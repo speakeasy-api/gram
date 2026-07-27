@@ -22,6 +22,7 @@ import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import UserSessions from "./pages/org/UserSessions";
 import DeviceAgent from "./pages/device-agent/DeviceAgent";
+import DeviceIntegrations from "./pages/org/device-integrations/DeviceIntegrations";
 import Elements from "./pages/elements/Elements";
 import EnvironmentPage from "./pages/environments/Environment";
 import Environments, {
@@ -956,6 +957,12 @@ const ORG_ROUTE_STRUCTURE = {
     url: "device-agent",
     icon: "laptop",
     component: DeviceAgent,
+  },
+  deviceIntegrations: {
+    title: "Device Integrations",
+    url: "device-integrations",
+    icon: "puzzle",
+    component: DeviceIntegrations,
   },
   access: {
     title: "Roles & Permissions",

@@ -1,9 +1,11 @@
 import { RequireScope } from "@/components/require-scope";
+import { ScheduleStatusBadge } from "@/components/schedule-status-badge";
 import { Switch } from "@/components/ui/switch";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
+import { formatRelativeTime } from "@/lib/dates";
+import type { DeviceIntegrationProviderSchedule } from "@gram/client/models/components/deviceintegrationproviderschedule.js";
 import {
-  Badge,
   Button,
   type Column,
   DropdownMenu,
@@ -13,19 +15,17 @@ import {
   Stack,
   Table,
 } from "@speakeasy-api/moonshine";
-import { Activity, ChartLine, Clock3, MoreHorizontal } from "lucide-react";
-import type { AIIntegrationSchedule } from "./ai-integration-providers";
-import { ScheduleStatusBadge } from "@/components/schedule-status-badge";
+import { Clock3, MoreHorizontal } from "lucide-react";
 import {
-  formatRelativeTime,
+  formatCadence,
   type ScheduleRuntime,
-} from "./use-ai-integration-schedules";
+} from "./use-device-integration-schedules";
 
-// One row per stream (an imported event or metric feed). The row carries
-// everything the cells need so the table itself stays hook-free.
-export type AIIntegrationStreamRow = {
+// One row per sync schedule. The row carries everything the cells need so the
+// table itself stays hook-free.
+export type DeviceIntegrationScheduleRow = {
   key: string;
-  schedule: AIIntegrationSchedule;
+  schedule: DeviceIntegrationProviderSchedule;
   runtime: ScheduleRuntime;
   configured: boolean;
   connectionEnabled: boolean;
@@ -33,32 +33,30 @@ export type AIIntegrationStreamRow = {
   retry: (schedule: string) => void;
 };
 
-export function AIIntegrationStreamsTable({
+export function DeviceIntegrationSchedulesTable({
   rows,
 }: {
-  rows: AIIntegrationStreamRow[];
+  rows: DeviceIntegrationScheduleRow[];
 }): JSX.Element {
-  const columns: Column<AIIntegrationStreamRow>[] = [
+  const columns: Column<DeviceIntegrationScheduleRow>[] = [
     {
       key: "name",
-      header: "Stream",
-      render: (row) => <NameCell row={row} />,
-    },
-    {
-      key: "type",
-      header: "Type",
-      width: "120px",
-      render: (row) => <TypeCell row={row} />,
+      header: "Schedule",
+      render: (row) => (
+        <Type variant="small" className="w-fit font-mono text-xs font-medium">
+          {row.schedule.schedule}
+        </Type>
+      ),
     },
     {
       key: "cadence",
       header: "Cadence",
-      width: "100px",
+      width: "120px",
       render: (row) => (
         <Stack direction="horizontal" align="center" gap={1.5}>
           <Clock3 className="text-muted-foreground size-3.5 shrink-0" />
           <Type muted small className="whitespace-nowrap">
-            {row.schedule.cadence}
+            {formatCadence(row.schedule.intervalMinutes)}
           </Type>
         </Stack>
       ),
@@ -100,42 +98,14 @@ export function AIIntegrationStreamsTable({
       columns={columns}
       data={rows}
       rowKey={(row) => row.key}
-      noResultsMessage={<Type muted>No streams</Type>}
+      noResultsMessage={<Type muted>No schedules</Type>}
     />
   );
 }
 
-function NameCell({ row }: { row: AIIntegrationStreamRow }) {
-  // The backend registry owns stream identifiers; the static provider
-  // metadata only fills in before the backend has a sync row.
-  const stream = row.runtime.stream ?? row.schedule.signal;
-  return (
-    <SimpleTooltip
-      tooltip={`${row.schedule.name} — ${row.schedule.description}`}
-    >
-      <Type variant="small" className="w-fit font-mono text-xs font-medium">
-        {stream}
-      </Type>
-    </SimpleTooltip>
-  );
-}
-
-function TypeCell({ row }: { row: AIIntegrationStreamRow }) {
-  const kind = row.runtime.streamKind ?? row.schedule.kind;
-  const isEvents = kind === "events";
-  const KindIcon = isEvents ? Activity : ChartLine;
-  return (
-    <Badge variant="neutral" background className="shrink-0">
-      <Badge.LeftIcon>
-        <KindIcon className="h-3 w-3" />
-      </Badge.LeftIcon>
-      <Badge.Text>{isEvents ? "Event" : "Metric"}</Badge.Text>
-    </Badge>
-  );
-}
-
-function ActionsCell({ row }: { row: AIIntegrationStreamRow }) {
-  const canRetry = streamNeedsAttention(row) && !row.runtime.isMutating;
+function ActionsCell({ row }: { row: DeviceIntegrationScheduleRow }) {
+  const canRetry =
+    row.configured && row.connectionEnabled && !row.runtime.isMutating;
 
   return (
     <Stack direction="horizontal" align="center" justify="end" gap={1}>
@@ -143,8 +113,8 @@ function ActionsCell({ row }: { row: AIIntegrationStreamRow }) {
         <SimpleTooltip
           tooltip={
             row.configured
-              ? "Pause or resume this stream. Applies immediately."
-              : "Connect the provider before enabling this stream."
+              ? "Pause or resume this schedule. Applies immediately."
+              : "Connect the provider before enabling this schedule."
           }
         >
           <Switch
@@ -157,7 +127,7 @@ function ActionsCell({ row }: { row: AIIntegrationStreamRow }) {
               !row.connectionEnabled ||
               row.runtime.isMutating
             }
-            aria-label={`Enable ${row.schedule.name}`}
+            aria-label={`Enable ${row.schedule.schedule}`}
           />
         </SimpleTooltip>
       </RequireScope>
@@ -168,7 +138,7 @@ function ActionsCell({ row }: { row: AIIntegrationStreamRow }) {
               variant="tertiary"
               size="sm"
               disabled={!row.configured}
-              aria-label={`${row.schedule.name} actions`}
+              aria-label={`${row.schedule.schedule} actions`}
             >
               <Button.Icon>
                 <MoreHorizontal className="size-4" />
@@ -180,7 +150,7 @@ function ActionsCell({ row }: { row: AIIntegrationStreamRow }) {
               onSelect={() => row.retry(row.schedule.schedule)}
               disabled={!canRetry}
             >
-              Retry now
+              Sync now
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -189,18 +159,7 @@ function ActionsCell({ row }: { row: AIIntegrationStreamRow }) {
   );
 }
 
-// A stream needs attention when it is actively polling but the provider
-// rejected or failed the last poll.
-function streamNeedsAttention(row: AIIntegrationStreamRow): boolean {
-  return (
-    row.configured &&
-    row.connectionEnabled &&
-    row.runtime.enabled &&
-    (row.runtime.status === "failed" || row.runtime.status === "auto_paused")
-  );
-}
-
-function lastSyncedLabel(row: AIIntegrationStreamRow): string {
+function lastSyncedLabel(row: DeviceIntegrationScheduleRow): string {
   if (!row.configured || !row.runtime.lastSyncedAt) return "—";
   return formatRelativeTime(row.runtime.lastSyncedAt) ?? "—";
 }
