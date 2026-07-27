@@ -22,7 +22,7 @@ export type ListSkillSuggestionFeedbackSecurity = {
 
 export type ListSkillSuggestionFeedbackRequest = {
   /**
-   * The suggestion ID.
+   * The proposed change ID.
    */
   id: string;
   /**

@@ -292,10 +292,10 @@ var _ = Service("skills", func() {
 	})
 
 	Method("listSuggestionFeedback", func() {
-		Description("List the agent feedback a skill edit suggestion was generated from, newest first.")
+		Description("List the agent feedback cited as the reason for one proposed change, newest first.")
 
 		Payload(func() {
-			Attribute("id", String, "The suggestion ID.", func() { Format(FormatUUID) })
+			Attribute("id", String, "The proposed change ID.", func() { Format(FormatUUID) })
 			Attribute("limit", Int, "The number of feedback records to return.", func() {
 				Default(50)
 				Minimum(1)

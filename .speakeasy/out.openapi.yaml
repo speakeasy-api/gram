@@ -37828,16 +37828,16 @@ paths:
         name: SkillFeedback
   /rpc/skills.listSuggestionFeedback:
     get:
-      description: List the agent feedback a skill edit suggestion was generated from, newest first.
+      description: List the agent feedback cited as the reason for one proposed change, newest first.
       operationId: listSkillSuggestionFeedback
       parameters:
         - allowEmptyValue: true
-          description: The suggestion ID.
+          description: The proposed change ID.
           in: query
           name: id
           required: true
           schema:
-            description: The suggestion ID.
+            description: The proposed change ID.
             format: uuid
             type: string
         - allowEmptyValue: true

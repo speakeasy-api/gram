@@ -1,4 +1,4 @@
-import type { SkillEditSuggestion } from "@gram/client/models/components/skilleditsuggestion.js";
+import type { SkillEditSuggestionChange } from "@gram/client/models/components/skilleditsuggestionchange.js";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SkillSuggestionComment } from "./SkillSuggestionComment";
@@ -32,27 +32,20 @@ vi.mock("@gram/client/react-query/skillSuggestionFeedback.js", () => ({
   },
 }));
 
-function suggestion(
-  overrides: Partial<SkillEditSuggestion> = {},
-): SkillEditSuggestion {
+function change(
+  overrides: Partial<SkillEditSuggestionChange> = {},
+): SkillEditSuggestionChange {
   return {
-    id: "suggestion_a",
-    skillId: "skill_a",
-    skillName: "incident-review",
-    skillDisplayName: "Incident review",
-    baseVersionID: "version_a",
+    id: "change_a",
+    suggestionId: "suggestion_a",
     proposedDiff: "",
-    proposedContent: "",
-    appliesCleanly: true,
     rationale: "Leadership reviews stall without a number here.",
-    status: "open",
+    appliesCleanly: true,
     feedbackCount: 11,
     feedbackSessionCount: 11,
-    scoredSessionCount: 4,
     createdAt: new Date("2026-07-01T00:00:00Z"),
-    updatedAt: new Date("2026-07-01T00:00:00Z"),
     ...overrides,
-  } as SkillEditSuggestion;
+  } as SkillEditSuggestionChange;
 }
 
 const actions = {
@@ -72,7 +65,7 @@ describe("SkillSuggestionComment", () => {
   it("leads with the session count the suggestion was built from", () => {
     render(
       <SkillSuggestionComment
-        suggestion={suggestion()}
+        change={change()}
         changeCount={1}
         actions={actions}
       />,
@@ -87,7 +80,7 @@ describe("SkillSuggestionComment", () => {
   it("omits the session count when no session reported the feedback", () => {
     render(
       <SkillSuggestionComment
-        suggestion={suggestion({ feedbackSessionCount: 0 })}
+        change={change({ feedbackSessionCount: 0 })}
         changeCount={1}
         actions={actions}
       />,
@@ -107,7 +100,7 @@ describe("SkillSuggestionComment", () => {
     ];
     render(
       <SkillSuggestionComment
-        suggestion={suggestion()}
+        change={change()}
         changeCount={1}
         actions={actions}
       />,
@@ -124,7 +117,7 @@ describe("SkillSuggestionComment", () => {
   it("hides the source expander when nothing is linked", () => {
     render(
       <SkillSuggestionComment
-        suggestion={suggestion({ feedbackCount: 0 })}
+        change={change({ feedbackCount: 0 })}
         changeCount={1}
         actions={actions}
       />,
@@ -140,7 +133,7 @@ describe("SkillSuggestionComment actions", () => {
   it("offers applying everything only when more than one change is proposed", () => {
     const { rerender } = render(
       <SkillSuggestionComment
-        suggestion={suggestion()}
+        change={change()}
         changeCount={1}
         actions={actions}
       />,
@@ -149,7 +142,7 @@ describe("SkillSuggestionComment actions", () => {
 
     rerender(
       <SkillSuggestionComment
-        suggestion={suggestion()}
+        change={change()}
         changeCount={3}
         actions={actions}
       />,
@@ -158,11 +151,11 @@ describe("SkillSuggestionComment actions", () => {
   });
 
   it("keeps applying one change separate from applying them all", () => {
-    const onApply = vi.fn();
-    const onApplyAll = vi.fn();
+    const onApply = vi.fn<() => void>();
+    const onApplyAll = vi.fn<() => void>();
     render(
       <SkillSuggestionComment
-        suggestion={suggestion()}
+        change={change()}
         changeCount={2}
         actions={{ ...actions, onApply, onApplyAll }}
       />,

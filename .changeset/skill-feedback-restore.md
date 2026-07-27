@@ -2,4 +2,4 @@
 "server": minor
 ---
 
-Review suggested skill edits as a diff with a comment on each proposed change, and apply those changes one at a time. Applying a single change records a new version carrying only it and leaves the rest of the suggestion open against that version. Suggestions are stored as diffs, so they survive unrelated edits to the skill and are retired only when the change no longer applies. Each suggestion shows how many sessions asked for it and can expand the agent reports it was built from.
+Review suggested skill edits one change at a time. A suggestion now proposes separate changes, each carrying its own summary and citing only the agent reports behind that change, so unrelated evidence no longer appears next to an edit. Applying a single change records a new version carrying only it and leaves the rest of the suggestion open against that version. Changes are stored as diffs, so they survive unrelated edits to the skill and are retired individually when they no longer apply.

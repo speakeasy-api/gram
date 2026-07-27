@@ -608,28 +608,28 @@ func (s *Service) ListSuggestionFeedback(ctx context.Context, payload *gen.ListS
 	if payload.Limit < 1 || payload.Limit > 50 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "skill suggestion feedback limit must be between 1 and 50")
 	}
-	suggestionID, err := uuid.Parse(payload.ID)
+	changeID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill suggestion id")
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill suggestion change id")
 	}
 
 	queries := repo.New(s.db)
-	if _, err := queries.GetSkillEditSuggestionDetails(ctx, repo.GetSkillEditSuggestionDetailsParams{
+	if _, err := queries.GetSkillEditSuggestionChange(ctx, repo.GetSkillEditSuggestionChangeParams{
 		ProjectID: *authCtx.ProjectID,
-		ID:        suggestionID,
+		ID:        changeID,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, nil, "skill suggestion not found")
+			return nil, oops.E(oops.CodeNotFound, nil, "proposed change not found")
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "get skill suggestion for feedback").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get proposed change for feedback").LogError(ctx, logger)
 	}
 	rows, err := queries.ListSkillEditSuggestionFeedback(ctx, repo.ListSkillEditSuggestionFeedbackParams{
-		ProjectID:    *authCtx.ProjectID,
-		SuggestionID: suggestionID,
-		PageLimit:    conv.SafeInt32(payload.Limit),
+		ProjectID: *authCtx.ProjectID,
+		ChangeID:  changeID,
+		PageLimit: conv.SafeInt32(payload.Limit),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list skill suggestion feedback").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list proposed change feedback").LogError(ctx, logger)
 	}
 
 	return &gen.ListSkillSuggestionFeedbackResult{Feedback: mv.BuildSkillFeedbackListView(rows)}, nil

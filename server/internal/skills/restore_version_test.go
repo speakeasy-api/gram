@@ -56,7 +56,7 @@ func TestRestoreSkillVersionUpdatesCurrentResolversWithoutMovingPins(t *testing.
 	require.NoError(t, err)
 	link, err := ti.service.Share(ctx, &gen.SharePayload{SkillID: first.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
-	open, err := ti.repo.CreateSkillEditSuggestion(ctx, repo.CreateSkillEditSuggestionParams{
+	open, err := seedSuggestion(t, ctx, ti, seedSuggestionParams{
 		ProposedDiff: diffTo(t, third.Version.Content, skillManifest("restorable", "Third summary.", "third, expanded")),
 		Rationale:    "stale", ScoredSessionCount: 0,
 		BaseVersionID: thirdID, ProjectID: ti.projectID, SkillID: skillID,
@@ -220,7 +220,7 @@ func TestRestoreSkillVersionPromotesCurrentCapturedTargetToManual(t *testing.T) 
 	})
 	require.NoError(t, err)
 	require.Equal(t, manual.Version.ID, distribution.ResolvedVersionID)
-	open, err := ti.repo.CreateSkillEditSuggestion(ctx, repo.CreateSkillEditSuggestionParams{
+	open, err := seedSuggestion(t, ctx, ti, seedSuggestionParams{
 		ProposedDiff: diffTo(t, manual.Version.Content, skillManifest("restore-current-captured", "Manual.", "# restore-current-captured, expanded")),
 		Rationale:    "stale", ScoredSessionCount: 0,
 		BaseVersionID: uuid.MustParse(manual.Version.ID), ProjectID: ti.projectID, SkillID: captured.SkillID,

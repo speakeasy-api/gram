@@ -19,13 +19,13 @@ An automated analysis agent reviews eligible feedback and scored sessions for a 
 
 The analysis agent does not update the skill directly. The proposal remains an open suggestion until someone reviews it.
 
-Because a suggestion stores a diff rather than a whole manifest, it survives later edits it does not overlap. On each analysis pass Gram replays an open suggestion onto the current version: it carries forward when the diff still applies, and is superseded when the diff conflicts or the newer version already contains the edit.
+A suggestion is a list of separate changes rather than one rewritten manifest. The agent is asked to keep each change self-contained and to cite only the feedback behind that change, so a reviewer reading a change sees the reports that motivated it and not the ones behind an unrelated edit. Each change stores its own diff, so it survives later edits it does not overlap: on each analysis pass Gram replays every open change onto the current version, carrying forward the ones that still apply and dropping the ones that conflict or are already applied. A suggestion is superseded once nothing is left to propose.
 
 ## Review a suggested edit
 
-The skill detail page shows a suggested edit as a diff between the current and proposed manifests, with a review marker beside each proposed change. Expanding a marker shows the summary, how many sessions asked for the change, and an expander for the agent reports it was built from. Project members with skill write access can:
+The skill detail page shows a suggested edit as a diff between the current and proposed manifests, with a review marker beside each proposed change. Expanding a marker shows that change's summary, how many sessions asked for it, and an expander for the agent reports cited as its reason. Project members with skill write access can:
 
-- **Apply** to take just that change. Gram records a new immutable version carrying only it, and the suggestion stays open proposing whatever is left, now measured against the version you just created. Applying the last remaining change closes the suggestion.
+- **Apply** to take just that change. Gram records a new immutable version carrying only it, and the suggestion stays open proposing the remaining changes, now measured against the version you just created. Applying the last remaining change closes the suggestion.
 - **Apply all** to review every change the suggestion still proposes and take them as one new version. From there you can also adjust the complete proposed manifest before applying it, or dismiss the suggestion without changing the skill. The normal manifest validation and 65,536-byte UTF-8 limit still apply.
 
 There is no draft state. Every apply records a new version immediately, and that version becomes the one agents load, so plugin distributions that are not pinned to a specific version pick it up.

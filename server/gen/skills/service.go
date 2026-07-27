@@ -48,7 +48,7 @@ type Service interface {
 	// Idempotently dismiss an open skill edit suggestion. Approved and superseded
 	// suggestions conflict.
 	DismissSuggestion(context.Context, *DismissSuggestionPayload) (res *types.SkillEditSuggestion, err error)
-	// List the agent feedback a skill edit suggestion was generated from, newest
+	// List the agent feedback cited as the reason for one proposed change, newest
 	// first.
 	ListSuggestionFeedback(context.Context, *ListSuggestionFeedbackPayload) (res *ListSkillSuggestionFeedbackResult, err error)
 	// Snapshot and independently process selected skill edit suggestions, or every
@@ -345,7 +345,7 @@ type ListSkillsResult struct {
 // ListSuggestionFeedbackPayload is the payload type of the skills service
 // listSuggestionFeedback method.
 type ListSuggestionFeedbackPayload struct {
-	// The suggestion ID.
+	// The proposed change ID.
 	ID string
 	// The number of feedback records to return.
 	Limit            int

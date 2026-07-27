@@ -6,7 +6,7 @@ import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import type { SkillEditSuggestion } from "@gram/client/models/components/skilleditsuggestion.js";
+import type { SkillEditSuggestionChange } from "@gram/client/models/components/skilleditsuggestionchange.js";
 import { useSkillSuggestionFeedback } from "@gram/client/react-query/skillSuggestionFeedback.js";
 import { Badge, Icon } from "@speakeasy-api/moonshine";
 import { useState } from "react";
@@ -45,11 +45,11 @@ export function SkillSuggestionMarker({
 }
 
 export function SkillSuggestionComment({
-  suggestion,
+  change,
   changeCount,
   actions,
 }: {
-  suggestion: SkillEditSuggestion;
+  change: SkillEditSuggestionChange;
   /** How many changes the suggestion still proposes across the manifest. */
   changeCount: number;
   actions: SkillSuggestionActions;
@@ -62,19 +62,19 @@ export function SkillSuggestionComment({
     <div className="border-border bg-card my-2 overflow-hidden rounded-lg border font-sans shadow-sm">
       <div className="space-y-3 px-4 py-3">
         <Type small>
-          {suggestion.feedbackSessionCount > 0 && (
+          {change.feedbackSessionCount > 0 && (
             <span className="font-medium">
-              {`Requested in ${suggestion.feedbackSessionCount.toLocaleString()} ${
-                suggestion.feedbackSessionCount === 1 ? "session" : "sessions"
+              {`Requested in ${change.feedbackSessionCount.toLocaleString()} ${
+                change.feedbackSessionCount === 1 ? "session" : "sessions"
               }. `}
             </span>
           )}
-          {suggestion.rationale}
+          {change.rationale}
         </Type>
 
         <SuggestionSources
-          suggestionId={suggestion.id}
-          feedbackCount={suggestion.feedbackCount}
+          changeId={change.id}
+          feedbackCount={change.feedbackCount}
           open={sourcesOpen}
           onToggle={() => setSourcesOpen((current) => !current)}
         />
@@ -117,18 +117,18 @@ export function SkillSuggestionComment({
 }
 
 function SuggestionSources({
-  suggestionId,
+  changeId,
   feedbackCount,
   open,
   onToggle,
 }: {
-  suggestionId: string;
+  changeId: string;
   feedbackCount: number;
   open: boolean;
   onToggle: () => void;
 }): JSX.Element | null {
   const query = useSkillSuggestionFeedback(
-    { id: suggestionId, limit: 50 },
+    { id: changeId, limit: 50 },
     undefined,
     { enabled: open, throwOnError: false },
   );

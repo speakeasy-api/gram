@@ -1,64 +1,56 @@
-const HUNK_HEADER = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
+import type { SkillEditSuggestionChange } from "@gram/client/models/components/skilleditsuggestionchange.js";
 
 /** Which side of a rendered diff an anchor belongs to. */
 export type SkillDiffSide = "additions" | "deletions";
 
-export type SkillDiffHunk = {
+export type SkillDiffAnchor = {
   side: SkillDiffSide;
-  /** 1-based line number on that side of the diff. */
+  /** 1-based line number on that side of the rendered diff. */
   line: number;
-  removed: string[];
-  added: string[];
+  change: SkillEditSuggestionChange;
 };
 
 /**
- * Splits a unified diff into hunks addressed by the line numbers a rendered
- * diff uses, so a review comment can hang off the line it talks about. A hunk
- * anchors to its first added line, falling back to its first removed line when
- * the hunk only deletes.
+ * Finds the first line a change adds, falling back to the first line it removes
+ * when the change only deletes.
  */
-export function parseSkillDiffHunks(diff: string): SkillDiffHunk[] {
-  const hunks: SkillDiffHunk[] = [];
-  let current: SkillDiffHunk | null = null;
-  let oldLine = 0;
-  let newLine = 0;
-  let anchored = false;
+function firstEditedLine(
+  diff: string,
+): { side: SkillDiffSide; text: string } | null {
+  let removed: string | null = null;
 
   for (const line of diff.split("\n")) {
-    const header = HUNK_HEADER.exec(line);
-    if (header) {
-      oldLine = Number(header[1]);
-      newLine = Number(header[2]);
-      anchored = false;
-      current = { side: "additions", line: newLine, removed: [], added: [] };
-      hunks.push(current);
-      continue;
-    }
-    if (!current) continue;
-
+    if (line.startsWith("+++") || line.startsWith("---")) continue;
     if (line.startsWith("+")) {
-      current.added.push(line.slice(1));
-      if (!anchored || current.side === "deletions") {
-        current.side = "additions";
-        current.line = newLine;
-        anchored = true;
-      }
-      newLine += 1;
-    } else if (line.startsWith("-")) {
-      current.removed.push(line.slice(1));
-      if (!anchored) {
-        current.side = "deletions";
-        current.line = oldLine;
-        anchored = true;
-      }
-      oldLine += 1;
-    } else if (line.startsWith(" ")) {
-      oldLine += 1;
-      newLine += 1;
+      return { side: "additions", text: line.slice(1) };
+    }
+    if (line.startsWith("-") && removed === null) {
+      removed = line.slice(1);
     }
   }
 
-  return hunks.filter(
-    (hunk) => hunk.removed.length > 0 || hunk.added.length > 0,
-  );
+  return removed === null ? null : { side: "deletions", text: removed };
+}
+
+/**
+ * Locates a change in the diff the reviewer is looking at. A change is stored
+ * as a diff against whatever the changes before it produce, so its own line
+ * numbers do not line up with the rendered current-to-proposed diff. The edited
+ * line is found by its text in the content that side of the diff renders, which
+ * holds however the changes are ordered or spaced.
+ */
+export function changeAnchor(
+  change: SkillEditSuggestionChange,
+  currentContent: string,
+  proposedContent: string,
+): SkillDiffAnchor | null {
+  const edited = firstEditedLine(change.proposedDiff);
+  if (!edited) return null;
+
+  const haystack =
+    edited.side === "additions" ? proposedContent : currentContent;
+  const line = haystack.split("\n").indexOf(edited.text);
+  if (line === -1) return null;
+
+  return { side: edited.side, line: line + 1, change };
 }

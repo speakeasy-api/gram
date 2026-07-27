@@ -16777,7 +16777,7 @@ func skillsUsage() {
 	fmt.Fprintln(os.Stderr, `    list-feedback: List all-time outcome counts and recent resolved feedback for a skill. Name-only feedback is excluded.`)
 	fmt.Fprintln(os.Stderr, `    approve-suggestion: Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only one of its proposed changes. Stale suggestions are superseded instead.`)
 	fmt.Fprintln(os.Stderr, `    dismiss-suggestion: Idempotently dismiss an open skill edit suggestion. Approved and superseded suggestions conflict.`)
-	fmt.Fprintln(os.Stderr, `    list-suggestion-feedback: List the agent feedback a skill edit suggestion was generated from, newest first.`)
+	fmt.Fprintln(os.Stderr, `    list-suggestion-feedback: List the agent feedback cited as the reason for one proposed change, newest first.`)
 	fmt.Fprintln(os.Stderr, `    approve-all-suggestions: Snapshot and independently process selected skill edit suggestions, or every open suggestion when no IDs are supplied. One conflict or failure does not stop the remaining approvals.`)
 	fmt.Fprintln(os.Stderr, `    get: Get an active skill and its latest version. The implementation requires the skills product feature and skill read scope.`)
 	fmt.Fprintln(os.Stderr, `    list-unknown-activations: List terminal skill activations that could not be attributed to a skill version.`)
@@ -17031,7 +17031,7 @@ func skillsListSuggestionFeedbackUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the agent feedback a skill edit suggestion was generated from, newest first.`)
+	fmt.Fprintln(os.Stderr, `List the agent feedback cited as the reason for one proposed change, newest first.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)

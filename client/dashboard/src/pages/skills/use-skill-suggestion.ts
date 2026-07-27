@@ -17,8 +17,8 @@ export type SkillSuggestionReview = {
   actionsDisabled: boolean;
   approving: boolean;
   dismissing: boolean;
-  /** Applies one proposed change by index, or the whole suggestion when omitted. */
-  approve: (hunk?: number) => Promise<void>;
+  /** Applies one proposed change by id, or every change when omitted. */
+  approve: (changeId?: string) => Promise<void>;
   dismiss: () => Promise<void>;
   refresh: () => Promise<void>;
   retry: () => void;
@@ -44,14 +44,14 @@ export function useSkillSuggestionReview(
   const loaded = query.data?.result.suggestions[0];
   const suggestion = loaded?.id === hiddenSuggestionId ? undefined : loaded;
 
-  const approve = async (hunk?: number): Promise<void> => {
+  const approve = async (changeId?: string): Promise<void> => {
     if (!suggestion) return;
     setActionError(null);
     setReconciling(true);
     try {
       const result = await approveMutation.mutateAsync({
         request: {
-          approveSkillSuggestionRequestBody: { id: suggestion.id, hunk },
+          approveSkillSuggestionRequestBody: { id: suggestion.id, changeId },
         },
       });
       // A partial apply leaves the suggestion open carrying the rest, so it
@@ -66,8 +66,9 @@ export function useSkillSuggestionReview(
         case "partially_applied":
           toast.success("Change applied as a new version");
           break;
-        default:
+        case "superseded":
           toast.info("Suggestion was superseded because the skill changed");
+          break;
       }
     } catch (error) {
       const message =

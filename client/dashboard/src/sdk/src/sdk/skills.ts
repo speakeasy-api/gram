@@ -357,7 +357,7 @@ export class Skills extends ClientSDK {
    * listSuggestionFeedback skills
    *
    * @remarks
-   * List the agent feedback a skill edit suggestion was generated from, newest first.
+   * List the agent feedback cited as the reason for one proposed change, newest first.
    */
   async listSuggestionFeedback(
     request: ListSkillSuggestionFeedbackRequest,

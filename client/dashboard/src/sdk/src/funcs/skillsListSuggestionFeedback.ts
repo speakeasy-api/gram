@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listSuggestionFeedback skills
  *
  * @remarks
- * List the agent feedback a skill edit suggestion was generated from, newest first.
+ * List the agent feedback cited as the reason for one proposed change, newest first.
  */
 export function skillsListSuggestionFeedback(
   client: GramCore,
