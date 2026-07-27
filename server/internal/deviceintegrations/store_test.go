@@ -217,3 +217,39 @@ func TestUpsertReturnsTransactionObservedBefore(t *testing.T) {
 	require.True(t, updated.Before.Enabled)
 	require.False(t, updated.Config.Enabled)
 }
+
+func TestCredentialRotationMergesSavedSecrets(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	created, err := upsertProviderTx(t, ctx, conn, store, orgID, testRotateProviderID,
+		providers.Credentials{"client_id": "original-id", "client_secret": "original-secret"},
+		providers.Settings{"instance_url": "https://example.test"}, true)
+	require.NoError(t, err)
+	require.True(t, created.Created)
+
+	// Rotate ONE secret: the omitted secret keeps its stored value, matching
+	// the dashboard's "•••••• (saved)" placeholders.
+	_, err = upsertProviderTx(t, ctx, conn, store, orgID, testRotateProviderID,
+		providers.Credentials{"client_secret": "rotated-secret"},
+		providers.Settings{}, true)
+	require.NoError(t, err, "single-secret rotation must not demand every secret")
+
+	_, creds, err := store.LoadConfigWithCredentials(ctx, orgID, testRotateProviderID)
+	require.NoError(t, err)
+	require.Equal(t, "original-id", creds["client_id"], "omitted secret keeps its stored value")
+	require.Equal(t, "rotated-secret", creds["client_secret"])
+
+	// A blank supplied value also keeps the stored secret rather than
+	// clobbering it with an empty string.
+	_, err = upsertProviderTx(t, ctx, conn, store, orgID, testRotateProviderID,
+		providers.Credentials{"client_id": "", "client_secret": "rotated-again!"},
+		providers.Settings{}, true)
+	require.NoError(t, err)
+
+	_, creds, err = store.LoadConfigWithCredentials(ctx, orgID, testRotateProviderID)
+	require.NoError(t, err)
+	require.Equal(t, "original-id", creds["client_id"], "blank supplied secret keeps the stored value")
+	require.Equal(t, "rotated-again!", creds["client_secret"])
+}
