@@ -1,12 +1,17 @@
 import { Page } from "@/components/page-layout";
-import { Stack } from "@speakeasy-api/moonshine";
 import { useTelemetry } from "@/contexts/Telemetry";
 import {
   CoverageSummaryTiles,
   ManagedDeviceTable,
 } from "@/pages/org/device-integrations/coverage-widgets";
 import { useDeviceIntegrationCoverage } from "@gram/client/react-query/deviceIntegrationCoverage.js";
-import { useManagedDevices } from "@gram/client/react-query/managedDevices.js";
+import { useManagedDevicesInfinite } from "@gram/client/react-query/managedDevices.js";
+import { Stack } from "@speakeasy-api/moonshine";
+import { useMemo } from "react";
+
+// Coverage moves on the hourly sync cadence; don't refire the heavy joins on
+// every window focus.
+const COVERAGE_STALE_TIME = 30_000;
 
 // Coverage section for the Device Agent page: bucket summary tiles plus the
 // filterable managed-device list, org-wide across every connected MDM.
@@ -25,12 +30,15 @@ function DeviceAgentCoverageInner(): JSX.Element | null {
   const { data: coverage } = useDeviceIntegrationCoverage(
     undefined,
     undefined,
-    { throwOnError: false },
+    { throwOnError: false, staleTime: COVERAGE_STALE_TIME },
   );
-  const { data: devicePage, isLoading: devicesLoading } = useManagedDevices(
-    { limit: 200 },
-    undefined,
-    { throwOnError: false },
+  const devicesQuery = useManagedDevicesInfinite({ limit: 200 }, undefined, {
+    throwOnError: false,
+    staleTime: COVERAGE_STALE_TIME,
+  });
+  const devices = useMemo(
+    () => devicesQuery.data?.pages.flatMap((page) => page.result.devices) ?? [],
+    [devicesQuery.data],
   );
 
   if (!coverage || coverage.totalDevices === 0) return null;
@@ -47,8 +55,13 @@ function DeviceAgentCoverageInner(): JSX.Element | null {
         <Stack gap={4}>
           <CoverageSummaryTiles coverage={coverage} />
           <ManagedDeviceTable
-            devices={devicePage?.result.devices ?? []}
-            isLoading={devicesLoading}
+            devices={devices}
+            isLoading={devicesQuery.isLoading}
+            isError={devicesQuery.isError}
+            onRetry={() => void devicesQuery.refetch()}
+            hasMore={devicesQuery.hasNextPage}
+            onLoadMore={() => void devicesQuery.fetchNextPage()}
+            isLoadingMore={devicesQuery.isFetchingNextPage}
           />
         </Stack>
       </Page.Section.Body>

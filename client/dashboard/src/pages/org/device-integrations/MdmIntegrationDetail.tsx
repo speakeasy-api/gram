@@ -7,10 +7,10 @@ import type { DeviceIntegrationCoverage } from "@gram/client/models/components/d
 import type { DeviceIntegrationProvider } from "@gram/client/models/components/deviceintegrationprovider.js";
 import { useDeviceIntegrationCoverage } from "@gram/client/react-query/deviceIntegrationCoverage.js";
 import { useDeviceIntegrationProviders } from "@gram/client/react-query/deviceIntegrationProviders.js";
-import { useManagedDevices } from "@gram/client/react-query/managedDevices.js";
+import { useManagedDevicesInfinite } from "@gram/client/react-query/managedDevices.js";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { PlugZap } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Navigate, useParams } from "react-router";
 import { CoverageSummaryTiles, ManagedDeviceTable } from "./coverage-widgets";
 import {
@@ -28,12 +28,20 @@ import {
   useDeviceScheduleRuntimes,
 } from "./use-device-integration-schedules";
 
+// Coverage moves on the hourly sync cadence; don't refire the heavy joins on
+// every window focus.
+const COVERAGE_STALE_TIME = 30_000;
+
 // Detail page for one MDM integration: its connection state and controls,
 // the vendor-scoped coverage breakdown, sync schedules, and the synced
 // device inventory.
 export default function MdmIntegrationDetail(): JSX.Element | null {
   const { provider: providerID = "" } = useParams<{ provider: string }>();
-  const { data, isLoading } = useDeviceIntegrationProviders();
+  const { data, isLoading } = useDeviceIntegrationProviders(
+    undefined,
+    undefined,
+    { staleTime: COVERAGE_STALE_TIME },
+  );
 
   const provider = data?.providers.find((p) => p.id === providerID);
   if (isLoading) return null;
@@ -42,7 +50,9 @@ export default function MdmIntegrationDetail(): JSX.Element | null {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Breadcrumbs />
+        <Page.Header.Breadcrumbs
+          substitutions={{ [provider.id]: provider.displayName }}
+        />
       </Page.Header>
       <Page.Body>
         <RequireScope scope={["org:read", "org:admin"]} level="page">
@@ -67,30 +77,43 @@ function MdmIntegrationDetailInner({
   const { data: coverage } = useDeviceIntegrationCoverage(
     { provider: provider.id },
     undefined,
-    { throwOnError: false },
+    { throwOnError: false, staleTime: COVERAGE_STALE_TIME },
   );
-  const { data: devicePage, isLoading: devicesLoading } = useManagedDevices(
+  const devicesQuery = useManagedDevicesInfinite(
     { provider: provider.id, limit: 200 },
     undefined,
-    { throwOnError: false },
+    { throwOnError: false, staleTime: COVERAGE_STALE_TIME },
+  );
+  const devices = useMemo(
+    () => devicesQuery.data?.pages.flatMap((page) => page.result.devices) ?? [],
+    [devicesQuery.data],
   );
 
-  const scheduleRows = provider.schedules.map(
-    (schedule): DeviceIntegrationScheduleRow => ({
-      key: `${provider.id}:${schedule.schedule}`,
-      schedule,
-      runtime: runtimeOrDefault(runtimes, schedule.schedule),
-      configured: form.isConfigured,
-      connectionEnabled: form.enabled,
-      toggle,
-      retry,
-    }),
+  const scheduleRows = useMemo(
+    () =>
+      provider.schedules.map(
+        (schedule): DeviceIntegrationScheduleRow => ({
+          key: `${provider.id}:${schedule.schedule}`,
+          schedule,
+          runtime: runtimeOrDefault(runtimes, schedule.schedule),
+          configured: form.isConfigured,
+          connectionEnabled: form.enabled,
+          toggle,
+          retry,
+        }),
+      ),
+    [provider, runtimes, form.isConfigured, form.enabled, toggle, retry],
   );
+
+  const handleSheetChange = (open: boolean) => {
+    if (!open) form.resetDraft();
+    setConfigureOpen(open);
+  };
 
   return (
     <>
       <Page.Section>
-        <Page.Section.Title>
+        <Page.Section.Title stage="preview">
           <Stack direction="horizontal" align="center" gap={2}>
             <Icon className="text-foreground h-5 w-5 shrink-0" />
             {provider.displayName}
@@ -168,23 +191,35 @@ function MdmIntegrationDetailInner({
         </Page.Section.Description>
         <Page.Section.Body>
           <ManagedDeviceTable
-            devices={devicePage?.result.devices ?? []}
-            isLoading={devicesLoading}
-          />
-          <DeviceIntegrationConfigureSheet
-            provider={provider}
-            form={form}
-            open={configureOpen}
-            onOpenChange={setConfigureOpen}
+            devices={devices}
+            isLoading={devicesQuery.isLoading}
+            isError={devicesQuery.isError}
+            onRetry={() => void devicesQuery.refetch()}
+            hasMore={devicesQuery.hasNextPage}
+            onLoadMore={() => void devicesQuery.fetchNextPage()}
+            isLoadingMore={devicesQuery.isFetchingNextPage}
           />
         </Page.Section.Body>
       </Page.Section>
+
+      <DeviceIntegrationConfigureSheet
+        provider={provider}
+        form={form}
+        open={configureOpen}
+        onOpenChange={handleSheetChange}
+      />
     </>
   );
 }
 
 // The headline number an admin acts on: of the devices this vendor manages,
-// how many have an assigned user with a live agent heartbeat.
+// how many have an assigned user with a live agent heartbeat. Floors so the
+// headline never claims 100% while any device is uncovered.
+function coverageHeadlineCopy(coverage: DeviceIntegrationCoverage): string {
+  const noun = coverage.totalDevices === 1 ? "device" : "devices";
+  return `of ${coverage.totalDevices} managed ${noun} have an assigned user with an active agent`;
+}
+
 function CoverageHeadline({
   coverage,
 }: {
@@ -198,7 +233,7 @@ function CoverageHeadline({
       </Type>
     );
   }
-  const percent = Math.round(
+  const percent = Math.floor(
     (coverage.agentActive / coverage.totalDevices) * 100,
   );
   return (
@@ -206,14 +241,7 @@ function CoverageHeadline({
       <Type variant="body" className="text-3xl font-semibold tabular-nums">
         {percent}%
       </Type>
-      <Type muted>
-        of {coverage.totalDevices} managed device
-        {coverage.totalDevices === 1 ? "" : "s"} have an assigned user with an
-        active agent
-        {coverage.unmanagedAgentUsers > 0
-          ? ` · ${coverage.unmanagedAgentUsers} agent user${coverage.unmanagedAgentUsers === 1 ? "" : "s"} with no managed device`
-          : ""}
-      </Type>
+      <Type muted>{coverageHeadlineCopy(coverage)}</Type>
     </Stack>
   );
 }

@@ -16,6 +16,7 @@ import {
   Table,
 } from "@speakeasy-api/moonshine";
 import { Clock3, MoreHorizontal } from "lucide-react";
+import { memo } from "react";
 import {
   formatCadence,
   type ScheduleRuntime,
@@ -33,75 +34,79 @@ export type DeviceIntegrationScheduleRow = {
   retry: (schedule: string) => void;
 };
 
-export function DeviceIntegrationSchedulesTable({
-  rows,
-}: {
-  rows: DeviceIntegrationScheduleRow[];
-}): JSX.Element {
-  const columns: Column<DeviceIntegrationScheduleRow>[] = [
-    {
-      key: "name",
-      header: "Schedule",
-      render: (row) => (
-        <Type variant="small" className="w-fit font-mono text-xs font-medium">
-          {row.schedule.schedule}
-        </Type>
-      ),
-    },
-    {
-      key: "cadence",
-      header: "Cadence",
-      width: "120px",
-      render: (row) => (
-        <Stack direction="horizontal" align="center" gap={1.5}>
-          <Clock3 className="text-muted-foreground size-3.5 shrink-0" />
-          <Type muted small className="whitespace-nowrap">
-            {formatCadence(row.schedule.intervalMinutes)}
-          </Type>
-        </Stack>
-      ),
-    },
-    {
-      key: "lastSynced",
-      header: "Last synced",
-      width: "110px",
-      render: (row) => (
+// Module-scope columns: the render closures read everything from the row, so
+// the array never needs a per-render identity.
+const scheduleColumns: Column<DeviceIntegrationScheduleRow>[] = [
+  {
+    key: "name",
+    header: "Schedule",
+    render: (row) => (
+      <Type variant="small" className="w-fit font-mono text-xs font-medium">
+        {row.schedule.schedule}
+      </Type>
+    ),
+  },
+  {
+    key: "cadence",
+    header: "Cadence",
+    width: "120px",
+    render: (row) => (
+      <Stack direction="horizontal" align="center" gap={1.5}>
+        <Clock3 className="text-muted-foreground size-3.5 shrink-0" />
         <Type muted small className="whitespace-nowrap">
-          {lastSyncedLabel(row)}
+          {formatCadence(row.schedule.intervalMinutes)}
         </Type>
-      ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      // Just wide enough for the longest badge ("Not connected").
-      width: "140px",
-      // Failure detail lives in the badge's tooltip, not inline.
-      render: (row) => (
-        <ScheduleStatusBadge
-          runtime={row.runtime}
-          configured={row.configured}
-          connectionEnabled={row.connectionEnabled}
-        />
-      ),
-    },
-    {
-      key: "actions",
-      header: "",
-      width: "110px",
-      render: (row) => <ActionsCell row={row} />,
-    },
-  ];
+      </Stack>
+    ),
+  },
+  {
+    key: "lastSynced",
+    header: "Last synced",
+    width: "110px",
+    render: (row) => (
+      <Type muted small className="whitespace-nowrap">
+        {lastSyncedLabel(row)}
+      </Type>
+    ),
+  },
+  {
+    key: "status",
+    header: "Status",
+    // Just wide enough for the longest badge ("Not connected").
+    width: "140px",
+    // Failure detail lives in the badge's tooltip, not inline.
+    render: (row) => (
+      <ScheduleStatusBadge
+        runtime={row.runtime}
+        configured={row.configured}
+        connectionEnabled={row.connectionEnabled}
+      />
+    ),
+  },
+  {
+    key: "actions",
+    header: "",
+    width: "110px",
+    render: (row) => <ActionsCell row={row} />,
+  },
+];
 
-  return (
-    <Table
-      columns={columns}
-      data={rows}
-      rowKey={(row) => row.key}
-      noResultsMessage={<Type muted>No schedules</Type>}
-    />
-  );
-}
+export const DeviceIntegrationSchedulesTable = memo(
+  function DeviceIntegrationSchedulesTable({
+    rows,
+  }: {
+    rows: DeviceIntegrationScheduleRow[];
+  }): JSX.Element {
+    return (
+      <Table
+        columns={scheduleColumns}
+        data={rows}
+        rowKey={(row) => row.key}
+        noResultsMessage={<Type muted>No schedules</Type>}
+      />
+    );
+  },
+);
 
 function ActionsCell({ row }: { row: DeviceIntegrationScheduleRow }) {
   const canRetry =
@@ -117,18 +122,23 @@ function ActionsCell({ row }: { row: DeviceIntegrationScheduleRow }) {
               : "Connect the provider before enabling this schedule."
           }
         >
-          <Switch
-            checked={row.configured && row.runtime.enabled}
-            onCheckedChange={(checked) =>
-              row.toggle(row.schedule.schedule, checked)
-            }
-            disabled={
-              !row.configured ||
-              !row.connectionEnabled ||
-              row.runtime.isMutating
-            }
-            aria-label={`Enable ${row.schedule.schedule}`}
-          />
+          {/* The span carries the Radix tooltip trigger props: Switch is a
+              plain component that doesn't forward refs or spread props, so
+              as a direct asChild child the tooltip would never open. */}
+          <span>
+            <Switch
+              checked={row.configured && row.runtime.enabled}
+              onCheckedChange={(checked) =>
+                row.toggle(row.schedule.schedule, checked)
+              }
+              disabled={
+                !row.configured ||
+                !row.connectionEnabled ||
+                row.runtime.isMutating
+              }
+              aria-label={`Enable ${row.schedule.schedule}`}
+            />
+          </span>
         </SimpleTooltip>
       </RequireScope>
       <RequireScope scope="org:admin" level="component">

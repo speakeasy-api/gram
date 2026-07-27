@@ -44,12 +44,17 @@ export default function DeviceIntegrations(): React.JSX.Element {
 }
 
 function DeviceIntegrationsInner() {
-  const { data, isLoading } = useDeviceIntegrationProviders();
+  const { data, isLoading } = useDeviceIntegrationProviders(
+    undefined,
+    undefined,
+    // The provider registry only changes on deploy.
+    { staleTime: 300_000 },
+  );
   const providers = data?.providers ?? [];
 
   return (
     <Page.Section>
-      <Page.Section.Title>MDM Integrations</Page.Section.Title>
+      <Page.Section.Title stage="preview">MDM Integrations</Page.Section.Title>
       <Page.Section.Description>
         Connect your MDM and compliance vendors. MDM inventory reveals which
         managed devices are missing the device agent; compliance connections

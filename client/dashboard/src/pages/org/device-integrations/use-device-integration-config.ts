@@ -4,7 +4,9 @@ import {
   invalidateAllDeviceIntegrationConfig,
   useDeviceIntegrationConfig as useDeviceIntegrationConfigQuery,
 } from "@gram/client/react-query/deviceIntegrationConfig.js";
+import { invalidateAllDeviceIntegrationCoverage } from "@gram/client/react-query/deviceIntegrationCoverage.js";
 import { invalidateAllDeviceIntegrationSchedules } from "@gram/client/react-query/deviceIntegrationSchedules.js";
+import { invalidateAllManagedDevices } from "@gram/client/react-query/managedDevices.js";
 import { useTestDeviceIntegrationConnectionMutation } from "@gram/client/react-query/testDeviceIntegrationConnection.js";
 import { useUpsertDeviceIntegrationConfigMutation } from "@gram/client/react-query/upsertDeviceIntegrationConfig.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -39,10 +41,13 @@ export type DeviceIntegrationConfigForm = {
   save: () => void;
   saveEnabled: (nextEnabled: boolean) => void;
   remove: () => void;
+  // Discards unsaved edits and pending test results, restoring the form to
+  // the saved config. Called when the configure sheet closes so a canceled
+  // session's secrets never linger into the next open.
+  resetDraft: () => void;
   testConnection: () => void;
   isTesting: boolean;
   testResult: TestConnectionResult | null;
-  clearTestResult: () => void;
 };
 
 // Form state for one provider's org-wide config, driven entirely by the
@@ -68,21 +73,38 @@ export function useDeviceIntegrationConfigForm(
   const invalidate = () => {
     void invalidateAllDeviceIntegrationConfig(queryClient);
     void invalidateAllDeviceIntegrationSchedules(queryClient);
+    // Coverage and the device inventory exclude deleted configs server-side,
+    // so they must refetch alongside the config or a deleted integration's
+    // fleet keeps rendering from cache.
+    void invalidateAllDeviceIntegrationCoverage(queryClient);
+    void invalidateAllManagedDevices(queryClient);
   };
 
-  const { mutate: upsert, status: upsertStatus } =
-    useUpsertDeviceIntegrationConfigMutation({
-      onSuccess: () => {
-        toast.success("Device integration saved");
-        setCredentials({});
-        setTestResult(null);
-        invalidate();
-        options.onSaveSuccess?.();
-      },
-      onError: (err) => {
-        toast.error(`Failed to save device integration: ${err.message}`);
-      },
-    });
+  const upsertMutation = useUpsertDeviceIntegrationConfigMutation({
+    onSuccess: () => {
+      toast.success("Device integration saved");
+      setCredentials({});
+      setTestResult(null);
+      invalidate();
+      options.onSaveSuccess?.();
+    },
+    onError: (err) => {
+      toast.error(`Failed to save device integration: ${err.message}`);
+      // Roll back optimistic state (e.g. a failed enabled-flip) by letting
+      // the next config fetch re-sync the form to server truth.
+      lastSyncedConfigIdRef.current = null;
+      void invalidateAllDeviceIntegrationConfig(queryClient);
+    },
+    onSettled: () => {
+      // Credentials travel in the mutation's variables; reset drops them
+      // from client-side mutation state once the request settles.
+      resetUpsertRef.current?.();
+    },
+  });
+  const { mutate: upsert, status: upsertStatus } = upsertMutation;
+  const resetUpsertRef = useRef<(() => void) | null>(null);
+  resetUpsertRef.current = upsertMutation.reset;
+
   const { mutate: deleteConfig, status: deleteStatus } =
     useDeleteDeviceIntegrationConfigMutation({
       onSuccess: () => {
@@ -132,7 +154,9 @@ export function useDeviceIntegrationConfigForm(
   const isMutating = upsertStatus === "pending" || deleteStatus === "pending";
 
   const canSave = useMemo(() => {
-    if (isMutating) return false;
+    // Never save against a config that hasn't loaded: a save racing the
+    // fetch would be treated as a first-time connect.
+    if (isMutating || isLoading) return false;
     for (const field of provider.fields) {
       const value = field.secret
         ? (credentials[field.key] ?? "")
@@ -143,7 +167,14 @@ export function useDeviceIntegrationConfigForm(
       return false;
     }
     return true;
-  }, [credentials, hasSavedCredentials, isMutating, provider.fields, settings]);
+  }, [
+    credentials,
+    hasSavedCredentials,
+    isLoading,
+    isMutating,
+    provider.fields,
+    settings,
+  ]);
 
   const save = () => {
     // Only send secret values the user actually typed: omitted keys keep the
@@ -156,9 +187,10 @@ export function useDeviceIntegrationConfigForm(
       request: {
         upsertConfigRequestBody2: {
           provider: provider.id,
-          // A first-time connect starts enabled; the connection switch and
-          // sheet manage the flag from then on.
-          enabled: isConfigured ? enabled : true,
+          // A first-time connect starts DISABLED: the intended flow is
+          // save → test connection → enable, so invalid credentials never
+          // start sync attempts.
+          enabled: isConfigured ? enabled : false,
           credentials: suppliedCredentials,
           settings,
         },
@@ -190,6 +222,13 @@ export function useDeviceIntegrationConfigForm(
     });
   };
 
+  const resetDraft = () => {
+    setCredentials({});
+    setSettings(data?.settings ?? {});
+    setEnabled(Boolean(data?.enabled));
+    setTestResult(null);
+  };
+
   const testConnection = () => {
     setTestResult(null);
     runTest({
@@ -207,19 +246,25 @@ export function useDeviceIntegrationConfigForm(
     isConfigured,
     hasSavedCredentials,
     credentials,
-    setCredential: (key, value) =>
-      setCredentials((current) => ({ ...current, [key]: value })),
+    setCredential: (key, value) => {
+      setCredentials((current) => ({ ...current, [key]: value }));
+      // An edit invalidates a previous test verdict: the shown result must
+      // always describe the saved configuration that was actually probed.
+      setTestResult(null);
+    },
     settings,
-    setSetting: (key, value) =>
-      setSettings((current) => ({ ...current, [key]: value })),
+    setSetting: (key, value) => {
+      setSettings((current) => ({ ...current, [key]: value }));
+      setTestResult(null);
+    },
     isMutating,
     canSave,
     save,
     saveEnabled,
     remove,
+    resetDraft,
     testConnection,
     isTesting: testStatus === "pending",
     testResult,
-    clearTestResult: () => setTestResult(null),
   };
 }

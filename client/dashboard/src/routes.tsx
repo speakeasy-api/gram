@@ -965,6 +965,7 @@ const ORG_ROUTE_STRUCTURE = {
     title: "MDM Integrations",
     url: "mdm-integrations",
     icon: "puzzle",
+    stage: "preview",
     component: DeviceIntegrationsRoot,
     indexComponent: DeviceIntegrations,
     subPages: {

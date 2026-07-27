@@ -37,7 +37,7 @@ function ScopeGatedNavItem({
 }) {
   return (
     <RequireScope scope={scope} level="section">
-      <CollapsibleNavItem item={item} />
+      <CollapsibleNavItem item={item} stage={item.stage} />
     </RequireScope>
   );
 }
