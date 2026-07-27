@@ -149,24 +149,31 @@ type Scanner struct {
 	bypass     BypassChecker
 }
 
-// NewScanner returns a Scanner without policy-bypass evaluation. logger,
-// validator, hosted, and provenance must all be non-nil; coverage may be nil
-// to disable resolution metrics.
-func NewScanner(logger *slog.Logger, validator Validator, hosted HostedChecker, provenance ProvenanceLookup, coverage CoverageRecorder) *Scanner {
-	return NewScannerWithBypass(logger, validator, hosted, provenance, coverage, nil)
+// Option configures optional Scanner behavior.
+type Option func(*Scanner)
+
+// WithShadowMCPBypass enables risk-policy bypass evaluation.
+func WithShadowMCPBypass(bypass BypassChecker) Option {
+	return func(scanner *Scanner) {
+		scanner.bypass = bypass
+	}
 }
 
-// NewScannerWithBypass returns a Scanner that suppresses findings covered by
-// attributed users' risk-policy bypass grants.
-func NewScannerWithBypass(logger *slog.Logger, validator Validator, hosted HostedChecker, provenance ProvenanceLookup, coverage CoverageRecorder, bypass BypassChecker) *Scanner {
-	return &Scanner{
+// NewScanner returns a Scanner. logger, validator, hosted, and provenance must
+// all be non-nil; coverage may be nil to disable resolution metrics.
+func NewScanner(logger *slog.Logger, validator Validator, hosted HostedChecker, provenance ProvenanceLookup, coverage CoverageRecorder, opts ...Option) *Scanner {
+	scanner := &Scanner{
 		logger:     logger,
 		validator:  validator,
 		hosted:     hosted,
 		provenance: provenance,
 		coverage:   coverage,
-		bypass:     bypass,
+		bypass:     nil,
 	}
+	for _, opt := range opts {
+		opt(scanner)
+	}
+	return scanner
 }
 
 // Scan returns a Finding for each MCP tool call that did not reach a

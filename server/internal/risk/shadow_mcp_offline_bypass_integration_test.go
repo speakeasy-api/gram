@@ -144,7 +144,7 @@ func TestOfflineShadowMCPScan_CursorApprovalWithURLAndIdentitySuppressesFinding(
 		evaluator: risk.NewPolicyBypassEvaluator(testenv.NewLogger(t), countingDB),
 		calls:     0,
 	}
-	scanner := shadowmcpscan.NewScannerWithBypass(
+	scanner := shadowmcpscan.NewScanner(
 		testenv.NewLogger(t),
 		offlineBypassValidator{},
 		offlineBypassHostedChecker{},
@@ -153,7 +153,7 @@ func TestOfflineShadowMCPScan_CursorApprovalWithURLAndIdentitySuppressesFinding(
 			"cursor-call-2": {Match: serverURL, ServerURL: serverURL, ServerIdentity: "", HookSource: "cursor"},
 		}},
 		nil,
-		checker,
+		shadowmcpscan.WithShadowMCPBypass(checker),
 	)
 
 	findings := scanner.Scan(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, uuid.MustParse(policy.ID), []shadowmcpscan.Message{{

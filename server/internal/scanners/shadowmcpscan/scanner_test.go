@@ -190,7 +190,7 @@ func TestScanner_URLBypassGrantSuppressesFinding(t *testing.T) {
 		callCount: 0,
 	}
 	bypass := &fakeBypassChecker{allowed: true, policyID: uuid.Nil, requests: nil, calls: 0}
-	s := NewScannerWithBypass(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil, bypass)
+	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil, WithShadowMCPBypass(bypass))
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), policyID, []Message{
 		{UserID: "user-1", ToolCalls: []ToolCall{{ID: "call-1", Name: "MCP:delete_row", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Cursor"}}},
@@ -227,7 +227,7 @@ func TestScanner_BatchesDuplicateBypassChecksAndPreservesURLIdentity(t *testing.
 		callCount: 0,
 	}
 	bypass := &fakeBypassChecker{allowed: true, policyID: uuid.Nil, requests: nil, calls: 0}
-	s := NewScannerWithBypass(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil, bypass)
+	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil, WithShadowMCPBypass(bypass))
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), policyID, []Message{{
 		UserID: "user-1",
@@ -255,13 +255,13 @@ func TestScanner_UnresolvedDeniedCallCanUseWholePolicyDecision(t *testing.T) {
 	t.Parallel()
 
 	bypass := &fakeBypassChecker{allowed: true, policyID: uuid.Nil, requests: nil, calls: 0}
-	s := NewScannerWithBypass(
+	s := NewScanner(
 		discardLogger(),
 		&fakeValidator{denied: map[string]bool{"delete": true}, orgIDs: nil},
 		gramHosted(),
 		noProvenance(),
 		nil,
-		bypass,
+		WithShadowMCPBypass(bypass),
 	)
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.New(), []Message{{
@@ -290,7 +290,7 @@ func TestScanner_UnattributedSessionCannotBypassFinding(t *testing.T) {
 		callCount: 0,
 	}
 	bypass := &fakeBypassChecker{allowed: true, policyID: uuid.Nil, requests: nil, calls: 0}
-	s := NewScannerWithBypass(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil, bypass)
+	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil, WithShadowMCPBypass(bypass))
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.New(), []Message{
 		{UserID: "", ToolCalls: []ToolCall{{ID: "call-1", Name: "MCP:delete_row", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Cursor"}}},
@@ -338,7 +338,7 @@ func TestScanner_StdioBypassGrantSuppressesFinding(t *testing.T) {
 		callCount: 0,
 	}
 	bypass := &fakeBypassChecker{allowed: true, policyID: uuid.Nil, requests: nil, calls: 0}
-	s := NewScannerWithBypass(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil, bypass)
+	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil, WithShadowMCPBypass(bypass))
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), policyID, []Message{
 		{UserID: "user-1", ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Codex"}}},
