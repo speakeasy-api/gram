@@ -13,9 +13,10 @@ import (
 // allow for enqueuing subsequent runs of the workflow.
 //
 // `wrapped` is the workflow function whose body runs once per execution. It
-// must return (result, nil) and must not issue its own ContinueAsNew —
-// continuation is owned by this wrapper. Errors returned by `wrapped` are
-// propagated unchanged.
+// must not issue its own ContinueAsNew — continuation is owned by this wrapper.
+// Errors returned by `wrapped` are propagated unless another signal arrived
+// while it was running; in that case the pending signal is answered with a
+// fresh run instead of being stranded behind a closed workflow.
 //
 // `continueAsSelf` is the function used as the ContinueAsNew target when the
 // wrapper decides to enqueue another run. It MUST be the debounced wrapper
@@ -48,6 +49,9 @@ func Debounce[Params any, Result any](
 
 		res, err := wrapped(ctx, params)
 		if err != nil {
+			if drainSignals(signalCh) {
+				return res, workflow.NewContinueAsNewError(ctx, continueAsSelf, params)
+			}
 			return res, err
 		}
 

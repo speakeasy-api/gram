@@ -214,12 +214,10 @@ func (s *Service) CreateSpendRule(ctx context.Context, payload *gen.CreateSpendR
 		return nil, oops.E(oops.CodeUnexpected, err, "log spend rule create").LogError(ctx, s.logger)
 	}
 
-	if err := s.refreshGateRules(ctx, authCtx.ActiveOrganizationID, queries); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "refresh spend gate rules").LogError(ctx, s.logger)
-	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit spend rule create").LogError(ctx, s.logger)
 	}
+	s.refreshGateRulesAfterCommit(ctx, authCtx.ActiveOrganizationID)
 	s.signalEvaluation(ctx, authCtx.ActiveOrganizationID)
 
 	return buildSpendRuleView(row), nil
@@ -468,12 +466,10 @@ func (s *Service) UpdateSpendRule(ctx context.Context, payload *gen.UpdateSpendR
 		return nil, oops.E(oops.CodeUnexpected, err, "log spend rule update").LogError(ctx, s.logger)
 	}
 
-	if err := s.refreshGateRules(ctx, authCtx.ActiveOrganizationID, queries); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "refresh spend gate rules").LogError(ctx, s.logger)
-	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit spend rule update").LogError(ctx, s.logger)
 	}
+	s.refreshGateRulesAfterCommit(ctx, authCtx.ActiveOrganizationID)
 	s.signalEvaluation(ctx, authCtx.ActiveOrganizationID)
 
 	return buildSpendRuleView(row), nil
@@ -544,12 +540,10 @@ func (s *Service) ArchiveSpendRule(ctx context.Context, payload *gen.ArchiveSpen
 		return oops.E(oops.CodeUnexpected, err, "log spend rule archive").LogError(ctx, s.logger)
 	}
 
-	if err := s.refreshGateRules(ctx, authCtx.ActiveOrganizationID, queries); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "refresh spend gate rules").LogError(ctx, s.logger)
-	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit spend rule archive").LogError(ctx, s.logger)
 	}
+	s.refreshGateRulesAfterCommit(ctx, authCtx.ActiveOrganizationID)
 	s.signalEvaluation(ctx, authCtx.ActiveOrganizationID)
 
 	return nil
@@ -885,6 +879,15 @@ func (s *Service) refreshGateRules(ctx context.Context, organizationID string, q
 		return fmt.Errorf("refresh gate rules from db: %w", err)
 	}
 	return nil
+}
+
+func (s *Service) refreshGateRulesAfterCommit(ctx context.Context, organizationID string) {
+	if err := s.refreshGateRules(ctx, organizationID, repo.New(s.db)); err != nil {
+		s.logger.ErrorContext(ctx, "refresh spend gate rules after commit",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(organizationID),
+		)
+	}
 }
 
 func (s *Service) budgetsEnabled(ctx context.Context, organizationID string) bool {

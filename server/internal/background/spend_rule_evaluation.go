@@ -20,21 +20,34 @@ const (
 	spendRuleEvaluationWorkflowID = "v1:spend-rule-evaluation"
 	spendRuleEvaluationScheduleID = "v1:spend-rule-evaluation-schedule"
 
-	// spendRuleEvaluationRunTimeout budgets one full scheduled sweep across
-	// every org with enabled rules.
+	// spendRuleEvaluationRunTimeout budgets one bounded page of the scheduled
+	// sweep. Larger sweeps ContinueAsNew with the remaining orgs.
 	spendRuleEvaluationRunTimeout = 15 * time.Minute
 
 	// spendRuleEvaluationActivityTimeout budgets one activity: listing orgs
 	// or evaluating a single org (directory match + one ClickHouse query per
 	// rule).
-	spendRuleEvaluationActivityTimeout = 2 * time.Minute
+	spendRuleEvaluationActivityTimeout = 30 * time.Second
+
+	// spendRuleEvaluationOrgPageSize bounds each workflow run. With a 30s
+	// activity attempt and 3 attempts, five unhealthy orgs still fit under the
+	// run timeout with retry backoff.
+	spendRuleEvaluationOrgPageSize = 5
 )
 
+type SpendRuleEvaluationParams struct {
+	OrganizationIDs []string `json:"organization_ids"`
+	EvaluatedCount  int      `json:"evaluated_count"`
+	ErrorCount      int      `json:"error_count"`
+}
+
 // SpendRuleEvaluationWorkflow is the scheduled coordinator: it lists every
-// organization with enabled spend rules and evaluates each in turn. Runs
-// every spendrules.EvaluationInterval with overlap-skip, so a slow sweep
-// delays rather than stacks.
-func SpendRuleEvaluationWorkflow(ctx workflow.Context) error {
+// organization with enabled spend rules and evaluates a bounded page per run.
+// Larger sweeps ContinueAsNew with the remaining orgs so slow/failing orgs do
+// not prevent later orgs from being evaluated. Runs every
+// spendrules.EvaluationInterval with overlap-skip, so a slow sweep delays
+// rather than stacks.
+func SpendRuleEvaluationWorkflow(ctx workflow.Context, params SpendRuleEvaluationParams) error {
 	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: spendRuleEvaluationActivityTimeout,
 		RetryPolicy: &temporal.RetryPolicy{
@@ -46,25 +59,37 @@ func SpendRuleEvaluationWorkflow(ctx workflow.Context) error {
 
 	var a *Activities
 
-	var orgs []string
-	if err := workflow.ExecuteActivity(activityCtx, a.ListSpendRuleOrgs).Get(activityCtx, &orgs); err != nil {
-		return fmt.Errorf("list spend rule orgs: %w", err)
-	}
-
-	var errCount int
-	for _, org := range orgs {
-		if err := workflow.ExecuteActivity(activityCtx, a.EvaluateOrgSpendRules, spend_rules.EvaluateOrgArgs{
-			OrganizationID: org,
-		}).Get(activityCtx, nil); err != nil {
-			// Evaluate every org even when one fails; surface the failure at
-			// the end so the run is visibly unhealthy.
-			workflow.GetLogger(ctx).Error("evaluate org spend rules", "organization_id", org, "error", err)
-			errCount++
+	orgs := params.OrganizationIDs
+	if len(orgs) == 0 && params.EvaluatedCount == 0 {
+		if err := workflow.ExecuteActivity(activityCtx, a.ListSpendRuleOrgs).Get(activityCtx, &orgs); err != nil {
+			return fmt.Errorf("list spend rule orgs: %w", err)
 		}
 	}
 
+	pageEnd := min(len(orgs), spendRuleEvaluationOrgPageSize)
+	errCount := params.ErrorCount
+	evaluatedCount := params.EvaluatedCount
+	for _, org := range orgs[:pageEnd] {
+		if err := workflow.ExecuteActivity(activityCtx, a.EvaluateOrgSpendRules, spend_rules.EvaluateOrgArgs{
+			OrganizationID: org,
+		}).Get(activityCtx, nil); err != nil {
+			// Evaluate every org in this page even when one fails; surface the
+			// failure after the sweep finishes so later pages still run.
+			workflow.GetLogger(ctx).Error("evaluate org spend rules", "organization_id", org, "error", err)
+			errCount++
+		}
+		evaluatedCount++
+	}
+
+	if pageEnd < len(orgs) {
+		return workflow.NewContinueAsNewError(ctx, SpendRuleEvaluationWorkflow, SpendRuleEvaluationParams{
+			OrganizationIDs: orgs[pageEnd:],
+			EvaluatedCount:  evaluatedCount,
+			ErrorCount:      errCount,
+		})
+	}
 	if errCount > 0 {
-		return fmt.Errorf("spend rule evaluation failed for %d of %d orgs", errCount, len(orgs))
+		return fmt.Errorf("spend rule evaluation failed for %d of %d orgs", errCount, evaluatedCount)
 	}
 	return nil
 }
@@ -267,6 +292,7 @@ func buildSpendRuleEvaluationScheduleOptions(temporalEnv *tenv.Environment) clie
 		Action: &client.ScheduleWorkflowAction{
 			ID:                 spendRuleEvaluationWorkflowID,
 			Workflow:           SpendRuleEvaluationWorkflow,
+			Args:               []any{SpendRuleEvaluationParams{OrganizationIDs: nil, EvaluatedCount: 0, ErrorCount: 0}},
 			TaskQueue:          string(temporalEnv.Queue()),
 			WorkflowRunTimeout: spendRuleEvaluationRunTimeout,
 		},

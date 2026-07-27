@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -11,6 +12,97 @@ import (
 
 	spend_rules "github.com/speakeasy-api/gram/server/internal/background/activities/spend_rules"
 )
+
+func TestSpendRuleEvaluationWorkflowContinuesWithRemainingOrgs(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	orgs := []string{"org_01", "org_02", "org_03", "org_04", "org_05", "org_06"}
+	env.RegisterActivityWithOptions(
+		func(context.Context) ([]string, error) {
+			return orgs, nil
+		},
+		activity.RegisterOptions{Name: "ListSpendRuleOrgs"},
+	)
+
+	evaluated := make([]string, 0, spendRuleEvaluationOrgPageSize)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, args spend_rules.EvaluateOrgArgs) error {
+			evaluated = append(evaluated, args.OrganizationID)
+			return nil
+		},
+		activity.RegisterOptions{Name: "EvaluateOrgSpendRules"},
+	)
+
+	env.ExecuteWorkflow(SpendRuleEvaluationWorkflow, SpendRuleEvaluationParams{
+		OrganizationIDs: nil,
+		EvaluatedCount:  0,
+		ErrorCount:      0,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	var canErr *workflow.ContinueAsNewError
+	require.ErrorAs(t, env.GetWorkflowError(), &canErr)
+	require.Equal(t, "SpendRuleEvaluationWorkflow", canErr.WorkflowType.Name)
+	require.Equal(t, orgs[:spendRuleEvaluationOrgPageSize], evaluated)
+}
+
+func TestSpendRuleEvaluationWorkflowContinuesBeforeReportingPageErrors(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	orgs := []string{"org_01", "org_02", "org_03", "org_04", "org_05", "org_06"}
+	env.RegisterActivityWithOptions(
+		func(context.Context) ([]string, error) {
+			return orgs, nil
+		},
+		activity.RegisterOptions{Name: "ListSpendRuleOrgs"},
+	)
+	env.RegisterActivityWithOptions(
+		func(context.Context, spend_rules.EvaluateOrgArgs) error {
+			return errors.New("evaluate failed")
+		},
+		activity.RegisterOptions{Name: "EvaluateOrgSpendRules"},
+	)
+
+	env.ExecuteWorkflow(SpendRuleEvaluationWorkflow, SpendRuleEvaluationParams{
+		OrganizationIDs: nil,
+		EvaluatedCount:  0,
+		ErrorCount:      0,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	var canErr *workflow.ContinueAsNewError
+	require.ErrorAs(t, env.GetWorkflowError(), &canErr)
+	require.Equal(t, "SpendRuleEvaluationWorkflow", canErr.WorkflowType.Name)
+}
+
+func TestSpendRuleEvaluationWorkflowReportsAggregatedErrorsOnFinalPage(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	env.RegisterActivityWithOptions(
+		func(context.Context, spend_rules.EvaluateOrgArgs) error {
+			return errors.New("evaluate failed")
+		},
+		activity.RegisterOptions{Name: "EvaluateOrgSpendRules"},
+	)
+
+	env.ExecuteWorkflow(SpendRuleEvaluationWorkflow, SpendRuleEvaluationParams{
+		OrganizationIDs: []string{"org_06"},
+		EvaluatedCount:  5,
+		ErrorCount:      2,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.ErrorContains(t, env.GetWorkflowError(), "spend rule evaluation failed for 3 of 6 orgs")
+}
 
 func TestSpendRuleOrgEvaluationWorkflowID(t *testing.T) {
 	t.Parallel()
@@ -90,6 +182,28 @@ func TestSpendRuleOrgEvaluationWorkflowDebounced_SignalMidRunContinuesAsNew(t *t
 
 	// The ContinueAsNew must target the debounced wrapper itself, not the
 	// inner workflow, or the next run loses debounce semantics.
+	var canErr *workflow.ContinueAsNewError
+	require.ErrorAs(t, env.GetWorkflowError(), &canErr)
+	require.Equal(t, "SpendRuleOrgEvaluationWorkflowDebounced", canErr.WorkflowType.Name)
+}
+
+func TestSpendRuleOrgEvaluationWorkflowDebounced_FailingRunWithSignalContinuesAsNew(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ spend_rules.EvaluateOrgArgs) error {
+			env.SignalWorkflow(spendRuleOrgEvaluationDebounceSignal("org_01HZ"), "enqueue")
+			return errors.New("evaluate failed")
+		},
+		activity.RegisterOptions{Name: "EvaluateOrgSpendRules"},
+	)
+
+	env.ExecuteWorkflow(SpendRuleOrgEvaluationWorkflowDebounced, "org_01HZ")
+
+	require.True(t, env.IsWorkflowCompleted())
 	var canErr *workflow.ContinueAsNewError
 	require.ErrorAs(t, env.GetWorkflowError(), &canErr)
 	require.Equal(t, "SpendRuleOrgEvaluationWorkflowDebounced", canErr.WorkflowType.Name)
