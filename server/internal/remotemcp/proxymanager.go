@@ -142,9 +142,13 @@ func (f *ProxyManager) Build(
 			identity,
 		)
 		// Authorize against upstream canonical names first, then expose aliases
-		// in tools/list and restore them after tools/call authorization.
+		// in tools/list. Restore aliases before the request-side interceptors so
+		// tools/call authorization uses that same canonical name.
 		p.ToolsListResponseInterceptors = append(p.ToolsListResponseInterceptors, variationInterceptor)
-		p.ToolsCallRequestInterceptors = append(p.ToolsCallRequestInterceptors, variationInterceptor)
+		p.ToolsCallRequestInterceptors = append(
+			[]proxy.ToolsCallRequestInterceptor{variationInterceptor},
+			p.ToolsCallRequestInterceptors...,
+		)
 	}
 
 	return p

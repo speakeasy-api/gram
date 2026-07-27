@@ -134,7 +134,13 @@ func applyRemoteToolVariation(tool *mcp.Tool, variation variationsrepo.ToolVaria
 		return
 	}
 	if tool.Annotations == nil {
-		tool.Annotations = &mcp.ToolAnnotations{}
+		tool.Annotations = &mcp.ToolAnnotations{
+			DestructiveHint: nil,
+			IdempotentHint:  false,
+			OpenWorldHint:   nil,
+			ReadOnlyHint:    false,
+			Title:           "",
+		}
 	}
 	if variation.Title.Valid && variation.Title.String != "" {
 		tool.Annotations.Title = variation.Title.String
