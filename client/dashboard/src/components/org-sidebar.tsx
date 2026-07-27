@@ -77,8 +77,6 @@ export function OrgSidebar({
   const isPlatformAdmin = useIsPlatformAdmin();
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
-  const isDeviceIntegrationsEnabled =
-    telemetry.isFeatureEnabled("gram-device-integrations") ?? false;
   const isUserSessionsEnabled =
     telemetry.isFeatureEnabled("user-sessions-dashboard") ?? false;
 
@@ -96,7 +94,6 @@ export function OrgSidebar({
   const secureActive = [
     orgRoutes.auditLogs,
     orgRoutes.deviceAgent,
-    orgRoutes.deviceIntegrations,
     orgRoutes.access,
   ].some((r) => r.active);
 
@@ -128,7 +125,6 @@ export function OrgSidebar({
     orgRoutes.externalServices,
     orgRoutes.auditLogs,
     orgRoutes.deviceAgent,
-    orgRoutes.deviceIntegrations,
     orgRoutes.access,
     orgRoutes.userSessions,
     orgRoutes.identity,
@@ -233,12 +229,6 @@ export function OrgSidebar({
                 {isDeviceAgentEnabled && (
                   <ScopeGatedNavItem
                     item={orgRoutes.deviceAgent}
-                    scope={["org:read", "org:admin"]}
-                  />
-                )}
-                {isDeviceIntegrationsEnabled && (
-                  <ScopeGatedNavItem
-                    item={orgRoutes.deviceIntegrations}
                     scope={["org:read", "org:admin"]}
                   />
                 )}

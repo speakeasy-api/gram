@@ -63,7 +63,7 @@ export function DeviceIntegrationConnectionRow({
             while the markup stays a single non-nested anchor. Interactive
             controls opt out by sitting above it with relative + z-10. */}
         <Link
-          to={orgRoutes.deviceIntegrations.detail.href(provider.id)}
+          to={orgRoutes.deviceAgent.mdmDetail.href(provider.id)}
           aria-label={`Open ${provider.displayName} details`}
           className="min-w-0 flex-1 focus-visible:outline-none after:absolute after:inset-0 after:content-['']"
         >

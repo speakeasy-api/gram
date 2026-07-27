@@ -1,8 +1,14 @@
-import { MultiSelect } from "@/components/ui/multi-select";
-import { SearchBar } from "@/components/ui/search-bar";
+import { Page } from "@/components/page-layout";
+import {
+  defineFilters,
+  type FilterValue,
+  useFilterState,
+} from "@/components/filters";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
+import { useOrganization } from "@/contexts/Auth";
+import { useSlugs } from "@/contexts/Sdk";
 import { formatRelativeTime } from "@/lib/dates";
 import type { DeviceIntegrationCoverage } from "@gram/client/models/components/deviceintegrationcoverage.js";
 import type {
@@ -26,6 +32,7 @@ import {
   UserX,
 } from "lucide-react";
 import { memo, useDeferredValue, useMemo, useState } from "react";
+import { Link } from "react-router";
 
 // Coverage joins the MDM-reported fleet against device agent heartbeats.
 // Attestation is per assigned USER, not per device: an active heartbeat
@@ -207,9 +214,12 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
   isLoadingMore?: boolean;
 }): JSX.Element {
   const [search, setSearch] = useState("");
-  const [selectedBuckets, setSelectedBuckets] = useState<string[]>([]);
   // Keep the input responsive; the table filter recomputation trails behind.
   const deferredSearch = useDeferredValue(search);
+  const { values, setValue, clearValue, clearAll } =
+    useFilterState(DEVICE_FILTERS);
+  const selectedBuckets = values.coverage ?? [];
+  const userHref = useEmployeeDetailHref();
 
   const filteredDevices = useMemo(() => {
     const normalizedSearch = deferredSearch.trim().toLowerCase();
@@ -229,6 +239,8 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
     });
   }, [devices, deferredSearch, selectedBuckets]);
 
+  const columns = useMemo(() => deviceColumns(userHref), [userHref]);
+
   if (isLoading) return <SkeletonTable />;
   if (isError) {
     return (
@@ -245,23 +257,27 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
 
   return (
     <Stack gap={3}>
-      <Stack direction="horizontal" gap={2} className="h-fit flex-wrap">
-        <SearchBar
+      <Page.Toolbar>
+        <Page.Toolbar.Search
           value={search}
           onChange={setSearch}
           placeholder="Search host, serial, or user"
-          className="w-64 max-w-full"
+          debounceMs={300}
         />
-        <MultiSelect
-          options={BUCKET_OPTIONS}
-          defaultValue={selectedBuckets}
-          onValueChange={setSelectedBuckets}
-          placeholder="Filter by coverage"
-          autoSize
+        <Page.Toolbar.Filters
+          schema={DEVICE_FILTERS}
+          values={values}
+          optionsById={{ coverage: BUCKET_OPTIONS }}
+          onChange={setValue as (id: string, value: FilterValue) => void}
+          onClear={clearValue as (id: string) => void}
+          onClearAll={clearAll}
         />
-      </Stack>
+        <Page.Toolbar.Count>
+          {filteredDevices.length} devices
+        </Page.Toolbar.Count>
+      </Page.Toolbar>
       <Table
-        columns={deviceColumns}
+        columns={columns}
         data={filteredDevices}
         rowKey={(row) => row.id}
         noResultsMessage={<Type muted>No matching devices</Type>}
@@ -295,30 +311,87 @@ const BUCKET_OPTIONS = (Object.keys(BUCKETS) as CoverageBucket[]).map(
   }),
 );
 
-const deviceColumns: Column<ManagedDevice>[] = [
-  {
-    key: "device",
-    header: "Device",
-    render: (device) => (
-      <Stack gap={0.5} className="min-w-0">
-        <Type variant="body" className="truncate font-medium">
-          {device.hostname ?? device.externalId}
-        </Type>
-        <Type muted small className="truncate font-mono text-xs">
-          {deviceSubtitle(device)}
-        </Type>
-      </Stack>
-    ),
-  },
-  {
-    key: "user",
-    header: "Assigned user",
-    render: (device) => (
+const DEVICE_FILTERS = defineFilters([
+  { id: "coverage", label: "Coverage", kind: "multiselect", pinned: true },
+]);
+
+// Builds a link to the (project-scoped) Employee Detail page for a device's
+// assigned user, when the device resolved to an org member. The employee
+// pages live under a project, so the org's first project anchors the link.
+function useEmployeeDetailHref(): (device: ManagedDevice) => string | null {
+  const organization = useOrganization();
+  const { orgSlug } = useSlugs();
+  const projectSlug = organization.projects[0]?.slug;
+  return useMemo(
+    () => (device: ManagedDevice) => {
+      if (!device.userId || !device.userEmail || !projectSlug) return null;
+      return `/${orgSlug}/projects/${projectSlug}/employees/${encodeURIComponent(device.userEmail)}`;
+    },
+    [orgSlug, projectSlug],
+  );
+}
+
+function deviceColumns(
+  userHref: (device: ManagedDevice) => string | null,
+): Column<ManagedDevice>[] {
+  return [
+    {
+      key: "device",
+      header: "Device",
+      render: (device) => (
+        <Stack gap={0.5} className="min-w-0">
+          <Type variant="body" className="truncate font-medium">
+            {device.hostname ?? device.externalId}
+          </Type>
+          <Type muted small className="truncate font-mono text-xs">
+            {deviceSubtitle(device)}
+          </Type>
+        </Stack>
+      ),
+    },
+    {
+      key: "user",
+      header: "Assigned user",
+      render: (device) => (
+        <AssignedUserCell device={device} href={userHref(device)} />
+      ),
+    },
+    ...trailingDeviceColumns,
+  ];
+}
+
+function AssignedUserCell({
+  device,
+  href,
+}: {
+  device: ManagedDevice;
+  href: string | null;
+}) {
+  if (!device.userEmail) {
+    return (
       <Type muted small className="truncate">
-        {device.userEmail ?? "—"}
+        —
       </Type>
-    ),
-  },
+    );
+  }
+  if (!href) {
+    return (
+      <Type muted small className="truncate">
+        {device.userEmail}
+      </Type>
+    );
+  }
+  return (
+    <Link
+      to={href}
+      className="text-muted-foreground hover:text-foreground block truncate text-sm underline-offset-2 hover:underline"
+    >
+      {device.userEmail}
+    </Link>
+  );
+}
+
+const trailingDeviceColumns: Column<ManagedDevice>[] = [
   {
     key: "agentLastSeen",
     header: "Agent last seen",
