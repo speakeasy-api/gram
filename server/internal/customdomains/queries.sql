@@ -152,14 +152,25 @@ LIMIT @page_limit;
 
 -- name: ListActivatedCustomDomainResources :many
 SELECT
-    id,
-    domain,
-    provisioner_kind,
-    COALESCE(ingress_name, '')::text AS resource_name
-FROM custom_domains
-WHERE activated IS TRUE
-  AND ingress_name IS NOT NULL
-  AND deleted IS FALSE;
+    d.id,
+    d.domain,
+    d.provisioner_kind,
+    COALESCE(d.ingress_name, '')::text AS resource_name,
+    EXISTS (
+        SELECT 1
+        FROM mcp_endpoints AS e
+        JOIN mcp_servers AS s
+          ON s.id = e.mcp_server_id
+         AND s.deleted IS FALSE
+         AND s.visibility <> 'disabled'
+        WHERE e.custom_domain_id = d.id
+          AND e.is_domain_root IS TRUE
+          AND e.deleted IS FALSE
+    ) AS has_root_mapping
+FROM custom_domains AS d
+WHERE d.activated IS TRUE
+  AND d.ingress_name IS NOT NULL
+  AND d.deleted IS FALSE;
 
 -- name: ListOrganizationUsersForHealthNotification :many
 -- Authorization filtering is applied by the caller.

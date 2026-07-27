@@ -414,11 +414,7 @@ func (c *CustomDomainHealth) FindOrphanResources(ctx context.Context) error {
 			Domain: resource.Domain,
 		}] = struct{}{}
 
-		route, err := repository.GetCustomDomainRouteConfig(ctx, resource.ID)
-		if err != nil {
-			return fmt.Errorf("get custom domain route for orphan reconciliation: %w", err)
-		}
-		if route.RootMcpEndpointID == uuid.Nil {
+		if !resource.HasRootMapping {
 			continue
 		}
 		rootName, err := k8s.RootIngressNameForDomain(resource.Domain)
