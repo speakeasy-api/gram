@@ -406,6 +406,7 @@ export function useRemoteMcpInstallWorkflow({
       mcpServer: McpServer;
       mcpEndpointUrl?: string;
       authConfigured: boolean;
+      authSetupRequired: boolean;
     }> => {
       const remoteMcpServer = await client.remoteMcp.createServer(
         {
