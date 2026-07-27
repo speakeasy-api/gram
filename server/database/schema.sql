@@ -1598,6 +1598,11 @@ CREATE TABLE IF NOT EXISTS chats (
   -- dedicated section above recents; the timestamp orders them by pin time.
   pinned_at timestamptz,
 
+  -- On-demand LLM summary of the session transcript (NULL until generated).
+  -- Written by chat.summarize; regenerated in place when requested.
+  summary text,
+  summary_generated_at timestamptz,
+
   -- Personal-account tracking: the external AI account (user_accounts row) this
   -- session belongs to. Join to user_accounts for provider, account_type
   -- (team/personal), external_org_id, the owning employee, etc. — set by ingest.
