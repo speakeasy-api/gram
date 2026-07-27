@@ -10,7 +10,6 @@ import type { SkillEditSuggestion } from "@gram/client/models/components/skilled
 import { useSkillSuggestionFeedback } from "@gram/client/react-query/skillSuggestionFeedback.js";
 import { Badge, Icon } from "@speakeasy-api/moonshine";
 import { useState } from "react";
-import type { SkillDiffHunk } from "./skill-diff-anchors";
 
 export type SkillSuggestionActions = {
   disabled: boolean;
@@ -56,11 +55,9 @@ export function SkillSuggestionMarker({
 
 export function SkillSuggestionComment({
   suggestion,
-  hunks,
   actions,
 }: {
   suggestion: SkillEditSuggestion;
-  hunks: SkillDiffHunk[];
   actions: SkillSuggestionActions;
 }): JSX.Element {
   const project = useProject();
@@ -91,10 +88,6 @@ export function SkillSuggestionComment({
           )}
           {suggestion.rationale}
         </Type>
-
-        {hunks.map((hunk, index) => (
-          <ProposedChange key={index} hunk={hunk} />
-        ))}
 
         <SuggestionSources
           suggestionId={suggestion.id}
@@ -142,29 +135,6 @@ export function SkillSuggestionComment({
           </div>
         </RequireScope>
       </div>
-    </div>
-  );
-}
-
-function ProposedChange({ hunk }: { hunk: SkillDiffHunk }): JSX.Element {
-  return (
-    <div className="border-border overflow-x-auto rounded-md border font-mono text-xs">
-      {hunk.removed.map((line, index) => (
-        <div
-          key={`removed-${index}`}
-          className="bg-destructive/10 text-destructive whitespace-pre px-3 py-0.5"
-        >
-          {`- ${line}`}
-        </div>
-      ))}
-      {hunk.added.map((line, index) => (
-        <div
-          key={`added-${index}`}
-          className="bg-success-softest text-success-default whitespace-pre px-3 py-0.5"
-        >
-          {`+ ${line}`}
-        </div>
-      ))}
     </div>
   );
 }

@@ -51,7 +51,6 @@ export function SkillManifestReview({
       <div className="px-4">
         <SkillSuggestionComment
           suggestion={suggestion}
-          hunks={anchor.hunks}
           actions={{
             disabled: review.actionsDisabled,
             approving: review.approving,

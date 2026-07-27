@@ -67,8 +67,6 @@ const actions = {
   onDismiss: vi.fn(),
 };
 
-const hunks = [{ anchorLine: 3, removed: [], added: ["Quantify impact."] }];
-
 describe("SkillSuggestionMarker", () => {
   afterEach(cleanup);
 
@@ -98,25 +96,19 @@ describe("SkillSuggestionComment", () => {
 
   it("leads with the session count the suggestion was built from", () => {
     render(
-      <SkillSuggestionComment
-        suggestion={suggestion()}
-        hunks={hunks}
-        actions={actions}
-      />,
+      <SkillSuggestionComment suggestion={suggestion()} actions={actions} />,
     );
 
     expect(screen.getByText(/Requested in 11 sessions\./)).toBeTruthy();
     expect(
       screen.getByText(/Leadership reviews stall without a number here\./),
     ).toBeTruthy();
-    expect(screen.getByText("+ Quantify impact.")).toBeTruthy();
   });
 
   it("omits the session count when no session reported the feedback", () => {
     render(
       <SkillSuggestionComment
         suggestion={suggestion({ feedbackSessionCount: 0 })}
-        hunks={hunks}
         actions={actions}
       />,
     );
@@ -134,11 +126,7 @@ describe("SkillSuggestionComment", () => {
       },
     ];
     render(
-      <SkillSuggestionComment
-        suggestion={suggestion()}
-        hunks={hunks}
-        actions={actions}
-      />,
+      <SkillSuggestionComment suggestion={suggestion()} actions={actions} />,
     );
 
     expect(testState.enabled).toBe(false);
@@ -153,7 +141,6 @@ describe("SkillSuggestionComment", () => {
     render(
       <SkillSuggestionComment
         suggestion={suggestion({ feedbackCount: 0 })}
-        hunks={hunks}
         actions={actions}
       />,
     );
