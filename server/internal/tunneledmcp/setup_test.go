@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -46,6 +47,7 @@ type testInstance struct {
 	service        *Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
+	enc            *encryption.Client
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -66,13 +68,15 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
+	enc := testenv.NewEncryptionClient(t)
 	authzEngine := authz.NewEngine(logger, conn, nil, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), nil)
+	svc := NewService(logger, tracerProvider, conn, sessionManager, enc, authzEngine, audit.NewLogger(), nil)
 
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
+		enc:            enc,
 	}
 }
 

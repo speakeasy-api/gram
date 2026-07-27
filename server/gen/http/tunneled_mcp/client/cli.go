@@ -286,3 +286,218 @@ func BuildDeleteServerPayload(tunneledMcpDeleteServerID string, tunneledMcpDelet
 
 	return v, nil
 }
+
+// BuildListServerHeadersPayload builds the payload for the tunneledMcp
+// listServerHeaders endpoint from CLI flags.
+func BuildListServerHeadersPayload(tunneledMcpListServerHeadersTunneledMcpServerID string, tunneledMcpListServerHeadersSessionToken string, tunneledMcpListServerHeadersApikeyToken string, tunneledMcpListServerHeadersProjectSlugInput string) (*tunneledmcp.ListServerHeadersPayload, error) {
+	var err error
+	var tunneledMcpServerID string
+	{
+		tunneledMcpServerID = tunneledMcpListServerHeadersTunneledMcpServerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("tunneled_mcp_server_id", tunneledMcpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if tunneledMcpListServerHeadersSessionToken != "" {
+			sessionToken = &tunneledMcpListServerHeadersSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if tunneledMcpListServerHeadersApikeyToken != "" {
+			apikeyToken = &tunneledMcpListServerHeadersApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if tunneledMcpListServerHeadersProjectSlugInput != "" {
+			projectSlugInput = &tunneledMcpListServerHeadersProjectSlugInput
+		}
+	}
+	v := &tunneledmcp.ListServerHeadersPayload{}
+	v.TunneledMcpServerID = tunneledMcpServerID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetServerHeaderPayload builds the payload for the tunneledMcp
+// getServerHeader endpoint from CLI flags.
+func BuildGetServerHeaderPayload(tunneledMcpGetServerHeaderID string, tunneledMcpGetServerHeaderSessionToken string, tunneledMcpGetServerHeaderApikeyToken string, tunneledMcpGetServerHeaderProjectSlugInput string) (*tunneledmcp.GetServerHeaderPayload, error) {
+	var err error
+	var id string
+	{
+		id = tunneledMcpGetServerHeaderID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if tunneledMcpGetServerHeaderSessionToken != "" {
+			sessionToken = &tunneledMcpGetServerHeaderSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if tunneledMcpGetServerHeaderApikeyToken != "" {
+			apikeyToken = &tunneledMcpGetServerHeaderApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if tunneledMcpGetServerHeaderProjectSlugInput != "" {
+			projectSlugInput = &tunneledMcpGetServerHeaderProjectSlugInput
+		}
+	}
+	v := &tunneledmcp.GetServerHeaderPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildCreateServerHeaderPayload builds the payload for the tunneledMcp
+// createServerHeader endpoint from CLI flags.
+func BuildCreateServerHeaderPayload(tunneledMcpCreateServerHeaderBody string, tunneledMcpCreateServerHeaderSessionToken string, tunneledMcpCreateServerHeaderApikeyToken string, tunneledMcpCreateServerHeaderProjectSlugInput string) (*tunneledmcp.CreateServerHeaderPayload, error) {
+	var err error
+	var body CreateServerHeaderRequestBody
+	{
+		err = json.Unmarshal([]byte(tunneledMcpCreateServerHeaderBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"is_required\": false,\n      \"is_secret\": false,\n      \"name\": \"abc123\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"value\": \"abc123\",\n      \"value_from_request_header\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", body.TunneledMcpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if tunneledMcpCreateServerHeaderSessionToken != "" {
+			sessionToken = &tunneledMcpCreateServerHeaderSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if tunneledMcpCreateServerHeaderApikeyToken != "" {
+			apikeyToken = &tunneledMcpCreateServerHeaderApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if tunneledMcpCreateServerHeaderProjectSlugInput != "" {
+			projectSlugInput = &tunneledMcpCreateServerHeaderProjectSlugInput
+		}
+	}
+	v := &tunneledmcp.CreateServerHeaderPayload{
+		TunneledMcpServerID:    body.TunneledMcpServerID,
+		Name:                   body.Name,
+		Description:            body.Description,
+		IsRequired:             body.IsRequired,
+		IsSecret:               body.IsSecret,
+		Value:                  body.Value,
+		ValueFromRequestHeader: body.ValueFromRequestHeader,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUpdateServerHeaderPayload builds the payload for the tunneledMcp
+// updateServerHeader endpoint from CLI flags.
+func BuildUpdateServerHeaderPayload(tunneledMcpUpdateServerHeaderBody string, tunneledMcpUpdateServerHeaderSessionToken string, tunneledMcpUpdateServerHeaderApikeyToken string, tunneledMcpUpdateServerHeaderProjectSlugInput string) (*tunneledmcp.UpdateServerHeaderPayload, error) {
+	var err error
+	var body UpdateServerHeaderRequestBody
+	{
+		err = json.Unmarshal([]byte(tunneledMcpUpdateServerHeaderBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"is_required\": false,\n      \"is_secret\": false,\n      \"name\": \"abc123\",\n      \"value\": \"abc123\",\n      \"value_from_request_header\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if tunneledMcpUpdateServerHeaderSessionToken != "" {
+			sessionToken = &tunneledMcpUpdateServerHeaderSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if tunneledMcpUpdateServerHeaderApikeyToken != "" {
+			apikeyToken = &tunneledMcpUpdateServerHeaderApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if tunneledMcpUpdateServerHeaderProjectSlugInput != "" {
+			projectSlugInput = &tunneledMcpUpdateServerHeaderProjectSlugInput
+		}
+	}
+	v := &tunneledmcp.UpdateServerHeaderPayload{
+		ID:                     body.ID,
+		Name:                   body.Name,
+		Description:            body.Description,
+		IsRequired:             body.IsRequired,
+		IsSecret:               body.IsSecret,
+		Value:                  body.Value,
+		ValueFromRequestHeader: body.ValueFromRequestHeader,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDeleteServerHeaderPayload builds the payload for the tunneledMcp
+// deleteServerHeader endpoint from CLI flags.
+func BuildDeleteServerHeaderPayload(tunneledMcpDeleteServerHeaderID string, tunneledMcpDeleteServerHeaderSessionToken string, tunneledMcpDeleteServerHeaderApikeyToken string, tunneledMcpDeleteServerHeaderProjectSlugInput string) (*tunneledmcp.DeleteServerHeaderPayload, error) {
+	var err error
+	var id string
+	{
+		id = tunneledMcpDeleteServerHeaderID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if tunneledMcpDeleteServerHeaderSessionToken != "" {
+			sessionToken = &tunneledMcpDeleteServerHeaderSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if tunneledMcpDeleteServerHeaderApikeyToken != "" {
+			apikeyToken = &tunneledMcpDeleteServerHeaderApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if tunneledMcpDeleteServerHeaderProjectSlugInput != "" {
+			projectSlugInput = &tunneledMcpDeleteServerHeaderProjectSlugInput
+		}
+	}
+	v := &tunneledmcp.DeleteServerHeaderPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

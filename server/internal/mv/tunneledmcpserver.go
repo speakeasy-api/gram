@@ -46,6 +46,35 @@ func BuildTunneledMcpServerListView(servers []repo.TunneledMcpServer, connection
 	return result
 }
 
+// BuildTunneledMcpServerHeaderView converts a repo header row into the API
+// response type. The row's value should already be decrypted and redacted
+// before being passed to this function.
+func BuildTunneledMcpServerHeaderView(header repo.TunneledMcpServerHeader) *types.TunneledMcpServerHeader {
+	return &types.TunneledMcpServerHeader{
+		ID:                     header.ID.String(),
+		Name:                   header.Name,
+		Description:            conv.FromPGText[string](header.Description),
+		IsRequired:             header.IsRequired,
+		IsSecret:               header.IsSecret,
+		Value:                  conv.FromPGText[string](header.Value),
+		ValueFromRequestHeader: conv.FromPGText[string](header.ValueFromRequestHeader),
+		CreatedAt:              header.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:              header.UpdatedAt.Time.Format(time.RFC3339),
+	}
+}
+
+// BuildTunneledMcpServerHeaderListView converts repo header rows into the API
+// response type. The rows' values should already be decrypted and redacted
+// before being passed to this function.
+func BuildTunneledMcpServerHeaderListView(headers []repo.TunneledMcpServerHeader) []*types.TunneledMcpServerHeader {
+	result := make([]*types.TunneledMcpServerHeader, len(headers))
+	for i, header := range headers {
+		result[i] = BuildTunneledMcpServerHeaderView(header)
+	}
+
+	return result
+}
+
 func BuildTunneledMcpServerConnectionsView(connections []TunneledMcpConnectionCache) *types.TunneledMcpServerConnections {
 	return &types.TunneledMcpServerConnections{
 		Connections:                buildTunneledMcpConnectionViews(connections),
