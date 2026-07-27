@@ -116,19 +116,23 @@ func TestOpenCodePermissionRequestedEnvelope(t *testing.T) {
 	require.Equal(t, "bash", *got.Data.ToolCall.PermissionType)
 }
 
-// TestOpenCodeStopHasNoUsageYet pins the current agenthooks v0.3.0 behavior:
-// the shim splices only finalMessage into session.idle, so StopEvent.Usage
-// stays nil. Restoring token/cost usage is deferred upstream work (plan Phase
-// 2 task 2.1 / Open Question #1); flip this assertion to non-nil with
-// token/cost checks once that lands.
-func TestOpenCodeStopHasNoUsageYet(t *testing.T) {
+// TestOpenCodeStopCarriesUsage pins the agenthooks v0.4.0 behavior: the shim
+// splices end-of-turn token/cost totals into session.idle alongside
+// finalMessage, so StopEvent.Usage — and the envelope's data.usage — carries
+// per-turn tokens and cost.
+func TestOpenCodeStopCarriesUsage(t *testing.T) {
 	got := opencodeEnvelope(t, "session_idle.json")
 
 	require.Equal(t, components.TypeAssistantResponded, got.Event.Type)
 	require.NotNil(t, got.Data)
 	require.NotNil(t, got.Data.Message)
 	require.Equal(t, "Deployed to staging.", *got.Data.Message.Text)
-	require.Nil(t, got.Data.Usage, "OpenCode stop carries no usage until agenthooks upstreams the tokens/cost splice")
+	require.NotNil(t, got.Data.Usage)
+	require.Equal(t, int64(1200), *got.Data.Usage.InputTokens)
+	require.Equal(t, int64(340), *got.Data.Usage.OutputTokens)
+	require.Equal(t, int64(800), *got.Data.Usage.CacheReadTokens)
+	require.Equal(t, int64(64), *got.Data.Usage.CacheWriteTokens)
+	require.Equal(t, 0.0123, *got.Data.Usage.Cost)
 }
 
 // TestOpenCodeMCPIdentityRedactedAndAttributed pins MCP resolution for
