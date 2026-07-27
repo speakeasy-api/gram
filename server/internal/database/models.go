@@ -531,6 +531,44 @@ type DeviceAgentSync struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
+type DeviceIntegrationConfig struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	Provider             string
+	CredentialsEncrypted string
+	Settings             []byte
+	Enabled              bool
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
+}
+
+type DeviceIntegrationSchedule struct {
+	ID                        uuid.UUID
+	DeviceIntegrationConfigID uuid.UUID
+	Schedule                  string
+	DisabledAt                pgtype.Timestamptz
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+}
+
+type DeviceIntegrationSync struct {
+	ID                          uuid.UUID
+	DeviceIntegrationScheduleID uuid.UUID
+	PollWatermarkAt             pgtype.Timestamptz
+	NextPollAfter               pgtype.Timestamptz
+	LastPollSuccessAt           pgtype.Timestamptz
+	LastPollFailedAt            pgtype.Timestamptz
+	LastPollError               pgtype.Text
+	ConsecutiveFailures         int32
+	ConsecutiveAuthRejections   int32
+	LastPushDigest              pgtype.Text
+	AutoPausedAt                pgtype.Timestamptz
+	CreatedAt                   pgtype.Timestamptz
+	UpdatedAt                   pgtype.Timestamptz
+}
+
 type DeviceOwner struct {
 	ID             uuid.UUID
 	OrganizationID string
@@ -1007,6 +1045,26 @@ type McpServerToolMetadatum struct {
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
 	Deleted         bool
+}
+
+type MdmDevice struct {
+	ID                        uuid.UUID
+	DeviceIntegrationConfigID uuid.UUID
+	OrganizationID            string
+	ExternalID                string
+	SerialNumber              pgtype.Text
+	Hostname                  pgtype.Text
+	OsName                    pgtype.Text
+	OsVersion                 pgtype.Text
+	UserEmail                 pgtype.Text
+	UserID                    pgtype.Text
+	MdmLastCheckInAt          pgtype.Timestamptz
+	Raw                       []byte
+	FirstSeenAt               pgtype.Timestamptz
+	LastSeenAt                pgtype.Timestamptz
+	MissingSince              pgtype.Timestamptz
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
 }
 
 type ModelProviderKey struct {
