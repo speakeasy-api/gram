@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -26,6 +27,7 @@ import (
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_exclusion"
 	risk_policy "github.com/speakeasy-api/gram/server/internal/background/activities/risk_policy"
+	spend_rules "github.com/speakeasy-api/gram/server/internal/background/activities/spend_rules"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -50,6 +52,7 @@ import (
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	spendrulesch "github.com/speakeasy-api/gram/server/internal/spendrules/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -75,7 +78,7 @@ type Activities struct {
 	getDeviceIntegrationCandidates  *activities.GetDeviceIntegrationSyncCandidates
 	runDeviceIntegrationSync        *activities.RunDeviceIntegrationSync
 	customDomainIngress             *activities.CustomDomainIngress
-	defaultCustomDomainProvisioner  k8s.ProvisionerKind
+	customDomainHealth              *activities.CustomDomainHealth
 	fireOpenRouterCreditsMetrics    *activities.FireOpenRouterCreditsMetrics
 	sendOpenRouterCreditsAlerts     *activities.MaybeSendOpenRouterCreditsAlerts
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
@@ -129,6 +132,8 @@ type Activities struct {
 	outboxRelay                     *outbox_relay.Relay
 	outboxGC                        *outbox_relay.GC
 	pluginPublisher                 *activities.PluginPublisher
+	listSpendRuleOrgs               *spend_rules.ListOrgs
+	evaluateOrgSpendRules           *spend_rules.EvaluateOrg
 	skillEfficacyScorer             *activities.SkillEfficacyScorer
 	chatAnalysisScorer              *activities.ChatAnalysisScorer
 }
@@ -146,8 +151,8 @@ func NewActivities(
 	openrouterProvisioner openrouter.Provisioner,
 	chatClient *chat.Client,
 	k8sClient *k8s.KubernetesClients,
-	defaultCustomDomainProvisioner k8s.ProvisionerKind,
 	expectedTargetCNAME string,
+	siteURL *url.URL,
 	billingTracker billing.Tracker,
 	billingRepo billing.Repository,
 	posthogClient *posthog.Posthog,
@@ -178,6 +183,13 @@ func NewActivities(
 	judgeRateLimiter *ratelimit.Limiter,
 	builtinPresets *presetlib.Library,
 ) *Activities {
+	// Spend rule evaluation reads ClickHouse; workers without a ClickHouse
+	// connection get a nil repo and the activity fails loudly if scheduled.
+	var spendRulesCH *spendrulesch.Queries
+	if chConn != nil {
+		spendRulesCH = spendrulesch.New(chConn)
+	}
+
 	analyzeBatch, err := risk_analysis.NewAnalyzeBatch(
 		logger,
 		tracerProvider,
@@ -202,7 +214,7 @@ func NewActivities(
 		panic(fmt.Errorf("new analyze batch: %w", err))
 	}
 
-	telemetryLogPublisher := telemetry.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs, features)
+	telemetryLogPublisher := telemetry.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs)
 
 	// The chat analysis judge roster. Adding a new session analysis is
 	// registering its judge here; enabling it per organization is a
@@ -221,8 +233,8 @@ func NewActivities(
 		pollAIData:                      activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
 		getDeviceIntegrationCandidates:  activities.NewGetDeviceIntegrationSyncCandidates(logger, db, encryption, guardianPolicy),
 		runDeviceIntegrationSync:        activities.NewRunDeviceIntegrationSync(logger, db, encryption, guardianPolicy),
-		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient, defaultCustomDomainProvisioner),
-		defaultCustomDomainProvisioner:  defaultCustomDomainProvisioner,
+		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
+		customDomainHealth:              activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, emailService, siteURL, guardianPolicy),
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		sendOpenRouterCreditsAlerts:     activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
@@ -276,6 +288,8 @@ func NewActivities(
 		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient, productFeatures),
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
+		listSpendRuleOrgs:               spend_rules.NewListOrgs(logger, db),
+		evaluateOrgSpendRules:           spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter, features),
 		// The judge draws on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so efficacy scoring
 		// cannot outspend the org's key behind their backs.
@@ -341,6 +355,37 @@ func (a *Activities) VerifyCustomDomain(ctx context.Context, input activities.Ve
 
 func (a *Activities) CustomDomainIngress(ctx context.Context, input activities.CustomDomainIngressArgs) error {
 	return a.customDomainIngress.Do(ctx, input)
+}
+
+func (a *Activities) ListCustomDomainsForHealthCheck(ctx context.Context, input activities.ListCustomDomainsForHealthCheckArgs) ([]activities.CustomDomainHealthCheckTarget, error) {
+	targets, err := a.customDomainHealth.List(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("list custom domains for health check: %w", err)
+	}
+	return targets, nil
+}
+
+func (a *Activities) CheckCustomDomainHealth(ctx context.Context, input activities.CheckCustomDomainHealthArgs) (activities.NotifyCustomDomainUnhealthyArgs, error) {
+	notification, err := a.customDomainHealth.Check(ctx, input)
+	if err != nil {
+		var noNotification activities.NotifyCustomDomainUnhealthyArgs
+		return noNotification, fmt.Errorf("check custom domain health: %w", err)
+	}
+	return notification, nil
+}
+
+func (a *Activities) NotifyCustomDomainUnhealthy(ctx context.Context, input activities.NotifyCustomDomainUnhealthyArgs) error {
+	if err := a.customDomainHealth.NotifyOrgAdmins(ctx, input); err != nil {
+		return fmt.Errorf("notify custom domain unhealthy: %w", err)
+	}
+	return nil
+}
+
+func (a *Activities) FindOrphanCustomDomainResources(ctx context.Context) error {
+	if err := a.customDomainHealth.FindOrphanResources(ctx); err != nil {
+		return fmt.Errorf("find orphan custom domain resources: %w", err)
+	}
+	return nil
 }
 
 func (a *Activities) CollectPlatformUsageMetrics(ctx context.Context) ([]activities.PlatformUsageMetrics, error) {
@@ -634,4 +679,26 @@ func (a *Activities) PublishPluginProject(ctx context.Context, input plugins.Pub
 		return nil, fmt.Errorf("publish plugin project: %w", err)
 	}
 	return result, nil
+}
+
+func (a *Activities) ListSpendRuleOrgs(ctx context.Context) ([]string, error) {
+	orgs, err := a.listSpendRuleOrgs.Do(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list spend rule orgs: %w", err)
+	}
+	return orgs, nil
+}
+
+func (a *Activities) EvaluateOrgSpendRules(ctx context.Context, args spend_rules.EvaluateOrgArgs) error {
+	if err := a.evaluateOrgSpendRules.Do(ctx, args); err != nil {
+		return fmt.Errorf("evaluate org spend rules: %w", err)
+	}
+	return nil
+}
+
+func (a *Activities) RefreshSpendRuleActor(ctx context.Context, args spend_rules.EvaluateActorArgs) error {
+	if err := a.evaluateOrgSpendRules.RefreshActor(ctx, args); err != nil {
+		return fmt.Errorf("refresh spend rule actor: %w", err)
+	}
+	return nil
 }

@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatLogsTable } from "./ChatLogsTable";
@@ -33,6 +34,29 @@ vi.mock("@gram/client/react-query/members.js", () => ({
   }),
 }));
 
+vi.mock("@gram/client/react-query/chatSetPinned.js", () => ({
+  useChatSetPinnedMutation: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+}));
+
+vi.mock("@gram/client/react-query/listChats.js", () => ({
+  invalidateAllListChats: vi.fn(),
+}));
+
+vi.mock("@/contexts/Auth", () => ({
+  useSession: () => ({
+    // Distinct from the chat owner so ChatOwnerLabel resolves the member name
+    // instead of collapsing to "You".
+    user: {
+      id: "gram-user-viewer",
+      email: "viewer@example.com",
+      name: "Viewer",
+    },
+  }),
+}));
+
 function makeChat(id: string): ChatOverview {
   const createdAt = new Date("2026-01-01T12:00:00Z");
 
@@ -44,6 +68,15 @@ function makeChat(id: string): ChatOverview {
     title: "Investigate session",
     updatedAt: new Date("2026-01-01T12:03:00Z"),
   };
+}
+
+function renderTable(ui: ReactNode) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
+  );
 }
 
 describe("ChatLogsTable", () => {
@@ -60,7 +93,7 @@ describe("ChatLogsTable", () => {
     });
     const chatId = "chat_01HXQ1P84WV3S9J7Z52DKVE7NE";
 
-    render(
+    renderTable(
       <ChatLogsTable
         chats={[makeChat(chatId)]}
         onDeleteChat={() => {
@@ -80,7 +113,7 @@ describe("ChatLogsTable", () => {
   });
 
   it("shows created and last activity timestamps", () => {
-    render(
+    renderTable(
       <ChatLogsTable
         chats={[makeChat("chat_01HXQ1P84WV3S9J7Z52DKVE7NE")]}
         onDeleteChat={() => {
@@ -99,7 +132,7 @@ describe("ChatLogsTable", () => {
   });
 
   it("shows the normalized product surface for a session source", () => {
-    render(
+    renderTable(
       <ChatLogsTable
         chats={[
           {
@@ -123,7 +156,7 @@ describe("ChatLogsTable", () => {
   });
 
   it("shows a resolved member name for a compliance chat", () => {
-    render(
+    renderTable(
       <ChatLogsTable
         chats={[
           {

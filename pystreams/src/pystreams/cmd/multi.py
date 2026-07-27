@@ -85,12 +85,6 @@ async def multi(
         enable_metrics=enable_metrics,
     )
 
-    # Opt-in (defaulted on for local dev via mise.toml): actively watch the loop
-    # for blocking calls and raise on a high-severity violation. The production
-    # container leaves the env var unset, so this is a no-op there.
-    if os.environ.get("GRAM_PYSTREAMS_DETECT_BLOCKING"):
-        activate_blocking_detection(logger=logger)
-
     # The emulator's project ID is arbitrary; against real GCP a project is
     # required to resolve the subscription path.
     project_id = gcp_project_id or ("my-project-id" if pubsub_emulator_host else None)
@@ -131,6 +125,16 @@ async def multi(
                 max_scan_concurrency=max_scan_concurrency,
                 logger=logger,
             )
+
+            # Opt-in (defaulted on for local dev via mise.toml): actively watch
+            # the steady-state loop for blocking calls and raise on a
+            # high-severity violation. Activate only after startup has loaded
+            # Presidio: aiocop documents lazy imports as expected startup I/O,
+            # and its own stack collection can turn the analyzer's legitimate
+            # worker-thread handoff into a noisy slow-task warning. Receivers
+            # have not started yet, so all message handling remains covered.
+            if os.environ.get("GRAM_PYSTREAMS_DETECT_BLOCKING"):
+                activate_blocking_detection(logger=logger)
 
             presidio_handler = PresidioHandler(
                 logger, findings_publisher, presidio_scanner
