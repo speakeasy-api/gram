@@ -16,7 +16,6 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -543,9 +542,6 @@ func TestPromoteStagedTelemetry_DedupSkipsAlreadyPromotedRows(t *testing.T) {
 func TestPromoteStagedTelemetry_ShadowPublishesPromotedRows(t *testing.T) {
 	t.Parallel()
 
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagTelemetryLogsPubSubShadow, telemetry.ShadowFlagDistinctID, true)
-
 	var publishedMu sync.Mutex
 	published := make([]string, 0, 2)
 	mockPub := gcp.NewMockPublisher[*telemetryv1.LogRecord]()
@@ -556,7 +552,7 @@ func TestPromoteStagedTelemetry_ShadowPublishesPromotedRows(t *testing.T) {
 			publishedMu.Unlock()
 		}
 	})
-	logPublisher := telemetry.NewLogPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), mockPub, flags)
+	logPublisher := telemetry.NewLogPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), mockPub)
 
 	ctx, act, queries, cacheAdapter := newPromoteStagedTelemetryHarness(t, logPublisher)
 	chConn, err := infra.NewClickhouseClient(t)
