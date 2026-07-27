@@ -593,11 +593,15 @@ func (s *Service) GetCoverage(ctx context.Context, payload *gen.GetCoveragePaylo
 	counts, err := s.repo.GetCoverageCounts(ctx, repo.GetCoverageCountsParams{
 		ActiveCutoff:   conv.ToPGTimestamptz(time.Now().UTC().Add(-activeWindow)),
 		OrganizationID: authCtx.ActiveOrganizationID,
+		Provider:       conv.PtrToPGTextEmpty(payload.Provider),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "compute device integration coverage")
 	}
-	unmanaged, err := s.repo.CountUnmanagedAgentUsers(ctx, authCtx.ActiveOrganizationID)
+	unmanaged, err := s.repo.CountUnmanagedAgentUsers(ctx, repo.CountUnmanagedAgentUsersParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Provider:       conv.PtrToPGTextEmpty(payload.Provider),
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count unmanaged agent users")
 	}

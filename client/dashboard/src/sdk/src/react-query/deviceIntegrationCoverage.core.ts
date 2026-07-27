@@ -49,6 +49,7 @@ export function buildDeviceIntegrationCoverageQuery(
 } {
   return {
     queryKey: queryKeyDeviceIntegrationCoverage({
+      provider: request?.provider,
       gramKey: request?.gramKey,
       gramSession: request?.gramSession,
     }),
@@ -78,6 +79,7 @@ export function buildDeviceIntegrationCoverageQuery(
 
 export function queryKeyDeviceIntegrationCoverage(
   parameters: {
+    provider?: string | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
   },
