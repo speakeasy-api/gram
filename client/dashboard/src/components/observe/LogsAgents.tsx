@@ -495,8 +495,12 @@ export function LogsAgentsContent(): JSX.Element {
     [sourcesData?.sources],
   );
 
+  // Cache the last known total so pagination stays stable while a refetch is
+  // in flight (data briefly undefined). Include 0 so an empty view — e.g.
+  // Pinned after unpinning the last session — does not keep the previous
+  // view's count and leave Next enabled.
   const lastTotalRef = useRef(0);
-  if (data?.total !== undefined && data.total > 0) {
+  if (data?.total !== undefined) {
     lastTotalRef.current = data.total;
   }
   const total = lastTotalRef.current;
