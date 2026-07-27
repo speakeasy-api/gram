@@ -10,30 +10,32 @@ These reports are raw, agent-reported signals. They are inputs to analysis, not 
 
 ## How analysis works
 
-An automated analysis agent reviews eligible feedback and scored sessions for a skill. When the evidence supports a concrete improvement, it creates one complete proposed `SKILL.md` and records:
+An automated analysis agent reviews eligible feedback and scored sessions for a skill. When the evidence supports a concrete improvement, it records the edit as a unified diff against the skill version it analyzed, along with:
 
-- Why the edit was proposed.
-- How many feedback records informed the proposal.
+- A short summary of what goes wrong today and what the edit fixes.
+- A link to every feedback record the proposal was generated from, which is where the reported feedback and session counts come from.
 - How many scored sessions informed the proposal.
 - The exact skill version used as the proposal's base.
 
-The analysis agent does not update the skill directly. The proposed content remains an open suggestion until someone reviews it.
+The analysis agent does not update the skill directly. The proposal remains an open suggestion until someone reviews it.
+
+Because a suggestion stores a diff rather than a whole manifest, it survives later edits it does not overlap. On each analysis pass Gram replays an open suggestion onto the current version: it carries forward when the diff still applies, and is superseded when the diff conflicts or the newer version already contains the edit.
 
 ## Review a suggested edit
 
-The skill detail page shows the current and proposed manifests as a diff. Project members with skill write access can:
+The skill detail page renders `SKILL.md` as agents load it, with a review marker in the margin beside each line the suggestion changes. A marker shows a count when more than one proposed change lands on the same line. Expanding a marker shows the proposed change, the summary, how many sessions asked for it, and an expander for the agent reports it was built from. Project members with skill write access can:
 
-- **Approve** to apply the proposed content as a new immutable version.
-- **Edit and approve** to adjust the complete proposed manifest before applying it. The normal manifest validation and 65,536-byte UTF-8 limit still apply.
+- **Apply to draft** to apply the diff to the current version as a new immutable version.
+- **Apply with edits** to adjust the complete proposed manifest before applying it. The normal manifest validation and 65,536-byte UTF-8 limit still apply.
 - **Dismiss** to close the suggestion without changing the skill.
 
-A suggestion is tied to its base version. If the current skill changes before approval, Gram marks the stale suggestion as superseded rather than applying it over newer work.
+Approval applies the diff to the version that is current at that moment. If the diff no longer applies, Gram reports a conflict or supersedes the suggestion rather than applying it over newer work.
 
 After every suggestion page has loaded, the skills list can approve the exact set shown in the confirmation dialog. Suggestions created after the dialog opens are not included. There is no dashboard batch limit. Bulk approval processes each confirmed suggestion independently. A selected suggestion that is no longer open is reported as a conflict. The API returns applied, superseded, conflicting, and failed item outcomes. The dashboard also computes a skipped count as the number of confirmed IDs absent from the response, which can happen when an ID is missing or archived as the snapshot is processed. Review the reported counts instead of assuming every suggestion was applied. If the request fails, refresh and review the current state before retrying because some edits may already have been applied.
 
 ## Read feedback and regression signals
 
-The collapsed feedback log on a skill shows all-time outcome counts and recent notes. It intentionally exposes only the privacy-minimized feedback fields returned by the API. It does not appear on the primary skills list.
+The collapsed **All agent reviews** section at the bottom of a skill shows all-time outcome counts and recent notes across every report, not only the ones behind the current suggestion. It intentionally exposes only the privacy-minimized feedback fields returned by the API. It does not appear on the primary skills list.
 
 Skill insights may also show a regression warning when the server's comparison policy identifies the current version as a regression. The warning includes current and predecessor scores and sample counts and links to the predecessor in version history. The dashboard does not calculate its own threshold.
 

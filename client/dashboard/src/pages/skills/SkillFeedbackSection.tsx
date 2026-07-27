@@ -42,11 +42,12 @@ export function SkillFeedbackSection({
           <CollapsibleTrigger className="hover:bg-muted/30 flex w-full items-center justify-between gap-4 p-5 text-left">
             <span className="block">
               <Type as="span" variant="subheading" className="block">
-                Agent feedback log
+                All agent reviews
               </Type>
               <Type as="span" small muted className="block">
-                Raw agent-reported signals used as analysis input, not
-                authoritative efficacy output.
+                Every report agents filed against this skill. Suggested edits
+                are built from these, so review them here only when you want the
+                unfiltered pool.
               </Type>
             </span>
             <Icon

@@ -65,15 +65,15 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("SkillFeedbackSection", () => {
-  it("starts collapsed, explains raw signals, then shows counts and notes", () => {
+  it("starts collapsed, explains the pool, then shows counts and notes", () => {
     render(<SkillFeedbackSection skillId="skill_a" />);
     expect(testState.enabled).toBe(false);
     expect(
-      screen.getByText(/Raw agent-reported signals used as analysis input/),
+      screen.getByText(/Every report agents filed against this skill/),
     ).toBeTruthy();
     expect(screen.queryByText("Helped: 5")).toBeNull();
 
-    const trigger = screen.getByRole("button", { name: /Agent feedback log/ });
+    const trigger = screen.getByRole("button", { name: /All agent reviews/ });
     expect(trigger.querySelector("p")).toBeNull();
     fireEvent.click(trigger);
     expect(testState.enabled).toBe(true);
@@ -93,7 +93,7 @@ describe("SkillFeedbackSection", () => {
   it("shows an error and retries", () => {
     testState.error = new Error("feedback unavailable");
     render(<SkillFeedbackSection skillId="skill_a" />);
-    fireEvent.click(screen.getByRole("button", { name: /Agent feedback log/ }));
+    fireEvent.click(screen.getByRole("button", { name: /All agent reviews/ }));
     expect(screen.getByText("feedback unavailable")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(testState.refetch).toHaveBeenCalledOnce();
@@ -102,7 +102,7 @@ describe("SkillFeedbackSection", () => {
   it("describes an empty recent page without implying all feedback was searched", () => {
     testState.feedback = [];
     render(<SkillFeedbackSection skillId="skill_a" />);
-    fireEvent.click(screen.getByRole("button", { name: /Agent feedback log/ }));
+    fireEvent.click(screen.getByRole("button", { name: /All agent reviews/ }));
 
     expect(screen.getByText("No notes among recent feedback.")).toBeTruthy();
   });

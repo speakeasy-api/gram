@@ -77,11 +77,11 @@ vi.mock("./SkillInsightsSection", () => ({
   SKILL_INSIGHTS_SECTION_ID: "insights",
   SkillInsightsSection: () => <div>Skill insights</div>,
 }));
-vi.mock("./SuggestedSkillEditSection", () => ({
-  SuggestedSkillEditSection: () => <div>Suggested edit review</div>,
+vi.mock("./SkillManifestReview", () => ({
+  SkillManifestReview: () => <div>Manifest review</div>,
 }));
 vi.mock("./SkillFeedbackSection", () => ({
-  SkillFeedbackSection: () => <div>Agent feedback log</div>,
+  SkillFeedbackSection: () => <div>All agent reviews</div>,
 }));
 vi.mock("./RestoreSkillVersionDialog", () => ({
   RestoreSkillVersionDialog: () => null,
