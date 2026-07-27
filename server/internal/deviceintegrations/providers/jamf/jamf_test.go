@@ -1,12 +1,12 @@
 package jamf
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -38,6 +38,10 @@ type fakeJamf struct {
 	inventoryRequests atomic.Int32
 	tokenGeneration   atomic.Int32
 
+	// devMu guards devices so tests can mutate the fleet between requests
+	// (mid-pull enrollment churn) without racing the handler goroutine.
+	devMu sync.Mutex
+
 	server *httptest.Server
 }
 
@@ -53,6 +57,7 @@ func newFakeJamf(t *testing.T, deviceCount int) *fakeJamf {
 		expireTokensAfter: 0,
 		inventoryRequests: atomic.Int32{},
 		tokenGeneration:   atomic.Int32{},
+		devMu:             sync.Mutex{},
 		server:            nil,
 	}
 	for i := range deviceCount {
@@ -89,6 +94,7 @@ func newFakeJamf(t *testing.T, deviceCount int) *fakeJamf {
 	mux.HandleFunc("/api/v1/computers-inventory", func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, userAgent, r.Header.Get("User-Agent"), "every request must carry the partner User-Agent")
 		assert.Equal(t, "id:asc", r.URL.Query().Get("sort"), "pagination must be stably ordered")
+		assert.Equal(t, "0", r.URL.Query().Get("page"), "keyset pagination must window via the id filter, never page offsets")
 		assert.ElementsMatch(t, []string{"GENERAL", "HARDWARE", "OPERATING_SYSTEM", "USER_AND_LOCATION"}, r.URL.Query()["section"], "only mapped sections are requested")
 
 		n := f.inventoryRequests.Add(1)
@@ -102,23 +108,53 @@ func newFakeJamf(t *testing.T, deviceCount int) *fakeJamf {
 			return
 		}
 
-		page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-		size, _ := strconv.Atoi(r.URL.Query().Get("page-size"))
-		start := page * size
-		end := min(start+size, len(f.devices))
-		results := []map[string]any{}
-		if start < len(f.devices) {
-			results = f.devices[start:end]
+		afterID := -1
+		if filter := r.URL.Query().Get("filter"); filter != "" {
+			parsed, err := strconv.Atoi(strings.TrimPrefix(filter, "id>"))
+			assert.NoError(t, err, "filter must be an RSQL id-greater-than expression")
+			afterID = parsed
 		}
+		size, _ := strconv.Atoi(r.URL.Query().Get("page-size"))
+
+		f.devMu.Lock()
+		results := []map[string]any{}
+		total := 0
+		for _, d := range f.devices {
+			rawID, _ := d["id"].(string)
+			id, _ := strconv.Atoi(rawID)
+			if id <= afterID {
+				continue
+			}
+			total++
+			if len(results) < size {
+				results = append(results, d)
+			}
+		}
+		f.devMu.Unlock()
+
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"totalCount": len(f.devices),
+			"totalCount": total,
 			"results":    results,
 		})
 	})
 	f.server = httptest.NewTLSServer(mux)
 	t.Cleanup(f.server.Close)
 	return f
+}
+
+// removeDevice unenrolls a device mid-test, simulating fleet churn between
+// paginated pulls.
+func (f *fakeJamf) removeDevice(id string) {
+	f.devMu.Lock()
+	defer f.devMu.Unlock()
+	kept := f.devices[:0]
+	for _, d := range f.devices {
+		if d["id"] != id {
+			kept = append(kept, d)
+		}
+	}
+	f.devices = kept
 }
 
 func (f *fakeJamf) creds() providers.Credentials {
@@ -140,7 +176,7 @@ func listAll(t *testing.T, s providers.InventorySource, creds providers.Credenti
 	var all []providers.Device
 	cursor := ""
 	for {
-		page, err := s.ListDevices(context.Background(), creds, settings, cursor)
+		page, err := s.ListDevices(t.Context(), creds, settings, cursor)
 		require.NoError(t, err)
 		all = append(all, page.Devices...)
 		if page.NextCursor == "" {
@@ -177,10 +213,10 @@ func TestTestConnection(t *testing.T) {
 	t.Parallel()
 
 	fake := newFakeJamf(t, 1)
-	require.NoError(t, fake.newSource().TestConnection(context.Background(), fake.creds(), fake.settings()))
+	require.NoError(t, fake.newSource().TestConnection(t.Context(), fake.creds(), fake.settings()))
 
 	bad := providers.Credentials{fieldClientID: "wrong", fieldClientSecret: "wrong-secret"}
-	err := fake.newSource().TestConnection(context.Background(), bad, fake.settings())
+	err := fake.newSource().TestConnection(t.Context(), bad, fake.settings())
 	require.Error(t, err)
 	require.True(t, providers.IsAuthError(err), "credential rejections classify as auth errors")
 }
@@ -192,19 +228,46 @@ func TestMidPaginationTokenExpiryClassifiesAsAuthAndDropsCache(t *testing.T) {
 	fake.expireTokensAfter = 1 // token dies after the first inventory page
 	s := fake.newSource()
 
-	_, err := s.ListDevices(context.Background(), fake.creds(), fake.settings(), "")
+	first, err := s.ListDevices(t.Context(), fake.creds(), fake.settings(), "")
 	require.NoError(t, err, "first page succeeds on the original token")
+	require.NotEmpty(t, first.NextCursor)
 
-	_, err = s.ListDevices(context.Background(), fake.creds(), fake.settings(), "1")
+	_, err = s.ListDevices(t.Context(), fake.creds(), fake.settings(), first.NextCursor)
 	require.Error(t, err)
 	require.True(t, providers.IsAuthError(err))
 
 	// The cache was dropped, so the next call re-mints and succeeds — the
 	// sync scheduler's retry recovers without operator action.
-	page, err := s.ListDevices(context.Background(), fake.creds(), fake.settings(), "1")
+	page, err := s.ListDevices(t.Context(), fake.creds(), fake.settings(), first.NextCursor)
 	require.NoError(t, err)
 	require.NotEmpty(t, page.Devices)
 	require.Equal(t, int32(2), fake.tokenRequests.Load(), "exactly one re-mint after expiry")
+}
+
+func TestShortTokenLifetimeStillCaches(t *testing.T) {
+	t.Parallel()
+
+	// Jamf's admin-configured token lifetime defaults to 60s and can be set
+	// lower. The expiry slack must not consume the whole lifetime, or the
+	// cache degrades to one mint per page.
+	fake := newFakeJamf(t, 250)
+	fake.tokenTTLSeconds = 20 // below the 30s slack
+	s := fake.newSource()
+
+	devices := listAll(t, s, fake.creds(), fake.settings())
+	require.Len(t, devices, 250)
+	require.Equal(t, int32(1), fake.tokenRequests.Load(), "one mint serves the pull even under a short token lifetime")
+}
+
+func TestReadBoundedBodyDetectsTruncation(t *testing.T) {
+	t.Parallel()
+
+	body, err := readBoundedBody(strings.NewReader("small"))
+	require.NoError(t, err)
+	require.Equal(t, "small", string(body))
+
+	_, err = readBoundedBody(strings.NewReader(strings.Repeat("x", maxResponseBytes+1)))
+	require.ErrorContains(t, err, "limit", "an oversized body must fail loudly, not decode a truncated payload")
 }
 
 func TestInstanceURLValidation(t *testing.T) {
@@ -214,9 +277,9 @@ func TestInstanceURLValidation(t *testing.T) {
 	s := fake.newSource()
 
 	// Explicit assertions on representative cases:
-	_, err := s.ListDevices(context.Background(), fake.creds(), providers.Settings{fieldInstanceURL: "http://tenant.jamfcloud.com"}, "")
+	_, err := s.ListDevices(t.Context(), fake.creds(), providers.Settings{fieldInstanceURL: "http://tenant.jamfcloud.com"}, "")
 	require.ErrorContains(t, err, "https")
-	_, err = s.ListDevices(context.Background(), fake.creds(), providers.Settings{fieldInstanceURL: "https://tenant.jamfcloud.com/some/path"}, "")
+	_, err = s.ListDevices(t.Context(), fake.creds(), providers.Settings{fieldInstanceURL: "https://tenant.jamfcloud.com/some/path"}, "")
 	require.ErrorContains(t, err, "tenant root")
 }
 
@@ -224,8 +287,42 @@ func TestInvalidCursorRejected(t *testing.T) {
 	t.Parallel()
 
 	fake := newFakeJamf(t, 1)
-	_, err := fake.newSource().ListDevices(context.Background(), fake.creds(), fake.settings(), "not-a-page")
+	_, err := fake.newSource().ListDevices(t.Context(), fake.creds(), fake.settings(), "not-an-id")
 	require.ErrorContains(t, err, "cursor")
+}
+
+func TestMidPullDeletionDoesNotSkipDevices(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeJamf(t, 250) // three pages at size 100
+	s := fake.newSource()
+
+	first, err := s.ListDevices(t.Context(), fake.creds(), fake.settings(), "")
+	require.NoError(t, err)
+	require.Len(t, first.Devices, 100)
+
+	// A device already consumed is unenrolled mid-pull. Offset pagination
+	// would shift every later row one slot down and silently skip the device
+	// at the next page boundary; the id-filter cursor must not.
+	fake.removeDevice("50")
+
+	seen := make(map[string]bool, 250)
+	for _, d := range first.Devices {
+		seen[d.ExternalID] = true
+	}
+	cursor := first.NextCursor
+	for cursor != "" {
+		page, err := s.ListDevices(t.Context(), fake.creds(), fake.settings(), cursor)
+		require.NoError(t, err)
+		for _, d := range page.Devices {
+			require.False(t, seen[d.ExternalID], "device %s repeated across pages", d.ExternalID)
+			seen[d.ExternalID] = true
+		}
+		cursor = page.NextCursor
+	}
+
+	require.Len(t, seen, 250, "every device is returned exactly once despite mid-pull churn")
+	require.True(t, seen["101"], "the boundary device an offset pull would have skipped is present")
 }
 
 func TestDescriptorRegistered(t *testing.T) {

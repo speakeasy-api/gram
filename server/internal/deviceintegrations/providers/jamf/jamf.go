@@ -46,9 +46,10 @@ const (
 	// request, as the Jamf Technology Partner Program requires.
 	userAgent = "Speakeasy-Gram/1.0"
 
-	// pageSize keeps inventory pages at Jamf's sweet spot: large enough to
-	// cover big fleets in few requests, small enough that section-filtered
-	// payloads stay light.
+	// pageSize keeps inventory pages at Jamf's documented default: large
+	// enough to cover big fleets in few requests, small enough that
+	// section-filtered payloads stay well under maxResponseBytes even on
+	// tenants with heavy extension attributes.
 	pageSize = 100
 
 	// maxResponseBytes bounds each response body read so a misbehaving
@@ -96,6 +97,20 @@ type source struct {
 }
 
 var _ providers.InventorySource = (*source)(nil)
+
+// readBoundedBody reads at most maxResponseBytes and fails loudly when the
+// cap is hit, so an oversized page surfaces as a size error instead of a
+// baffling JSON decode failure on the silently truncated body.
+func readBoundedBody(r io.Reader) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(r, maxResponseBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+	if len(body) > maxResponseBytes {
+		return nil, fmt.Errorf("response body exceeded the %d-byte limit", maxResponseBytes)
+	}
+	return body, nil
+}
 
 // instanceBaseURL validates and normalizes the customer-supplied instance
 // URL: https only, no path/query — the API path is ours to append.
@@ -145,7 +160,7 @@ func (s *source) bearerToken(ctx context.Context, creds providers.Credentials, b
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	body, err := readBoundedBody(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("read token response: %w", err)
 	}
@@ -167,8 +182,18 @@ func (s *source) bearerToken(ctx context.Context, creds providers.Credentials, b
 		return "", fmt.Errorf("token response carried no access token")
 	}
 
+	// Renew slack seconds before actual expiry so in-flight requests don't
+	// race the cutoff — but never let slack consume the whole lifetime.
+	// Jamf's admin-configured token lifetime defaults to 60s and can be set
+	// lower; without the floor a lifetime <= slack would make the cache
+	// permanently stale and degrade to per-request minting.
+	ttl := time.Duration(payload.ExpiresIn) * time.Second
+	slack := tokenExpirySlack
+	if ttl <= 2*tokenExpirySlack {
+		slack = ttl / 2
+	}
 	s.token = payload.AccessToken
-	s.tokenExpiry = time.Now().Add(time.Duration(payload.ExpiresIn)*time.Second - tokenExpirySlack)
+	s.tokenExpiry = time.Now().Add(ttl - slack)
 	return s.token, nil
 }
 
@@ -193,12 +218,12 @@ type inventoryDevice struct {
 }
 
 type inventoryPage struct {
-	TotalCount int               `json:"totalCount"`
-	Results    []json.RawMessage `json:"results"`
+	Results []json.RawMessage `json:"results"`
 }
 
-// fetchInventoryPage requests one section-filtered, id-sorted page.
-func (s *source) fetchInventoryPage(ctx context.Context, creds providers.Credentials, settings providers.Settings, page int, size int) (inventoryPage, error) {
+// fetchInventoryPage requests one section-filtered, id-sorted page of
+// devices with ids strictly greater than afterID (-1 = from the start).
+func (s *source) fetchInventoryPage(ctx context.Context, creds providers.Credentials, settings providers.Settings, afterID int, size int) (inventoryPage, error) {
 	base, err := instanceBaseURL(settings)
 	if err != nil {
 		return inventoryPage{}, err
@@ -209,11 +234,17 @@ func (s *source) fetchInventoryPage(ctx context.Context, creds providers.Credent
 	}
 
 	query := url.Values{}
-	query.Set("page", strconv.Itoa(page))
+	query.Set("page", "0")
 	query.Set("page-size", strconv.Itoa(size))
-	// Stable ordering so pagination never skips or repeats devices when the
-	// fleet changes mid-pull.
+	// Keyset pagination: id-sorted pages windowed by an RSQL id filter
+	// instead of page offsets. Offset pages over a live collection skip a
+	// boundary record when a device earlier in the sort order is unenrolled
+	// mid-pull (later rows shift into already-consumed windows); filtering
+	// on id > last-seen is immune to both insertions and deletions.
 	query.Set("sort", "id:asc")
+	if afterID >= 0 {
+		query.Set("filter", fmt.Sprintf("id>%d", afterID))
+	}
 	// Only the sections we map — full payloads bloat badly on large fleets.
 	query["section"] = []string{"GENERAL", "HARDWARE", "OPERATING_SYSTEM", "USER_AND_LOCATION"}
 
@@ -231,15 +262,18 @@ func (s *source) fetchInventoryPage(ctx context.Context, creds providers.Credent
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	body, err := readBoundedBody(resp.Body)
 	if err != nil {
 		return inventoryPage{}, fmt.Errorf("read inventory response: %w", err)
 	}
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
-		// Includes a token that expired mid-pull: drop the cache so the next
-		// page mints a fresh one, and classify as a credential rejection only
-		// if the retry also fails (the sync runner's streak handles that).
+		// Reachable when the token expires while a request is in flight (the
+		// per-page expiry check re-mints between pages, so this is a narrow
+		// race) or on genuine credential revocation. Drop the cache so any
+		// later call on this source re-mints; the sync runner records this
+		// run as an auth rejection either way, and only a streak of pure
+		// rejections auto-pauses the schedule.
 		s.mu.Lock()
 		s.token = ""
 		s.mu.Unlock()
@@ -258,38 +292,45 @@ func (s *source) fetchInventoryPage(ctx context.Context, creds providers.Credent
 // TestConnection proves the stored credentials against the cheapest
 // authenticated read: one single-record inventory page.
 func (s *source) TestConnection(ctx context.Context, creds providers.Credentials, settings providers.Settings) error {
-	if _, err := s.fetchInventoryPage(ctx, creds, settings, 0, 1); err != nil {
+	if _, err := s.fetchInventoryPage(ctx, creds, settings, -1, 1); err != nil {
 		return fmt.Errorf("jamf connection test: %w", err)
 	}
 	return nil
 }
 
 // ListDevices returns one page of the tenant's computer inventory. The
-// cursor is the zero-based page number.
+// cursor is the numeric id of the last device already returned; devices are
+// pulled in id order with an id-greater-than filter (keyset pagination).
 func (s *source) ListDevices(ctx context.Context, creds providers.Credentials, settings providers.Settings, cursor string) (providers.DevicePage, error) {
-	page := 0
+	afterID := -1
 	if cursor != "" {
 		parsed, err := strconv.Atoi(cursor)
 		if err != nil || parsed < 0 {
 			return providers.DevicePage{Devices: nil, NextCursor: ""}, fmt.Errorf("invalid jamf inventory cursor %q", cursor)
 		}
-		page = parsed
+		afterID = parsed
 	}
 
-	fetched, err := s.fetchInventoryPage(ctx, creds, settings, page, pageSize)
+	fetched, err := s.fetchInventoryPage(ctx, creds, settings, afterID, pageSize)
 	if err != nil {
 		return providers.DevicePage{Devices: nil, NextCursor: ""}, err
 	}
 
+	lastID := -1
 	devices := make([]providers.Device, 0, len(fetched.Results))
 	for _, raw := range fetched.Results {
 		var d inventoryDevice
 		if err := json.Unmarshal(raw, &d); err != nil {
 			return providers.DevicePage{Devices: nil, NextCursor: ""}, fmt.Errorf("decode inventory device: %w", err)
 		}
-		if d.ID == "" {
-			continue
+		// Jamf computer ids are numeric; the cursor depends on that. A
+		// non-numeric or missing id cannot anchor the next window, so fail
+		// loudly rather than risk an infinite pull.
+		numericID, err := strconv.Atoi(d.ID)
+		if err != nil || numericID < 0 {
+			return providers.DevicePage{Devices: nil, NextCursor: ""}, fmt.Errorf("inventory device carried unusable id %q", d.ID)
 		}
+		lastID = numericID
 		var lastContact time.Time
 		if d.General.LastContactTime != "" {
 			// Jamf emits RFC3339 with sub-second precision.
@@ -309,9 +350,12 @@ func (s *source) ListDevices(ctx context.Context, creds providers.Credentials, s
 		})
 	}
 
+	// A short page means the filtered window is exhausted. A full page
+	// continues from the last id seen; totalCount is not consulted because
+	// it tracks the live filtered collection, not our snapshot.
 	next := ""
-	if (page+1)*pageSize < fetched.TotalCount {
-		next = strconv.Itoa(page + 1)
+	if len(fetched.Results) == pageSize && lastID >= 0 {
+		next = strconv.Itoa(lastID)
 	}
 	return providers.DevicePage{Devices: devices, NextCursor: next}, nil
 }
