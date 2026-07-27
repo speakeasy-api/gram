@@ -113,3 +113,86 @@ func TestApply_ReplaysEditAtEndOfSkill(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, proposed, applied)
 }
+
+const runbookSkill = `---
+name: deploy-runbook
+---
+
+## Before
+
+Announce the window in the release channel.
+Confirm the rollback artifact exists.
+Check the error budget.
+
+## During
+
+Watch the canary for ten minutes.
+Compare latency against the previous release.
+Stop on any regression.
+
+## After
+
+Post the outcome in the release channel.
+File follow-ups for anything deferred.
+Close the window.
+`
+
+func TestHunks_SplitsEachChangeIntoAnIndependentDiff(t *testing.T) {
+	t.Parallel()
+
+	proposed := strings.NewReplacer(
+		"Check the error budget.", "Check the error budget and page the on-call.",
+		"Close the window.", "Close the window and record the duration.",
+	).Replace(runbookSkill)
+
+	diff, err := skilldiff.Unified(runbookSkill, proposed)
+	require.NoError(t, err)
+
+	hunks := skilldiff.Hunks(diff)
+	require.Len(t, hunks, 2)
+
+	first, err := skilldiff.Apply(runbookSkill, hunks[0])
+	require.NoError(t, err)
+	require.Contains(t, first, "page the on-call")
+	require.NotContains(t, first, "record the duration")
+
+	second, err := skilldiff.Apply(runbookSkill, hunks[1])
+	require.NoError(t, err)
+	require.NotContains(t, second, "page the on-call")
+	require.Contains(t, second, "record the duration")
+}
+
+func TestHunks_RemainderStillAppliesAfterOneHunkLands(t *testing.T) {
+	t.Parallel()
+
+	proposed := strings.NewReplacer(
+		"Check the error budget.", "Check the error budget and page the on-call.",
+		"Close the window.", "Close the window and record the duration.",
+	).Replace(runbookSkill)
+
+	diff, err := skilldiff.Unified(runbookSkill, proposed)
+	require.NoError(t, err)
+	hunks := skilldiff.Hunks(diff)
+
+	applied, err := skilldiff.Apply(runbookSkill, hunks[0])
+	require.NoError(t, err)
+
+	// What is left of the suggestion is the edit from the new base to the
+	// original proposal, which no longer mentions the change already taken.
+	remaining, err := skilldiff.Unified(applied, proposed)
+	require.NoError(t, err)
+	require.NotContains(t, remaining, "page the on-call")
+	require.Contains(t, remaining, "+Close the window and record the duration.")
+	require.Len(t, skilldiff.Hunks(remaining), 1)
+
+	final, err := skilldiff.Apply(applied, remaining)
+	require.NoError(t, err)
+	require.Equal(t, proposed, final)
+}
+
+func TestHunks_EmptyDiffHasNoHunks(t *testing.T) {
+	t.Parallel()
+
+	require.Empty(t, skilldiff.Hunks(""))
+	require.Empty(t, skilldiff.Hunks("   \n"))
+}

@@ -43,6 +43,41 @@ func Unified(base, proposed string) (string, error) {
 	return diff, nil
 }
 
+// Hunks splits diff into one standalone diff per hunk, in the order they appear,
+// so a reviewer can accept part of a suggestion without taking the rest. Each
+// result carries the file headers and replays through Apply on its own; Apply
+// relocates hunks by their context, so the pieces do not have to be applied in
+// order. An empty diff yields no hunks.
+func Hunks(diff string) []string {
+	if strings.TrimSpace(diff) == "" {
+		return nil
+	}
+
+	var header strings.Builder
+	var hunks []string
+	var current *strings.Builder
+	for _, line := range strings.SplitAfter(diff, "\n") {
+		switch {
+		case strings.HasPrefix(line, "@@"):
+			if current != nil {
+				hunks = append(hunks, current.String())
+			}
+			current = &strings.Builder{}
+			current.WriteString(header.String())
+			current.WriteString(line)
+		case current != nil:
+			current.WriteString(line)
+		default:
+			header.WriteString(line)
+		}
+	}
+	if current != nil {
+		hunks = append(hunks, current.String())
+	}
+
+	return hunks
+}
+
 // Apply replays diff onto base. Hunks are relocated to wherever their recorded
 // context still appears, so an edit elsewhere in the skill shifts a suggestion
 // rather than invalidating it. A hunk whose context is gone is a conflict, not
