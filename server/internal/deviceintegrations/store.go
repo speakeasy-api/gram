@@ -14,7 +14,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -369,7 +368,6 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, desc providers
 // schedule the provider declares. Existing rows — including their disabled_at
 // user intent and sync progress — are left untouched.
 func (s *Store) ensureSchedules(ctx context.Context, q *repo.Queries, desc providers.Descriptor, configID uuid.UUID) error {
-	now := time.Now().UTC()
 	for _, spec := range desc.Schedules {
 		sched, err := q.EnsureSchedule(ctx, repo.EnsureScheduleParams{
 			DeviceIntegrationConfigID: configID,
@@ -378,11 +376,7 @@ func (s *Store) ensureSchedules(ctx context.Context, q *repo.Queries, desc provi
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "save device integration schedule")
 		}
-		if err := q.EnsureSync(ctx, repo.EnsureSyncParams{
-			DeviceIntegrationScheduleID: sched.ID,
-			PollWatermarkAt:             conv.ToPGTimestamptz(now),
-			NextPollAfter:               conv.ToPGTimestamptz(now),
-		}); err != nil {
+		if err := q.EnsureSync(ctx, sched.ID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "save device integration sync")
 		}
 	}

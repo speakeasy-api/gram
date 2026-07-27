@@ -125,26 +125,25 @@ func (q *Queries) EnsureSchedule(ctx context.Context, arg EnsureScheduleParams) 
 }
 
 const ensureSync = `-- name: EnsureSync :exec
+
 INSERT INTO device_integration_syncs (
     device_integration_schedule_id
   , poll_watermark_at
   , next_poll_after
 ) VALUES (
     $1
-  , $2
-  , $3
+  , clock_timestamp()
+  , clock_timestamp()
 )
 ON CONFLICT (device_integration_schedule_id) DO NOTHING
 `
 
-type EnsureSyncParams struct {
-	DeviceIntegrationScheduleID uuid.UUID
-	PollWatermarkAt             pgtype.Timestamptz
-	NextPollAfter               pgtype.Timestamptz
-}
-
-func (q *Queries) EnsureSync(ctx context.Context, arg EnsureSyncParams) error {
-	_, err := q.db.Exec(ctx, ensureSync, arg.DeviceIntegrationScheduleID, arg.PollWatermarkAt, arg.NextPollAfter)
+// EnsureSync seeds the sync row due immediately. Both timestamps come from
+// the database clock: due-ness is compared against clock_timestamp() in
+// ListSyncCandidates, and an app-clock value here would make fresh syncs
+// invisible under app/database clock skew.
+func (q *Queries) EnsureSync(ctx context.Context, deviceIntegrationScheduleID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, ensureSync, deviceIntegrationScheduleID)
 	return err
 }
 

@@ -99,6 +99,11 @@ WHERE device_integration_config_id = @device_integration_config_id
   AND schedule = @schedule
 LIMIT 1;
 
+-- EnsureSync seeds the sync row due immediately. Both timestamps come from
+-- the database clock: due-ness is compared against clock_timestamp() in
+-- ListSyncCandidates, and an app-clock value here would make fresh syncs
+-- invisible under app/database clock skew.
+
 -- name: EnsureSync :exec
 INSERT INTO device_integration_syncs (
     device_integration_schedule_id
@@ -106,8 +111,8 @@ INSERT INTO device_integration_syncs (
   , next_poll_after
 ) VALUES (
     @device_integration_schedule_id
-  , @poll_watermark_at
-  , @next_poll_after
+  , clock_timestamp()
+  , clock_timestamp()
 )
 ON CONFLICT (device_integration_schedule_id) DO NOTHING;
 
