@@ -74,7 +74,6 @@ type Activities struct {
 	pollAIData                      *activities.PollAIData
 	customDomainIngress             *activities.CustomDomainIngress
 	customDomainHealth              *activities.CustomDomainHealth
-	defaultCustomDomainProvisioner  k8s.ProvisionerKind
 	fireOpenRouterCreditsMetrics    *activities.FireOpenRouterCreditsMetrics
 	sendOpenRouterCreditsAlerts     *activities.MaybeSendOpenRouterCreditsAlerts
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
@@ -145,7 +144,6 @@ func NewActivities(
 	openrouterProvisioner openrouter.Provisioner,
 	chatClient *chat.Client,
 	k8sClient *k8s.KubernetesClients,
-	defaultCustomDomainProvisioner k8s.ProvisionerKind,
 	expectedTargetCNAME string,
 	siteURL *url.URL,
 	billingTracker billing.Tracker,
@@ -219,9 +217,8 @@ func NewActivities(
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
 		getAIIntegrationsCandidates:     activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
 		pollAIData:                      activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
-		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient, defaultCustomDomainProvisioner),
+		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
 		customDomainHealth:              activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, emailService, siteURL, guardianPolicy),
-		defaultCustomDomainProvisioner:  defaultCustomDomainProvisioner,
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		sendOpenRouterCreditsAlerts:     activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),

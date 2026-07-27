@@ -17,8 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayfake "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/fake"
 
 	"github.com/stretchr/testify/require"
 )
@@ -153,30 +151,16 @@ func TestListManagedCustomDomainResourcesReturnsLabeledResources(t *testing.T) {
 			},
 		},
 	)
-	gatewayClientset := gatewayfake.NewSimpleClientset(
-		&gatewayv1.HTTPRoute{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "managed-route",
-				Namespace: namespace,
-				Labels: map[string]string{
-					managedByLabelKey:    managedByLabelValue,
-					customDomainLabelKey: "route.example.com",
-				},
-			},
-		},
-	)
 	clients := &KubernetesClients{
-		Clientset:     clientset,
-		gatewayClient: gatewayClientset,
-		namespace:     namespace,
-		enabled:       true,
+		Clientset: clientset,
+		namespace: namespace,
+		enabled:   true,
 	}
 
 	resources, err := clients.ListManagedCustomDomainResources(t.Context())
 	require.NoError(t, err)
 	require.ElementsMatch(t, []ManagedCustomDomainResource{
 		{Kind: ProvisionerKindIngress, Name: "managed-ingress", Domain: "managed.example.com"},
-		{Kind: ProvisionerKindGateway, Name: "managed-route", Domain: "route.example.com"},
 	}, resources)
 }
 

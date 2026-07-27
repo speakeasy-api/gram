@@ -69,17 +69,6 @@ func (k *KubernetesClients) ListManagedCustomDomainResources(ctx context.Context
 		})
 	}
 
-	routes, err := k.gatewayClient.GatewayV1().HTTPRoutes(k.namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
-	if err != nil {
-		return nil, fmt.Errorf("list managed custom domain http routes: %w", err)
-	}
-	for _, route := range routes.Items {
-		resources = append(resources, ManagedCustomDomainResource{
-			Kind:   ProvisionerKindGateway,
-			Name:   route.Name,
-			Domain: route.Labels[customDomainLabelKey],
-		})
-	}
 	return resources, nil
 }
 
@@ -100,9 +89,6 @@ func (k *KubernetesClients) CheckCustomDomainInfrastructure(ctx context.Context,
 			return health, nil
 		}
 		return health, fmt.Errorf("get custom domain resource: %w", err)
-	}
-	if check.ProvisionerKind == ProvisionerKindGateway {
-		return health, nil
 	}
 	if check.CertSecretName == "" {
 		health.Issue = CustomDomainInfrastructureIssueCertificateMissing
