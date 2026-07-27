@@ -91,7 +91,9 @@ export function DeviceIntegrationConfigureSheet({
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) form.clearTestResult();
+    // Closing discards the draft: a canceled session's typed secrets and
+    // half-edited settings must not reappear on the next open.
+    if (!nextOpen) form.resetDraft();
     onOpenChange(nextOpen);
   };
 
@@ -106,7 +108,8 @@ export function DeviceIntegrationConfigureSheet({
           </SheetTitle>
           <SheetDescription>
             Credentials are stored encrypted and are never shown again after
-            saving. Save first, then test the connection.
+            saving. New connections start paused: save, test the connection,
+            then enable it.
           </SheetDescription>
         </SheetHeader>
 

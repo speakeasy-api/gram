@@ -30,6 +30,9 @@ const testProviderID = "testmdm"
 // testSinkProviderID is a fake evidence-sink provider for push tests.
 const testSinkProviderID = "testsink"
 
+// testRotateProviderID declares two required secrets for rotation tests.
+const testRotateProviderID = "testrotate"
+
 func TestMain(m *testing.M) {
 	providers.Register(providers.Descriptor{
 		ID:           testProviderID,
@@ -46,6 +49,23 @@ func TestMain(m *testing.M) {
 		},
 		Schedules: []providers.ScheduleSpec{
 			{Schedule: "testmdm_inventory", Capability: providers.CapabilityInventorySource, Interval: time.Hour},
+		},
+		NewInventorySource: func(deps providers.Deps) providers.InventorySource { return fakeInventorySource{} },
+		NewEvidenceSink:    nil,
+	})
+	providers.Register(providers.Descriptor{
+		ID:           testRotateProviderID,
+		DisplayName:  "Test Rotate",
+		Capabilities: []providers.Capability{providers.CapabilityInventorySource},
+		// Two required secrets so credential-rotation tests can prove the
+		// per-key merge: supplying one secret must keep the other.
+		Fields: []providers.CredentialField{
+			{Key: "client_id", Label: "Client ID", Kind: providers.FieldKindText, Secret: true, Required: true},
+			{Key: "client_secret", Label: "Client Secret", Kind: providers.FieldKindText, Secret: true, Required: true},
+			{Key: "instance_url", Label: "Instance URL", Kind: providers.FieldKindURL, Secret: false, Required: true},
+		},
+		Schedules: []providers.ScheduleSpec{
+			{Schedule: "testrotate_inventory", Capability: providers.CapabilityInventorySource, Interval: time.Hour},
 		},
 		NewInventorySource: func(deps providers.Deps) providers.InventorySource { return fakeInventorySource{} },
 		NewEvidenceSink:    nil,

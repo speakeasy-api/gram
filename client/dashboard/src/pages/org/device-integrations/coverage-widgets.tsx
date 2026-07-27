@@ -9,7 +9,13 @@ import type {
   CoverageBucket,
   ManagedDevice,
 } from "@gram/client/models/components/manageddevice.js";
-import { Badge, type Column, Stack, Table } from "@speakeasy-api/moonshine";
+import {
+  Badge,
+  Button,
+  type Column,
+  Stack,
+  Table,
+} from "@speakeasy-api/moonshine";
 import {
   CheckCircle2,
   CircleSlash,
@@ -17,8 +23,9 @@ import {
   MailX,
   MonitorX,
   TriangleAlert,
+  UserX,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { memo, useDeferredValue, useMemo, useState } from "react";
 
 // Coverage joins the MDM-reported fleet against device agent heartbeats.
 // Attestation is per assigned USER, not per device: an active heartbeat
@@ -113,39 +120,65 @@ export function CoverageSummaryTiles({
 }: {
   coverage: DeviceIntegrationCoverage;
 }): JSX.Element {
-  const tiles: { bucket: CoverageBucket; count: number }[] = [
-    { bucket: "agent_active", count: coverage.agentActive },
-    { bucket: "agent_stale", count: coverage.agentStale },
-    { bucket: "no_agent", count: coverage.noAgent },
-    { bucket: "no_email", count: coverage.noEmail },
-    { bucket: "unresolved_email", count: coverage.unresolvedEmail },
-    { bucket: "missing", count: coverage.missing },
+  const tiles: { key: string; display: BucketDisplay; count: number }[] = [
+    {
+      key: "agent_active",
+      display: BUCKETS.agent_active,
+      count: coverage.agentActive,
+    },
+    {
+      key: "agent_stale",
+      display: BUCKETS.agent_stale,
+      count: coverage.agentStale,
+    },
+    { key: "no_agent", display: BUCKETS.no_agent, count: coverage.noAgent },
+    { key: "no_email", display: BUCKETS.no_email, count: coverage.noEmail },
+    {
+      key: "unresolved_email",
+      display: BUCKETS.unresolved_email,
+      count: coverage.unresolvedEmail,
+    },
+    { key: "missing", display: BUCKETS.missing, count: coverage.missing },
+    // Not a device bucket: agent USERS the MDM knows no device for — the
+    // inverse gap the ticket's bucket list requires.
+    {
+      key: "unmanaged_agent_users",
+      display: UNMANAGED_USERS_TILE,
+      count: coverage.unmanagedAgentUsers,
+    },
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-      {tiles.map(({ bucket, count }) => (
-        <CoverageStatTile key={bucket} bucket={bucket} count={count} />
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+      {tiles.map(({ key, display, count }) => (
+        <CoverageStatTile key={key} display={display} count={count} />
       ))}
     </div>
   );
 }
 
+const UNMANAGED_USERS_TILE: BucketDisplay = {
+  label: "Agent users w/o device",
+  variant: "neutral",
+  icon: UserX,
+  detail:
+    "Users reporting device agent heartbeats whose email matches no managed device in the MDM inventory.",
+};
+
 function CoverageStatTile({
-  bucket,
+  display,
   count,
 }: {
-  bucket: CoverageBucket;
+  display: BucketDisplay;
   count: number;
 }) {
-  const display = bucketDisplay(bucket);
   return (
     <SimpleTooltip tooltip={display.detail}>
       <div className="border-border bg-card flex flex-col gap-1 rounded-lg border p-3">
         <Type variant="body" className="text-2xl font-semibold tabular-nums">
           {count}
         </Type>
-        <Type muted small className="whitespace-nowrap">
+        <Type muted small className="truncate">
           {display.label}
         </Type>
       </div>
@@ -153,53 +186,74 @@ function CoverageStatTile({
   );
 }
 
-export function ManagedDeviceTable({
+// Memoized so parent form/typing state changes (e.g. the configure sheet on
+// the detail page) don't re-render up to 200 device rows per keystroke.
+export const ManagedDeviceTable = memo(function ManagedDeviceTable({
   devices,
   isLoading,
+  isError = false,
+  onRetry,
+  hasMore = false,
+  onLoadMore,
+  isLoadingMore = false,
 }: {
   devices: ManagedDevice[];
   isLoading: boolean;
+  // A failed inventory fetch must never masquerade as an empty fleet.
+  isError?: boolean;
+  onRetry?: () => void;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
+  isLoadingMore?: boolean;
 }): JSX.Element {
   const [search, setSearch] = useState("");
   const [selectedBuckets, setSelectedBuckets] = useState<string[]>([]);
+  // Keep the input responsive; the table filter recomputation trails behind.
+  const deferredSearch = useDeferredValue(search);
 
   const filteredDevices = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
+    const normalizedSearch = deferredSearch.trim().toLowerCase();
     return devices.filter((device) => {
       const matchesSearch =
         normalizedSearch.length === 0 ||
-        [device.hostname, device.serialNumber, device.userEmail].some((value) =>
-          value?.toLowerCase().includes(normalizedSearch),
-        );
+        [
+          device.hostname,
+          device.serialNumber,
+          device.userEmail,
+          device.externalId,
+        ].some((value) => value?.toLowerCase().includes(normalizedSearch));
       const matchesBucket =
         selectedBuckets.length === 0 ||
         selectedBuckets.includes(device.coverageBucket);
       return matchesSearch && matchesBucket;
     });
-  }, [devices, search, selectedBuckets]);
-
-  const bucketOptions = useMemo(
-    () =>
-      (Object.keys(BUCKETS) as CoverageBucket[]).map((bucket) => ({
-        label: bucketDisplay(bucket).label,
-        value: bucket,
-      })),
-    [],
-  );
+  }, [devices, deferredSearch, selectedBuckets]);
 
   if (isLoading) return <SkeletonTable />;
+  if (isError) {
+    return (
+      <Stack gap={2} align="start">
+        <Type muted>Could not load the device inventory.</Type>
+        {onRetry ? (
+          <Button variant="secondary" size="sm" onClick={onRetry}>
+            <Button.Text>Retry</Button.Text>
+          </Button>
+        ) : null}
+      </Stack>
+    );
+  }
 
   return (
     <Stack gap={3}>
-      <Stack direction="horizontal" gap={2} className="h-fit">
+      <Stack direction="horizontal" gap={2} className="h-fit flex-wrap">
         <SearchBar
           value={search}
           onChange={setSearch}
           placeholder="Search host, serial, or user"
-          className="w-64"
+          className="w-64 max-w-full"
         />
         <MultiSelect
-          options={bucketOptions}
+          options={BUCKET_OPTIONS}
           defaultValue={selectedBuckets}
           onValueChange={setSelectedBuckets}
           placeholder="Filter by coverage"
@@ -212,9 +266,34 @@ export function ManagedDeviceTable({
         rowKey={(row) => row.id}
         noResultsMessage={<Type muted>No matching devices</Type>}
       />
+      {hasMore ? (
+        <Stack direction="horizontal" align="center" gap={3}>
+          <Button
+            variant="tertiary"
+            size="sm"
+            onClick={onLoadMore}
+            disabled={isLoadingMore}
+          >
+            <Button.Text>
+              {isLoadingMore ? "Loading…" : "Load more devices"}
+            </Button.Text>
+          </Button>
+          <Type muted small>
+            Showing {devices.length} synced devices so far — search covers only
+            loaded devices.
+          </Type>
+        </Stack>
+      ) : null}
     </Stack>
   );
-}
+});
+
+const BUCKET_OPTIONS = (Object.keys(BUCKETS) as CoverageBucket[]).map(
+  (bucket) => ({
+    label: bucketDisplay(bucket).label,
+    value: bucket,
+  }),
+);
 
 const deviceColumns: Column<ManagedDevice>[] = [
   {
