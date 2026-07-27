@@ -278,10 +278,10 @@ func (m *ChallengeManager) validateAndRefresh(
 	return m.refreshAccessToken(ctx, sess, resource)
 }
 
-// errRefreshRaceLost marks a refresh beaten to the row by a concurrent one. A
-// private cause, not a Reason: the caller recovers from it rather than
-// surfacing it.
-var errRefreshRaceLost = errors.New("remotesessions: refresh lost to a concurrent rotation")
+// errRefreshNotApplied marks a refresh whose write matched no row: either
+// another refresh rotated it first, or it was revoked mid-POST. A private
+// cause, not a Reason: the caller recovers from it rather than surfacing it.
+var errRefreshNotApplied = errors.New("remotesessions: refreshed tokens matched no active session")
 
 // The ordering of these three is the invariant that makes single-flight sound:
 //
@@ -574,7 +574,7 @@ func refreshSessionTokens(
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return zero, "", newTokenRefreshError("the session was refreshed by another request; reload and try again", errRefreshRaceLost)
+			return zero, "", newTokenRefreshError("the session was rotated by another request or revoked while this refresh was in flight; reload to see its current state", errRefreshNotApplied)
 		}
 		return zero, "", fmt.Errorf("persist refreshed session: %w", err)
 	}
