@@ -371,3 +371,21 @@ func TestAutoPauseRequiresPureAuthRejectionStreak(t *testing.T) {
 
 	// A non-auth failure would have reset the streak.
 }
+
+// Regression: EnsureSync must seed next_poll_after from the DATABASE clock.
+// An app-clock timestamp compared against clock_timestamp() in
+// ListSyncCandidates made fresh syncs invisible under app/database clock
+// skew (observed as every sync test failing after VM clock drift).
+func TestFreshConfigSyncIsImmediatelyDue(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, _, orgID := newSyncTestEnv(t)
+	_ = mustUpsert(t, ctx, conn, store, orgID, validCreds(), providers.Settings{
+		"instance_url": "https://example.test",
+	}, true)
+
+	// findSyncID lists through the same candidates query the coordinator
+	// uses; a fresh config's sync must already be due.
+	syncID := findSyncID(t, ctx, store, orgID, testProviderID)
+	require.NotEqual(t, uuid.Nil, syncID)
+}
