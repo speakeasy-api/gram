@@ -47,7 +47,8 @@ type Service interface {
 	// Page through the org's synced MDM device inventory, newest first, with each
 	// device's coverage bucket.
 	ListManagedDevices(context.Context, *ListManagedDevicesPayload) (res *ListManagedDevicesResult, err error)
-	// Summarize agent coverage across the org's connected MDM inventories.
+	// Summarize agent coverage across the org's connected MDM inventories,
+	// optionally scoped to one provider.
 	GetCoverage(context.Context, *GetCoveragePayload) (res *DeviceIntegrationCoverage, err error)
 }
 
@@ -225,6 +226,8 @@ type GetConfigPayload struct {
 type GetCoveragePayload struct {
 	ApikeyToken  *string
 	SessionToken *string
+	// Optionally scope coverage to one provider (e.g. jamf).
+	Provider *string
 }
 
 // ListDeviceIntegrationProvidersResult is the result type of the

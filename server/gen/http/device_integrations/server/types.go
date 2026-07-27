@@ -3961,8 +3961,9 @@ func NewListManagedDevicesPayload(provider *string, coverageBucket *string, curs
 
 // NewGetCoveragePayload builds a deviceIntegrations service getCoverage
 // endpoint payload.
-func NewGetCoveragePayload(apikeyToken *string, sessionToken *string) *deviceintegrations.GetCoveragePayload {
+func NewGetCoveragePayload(provider *string, apikeyToken *string, sessionToken *string) *deviceintegrations.GetCoveragePayload {
 	v := &deviceintegrations.GetCoveragePayload{}
+	v.Provider = provider
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 

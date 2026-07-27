@@ -2184,6 +2184,11 @@ func EncodeGetCoverageRequest(encoder func(*http.Request) goahttp.Encoder) func(
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		values := req.URL.Query()
+		if p.Provider != nil {
+			values.Add("provider", *p.Provider)
+		}
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }

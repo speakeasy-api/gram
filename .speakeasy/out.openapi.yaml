@@ -11213,9 +11213,16 @@ paths:
         name: DeviceIntegrationConfig
   /rpc/deviceIntegrations.getCoverage:
     get:
-      description: Summarize agent coverage across the org's connected MDM inventories.
+      description: Summarize agent coverage across the org's connected MDM inventories, optionally scoped to one provider.
       operationId: getDeviceIntegrationCoverage
       parameters:
+        - allowEmptyValue: true
+          description: Optionally scope coverage to one provider (e.g. jamf).
+          in: query
+          name: provider
+          schema:
+            description: Optionally scope coverage to one provider (e.g. jamf).
+            type: string
         - allowEmptyValue: true
           description: API Key header
           in: header

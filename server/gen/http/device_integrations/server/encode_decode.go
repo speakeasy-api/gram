@@ -2042,9 +2042,14 @@ func DecodeGetCoverageRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 	return func(r *http.Request) (*deviceintegrations.GetCoveragePayload, error) {
 		var payload *deviceintegrations.GetCoveragePayload
 		var (
+			provider     *string
 			apikeyToken  *string
 			sessionToken *string
 		)
+		providerRaw := r.URL.Query().Get("provider")
+		if providerRaw != "" {
+			provider = &providerRaw
+		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -2053,7 +2058,7 @@ func DecodeGetCoverageRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewGetCoveragePayload(apikeyToken, sessionToken)
+		payload = NewGetCoveragePayload(provider, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

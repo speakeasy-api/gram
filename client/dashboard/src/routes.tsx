@@ -22,7 +22,10 @@ import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import UserSessions from "./pages/org/UserSessions";
 import DeviceAgent from "./pages/device-agent/DeviceAgent";
-import DeviceIntegrations from "./pages/org/device-integrations/DeviceIntegrations";
+import DeviceIntegrations, {
+  DeviceIntegrationsRoot,
+} from "./pages/org/device-integrations/DeviceIntegrations";
+import MdmIntegrationDetail from "./pages/org/device-integrations/MdmIntegrationDetail";
 import Elements from "./pages/elements/Elements";
 import EnvironmentPage from "./pages/environments/Environment";
 import Environments, {
@@ -962,7 +965,15 @@ const ORG_ROUTE_STRUCTURE = {
     title: "MDM Integrations",
     url: "mdm-integrations",
     icon: "puzzle",
-    component: DeviceIntegrations,
+    component: DeviceIntegrationsRoot,
+    indexComponent: DeviceIntegrations,
+    subPages: {
+      detail: {
+        title: "MDM Integration",
+        url: ":provider",
+        component: MdmIntegrationDetail,
+      },
+    },
   },
   access: {
     title: "Roles & Permissions",

@@ -2,38 +2,34 @@ import { RequireScope } from "@/components/require-scope";
 import { Switch } from "@/components/ui/switch";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
+import { useOrgRoutes } from "@/routes";
 import type { DeviceIntegrationProvider } from "@gram/client/models/components/deviceintegrationprovider.js";
 import { Button, Stack } from "@speakeasy-api/moonshine";
-import { ChevronDown, PlugZap, Trash2 } from "lucide-react";
+import { ChevronRight, PlugZap } from "lucide-react";
 import { useState } from "react";
 import {
   ConnectionStatusBadge,
   DeviceIntegrationConfigureSheet,
 } from "./device-integration-configure-sheet";
 import { providerUI } from "./provider-ui";
-import {
-  type DeviceIntegrationScheduleRow,
-  DeviceIntegrationSchedulesTable,
-} from "./device-integration-schedules-table";
 import { useDeviceIntegrationConfigForm } from "./use-device-integration-config";
 import {
   runtimeOrDefault,
   useDeviceScheduleRuntimes,
 } from "./use-device-integration-schedules";
 
-// One provider connection: a collapsed row that expands to reveal the
-// provider's sync schedules, with the credential form in a side sheet.
+// One provider connection: the row navigates to the provider's detail page
+// (coverage, schedules, device inventory); the inline controls handle the
+// quick actions — enable/disable and the credential sheet.
 export function DeviceIntegrationConnectionRow({
   provider,
 }: {
   provider: DeviceIntegrationProvider;
 }): JSX.Element {
+  const orgRoutes = useOrgRoutes();
   const [configureOpen, setConfigureOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const form = useDeviceIntegrationConfigForm(provider, {
-    onDeleteSuccess: () => setConfigureOpen(false),
-  });
-  const { runtimes, toggle, retry } = useDeviceScheduleRuntimes(provider.id);
+  const form = useDeviceIntegrationConfigForm(provider);
+  const { runtimes } = useDeviceScheduleRuntimes(provider.id);
   const ui = providerUI(provider);
   const Icon = ui.icon;
 
@@ -46,42 +42,22 @@ export function DeviceIntegrationConnectionRow({
     total: provider.schedules.length,
   });
 
-  const scheduleRows = provider.schedules.map(
-    (schedule): DeviceIntegrationScheduleRow => ({
-      key: `${provider.id}:${schedule.schedule}`,
-      schedule,
-      runtime: runtimeOrDefault(runtimes, schedule.schedule),
-      configured: form.isConfigured,
-      connectionEnabled: form.enabled,
-      toggle,
-      retry,
-    }),
-  );
-
-  const handleDelete = () => {
-    if (!form.isConfigured) return;
-    if (
-      !window.confirm(`Delete the ${provider.displayName} device integration?`)
-    ) {
-      return;
-    }
-    form.remove();
-  };
+  const goToDetail = () =>
+    orgRoutes.deviceIntegrations.detail.goTo(provider.id);
 
   return (
     <div className="flex flex-col">
-      {/* The whole header row toggles the schedules, so interactive children
-          stop propagation to keep their own clicks from collapsing it. */}
+      {/* The whole row navigates to the detail page, so interactive children
+          stop propagation to keep their own clicks from navigating. */}
       <div
-        role="button"
+        role="link"
         tabIndex={0}
-        aria-expanded={expanded}
-        aria-label={`${expanded ? "Hide" : "Show"} ${provider.displayName} schedules`}
-        onClick={() => setExpanded((current) => !current)}
+        aria-label={`Open ${provider.displayName} details`}
+        onClick={goToDetail}
         onKeyDown={(event) => {
           if (event.key !== "Enter" && event.key !== " ") return;
           event.preventDefault();
-          setExpanded((current) => !current);
+          goToDetail();
         }}
         className="hover:bg-muted/50 cursor-pointer p-4 transition-colors focus-visible:outline-none"
       >
@@ -160,36 +136,13 @@ export function DeviceIntegrationConnectionRow({
                 </Button.Text>
               </Button>
             </RequireScope>
-            <ChevronDown
+            <ChevronRight
               aria-hidden
-              className={`text-muted-foreground h-4 w-4 shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`}
+              className="text-muted-foreground h-4 w-4 shrink-0"
             />
           </Stack>
         </Stack>
       </div>
-
-      {expanded ? (
-        <Stack gap={3} className="px-4 pb-4 pl-10">
-          <DeviceIntegrationSchedulesTable rows={scheduleRows} />
-          {form.isConfigured ? (
-            <Stack direction="horizontal" justify="end" align="center">
-              <RequireScope scope="org:admin" level="component">
-                <Button
-                  variant="destructive-secondary"
-                  size="sm"
-                  onClick={handleDelete}
-                  disabled={form.isMutating}
-                >
-                  <Button.LeftIcon>
-                    <Trash2 className="size-3.5" />
-                  </Button.LeftIcon>
-                  <Button.Text>Delete connection</Button.Text>
-                </Button>
-              </RequireScope>
-            </Stack>
-          ) : null}
-        </Stack>
-      ) : null}
 
       <DeviceIntegrationConfigureSheet
         provider={provider}
