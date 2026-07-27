@@ -856,8 +856,15 @@ func hookTelemetryBaseAttrs(payload *gen.IngestPayload, authCtx *contextvalues.A
 		attr.TraceIDKey:        canonicalTraceID(payload),
 		attr.LogBodyKey:        "Hook: " + hookEventName,
 	}
+	// Stamp the resolved chat id, not the raw agent session id: every consumer
+	// treats gen_ai.conversation.id (materialized as telemetry_logs.chat_id) as
+	// the chats row id, and persistCanonicalConversationEvent stores the
+	// transcript under the same mapping. Claude/Codex/Cursor session ids are
+	// themselves UUIDs, so this was previously an accidental identity; opencode
+	// ids ("ses_...") are not, and the raw string reached the chat detail
+	// endpoint as a malformed UUID. See chat.SessionIDToChatID.
 	if sessionID := canonicalSessionID(payload); sessionID != "" {
-		attrs[attr.GenAIConversationIDKey] = sessionID
+		attrs[attr.GenAIConversationIDKey] = sessionIDToUUID(sessionID).String()
 	}
 	if conv.PtrValOr(payload.Replayed, false) {
 		// Downtime backlog redelivered from a device's offline spool: the

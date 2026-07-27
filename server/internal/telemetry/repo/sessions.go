@@ -60,11 +60,22 @@ const (
 	// rows are deliberately excluded: the summaries cover agent surfaces only,
 	// and claude-code:usage duplicates the OTEL api_request stream.
 	sessionAgentUsageRowPredicate = "(startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost'))"
-	// sessionAgentToolCallPredicate matches Codex/Cursor completed tool-call hook
-	// rows (they have no OTEL stream). The hook.event guard excludes the
-	// PreToolUse companion row; provider names are not tool calls.
+	// sessionOpencodeUsageRowPredicate matches opencode's unified-ingest
+	// assistant.responded rows, which report per-turn tokens and cost under the
+	// canonical gen_ai.usage.* keys the generic measure branches already read.
+	// opencode has no OTEL stream and the unified ingest path stamps no
+	// gram_urn, so provenance anchors on hook_source. The token guard mirrors
+	// sessionCodexAPIRequestPredicate: only the turn-closing row carries usage.
+	// Mirrors is_opencode_usage_row in the MVs.
+	sessionOpencodeUsageRowPredicate = "(" +
+		"hook_source = 'opencode' AND " +
+		"(toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '')" +
+		")"
+	// sessionAgentToolCallPredicate matches Codex/Cursor/opencode completed
+	// tool-call hook rows (they have no OTEL stream). The hook.event guard
+	// excludes the PreToolUse companion row; provider names are not tool calls.
 	sessionAgentToolCallPredicate = "(" +
-		"hook_source IN ('codex', 'cursor') AND " +
+		"hook_source IN ('codex', 'cursor', 'opencode') AND " +
 		"toString(attributes.gram.tool.name) != '' AND " +
 		"toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor') AND " +
 		"toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')" +
@@ -87,14 +98,15 @@ const (
 		"toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id), " +
 		"toString(id))"
 	// sessionUsageMeasureFilter selects the rows that carry token/cost usage:
-	// Claude api_request rows, Codex response.completed rows, and
-	// Cursor/Claude-Chat usage rows. This is the sumIf guard for every
-	// token/cost measure, keeping session totals aligned with the aggregate.
-	sessionUsageMeasureFilter = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + ")"
+	// Claude api_request rows, Codex response.completed rows,
+	// Cursor/Claude-Chat usage rows, and opencode assistant.responded rows.
+	// This is the sumIf guard for every token/cost measure, keeping session
+	// totals aligned with the aggregate.
+	sessionUsageMeasureFilter = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionOpencodeUsageRowPredicate + ")"
 	// sessionSourceRowPredicate admits every row class the session list derives
 	// from, matching the aggregate MV's WHERE clause so the two views cover the
 	// same sessions.
-	sessionSourceRowPredicate = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionClaudeToolResultPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionAgentToolCallPredicate + ")"
+	sessionSourceRowPredicate = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionClaudeToolResultPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionOpencodeUsageRowPredicate + " OR " + sessionAgentToolCallPredicate + ")"
 
 	// Token/cost measures are source-aware: Claude api_request rows carry usage
 	// on flat attributes (input_tokens, cost_usd, …), Codex response.completed
@@ -145,13 +157,14 @@ const (
 
 	// sessionMessageIDExpr identifies a distinct message/turn per row: Claude
 	// api_request rows are one turn each (unique prompt.id); Codex
-	// response.completed rows are one turn each but carry no stable turn id, so
-	// they fall back to the row id (count-per-row, same degradation as the
-	// tool-call dedup); generic rows key off gen_ai.response.id. Counted
-	// distinct for message_count.
+	// response.completed and opencode assistant.responded rows are one turn
+	// each but carry no stable turn id (the unified ingest path sets no
+	// gen_ai.response.id), so they fall back to the row id (count-per-row, same
+	// degradation as the tool-call dedup); generic rows key off
+	// gen_ai.response.id. Counted distinct for message_count.
 	sessionMessageIDExpr = "multiIf(" + sessionClaudeAPIRequestPredicate + ", " +
 		"toString(attributes.prompt.id), " +
-		sessionCodexAPIRequestPredicate + ", toString(id), " +
+		sessionCodexAPIRequestPredicate + " OR " + sessionOpencodeUsageRowPredicate + ", toString(id), " +
 		"toString(attributes.gen_ai.response.id))"
 	sessionMessageCountExpr = "uniqExactIf(" + sessionMessageIDExpr + ", " + sessionMessageIDExpr + " != '')"
 )
