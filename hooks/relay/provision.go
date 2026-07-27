@@ -52,6 +52,8 @@ func WritePlugin(ctx context.Context, provider, dir string, cfg PluginConfig) er
 		target = install.Target{Provider: agenthooks.ProviderCursor, Scope: install.ScopePlugin, Dir: dir}
 	case "codex":
 		target = install.Target{Provider: agenthooks.ProviderCodex, Scope: install.ScopeUser, Dir: dir}
+	case "opencode":
+		target = install.Target{Provider: agenthooks.ProviderOpenCode, Scope: install.ScopeProject, Dir: dir}
 	default:
 		return fmt.Errorf("unknown provider %q", provider)
 	}
@@ -87,7 +89,7 @@ func manifest(provider agenthooks.Provider, cfg PluginConfig, dir string) instal
 		observe(agenthooks.KindNotification),
 		observe(agenthooks.KindModelResponse),
 	}
-	if provider == agenthooks.ProviderCodex {
+	if provider == agenthooks.ProviderCodex || provider == agenthooks.ProviderOpenCode {
 		hooks = append(hooks, gate(agenthooks.KindPermission, 60*time.Second))
 	}
 	return install.Manifest{
