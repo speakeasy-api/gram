@@ -45,6 +45,7 @@ type CustomDomainHealth struct {
 	expectedTarget string
 	emails         *email.Service
 	siteURL        *url.URL
+	dryRun         bool
 }
 
 type ListCustomDomainsForHealthCheckArgs struct {
@@ -89,6 +90,12 @@ func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure
 		expectedTarget: expectedTarget,
 		emails:         emails,
 		siteURL:        siteURL,
+		// The first release observes only: checks run and log their findings,
+		// including the admin notifications that would be sent, but no health
+		// state is persisted and no email goes out. Because dry run leaves no
+		// trace in the database, flipping this to false later lets the next
+		// sweep re-derive state and notify as if it were the first ever check.
+		dryRun: true,
 	}
 }
 
@@ -99,6 +106,11 @@ func (c *CustomDomainHealth) SetResolver(resolver dns.Resolver) {
 // SetProbe replaces the HTTPS probe. Intended for testing.
 func (c *CustomDomainHealth) SetProbe(probe func(ctx context.Context, domain string) error) {
 	c.probe = probe
+}
+
+// SetDryRun toggles observation-only mode. Intended for testing.
+func (c *CustomDomainHealth) SetDryRun(dryRun bool) {
+	c.dryRun = dryRun
 }
 
 func (c *CustomDomainHealth) List(ctx context.Context, args ListCustomDomainsForHealthCheckArgs) ([]CustomDomainHealthCheckTarget, error) {
@@ -192,6 +204,35 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 				observation.Issue = customdomains.HealthIssue(infrastructureHealth.Issue)
 			}
 		}
+	}
+
+	if c.dryRun {
+		// Observation-only release: report what a live check would have done
+		// without flipping status, bumping consecutive_failures, or touching
+		// checked_at. Since nothing persists, an unhealthy domain re-reports a
+		// would-be transition on every sweep — that recurring log line is the
+		// point of the dry run.
+		current := customDomainHealthState(domain)
+		if preserveCertificateExpiry {
+			observation.CertificateExpiresAt = current.CertificateExpiresAt
+		}
+		next := customdomains.ReconcileHealthState(current, observation, args.CheckedAt)
+		c.logger.InfoContext(ctx, "dry run: observed custom domain health",
+			attr.SlogURLDomain(domain.Domain),
+			attr.SlogOrganizationID(args.OrganizationID),
+			attr.SlogCustomDomainHealthStatus(string(next.Status)),
+			attr.SlogCustomDomainHealthIssue(string(next.Issue)),
+		)
+		if customdomains.ShouldNotifyUnhealthyTransition(current, next) {
+			return NotifyCustomDomainUnhealthyArgs{
+				CustomDomainID: domain.ID,
+				OrganizationID: args.OrganizationID,
+				Domain:         domain.Domain,
+				Issue:          next.Issue,
+				CheckedAt:      args.CheckedAt,
+			}, nil
+		}
+		return noNotification, nil
 	}
 
 	var notification NotifyCustomDomainUnhealthyArgs
@@ -303,6 +344,9 @@ func (c *CustomDomainHealth) NotifyOrgAdmins(ctx context.Context, args NotifyCus
 			continue
 		}
 		seen[emailKey] = struct{}{}
+		if c.dryRun {
+			continue
+		}
 		tmpl := email.CustomDomainUnhealthy{
 			Email:        user.Email,
 			Domain:       args.Domain,
@@ -316,7 +360,21 @@ func (c *CustomDomainHealth) NotifyOrgAdmins(ctx context.Context, args NotifyCus
 		}
 	}
 
-	return errors.Join(notificationErrors...)
+	if err := errors.Join(notificationErrors...); err != nil {
+		return err
+	}
+	if c.dryRun {
+		// Aggregate line only after every recipient resolved cleanly, so a
+		// retried activity cannot log a misleading partial count. Addresses
+		// stay out of the logs.
+		c.logger.InfoContext(ctx, "dry run: would email org admins about unhealthy custom domain",
+			attr.SlogURLDomain(args.Domain),
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogCustomDomainHealthIssue(string(args.Issue)),
+			attr.SlogCustomDomainNotifyRecipientCount(len(seen)),
+		)
+	}
+	return nil
 }
 
 // FindOrphanResources reports but never deletes unmatched managed resources.
