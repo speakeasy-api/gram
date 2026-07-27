@@ -21,10 +21,11 @@ const DefaultSinkBatchSize = 5000
 // columns by their ch tags.
 const insertStatement = `INSERT INTO risk_findings (
 	id, created_at, organization_id, project_id, request_id, chat_message_id,
+	chat_id, user_id, external_user_id,
 	risk_policy_id, risk_policy_version, rule_id, description, source, confidence,
-	tags, start_pos, end_pos, dead_letter_reason, match_len, match_redacted,
+	category, tags, start_pos, end_pos, dead_letter_reason, match_len, match_redacted,
 	fingerprint_pepper_version, fingerprint_global_hs256, fingerprint_tenant_hs256,
-	excluded_at, exclusion_id
+	excluded_at, exclusion_id, false_positive_at
 )`
 
 // Sink batches FindingRow values and inserts them into the ClickHouse
