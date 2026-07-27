@@ -5,6 +5,7 @@ import { Type } from "@/components/ui/type";
 import { ManualSetupBadge } from "@/pages/catalog/ManualSetupBadge";
 import { useSdkClient } from "@/contexts/Sdk";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
+import { GOOGLE_WORKSPACE_REGISTRY_SPECIFIER } from "@/pages/catalog/toolCurations";
 import {
   PulseMCPServer,
   useIsCatalogServerInstalled,
@@ -329,6 +330,11 @@ export default function CatalogDetail(): JSX.Element {
               </Card.Content>
             </Card>
 
+            {server.registrySpecifier ===
+              GOOGLE_WORKSPACE_REGISTRY_SPECIFIER && (
+              <GoogleWorkspaceRichDocsGuide />
+            )}
+
             {/* Available Tools */}
             {detailTools.length > 0 && <ToolsSection tools={detailTools} />}
           </div>
@@ -481,6 +487,35 @@ export default function CatalogDetail(): JSX.Element {
         />
       </Page.Body>
     </Page>
+  );
+}
+
+function GoogleWorkspaceRichDocsGuide() {
+  return (
+    <Card>
+      <Card.Header>
+        <Card.Title>Creating rich Google Docs</Card.Title>
+      </Card.Header>
+      <Card.Content>
+        <div className="space-y-3">
+          <Type>
+            For documents with headings, formatted text, lists, or tables, use{" "}
+            <code className="font-mono">import_to_google_doc</code> with{" "}
+            <code className="font-mono">source_format: &quot;html&quot;</code>.
+            Catalog installs expose this as{" "}
+            <code className="font-mono">create_rich_doc</code> so assistants
+            select it for structured-document requests.{" "}
+            <code className="font-mono">create_doc</code> remains available for
+            plain text.
+          </Type>
+          <Type muted>
+            Rich import is included in the Core tier. In-place table and
+            paragraph styling requires Extended; batch updates and advanced
+            table editing require Complete.
+          </Type>
+        </div>
+      </Card.Content>
+    </Card>
   );
 }
 

@@ -3,6 +3,8 @@ package remotemcp
 import (
 	"log/slog"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
@@ -16,6 +18,7 @@ import (
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	variationsrepo "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
 
 // ProxyManager builds configured remote-MCP proxies wired up with the
@@ -31,6 +34,7 @@ import (
 type ProxyManager struct {
 	logger         *slog.Logger
 	tracer         trace.Tracer
+	db             *pgxpool.Pool
 	guardianPolicy *guardian.Policy
 	authz          *authz.Engine
 	posthog        *posthog.Posthog
@@ -53,6 +57,7 @@ func NewProxyManager(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
+	db *pgxpool.Pool,
 	guardianPolicy *guardian.Policy,
 	authzEngine *authz.Engine,
 	posthogClient *posthog.Posthog,
@@ -66,6 +71,7 @@ func NewProxyManager(
 	return &ProxyManager{
 		logger:                                logger,
 		tracer:                                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotemcp"),
+		db:                                    db,
 		guardianPolicy:                        guardianPolicy,
 		authz:                                 authzEngine,
 		posthog:                               posthogClient,
@@ -106,7 +112,8 @@ func (f *ProxyManager) Build(
 	mcpServerID string,
 	headers []remotemcprepo.RemoteMcpServerHeader,
 	visibility string,
-	projectID string,
+	projectID uuid.UUID,
+	toolVariationsGroupID uuid.NullUUID,
 	upstreamAuth string,
 	wwwAuthenticate string,
 ) *proxy.Proxy {
@@ -120,11 +127,31 @@ func (f *ProxyManager) Build(
 		})
 	}
 
-	return f.BuildTarget(logger, proxy.ServerIdentity{
+	identity := proxy.ServerIdentity{
 		RemoteMCPServerID:   server.ID.String(),
 		TunneledMCPServerID: "",
 		McpServerID:         mcpServerID,
-	}, server.Url, configured, visibility, projectID, upstreamAuth, wwwAuthenticate)
+	}
+	p := f.BuildTarget(logger, identity, server.Url, configured, visibility, projectID.String(), upstreamAuth, wwwAuthenticate)
+
+	if toolVariationsGroupID.Valid {
+		variationInterceptor := NewToolsVariationInterceptor(
+			variationsrepo.New(f.db),
+			toolVariationsGroupID.UUID,
+			projectID,
+			identity,
+		)
+		// Authorize against upstream canonical names first, then expose aliases
+		// in tools/list. Restore aliases before the request-side interceptors so
+		// tools/call authorization uses that same canonical name.
+		p.ToolsListResponseInterceptors = append(p.ToolsListResponseInterceptors, variationInterceptor)
+		p.ToolsCallRequestInterceptors = append(
+			[]proxy.ToolsCallRequestInterceptor{variationInterceptor},
+			p.ToolsCallRequestInterceptors...,
+		)
+	}
+
+	return p
 }
 
 func (f *ProxyManager) BuildTarget(

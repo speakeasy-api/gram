@@ -12,6 +12,7 @@ import {
   getRemoteDisplayInfo,
   normalizeRemoteUrl,
 } from "@/pages/catalog/remotes";
+import { catalogToolCurations } from "@/pages/catalog/toolCurations";
 import { autoConfigureRemoteMcpAuth } from "@/pages/sources/remote-mcp/autoConfigureAuth";
 import type { RequestOptions } from "@gram/client/lib/sdks.js";
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
@@ -418,12 +419,28 @@ export function useRemoteMcpInstallWorkflow({
       );
 
       let mcpServer: McpServer;
+      const variationIds: string[] = [];
       try {
+        let toolVariationsGroupId: string | undefined;
+        for (const variation of catalogToolCurations(
+          target.server.registrySpecifier,
+          remoteMcpServer.id,
+        )) {
+          const result = await client.variations.upsertGlobal(
+            { upsertGlobalToolVariationForm: variation },
+            undefined,
+            reqOpts,
+          );
+          variationIds.push(result.variation.id);
+          toolVariationsGroupId = result.variation.groupId;
+        }
+
         mcpServer = await client.mcpServers.create(
           {
             createMcpServerForm: {
               name: target.name,
               remoteMcpServerId: remoteMcpServer.id,
+              toolVariationsGroupId,
               // Private (user-session gated) rather than the sources flow's
               // "disabled": catalog installs promise a usable server, and the
               // pre-staged endpoint must actually serve. Public would expose
@@ -435,6 +452,11 @@ export function useRemoteMcpInstallWorkflow({
           reqOpts,
         );
       } catch (linkError) {
+        const variationRollbacks = await Promise.allSettled(
+          variationIds.map((variationId) =>
+            client.variations.deleteGlobal({ variationId }, undefined, reqOpts),
+          ),
+        );
         try {
           await client.remoteMcp.deleteServer(
             { id: remoteMcpServer.id },
@@ -448,8 +470,11 @@ export function useRemoteMcpInstallWorkflow({
             rollbackError instanceof Error
               ? rollbackError.message
               : String(rollbackError);
+          const failedVariationRollbacks = variationRollbacks.filter(
+            (result) => result.status === "rejected",
+          ).length;
           throw new Error(
-            `Created remote MCP server ${remoteMcpServer.id} but failed to link an MCP server, and the rollback also failed. Delete it manually before retrying. Cause: ${linkMsg}. Rollback: ${rollbackMsg}.`,
+            `Created remote MCP server ${remoteMcpServer.id} but failed to configure and link it, and the rollback also failed. Delete it manually before retrying. Cause: ${linkMsg}. Remote rollback: ${rollbackMsg}. Variation rollbacks failed: ${failedVariationRollbacks}.`,
           );
         }
         throw linkError instanceof Error
