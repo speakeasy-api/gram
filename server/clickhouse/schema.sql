@@ -582,10 +582,11 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS attribute_metrics_summaries_mv TO attribu
 -- admitted. Claude Code and Codex data comes exclusively from their raw OTEL
 -- log streams (Claude api_request / Codex response.completed rows for usage,
 -- Claude tool_result rows for tool calls); Cursor comes from its
--- usage-metrics rows; Codex/Cursor tool calls arrive as completed tool-call
--- hook rows; Claude Chat (web/desktop) usage and cost arrive as
--- claude_chat:usage / claude_chat:cost rows polled from the Admin Analytics
--- API. Everything else —
+-- usage-metrics rows; opencode comes from its unified-ingest
+-- assistant.responded rows; Codex/Cursor/opencode tool calls arrive as
+-- completed tool-call hook rows; Claude Chat (web/desktop) usage and cost
+-- arrive as claude_chat:usage / claude_chat:cost rows polled from the Admin
+-- Analytics API. Everything else —
 -- Gram-hosted chat completions, claude-code:usage metric rows (which
 -- duplicate api_request usage), Claude hook rows, MCP hook rows — is
 -- excluded so cost attribution never mixes sources.
@@ -646,16 +647,27 @@ WITH
     -- kept so in-flight rows from pods that predate the Codex raw-stream
     -- cutover still land; no new rows carry it.
     (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
+    -- opencode reports per-turn tokens and cost on its unified-ingest
+    -- assistant.responded rows, under the canonical gen_ai.usage.* keys that
+    -- every fallback branch below already reads. It has no OTEL stream and the
+    -- unified ingest path stamps no gram_urn, so provenance anchors on
+    -- hook_source instead. The token guard mirrors is_codex_api_request: only
+    -- the turn-closing row carries usage, so a session's other opencode rows
+    -- (prompts, tool calls, session lifecycle) contribute nothing.
+    (
+        toString(attributes.gram.hook.source) = 'opencode'
+        AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '')
+    ) AS is_opencode_usage_row,
     -- Rows that carry token usage: the sumIf guard for every token/cost sum.
-    (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row) AS is_usage_row,
-    -- Codex/Cursor tool calls arrive as hook rows, one
+    (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row) AS is_usage_row,
+    -- Codex/Cursor/opencode tool calls arrive as hook rows, one
     -- PostToolUse/PostToolUseFailure row per completed call (Codex raw OTEL
     -- tool events are deliberately not counted — hook rows stay the sole
     -- source). The hook.event guard is required: every call also emits a
     -- PreToolUse row with the same gram.tool.name. Provider names (the
     -- usage-metrics rows' tool.name) are excluded — they are not tool calls.
     (
-        toString(attributes.gram.hook.source) IN ('codex', 'cursor')
+        toString(attributes.gram.hook.source) IN ('codex', 'cursor', 'opencode')
         AND toString(attributes.gram.tool.name) != ''
         AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
         AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
@@ -765,11 +777,11 @@ SELECT
 FROM telemetry_logs
 -- Admit only the observed agent surfaces: Claude OTEL api_request/tool_result
 -- rows, Codex OTEL response.completed usage rows, Cursor/Claude-Chat usage
--- and cost rows, and Codex/Cursor completed tool-call hook rows. Tool rows
--- carry no token/cost fields, so they only contribute to the tool-call
--- counts.
+-- and cost rows, opencode unified-ingest usage rows, and
+-- Codex/Cursor/opencode completed tool-call hook rows. Tool rows carry no
+-- token/cost fields, so they only contribute to the tool-call counts.
 WHERE time_unix_nano >= attribute_metrics_cutoff_unix_nano
-  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_agent_tool_call OR is_work_units_score)
+  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row OR is_agent_tool_call OR is_work_units_score)
 GROUP BY
     gram_project_id,
     time_bucket,
@@ -968,7 +980,8 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS chat_session_summaries_mv TO chat_session
 -- Provenance-first ingestion, identical to attribute_metrics_summaries_mv:
 -- Claude OTEL api_request rows and Codex OTEL response.completed rows for
 -- usage, Claude tool_result rows for tool calls, Cursor/Claude-Chat usage
--- rows, and Codex/Cursor completed tool-call hook rows. Keep the predicates
+-- rows, opencode unified-ingest usage rows, and Codex/Cursor/opencode
+-- completed tool-call hook rows. Keep the predicates
 -- in sync with the session* constants in
 -- server/internal/telemetry/repo/sessions.go and with
 -- attribute_metrics_summaries_mv above.
@@ -1009,14 +1022,21 @@ WITH
     least(greatest(toInt64OrZero(toString(attributes.cached_token_count)), 0), greatest(toInt64OrZero(toString(attributes.input_token_count)), 0)) AS codex_cache_read_tokens,
     (greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - codex_cache_read_tokens) AS codex_input_tokens,
     (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
+    -- opencode usage rides on its unified-ingest assistant.responded rows,
+    -- anchored on hook_source because that path stamps no gram_urn; see
+    -- attribute_metrics_summaries_mv above.
     (
-        hook_source IN ('codex', 'cursor')
+        hook_source = 'opencode'
+        AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '')
+    ) AS is_opencode_usage_row,
+    (
+        hook_source IN ('codex', 'cursor', 'opencode')
         AND toString(attributes.gram.tool.name) != ''
         AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
         AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
     ) AS is_agent_tool_call,
     (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
-    (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row) AS is_usage_row,
+    (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row) AS is_usage_row,
     -- A counted tool call that failed: Claude tool_result rows carry
     -- success="false", Codex/Cursor hook rows report PostToolUseFailure or an
     -- HTTP error status.
@@ -1030,10 +1050,11 @@ WITH
         toString(id)
     ) AS tool_call_dedup_id,
     -- One distinct message per Claude api_request turn (prompt.id); Codex
-    -- response.completed rows are one turn each but carry no stable turn id,
-    -- so they fall back to the row id (count-per-row); generic rows key off
-    -- gen_ai.response.id.
-    multiIf(is_claude_api_request, toString(attributes.prompt.id), is_codex_api_request, toString(id), toString(attributes.gen_ai.response.id)) AS session_message_id,
+    -- response.completed and opencode assistant.responded rows are one turn
+    -- each but carry no stable turn id (the unified ingest path sets no
+    -- gen_ai.response.id), so they fall back to the row id (count-per-row);
+    -- generic rows key off gen_ai.response.id.
+    multiIf(is_claude_api_request, toString(attributes.prompt.id), is_codex_api_request OR is_opencode_usage_row, toString(id), toString(attributes.gen_ai.response.id)) AS session_message_id,
     -- Per-row effective model: Claude api_request rows put it on
     -- attributes.model / gen_ai.request.model, everyone else on
     -- gen_ai.response.model.
@@ -1093,7 +1114,7 @@ SELECT
 FROM telemetry_logs
 WHERE time_unix_nano >= chat_session_cutoff_unix_nano
   AND chat_id != ''
-  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_agent_tool_call)
+  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row OR is_agent_tool_call)
 GROUP BY gram_project_id, time_bucket, chat_id;
 
 CREATE TABLE IF NOT EXISTS attribute_keys (
