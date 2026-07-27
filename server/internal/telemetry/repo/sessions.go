@@ -64,12 +64,14 @@ const (
 	// assistant.responded rows, which report per-turn tokens and cost under the
 	// canonical gen_ai.usage.* keys the generic measure branches already read.
 	// opencode has no OTEL stream and the unified ingest path stamps no
-	// gram_urn, so provenance anchors on hook_source. The token guard mirrors
-	// sessionCodexAPIRequestPredicate: only the turn-closing row carries usage.
-	// Mirrors is_opencode_usage_row in the MVs.
+	// gram_urn, so provenance anchors on hook_source. The usage guard admits a
+	// row when any of tokens/cost is present: only the turn-closing row carries
+	// usage, and a turn may report cost without token counts. Byte-for-byte
+	// mirror of is_opencode_usage_row in the MVs so session totals match the
+	// aggregate.
 	sessionOpencodeUsageRowPredicate = "(" +
 		"hook_source = 'opencode' AND " +
-		"(toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '')" +
+		"(toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')" +
 		")"
 	// sessionAgentToolCallPredicate matches Codex/Cursor/opencode completed
 	// tool-call hook rows (they have no OTEL stream). The hook.event guard
