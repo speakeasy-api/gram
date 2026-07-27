@@ -924,8 +924,17 @@ jobs:
   atlas-push:
     name: Push migrations to Atlas Registry
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes, server-build-lint]
-    if: needs.changes.outputs.server == 'true' && github.event_name != 'merge_group'
+    # Preview environments pin AtlasMigration resources to the
+    # pr-<number>-<8-char head sha> tag, so this must run for every PR head
+    # commit regardless of changed paths (adding the preview label does not
+    # re-run the workflow). Pushing a dir whose content is unchanged from
+    # main deduplicates server-side into a tag alias of the existing
+    # registry version. Forks are excluded because they cannot read
+    # ATLAS_TOKEN, and a skipped job passes ci-gate while a failed one
+    # would not.
+    if: |
+      github.event_name != 'merge_group' &&
+      (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork)
     permissions:
       contents: read
       pull-requests: write
