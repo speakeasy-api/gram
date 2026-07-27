@@ -200,6 +200,7 @@ func (f *ProxyManager) BuildTarget(
 		AuthorizationOverride:       upstreamAuth,
 		UpstreamResponseRetryer:     nil,
 		UpstreamResponseInterceptor: nil,
+		DisableRedirects:            false,
 		WWWAuthenticate:             wwwAuthenticate,
 		UserRequestInterceptors: []proxy.UserRequestInterceptor{
 			interceptors.NewFigma(upstreamURL, logger),

@@ -80,6 +80,8 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if g.challenge != "" {
 		w.Header().Set("WWW-Authenticate", g.challenge)
+		w.Header().Set("Set-Cookie", "backend=state; Path=/")
+		w.Header().Set("Clear-Site-Data", `"cookies"`)
 	}
 
 	// Customer backend behavior.
@@ -406,6 +408,8 @@ func TestServePublic_Tunneled_StripsBackendChallenge(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Empty(t, w.Header().Get("WWW-Authenticate"))
+	require.Empty(t, w.Header().Get("Set-Cookie"), "backend cookies must not reach the Gram origin")
+	require.Empty(t, w.Header().Get("Clear-Site-Data"), "backend must not wipe state on the Gram origin")
 	require.Empty(t, w.Header().Get(wire.HeaderTunnelAgentSession), "internal tunnel headers must not leak")
 }
 

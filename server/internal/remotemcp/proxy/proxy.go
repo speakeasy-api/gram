@@ -235,6 +235,13 @@ type Proxy struct {
 	// cannot be recorded.
 	UpstreamResponseInterceptor func(ctx context.Context, resp *http.Response) error
 
+	// DisableRedirects stops the upstream client from following redirect
+	// responses; the 3xx relays to the caller as-is. Tunneled forwards set
+	// this: a redirect target is never another tunnel hop, and following one
+	// would replay Gram's internal forward headers (including the tunnel
+	// forward token) against an upstream-controlled URL.
+	DisableRedirects bool
+
 	// WWWAuthenticate is the challenge relayed to the client when the
 	// upstream rejects a request (401/403), replacing the upstream's own
 	// WWW-Authenticate — the upstream challenge names the upstream's
@@ -743,7 +750,13 @@ func (p *Proxy) forwardRequest(ctx context.Context, r *http.Request, body io.Rea
 		return nil, nil, err
 	}
 
-	resp, err := p.GuardianPolicy.Client(p.GuardianClientOptions...).Do(upstreamReq)
+	client := p.GuardianPolicy.Client(p.GuardianClientOptions...)
+	if p.DisableRedirects {
+		client.CheckRedirect = func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+	}
+	resp, err := client.Do(upstreamReq)
 	if err != nil {
 		// timer.Stop() returns false if the timer has already fired;
 		// that's how we distinguish a phase-1 timeout from a parent

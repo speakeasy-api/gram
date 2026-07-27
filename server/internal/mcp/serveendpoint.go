@@ -113,8 +113,8 @@ func (s *Service) serveResolvedMCPEndpoint(
 
 	// Public tunneled servers serve anonymously: no OAuth handshake, so the
 	// issuer gate is skipped even though the issuer column is populated.
-	// Gate on consent + rollout flags before dispatch so ungated callers are
-	// never challenged for a server that will not serve them;
+	// Gate on owner consent before dispatch so ungated callers are never
+	// challenged for a server that will not serve them;
 	// serveTunneledPublicBackend re-checks as defense-in-depth.
 	if isTunneledPublic(mcpServer) {
 		if err := s.requireTunneledPublicConsent(ctx, logger, mcpEndpoint, mcpServer); err != nil {

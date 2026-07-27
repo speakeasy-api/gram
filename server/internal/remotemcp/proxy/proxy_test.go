@@ -122,6 +122,44 @@ func TestProxy_Post_ForwardsRequestAndResponse(t *testing.T) {
 	require.Contains(t, rr.Body.String(), `"protocolVersion":"2025-06-18"`)
 }
 
+func TestProxy_Post_DisableRedirectsRelaysRedirectWithoutFollowing(t *testing.T) {
+	t.Parallel()
+
+	var targetHits atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		targetHits.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(target.Close)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusFound)
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.DisableRedirects = true
+	p.Headers = []proxy.ConfiguredHeader{{
+		Name:                   "X-Gram-Tunnel-Forward-Token",
+		StaticValue:            "internal-secret",
+		ValueFromRequestHeader: "",
+		IsRequired:             true,
+	}}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+
+	// The redirect relays to the caller verbatim; the target — which would
+	// have received the internal forward headers — is never contacted.
+	require.Equal(t, http.StatusFound, rr.Code)
+	require.Equal(t, target.URL, rr.Header().Get("Location"))
+	require.Equal(t, int32(0), targetHits.Load())
+}
+
 func TestProxy_Post_RetriesUpstreamResponseBeforeRelay(t *testing.T) {
 	t.Parallel()
 

@@ -174,6 +174,14 @@ redis.call('DEL', KEYS[1])
 return #members
 `)
 
+// reservationTTL bounds how long an uncommitted reservation holds a capacity
+// slot. Commit re-aligns the member's expiry to the full session TTL; until
+// then the slot only needs to survive the initialize exchange (bounded by the
+// proxy's headers-phase timeout, well under this). Without the shorter bound,
+// a crash between Reserve and Rollback would pin the slot for the full
+// session TTL (default 24h).
+const reservationTTL = 10 * time.Minute
+
 // Reserve admits sid into the tunnel's live-session set ahead of the
 // initialize forward, enforcing the per-tunnel cap atomically. The
 // reservation holds a capacity slot only; the mapping is written by Commit
@@ -185,7 +193,7 @@ func (s *Store) Reserve(ctx context.Context, tunnelID, mcpServerID, sid string) 
 		[]string{liveSetKey(tunnelID)},
 		now.UnixMilli(),
 		s.liveCap,
-		now.Add(s.ttl).UnixMilli(),
+		now.Add(min(reservationTTL, s.ttl)).UnixMilli(),
 		liveMember(mcpServerID, sid),
 		s.ttl.Milliseconds(),
 	).Int64Slice()

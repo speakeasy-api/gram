@@ -219,9 +219,13 @@ func (s *Service) serveTunneledPublicBackend(
 // stripPublicResponseHeaders removes headers that must never reach an
 // anonymous caller: the customer backend's own WWW-Authenticate challenge
 // (this endpoint deliberately has no authorization server — relaying the
-// challenge would misdirect clients at an unreachable one).
+// challenge would misdirect clients at an unreachable one), and
+// state-mutating headers (Set-Cookie, Clear-Site-Data) that would let a
+// backend plant or wipe browser state on the Gram or custom-domain origin.
 func stripPublicResponseHeaders(resp *http.Response) {
 	resp.Header.Del("WWW-Authenticate")
+	resp.Header.Del("Set-Cookie")
+	resp.Header.Del("Clear-Site-Data")
 }
 
 // reservationCleanupTimeout bounds the detached Redis cleanup for an
@@ -407,7 +411,10 @@ func peekIsInitialize(r *http.Request) bool {
 	if r.Body == nil {
 		return false
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, proxy.DefaultMaxBufferedBodyBytes))
+	// Read one byte past the proxy's buffered-body cap: restoring exactly the
+	// cap would make an oversized body indistinguishable from a cap-sized one
+	// downstream, silently truncating it instead of rejecting it as too large.
+	body, err := io.ReadAll(io.LimitReader(r.Body, proxy.DefaultMaxBufferedBodyBytes+1))
 	_ = r.Body.Close()
 	if err != nil {
 		r.Body = io.NopCloser(bytes.NewReader(body))
@@ -533,6 +540,9 @@ func (s *Service) serveTunneledPublicSession(
 		"",
 		"",
 	)
+	// Same rationale as buildProxy: never follow a backend-controlled
+	// redirect with Gram's internal forward headers attached.
+	p.DisableRedirects = true
 	if len(m.gatewayCIDRs) > 0 {
 		p.GuardianClientOptions = []guardian.ClientOption{guardian.WithAllowedCIDRBlocks(m.gatewayCIDRs...)}
 	}
