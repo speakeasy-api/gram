@@ -43,7 +43,7 @@ export function SkillSuggestionMarker({
       aria-label={label}
       onClick={onToggle}
       className={cn(
-        "border-border bg-background text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors",
+        "border-border bg-background text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-sans text-xs transition-colors",
         open && "text-foreground border-foreground/30",
       )}
     >
@@ -64,7 +64,8 @@ export function SkillSuggestionComment({
   const [sourcesOpen, setSourcesOpen] = useState(false);
 
   return (
-    <div className="border-border bg-card my-2 overflow-hidden rounded-lg border shadow-sm">
+    // The card sits inside the diff's <pre>, so the prose font is reset here.
+    <div className="border-border bg-card my-2 overflow-hidden rounded-lg border font-sans shadow-sm">
       <div className="flex items-center gap-2 px-4 py-2.5">
         <span className="bg-foreground text-background flex h-5 w-5 items-center justify-center rounded text-[11px] font-semibold">
           S

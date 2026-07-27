@@ -38,13 +38,17 @@ export default function SkillTextDiff<Annotation = undefined>({
     // Review comments need the full width of a line, so annotated diffs stay
     // unified rather than splitting into two narrow columns.
     diffStyle: isMobile || lineAnnotations != null ? "unified" : "split",
+    // A manifest is prose, so wrap long lines rather than scrolling sideways.
+    // Wrapping also sizes annotations to the visible column instead of the
+    // widest line, which keeps a review comment fully readable.
+    overflow: "wrap",
     disableFileHeader: false,
     disableLineNumbers: false,
   };
 
   return (
     <HighlightProvider langs={["markdown"]}>
-      <div className="overflow-x-auto rounded-lg border">
+      <div className="rounded-lg border">
         <MultiFileDiff
           oldFile={{ name: oldLabel, contents: oldContent, lang: "markdown" }}
           newFile={{ name: newLabel, contents: newContent, lang: "markdown" }}
