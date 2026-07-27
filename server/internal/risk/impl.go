@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
@@ -123,6 +124,10 @@ type Service struct {
 	// the realtime scanner uses. Optional: when nil the eval endpoint returns
 	// un-matched verdicts (judge unavailable).
 	promptJudge promptpolicy.Evaluator
+	// findingsCH reads the ClickHouse risk_findings table for the overview
+	// endpoint when FlagRiskOverviewFromClickHouse is on for the org.
+	// Optional: when nil the overview always serves from Postgres.
+	findingsCH *chrepo.Queries
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -162,6 +167,7 @@ func NewObserver(
 		celEng:                       nil,
 		builtinPresets:               nil,
 		promptJudge:                  nil,
+		findingsCH:                   nil,
 	}
 }
 
@@ -187,6 +193,7 @@ func NewService(
 	promptJudge promptpolicy.Evaluator,
 	reconcileShadowMCPPolicyURLs ShadowMCPPolicyURLReconciler,
 	shadowMCPInventoryURLLookup ShadowMCPInventoryURLLookup,
+	findingsCH *chrepo.Queries,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -214,6 +221,7 @@ func NewService(
 		celEng:                       celEng,
 		builtinPresets:               builtinPresets,
 		promptJudge:                  promptJudge,
+		findingsCH:                   findingsCH,
 	}
 }
 
@@ -1484,6 +1492,10 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 		return nil, oops.E(oops.CodeInvalid, err, "invalid overview window").LogError(ctx, s.logger)
 	}
 
+	if s.overviewFromClickHouse(ctx, authCtx) {
+		return s.getRiskOverviewFromClickHouse(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, from, to)
+	}
+
 	window := riskOverviewWindowParams(from, to)
 	scanCounts, err := s.repo.GetRiskOverviewScanCounts(ctx, repo.GetRiskOverviewScanCountsParams{
 		ProjectID: *authCtx.ProjectID,
@@ -1626,13 +1638,19 @@ func riskOverviewWindowParams(from, to time.Time) riskOverviewWindow {
 }
 
 func riskOverviewTopCategories(rows []repo.ListRiskOverviewTimeSeriesFindingsRow, limit int) []*gen.RiskOverviewCategory {
-	if limit <= 0 {
-		return nil
-	}
-
 	counts := make(map[string]int64)
 	for _, row := range rows {
 		counts[row.Category] += row.Findings
+	}
+
+	return topCategoriesFromCounts(counts, limit)
+}
+
+// topCategoriesFromCounts is the shared tail of the Postgres and ClickHouse
+// top-categories derivations: rank per-category totals, drop empty ones.
+func topCategoriesFromCounts(counts map[string]int64, limit int) []*gen.RiskOverviewCategory {
+	if limit <= 0 {
+		return nil
 	}
 
 	categories := make([]*gen.RiskOverviewCategory, 0, len(counts))

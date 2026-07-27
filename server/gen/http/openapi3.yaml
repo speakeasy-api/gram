@@ -3924,6 +3924,537 @@ paths:
             x-speakeasy-name-override: upsertWorkUnitsSettings
             x-speakeasy-react-hook:
                 name: UpsertChatAnalysisSettings
+    /rpc/adminExternalCredentials.createGcpIam:
+        post:
+            description: Create a platform GCP IAM external credential (organization_id NULL, project_id NULL). Requires platform admin.
+            operationId: createGcpIamPlatformCredential
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateGcpIamCredentialForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GcpIamCredential'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: createGcpIamPlatformCredential adminExternalCredentials
+            tags:
+                - adminExternalCredentials
+            x-speakeasy-name-override: createGcpIam
+            x-speakeasy-react-hook:
+                name: CreateGcpIamPlatformCredential
+    /rpc/adminExternalCredentials.deleteGcpIam:
+        delete:
+            description: Soft-delete a platform GCP IAM external credential by ID. Requires platform admin.
+            operationId: deleteGcpIamPlatformCredential
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the credential to delete.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the credential to delete.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: deleteGcpIamPlatformCredential adminExternalCredentials
+            tags:
+                - adminExternalCredentials
+            x-speakeasy-name-override: deleteGcpIam
+            x-speakeasy-react-hook:
+                name: DeleteGcpIamPlatformCredential
+    /rpc/adminExternalCredentials.getGcpIam:
+        get:
+            description: Get a platform GCP IAM external credential by ID. Requires platform admin.
+            operationId: getGcpIamPlatformCredential
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the credential to get.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the credential to get.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GcpIamCredential'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getGcpIamPlatformCredential adminExternalCredentials
+            tags:
+                - adminExternalCredentials
+            x-speakeasy-name-override: getGcpIam
+            x-speakeasy-react-hook:
+                name: GetGcpIamPlatformCredential
+    /rpc/adminExternalCredentials.list:
+        get:
+            description: List the platform external credentials (provider-independent summary). Optionally filter by provider. Requires platform admin.
+            operationId: listPlatformExternalCredentials
+            parameters:
+                - allowEmptyValue: true
+                  description: Only return credentials for this provider.
+                  in: query
+                  name: provider
+                  schema:
+                    description: Only return credentials for this provider.
+                    enum:
+                        - aws_iam
+                        - gcp_iam
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListExternalCredentialsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listPlatformExternalCredentials adminExternalCredentials
+            tags:
+                - adminExternalCredentials
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: ListPlatformExternalCredentials
+    /rpc/adminExternalCredentials.updateGcpIam:
+        post:
+            description: Replace a platform GCP IAM external credential's configuration. Requires platform admin.
+            operationId: updateGcpIamPlatformCredential
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateGcpIamCredentialRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GcpIamCredential'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: updateGcpIamPlatformCredential adminExternalCredentials
+            tags:
+                - adminExternalCredentials
+            x-speakeasy-name-override: updateGcpIam
+            x-speakeasy-react-hook:
+                name: UpdateGcpIamPlatformCredential
+    /rpc/adminExternalCredentials.verifyGcpIam:
+        post:
+            description: 'Run a live ''who am I'' probe against a platform GCP IAM credential''s resolved identity and report the effective principal. Ephemeral: nothing is persisted. Requires platform admin.'
+            operationId: verifyGcpIamPlatformCredential
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the credential to verify.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the credential to verify.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/VerifyPlatformCredentialResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: verifyGcpIamPlatformCredential adminExternalCredentials
+            tags:
+                - adminExternalCredentials
+            x-speakeasy-name-override: verifyGcpIam
+            x-speakeasy-react-hook:
+                name: VerifyGcpIamPlatformCredential
     /rpc/adminRemoteSessions.createGlobalClient:
         post:
             description: Register a global remote_session_client under an existing global remote_session_issuer. Caller supplies client_id and optional client_secret obtained out-of-band from the upstream issuer. Requires platform admin.
@@ -9825,6 +10356,101 @@ paths:
             tags:
                 - chat
             x-speakeasy-name-override: submitFeedback
+    /rpc/chat.summarize:
+        post:
+            description: Generate or return a persisted LLM summary of a chat session transcript. When a summary already exists and regenerate is false, returns the cached summary without calling the model.
+            operationId: summarizeChat
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SummarizeRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SummarizeChatResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: summarize chat
+            tags:
+                - chat
+            x-speakeasy-name-override: summarize
+            x-speakeasy-react-hook:
+                name: SummarizeChat
     /rpc/chatSessions.create:
         post:
             description: Creates a new chat session token
@@ -11673,117 +12299,11 @@ paths:
             x-speakeasy-name-override: redeployDeployment
             x-speakeasy-react-hook:
                 name: RedeployDeployment
-    /rpc/deviceIntegrations.deleteConfig:
+    /rpc/domain.checkHealth:
         post:
-            description: Disconnect the org-wide device integration for a provider. Synced inventory becomes invisible to coverage; reconnecting starts fresh.
-            operationId: deleteDeviceIntegrationConfig
+            description: Check the routing and certificate health of the organization's custom domain
+            operationId: checkDomainHealth
             parameters:
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/DeleteConfigRequestBody'
-                required: true
-            responses:
-                "204":
-                    description: No Content response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                - session_header_Gram-Session: []
-            summary: deleteConfig deviceIntegrations
-            tags:
-                - deviceIntegrations
-            x-speakeasy-name-override: deleteConfig
-            x-speakeasy-react-hook:
-                name: DeleteDeviceIntegrationConfig
-    /rpc/deviceIntegrations.getConfig:
-        get:
-            description: Get the org-wide device integration config for a provider. Returns an empty config (enabled=false, has_credentials=false) when none is set.
-            operationId: getDeviceIntegrationConfig
-            parameters:
-                - allowEmptyValue: true
-                  description: Provider identifier (e.g. jamf, kandji, drata, vanta).
-                  in: query
-                  name: provider
-                  required: true
-                  schema:
-                    description: Provider identifier (e.g. jamf, kandji, drata, vanta).
-                    type: string
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -11796,7 +12316,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/DeviceIntegrationConfig'
+                                $ref: '#/components/schemas/CustomDomain'
                     description: OK response.
                 "400":
                     content:
@@ -11853,812 +12373,13 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
-            summary: getConfig deviceIntegrations
+            summary: checkHealth domains
             tags:
-                - deviceIntegrations
-            x-speakeasy-name-override: getConfig
+                - domains
+            x-speakeasy-name-override: checkHealth
             x-speakeasy-react-hook:
-                name: DeviceIntegrationConfig
-    /rpc/deviceIntegrations.getCoverage:
-        get:
-            description: Summarize agent coverage across the org's connected MDM inventories, optionally scoped to one provider.
-            operationId: getDeviceIntegrationCoverage
-            parameters:
-                - allowEmptyValue: true
-                  description: Optionally scope coverage to one provider (e.g. jamf).
-                  in: query
-                  name: provider
-                  schema:
-                    description: Optionally scope coverage to one provider (e.g. jamf).
-                    type: string
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/DeviceIntegrationCoverage'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                - session_header_Gram-Session: []
-            summary: getCoverage deviceIntegrations
-            tags:
-                - deviceIntegrations
-            x-speakeasy-name-override: getCoverage
-            x-speakeasy-react-hook:
-                name: DeviceIntegrationCoverage
-    /rpc/deviceIntegrations.listManagedDevices:
-        get:
-            description: Page through the org's synced MDM device inventory, newest first, with each device's coverage bucket.
-            operationId: listManagedDevices
-            parameters:
-                - allowEmptyValue: true
-                  description: Only devices synced from this provider.
-                  in: query
-                  name: provider
-                  schema:
-                    description: Only devices synced from this provider.
-                    type: string
-                - allowEmptyValue: true
-                  description: Only devices in this coverage bucket.
-                  in: query
-                  name: coverage_bucket
-                  schema:
-                    description: Only devices in this coverage bucket.
-                    enum:
-                        - agent_active
-                        - agent_stale
-                        - no_agent
-                        - no_email
-                        - unresolved_email
-                        - missing
-                    type: string
-                - allowEmptyValue: true
-                  description: Pagination cursor from a previous page.
-                  in: query
-                  name: cursor
-                  schema:
-                    description: Pagination cursor from a previous page.
-                    type: string
-                - allowEmptyValue: true
-                  description: Page size. Defaults to 50, maximum 200.
-                  in: query
-                  name: limit
-                  schema:
-                    default: 50
-                    description: Page size. Defaults to 50, maximum 200.
-                    format: int64
-                    maximum: 200
-                    minimum: 1
-                    type: integer
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListManagedDevicesResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                - session_header_Gram-Session: []
-            summary: listManagedDevices deviceIntegrations
-            tags:
-                - deviceIntegrations
-            x-speakeasy-name-override: listManagedDevices
-            x-speakeasy-pagination:
-                inputs:
-                    - in: parameters
-                      name: cursor
-                      type: cursor
-                outputs:
-                    nextCursor: $.next_cursor
-                type: cursor
-            x-speakeasy-react-hook:
-                name: ManagedDevices
-    /rpc/deviceIntegrations.listProviders:
-        get:
-            description: List the providers the device integrations framework supports, including the credential fields each needs.
-            operationId: listDeviceIntegrationProviders
-            parameters:
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListDeviceIntegrationProvidersResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                - session_header_Gram-Session: []
-            summary: listProviders deviceIntegrations
-            tags:
-                - deviceIntegrations
-            x-speakeasy-name-override: listProviders
-            x-speakeasy-react-hook:
-                name: DeviceIntegrationProviders
-    /rpc/deviceIntegrations.listSchedules:
-        get:
-            description: List the sync schedules and their state for a provider's org-wide device integration config. Returns an empty list when no config is set.
-            operationId: listDeviceIntegrationSchedules
-            parameters:
-                - allowEmptyValue: true
-                  description: Provider identifier (e.g. jamf, kandji, drata, vanta).
-                  in: query
-                  name: provider
-                  required: true
-                  schema:
-                    description: Provider identifier (e.g. jamf, kandji, drata, vanta).
-                    type: string
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListDeviceIntegrationSchedulesResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                - session_header_Gram-Session: []
-            summary: listSchedules deviceIntegrations
-            tags:
-                - deviceIntegrations
-            x-speakeasy-name-override: listSchedules
-            x-speakeasy-react-hook:
-                name: DeviceIntegrationSchedules
-    /rpc/deviceIntegrations.retrySchedule:
-        post:
-            description: Make one sync schedule due immediately, lifting any automatic pause and resetting its failure streak.
-            operationId: retryDeviceIntegrationSchedule
-            parameters:
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/RetryScheduleRequestBody'
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/DeviceIntegrationScheduleState'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                - session_header_Gram-Session: []
-            summary: retrySchedule deviceIntegrations
-            tags:
-                - deviceIntegrations
-            x-speakeasy-name-override: retrySchedule
-            x-speakeasy-react-hook:
-                name: RetryDeviceIntegrationSchedule
-    /rpc/deviceIntegrations.setScheduleEnabled:
-        post:
-            description: Enable or disable one sync schedule of a provider's device integration. Disabling records user intent on the schedule; only re-enabling clears it — config saves do not.
-            operationId: setDeviceIntegrationScheduleEnabled
-            parameters:
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/SetScheduleEnabledRequestBody'
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/DeviceIntegrationScheduleState'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                - session_header_Gram-Session: []
-            summary: setScheduleEnabled deviceIntegrations
-            tags:
-                - deviceIntegrations
-            x-speakeasy-name-override: setScheduleEnabled
-            x-speakeasy-react-hook:
-                name: SetDeviceIntegrationScheduleEnabled
-    /rpc/deviceIntegrations.testConnection:
-        post:
-            description: Probe the provider with the stored credentials to verify they work. Save the config first; this tests what is stored, so secrets never round-trip.
-            operationId: testDeviceIntegrationConnection
-            parameters:
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/DeleteConfigRequestBody'
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/DeviceIntegrationTestConnectionResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                - session_header_Gram-Session: []
-            summary: testConnection deviceIntegrations
-            tags:
-                - deviceIntegrations
-            x-speakeasy-name-override: testConnection
-            x-speakeasy-react-hook:
-                name: TestDeviceIntegrationConnection
-    /rpc/deviceIntegrations.upsertConfig:
-        post:
-            description: 'Create or update the org-wide device integration config for a provider. Omit credentials to keep the stored secrets; supplying credentials rotates them in place and resets the schedules'' sync state. Settings merge per key: an omitted key keeps its stored value, a supplied key overwrites it.'
-            operationId: upsertDeviceIntegrationConfig
-            parameters:
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/UpsertConfigRequestBody2'
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/DeviceIntegrationConfig'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                - session_header_Gram-Session: []
-            summary: upsertConfig deviceIntegrations
-            tags:
-                - deviceIntegrations
-            x-speakeasy-name-override: upsertConfig
-            x-speakeasy-react-hook:
-                name: UpsertDeviceIntegrationConfig
+                name: CheckDomainHealth
     /rpc/domain.delete:
         delete:
             description: Delete a custom domain
@@ -24352,7 +24073,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/UpsertConfigRequestBody3'
+                            $ref: '#/components/schemas/UpsertConfigRequestBody2'
                 required: true
             responses:
                 "200":
@@ -37174,6 +36895,965 @@ paths:
             x-speakeasy-name-override: update
             x-speakeasy-react-hook:
                 name: UpdateSkill
+    /rpc/spendrules.archiveRule:
+        post:
+            description: 'Archive a budget rule. There is no delete: archiving ends the rule''s lineage while retaining its slug, version history, and events. Any open circuits for the rule close on the next evaluation cycle.'
+            operationId: archiveSpendRule
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RiskIDRequestBody'
+                required: true
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: archiveSpendRule spendRules
+            tags:
+                - spendRules
+            x-speakeasy-group: spendRules.rules
+            x-speakeasy-name-override: archive
+            x-speakeasy-react-hook:
+                name: SpendRulesArchiveRule
+                type: mutation
+    /rpc/spendrules.createRule:
+        post:
+            description: Create a new budget rule for the current organization.
+            operationId: createSpendRule
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateSpendRuleRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SpendRule'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: createSpendRule spendRules
+            tags:
+                - spendRules
+            x-speakeasy-group: spendRules.rules
+            x-speakeasy-name-override: create
+            x-speakeasy-react-hook:
+                name: SpendRulesCreateRule
+                type: mutation
+    /rpc/spendrules.getOverview:
+        get:
+            description: 'Get budgets overview metrics: aggregate card numbers plus current-window usage per rule.'
+            operationId: getSpendRulesOverview
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SpendRulesOverviewResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getSpendRulesOverview spendRules
+            tags:
+                - spendRules
+            x-speakeasy-group: spendRules.overview
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: SpendRulesOverview
+    /rpc/spendrules.getRule:
+        get:
+            description: Get a budget rule by ID.
+            operationId: getSpendRule
+            parameters:
+                - allowEmptyValue: true
+                  description: The rule ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The rule ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SpendRule'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getSpendRule spendRules
+            tags:
+                - spendRules
+            x-speakeasy-group: spendRules.rules
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: SpendRulesGetRule
+    /rpc/spendrules.listActorAttributes:
+        get:
+            description: List the member attributes a rule target condition can be written against, with each attribute's value kind. Static reference data that powers the rule editor's attribute picker.
+            operationId: listSpendRuleActorAttributes
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListActorAttributesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listActorAttributes spendRules
+            tags:
+                - spendRules
+            x-speakeasy-group: spendRules.actorAttributes
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: SpendRulesActorAttributes
+    /rpc/spendrules.listEvents:
+        get:
+            description: List warning and breach events emitted by budget rule evaluation, most recent first.
+            operationId: listSpendRuleEvents
+            parameters:
+                - allowEmptyValue: true
+                  description: 'Optional rule ID to filter by. Matches the rule''s whole lineage: events from every version of the rule are returned.'
+                  in: query
+                  name: rule_id
+                  schema:
+                    description: 'Optional rule ID to filter by. Matches the rule''s whole lineage: events from every version of the rule are returned.'
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional event type to filter by.
+                  in: query
+                  name: event_type
+                  schema:
+                    description: Optional event type to filter by.
+                    enum:
+                        - warning
+                        - breach
+                    type: string
+                - allowEmptyValue: true
+                  description: Cursor to fetch the next page of events.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor to fetch the next page of events.
+                    type: string
+                - allowEmptyValue: true
+                  description: Maximum number of events to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    description: Maximum number of events to return per page.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSpendRuleEventsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listSpendRuleEvents spendRules
+            tags:
+                - spendRules
+            x-speakeasy-group: spendRules.events
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: SpendRulesListEvents
+    /rpc/spendrules.listRules:
+        get:
+            description: List all budget rules for the current organization.
+            operationId: listSpendRules
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSpendRulesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listSpendRules spendRules
+            tags:
+                - spendRules
+            x-speakeasy-group: spendRules.rules
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: SpendRulesListRules
+    /rpc/spendrules.previewRule:
+        post:
+            description: Preview which actors a target expression matches and their current spend against a proposed budget. Powers the live preview in the rule editor and the per-actor breakdown in the rule detail view.
+            operationId: previewSpendRule
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PreviewSpendRuleRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PreviewSpendRuleResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: previewSpendRule spendRules
+            tags:
+                - spendRules
+            x-speakeasy-group: spendRules.rules
+            x-speakeasy-name-override: preview
+            x-speakeasy-react-hook:
+                name: SpendRulesPreviewRule
+                type: mutation
+    /rpc/spendrules.updateRule:
+        put:
+            description: 'Update a budget rule. Rule rows are immutable version snapshots: any change besides the enabled toggle archives the current version row and creates a successor at version + 1 (returned as the result, under a new ID). Enabled-only changes toggle the live row in place.'
+            operationId: updateSpendRule
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateSpendRuleRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SpendRule'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: updateSpendRule spendRules
+            tags:
+                - spendRules
+            x-speakeasy-group: spendRules.rules
+            x-speakeasy-name-override: update
+            x-speakeasy-react-hook:
+                name: SpendRulesUpdateRule
+                type: mutation
     /rpc/telemetry.captureEvent:
         post:
             description: Capture a telemetry event and forward it to PostHog
@@ -47069,6 +47749,25 @@ components:
                     description: The policy that issued the warning.
             required:
                 - acknowledged
+        ActorAttribute:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Human-readable description of the attribute.
+                name:
+                    type: string
+                    description: Attribute name as used in target conditions, e.g. department_name.
+                type:
+                    type: string
+                    description: 'Value kind: a scalar string or a list of strings.'
+                    enum:
+                        - string
+                        - list
+            required:
+                - name
+                - type
+                - description
         AddDeploymentPackageForm:
             type: object
             properties:
@@ -48605,6 +49304,9 @@ components:
                     type: integer
                     description: The number of messages in the chat
                     format: int64
+                pinned:
+                    type: boolean
+                    description: True when the chat is pinned
                 risk_findings_count:
                     type: integer
                     description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
@@ -48617,6 +49319,13 @@ components:
                 source:
                     type: string
                     description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
+                summary:
+                    type: string
+                    description: Persisted LLM summary of the session transcript, if one has been generated
+                summary_generated_at:
+                    type: string
+                    description: When the session summary was last generated.
+                    format: date-time
                 title:
                     type: string
                     description: The title of the chat
@@ -48775,6 +49484,9 @@ components:
                     type: integer
                     description: The number of messages in the chat
                     format: int64
+                pinned:
+                    type: boolean
+                    description: True when the chat is pinned
                 risk_findings_count:
                     type: integer
                     description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
@@ -48782,6 +49494,13 @@ components:
                 source:
                     type: string
                     description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
+                summary:
+                    type: string
+                    description: Persisted LLM summary of the session transcript, if one has been generated
+                summary_generated_at:
+                    type: string
+                    description: When the session summary was last generated.
+                    format: date-time
                 title:
                     type: string
                     description: The title of the chat
@@ -50556,6 +51275,53 @@ components:
                     description: The complete uploaded SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.
             required:
                 - content
+        CreateSpendRuleRequestBody:
+            type: object
+            properties:
+                action:
+                    type: string
+                    description: 'Rule action: flag or block.'
+                    default: flag
+                    enum:
+                        - flag
+                        - block
+                description:
+                    type: string
+                    description: Optional description of what the rule covers.
+                    default: ""
+                enabled:
+                    type: boolean
+                    description: Whether the rule is active.
+                    default: true
+                limit_usd:
+                    type: number
+                    description: Per-person budget in USD for one window.
+                    format: double
+                    minimum: 0
+                name:
+                    type: string
+                    description: The rule name.
+                target:
+                    $ref: '#/components/schemas/SpendRuleTargetCondition'
+                warn_at_pct:
+                    type: integer
+                    description: Percentage of the limit at which a warning event is emitted.
+                    default: 80
+                    format: int64
+                    minimum: 1
+                    maximum: 100
+                window_kind:
+                    type: string
+                    description: UTC calendar window the budget covers.
+                    enum:
+                        - daily
+                        - weekly
+                        - monthly
+            required:
+                - name
+                - target
+                - limit_usd
+                - window_kind
         CreateToolsetForm:
             type: object
             properties:
@@ -50832,6 +51598,14 @@ components:
                 activated:
                     type: boolean
                     description: Whether the domain is activated in ingress
+                certificate_expires_at:
+                    type: string
+                    description: When the currently observed TLS certificate expires.
+                    format: date-time
+                consecutive_failures:
+                    type: integer
+                    description: The number of consecutive failed health checks
+                    format: int32
                 created_at:
                     type: string
                     description: When the custom domain was created.
@@ -50839,6 +51613,16 @@ components:
                 domain:
                     type: string
                     description: The custom domain name
+                health_checked_at:
+                    type: string
+                    description: When the domain health was last checked.
+                    format: date-time
+                health_issue:
+                    type: string
+                    description: 'The reason the domain was last observed as unhealthy. One of: dns_not_found, dns_target_mismatch, resource_missing, certificate_missing, certificate_not_ready, certificate_expired, certificate_invalid, check_failed.'
+                health_status:
+                    type: string
+                    description: 'The latest observed domain health status. One of: unknown, healthy, unhealthy.'
                 id:
                     type: string
                     description: The ID of the custom domain
@@ -50853,6 +51637,10 @@ components:
                 organization_id:
                     type: string
                     description: The ID of the organization this domain belongs to
+                unhealthy_since:
+                    type: string
+                    description: When the current unhealthy period began.
+                    format: date-time
                 updated_at:
                     type: string
                     description: When the custom domain was last updated.
@@ -51246,230 +52034,6 @@ components:
             required:
                 - id
                 - user_session_issuer_id
-        DeviceIntegrationConfig:
-            type: object
-            properties:
-                created_at:
-                    type: string
-                    description: ISO 8601 timestamp when the config was created. Omitted when no config is set.
-                    format: date-time
-                enabled:
-                    type: boolean
-                    description: Whether the provider integration is active.
-                has_credentials:
-                    type: boolean
-                    description: Whether secret credentials are currently stored. The values themselves are never returned.
-                id:
-                    type: string
-                    description: Config ID. Omitted when no config is set for the provider.
-                organization_id:
-                    type: string
-                    description: Organization the config belongs to.
-                provider:
-                    type: string
-                    description: Provider identifier (e.g. jamf, kandji, drata, vanta).
-                settings:
-                    type: object
-                    description: Non-secret provider settings (e.g. instance URL), keyed by field key.
-                    additionalProperties:
-                        type: string
-                updated_at:
-                    type: string
-                    description: ISO 8601 timestamp of the most recent change. Omitted when no config is set.
-                    format: date-time
-            description: Per-organization device integration config for one provider. Secret credentials are write-only; reads only expose whether credentials are configured.
-            required:
-                - organization_id
-                - provider
-                - enabled
-                - has_credentials
-                - settings
-        DeviceIntegrationCoverage:
-            type: object
-            properties:
-                active_window_minutes:
-                    type: integer
-                    description: 'Freshness window: an assigned user counts as active when their agent heartbeat is within this many minutes.'
-                    format: int64
-                agent_active:
-                    type: integer
-                    description: Devices whose assigned user has an agent heartbeat within the window.
-                    format: int64
-                agent_stale:
-                    type: integer
-                    description: Devices whose assigned user has an agent that went quiet — the drift/disable case.
-                    format: int64
-                missing:
-                    type: integer
-                    description: Devices absent from the latest completed MDM snapshot.
-                    format: int64
-                no_agent:
-                    type: integer
-                    description: Devices whose assigned email resolves to an org member with no agent at all.
-                    format: int64
-                no_email:
-                    type: integer
-                    description: Devices the MDM reports with no assigned-user email.
-                    format: int64
-                organization_id:
-                    type: string
-                    description: Organization the coverage describes.
-                total_devices:
-                    type: integer
-                    description: All synced devices, including missing ones.
-                    format: int64
-                unmanaged_agent_users:
-                    type: integer
-                    description: Agent users with no matching device in any connected MDM inventory — shadow devices or fleets outside MDM.
-                    format: int64
-                unresolved_email:
-                    type: integer
-                    description: Devices whose assigned email matches neither an agent user nor an org member.
-                    format: int64
-            description: 'Agent-coverage summary across the org''s connected MDM inventories. Buckets attest the assigned user''s agent (the heartbeat is per user), not the device itself: agent_active means the device''s assigned user has a fresh agent heartbeat somewhere.'
-            required:
-                - organization_id
-                - active_window_minutes
-                - agent_active
-                - agent_stale
-                - no_agent
-                - no_email
-                - unresolved_email
-                - missing
-                - total_devices
-                - unmanaged_agent_users
-        DeviceIntegrationProvider:
-            type: object
-            properties:
-                capabilities:
-                    type: array
-                    items:
-                        type: string
-                    description: 'Integration directions the provider supports: inventory_source (pull the managed-device fleet) and/or evidence_sink (push agent-coverage evidence).'
-                display_name:
-                    type: string
-                    description: Human-readable vendor name.
-                fields:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/DeviceIntegrationProviderField'
-                    description: Credential and settings inputs the provider needs, in render order.
-                id:
-                    type: string
-                    description: Provider identifier (e.g. jamf, kandji, drata, vanta).
-                schedules:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/DeviceIntegrationProviderSchedule'
-                    description: Sync pipelines the provider runs.
-            description: A vendor the device integrations framework can connect to.
-            required:
-                - id
-                - display_name
-                - capabilities
-                - fields
-                - schedules
-        DeviceIntegrationProviderField:
-            type: object
-            properties:
-                key:
-                    type: string
-                    description: Field identifier in the credentials or settings document.
-                kind:
-                    type: string
-                    description: Input kind hint.
-                    enum:
-                        - text
-                        - url
-                label:
-                    type: string
-                    description: Human-readable name to render for the field.
-                required:
-                    type: boolean
-                    description: Whether the field must be supplied to connect the provider.
-                secret:
-                    type: boolean
-                    description: 'Whether the value is secret: stored encrypted, write-only, and masked in the UI.'
-            description: One credential or settings input a provider needs to connect. Secret fields are stored encrypted and are write-only; non-secret fields are readable settings.
-            required:
-                - key
-                - label
-                - kind
-                - secret
-                - required
-        DeviceIntegrationProviderSchedule:
-            type: object
-            properties:
-                interval_minutes:
-                    type: integer
-                    description: Target minutes between successful runs. Declared in code by the provider, not configurable per org.
-                    format: int64
-                schedule:
-                    type: string
-                    description: Schedule identifier (e.g. jamf_inventory).
-            description: One sync pipeline a provider runs on a cadence.
-            required:
-                - schedule
-                - interval_minutes
-        DeviceIntegrationScheduleState:
-            type: object
-            properties:
-                auto_paused_at:
-                    type: string
-                    description: ISO 8601 timestamp when the scheduler auto-paused the schedule after repeated provider rejections. Omitted unless auto-paused.
-                    format: date-time
-                consecutive_failures:
-                    type: integer
-                    description: Number of consecutive failed syncs. Resets to zero on success or retry.
-                    format: int64
-                enabled:
-                    type: boolean
-                    description: Whether the user has this schedule enabled. Disabled schedules are skipped by the scheduler until re-enabled.
-                last_sync_error:
-                    type: string
-                    description: Stored error from the schedule's latest failed sync. Omitted unless the latest sync failed.
-                last_sync_failed_at:
-                    type: string
-                    description: ISO 8601 timestamp for the schedule's latest failed sync. Omitted unless a sync has failed.
-                    format: date-time
-                last_sync_success_at:
-                    type: string
-                    description: ISO 8601 timestamp for the schedule's last successful sync. Omitted until a sync succeeds.
-                    format: date-time
-                next_sync_after:
-                    type: string
-                    description: ISO 8601 timestamp for the schedule's next scheduled sync.
-                    format: date-time
-                schedule:
-                    type: string
-                    description: Schedule identifier (e.g. jamf_inventory).
-                status:
-                    type: string
-                    description: Derived status for the schedule's latest sync state.
-                    enum:
-                        - pending
-                        - success
-                        - failed
-                        - auto_paused
-                        - disabled
-            description: 'State of one sync schedule of a provider integration: the user''s intent (enabled) plus the scheduler''s execution state.'
-            required:
-                - schedule
-                - enabled
-                - status
-                - consecutive_failures
-        DeviceIntegrationTestConnectionResult:
-            type: object
-            properties:
-                message:
-                    type: string
-                    description: Human-readable failure detail. Omitted on success.
-                ok:
-                    type: boolean
-                    description: Whether the provider accepted the stored credentials.
-            description: Outcome of probing the provider with the stored credentials.
-            required:
-                - ok
         DiscoverProtectedResourceMetadataRequestBody:
             type: object
             properties:
@@ -54446,6 +55010,16 @@ components:
                 - organization_id
                 - provider
                 - schedules
+        ListActorAttributesResult:
+            type: object
+            properties:
+                attributes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ActorAttribute'
+                    description: The member attributes available to target conditions, in editor display order.
+            required:
+                - attributes
         ListAllowedOriginsResult:
             type: object
             properties:
@@ -54685,35 +55259,6 @@ components:
                     example: 01jp3f054qc02gbcmpp0qmyzed
             required:
                 - items
-        ListDeviceIntegrationProvidersResult:
-            type: object
-            properties:
-                providers:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/DeviceIntegrationProvider'
-                    description: Every available provider, sorted by id.
-            required:
-                - providers
-        ListDeviceIntegrationSchedulesResult:
-            type: object
-            properties:
-                organization_id:
-                    type: string
-                    description: Organization the schedules belong to.
-                provider:
-                    type: string
-                    description: Provider identifier.
-                schedules:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/DeviceIntegrationScheduleState'
-                    description: State for each of the provider's sync schedules.
-            description: Sync schedules for one provider integration. Empty when no config is set for the provider.
-            required:
-                - organization_id
-                - provider
-                - schedules
         ListEnvironmentsResult:
             type: object
             properties:
@@ -54895,19 +55440,6 @@ components:
                         $ref: '#/components/schemas/Key'
             required:
                 - keys
-        ListManagedDevicesResult:
-            type: object
-            properties:
-                devices:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/ManagedDevice'
-                    description: Devices, newest first.
-                next_cursor:
-                    type: string
-                    description: Cursor for the next page. Omitted on the last page.
-            required:
-                - devices
         ListMcpEndpointsResult:
             type: object
             properties:
@@ -55478,6 +56010,29 @@ components:
                     description: The distinct agent sources present in this project's chats (raw source strings such as 'claude-code', 'Codex', 'playground').
             required:
                 - sources
+        ListSpendRuleEventsResult:
+            type: object
+            properties:
+                events:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SpendRuleEvent'
+                    description: The list of budget rule events, most recent first.
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page of events.
+            required:
+                - events
+        ListSpendRulesResult:
+            type: object
+            properties:
+                rules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SpendRule'
+                    description: The list of budget rules.
+            required:
+                - rules
         ListSyncedUsersResult:
             type: object
             properties:
@@ -55917,72 +56472,6 @@ components:
                 - id
                 - name
                 - url
-        ManagedDevice:
-            type: object
-            properties:
-                agent_last_seen_at:
-                    type: string
-                    description: The assigned user's latest device-agent heartbeat. Omitted when the user has never synced an agent.
-                    format: date-time
-                coverage_bucket:
-                    type: string
-                    description: Coverage classification for the device.
-                    enum:
-                        - agent_active
-                        - agent_stale
-                        - no_agent
-                        - no_email
-                        - unresolved_email
-                        - missing
-                external_id:
-                    type: string
-                    description: The MDM's identifier for the device.
-                first_seen_at:
-                    type: string
-                    format: date-time
-                hostname:
-                    type: string
-                    description: Device hostname.
-                id:
-                    type: string
-                    description: Device row ID.
-                last_seen_at:
-                    type: string
-                    format: date-time
-                mdm_last_check_in_at:
-                    type: string
-                    description: Last device check-in as reported by the MDM.
-                    format: date-time
-                missing_since:
-                    type: string
-                    description: When the device went absent from the MDM inventory. Omitted while present.
-                    format: date-time
-                os_name:
-                    type: string
-                    description: Operating system name.
-                os_version:
-                    type: string
-                    description: Operating system version.
-                provider:
-                    type: string
-                    description: Provider the device was synced from.
-                serial_number:
-                    type: string
-                    description: Hardware serial number as reported by the MDM.
-                user_email:
-                    type: string
-                    description: Assigned user's email exactly as the MDM reported it. Omitted when the MDM has no assignment.
-                user_id:
-                    type: string
-                    description: Resolved Gram user for the assigned email. Omitted when the email is missing or does not resolve to an org member.
-            description: One device from a connected MDM's inventory, annotated with its agent-coverage bucket. Agent presence is attested per assigned user (the agent heartbeat is keyed by user email), not per device.
-            required:
-                - id
-                - provider
-                - external_id
-                - coverage_bucket
-                - first_seen_at
-                - last_seen_at
         MarketplaceSettingsResult:
             type: object
             properties:
@@ -57751,6 +58240,59 @@ components:
                 - created_by_user_id
                 - created_at
                 - updated_at
+        PreviewSpendRuleRequestBody:
+            type: object
+            properties:
+                limit_usd:
+                    type: number
+                    description: Per-person budget in USD used to compute usage percentages.
+                    format: double
+                    minimum: 0
+                target:
+                    $ref: '#/components/schemas/SpendRuleTargetCondition'
+                warn_at_pct:
+                    type: integer
+                    description: Percentage of the limit at which a warning event is emitted.
+                    default: 80
+                    format: int64
+                    minimum: 1
+                    maximum: 100
+                window_kind:
+                    type: string
+                    description: UTC calendar window to compute spend over.
+                    enum:
+                        - daily
+                        - weekly
+                        - monthly
+            required:
+                - target
+                - limit_usd
+                - window_kind
+        PreviewSpendRuleResult:
+            type: object
+            properties:
+                actors:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SpendRuleActorUsage'
+                    description: Matched actors with their current-window spend, ordered by spend descending. Capped at 50 entries.
+                matched_count:
+                    type: integer
+                    description: Total number of organization members the target expression matches.
+                    format: int64
+                window_end:
+                    type: string
+                    description: Exclusive end of the current window used for spend.
+                    format: date-time
+                window_start:
+                    type: string
+                    description: Inclusive start of the current window used for spend.
+                    format: date-time
+            required:
+                - matched_count
+                - window_start
+                - window_end
+                - actors
         Project:
             type: object
             properties:
@@ -62685,6 +63227,296 @@ components:
                 - source_kind
                 - source_slug
                 - environment_id
+        SpendRule:
+            type: object
+            properties:
+                action:
+                    type: string
+                    description: 'Rule action: flag (record events only) or block (deny agent traffic on breach).'
+                    enum:
+                        - flag
+                        - block
+                created_at:
+                    type: string
+                    description: When the rule was created.
+                    format: date-time
+                description:
+                    type: string
+                    description: Description of what the rule covers. Empty when unset.
+                enabled:
+                    type: boolean
+                    description: Whether the rule is active.
+                id:
+                    type: string
+                    description: 'The budget rule ID. Identifies one immutable version row: edits produce a successor row with a fresh ID.'
+                    format: uuid
+                limit_usd:
+                    type: number
+                    description: Per-person budget in USD for one window.
+                    format: double
+                name:
+                    type: string
+                    description: The rule name.
+                organization_id:
+                    type: string
+                    description: The organization ID.
+                rule_expr:
+                    type: string
+                    description: CEL boolean expression over actor usage that identifies a budget breach for matched members.
+                slug:
+                    type: string
+                    description: URL-safe identifier derived from the name at creation time. Unique per organization and immutable; the rule URN embeds it.
+                target:
+                    $ref: '#/components/schemas/SpendRuleTargetCondition'
+                target_expr:
+                    type: string
+                    description: CEL boolean expression over member attributes (email, directory attributes, groups, roles) selecting who the rule applies to.
+                updated_at:
+                    type: string
+                    description: When the rule was last updated.
+                    format: date-time
+                urn:
+                    type: string
+                    description: Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule configuration that produced an event.
+                version:
+                    type: integer
+                    description: Position of this row in its slug lineage; every edit archives the current row and creates version + 1.
+                    format: int64
+                warn_at_pct:
+                    type: integer
+                    description: Percentage of the limit at which a warning event is emitted.
+                    format: int64
+                window_kind:
+                    type: string
+                    description: UTC calendar window the budget covers.
+                    enum:
+                        - daily
+                        - weekly
+                        - monthly
+            required:
+                - id
+                - urn
+                - organization_id
+                - name
+                - slug
+                - description
+                - target
+                - target_expr
+                - rule_expr
+                - limit_usd
+                - window_kind
+                - warn_at_pct
+                - action
+                - enabled
+                - version
+                - created_at
+                - updated_at
+        SpendRuleActorUsage:
+            type: object
+            properties:
+                breached:
+                    type: boolean
+                    description: Whether the rule expression currently matches this actor usage.
+                display_name:
+                    type: string
+                    description: Actor display name, when known.
+                email:
+                    type: string
+                    description: Actor email.
+                limit_usd:
+                    type: number
+                    description: Per-person budget in USD.
+                    format: double
+                spend_usd:
+                    type: number
+                    description: Actor spend in USD within the current window.
+                    format: double
+                used_pct:
+                    type: number
+                    description: Spend as a percentage of the limit (may exceed 100).
+                    format: double
+                user_id:
+                    type: string
+                    description: Gram user ID of the actor, when linked.
+            required:
+                - email
+                - spend_usd
+                - limit_usd
+                - used_pct
+                - breached
+        SpendRuleEvent:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the event was recorded.
+                    format: date-time
+                display_name:
+                    type: string
+                    description: Actor display name, when known.
+                email:
+                    type: string
+                    description: Actor email.
+                event_type:
+                    type: string
+                    description: Event type.
+                    enum:
+                        - warning
+                        - breach
+                id:
+                    type: string
+                    description: The event ID.
+                    format: uuid
+                limit_usd:
+                    type: number
+                    description: Per-person budget in USD the rule granted at the pinned version.
+                    format: double
+                rule_id:
+                    type: string
+                    description: ID of the exact rule version row that produced the event.
+                    format: uuid
+                rule_name:
+                    type: string
+                    description: Name of the rule as of the version that fired.
+                rule_urn:
+                    type: string
+                    description: Versioned rule URN pinning the config that produced the event.
+                spend_usd:
+                    type: number
+                    description: Actor spend in USD at evaluation time.
+                    format: double
+                user_id:
+                    type: string
+                    description: Gram user ID of the actor, when linked.
+                window_end:
+                    type: string
+                    description: Exclusive end of the budget window; the budget resets at this instant.
+                    format: date-time
+                window_start:
+                    type: string
+                    description: Inclusive start of the budget window.
+                    format: date-time
+            required:
+                - id
+                - rule_id
+                - rule_urn
+                - rule_name
+                - event_type
+                - email
+                - spend_usd
+                - limit_usd
+                - window_start
+                - window_end
+                - created_at
+        SpendRuleTargetCondition:
+            type: object
+            properties:
+                attribute:
+                    type: string
+                    description: Member attribute name.
+                operator:
+                    type: string
+                    description: 'Comparison operator: equals, not_equals, starts_with, ends_with, contains, matches, or includes.'
+                value:
+                    type: string
+                    description: Comparison value.
+            required:
+                - attribute
+                - operator
+                - value
+        SpendRuleUsage:
+            type: object
+            properties:
+                budget_usd:
+                    type: number
+                    description: Total budgeted spend in USD (per-person limit times matched users).
+                    format: double
+                matched_users:
+                    type: integer
+                    description: Number of organization members the rule currently matches.
+                    format: int64
+                rule_id:
+                    type: string
+                    description: The budget rule ID.
+                    format: uuid
+                spend_usd:
+                    type: number
+                    description: Total spend in USD across matched users within the current window.
+                    format: double
+                status:
+                    type: string
+                    description: Derived rule status from the worst matched actor.
+                    enum:
+                        - healthy
+                        - approaching
+                        - flagging
+                        - blocking
+                users_breached:
+                    type: integer
+                    description: Matched users at or past the limit.
+                    format: int64
+                users_warned:
+                    type: integer
+                    description: Matched users at or past the warning threshold but under the limit.
+                    format: int64
+                worst_used_pct:
+                    type: number
+                    description: Highest per-actor usage percentage across matched users (may exceed 100).
+                    format: double
+            required:
+                - rule_id
+                - matched_users
+                - users_warned
+                - users_breached
+                - spend_usd
+                - budget_usd
+                - worst_used_pct
+                - status
+        SpendRulesOverviewResult:
+            type: object
+            properties:
+                rules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SpendRuleUsage'
+                    description: Current-window usage per enabled rule.
+                rules_total:
+                    type: integer
+                    description: Total enabled rules.
+                    format: int64
+                rules_unhealthy:
+                    type: integer
+                    description: Enabled rules whose status is not healthy.
+                    format: int64
+                spend_over_budget_usd:
+                    type: number
+                    description: Current spend over planned budget in USD, summed across actors over their per-person limits.
+                    format: double
+                total_budget_usd:
+                    type: number
+                    description: Total budgeted spend in USD across enabled rules (per-person limits times matched users).
+                    format: double
+                total_spend_usd:
+                    type: number
+                    description: Spend in USD across all users matched by enabled rules, in each rule's current window.
+                    format: double
+                users_breached:
+                    type: integer
+                    description: Distinct users at or past the limit of at least one enabled rule.
+                    format: int64
+                users_total:
+                    type: integer
+                    description: Distinct users matched by at least one enabled rule.
+                    format: int64
+            required:
+                - total_spend_usd
+                - total_budget_usd
+                - users_breached
+                - users_total
+                - rules_unhealthy
+                - rules_total
+                - spend_over_budget_usd
+                - rules
         SubmitFeedbackRequestBody:
             type: object
             properties:
@@ -62797,6 +63629,36 @@ components:
             required:
                 - match_type
                 - match_value
+        SummarizeChatResult:
+            type: object
+            properties:
+                cached:
+                    type: boolean
+                    description: True when an existing summary was returned without regenerating
+                summary:
+                    type: string
+                    description: The session summary text
+                summary_generated_at:
+                    type: string
+                    description: When the summary was last generated.
+                    format: date-time
+            required:
+                - summary
+                - summary_generated_at
+                - cached
+        SummarizeRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the chat to summarize
+                    format: uuid
+                regenerate:
+                    type: boolean
+                    description: When true, regenerate and overwrite any existing summary. Defaults to false.
+                    default: false
+            required:
+                - id
         SyncedAgentUser:
             type: object
             properties:
@@ -65918,6 +66780,50 @@ components:
                 - id
                 - name
                 - display_name
+        UpdateSpendRuleRequestBody:
+            type: object
+            properties:
+                action:
+                    type: string
+                    description: 'Rule action: flag or block. Omit to preserve the current action.'
+                    enum:
+                        - flag
+                        - block
+                description:
+                    type: string
+                    description: Description of what the rule covers. Omit to preserve the current description.
+                enabled:
+                    type: boolean
+                    description: Whether the rule is active. Omit to preserve the current state.
+                id:
+                    type: string
+                    description: The rule ID.
+                    format: uuid
+                limit_usd:
+                    type: number
+                    description: Per-person budget in USD for one window. Omit to preserve the current limit.
+                    format: double
+                    minimum: 0
+                name:
+                    type: string
+                    description: The rule name. Omit to preserve the current name.
+                target:
+                    $ref: '#/components/schemas/SpendRuleTargetCondition'
+                warn_at_pct:
+                    type: integer
+                    description: Percentage of the limit at which a warning event is emitted. Omit to preserve the current threshold.
+                    format: int64
+                    minimum: 1
+                    maximum: 100
+                window_kind:
+                    type: string
+                    description: UTC calendar window the budget covers. Omit to preserve the current window.
+                    enum:
+                        - daily
+                        - weekly
+                        - monthly
+            required:
+                - id
         UpdateToolsetForm:
             type: object
             properties:
@@ -66263,28 +67169,6 @@ components:
                 - api_key
                 - enabled
         UpsertConfigRequestBody2:
-            type: object
-            properties:
-                credentials:
-                    type: object
-                    description: Secret credential values keyed by field key. Stored encrypted; never returned on reads. Omit to keep the existing secrets.
-                    additionalProperties:
-                        type: string
-                enabled:
-                    type: boolean
-                    description: Whether the integration should be active.
-                provider:
-                    type: string
-                    description: Provider identifier (e.g. jamf, kandji, drata, vanta).
-                settings:
-                    type: object
-                    description: 'Non-secret settings values keyed by field key. Merged per key with the stored settings: omitted keys keep their stored values.'
-                    additionalProperties:
-                        type: string
-            required:
-                - provider
-                - enabled
-        UpsertConfigRequestBody3:
             type: object
             properties:
                 enabled:
@@ -66840,6 +67724,28 @@ components:
                 - events
                 - latest_unix_nano
                 - total_count
+        VerifyPlatformCredentialResult:
+            type: object
+            properties:
+                detail:
+                    type: string
+                    description: Human-readable detail about the probe outcome (e.g. why the principal is unavailable, or the failure reason).
+                identity_source:
+                    type: string
+                    description: How the identity was resolved. Lets the caller tell an in-cluster attached identity apart from local Application Default Credentials or an impersonated service account.
+                    enum:
+                        - metadata_server
+                        - application_default_credentials
+                        - impersonation
+                principal:
+                    type: string
+                    description: The effective principal the identity resolves to (e.g. a service-account email). May be empty when the resolution source cannot report it.
+                verified:
+                    type: boolean
+                    description: Whether the credential's identity resolved successfully.
+            description: Result of a live 'who am I' probe against a platform credential's resolved identity.
+            required:
+                - verified
         VerifyURLForm:
             type: object
             properties:
@@ -67005,8 +67911,6 @@ tags:
       description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.
     - name: deployments
       description: Manages deployments of tools from upstream sources.
-    - name: deviceIntegrations
-      description: 'Manage organization-level device integrations: MDM inventory sources and compliance evidence sinks.'
     - name: domains
       description: Manage custom domains for gram.
     - name: environments
@@ -67047,6 +67951,8 @@ tags:
       description: Manages packages in Gram.
     - name: adminChatAnalysis
       description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
+    - name: adminExternalCredentials
+      description: Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
     - name: plugins
       description: Manage distributable plugin bundles of MCP servers and hooks.
     - name: features
@@ -67077,6 +67983,8 @@ tags:
       description: Manage organization-wide skill efficacy sampling settings.
     - name: skills
       description: Manage project skills and their immutable versions. Methods are gated by the skills product feature and skill read or write scopes.
+    - name: spendRules
+      description: Manage budget rules, view budget events, and preview actor targeting.
     - name: telemetry
       description: Fetch telemetry data for tools in Gram.
     - name: templates
