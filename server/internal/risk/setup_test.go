@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -30,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
@@ -172,6 +174,7 @@ type testInstance struct {
 	shadowMCPInventoryURLLookup  risk.ShadowMCPInventoryURLLookup
 	completionClient             openrouter.CompletionClient
 	cacheDeletes                 *countingCache
+	chConn                       clickhouse.Conn
 }
 
 func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context.Context, *testInstance) {
@@ -223,6 +226,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 		},
 		completionClient: nil,
 		cacheDeletes:     cacheAdapter,
+		chConn:           chConn,
 	}
 	for _, configureInstance := range configure {
 		configureInstance(ti)
@@ -231,7 +235,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 		return ti.reconcileShadowMCPPolicyURLs(ctx, db, input)
 	}, func(ctx context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
 		return ti.shadowMCPInventoryURLLookup(ctx, projectID, canonicalURLs)
-	})
+	}, chrepo.New(chConn))
 
 	return ctx, ti
 }

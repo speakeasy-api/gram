@@ -80,13 +80,11 @@ describe("SidebarUserMenu", () => {
     expect(screen.queryByText(/Bug or Feature Request/)).toBeNull();
   });
 
-  it("links Platform Status to status.speakeasyapi.dev in a new tab", () => {
+  it("links Platform Status to status.speakeasy.com in a new tab", () => {
     render(<SidebarUserMenu />);
     fireEvent.click(screen.getByTestId("user-menu-trigger"));
     const status = screen.getByText("Platform Status").closest("a");
-    expect(status?.getAttribute("href")).toBe(
-      "https://status.speakeasyapi.dev/",
-    );
+    expect(status?.getAttribute("href")).toBe("https://status.speakeasy.com/");
     expect(status?.getAttribute("target")).toBe("_blank");
     expect(status?.getAttribute("rel")).toBe("noopener noreferrer");
   });

@@ -265,6 +265,17 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, ev *hookevents.Use
 	if payload == nil {
 		return makeHookResult(ev.RawEventType), nil
 	}
+	// Spend gate runs before any risk-policy evaluation: an over-budget user
+	// is denied outright.
+	if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+		reason := spendBlockReason("prompt", block)
+		if payload.SessionID != nil && s.claimBlockedPromptTelemetry(ctx, payload) {
+			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
+				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, reason)
+			}
+		}
+		return constructBlockResponse(payload.HookEventName, reason), nil
+	}
 	if s.riskScanner != nil && ev.Prompt != "" && ev.ConversationID != "" {
 		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
 			// Warn (challenge) defers to the tool call: Claude Code can only show
@@ -278,8 +289,11 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, ev *hookevents.Use
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			// ClickHouse always gets the technical reason; the user_message
 			// override only changes what the agent / end user sees.
-			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
-				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
+			if s.claimBlockedPromptTelemetry(ctx, payload) {
+				metadata, err := s.getSessionMetadata(ctx, conv.PtrValOr(payload.SessionID, ""))
+				if err == nil {
+					s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
+				}
 			}
 			return constructBlockResponse(payload.HookEventName, userReason), nil
 		}

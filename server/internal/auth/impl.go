@@ -16,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -278,7 +277,10 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrInit, err)
 	}
 
-	sessionID := uuid.New().String()
+	sessionID, err := sessions.NewSessionID()
+	if err != nil {
+		return redirectWithError(authErrInit, err)
+	}
 	session := sessions.Session{
 		SessionID:            sessionID,
 		UserID:               userID,

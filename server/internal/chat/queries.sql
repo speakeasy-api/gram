@@ -417,6 +417,7 @@ candidate_chats AS (
     c.external_user_id,
     c.created_at,
     c.updated_at,
+    c.pinned_at,
     COALESCE(ua.account_type, '')::text AS account_type,
     COALESCE(ua.email, '')::text AS account_email
   FROM chats c
@@ -515,6 +516,7 @@ filtered_chats AS (
     cc.external_user_id,
     cc.created_at,
     cc.updated_at,
+    cc.pinned_at,
     cs.num_messages,
     cs.last_message_timestamp,
     cc.account_type,
@@ -532,6 +534,7 @@ limited_chats AS (
     fc.external_user_id,
     fc.created_at,
     fc.updated_at,
+    fc.pinned_at,
     fc.num_messages,
     (SELECT source FROM chat_messages WHERE chat_id = fc.id AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
     fc.last_message_timestamp,
@@ -569,6 +572,7 @@ SELECT
   lc.source,
   lc.created_at,
   lc.updated_at,
+  lc.pinned_at,
   lc.num_messages,
   lc.last_message_timestamp,
   -- Active findings for the returned page rows only; must stay in sync with
@@ -1000,6 +1004,16 @@ UPDATE chats
 SET pinned_at = CASE WHEN @pinned::boolean THEN COALESCE(pinned_at, NOW()) ELSE NULL END,
     updated_at = NOW()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: UpdateChatSummary :one
+-- Persist an on-demand LLM session summary. Project-scoped so a summarize write
+-- can never touch another project's chat. Returns the updated row timestamps.
+UPDATE chats
+SET summary = @summary,
+    summary_generated_at = NOW(),
+    updated_at = NOW()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+RETURNING summary, summary_generated_at;
 
 -- name: GetFirstUserChatMessage :one
 SELECT content FROM chat_messages

@@ -307,20 +307,22 @@ type BillingMetadatum struct {
 }
 
 type Chat struct {
-	ID               uuid.UUID
-	ProjectID        uuid.UUID
-	OrganizationID   string
-	UserID           pgtype.Text
-	ExternalUserID   pgtype.Text
-	ExternalChatID   pgtype.Text
-	Title            pgtype.Text
-	TitleManuallySet bool
-	PinnedAt         pgtype.Timestamptz
-	UserAccountID    uuid.NullUUID
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-	DeletedAt        pgtype.Timestamptz
-	Deleted          bool
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	OrganizationID     string
+	UserID             pgtype.Text
+	ExternalUserID     pgtype.Text
+	ExternalChatID     pgtype.Text
+	Title              pgtype.Text
+	TitleManuallySet   bool
+	PinnedAt           pgtype.Timestamptz
+	Summary            pgtype.Text
+	SummaryGeneratedAt pgtype.Timestamptz
+	UserAccountID      uuid.NullUUID
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	Deleted            bool
 }
 
 type ChatAnalysisEvaluation struct {
@@ -2124,6 +2126,8 @@ type TunneledMcpServer struct {
 	KeyPrefix string
 	// Durable lifecycle state for the source: created, active, or revoked. Live connection state is derived from Redis.
 	Status string
+	// Owner consent for anonymous public MCP serving of this source. Double opt-in with mcp_servers.visibility=public, enforced in application code.
+	AllowPublic bool
 	// Last persisted tunnel agent version reported for this source. Per-connection agent versions are stored in Redis.
 	AgentVersion pgtype.Text
 	// Most recent persisted heartbeat time for the source, used when Redis liveness data is absent or expired.

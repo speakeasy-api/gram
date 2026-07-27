@@ -32,8 +32,8 @@ var managedAssistantInstructions string
 
 const (
 	// managedAssistantModel is the default model for the platform-managed
-	// assistant. Defaulted to Sonnet 5, matching the in-app default chat model.
-	managedAssistantModel = "anthropic/claude-sonnet-5"
+	// assistant. Kept aligned with the in-app default chat model.
+	managedAssistantModel = "anthropic/claude-opus-5"
 
 	// Schema defaults for the assistants table, applied explicitly so the
 	// managed assistant's intent is visible at the call site.

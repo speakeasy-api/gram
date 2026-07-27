@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -54,6 +55,7 @@ type Service struct {
 	chatTitleGenerator ChatTitleGenerator
 	riskScanner        risk.RiskScanner
 	policyBypass       *risk.PolicyBypassEvaluator
+	spendGate          *spendrules.Gate
 	shadowMCPClient    *shadowmcp.Client
 	writer             *chat.ChatMessageWriter
 	// efficacySignaler is optional: when nil, hook paths record exactly as
@@ -195,6 +197,7 @@ func NewService(
 	chatTitleGenerator ChatTitleGenerator,
 	riskScanner risk.RiskScanner,
 	policyBypass *risk.PolicyBypassEvaluator,
+	spendGate *spendrules.Gate,
 	shadowMCPClient *shadowmcp.Client,
 	writer *chat.ChatMessageWriter,
 	efficacySignaler efficacy.Signaler,
@@ -217,6 +220,7 @@ func NewService(
 		chatTitleGenerator: chatTitleGenerator,
 		riskScanner:        riskScanner,
 		policyBypass:       policyBypass,
+		spendGate:          spendGate,
 		shadowMCPClient:    shadowMCPClient,
 		writer:             writer,
 		efficacySignaler:   efficacySignaler,
