@@ -29,6 +29,10 @@ type Client struct {
 	// updateDomain endpoint.
 	UpdateDomainDoer goahttp.Doer
 
+	// CheckHealth Doer is the HTTP client used to make requests to the checkHealth
+	// endpoint.
+	CheckHealthDoer goahttp.Doer
+
 	// DeleteDomain Doer is the HTTP client used to make requests to the
 	// deleteDomain endpoint.
 	DeleteDomainDoer goahttp.Doer
@@ -60,6 +64,7 @@ func NewClient(
 		GetDomainDoer:        doer,
 		CreateDomainDoer:     doer,
 		UpdateDomainDoer:     doer,
+		CheckHealthDoer:      doer,
 		DeleteDomainDoer:     doer,
 		ListMcpEndpointsDoer: doer,
 		RestoreResponseBody:  restoreBody,
@@ -137,6 +142,30 @@ func (c *Client) UpdateDomain() goa.Endpoint {
 		resp, err := c.UpdateDomainDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("domains", "updateDomain", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CheckHealth returns an endpoint that makes HTTP requests to the domains
+// service checkHealth server.
+func (c *Client) CheckHealth() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCheckHealthRequest(c.encoder)
+		decodeResponse = DecodeCheckHealthResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCheckHealthRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CheckHealthDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("domains", "checkHealth", err)
 		}
 		return decodeResponse(resp)
 	}

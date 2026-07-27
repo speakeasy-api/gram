@@ -4390,7 +4390,6 @@ func marshalTypesSkillEditSuggestionToSkillEditSuggestionResponseBody(v *types.S
 		SkillName:            v.SkillName,
 		SkillDisplayName:     v.SkillDisplayName,
 		BaseVersionID:        v.BaseVersionID,
-		ProposedDiff:         v.ProposedDiff,
 		ProposedContent:      v.ProposedContent,
 		AppliesCleanly:       v.AppliesCleanly,
 		Rationale:            v.Rationale,
@@ -4402,6 +4401,36 @@ func marshalTypesSkillEditSuggestionToSkillEditSuggestionResponseBody(v *types.S
 		ApprovedAt:           v.ApprovedAt,
 		CreatedAt:            v.CreatedAt,
 		UpdatedAt:            v.UpdatedAt,
+	}
+	if v.Changes != nil {
+		res.Changes = make([]*SkillEditSuggestionChangeResponseBody, len(v.Changes))
+		for i, val := range v.Changes {
+			if val == nil {
+				res.Changes[i] = nil
+				continue
+			}
+			res.Changes[i] = marshalTypesSkillEditSuggestionChangeToSkillEditSuggestionChangeResponseBody(val)
+		}
+	} else {
+		res.Changes = []*SkillEditSuggestionChangeResponseBody{}
+	}
+
+	return res
+}
+
+// marshalTypesSkillEditSuggestionChangeToSkillEditSuggestionChangeResponseBody
+// builds a value of type *SkillEditSuggestionChangeResponseBody from a value
+// of type *types.SkillEditSuggestionChange.
+func marshalTypesSkillEditSuggestionChangeToSkillEditSuggestionChangeResponseBody(v *types.SkillEditSuggestionChange) *SkillEditSuggestionChangeResponseBody {
+	res := &SkillEditSuggestionChangeResponseBody{
+		ID:                   v.ID,
+		SuggestionID:         v.SuggestionID,
+		ProposedDiff:         v.ProposedDiff,
+		Rationale:            v.Rationale,
+		AppliesCleanly:       v.AppliesCleanly,
+		FeedbackCount:        v.FeedbackCount,
+		FeedbackSessionCount: v.FeedbackSessionCount,
+		CreatedAt:            v.CreatedAt,
 	}
 
 	return res

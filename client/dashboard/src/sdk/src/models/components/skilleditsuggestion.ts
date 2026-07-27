@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  SkillEditSuggestionChange,
+  SkillEditSuggestionChange$inboundSchema,
+} from "./skilleditsuggestionchange.js";
 
 /**
  * The suggestion state.
@@ -30,7 +34,7 @@ export type SkillEditSuggestionStatus = ClosedEnum<
  */
 export type SkillEditSuggestion = {
   /**
-   * Whether the diff still applies to the base version.
+   * Whether every proposed change still applies to the base version.
    */
   appliesCleanly: boolean;
   /**
@@ -45,6 +49,10 @@ export type SkillEditSuggestion = {
    * The version the suggestion was generated from.
    */
   baseVersionId: string;
+  /**
+   * The separate changes proposed, each reviewable on its own.
+   */
+  changes: Array<SkillEditSuggestionChange>;
   /**
    * When the suggestion was created.
    */
@@ -62,15 +70,11 @@ export type SkillEditSuggestion = {
    */
   id: string;
   /**
-   * The complete proposed SKILL.md content, empty when the diff no longer applies.
+   * The complete SKILL.md content produced by taking every proposed change.
    */
   proposedContent: string;
   /**
-   * The proposed edit as a unified diff against the base version.
-   */
-  proposedDiff: string;
-  /**
-   * Why the edit was proposed.
+   * Why the edit was proposed, covering the suggestion as a whole.
    */
   rationale: string;
   /**
@@ -116,6 +120,7 @@ export const SkillEditSuggestion$inboundSchema: z.ZodMiniType<
     ),
     approved_by_user_id: z.optional(z.string()),
     base_version_id: z.string(),
+    changes: z.array(SkillEditSuggestionChange$inboundSchema),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -124,7 +129,6 @@ export const SkillEditSuggestion$inboundSchema: z.ZodMiniType<
     feedback_session_count: z.int(),
     id: z.string(),
     proposed_content: z.string(),
-    proposed_diff: z.string(),
     rationale: z.string(),
     scored_session_count: z.int(),
     skill_display_name: z.string(),
@@ -146,7 +150,6 @@ export const SkillEditSuggestion$inboundSchema: z.ZodMiniType<
       "feedback_count": "feedbackCount",
       "feedback_session_count": "feedbackSessionCount",
       "proposed_content": "proposedContent",
-      "proposed_diff": "proposedDiff",
       "scored_session_count": "scoredSessionCount",
       "skill_display_name": "skillDisplayName",
       "skill_id": "skillId",

@@ -54,10 +54,9 @@ type ApproveSuggestionRequestBody struct {
 	// Optional edited complete SKILL.md content. Handlers enforce a maximum size
 	// of 65,536 UTF-8 bytes.
 	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
-	// Optional zero-based index of the single proposed change to take. The
-	// suggestion stays open carrying whatever is left. Cannot be combined with
-	// edited content.
-	Hunk *int `form:"hunk,omitempty" json:"hunk,omitempty" xml:"hunk,omitempty"`
+	// Optional ID of the single proposed change to take. The suggestion stays open
+	// carrying whatever is left. Cannot be combined with edited content.
+	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
 }
 
 // DismissSuggestionRequestBody is the type of the "skills" service
@@ -224,14 +223,13 @@ type DismissSuggestionResponseBody struct {
 	SkillDisplayName *string `form:"skill_display_name,omitempty" json:"skill_display_name,omitempty" xml:"skill_display_name,omitempty"`
 	// The version the suggestion was generated from.
 	BaseVersionID *string `form:"base_version_id,omitempty" json:"base_version_id,omitempty" xml:"base_version_id,omitempty"`
-	// The proposed edit as a unified diff against the base version.
-	ProposedDiff *string `form:"proposed_diff,omitempty" json:"proposed_diff,omitempty" xml:"proposed_diff,omitempty"`
-	// The complete proposed SKILL.md content, empty when the diff no longer
-	// applies.
+	// The separate changes proposed, each reviewable on its own.
+	Changes []*SkillEditSuggestionChangeResponseBody `form:"changes,omitempty" json:"changes,omitempty" xml:"changes,omitempty"`
+	// The complete SKILL.md content produced by taking every proposed change.
 	ProposedContent *string `form:"proposed_content,omitempty" json:"proposed_content,omitempty" xml:"proposed_content,omitempty"`
-	// Whether the diff still applies to the base version.
+	// Whether every proposed change still applies to the base version.
 	AppliesCleanly *bool `form:"applies_cleanly,omitempty" json:"applies_cleanly,omitempty" xml:"applies_cleanly,omitempty"`
-	// Why the edit was proposed.
+	// Why the edit was proposed, covering the suggestion as a whole.
 	Rationale *string `form:"rationale,omitempty" json:"rationale,omitempty" xml:"rationale,omitempty"`
 	// The suggestion state.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
@@ -3733,14 +3731,13 @@ type SkillEditSuggestionResponseBody struct {
 	SkillDisplayName *string `form:"skill_display_name,omitempty" json:"skill_display_name,omitempty" xml:"skill_display_name,omitempty"`
 	// The version the suggestion was generated from.
 	BaseVersionID *string `form:"base_version_id,omitempty" json:"base_version_id,omitempty" xml:"base_version_id,omitempty"`
-	// The proposed edit as a unified diff against the base version.
-	ProposedDiff *string `form:"proposed_diff,omitempty" json:"proposed_diff,omitempty" xml:"proposed_diff,omitempty"`
-	// The complete proposed SKILL.md content, empty when the diff no longer
-	// applies.
+	// The separate changes proposed, each reviewable on its own.
+	Changes []*SkillEditSuggestionChangeResponseBody `form:"changes,omitempty" json:"changes,omitempty" xml:"changes,omitempty"`
+	// The complete SKILL.md content produced by taking every proposed change.
 	ProposedContent *string `form:"proposed_content,omitempty" json:"proposed_content,omitempty" xml:"proposed_content,omitempty"`
-	// Whether the diff still applies to the base version.
+	// Whether every proposed change still applies to the base version.
 	AppliesCleanly *bool `form:"applies_cleanly,omitempty" json:"applies_cleanly,omitempty" xml:"applies_cleanly,omitempty"`
-	// Why the edit was proposed.
+	// Why the edit was proposed, covering the suggestion as a whole.
 	Rationale *string `form:"rationale,omitempty" json:"rationale,omitempty" xml:"rationale,omitempty"`
 	// The suggestion state.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
@@ -3758,6 +3755,28 @@ type SkillEditSuggestionResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the suggestion was last updated.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// SkillEditSuggestionChangeResponseBody is used to define fields on response
+// body types.
+type SkillEditSuggestionChangeResponseBody struct {
+	// The change ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The suggestion the change belongs to.
+	SuggestionID *string `form:"suggestion_id,omitempty" json:"suggestion_id,omitempty" xml:"suggestion_id,omitempty"`
+	// The change as a unified diff against the content the changes before it
+	// produce.
+	ProposedDiff *string `form:"proposed_diff,omitempty" json:"proposed_diff,omitempty" xml:"proposed_diff,omitempty"`
+	// Why this change alone was proposed.
+	Rationale *string `form:"rationale,omitempty" json:"rationale,omitempty" xml:"rationale,omitempty"`
+	// Whether the change still applies.
+	AppliesCleanly *bool `form:"applies_cleanly,omitempty" json:"applies_cleanly,omitempty" xml:"applies_cleanly,omitempty"`
+	// Feedback records cited as the reason for this change.
+	FeedbackCount *int64 `form:"feedback_count,omitempty" json:"feedback_count,omitempty" xml:"feedback_count,omitempty"`
+	// Distinct sessions that reported the feedback behind this change.
+	FeedbackSessionCount *int64 `form:"feedback_session_count,omitempty" json:"feedback_session_count,omitempty" xml:"feedback_session_count,omitempty"`
+	// When the change was recorded.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 }
 
 // SkillSuggestionApprovalItemResponseBody is used to define fields on response
@@ -3908,9 +3927,9 @@ func NewUpdateRequestBody(p *skills.UpdatePayload) *UpdateRequestBody {
 // payload of the "approveSuggestion" endpoint of the "skills" service.
 func NewApproveSuggestionRequestBody(p *skills.ApproveSuggestionPayload) *ApproveSuggestionRequestBody {
 	body := &ApproveSuggestionRequestBody{
-		ID:      p.ID,
-		Content: p.Content,
-		Hunk:    p.Hunk,
+		ID:       p.ID,
+		Content:  p.Content,
+		ChangeID: p.ChangeID,
 	}
 	return body
 }
@@ -4968,7 +4987,6 @@ func NewDismissSuggestionSkillEditSuggestionOK(body *DismissSuggestionResponseBo
 		SkillName:            *body.SkillName,
 		SkillDisplayName:     *body.SkillDisplayName,
 		BaseVersionID:        *body.BaseVersionID,
-		ProposedDiff:         *body.ProposedDiff,
 		ProposedContent:      *body.ProposedContent,
 		AppliesCleanly:       *body.AppliesCleanly,
 		Rationale:            *body.Rationale,
@@ -4980,6 +4998,14 @@ func NewDismissSuggestionSkillEditSuggestionOK(body *DismissSuggestionResponseBo
 		ApprovedAt:           body.ApprovedAt,
 		CreatedAt:            *body.CreatedAt,
 		UpdatedAt:            *body.UpdatedAt,
+	}
+	v.Changes = make([]*types.SkillEditSuggestionChange, len(body.Changes))
+	for i, val := range body.Changes {
+		if val == nil {
+			v.Changes[i] = nil
+			continue
+		}
+		v.Changes[i] = unmarshalSkillEditSuggestionChangeResponseBodyToTypesSkillEditSuggestionChange(val)
 	}
 
 	return v
@@ -7102,8 +7128,8 @@ func ValidateDismissSuggestionResponseBody(body *DismissSuggestionResponseBody) 
 	if body.BaseVersionID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("base_version_id", "body"))
 	}
-	if body.ProposedDiff == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("proposed_diff", "body"))
+	if body.Changes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("changes", "body"))
 	}
 	if body.ProposedContent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("proposed_content", "body"))
@@ -7140,6 +7166,13 @@ func ValidateDismissSuggestionResponseBody(body *DismissSuggestionResponseBody) 
 	}
 	if body.BaseVersionID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.base_version_id", *body.BaseVersionID, goa.FormatUUID))
+	}
+	for _, e := range body.Changes {
+		if e != nil {
+			if err2 := ValidateSkillEditSuggestionChangeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	if body.Status != nil {
 		if !(*body.Status == "open" || *body.Status == "approved" || *body.Status == "dismissed" || *body.Status == "superseded") {
@@ -11853,8 +11886,8 @@ func ValidateSkillEditSuggestionResponseBody(body *SkillEditSuggestionResponseBo
 	if body.BaseVersionID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("base_version_id", "body"))
 	}
-	if body.ProposedDiff == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("proposed_diff", "body"))
+	if body.Changes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("changes", "body"))
 	}
 	if body.ProposedContent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("proposed_content", "body"))
@@ -11892,6 +11925,13 @@ func ValidateSkillEditSuggestionResponseBody(body *SkillEditSuggestionResponseBo
 	if body.BaseVersionID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.base_version_id", *body.BaseVersionID, goa.FormatUUID))
 	}
+	for _, e := range body.Changes {
+		if e != nil {
+			if err2 := ValidateSkillEditSuggestionChangeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.Status != nil {
 		if !(*body.Status == "open" || *body.Status == "approved" || *body.Status == "dismissed" || *body.Status == "superseded") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"open", "approved", "dismissed", "superseded"}))
@@ -11905,6 +11945,45 @@ func ValidateSkillEditSuggestionResponseBody(body *SkillEditSuggestionResponseBo
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateSkillEditSuggestionChangeResponseBody runs the validations defined
+// on SkillEditSuggestionChangeResponseBody
+func ValidateSkillEditSuggestionChangeResponseBody(body *SkillEditSuggestionChangeResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.SuggestionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("suggestion_id", "body"))
+	}
+	if body.ProposedDiff == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("proposed_diff", "body"))
+	}
+	if body.Rationale == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("rationale", "body"))
+	}
+	if body.AppliesCleanly == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("applies_cleanly", "body"))
+	}
+	if body.FeedbackCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("feedback_count", "body"))
+	}
+	if body.FeedbackSessionCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("feedback_session_count", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.SuggestionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.suggestion_id", *body.SuggestionID, goa.FormatUUID))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
 	return
 }

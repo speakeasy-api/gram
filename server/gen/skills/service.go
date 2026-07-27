@@ -36,8 +36,8 @@ type Service interface {
 	// implementation requires the skills product feature and skill read scope.
 	ListSuggestions(context.Context, *ListSuggestionsPayload) (res *ListSkillSuggestionsResult, err error)
 	// Approve an open skill edit suggestion, optionally replacing its proposed
-	// SKILL.md content or taking only one of its changes. Stale suggestions are
-	// superseded instead.
+	// SKILL.md content or taking only one of its proposed changes. Stale
+	// suggestions are superseded instead.
 	ApproveSuggestion(context.Context, *ApproveSuggestionPayload) (res *ApproveSkillSuggestionResult, err error)
 	// Idempotently dismiss an open skill edit suggestion. Approved and superseded
 	// suggestions conflict.
@@ -150,10 +150,9 @@ type ApproveSuggestionPayload struct {
 	// Optional edited complete SKILL.md content. Handlers enforce a maximum size
 	// of 65,536 UTF-8 bytes.
 	Content *string
-	// Optional zero-based index of the single proposed change to take. The
-	// suggestion stays open carrying whatever is left. Cannot be combined with
-	// edited content.
-	Hunk             *int
+	// Optional ID of the single proposed change to take. The suggestion stays open
+	// carrying whatever is left. Cannot be combined with edited content.
+	ChangeID         *string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

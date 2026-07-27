@@ -14,14 +14,15 @@ import {
 import { SkillVersion, SkillVersion$inboundSchema } from "./skillversion.js";
 
 /**
- * Whether the suggestion created a version or was stale.
+ * Whether the suggestion created a version, created one and stayed open carrying its remaining changes, or was stale.
  */
 export const ApproveSkillSuggestionResultOutcome = {
   Applied: "applied",
+  PartiallyApplied: "partially_applied",
   Superseded: "superseded",
 } as const;
 /**
- * Whether the suggestion created a version or was stale.
+ * Whether the suggestion created a version, created one and stayed open carrying its remaining changes, or was stale.
  */
 export type ApproveSkillSuggestionResultOutcome = ClosedEnum<
   typeof ApproveSkillSuggestionResultOutcome
@@ -32,7 +33,7 @@ export type ApproveSkillSuggestionResultOutcome = ClosedEnum<
  */
 export type ApproveSkillSuggestionResult = {
   /**
-   * Whether the suggestion created a version or was stale.
+   * Whether the suggestion created a version, created one and stayed open carrying its remaining changes, or was stale.
    */
   outcome: ApproveSkillSuggestionResultOutcome;
   /**

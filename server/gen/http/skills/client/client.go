@@ -30,6 +30,22 @@ type Client struct {
 	// List Doer is the HTTP client used to make requests to the list endpoint.
 	ListDoer goahttp.Doer
 
+	// ListSuggestions Doer is the HTTP client used to make requests to the
+	// listSuggestions endpoint.
+	ListSuggestionsDoer goahttp.Doer
+
+	// ApproveSuggestion Doer is the HTTP client used to make requests to the
+	// approveSuggestion endpoint.
+	ApproveSuggestionDoer goahttp.Doer
+
+	// DismissSuggestion Doer is the HTTP client used to make requests to the
+	// dismissSuggestion endpoint.
+	DismissSuggestionDoer goahttp.Doer
+
+	// ApproveAllSuggestions Doer is the HTTP client used to make requests to the
+	// approveAllSuggestions endpoint.
+	ApproveAllSuggestionsDoer goahttp.Doer
+
 	// Get Doer is the HTTP client used to make requests to the get endpoint.
 	GetDoer goahttp.Doer
 
@@ -92,6 +108,10 @@ func NewClient(
 		AddVersionDoer:             doer,
 		UpdateDoer:                 doer,
 		ListDoer:                   doer,
+		ListSuggestionsDoer:        doer,
+		ApproveSuggestionDoer:      doer,
+		DismissSuggestionDoer:      doer,
+		ApproveAllSuggestionsDoer:  doer,
 		GetDoer:                    doer,
 		ListUnknownActivationsDoer: doer,
 		ListVersionsDoer:           doer,
@@ -201,6 +221,102 @@ func (c *Client) List() goa.Endpoint {
 		resp, err := c.ListDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("skills", "list", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListSuggestions returns an endpoint that makes HTTP requests to the skills
+// service listSuggestions server.
+func (c *Client) ListSuggestions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListSuggestionsRequest(c.encoder)
+		decodeResponse = DecodeListSuggestionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListSuggestionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListSuggestionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "listSuggestions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ApproveSuggestion returns an endpoint that makes HTTP requests to the skills
+// service approveSuggestion server.
+func (c *Client) ApproveSuggestion() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeApproveSuggestionRequest(c.encoder)
+		decodeResponse = DecodeApproveSuggestionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildApproveSuggestionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ApproveSuggestionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "approveSuggestion", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DismissSuggestion returns an endpoint that makes HTTP requests to the skills
+// service dismissSuggestion server.
+func (c *Client) DismissSuggestion() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDismissSuggestionRequest(c.encoder)
+		decodeResponse = DecodeDismissSuggestionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDismissSuggestionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DismissSuggestionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "dismissSuggestion", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ApproveAllSuggestions returns an endpoint that makes HTTP requests to the
+// skills service approveAllSuggestions server.
+func (c *Client) ApproveAllSuggestions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeApproveAllSuggestionsRequest(c.encoder)
+		decodeResponse = DecodeApproveAllSuggestionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildApproveAllSuggestionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ApproveAllSuggestionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "approveAllSuggestions", err)
 		}
 		return decodeResponse(resp)
 	}

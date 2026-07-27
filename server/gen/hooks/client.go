@@ -20,18 +20,20 @@ type Client struct {
 	CodexEndpoint              goa.Endpoint
 	IngestEndpoint             goa.Endpoint
 	UploadSkillContentEndpoint goa.Endpoint
+	SkillFeedbackEndpoint      goa.Endpoint
 	LogsEndpoint               goa.Endpoint
 	MetricsEndpoint            goa.Endpoint
 }
 
 // NewClient initializes a "hooks" service client given the endpoints.
-func NewClient(claude, cursor, codex, ingest, uploadSkillContent, logs, metrics goa.Endpoint) *Client {
+func NewClient(claude, cursor, codex, ingest, uploadSkillContent, skillFeedback, logs, metrics goa.Endpoint) *Client {
 	return &Client{
 		ClaudeEndpoint:             claude,
 		CursorEndpoint:             cursor,
 		CodexEndpoint:              codex,
 		IngestEndpoint:             ingest,
 		UploadSkillContentEndpoint: uploadSkillContent,
+		SkillFeedbackEndpoint:      skillFeedback,
 		LogsEndpoint:               logs,
 		MetricsEndpoint:            metrics,
 	}
@@ -141,6 +143,24 @@ func (c *Client) Ingest(ctx context.Context, p *IngestPayload) (res *IngestHookR
 //   - error: internal error
 func (c *Client) UploadSkillContent(ctx context.Context, p *UploadSkillContentPayload) (err error) {
 	_, err = c.UploadSkillContentEndpoint(ctx, p)
+	return
+}
+
+// SkillFeedback calls the "skillFeedback" endpoint of the "hooks" service.
+// SkillFeedback may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SkillFeedback(ctx context.Context, p *SkillFeedbackPayload) (err error) {
+	_, err = c.SkillFeedbackEndpoint(ctx, p)
 	return
 }
 

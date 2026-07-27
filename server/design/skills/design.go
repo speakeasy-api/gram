@@ -172,12 +172,12 @@ var _ = Service("skills", func() {
 	})
 
 	Method("approveSuggestion", func() {
-		Description("Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only one of its changes. Stale suggestions are superseded instead.")
+		Description("Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only one of its proposed changes. Stale suggestions are superseded instead.")
 
 		Payload(func() {
 			Attribute("id", String, "The suggestion ID.", func() { Format(FormatUUID) })
 			Attribute("content", String, "Optional edited complete SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
-			Attribute("hunk", Int, "Optional zero-based index of the single proposed change to take. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.", func() { Minimum(0) })
+			Attribute("change_id", String, "Optional ID of the single proposed change to take. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.", func() { Format(FormatUUID) })
 			Required("id")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -581,7 +581,7 @@ var ApproveSkillSuggestionRequestBody = Type("ApproveSkillSuggestionRequestBody"
 
 	Attribute("id", String, "The suggestion ID.", func() { Format(FormatUUID) })
 	Attribute("content", String, "Optional edited complete SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
-	Attribute("hunk", Int, "Optional zero-based index of the single proposed change to take. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.", func() { Minimum(0) })
+	Attribute("change_id", String, "Optional ID of the single proposed change to take. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.", func() { Format(FormatUUID) })
 	Required("id")
 })
 
@@ -762,10 +762,10 @@ var SkillEditSuggestion = Type("SkillEditSuggestion", func() {
 	Attribute("skill_name", String, "The canonical skill name.")
 	Attribute("skill_display_name", String, "The user-facing skill name.")
 	Attribute("base_version_id", String, "The version the suggestion was generated from.", func() { Format(FormatUUID) })
-	Attribute("proposed_diff", String, "The proposed edit as a unified diff against the base version.")
-	Attribute("proposed_content", String, "The complete proposed SKILL.md content, empty when the diff no longer applies.")
-	Attribute("applies_cleanly", Boolean, "Whether the diff still applies to the base version.")
-	Attribute("rationale", String, "Why the edit was proposed.")
+	Attribute("changes", ArrayOf(SkillEditSuggestionChange), "The separate changes proposed, each reviewable on its own.")
+	Attribute("proposed_content", String, "The complete SKILL.md content produced by taking every proposed change.")
+	Attribute("applies_cleanly", Boolean, "Whether every proposed change still applies to the base version.")
+	Attribute("rationale", String, "Why the edit was proposed, covering the suggestion as a whole.")
 	Attribute("status", String, "The suggestion state.", func() { Enum("open", "approved", "dismissed", "superseded") })
 	Attribute("feedback_count", Int64, "Feedback records the suggestion was generated from.")
 	Attribute("feedback_session_count", Int64, "Distinct sessions that reported the feedback behind the suggestion.")
@@ -775,7 +775,23 @@ var SkillEditSuggestion = Type("SkillEditSuggestion", func() {
 	Attribute("created_at", String, "When the suggestion was created.", func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, "When the suggestion was last updated.", func() { Format(FormatDateTime) })
 
-	Required("id", "skill_id", "skill_name", "skill_display_name", "base_version_id", "proposed_diff", "proposed_content", "applies_cleanly", "rationale", "status", "feedback_count", "feedback_session_count", "scored_session_count", "created_at", "updated_at")
+	Required("id", "skill_id", "skill_name", "skill_display_name", "base_version_id", "changes", "proposed_content", "applies_cleanly", "rationale", "status", "feedback_count", "feedback_session_count", "scored_session_count", "created_at", "updated_at")
+})
+
+var SkillEditSuggestionChange = Type("SkillEditSuggestionChange", func() {
+	Meta("struct:pkg:path", "types")
+	Description("One self-contained edit proposed by a suggestion, applied and reviewed on its own.")
+
+	Attribute("id", String, "The change ID.", func() { Format(FormatUUID) })
+	Attribute("suggestion_id", String, "The suggestion the change belongs to.", func() { Format(FormatUUID) })
+	Attribute("proposed_diff", String, "The change as a unified diff against the content the changes before it produce.")
+	Attribute("rationale", String, "Why this change alone was proposed.")
+	Attribute("applies_cleanly", Boolean, "Whether the change still applies.")
+	Attribute("feedback_count", Int64, "Feedback records cited as the reason for this change.")
+	Attribute("feedback_session_count", Int64, "Distinct sessions that reported the feedback behind this change.")
+	Attribute("created_at", String, "When the change was recorded.", func() { Format(FormatDateTime) })
+
+	Required("id", "suggestion_id", "proposed_diff", "rationale", "applies_cleanly", "feedback_count", "feedback_session_count", "created_at")
 })
 
 var ListSkillSuggestionsResult = Type("ListSkillSuggestionsResult", func() {

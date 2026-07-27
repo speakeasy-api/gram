@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -79,8 +78,20 @@ func (s *Service) ListSuggestions(ctx context.Context, payload *gen.ListSuggesti
 		nextCursor = &encoded
 	}
 
+	suggestionIDs := make([]uuid.UUID, len(rows))
+	for i := range rows {
+		suggestionIDs[i] = rows[i].SkillEditSuggestion.ID
+	}
+	changes, err := queries.ListSkillEditSuggestionChanges(ctx, repo.ListSkillEditSuggestionChangesParams{
+		ProjectID:     *authCtx.ProjectID,
+		SuggestionIds: suggestionIDs,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list skill suggestion changes").LogError(ctx, logger)
+	}
+
 	return &gen.ListSkillSuggestionsResult{
-		Suggestions:    mv.BuildSkillEditSuggestionListView(rows),
+		Suggestions:    mv.BuildSkillEditSuggestionListView(rows, changes),
 		TotalOpenCount: totalOpenCount,
 		NextCursor:     nextCursor,
 	}, nil
@@ -99,9 +110,9 @@ func (s *Service) approveSuggestion(
 	logger *slog.Logger,
 	suggestionID uuid.UUID,
 	editedContent *string,
-	hunk *int,
+	changeID *uuid.UUID,
 ) (approval suggestionApproval, err error) {
-	if hunk != nil && editedContent != nil {
+	if changeID != nil && editedContent != nil {
 		return approval, oops.E(oops.CodeBadRequest, nil, "cannot take a single proposed change and edited content together")
 	}
 
@@ -128,6 +139,7 @@ func (s *Service) approveSuggestion(
 			SkillName:            details.SkillName,
 			SkillDisplayName:     details.SkillDisplayName,
 			BaseContent:          details.BaseContent,
+			Changes:              nil,
 			FeedbackCount:        details.FeedbackCount,
 			FeedbackSessionCount: details.FeedbackSessionCount,
 		},
@@ -142,7 +154,14 @@ func (s *Service) approveSuggestion(
 	if editedContent != nil {
 		content = *editedContent
 	} else {
-		content, _, err = approvalContent(details.BaseContent, details.SkillEditSuggestion.ProposedDiff, hunk)
+		changes, listErr := queries.ListSkillEditSuggestionChanges(ctx, repo.ListSkillEditSuggestionChangesParams{
+			ProjectID: *authCtx.ProjectID, SuggestionIds: []uuid.UUID{suggestionID},
+		})
+		if listErr != nil {
+			return approval, oops.E(oops.CodeUnexpected, listErr, "load skill suggestion changes for approval").LogError(ctx, logger)
+		}
+		approval.evidence.Changes = changes
+		content, _, err = approvalContent(details.BaseContent, changes, changeID)
 		if err != nil {
 			return approval, err
 		}
@@ -218,9 +237,16 @@ func (s *Service) approveSuggestion(
 		return approval, nil
 	}
 
-	remainingDiff := ""
+	changes, err := queries.ListSkillEditSuggestionChanges(ctx, repo.ListSkillEditSuggestionChangesParams{
+		ProjectID: *authCtx.ProjectID, SuggestionIds: []uuid.UUID{suggestion.ID},
+	})
+	if err != nil {
+		return approval, oops.E(oops.CodeUnexpected, err, "load skill suggestion changes for approval").LogError(ctx, logger)
+	}
+	approval.evidence.Changes = changes
+	var remaining []repo.ListSkillEditSuggestionChangesRow
 	if editedContent == nil {
-		content, remainingDiff, err = approvalContent(base.BaseContent, suggestion.ProposedDiff, hunk)
+		content, remaining, err = approvalContent(base.BaseContent, changes, changeID)
 		if err != nil {
 			return approval, err
 		}
@@ -244,17 +270,16 @@ func (s *Service) approveSuggestion(
 	// repoint it at the version this creates; closing it first, as a whole
 	// approval does, is what keeps that replay off an approval's own work.
 	var approved repo.SkillEditSuggestion
-	if remainingDiff != "" {
-		approved, err = queries.RebaseOpenSkillEditSuggestion(ctx, repo.RebaseOpenSkillEditSuggestionParams{
-			BaseVersionID: suggestion.BaseVersionID,
-			ProposedDiff:  remainingDiff,
-			ProjectID:     *authCtx.ProjectID,
-			SkillID:       suggestion.SkillID,
-			ID:            suggestion.ID,
-		})
-		if err != nil {
-			return approval, oops.E(oops.CodeUnexpected, err, "carry remaining skill suggestion changes forward").LogError(ctx, logger)
+	if len(remaining) > 0 {
+		// Drop only the change being taken. The rest keep their own rationale
+		// and evidence, and recordVersion's replay rebases them onto the
+		// version this creates.
+		if err := queries.DeleteSkillEditSuggestionChange(ctx, repo.DeleteSkillEditSuggestionChangeParams{
+			ProjectID: *authCtx.ProjectID, ID: *changeID,
+		}); err != nil {
+			return approval, oops.E(oops.CodeUnexpected, err, "drop the approved skill suggestion change").LogError(ctx, logger)
 		}
+		approved = suggestion
 	} else {
 		approved, err = queries.ApproveOpenSkillEditSuggestion(ctx, repo.ApproveOpenSkillEditSuggestionParams{
 			ApprovedByUserID: conv.ToPGText(authCtx.UserID),
@@ -304,7 +329,7 @@ func (s *Service) approveSuggestion(
 		return approval, oops.E(oops.CodeUnexpected, err, "log skill suggestion approval").LogError(ctx, logger)
 	}
 	approval.outcome = "applied"
-	if remainingDiff != "" {
+	if len(remaining) > 0 {
 		// Re-read what the replay left behind so the reviewer sees the
 		// remaining changes against the version they just created.
 		approved, err = queries.GetOpenSkillEditSuggestion(ctx, repo.GetOpenSkillEditSuggestionParams{
@@ -318,6 +343,12 @@ func (s *Service) approveSuggestion(
 			return approval, oops.E(oops.CodeUnexpected, err, "re-read remaining skill suggestion").LogError(ctx, logger)
 		default:
 			approval.evidence.BaseContent = validated.Content
+			approval.evidence.Changes, err = queries.ListSkillEditSuggestionChanges(ctx, repo.ListSkillEditSuggestionChangesParams{
+				ProjectID: *authCtx.ProjectID, SuggestionIds: []uuid.UUID{approved.ID},
+			})
+			if err != nil {
+				return approval, oops.E(oops.CodeUnexpected, err, "re-read remaining skill suggestion changes").LogError(ctx, logger)
+			}
 			approval.outcome = "partially_applied"
 		}
 	}
@@ -330,33 +361,48 @@ func (s *Service) approveSuggestion(
 	return approval, nil
 }
 
-// approvalContent resolves what a reviewer is taking from a suggestion: the
-// whole proposal, or a single proposed change with the rest still to propose.
-// The remainder is the edit from what they took to what was proposed, so a
-// change already taken drops out of it rather than being replayed twice.
-func approvalContent(baseContent, proposedDiff string, hunk *int) (content string, remaining string, err error) {
-	proposed, err := skilldiff.Apply(baseContent, proposedDiff)
-	if err != nil {
-		return "", "", oops.E(oops.CodeConflict, nil, "skill suggestion no longer applies to its base version")
-	}
-	if hunk == nil {
-		return proposed, "", nil
+// approvalContent resolves what a reviewer is taking from a suggestion: every
+// proposed change, or a single one with the rest left to propose. Each change
+// applies to what the changes before it produce, so taking one on its own
+// replays only that edit onto the current manifest.
+func approvalContent(
+	baseContent string,
+	changes []repo.ListSkillEditSuggestionChangesRow,
+	changeID *uuid.UUID,
+) (string, []repo.ListSkillEditSuggestionChangesRow, error) {
+	if len(changes) == 0 {
+		return "", nil, oops.E(oops.CodeConflict, nil, "skill suggestion no longer proposes any changes")
 	}
 
-	hunks := skilldiff.Hunks(proposedDiff)
-	if *hunk < 0 || *hunk >= len(hunks) {
-		return "", "", oops.E(oops.CodeConflict, nil, "that proposed change is no longer part of this suggestion")
+	if changeID == nil {
+		content := baseContent
+		for _, change := range changes {
+			applied, err := skilldiff.Apply(content, change.ProposedDiff)
+			if err != nil {
+				return "", nil, oops.E(oops.CodeConflict, nil, "skill suggestion no longer applies to its base version")
+			}
+			content = applied
+		}
+
+		return content, nil, nil
 	}
-	content, err = skilldiff.Apply(baseContent, hunks[*hunk])
+
+	var taken *repo.ListSkillEditSuggestionChangesRow
+	remaining := make([]repo.ListSkillEditSuggestionChangesRow, 0, len(changes))
+	for i, change := range changes {
+		if change.ID == *changeID {
+			taken = &changes[i]
+			continue
+		}
+		remaining = append(remaining, change)
+	}
+	if taken == nil {
+		return "", nil, oops.E(oops.CodeConflict, nil, "that proposed change is no longer part of this suggestion")
+	}
+
+	content, err := skilldiff.Apply(baseContent, taken.ProposedDiff)
 	if err != nil {
-		return "", "", oops.E(oops.CodeConflict, nil, "skill suggestion no longer applies to its base version")
-	}
-	remaining, err = skilldiff.Unified(content, proposed)
-	if err != nil {
-		return "", "", oops.E(oops.CodeUnexpected, err, "render remaining skill suggestion changes")
-	}
-	if strings.TrimSpace(remaining) == "" {
-		remaining = ""
+		return "", nil, oops.E(oops.CodeConflict, nil, "that proposed change no longer applies to the current skill")
 	}
 
 	return content, remaining, nil
@@ -372,7 +418,16 @@ func (s *Service) ApproveSuggestion(ctx context.Context, payload *gen.ApproveSug
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill suggestion id")
 	}
 
-	approval, err := s.approveSuggestion(ctx, authCtx, logger, suggestionID, payload.Content, payload.Hunk)
+	var changeID *uuid.UUID
+	if payload.ChangeID != nil {
+		parsed, parseErr := uuid.Parse(*payload.ChangeID)
+		if parseErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill suggestion change id")
+		}
+		changeID = &parsed
+	}
+
+	approval, err := s.approveSuggestion(ctx, authCtx, logger, suggestionID, payload.Content, changeID)
 	if err != nil {
 		return nil, err
 	}
@@ -429,10 +484,17 @@ func (s *Service) DismissSuggestion(ctx context.Context, payload *gen.DismissSug
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lock skill suggestion for dismissal").LogError(ctx, logger)
 	}
+	changes, err := queries.ListSkillEditSuggestionChanges(ctx, repo.ListSkillEditSuggestionChangesParams{
+		ProjectID: *authCtx.ProjectID, SuggestionIds: []uuid.UUID{suggestion.ID},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load skill suggestion changes for dismissal").LogError(ctx, logger)
+	}
 	evidence := mv.SkillEditSuggestionEvidence{
 		SkillName:            skill.Name,
 		SkillDisplayName:     skill.DisplayName,
 		BaseContent:          details.BaseContent,
+		Changes:              changes,
 		FeedbackCount:        details.FeedbackCount,
 		FeedbackSessionCount: details.FeedbackSessionCount,
 	}

@@ -296,13 +296,11 @@ func BuildApproveSuggestionPayload(skillsApproveSuggestionBody string, skillsApp
 	{
 		err = json.Unmarshal([]byte(skillsApproveSuggestionBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"abc123\",\n      \"hunk\": 1,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"change_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"content\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
-		if body.Hunk != nil {
-			if *body.Hunk < 0 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("body.hunk", *body.Hunk, 0, true))
-			}
+		if body.ChangeID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.change_id", *body.ChangeID, goa.FormatUUID))
 		}
 		if err != nil {
 			return nil, err
@@ -327,9 +325,9 @@ func BuildApproveSuggestionPayload(skillsApproveSuggestionBody string, skillsApp
 		}
 	}
 	v := &skills.ApproveSuggestionPayload{
-		ID:      body.ID,
-		Content: body.Content,
-		Hunk:    body.Hunk,
+		ID:       body.ID,
+		Content:  body.Content,
+		ChangeID: body.ChangeID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

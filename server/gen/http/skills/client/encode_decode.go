@@ -4448,7 +4448,6 @@ func unmarshalSkillEditSuggestionResponseBodyToTypesSkillEditSuggestion(v *Skill
 		SkillName:            *v.SkillName,
 		SkillDisplayName:     *v.SkillDisplayName,
 		BaseVersionID:        *v.BaseVersionID,
-		ProposedDiff:         *v.ProposedDiff,
 		ProposedContent:      *v.ProposedContent,
 		AppliesCleanly:       *v.AppliesCleanly,
 		Rationale:            *v.Rationale,
@@ -4460,6 +4459,32 @@ func unmarshalSkillEditSuggestionResponseBodyToTypesSkillEditSuggestion(v *Skill
 		ApprovedAt:           v.ApprovedAt,
 		CreatedAt:            *v.CreatedAt,
 		UpdatedAt:            *v.UpdatedAt,
+	}
+	res.Changes = make([]*types.SkillEditSuggestionChange, len(v.Changes))
+	for i, val := range v.Changes {
+		if val == nil {
+			res.Changes[i] = nil
+			continue
+		}
+		res.Changes[i] = unmarshalSkillEditSuggestionChangeResponseBodyToTypesSkillEditSuggestionChange(val)
+	}
+
+	return res
+}
+
+// unmarshalSkillEditSuggestionChangeResponseBodyToTypesSkillEditSuggestionChange
+// builds a value of type *types.SkillEditSuggestionChange from a value of type
+// *SkillEditSuggestionChangeResponseBody.
+func unmarshalSkillEditSuggestionChangeResponseBodyToTypesSkillEditSuggestionChange(v *SkillEditSuggestionChangeResponseBody) *types.SkillEditSuggestionChange {
+	res := &types.SkillEditSuggestionChange{
+		ID:                   *v.ID,
+		SuggestionID:         *v.SuggestionID,
+		ProposedDiff:         *v.ProposedDiff,
+		Rationale:            *v.Rationale,
+		AppliesCleanly:       *v.AppliesCleanly,
+		FeedbackCount:        *v.FeedbackCount,
+		FeedbackSessionCount: *v.FeedbackSessionCount,
+		CreatedAt:            *v.CreatedAt,
 	}
 
 	return res

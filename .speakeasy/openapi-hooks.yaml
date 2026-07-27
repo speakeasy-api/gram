@@ -112,6 +112,96 @@ paths:
       x-speakeasy-name-override: ingest
       x-speakeasy-react-hook:
         name: IngestHookEvent
+  /rpc/hooks.skillFeedback:
+    post:
+      description: Records agent-volunteered feedback about a distributed skill.
+      operationId: skillFeedback
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SkillFeedbackPayload'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: skillFeedback hooks
+      tags:
+        - hooks
+      x-speakeasy-name-override: skillFeedback
   /rpc/hooks.uploadSkillContent:
     post:
       description: Uploads skill manifest content requested by the unified hook ingest endpoint.
@@ -524,6 +614,38 @@ components:
         - schema_version
         - source
         - event
+    SkillFeedbackPayload:
+      type: object
+      properties:
+        note:
+          type: string
+          description: Optional concise context about the outcome.
+          maxLength: 4000
+        outcome:
+          type: string
+          description: How the skill affected the task.
+          enum:
+            - helped
+            - partially_helped
+            - did_not_help
+            - misleading
+            - harmful
+        schema_version:
+          type: string
+          description: Contract version.
+          enum:
+            - hook.skill-feedback.v1
+        skill:
+          type: string
+          description: Canonical name of the skill that was used.
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          minLength: 1
+          maxLength: 64
+      description: Agent-volunteered feedback about a distributed skill.
+      required:
+        - schema_version
+        - skill
+        - outcome
     UploadSkillContentPayload:
       type: object
       properties:
@@ -647,6 +769,8 @@ tags:
     description: Manages packages in Gram.
   - name: adminChatAnalysis
     description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
+  - name: adminExternalCredentials
+    description: Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
   - name: plugins
     description: Manage distributable plugin bundles of MCP servers and hooks.
   - name: features

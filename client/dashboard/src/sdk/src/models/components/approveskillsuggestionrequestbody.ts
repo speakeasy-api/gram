@@ -3,8 +3,13 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 
 export type ApproveSkillSuggestionRequestBody = {
+  /**
+   * Optional ID of the single proposed change to take. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.
+   */
+  changeId?: string | undefined;
   /**
    * Optional edited complete SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.
    */
@@ -17,6 +22,7 @@ export type ApproveSkillSuggestionRequestBody = {
 
 /** @internal */
 export type ApproveSkillSuggestionRequestBody$Outbound = {
+  change_id?: string | undefined;
   content?: string | undefined;
   id: string;
 };
@@ -25,10 +31,18 @@ export type ApproveSkillSuggestionRequestBody$Outbound = {
 export const ApproveSkillSuggestionRequestBody$outboundSchema: z.ZodMiniType<
   ApproveSkillSuggestionRequestBody$Outbound,
   ApproveSkillSuggestionRequestBody
-> = z.object({
-  content: z.optional(z.string()),
-  id: z.string(),
-});
+> = z.pipe(
+  z.object({
+    changeId: z.optional(z.string()),
+    content: z.optional(z.string()),
+    id: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      changeId: "change_id",
+    });
+  }),
+);
 
 export function approveSkillSuggestionRequestBodyToJSON(
   approveSkillSuggestionRequestBody: ApproveSkillSuggestionRequestBody,

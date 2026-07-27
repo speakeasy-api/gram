@@ -67,7 +67,7 @@ func TestSkillsFeatureDisabledRejectsEveryEndpoint(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.ListSuggestions(ctx, &gen.ListSuggestionsPayload{SkillID: nil, Cursor: nil, Limit: 10, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
-	_, err = ti.service.ApproveSuggestion(ctx, &gen.ApproveSuggestionPayload{ID: suggestion.ID.String(), Content: nil, Hunk: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	_, err = ti.service.ApproveSuggestion(ctx, &gen.ApproveSuggestionPayload{ID: suggestion.ID.String(), Content: nil, ChangeID: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.DismissSuggestion(ctx, &gen.DismissSuggestionPayload{ID: suggestion.ID.String(), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)

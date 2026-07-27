@@ -133,17 +133,23 @@ SELECT
   (
     SELECT COUNT(*)
     FROM skill_edit_suggestion_feedback link
+    JOIN skill_edit_suggestion_changes change
+      ON change.project_id = link.project_id
+      AND change.id = link.change_id
     WHERE link.project_id = suggestion.project_id
-      AND link.suggestion_id = suggestion.id
+      AND change.suggestion_id = suggestion.id
   ) AS feedback_count,
   (
     SELECT COUNT(DISTINCT feedback.session_id)
     FROM skill_edit_suggestion_feedback link
+    JOIN skill_edit_suggestion_changes change
+      ON change.project_id = link.project_id
+      AND change.id = link.change_id
     JOIN skill_feedback feedback
       ON feedback.project_id = link.project_id
       AND feedback.id = link.feedback_id
     WHERE link.project_id = suggestion.project_id
-      AND link.suggestion_id = suggestion.id
+      AND change.suggestion_id = suggestion.id
       AND feedback.session_id IS NOT NULL
   ) AS feedback_session_count
 FROM skill_edit_suggestions suggestion
@@ -202,17 +208,23 @@ SELECT
   (
     SELECT COUNT(*)
     FROM skill_edit_suggestion_feedback link
+    JOIN skill_edit_suggestion_changes change
+      ON change.project_id = link.project_id
+      AND change.id = link.change_id
     WHERE link.project_id = suggestion.project_id
-      AND link.suggestion_id = suggestion.id
+      AND change.suggestion_id = suggestion.id
   ) AS feedback_count,
   (
     SELECT COUNT(DISTINCT feedback.session_id)
     FROM skill_edit_suggestion_feedback link
+    JOIN skill_edit_suggestion_changes change
+      ON change.project_id = link.project_id
+      AND change.id = link.change_id
     JOIN skill_feedback feedback
       ON feedback.project_id = link.project_id
       AND feedback.id = link.feedback_id
     WHERE link.project_id = suggestion.project_id
-      AND link.suggestion_id = suggestion.id
+      AND change.suggestion_id = suggestion.id
       AND feedback.session_id IS NOT NULL
   ) AS feedback_session_count
 FROM skill_edit_suggestions suggestion
@@ -2383,6 +2395,6 @@ JOIN skill_feedback feedback
   ON feedback.project_id = link.project_id
   AND feedback.id = link.feedback_id
 WHERE link.project_id = @project_id
-  AND link.suggestion_id = @suggestion_id
+  AND link.change_id = @change_id
 ORDER BY feedback.created_at DESC, feedback.id DESC
 LIMIT GREATEST(@page_limit::int, 0);

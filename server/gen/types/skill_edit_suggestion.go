@@ -20,14 +20,13 @@ type SkillEditSuggestion struct {
 	SkillDisplayName string
 	// The version the suggestion was generated from.
 	BaseVersionID string
-	// The proposed edit as a unified diff against the base version.
-	ProposedDiff string
-	// The complete proposed SKILL.md content, empty when the diff no longer
-	// applies.
+	// The separate changes proposed, each reviewable on its own.
+	Changes []*SkillEditSuggestionChange
+	// The complete SKILL.md content produced by taking every proposed change.
 	ProposedContent string
-	// Whether the diff still applies to the base version.
+	// Whether every proposed change still applies to the base version.
 	AppliesCleanly bool
-	// Why the edit was proposed.
+	// Why the edit was proposed, covering the suggestion as a whole.
 	Rationale string
 	// The suggestion state.
 	Status string
