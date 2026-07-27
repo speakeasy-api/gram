@@ -25,6 +25,10 @@ const (
 
 	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
 	FlagRiskAsyncScanShadow  Flag = "risk-async-scan-shadow"
+	// FlagRiskOverviewFromClickHouse serves the risk overview endpoint from
+	// ClickHouse risk_findings instead of Postgres risk_results. Per-org
+	// rollout gate; removed once the ClickHouse read path is GA.
+	FlagRiskOverviewFromClickHouse Flag = "risk-overview-from-clickhouse"
 
 	// FlagTelemetryLogsPubSubShadow gates the best-effort shadow dual-write of
 	// telemetry_logs rows onto Pub/Sub (gram-telemetry-v1-log-record). It is

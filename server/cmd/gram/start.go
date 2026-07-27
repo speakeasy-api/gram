@@ -103,6 +103,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
@@ -1232,6 +1233,7 @@ func newStartCommand() *cli.Command {
 					}
 					return urls, nil
 				},
+				riskchrepo.New(chDB),
 			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
