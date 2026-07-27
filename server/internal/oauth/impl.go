@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth/providers"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -890,6 +891,9 @@ type ProxyRegisterRequest struct {
 	RegistrationEndpoint    string  `json:"registration_endpoint"`
 	Scope                   *string `json:"scope,omitempty"`
 	TokenEndpointAuthMethod *string `json:"token_endpoint_auth_method,omitempty"`
+	// RedirectURI opts this registration into the device-agent loopback flow.
+	// When omitted, the existing hosted callbacks remain unchanged.
+	RedirectURI *string `json:"redirect_uri,omitempty"`
 }
 
 type ProxyRegisterResponse struct {
@@ -943,10 +947,9 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 	}
 
 	serverURL := s.serverURL.String()
-	redirectURIs := []string{
-		fmt.Sprintf("%s/oauth/callback", serverURL),
-		fmt.Sprintf("%s/mcp/remote_login_callback", serverURL),
-		fmt.Sprintf("%s/x/mcp/remote_login_callback", serverURL),
+	redirectURIs, err := proxyRegistrationRedirectURIs(serverURL, req.RedirectURI)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid redirect_uri").LogError(ctx, s.logger)
 	}
 
 	dcrReq := DCRRequest{
@@ -1054,4 +1057,19 @@ func dcrErrorDetail(body []byte, statusCode int) string {
 		}
 	}
 	return fmt.Sprintf("HTTP %d", statusCode)
+}
+
+func proxyRegistrationRedirectURIs(serverURL string, requested *string) ([]string, error) {
+	if requested != nil {
+		if err := remotesessions.ValidateLoopbackRedirectURI(*requested); err != nil {
+			return nil, err
+		}
+		return []string{*requested}, nil
+	}
+
+	return []string{
+		fmt.Sprintf("%s/oauth/callback", serverURL),
+		fmt.Sprintf("%s/mcp/remote_login_callback", serverURL),
+		fmt.Sprintf("%s/x/mcp/remote_login_callback", serverURL),
+	}, nil
 }

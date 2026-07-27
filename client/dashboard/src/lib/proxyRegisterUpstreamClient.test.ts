@@ -33,6 +33,27 @@ describe("proxyRegisterUpstreamClient", () => {
     });
   });
 
+  it("forwards a device-agent loopback redirect URI", async () => {
+    const authedFetch: AuthedFetch = vi.fn(async () =>
+      jsonResponse({ client_id: "loopback-client" }),
+    );
+
+    await proxyRegisterUpstreamClient(authedFetch, {
+      registrationEndpoint: "https://idp.example/register",
+      redirectUri: "http://localhost:49152/callback",
+    });
+
+    expect(authedFetch).toHaveBeenCalledWith(
+      "/oauth/proxy-register",
+      expect.objectContaining({
+        body: JSON.stringify({
+          registration_endpoint: "https://idp.example/register",
+          redirect_uri: "http://localhost:49152/callback",
+        }),
+      }),
+    );
+  });
+
   it("surfaces the passed-through upstream message on a 4xx", async () => {
     const authedFetch: AuthedFetch = vi.fn(async () =>
       jsonResponse(

@@ -57,6 +57,7 @@ func TestRemoteLoginCallback_AuthenticatedSubject(t *testing.T) {
 		IsPublic:                     false,
 		UpstreamMetadata:             idp.OAuth21Metadata(t),
 		RemoteSessionCallbackBaseURL: ti.serverURL.String(),
+		RemoteSessionRedirectURI:     "",
 	})
 
 	mgr, authnCache := buildChallengeManagerForTest(t, ti)
@@ -101,6 +102,7 @@ func TestRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 		IsPublic:                     true,
 		UpstreamMetadata:             idp.OAuth21Metadata(t),
 		RemoteSessionCallbackBaseURL: ti.serverURL.String(),
+		RemoteSessionRedirectURI:     "",
 	})
 
 	mgr, authnCache := buildChallengeManagerForTest(t, ti)
@@ -159,6 +161,7 @@ func TestRemoteLoginCallback_FinalRedirectURI(t *testing.T) {
 		IsPublic:                     false,
 		UpstreamMetadata:             idp.OAuth21Metadata(t),
 		RemoteSessionCallbackBaseURL: ti.serverURL.String(),
+		RemoteSessionRedirectURI:     "",
 	})
 
 	mgr, _ := buildChallengeManagerForTest(t, ti)
@@ -176,6 +179,91 @@ func TestRemoteLoginCallback_FinalRedirectURI(t *testing.T) {
 	)
 }
 
+func TestRemoteLoginCallback_DeviceAgentLoopbackRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	idp := devidptest.Launch(t, devidptest.LaunchOpts{})
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	var relayedPath string
+	var relayedQuery url.Values
+	loopback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		relayedPath = r.URL.Path
+		relayedQuery = r.URL.Query()
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(loopback.Close)
+	callbackURI := loopback.URL + "/callback"
+
+	result := oauthtest.CreateIssuerGatedToolset(t, ctx, ti.conn, ti.enc, authCtx, oauthtest.IssuerGatedToolsetOpts{
+		Slug:                         "issuer-loopback",
+		IsPublic:                     false,
+		UpstreamMetadata:             idp.OAuth21Metadata(t),
+		RemoteSessionCallbackBaseURL: "",
+		RemoteSessionRedirectURI:     callbackURI,
+		AuthnChallengeMode:           "",
+	})
+
+	mgr, _ := buildChallengeManagerForTest(t, ti)
+	clients, err := mgr.ListClients(ctx, result.Toolset.ProjectID, result.Toolset.OrganizationID, result.UserSessionIssuer.ID)
+	require.NoError(t, err)
+	require.Len(t, clients, 1)
+
+	userSubject := urn.NewUserSubject(uuid.NewString())
+	authURL, err := mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
+		ID:                     uuid.NewString(),
+		ProjectID:              result.Toolset.ProjectID,
+		OrganizationID:         result.Toolset.OrganizationID,
+		UserSessionIssuerID:    result.UserSessionIssuer.ID,
+		Subject:                &userSubject,
+		McpSlug:                result.Toolset.McpSlug.String,
+		RouteBase:              "mcp",
+		FinalRedirectURI:       "",
+		RemoteOAuthRedirectURI: callbackURI,
+		Resource:               "",
+	}, clients[0])
+	require.NoError(t, err)
+
+	parsedAuthURL, err := url.Parse(authURL)
+	require.NoError(t, err)
+	require.Equal(t, callbackURI, parsedAuthURL.Query().Get("redirect_uri"))
+
+	// The strict dev IDP checks the authorize redirect against its DCR record,
+	// then the browser follows the redirect into the real loopback listener.
+	upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodGet, authURL, nil)
+	require.NoError(t, err)
+	upstreamResp, err := http.DefaultClient.Do(upstreamReq)
+	require.NoError(t, err)
+	defer func() { _ = upstreamResp.Body.Close() }()
+	require.Equal(t, http.StatusNoContent, upstreamResp.StatusCode)
+	require.Equal(t, "/callback", relayedPath)
+	require.NotEmpty(t, relayedQuery.Get("code"))
+	require.NotEmpty(t, relayedQuery.Get("state"))
+
+	// The agent forwards the callback parameters to Gram; Gram still owns the
+	// PKCE verifier, performs the exchange, and persists the remote session.
+	cbReq := httptest.NewRequest(
+		http.MethodGet,
+		"/mcp/remote_login_callback?"+relayedQuery.Encode(),
+		nil,
+	)
+	cbW := httptest.NewRecorder()
+	require.NoError(t, mgr.HandleRemoteLoginCallback(cbW, cbReq))
+	require.Equal(t, http.StatusSeeOther, cbW.Code)
+
+	sessions, err := remotesessions_repo.New(ti.conn).ListRemoteSessionsByProjectID(ctx, remotesessions_repo.ListRemoteSessionsByProjectIDParams{
+		ProjectID:  result.Toolset.ProjectID,
+		LimitValue: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, sessions, 1)
+	require.Equal(t, userSubject.String(), sessions[0].RemoteSession.SubjectUrn.String())
+}
+
 func TestRemoteLoginChallenge_CustomDomainRegistersGramCallback(t *testing.T) {
 	t.Parallel()
 
@@ -191,6 +279,7 @@ func TestRemoteLoginChallenge_CustomDomainRegistersGramCallback(t *testing.T) {
 		IsPublic:                     false,
 		UpstreamMetadata:             idp.OAuth21Metadata(t),
 		RemoteSessionCallbackBaseURL: ti.serverURL.String(),
+		RemoteSessionRedirectURI:     "",
 	})
 	result.Toolset, _ = attachCustomDomainToToolset(t, ctx, ti, authCtx, result.Toolset, "remote-login-custom.example.com")
 
