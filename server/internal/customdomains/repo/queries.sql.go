@@ -12,6 +12,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearDeletedCustomDomainResourceNames = `-- name: ClearDeletedCustomDomainResourceNames :exec
+UPDATE custom_domains
+SET
+    ingress_name = NULL,
+    cert_secret_name = NULL,
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND deleted IS TRUE
+`
+
+func (q *Queries) ClearDeletedCustomDomainResourceNames(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearDeletedCustomDomainResourceNames, id)
+	return err
+}
+
 const clearRootMcpEndpoint = `-- name: ClearRootMcpEndpoint :exec
 UPDATE mcp_endpoints
 SET
@@ -440,6 +455,45 @@ func (q *Queries) GetOrganizationSlugForHealthNotification(ctx context.Context, 
 	var slug string
 	err := row.Scan(&slug)
 	return slug, err
+}
+
+const getPendingDeletedCustomDomainByOrganization = `-- name: GetPendingDeletedCustomDomainByOrganization :one
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+FROM custom_domains
+WHERE organization_id = $1
+  AND deleted IS TRUE
+  AND ingress_name IS NOT NULL
+  AND ingress_name <> ''
+ORDER BY deleted_at DESC, id DESC
+LIMIT 1
+`
+
+func (q *Queries) GetPendingDeletedCustomDomainByOrganization(ctx context.Context, organizationID string) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, getPendingDeletedCustomDomainByOrganization, organizationID)
+	var i CustomDomain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Domain,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.ProvisionerKind,
+		&i.IpAllowlist,
+		&i.OpenaiAppsChallengeToken,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const listActivatedCustomDomainResources = `-- name: ListActivatedCustomDomainResources :many

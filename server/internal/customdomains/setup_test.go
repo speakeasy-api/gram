@@ -25,12 +25,21 @@ import (
 )
 
 type stubTemporalRun struct {
-	err error
+	err   error
+	onGet func(context.Context) error
 }
 
-func (s stubTemporalRun) Get(ctx context.Context, valuePtr any) error { return s.err }
+func (s stubTemporalRun) Get(ctx context.Context, valuePtr any) error {
+	if s.err != nil {
+		return s.err
+	}
+	if s.onGet != nil {
+		return s.onGet(ctx)
+	}
+	return nil
+}
 func (s stubTemporalRun) GetWithOptions(ctx context.Context, valuePtr any, options client.WorkflowRunGetOptions) error {
-	return s.err
+	return s.Get(ctx, valuePtr)
 }
 func (stubTemporalRun) GetID() string    { return "workflow" }
 func (stubTemporalRun) GetRunID() string { return "run" }
@@ -45,7 +54,9 @@ type stubTemporalClient struct {
 	lastOrganization  string
 	lastHealthCheckID uuid.UUID
 	lastReconcileID   uuid.UUID
+	reconcileStartErr error
 	reconcileErr      error
+	reconcile         func(context.Context, uuid.UUID) error
 }
 
 func (s *stubTemporalClient) GetWorkflowInfo(ctx context.Context, orgID string, domain string) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
@@ -55,32 +66,43 @@ func (s *stubTemporalClient) GetWorkflowInfo(ctx context.Context, orgID string, 
 func (s *stubTemporalClient) ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, createdBy urn.Principal, createdByName *string, _ k8s.ProvisionerKind, _ []string) (client.WorkflowRun, error) {
 	s.registrationCalls++
 	s.lastDomain = domain
-	return stubTemporalRun{}, nil
+	return stubTemporalRun{err: nil, onGet: nil}, nil
 }
 
 func (s *stubTemporalClient) ExecuteCustomDomainDeletion(ctx context.Context, orgID, domain, ingressName, certSecretName string, _ k8s.ProvisionerKind) (client.WorkflowRun, error) {
 	s.deletionCalls++
 	s.lastDomain = domain
-	return stubTemporalRun{}, nil
+	return stubTemporalRun{err: nil, onGet: nil}, nil
 }
 
 func (s *stubTemporalClient) ExecuteCustomDomainUpdate(ctx context.Context, orgID, domain string, _ k8s.ProvisionerKind, _ []string) (client.WorkflowRun, error) {
 	s.updateCalls++
 	s.lastDomain = domain
-	return stubTemporalRun{}, nil
+	return stubTemporalRun{err: nil, onGet: nil}, nil
 }
 
 func (s *stubTemporalClient) ExecuteCustomDomainReconcile(ctx context.Context, customDomainID uuid.UUID) (client.WorkflowRun, error) {
 	s.reconcileCalls++
 	s.lastReconcileID = customDomainID
-	return stubTemporalRun{err: s.reconcileErr}, nil
+	if s.reconcileStartErr != nil {
+		return nil, s.reconcileStartErr
+	}
+	return stubTemporalRun{
+		err: s.reconcileErr,
+		onGet: func(ctx context.Context) error {
+			if s.reconcile == nil {
+				return nil
+			}
+			return s.reconcile(ctx, customDomainID)
+		},
+	}, nil
 }
 
 func (s *stubTemporalClient) ExecuteCustomDomainHealthCheck(ctx context.Context, organizationID string, customDomainID uuid.UUID) (client.WorkflowRun, error) {
 	s.healthCheckCalls++
 	s.lastOrganization = organizationID
 	s.lastHealthCheckID = customDomainID
-	return stubTemporalRun{}, nil
+	return stubTemporalRun{err: nil, onGet: nil}, nil
 }
 
 type serviceTestInstance struct {

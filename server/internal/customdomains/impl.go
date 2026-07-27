@@ -437,9 +437,23 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 		return err
 	}
 
-	domain, err := repo.New(s.db).GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+	repository := repo.New(s.db)
+	domain, err := repository.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		pending, pendingErr := repository.GetPendingDeletedCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+		if errors.Is(pendingErr, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "no custom domain found for organization").LogError(ctx, s.logger)
+		}
+		if pendingErr != nil {
+			return oops.E(oops.CodeUnexpected, pendingErr, "find custom domain cleanup pending retry").LogError(ctx, s.logger)
+		}
+		if err := s.reconcileCustomDomain(ctx, pending.ID); err != nil {
+			return err
+		}
+		return nil
+	}
 	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "no custom domain found for organization").LogError(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "get custom domain for deletion").LogError(ctx, s.logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)

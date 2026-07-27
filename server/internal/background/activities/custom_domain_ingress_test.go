@@ -391,8 +391,8 @@ func TestReconcileCustomDomain_DeleteDuringApplyRemovesAppliedResource(t *testin
 	deleted, err := customdomainsRepo.New(conn).GetCustomDomainRouteConfig(ctx, customDomain.ID)
 	require.NoError(t, err)
 	require.True(t, deleted.Deleted)
-	require.Equal(t, "race-resource", deleted.IngressName.String)
-	require.Equal(t, "race-secret", deleted.CertSecretName.String)
+	require.False(t, deleted.IngressName.Valid)
+	require.False(t, deleted.CertSecretName.Valid)
 }
 
 func TestReconcileCustomDomain_DeleteDuringConvergenceConvergesToDeleted(t *testing.T) {
@@ -431,7 +431,11 @@ func TestReconcileCustomDomain_DeleteDuringConvergenceConvergesToDeleted(t *test
 	go func() {
 		reconcileResult <- reconciler.ReconcileCustomDomain(ctx, activities.ReconcileCustomDomainArgs{CustomDomainID: customDomain.ID})
 	}()
-	<-provisioner.applyStarted
+	select {
+	case <-provisioner.applyStarted:
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "Apply did not start")
+	}
 	close(provisioner.releaseApply)
 	require.Eventually(t, func() bool {
 		route, routeErr := customdomainsRepo.New(conn).GetCustomDomainRouteConfig(ctx, customDomain.ID)
@@ -451,6 +455,10 @@ func TestReconcileCustomDomain_DeleteDuringConvergenceConvergesToDeleted(t *test
 
 	_, err = customdomainsRepo.New(conn).GetCustomDomainByID(ctx, customDomain.ID)
 	require.Error(t, err)
+	deleted, err := customdomainsRepo.New(conn).GetCustomDomainRouteConfig(ctx, customDomain.ID)
+	require.NoError(t, err)
+	require.False(t, deleted.IngressName.Valid)
+	require.False(t, deleted.CertSecretName.Valid)
 }
 
 func TestReconcileCustomDomain_DeletedWithoutResourcesNoops(t *testing.T) {
@@ -517,12 +525,15 @@ func TestReconcileCustomDomain_DeletedRetriesDeleteIdempotently(t *testing.T) {
 		require.NoError(t, reconciler.ReconcileCustomDomain(ctx, activities.ReconcileCustomDomainArgs{CustomDomainID: customDomain.ID}))
 	}
 	calls := provisioner.Calls()
-	require.Len(t, calls, 2)
-	for _, call := range calls {
-		require.Equal(t, "Delete", call.Method)
-		require.Equal(t, "retry-resource", call.ResourceName)
-		require.Equal(t, "retry-secret", call.SecretName)
-	}
+	require.Len(t, calls, 1)
+	require.Equal(t, "Delete", calls[0].Method)
+	require.Equal(t, "retry-resource", calls[0].ResourceName)
+	require.Equal(t, "retry-secret", calls[0].SecretName)
+
+	deleted, err := customdomainsRepo.New(conn).GetCustomDomainRouteConfig(ctx, customDomain.ID)
+	require.NoError(t, err)
+	require.False(t, deleted.IngressName.Valid)
+	require.False(t, deleted.CertSecretName.Valid)
 }
 
 func TestReconcileCustomDomain_NotFoundNoops(t *testing.T) {

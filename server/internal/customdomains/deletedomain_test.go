@@ -1,6 +1,7 @@
 package customdomains_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -12,10 +13,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	cdrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/k8s"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
+
+type deleteTestProvisionerFactory struct {
+	provisioner k8s.CustomDomainProvisioner
+}
+
+func (f *deleteTestProvisionerFactory) Provisioner(_ k8s.ProvisionerKind) k8s.CustomDomainProvisioner {
+	return f.provisioner
+}
 
 func TestDeleteDomain_NoCustomDomain_NotFound(t *testing.T) {
 	t.Parallel()
@@ -181,4 +193,63 @@ func TestDeleteDomain_AwaitsReconcileAfterCommit(t *testing.T) {
 
 	_, err = ti.repo.GetCustomDomainByID(ctx, domain.ID)
 	require.Error(t, err, "soft delete must commit before reconciliation starts")
+}
+
+func TestDeleteDomain_RetryCompletesPendingCleanup(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	domain, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          "delete-retry.example.com",
+		IngressName:     pgTextValid("retry-ingress"),
+		CertSecretName:  pgTextValid("retry-secret"),
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+
+	logger := testenv.NewLogger(t)
+	provisioner := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
+	reconciler := activities.NewCustomDomainIngress(
+		logger,
+		ti.conn,
+		&deleteTestProvisionerFactory{provisioner: provisioner},
+	)
+	ti.temporal.reconcile = func(ctx context.Context, customDomainID uuid.UUID) error {
+		return reconciler.ReconcileCustomDomain(ctx, activities.ReconcileCustomDomainArgs{CustomDomainID: customDomainID})
+	}
+	ti.temporal.reconcileStartErr = errors.New("signal failed")
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	require.Error(t, ti.service.DeleteDomain(ctx, &gen.DeleteDomainPayload{SessionToken: nil}))
+	pending, err := ti.repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	require.NoError(t, err)
+	require.True(t, pending.IngressName.Valid)
+
+	ti.temporal.reconcileStartErr = nil
+	require.NoError(t, ti.service.DeleteDomain(ctx, &gen.DeleteDomainPayload{SessionToken: nil}))
+	require.Equal(t, 2, ti.temporal.reconcileCalls)
+	require.Equal(t, domain.ID, ti.temporal.lastReconcileID)
+
+	calls := provisioner.Calls()
+	require.Len(t, calls, 1)
+	require.Equal(t, "Delete", calls[0].Method)
+	require.Equal(t, "retry-ingress", calls[0].ResourceName)
+	require.Equal(t, "retry-secret", calls[0].SecretName)
+
+	cleaned, err := ti.repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	require.NoError(t, err)
+	require.False(t, cleaned.IngressName.Valid)
+	require.False(t, cleaned.CertSecretName.Valid)
+
+	err = ti.service.DeleteDomain(ctx, &gen.DeleteDomainPayload{SessionToken: nil})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+	require.Equal(t, 2, ti.temporal.reconcileCalls)
 }

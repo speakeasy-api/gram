@@ -156,6 +156,9 @@ func (c *CustomDomainIngress) ReconcileCustomDomain(ctx context.Context, args Re
 		if err := provisioner.Delete(ctx, desired.IngressName.String, desired.CertSecretName.String); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "delete custom domain resource").LogError(ctx, c.logger)
 		}
+		if err := c.domains.ClearDeletedCustomDomainResourceNames(ctx, desired.ID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "clear deleted custom domain resource names").LogError(ctx, c.logger)
+		}
 		return nil
 	}
 
@@ -179,6 +182,9 @@ func (c *CustomDomainIngress) ReconcileCustomDomain(ctx context.Context, args Re
 		)
 		if err := provisioner.Delete(ctx, result.ResourceName, result.SecretName); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "delete custom domain resource applied after deletion").LogError(ctx, c.logger)
+		}
+		if err := c.domains.ClearDeletedCustomDomainResourceNames(ctx, desired.ID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "clear deleted custom domain resource names").LogError(ctx, c.logger)
 		}
 		return nil
 	}

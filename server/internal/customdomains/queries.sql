@@ -23,6 +23,16 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 LIMIT 1;
 
+-- name: GetPendingDeletedCustomDomainByOrganization :one
+SELECT *
+FROM custom_domains
+WHERE organization_id = @organization_id
+  AND deleted IS TRUE
+  AND ingress_name IS NOT NULL
+  AND ingress_name <> ''
+ORDER BY deleted_at DESC, id DESC
+LIMIT 1;
+
 -- name: LockCustomDomainByOrganization :one
 SELECT *
 FROM custom_domains
@@ -237,6 +247,15 @@ SET
     updated_at = clock_timestamp()
 WHERE id = @id
 RETURNING *;
+
+-- name: ClearDeletedCustomDomainResourceNames :exec
+UPDATE custom_domains
+SET
+    ingress_name = NULL,
+    cert_secret_name = NULL,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND deleted IS TRUE;
 
 -- name: UpdateCustomDomainIPAllowlist :one
 UPDATE custom_domains
