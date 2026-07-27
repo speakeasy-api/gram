@@ -2,7 +2,9 @@ package background
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -12,6 +14,8 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestCustomDomainReconcileWorkflowID(t *testing.T) {
@@ -99,4 +103,44 @@ func TestCustomDomainReconcileWorkflowRunsAgainForSignalAfterApply(t *testing.T)
 	var continueAsNewErr *workflow.ContinueAsNewError
 	require.ErrorAs(t, env.GetWorkflowError(), &continueAsNewErr)
 	require.Equal(t, "CustomDomainReconcileWorkflow", continueAsNewErr.WorkflowType.Name)
+}
+
+func TestCustomDomainRegistrationWorkflowUsesReconcileBridgeBudget(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterActivityWithOptions(
+		func(context.Context, activities.VerifyCustomDomainArgs) error {
+			return nil
+		},
+		activity.RegisterOptions{Name: "VerifyCustomDomain"},
+	)
+	bridgeAttempts := 0
+	var bridgeTimeout time.Duration
+	env.RegisterActivityWithOptions(
+		func(ctx context.Context, _ SignalCustomDomainReconcileArgs) error {
+			bridgeAttempts++
+			deadline, ok := ctx.Deadline()
+			require.True(t, ok)
+			bridgeTimeout = time.Until(deadline)
+			return errors.New("bridge failed")
+		},
+		activity.RegisterOptions{Name: "SignalCustomDomainReconcile"},
+	)
+
+	env.ExecuteWorkflow(CustomDomainRegistrationWorkflow, CustomDomainRegistrationParams{
+		OrgID:           "test-organization",
+		Domain:          "test.example.com",
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: k8s.ProvisionerKindIngress,
+		IPAllowlist:     nil,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.Error(t, env.GetWorkflowError())
+	require.Equal(t, signalCustomDomainReconcileActivityMaximumAttempts, bridgeAttempts)
+	require.Greater(t, bridgeTimeout, 11*time.Minute)
+	require.LessOrEqual(t, bridgeTimeout, signalCustomDomainReconcileStartToCloseTimeout)
 }

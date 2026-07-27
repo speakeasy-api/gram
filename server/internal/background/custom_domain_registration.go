@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -16,6 +17,13 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+)
+
+const (
+	customDomainReconcileWorkflowRunTimeout            = 15 * time.Minute
+	customDomainRegistrationWorkflowRunTimeout         = 30 * time.Minute
+	signalCustomDomainReconcileStartToCloseTimeout     = 12 * time.Minute
+	signalCustomDomainReconcileActivityMaximumAttempts = 2
 )
 
 type CustomDomainRegistrationParams struct {
@@ -101,7 +109,7 @@ func (c *CustomDomainRegistrationClient) ExecuteCustomDomainReconcile(ctx contex
 			TaskQueue:                string(c.TemporalEnv.Queue()),
 			WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 			WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-			WorkflowRunTimeout:       5 * time.Minute,
+			WorkflowRunTimeout:       customDomainReconcileWorkflowRunTimeout,
 		},
 		CustomDomainReconcileWorkflow,
 		params,
@@ -151,7 +159,7 @@ func (c *CustomDomainRegistrationClient) ExecuteCustomDomainRegistration(ctx con
 		ID:                    id,
 		TaskQueue:             string(c.TemporalEnv.Queue()),
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowRunTimeout:    5 * time.Minute,
+		WorkflowRunTimeout:    customDomainRegistrationWorkflowRunTimeout,
 	}, CustomDomainRegistrationWorkflow, CustomDomainRegistrationParams{
 		OrgID:           orgID,
 		Domain:          domain,
@@ -215,10 +223,16 @@ func CustomDomainRegistrationWorkflow(ctx workflow.Context, params CustomDomainR
 			},
 		).Get(ingressCreateCtx, nil)
 	} else {
-		err = workflow.ExecuteActivity(ctx, a.SignalCustomDomainReconcile, SignalCustomDomainReconcileArgs{
+		reconcileCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: signalCustomDomainReconcileStartToCloseTimeout,
+			RetryPolicy: &temporal.RetryPolicy{
+				MaximumAttempts: signalCustomDomainReconcileActivityMaximumAttempts,
+			},
+		})
+		err = workflow.ExecuteActivity(reconcileCtx, a.SignalCustomDomainReconcile, SignalCustomDomainReconcileArgs{
 			OrgID:  params.OrgID,
 			Domain: params.Domain,
-		}).Get(ctx, nil)
+		}).Get(reconcileCtx, nil)
 	}
 	if err != nil {
 		logger.Error("failed to reconcile custom domain route", "error", err.Error(), "org_id", params.OrgID, "domain", params.Domain)
@@ -249,10 +263,22 @@ func (a *Activities) SignalCustomDomainReconcile(ctx context.Context, args Signa
 	if err != nil {
 		return err
 	}
-	if err := run.Get(ctx, nil); err != nil {
+	if err := waitForCurrentCustomDomainReconcileRun(ctx, run); err != nil {
 		return fmt.Errorf("custom domain reconcile workflow: %w", err)
 	}
 	return nil
+}
+
+func waitForCurrentCustomDomainReconcileRun(ctx context.Context, run client.WorkflowRun) error {
+	err := run.GetWithOptions(ctx, nil, client.WorkflowRunGetOptions{DisableFollowingRuns: true})
+	if err == nil {
+		return nil
+	}
+	var continueAsNewErr *workflow.ContinueAsNewError
+	if errors.As(err, &continueAsNewErr) {
+		return nil
+	}
+	return fmt.Errorf("get current custom domain reconcile run: %w", err)
 }
 
 func CustomDomainUpdateWorkflow(ctx workflow.Context, params CustomDomainUpdateParams) error {
