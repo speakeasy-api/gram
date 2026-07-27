@@ -446,6 +446,46 @@ DO UPDATE SET
     updated_at = clock_timestamp()
 RETURNING *;
 
+-- name: UpsertRemoteSessionIfUnchanged :one
+-- Compare-and-swap variant of UpsertRemoteSession for the refresh path. Two
+-- concurrent refreshes can both come back holding a rotated token pair; without
+-- the guard the slower writer persists a refresh token the provider has already
+-- consumed, and the session stays broken until the user re-links. No rows means
+-- another writer got there first.
+--
+-- The INSERT branch is unreachable for a live session; it is kept so a session
+-- revoked mid-refresh behaves as it does under UpsertRemoteSession.
+INSERT INTO remote_sessions (
+    subject_urn,
+    user_session_issuer_id,
+    remote_session_client_id,
+    access_token_encrypted,
+    access_expires_at,
+    refresh_token_encrypted,
+    refresh_expires_at,
+    scopes
+)
+VALUES (
+    @subject_urn,
+    @user_session_issuer_id,
+    @remote_session_client_id,
+    @access_token_encrypted,
+    @access_expires_at,
+    @refresh_token_encrypted,
+    @refresh_expires_at,
+    @scopes
+)
+ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
+DO UPDATE SET
+    access_token_encrypted = EXCLUDED.access_token_encrypted,
+    access_expires_at = EXCLUDED.access_expires_at,
+    refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
+    refresh_expires_at = EXCLUDED.refresh_expires_at,
+    scopes = EXCLUDED.scopes,
+    updated_at = clock_timestamp()
+WHERE remote_sessions.updated_at = @expected_updated_at
+RETURNING *;
+
 -- name: GetActiveRemoteSession :one
 -- Look up the active remote_session for a (subject, client) binding.
 -- Single-row exact lookup; uniqueness enforced by the partial unique

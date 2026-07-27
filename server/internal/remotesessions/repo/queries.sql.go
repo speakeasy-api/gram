@@ -3481,3 +3481,91 @@ func (q *Queries) UpsertRemoteSession(ctx context.Context, arg UpsertRemoteSessi
 	)
 	return i, err
 }
+
+const upsertRemoteSessionIfUnchanged = `-- name: UpsertRemoteSessionIfUnchanged :one
+INSERT INTO remote_sessions (
+    subject_urn,
+    user_session_issuer_id,
+    remote_session_client_id,
+    access_token_encrypted,
+    access_expires_at,
+    refresh_token_encrypted,
+    refresh_expires_at,
+    scopes
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8
+)
+ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
+DO UPDATE SET
+    access_token_encrypted = EXCLUDED.access_token_encrypted,
+    access_expires_at = EXCLUDED.access_expires_at,
+    refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
+    refresh_expires_at = EXCLUDED.refresh_expires_at,
+    scopes = EXCLUDED.scopes,
+    updated_at = clock_timestamp()
+WHERE remote_sessions.updated_at = $9
+RETURNING id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, refresh_expires_at, scopes, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertRemoteSessionIfUnchangedParams struct {
+	SubjectUrn            urn.SessionSubject
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	AccessTokenEncrypted  string
+	AccessExpiresAt       pgtype.Timestamptz
+	RefreshTokenEncrypted pgtype.Text
+	RefreshExpiresAt      pgtype.Timestamptz
+	Scopes                []string
+	ExpectedUpdatedAt     pgtype.Timestamptz
+}
+
+// Compare-and-swap variant of UpsertRemoteSession, used by the refresh path.
+// The upstream token POST runs outside any transaction, so two concurrent
+// refreshes for one (subject, client) can both return holding a rotated token
+// pair. Without the updated_at guard the slower writer overwrites the faster
+// one and persists a refresh token the provider has already consumed, leaving
+// the session permanently unusable until the user re-links.
+//
+// Returns no rows when another writer rotated the row first; the caller adopts
+// that writer's tokens rather than clobbering them. The INSERT branch is
+// unreachable for a live session (the row exists, so the conflict target
+// matches) and is retained only so a session revoked mid-refresh behaves the
+// same as it does under UpsertRemoteSession.
+func (q *Queries) UpsertRemoteSessionIfUnchanged(ctx context.Context, arg UpsertRemoteSessionIfUnchangedParams) (RemoteSession, error) {
+	row := q.db.QueryRow(ctx, upsertRemoteSessionIfUnchanged,
+		arg.SubjectUrn,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.AccessTokenEncrypted,
+		arg.AccessExpiresAt,
+		arg.RefreshTokenEncrypted,
+		arg.RefreshExpiresAt,
+		arg.Scopes,
+		arg.ExpectedUpdatedAt,
+	)
+	var i RemoteSession
+	err := row.Scan(
+		&i.ID,
+		&i.SubjectUrn,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.AccessTokenEncrypted,
+		&i.AccessExpiresAt,
+		&i.RefreshTokenEncrypted,
+		&i.RefreshExpiresAt,
+		&i.Scopes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}

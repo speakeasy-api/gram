@@ -278,18 +278,142 @@ func (m *ChallengeManager) validateAndRefresh(
 	return m.refreshAccessToken(ctx, sess, resource)
 }
 
-// refreshAccessToken is the lazy-path wrapper: it runs the shared refresh and
-// returns just the new access token, discarding the persisted row.
+// errRefreshRaceLost marks a refresh beaten to the row by a concurrent one. A
+// private cause, not a Reason: the caller recovers from it rather than
+// surfacing it.
+var errRefreshRaceLost = errors.New("remotesessions: refresh lost to a concurrent rotation")
+
+const (
+	// A lease, not a mutex: a lost or expired one is caught by the
+	// compare-and-swap in refreshSessionTokens.
+	refreshLockTTL = 15 * time.Second
+
+	// Must exceed a normal upstream refresh round-trip. Expiring it early
+	// reintroduces the duplicate POST the lock exists to prevent.
+	refreshWaitBudget = 5 * time.Second
+
+	refreshWaitPoll = 20 * time.Millisecond
+)
+
+// refreshLockKey scopes the lock to the pair the partial unique index makes
+// exclusive, so unrelated subjects never block each other.
+func refreshLockKey(subject urn.SessionSubject, clientID uuid.UUID) string {
+	return "remotesession:refresh:" + subject.String() + ":" + clientID.String()
+}
+
+// refreshAccessToken returns a freshly refreshed upstream access token.
+//
+// Several MCP requests for one subject routinely arrive together once the
+// upstream token has aged out. Left unserialized they all present the same
+// stored refresh token, and a provider that rotates single-use tokens honours
+// the first and rejects the rest — so every loser becomes an ErrNoValidToken,
+// then a 401 at the MCP gate, and the user is told to reconnect a session that
+// was never broken.
+//
+// The lock elects one refresher per binding so the losers never call the
+// upstream at all. The re-read after a failed refresh backstops what the lock
+// cannot cover: Redis down, the lease expiring, or a holder that never writes.
 func (m *ChallengeManager) refreshAccessToken(
 	ctx context.Context,
 	sess remotesessions_repo.RemoteSession,
 	resource string,
 ) (string, error) {
-	_, accessToken, err := refreshSessionTokens(ctx, remotesessions_repo.New(m.db), m.enc, m.policy, sess, resource)
-	if err != nil {
-		return "", err
+	q := remotesessions_repo.New(m.db)
+
+	lockKey := refreshLockKey(sess.SubjectUrn, sess.RemoteSessionClientID)
+	held, lockErr := m.locks.Add(ctx, lockKey, refreshLockTTL)
+
+	switch {
+	case lockErr != nil:
+		// Refreshing unserialized beats refusing to refresh, and the
+		// compare-and-swap still stops a losing writer from clobbering.
+		m.logger.WarnContext(ctx, "remote session refresh lock unavailable; refreshing without single-flight",
+			attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
+			attr.SlogCacheKey(lockKey),
+			attr.SlogError(lockErr),
+		)
+	case !held:
+		if token, ok := m.awaitRefreshedToken(ctx, q, sess); ok {
+			return token, nil
+		}
+		// Refreshing ourselves risks a duplicate POST; not refreshing
+		// guarantees a reconnect prompt.
+		m.logger.WarnContext(ctx, "timed out waiting on a concurrent remote session refresh; refreshing directly",
+			attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
+			attr.SlogCacheKey(lockKey),
+		)
+	default:
+		defer o11y.LogDefer(ctx, m.logger, func() error { return m.locks.Delete(ctx, lockKey) })
 	}
-	return accessToken, nil
+
+	_, accessToken, refreshErr := refreshSessionTokens(ctx, q, m.enc, m.policy, sess, resource)
+	if refreshErr == nil {
+		return accessToken, nil
+	}
+
+	latest, err := q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            sess.SubjectUrn,
+		RemoteSessionClientID: sess.RemoteSessionClientID,
+	})
+	if err != nil {
+		return "", refreshErr
+	}
+
+	// Nothing else moved the row, so our failure is the real state of the
+	// session rather than the losing half of a race.
+	if !latest.UpdatedAt.Time.After(sess.UpdatedAt.Time) {
+		return "", refreshErr
+	}
+
+	plain, err := m.enc.Decrypt(latest.AccessTokenEncrypted)
+	if err != nil {
+		return "", refreshErr
+	}
+
+	return plain, nil
+}
+
+// awaitRefreshedToken waits for the lock holder to persist its rotation and
+// returns the access token it wrote. Reports false if the row has not moved
+// within refreshWaitBudget, rather than stranding the caller on a dead holder.
+func (m *ChallengeManager) awaitRefreshedToken(
+	ctx context.Context,
+	q *remotesessions_repo.Queries,
+	sess remotesessions_repo.RemoteSession,
+) (string, bool) {
+	ticker := time.NewTicker(refreshWaitPoll)
+	defer ticker.Stop()
+
+	deadline := time.NewTimer(refreshWaitBudget)
+	defer deadline.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return "", false
+		case <-deadline.C:
+			return "", false
+		case <-ticker.C:
+		}
+
+		latest, err := q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
+			SubjectUrn:            sess.SubjectUrn,
+			RemoteSessionClientID: sess.RemoteSessionClientID,
+		})
+		if err != nil {
+			return "", false
+		}
+		if !latest.UpdatedAt.Time.After(sess.UpdatedAt.Time) {
+			continue
+		}
+
+		plain, err := m.enc.Decrypt(latest.AccessTokenEncrypted)
+		if err != nil {
+			return "", false
+		}
+
+		return plain, true
+	}
 }
 
 // refreshSessionTokens POSTs grant_type=refresh_token to the upstream token
@@ -403,7 +527,10 @@ func refreshSessionTokens(
 		refreshExpires = conv.ToPGTimestamptz(v)
 	}
 
-	updated, err := q.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	// Compare-and-swap on the updated_at read before the POST. Whoever got
+	// there first owns the row; overwriting it would persist a refresh token
+	// the provider has already consumed and break the session for good.
+	updated, err := q.UpsertRemoteSessionIfUnchanged(ctx, remotesessions_repo.UpsertRemoteSessionIfUnchangedParams{
 		SubjectUrn:            sess.SubjectUrn,
 		UserSessionIssuerID:   sess.UserSessionIssuerID,
 		RemoteSessionClientID: sess.RemoteSessionClientID,
@@ -412,8 +539,12 @@ func refreshSessionTokens(
 		RefreshTokenEncrypted: newRefreshEnc,
 		RefreshExpiresAt:      refreshExpires,
 		Scopes:                sess.Scopes,
+		ExpectedUpdatedAt:     sess.UpdatedAt,
 	})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return zero, "", newTokenRefreshError("the session was refreshed by another request; reload and try again", errRefreshRaceLost)
+		}
 		return zero, "", fmt.Errorf("persist refreshed session: %w", err)
 	}
 
