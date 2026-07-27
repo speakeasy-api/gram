@@ -5,6 +5,7 @@ import {
   permissionAsked,
   promptSubmitted,
   redactMcpCommand,
+  redactUrl,
   sessionEnded,
   sessionStarted,
   toolCompleted,
@@ -111,11 +112,21 @@ export const GramObservability: Plugin = async ({ directory, client }) => {
     },
     "chat.message": async (input, output) => {
       const text = textFromParts(output.parts);
-      void send(promptSubmitted({ sessionID: input.sessionID }, text, ctx));
+      const v = await send(
+        promptSubmitted({ sessionID: input.sessionID }, text, ctx),
+      );
+      if (v?.decision === "deny") {
+        throw new Error(v.message ?? v.reason ?? "Blocked by Speakeasy policy");
+      }
     },
     "tool.execute.before": async (input, output) => {
       ensureMcpServers();
-      void send(toolRequested(input, output.args, ctx));
+      // This single send doubles as telemetry and enforcement — no extra
+      // request. A deny aborts the tool call; undefined (fail-open) proceeds.
+      const v = await send(toolRequested(input, output.args, ctx));
+      if (v?.decision === "deny") {
+        throw new Error(v.message ?? v.reason ?? "Blocked by Speakeasy policy");
+      }
     },
     "tool.execute.after": async (input, output) => {
       ensureMcpServers();
@@ -161,7 +172,7 @@ async function loadMcpServers(
     const res = await client.config.get({ query: { directory } });
     for (const [name, cfg] of Object.entries(res.data?.mcp ?? {})) {
       if (cfg.type === "remote") {
-        servers.set(name, { url: cfg.url });
+        servers.set(name, { url: redactUrl(cfg.url) });
       } else if (cfg.type === "local") {
         servers.set(name, { command: redactMcpCommand(cfg.command) });
       } else {

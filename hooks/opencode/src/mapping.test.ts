@@ -4,6 +4,7 @@ import {
   permissionAsked,
   promptSubmitted,
   redactMcpCommand,
+  redactUrl,
   resolveMcpTool,
   sessionEnded,
   sessionStarted,
@@ -273,5 +274,33 @@ describe("redactMcpCommand", () => {
     expect(redactMcpCommand(["uvx", "srv", "--port", "8080"])).toBe(
       "uvx srv --port 8080",
     );
+  });
+});
+
+describe("redactUrl", () => {
+  it("strips user:pass@ basic-auth userinfo", () => {
+    expect(redactUrl("https://user:pass@mcp.example.com/mcp")).toBe(
+      "https://mcp.example.com/mcp",
+    );
+  });
+
+  it("masks secret-named query params and leaves benign ones intact", () => {
+    const out = redactUrl(
+      "https://mcp.example.com/mcp?api_key=sk-secret&region=us&signature=abc",
+    );
+    expect(out).toContain("api_key=***");
+    expect(out).toContain("signature=***");
+    expect(out).toContain("region=us");
+    expect(out).not.toContain("sk-secret");
+  });
+
+  it("leaves a clean URL unchanged", () => {
+    expect(redactUrl("https://mcp.context7.com/mcp")).toBe(
+      "https://mcp.context7.com/mcp",
+    );
+  });
+
+  it("returns unparseable input unchanged (fail-open)", () => {
+    expect(redactUrl("not a url")).toBe("not a url");
   });
 });

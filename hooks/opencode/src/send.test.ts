@@ -64,4 +64,68 @@ describe("send", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it("returns the deny verdict parsed from a 2xx body", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        decision: "deny",
+        reason: "policy_denied",
+        message: "Blocked: no rm -rf",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(send(body)).resolves.toEqual({
+      decision: "deny",
+      reason: "policy_denied",
+      message: "Blocked: no rm -rf",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns the allow verdict parsed from a 2xx body", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(Response.json({ decision: "allow" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(send(body)).resolves.toEqual({ decision: "allow" });
+  });
+
+  it("fails open (undefined) on a non-2xx status after retrying", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 500 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(send(body)).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails open on a 2xx body that is not parseable JSON", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("not json", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(send(body)).resolves.toBeUndefined();
+  });
+
+  it("fails open on an unrecognized decision value", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(Response.json({ decision: "maybe" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(send(body)).resolves.toBeUndefined();
+  });
+
+  it("returns undefined without fetching on a non-TLS URL", async () => {
+    process.env.GRAM_URL = "http://evil.example.com";
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(send(body)).resolves.toBeUndefined();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

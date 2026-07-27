@@ -102,6 +102,35 @@ export function redactMcpCommand(command: readonly string[]): string {
   return out.join(" ");
 }
 
+// Credential material rides in a remote MCP server's url as basic-auth userinfo
+// or secret-named query params. redactUrl strips both before the url leaves the
+// machine as telemetry, mirroring the Go relay's redactURL (hooks/relay/redact.go):
+// drop user:pass@ and the fragment, mask secret/signature-named query values,
+// keep host/path/benign params matchable. Fail-open: an unparseable url is
+// returned unchanged (observability over strictness, as the relay does).
+const SECRET_PARAM = /(key|token|secret|password|passwd|credential|auth)/i;
+const SIGNATURE_PARAM = /^(sig|signature|x-amz-signature|x-goog-signature)$/i;
+
+export function redactUrl(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed === "") return raw;
+  let u: URL;
+  try {
+    u = new URL(trimmed);
+  } catch {
+    return raw;
+  }
+  u.username = "";
+  u.password = "";
+  u.hash = "";
+  for (const k of [...u.searchParams.keys()]) {
+    if (SECRET_PARAM.test(k) || SIGNATURE_PARAM.test(k)) {
+      u.searchParams.set(k, "***");
+    }
+  }
+  return u.toString();
+}
+
 // Wire shape of the ingest payload's data.mcp block (HookMCPData in the Goa
 // design). server_name is always set; url/command are set per transport.
 export type McpBlock = {

@@ -409,16 +409,24 @@ func isReservedAssistantAdapter(adapter string) bool {
 
 func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, timestamp time.Time) (string, string) {
 	event := canonicalHookEvent(payload, authCtx, actor, timestamp)
+	// opencode has no ask-capable transport, so a warn (challenge) can't be
+	// surfaced for it as an ask — treat warn as a hard deny for opencode only.
+	// Every other adapter keeps today's behavior (warn defers to its
+	// ask-capable legacy handler). MVP; ack/retry challenge deferred; universal
+	// warn parity on the canonical path is tracked in DNO-648.
+	isOpencode := strings.TrimSpace(payload.Source.Adapter) == "opencode"
 	switch strings.TrimSpace(payload.Event.Type) {
 	case "prompt.submitted":
 		ev := hookevents.NewUserPromptSubmit(event, hookevents.UserPromptSubmitParams{
 			Prompt: canonicalPromptText(payload),
 		})
-		// A warn (challenge) is never blocked here: the canonical ingest
-		// transport has no native confirmation primitive, and hard-denying
-		// would clobber the ask a dedicated ask-capable hook (Claude
+		// A warn (challenge) is never blocked here for most adapters: the
+		// canonical ingest transport has no native confirmation primitive, and
+		// hard-denying would clobber the ask a dedicated ask-capable hook (Claude
 		// PreToolUse) surfaces for the same event. Defer to that transport.
-		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
+		// Exception: opencode has no ask-capable transport, so warn hard-denies
+		// for it (MVP; ack/retry deferred — DNO-648).
+		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil && (scanResult.Action != "warn" || isOpencode) {
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			return auditReason, renderUserBlockReason(scanResult.UserMessage, auditReason)
 		}
@@ -431,7 +439,7 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				ToolInput:      toolInput,
 				PermissionType: permissionType,
 			})
-			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
+			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil && (scanResult.Action != "warn" || isOpencode) {
 				auditReason := fmt.Sprintf("Speakeasy blocked this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 				userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 				return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, toolName, scanResult.PolicyID, userReason)
@@ -442,7 +450,7 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				ToolName:  toolName,
 				ToolInput: toolInput,
 			})
-			if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
+			if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil && (scanResult.Action != "warn" || isOpencode) {
 				auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 				userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 				return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, toolName, scanResult.PolicyID, userReason)
@@ -453,8 +461,9 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 			ToolName:  toolName,
 			ToolInput: toolInput,
 		})
-		// warn defers to the ask-capable transport (see prompt.submitted note).
-		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
+		// warn defers to the ask-capable transport (see prompt.submitted note),
+		// except opencode, for which warn hard-denies (MVP — DNO-648).
+		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil && (scanResult.Action != "warn" || isOpencode) {
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, toolName, scanResult.PolicyID, userReason)
