@@ -434,13 +434,11 @@ func TestFindOrphanCustomDomainResourcesFlagsMismatchedIdentity(t *testing.T) {
 	stub := &stubInfrastructureChecker{resources: []k8s.ManagedCustomDomainResource{
 		{Kind: k8s.ProvisionerKindIngress, Name: "active-example-com", Domain: "active.example.com"},
 		{Kind: k8s.ProvisionerKindIngress, Name: "duplicate-active-example-com", Domain: "active.example.com"},
-		{Kind: k8s.ProvisionerKindGateway, Name: "active-example-com", Domain: "active.example.com"},
 	}}
 	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", noopEmailService(t), nil, nil)
 
 	err = checker.FindOrphanResources(t.Context())
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "2 orphaned custom domain resources")
+	require.Contains(t, err.Error(), "1 orphaned custom domain resources")
 	require.Contains(t, err.Error(), "duplicate-active-example-com")
-	require.Contains(t, err.Error(), "gateway/active-example-com")
 }

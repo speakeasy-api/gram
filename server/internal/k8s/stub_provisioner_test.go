@@ -13,11 +13,10 @@ func TestStubProvisioner_KindMatchesRequest(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	clients, err := k8s.InitializeK8sClient(ctx, testenv.NewLogger(t), "local", false)
+	clients, err := k8s.InitializeK8sClient(ctx, testenv.NewLogger(t), "local")
 	require.NoError(t, err)
 
 	require.Equal(t, k8s.ProvisionerKindIngress, clients.Provisioner(k8s.ProvisionerKindIngress).Kind())
-	require.Equal(t, k8s.ProvisionerKindGateway, clients.Provisioner(k8s.ProvisionerKindGateway).Kind())
 }
 
 func TestStubProvisioner_IsNoOp(t *testing.T) {

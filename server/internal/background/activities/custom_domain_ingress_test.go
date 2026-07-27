@@ -30,7 +30,7 @@ func TestCustomDomainIngress_Delete_EmptyResourceName_Errors(t *testing.T) {
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
-	act := activities.NewCustomDomainIngress(logger, nil, &stubProvisionerFactory{provisioner: stub}, k8s.ProvisionerKindIngress)
+	act := activities.NewCustomDomainIngress(logger, nil, &stubProvisionerFactory{provisioner: stub})
 
 	err := act.Do(ctx, activities.CustomDomainIngressArgs{
 		OrgID:        "org-1",
@@ -49,7 +49,7 @@ func TestCustomDomainIngress_Delete_ResourceNameTakesPriority(t *testing.T) {
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
-	act := activities.NewCustomDomainIngress(logger, nil, &stubProvisionerFactory{provisioner: stub}, k8s.ProvisionerKindIngress)
+	act := activities.NewCustomDomainIngress(logger, nil, &stubProvisionerFactory{provisioner: stub})
 
 	err := act.Do(ctx, activities.CustomDomainIngressArgs{
 		OrgID:        "org-1",
@@ -72,7 +72,7 @@ func TestCustomDomainIngress_Delete_IngressNameFallback(t *testing.T) {
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
-	act := activities.NewCustomDomainIngress(logger, nil, &stubProvisionerFactory{provisioner: stub}, k8s.ProvisionerKindIngress)
+	act := activities.NewCustomDomainIngress(logger, nil, &stubProvisionerFactory{provisioner: stub})
 
 	err := act.Do(ctx, activities.CustomDomainIngressArgs{
 		OrgID:       "org-1",
@@ -119,7 +119,7 @@ func TestCustomDomainIngress_Setup_Ingress_UpdatesDB(t *testing.T) {
 	require.NoError(t, err)
 
 	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
-	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, k8s.ProvisionerKindIngress, activities.WithSetupSleep(0))
+	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, activities.WithSetupSleep(0))
 
 	err = act.Do(ctx, activities.CustomDomainIngressArgs{
 		OrgID:           orgID,
@@ -142,54 +142,6 @@ func TestCustomDomainIngress_Setup_Ingress_UpdatesDB(t *testing.T) {
 	require.True(t, row.Verified)
 	require.Equal(t, "ingress", row.ProvisionerKind)
 	require.True(t, row.IngressName.Valid, "IngressName must be set after setup")
-}
-
-func TestCustomDomainIngress_Setup_Gateway_WritesNullCertSecret(t *testing.T) {
-	t.Parallel()
-
-	const orgID = "org-gateway-setup"
-	const domain = "gateway-setup.example.com"
-	ctx := t.Context()
-	logger := testenv.NewLogger(t)
-
-	conn, err := infra.CloneTestDatabase(t, "gateway_setup_test")
-	require.NoError(t, err)
-
-	_, err = orgRepo.New(conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:          orgID,
-		Name:        orgID,
-		Slug:        orgID,
-		WorkosID:    pgtype.Text{},
-		Whitelisted: pgtype.Bool{},
-	})
-	require.NoError(t, err)
-
-	_, err = customdomainsRepo.New(conn).CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
-		OrganizationID:  orgID,
-		Domain:          domain,
-		ProvisionerKind: "gateway",
-		IpAllowlist:     []string{},
-	})
-	require.NoError(t, err)
-
-	// GatewayProvisioner returns empty SecretName — stub mirrors this behaviour.
-	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindGateway, logger)
-	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, k8s.ProvisionerKindGateway, activities.WithSetupSleep(0))
-
-	err = act.Do(ctx, activities.CustomDomainIngressArgs{
-		OrgID:           orgID,
-		Domain:          domain,
-		Action:          activities.CustomDomainIngressActionSetup,
-		ProvisionerKind: k8s.ProvisionerKindGateway,
-	})
-	require.NoError(t, err)
-
-	row, err := customdomainsRepo.New(conn).GetCustomDomainByDomain(ctx, domain)
-	require.NoError(t, err)
-	require.True(t, row.Activated)
-	require.Equal(t, "gateway", row.ProvisionerKind)
-	// Gateway owns TLS at the parent level — HTTPRoute never has a cert secret.
-	require.False(t, row.CertSecretName.Valid, "CertSecretName must be NULL for gateway kind")
 }
 
 func TestCustomDomainIngress_Reapply_AppliesAllowlist(t *testing.T) {
@@ -221,7 +173,7 @@ func TestCustomDomainIngress_Reapply_AppliesAllowlist(t *testing.T) {
 	require.NoError(t, err)
 
 	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
-	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, k8s.ProvisionerKindIngress, activities.WithSetupSleep(0))
+	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, activities.WithSetupSleep(0))
 
 	err = act.Do(ctx, activities.CustomDomainIngressArgs{
 		OrgID:           orgID,
@@ -271,7 +223,7 @@ func TestCustomDomainIngress_Setup_KindResolution_DefaultsToIngress(t *testing.T
 
 	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
 	// No default provisioner set and no kind in args — must resolve to ingress.
-	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, "", activities.WithSetupSleep(0))
+	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, activities.WithSetupSleep(0))
 
 	err = act.Do(ctx, activities.CustomDomainIngressArgs{
 		OrgID:  orgID,
@@ -314,7 +266,7 @@ func TestCustomDomainIngress_Setup_WrongOrg_Errors(t *testing.T) {
 	require.NoError(t, err)
 
 	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
-	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, k8s.ProvisionerKindIngress, activities.WithSetupSleep(0))
+	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, activities.WithSetupSleep(0))
 
 	err = act.Do(ctx, activities.CustomDomainIngressArgs{
 		OrgID:  "org-intruder",
