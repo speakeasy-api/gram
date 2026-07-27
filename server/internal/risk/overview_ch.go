@@ -85,12 +85,16 @@ func (s *Service) getRiskOverviewFromClickHouse(ctx context.Context, projectID u
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview time series from clickhouse").LogError(ctx, s.logger)
 	}
 
-	userRows, err := s.findingsCH.ListRiskOverviewTopUsers(ctx, chWindow, riskOverviewRowLimit)
+	// Fetch raw (user_id, external_user_id) groups with headroom: email
+	// resolution can merge several raw groups into one display identity, so
+	// limiting at the display cap here could undercount a merged user near the
+	// boundary. The display-level cap applies after merging.
+	userRows, err := s.findingsCH.ListRiskOverviewTopUsers(ctx, chWindow, riskOverviewRowLimit*5)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview top users from clickhouse").LogError(ctx, s.logger)
 	}
 
-	topUsers, err := s.resolveOverviewUserEmails(ctx, userRows)
+	topUsers, err := s.resolveOverviewUserEmails(ctx, organizationID, userRows)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve risk overview user emails").LogError(ctx, s.logger)
 	}
@@ -127,8 +131,8 @@ func (s *Service) getRiskOverviewFromClickHouse(ctx context.Context, projectID u
 // groups into display rows, replicating the Postgres query's email precedence
 // in Go: users.email, else an @-containing external id, else "Unknown user".
 // Groups that resolve to the same (external_user_id, email) merge, mirroring
-// the Postgres GROUP BY.
-func (s *Service) resolveOverviewUserEmails(ctx context.Context, rows []chrepo.RiskOverviewUserCount) ([]*gen.RiskOverviewUser, error) {
+// the Postgres GROUP BY. The email lookup is tenant-bound to organizationID.
+func (s *Service) resolveOverviewUserEmails(ctx context.Context, organizationID string, rows []chrepo.RiskOverviewUserCount) ([]*gen.RiskOverviewUser, error) {
 	ids := make([]string, 0, len(rows))
 	seen := make(map[string]struct{}, len(rows))
 	for _, row := range rows {
@@ -144,7 +148,10 @@ func (s *Service) resolveOverviewUserEmails(ctx context.Context, rows []chrepo.R
 
 	emails := make(map[string]string, len(ids))
 	if len(ids) > 0 {
-		userRows, err := s.repo.ListUserEmailsByIDs(ctx, ids)
+		userRows, err := s.repo.ListUserEmailsByIDs(ctx, repo.ListUserEmailsByIDsParams{
+			OrganizationID: organizationID,
+			Ids:            ids,
+		})
 		if err != nil {
 			return nil, fmt.Errorf("list user emails by ids: %w", err)
 		}
@@ -185,6 +192,9 @@ func (s *Service) resolveOverviewUserEmails(ctx context.Context, rows []chrepo.R
 		}
 		return cmp.Compare(a.Email, b.Email)
 	})
+	if len(out) > riskOverviewRowLimit {
+		out = out[:riskOverviewRowLimit]
+	}
 
 	return out, nil
 }

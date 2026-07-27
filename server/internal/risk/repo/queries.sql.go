@@ -3274,22 +3274,31 @@ func (q *Queries) ListRiskUserRuleBreakdown(ctx context.Context, arg ListRiskUse
 }
 
 const listUserEmailsByIDs = `-- name: ListUserEmailsByIDs :many
-SELECT id, email
-FROM users
-WHERE id = ANY($1::text[])
+SELECT u.id, u.email
+FROM users u
+JOIN organization_user_relationships our
+  ON our.user_id = u.id
+  AND our.organization_id = $1
+WHERE u.id = ANY($2::text[])
 `
+
+type ListUserEmailsByIDsParams struct {
+	OrganizationID string
+	Ids            []string
+}
 
 type ListUserEmailsByIDsRow struct {
 	ID    string
 	Email string
 }
 
-// Display-email lookup for the ClickHouse-backed overview top-users list. The
-// ids come from findings already scoped to the caller's project; mirroring the
-// Postgres overview query, no deleted filter is applied so findings from
-// since-removed users keep a resolvable email.
-func (q *Queries) ListUserEmailsByIDs(ctx context.Context, ids []string) ([]ListUserEmailsByIDsRow, error) {
-	rows, err := q.db.Query(ctx, listUserEmailsByIDs, ids)
+// Display-email lookup for the ClickHouse-backed overview top-users list,
+// tenant-bound through org membership so a caller can never resolve emails of
+// users outside its organization. Soft-deleted memberships are intentionally
+// included: findings from since-removed org members keep a resolvable email,
+// mirroring the Postgres overview query's unconditional users join.
+func (q *Queries) ListUserEmailsByIDs(ctx context.Context, arg ListUserEmailsByIDsParams) ([]ListUserEmailsByIDsRow, error) {
+	rows, err := q.db.Query(ctx, listUserEmailsByIDs, arg.OrganizationID, arg.Ids)
 	if err != nil {
 		return nil, err
 	}

@@ -2111,7 +2111,15 @@ async function seedRiskFindingsClickHouse(init: {
           WHEN rr.source = 'presidio' THEN 'pii'
           ELSE 'custom'
         END,
-        COALESCE(rr.match, ''),
+        -- ClickHouse must never hold a plaintext match. Catalog matches are
+        -- already redacted display strings and pass through; anything else
+        -- (e.g. account_identity emails, stored verbatim in Postgres only)
+        -- collapses to a length-only placeholder, mirroring the writer.
+        CASE
+          WHEN COALESCE(rr.match, '') = '' THEN ''
+          WHEN rr.match LIKE '<redacted%' THEN rr.match
+          ELSE '<redacted len=' || length(rr.match) || '>'
+        END,
         rr.excluded_at,
         rr.false_positive_at
       FROM risk_results rr
