@@ -30,7 +30,9 @@ export function SuggestedSkillEditSection({
   const review = useSkillSuggestionReview(skillId);
   const [editOpen, setEditOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
-  const [openChange, setOpenChange] = useState<string | null>(null);
+  const [openChanges, setOpenChanges] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
 
   const suggestion = review.suggestion;
   // Each change is diffed against what the changes before it produce, so the
@@ -49,31 +51,38 @@ export function SuggestedSkillEditSection({
 
   if (!review.isPending && !review.loadError && !suggestion) return null;
 
+  const toggleChange = (changeId: string): void => {
+    setOpenChanges((current) => {
+      const next = new Set(current);
+      if (!next.delete(changeId)) next.add(changeId);
+      return next;
+    });
+  };
+
   // A change is applied on its own, so a comment only ever speaks for the
-  // change it is attached to and shows only the reports behind it.
+  // change it is attached to and shows only the reports behind it. Comments
+  // open independently: comparing two proposals means reading both at once.
   const renderChange = (anchor: SkillDiffAnchor): JSX.Element => {
-    if (openChange !== anchor.change.id) {
-      return (
-        <div className="px-4 py-1.5">
-          <SkillSuggestionMarker
-            open={false}
-            onToggle={() => setOpenChange(anchor.change.id)}
-          />
-        </div>
-      );
-    }
+    const open = openChanges.has(anchor.change.id);
+
     return (
-      <div className="px-4">
-        <SkillSuggestionComment
-          change={anchor.change}
-          changeCount={anchors.length}
-          actions={{
-            disabled: review.actionsDisabled,
-            approving: review.approving,
-            onApply: () => void review.approve(anchor.change.id),
-            onApplyAll: () => setReviewOpen(true),
-          }}
+      <div className="space-y-1 px-4 py-1.5">
+        <SkillSuggestionMarker
+          open={open}
+          onToggle={() => toggleChange(anchor.change.id)}
         />
+        {open && (
+          <SkillSuggestionComment
+            change={anchor.change}
+            changeCount={anchors.length}
+            actions={{
+              disabled: review.actionsDisabled,
+              approving: review.approving,
+              onApply: () => void review.approve(anchor.change.id),
+              onApplyAll: () => setReviewOpen(true),
+            }}
+          />
+        )}
       </div>
     );
   };
