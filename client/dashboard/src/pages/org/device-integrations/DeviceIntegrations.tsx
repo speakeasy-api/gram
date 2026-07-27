@@ -5,12 +5,12 @@ import { Type } from "@/components/ui/type";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useDeviceIntegrationProviders } from "@gram/client/react-query/deviceIntegrationProviders.js";
 import React from "react";
-import { Navigate } from "react-router";
+import { Navigate, Outlet } from "react-router";
 import { DeviceIntegrationConnectionRow } from "./device-integration-connection-row";
 
-// Device Integrations: one row per MDM / compliance vendor connection that
-// expands to reveal its sync schedules, each with its own status and controls.
-export default function DeviceIntegrations(): React.JSX.Element | null {
+// Route shell: gates the whole MDM Integrations surface — the catalog index
+// and per-provider detail pages — behind the rollout flag.
+export function DeviceIntegrationsRoot(): React.JSX.Element | null {
   const telemetry = useTelemetry();
   const isEnabled = telemetry.isFeatureEnabled("gram-device-integrations");
 
@@ -23,6 +23,12 @@ export default function DeviceIntegrations(): React.JSX.Element | null {
     return <Navigate to=".." replace />;
   }
 
+  return <Outlet />;
+}
+
+// MDM Integrations catalog: one row per vendor; clicking a row opens its
+// detail page with coverage, schedules, and the synced device inventory.
+export default function DeviceIntegrations(): React.JSX.Element {
   return (
     <Page>
       <Page.Header>
