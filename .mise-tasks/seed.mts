@@ -4510,7 +4510,7 @@ function chatSessionBackfillSQL(
         ) AS is_claude_tool_result,
         (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
         (
-            hook_source IN ('codex', 'cursor')
+            hook_source IN ('codex', 'cursor', 'opencode')
             AND toString(attributes.gram.tool.name) != ''
             AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
             AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
