@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/url"
 	"os"
@@ -29,6 +30,8 @@ import (
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/spendrules"
+	spendcelenv "github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -62,6 +65,7 @@ type testInstance struct {
 	conn            *pgxpool.Pool
 	chConn          clickhouse.Conn
 	redisClient     *redis.Client
+	spendGateCache  cache.Cache
 	accessStore     accesscontrol.Store
 	sessionManager  *sessions.Manager
 	efficacySignals *recordingEfficacySignaler
@@ -96,6 +100,45 @@ func (r *recordingEfficacySignaler) signaled() []uuid.UUID {
 	return slices.Clone(r.signals)
 }
 
+// namespacedSpendGateCache keeps snapshots isolated even though hook tests use
+// the same Redis database and organization fixture in parallel.
+type namespacedSpendGateCache struct {
+	cache.Cache
+	namespace string
+}
+
+func (c *namespacedSpendGateCache) key(key string) string {
+	return c.namespace + ":" + key
+}
+
+func (c *namespacedSpendGateCache) Get(ctx context.Context, key string, value any) error {
+	if err := c.Cache.Get(ctx, c.key(key), value); err != nil {
+		return fmt.Errorf("get namespaced spend gate cache: %w", err)
+	}
+	return nil
+}
+
+func (c *namespacedSpendGateCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+	if err := c.Cache.Set(ctx, c.key(key), value, ttl); err != nil {
+		return fmt.Errorf("set namespaced spend gate cache: %w", err)
+	}
+	return nil
+}
+
+func (c *namespacedSpendGateCache) Delete(ctx context.Context, key string) error {
+	if err := c.Cache.Delete(ctx, c.key(key)); err != nil {
+		return fmt.Errorf("delete namespaced spend gate cache: %w", err)
+	}
+	return nil
+}
+
+func (c *namespacedSpendGateCache) DeleteByPrefix(ctx context.Context, prefix string) error {
+	if err := c.Cache.DeleteByPrefix(ctx, c.key(prefix)); err != nil {
+		return fmt.Errorf("delete namespaced spend gate cache by prefix: %w", err)
+	}
+	return nil
+}
+
 func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
@@ -117,6 +160,13 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
+	spendGateCache := &namespacedSpendGateCache{
+		Cache:     cacheAdapter,
+		namespace: "hooks-spend-gate-test:" + uuid.NewString(),
+	}
+	t.Cleanup(func() {
+		require.NoError(t, spendGateCache.DeleteByPrefix(context.Background(), ""))
+	})
 
 	// Pass nil for telemetry logger, temporalEnv, productFeatures, and chatTitleGenerator in tests
 	chConn, err := infra.NewClickhouseClient(t)
@@ -133,6 +183,10 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	efficacySignals := &recordingEfficacySignaler{mu: sync.Mutex{}, err: nil, signals: nil}
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore, serverURL)
 	policyBypass := risk.NewPolicyBypassEvaluator(logger, conn)
+	spendCelEngine, err := spendcelenv.New()
+	require.NoError(t, err)
+	spendGate, err := spendrules.NewGate(logger, spendGateCache, spendCelEngine)
+	require.NoError(t, err)
 	svc := NewService(
 		logger,
 		conn,
@@ -148,6 +202,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		nil,
 		nil,
 		policyBypass,
+		spendGate,
 		shadowMCPClient,
 		chatWriter,
 		efficacySignals,
@@ -161,6 +216,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		conn:            conn,
 		chConn:          chConn,
 		redisClient:     redisClient,
+		spendGateCache:  spendGateCache,
 		accessStore:     accessStore,
 		sessionManager:  sessionManager,
 		efficacySignals: efficacySignals,

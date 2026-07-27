@@ -406,6 +406,10 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GCOutboxProcessedRows)
 	temporalWorker.RegisterActivity(activities.ListPluginPublishCandidates)
 	temporalWorker.RegisterActivity(activities.PublishPluginProject)
+	// Spend rule evaluation activities
+	temporalWorker.RegisterActivity(activities.ListSpendRuleOrgs)
+	temporalWorker.RegisterActivity(activities.EvaluateOrgSpendRules)
+	temporalWorker.RegisterActivity(activities.RefreshSpendRuleActor)
 	// Skill efficacy activities — the database steps run on the main queue and
 	// only the judged publication goes to the dedicated worker.
 	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.EnqueueSkillEfficacyPage)
@@ -486,6 +490,12 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(OutboxGCWorkflow)
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
 	temporalWorker.RegisterWorkflow(PluginInitialPublishWorkflow)
+	// Spend rule evaluation workflows
+	temporalWorker.RegisterWorkflow(SpendRuleEvaluationWorkflow)
+	temporalWorker.RegisterWorkflow(SpendRuleOrgEvaluationWorkflow)
+	temporalWorker.RegisterWorkflow(SpendRuleOrgEvaluationWorkflowDebounced)
+	temporalWorker.RegisterWorkflow(SpendRuleActorEvaluationWorkflow)
+	temporalWorker.RegisterWorkflow(SpendRuleActorEvaluationWorkflowDebounced)
 	// Skill efficacy workflows
 	temporalWorker.RegisterWorkflow(SkillEfficacyCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(SkillEfficacySweepWorkflow)
@@ -553,6 +563,12 @@ func NewTemporalWorker(
 
 	if err := AddStagedTelemetrySweepSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add staged telemetry sweep schedule", attr.SlogError(err))
+	}
+
+	if err := AddSpendRuleEvaluationSchedule(context.Background(), env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(context.Background(), "failed to add spend rule evaluation schedule", attr.SlogError(err))
+		}
 	}
 
 	if err := AddSkillObservationReconciliationSchedule(context.Background(), env); err != nil {

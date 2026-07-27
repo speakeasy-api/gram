@@ -308,6 +308,7 @@ const (
 	RiskPolicyTypeKey                 = attribute.Key("gram.risk.policy_type")
 	RiskMessageTypeKey                = attribute.Key("gram.risk.message_type")
 	RiskRuleIDKey                     = attribute.Key("gram.risk.rule_id")
+	SpendRuleIDKey                    = attribute.Key("gram.spend.rule_id")
 	RiskSourceKey                     = attribute.Key("gram.risk.source")
 	RiskScanAttemptKey                = attribute.Key("gram.risk.scan.attempt")
 	RiskScanMaxAttemptsKey            = attribute.Key("gram.risk.scan.max_attempts")
@@ -1416,6 +1417,9 @@ func SlogRiskMessageType(v string) slog.Attr      { return slog.String(string(Ri
 
 func RiskRuleID(v string) attribute.KeyValue { return RiskRuleIDKey.String(v) }
 func SlogRiskRuleID(v string) slog.Attr      { return slog.String(string(RiskRuleIDKey), v) }
+
+func SpendRuleID(v string) attribute.KeyValue { return SpendRuleIDKey.String(v) }
+func SlogSpendRuleID(v string) slog.Attr      { return slog.String(string(SpendRuleIDKey), v) }
 
 func RiskSource(v string) attribute.KeyValue { return RiskSourceKey.String(v) }
 func SlogRiskSource(v string) slog.Attr      { return slog.String(string(RiskSourceKey), v) }
