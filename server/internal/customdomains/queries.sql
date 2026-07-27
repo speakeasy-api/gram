@@ -23,6 +23,14 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 LIMIT 1;
 
+-- name: LockCustomDomainByOrganization :one
+SELECT *
+FROM custom_domains
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+LIMIT 1
+FOR UPDATE;
+
 -- name: GetCustomDomainByDomain :one
 SELECT *
 FROM custom_domains
@@ -33,6 +41,92 @@ WHERE domain = @domain
 SELECT *
 FROM custom_domains
 WHERE id = @id
+  AND deleted IS FALSE;
+
+-- name: LockCustomDomainByID :one
+-- Mutations acquire the domain lock before endpoint/server rows.
+SELECT id
+FROM custom_domains
+WHERE id = @id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: GetCustomDomainRouteConfig :one
+-- Canonical desired-state read for reconciliation and health. Keep root
+-- eligibility here so both paths agree on whether the secondary route exists.
+SELECT
+    d.id,
+    d.organization_id,
+    d.domain,
+    d.verified,
+    d.activated,
+    d.ingress_name,
+    d.cert_secret_name,
+    d.provisioner_kind,
+    d.ip_allowlist,
+    COALESCE(root_endpoint.id, '00000000-0000-0000-0000-000000000000'::uuid) AS root_mcp_endpoint_id,
+    COALESCE(root_endpoint.slug, '')::text AS root_slug
+FROM custom_domains AS d
+LEFT JOIN LATERAL (
+    SELECT e.id, e.slug
+    FROM mcp_endpoints AS e
+    JOIN mcp_servers AS s
+      ON s.id = e.mcp_server_id
+     AND s.deleted IS FALSE
+     AND s.visibility <> 'disabled'
+    WHERE e.custom_domain_id = d.id
+      AND e.is_domain_root IS TRUE
+      AND e.deleted IS FALSE
+    LIMIT 1
+) AS root_endpoint ON TRUE
+WHERE d.id = @id
+  AND d.deleted IS FALSE;
+
+-- name: LockRootMcpEndpointSelection :many
+-- The caller locks the parent custom-domain row first. Sort endpoint locks to
+-- keep replacement and lifecycle mutations on one global lock order.
+SELECT id
+FROM mcp_endpoints
+WHERE custom_domain_id = @custom_domain_id::uuid
+  AND deleted IS FALSE
+  AND (
+    is_domain_root IS TRUE
+    OR id = sqlc.narg('mcp_endpoint_id')::uuid
+  )
+ORDER BY id
+FOR UPDATE;
+
+-- name: GetEligibleRootMcpEndpoint :one
+SELECT e.*
+FROM mcp_endpoints AS e
+JOIN projects AS p
+  ON p.id = e.project_id
+ AND p.deleted IS FALSE
+JOIN mcp_servers AS s
+  ON s.id = e.mcp_server_id
+ AND s.deleted IS FALSE
+ AND s.visibility <> 'disabled'
+WHERE e.id = @mcp_endpoint_id::uuid
+  AND e.custom_domain_id = @custom_domain_id::uuid
+  AND e.deleted IS FALSE
+  AND p.organization_id = @organization_id;
+
+-- name: ClearRootMcpEndpoint :exec
+UPDATE mcp_endpoints
+SET
+    is_domain_root = NULL,
+    updated_at = clock_timestamp()
+WHERE custom_domain_id = @custom_domain_id::uuid
+  AND is_domain_root IS TRUE
+  AND deleted IS FALSE;
+
+-- name: SetRootMcpEndpoint :exec
+UPDATE mcp_endpoints
+SET
+    is_domain_root = TRUE,
+    updated_at = clock_timestamp()
+WHERE id = @mcp_endpoint_id::uuid
+  AND custom_domain_id = @custom_domain_id::uuid
   AND deleted IS FALSE;
 
 -- name: GetCustomDomainByIDAndOrganization :one
@@ -57,6 +151,7 @@ LIMIT @page_limit;
 
 -- name: ListActivatedCustomDomainResources :many
 SELECT
+    id,
     domain,
     provisioner_kind,
     COALESCE(ingress_name, '')::text AS resource_name
@@ -123,6 +218,22 @@ RETURNING *;
 UPDATE custom_domains
 SET
     ip_allowlist = @ip_allowlist,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: UpdateCustomDomainSettings :one
+UPDATE custom_domains
+SET
+    ip_allowlist = CASE
+        WHEN @update_ip_allowlist::boolean THEN @ip_allowlist::text[]
+        ELSE ip_allowlist
+    END,
+    openai_apps_challenge_token = CASE
+        WHEN @update_openai_apps_challenge_token::boolean THEN sqlc.narg('openai_apps_challenge_token')::text
+        ELSE openai_apps_challenge_token
+    END,
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND deleted IS FALSE

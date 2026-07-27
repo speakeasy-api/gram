@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -40,6 +42,12 @@ type CustomDomainUpdateParams struct {
 	IPAllowlist     []string
 }
 
+type CustomDomainReconcileParams struct {
+	CustomDomainID uuid.UUID
+}
+
+type CustomDomainReconcileResult struct{}
+
 type CustomDomainRegistrationClient struct {
 	TemporalEnv *tenv.Environment
 }
@@ -64,6 +72,41 @@ func (c *CustomDomainRegistrationClient) GetDeletionID(orgID string, domain stri
 
 func (c *CustomDomainRegistrationClient) GetUpdateID(orgID string, domain string) string {
 	return fmt.Sprintf("v1:custom-domain-update:%s:%s", orgID, domain)
+}
+
+func CustomDomainReconcileWorkflowID(customDomainID uuid.UUID) string {
+	return fmt.Sprintf("v1:custom-domain-reconcile:%s", customDomainID.String())
+}
+
+func customDomainReconcileSignal(params CustomDomainReconcileParams) string {
+	return CustomDomainReconcileWorkflowID(params.CustomDomainID) + "/signal"
+}
+
+// ExecuteCustomDomainReconcile signals the domain-scoped desired-state
+// workflow, starting it when no run is active. Signals arriving during Apply
+// cause a follow-up pass against the latest committed database state.
+func (c *CustomDomainRegistrationClient) ExecuteCustomDomainReconcile(ctx context.Context, customDomainID uuid.UUID) (client.WorkflowRun, error) {
+	params := CustomDomainReconcileParams{CustomDomainID: customDomainID}
+	id := CustomDomainReconcileWorkflowID(customDomainID)
+	run, err := c.TemporalEnv.Client().SignalWithStartWorkflow(
+		ctx,
+		id,
+		customDomainReconcileSignal(params),
+		"reconcile",
+		client.StartWorkflowOptions{
+			ID:                       id,
+			TaskQueue:                string(c.TemporalEnv.Queue()),
+			WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+			WorkflowRunTimeout:       5 * time.Minute,
+		},
+		CustomDomainReconcileWorkflow,
+		params,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("signal with start custom domain reconcile workflow: %w", err)
+	}
+	return run, nil
 }
 
 // ExecuteCustomDomainUpdate re-applies the persisted IP allowlist to an
@@ -143,32 +186,69 @@ func CustomDomainRegistrationWorkflow(ctx workflow.Context, params CustomDomainR
 		return fmt.Errorf("failed to verify custom domain: %w", err)
 	}
 
-	ingressCreateCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 180 * time.Second,
-		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts: 1,
-		},
-	})
-
-	err = workflow.ExecuteActivity(
-		ingressCreateCtx,
-		a.CustomDomainIngress,
-		activities.CustomDomainIngressArgs{
-			OrgID:           params.OrgID,
-			Domain:          params.Domain,
-			Action:          activities.CustomDomainIngressActionSetup,
-			IngressName:     "",
-			ResourceName:    "",
-			CertSecretName:  "",
-			ProvisionerKind: params.ProvisionerKind,
-			IPAllowlist:     nil, // Setup reads the persisted allowlist from the DB.
-		},
-	).Get(ingressCreateCtx, nil)
+	const reconcileWorkflowVersion = 1
+	version := workflow.GetVersion(ctx, "custom-domain-reconcile-workflow", workflow.DefaultVersion, reconcileWorkflowVersion)
+	if version == workflow.DefaultVersion {
+		// Preserve replay compatibility for registration workflows started
+		// before domain-scoped reconciliation was introduced.
+		ingressCreateCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: 180 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				MaximumAttempts: 1,
+			},
+		})
+		err = workflow.ExecuteActivity(
+			ingressCreateCtx,
+			a.CustomDomainIngress,
+			activities.CustomDomainIngressArgs{
+				OrgID:           params.OrgID,
+				Domain:          params.Domain,
+				Action:          activities.CustomDomainIngressActionSetup,
+				IngressName:     "",
+				ResourceName:    "",
+				CertSecretName:  "",
+				ProvisionerKind: params.ProvisionerKind,
+				IPAllowlist:     nil,
+			},
+		).Get(ingressCreateCtx, nil)
+	} else {
+		err = workflow.ExecuteActivity(ctx, a.SignalCustomDomainReconcile, SignalCustomDomainReconcileArgs{
+			OrgID:  params.OrgID,
+			Domain: params.Domain,
+		}).Get(ctx, nil)
+	}
 	if err != nil {
-		logger.Error("failed to create custom domain ingress", "error", err.Error(), "org_id", params.OrgID, "domain", params.Domain)
-		return fmt.Errorf("failed to create custom domain ingress: %w", err)
+		logger.Error("failed to reconcile custom domain route", "error", err.Error(), "org_id", params.OrgID, "domain", params.Domain)
+		return fmt.Errorf("failed to reconcile custom domain route: %w", err)
 	}
 
+	return nil
+}
+
+type SignalCustomDomainReconcileArgs struct {
+	OrgID  string
+	Domain string
+}
+
+// SignalCustomDomainReconcile bridges the registration workflow—whose stable
+// identifier predates the custom-domain row—to the UUID-scoped reconcile
+// workflow after verification has committed that row.
+func (a *Activities) SignalCustomDomainReconcile(ctx context.Context, args SignalCustomDomainReconcileArgs) error {
+	domain, err := customdomainsrepo.New(a.db).GetCustomDomainByDomain(ctx, args.Domain)
+	if err != nil {
+		return fmt.Errorf("load custom domain for reconciliation: %w", err)
+	}
+	if domain.OrganizationID != args.OrgID {
+		return fmt.Errorf("custom domain does not belong to organization")
+	}
+
+	run, err := (&CustomDomainRegistrationClient{TemporalEnv: a.temporalEnv}).ExecuteCustomDomainReconcile(ctx, domain.ID)
+	if err != nil {
+		return err
+	}
+	if err := run.Get(ctx, nil); err != nil {
+		return fmt.Errorf("custom domain reconcile workflow: %w", err)
+	}
 	return nil
 }
 
@@ -202,6 +282,44 @@ func CustomDomainUpdateWorkflow(ctx workflow.Context, params CustomDomainUpdateP
 	}
 
 	return nil
+}
+
+// CustomDomainReconcileWorkflow coalesces every signal received during an
+// Apply into another pass. Continue-as-new keeps the stable workflow ID while
+// bounding history growth; WorkflowRun.Get follows the run chain.
+func CustomDomainReconcileWorkflow(ctx workflow.Context, params CustomDomainReconcileParams) (CustomDomainReconcileResult, error) {
+	return Debounce(
+		customDomainReconcilePass,
+		CustomDomainReconcileWorkflow,
+		customDomainReconcileSignal,
+		func(CustomDomainReconcileParams, CustomDomainReconcileResult) bool { return false },
+	)(ctx, params)
+}
+
+func customDomainReconcilePass(ctx workflow.Context, params CustomDomainReconcileParams) (CustomDomainReconcileResult, error) {
+	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 3 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts:    3,
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2,
+			MaximumInterval:    10 * time.Second,
+		},
+	})
+
+	var a *Activities
+	if err := workflow.ExecuteActivity(ctx, a.ReconcileCustomDomain, activities.ReconcileCustomDomainArgs{
+		CustomDomainID: params.CustomDomainID,
+	}).Get(ctx, nil); err != nil {
+		return CustomDomainReconcileResult{}, fmt.Errorf("reconcile custom domain: %w", err)
+	}
+	// Yield one workflow task after Apply. A signal accepted alongside the
+	// activity-completion event is then visible to Debounce's final drain
+	// instead of racing the workflow-completion command.
+	if err := workflow.Sleep(ctx, time.Millisecond); err != nil {
+		return CustomDomainReconcileResult{}, fmt.Errorf("yield after custom domain reconcile: %w", err)
+	}
+	return CustomDomainReconcileResult{}, nil
 }
 
 func CustomDomainDeletionWorkflow(ctx workflow.Context, params CustomDomainDeletionParams) error {

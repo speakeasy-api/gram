@@ -549,6 +549,41 @@ func (q *Queries) ListMCPServersForTelemetryByProjectID(ctx context.Context, pro
 	return items, nil
 }
 
+const lockMCPServerByIDAndProjectID = `-- name: LockMCPServerByIDAndProjectID :one
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
+FROM mcp_servers
+WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockMCPServerByIDAndProjectIDParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) LockMCPServerByIDAndProjectID(ctx context.Context, arg LockMCPServerByIDAndProjectIDParams) (McpServer, error) {
+	row := q.db.QueryRow(ctx, lockMCPServerByIDAndProjectID, arg.ID, arg.ProjectID)
+	var i McpServer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.EnvironmentID,
+		&i.UserSessionIssuerID,
+		&i.RemoteMcpServerID,
+		&i.TunneledMcpServerID,
+		&i.ToolsetID,
+		&i.ToolVariationsGroupID,
+		&i.Visibility,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const lockMCPServerToolMetadataWrite = `-- name: LockMCPServerToolMetadataWrite :exec
 SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
 `
@@ -565,6 +600,57 @@ SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
 func (q *Queries) LockMCPServerToolMetadataWrite(ctx context.Context, mcpServerID string) error {
 	_, err := q.db.Exec(ctx, lockMCPServerToolMetadataWrite, mcpServerID)
 	return err
+}
+
+const lockMCPServersByIDs = `-- name: LockMCPServersByIDs :many
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
+FROM mcp_servers
+WHERE project_id = $1
+  AND id = ANY($2::uuid[])
+  AND deleted IS FALSE
+ORDER BY id
+FOR UPDATE
+`
+
+type LockMCPServersByIDsParams struct {
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
+
+func (q *Queries) LockMCPServersByIDs(ctx context.Context, arg LockMCPServersByIDsParams) ([]McpServer, error) {
+	rows, err := q.db.Query(ctx, lockMCPServersByIDs, arg.ProjectID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpServer
+	for rows.Next() {
+		var i McpServer
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Slug,
+			&i.EnvironmentID,
+			&i.UserSessionIssuerID,
+			&i.RemoteMcpServerID,
+			&i.TunneledMcpServerID,
+			&i.ToolsetID,
+			&i.ToolVariationsGroupID,
+			&i.Visibility,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const setMCPServerToolMetadata = `-- name: SetMCPServerToolMetadata :many

@@ -1,0 +1,102 @@
+package background
+
+import (
+	"context"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/converter"
+	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/workflow"
+
+	"github.com/speakeasy-api/gram/server/internal/background/activities"
+)
+
+func TestCustomDomainReconcileWorkflowID(t *testing.T) {
+	t.Parallel()
+
+	customDomainID := uuid.MustParse("10000000-0000-0000-0000-000000000001")
+	require.Equal(t, "v1:custom-domain-reconcile:10000000-0000-0000-0000-000000000001", CustomDomainReconcileWorkflowID(customDomainID))
+}
+
+func TestCustomDomainReconcileWorkflowDrainsStartingSignal(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	customDomainID := uuid.New()
+	params := CustomDomainReconcileParams{CustomDomainID: customDomainID}
+	applies := 0
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, args activities.ReconcileCustomDomainArgs) error {
+			require.Equal(t, customDomainID, args.CustomDomainID)
+			applies++
+			return nil
+		},
+		activity.RegisterOptions{Name: "ReconcileCustomDomain"},
+	)
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(customDomainReconcileSignal(params), "reconcile")
+	}, 0)
+
+	env.ExecuteWorkflow(CustomDomainReconcileWorkflow, params)
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, 1, applies)
+}
+
+func TestCustomDomainReconcileWorkflowCoalescesSignalsDuringApply(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	params := CustomDomainReconcileParams{CustomDomainID: uuid.New()}
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ activities.ReconcileCustomDomainArgs) error {
+			env.SignalWorkflow(customDomainReconcileSignal(params), "reconcile")
+			env.SignalWorkflow(customDomainReconcileSignal(params), "reconcile")
+			env.SignalWorkflow(customDomainReconcileSignal(params), "reconcile")
+			return nil
+		},
+		activity.RegisterOptions{Name: "ReconcileCustomDomain"},
+	)
+
+	env.ExecuteWorkflow(CustomDomainReconcileWorkflow, params)
+
+	require.True(t, env.IsWorkflowCompleted())
+	var continueAsNewErr *workflow.ContinueAsNewError
+	require.ErrorAs(t, env.GetWorkflowError(), &continueAsNewErr)
+	require.Equal(t, "CustomDomainReconcileWorkflow", continueAsNewErr.WorkflowType.Name)
+}
+
+func TestCustomDomainReconcileWorkflowRunsAgainForSignalAfterApply(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	params := CustomDomainReconcileParams{CustomDomainID: uuid.New()}
+	signaled := false
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ activities.ReconcileCustomDomainArgs) error {
+			return nil
+		},
+		activity.RegisterOptions{Name: "ReconcileCustomDomain"},
+	)
+	env.SetOnActivityCompletedListener(func(_ *activity.Info, _ converter.EncodedValue, _ error) {
+		if signaled {
+			return
+		}
+		signaled = true
+		env.SignalWorkflow(customDomainReconcileSignal(params), "reconcile")
+	})
+
+	env.ExecuteWorkflow(CustomDomainReconcileWorkflow, params)
+
+	require.True(t, env.IsWorkflowCompleted())
+	var continueAsNewErr *workflow.ContinueAsNewError
+	require.ErrorAs(t, env.GetWorkflowError(), &continueAsNewErr)
+	require.Equal(t, "CustomDomainReconcileWorkflow", continueAsNewErr.WorkflowType.Name)
+}

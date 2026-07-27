@@ -1,6 +1,7 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/Badge";
+import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
 import { Heading } from "@/components/ui/Heading";
 import { Input } from "@/components/ui/Input";
@@ -16,12 +17,16 @@ import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useProductTier } from "@/hooks/useProductTier";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useRootMcpEndpointMutation } from "@/hooks/useRootMcpEndpoint";
 import {
   customDomainMcpEndpointUrl,
   useCustomDomain,
 } from "@/hooks/useToolsetUrl";
 import { HumanizeDateTime } from "@/lib/dates";
 import { cn, getCustomDomainCNAME } from "@/lib/utils";
+import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
+import type { CustomDomainMcpEndpoint } from "@gram/client/models/components/customdomainmcpendpoint.js";
 import { useCustomDomainMcpEndpoints } from "@gram/client/react-query/customDomainMcpEndpoints";
 import { useCheckDomainHealthMutation } from "@gram/client/react-query/checkDomainHealth";
 import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
@@ -43,9 +48,18 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
 import { toast } from "sonner";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function OrgDomains(): JSX.Element {
   return (
@@ -271,9 +285,301 @@ function IPAllowlistEditor({
   );
 }
 
+const NO_ROOT_MCP_ENDPOINT = "__none__";
+
+function mcpServerLabel(endpoint: CustomDomainMcpEndpoint): string {
+  return (
+    endpoint.mcpServerName ?? endpoint.mcpServerSlug ?? endpoint.mcpServerId
+  );
+}
+
+function DefaultMcpServerControl({
+  domain,
+  endpoints,
+  isLoading,
+  canManage,
+}: {
+  domain: CustomDomain;
+  endpoints: CustomDomainMcpEndpoint[];
+  isLoading: boolean;
+  canManage: boolean;
+}) {
+  const rootMutation = useRootMcpEndpointMutation();
+  const endpointGroups = useMemo(() => {
+    const groups = new Map<
+      string,
+      { projectName: string; endpoints: CustomDomainMcpEndpoint[] }
+    >();
+
+    for (const endpoint of endpoints) {
+      const group = groups.get(endpoint.projectId);
+      if (group) {
+        group.endpoints.push(endpoint);
+      } else {
+        groups.set(endpoint.projectId, {
+          projectName: endpoint.projectName,
+          endpoints: [endpoint],
+        });
+      }
+    }
+
+    return Array.from(groups.entries())
+      .map(([projectId, group]) => ({
+        projectId,
+        projectName: group.projectName,
+        endpoints: [...group.endpoints].sort((a, b) =>
+          mcpServerLabel(a).localeCompare(mcpServerLabel(b)),
+        ),
+      }))
+      .sort((a, b) => a.projectName.localeCompare(b.projectName));
+  }, [endpoints]);
+  const currentEndpoint = endpoints.find(
+    (endpoint) => endpoint.id === domain.rootMcpEndpointId,
+  );
+  const selectedValue = currentEndpoint?.id ?? NO_ROOT_MCP_ENDPOINT;
+
+  let content: React.ReactNode;
+  if (isLoading) {
+    content = (
+      <Type variant="body" className="text-muted-foreground text-sm">
+        Loading MCP servers…
+      </Type>
+    );
+  } else if (endpoints.length === 0) {
+    content = (
+      <div className="border-border rounded-md border border-dashed p-4">
+        <Type variant="body" className="font-medium">
+          No MCP endpoints on this domain
+        </Type>
+        <Type
+          variant="body"
+          className="text-muted-foreground mt-1 max-w-[65ch] text-sm"
+        >
+          Attach an MCP endpoint to this custom domain before choosing a default
+          MCP server.
+        </Type>
+      </div>
+    );
+  } else {
+    const selectedLabel = currentEndpoint
+      ? `${mcpServerLabel(currentEndpoint)} · /mcp/${currentEndpoint.slug}`
+      : "No root mapping";
+
+    content = (
+      <div className="space-y-3">
+        <Select
+          value={selectedValue}
+          disabled={!canManage || rootMutation.isPending}
+          onValueChange={(value) =>
+            rootMutation.setRootMcpEndpoint(
+              value === NO_ROOT_MCP_ENDPOINT ? undefined : value,
+            )
+          }
+        >
+          <SelectTrigger className="w-full max-w-xl">
+            <SelectValue>{selectedLabel}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem
+              value={NO_ROOT_MCP_ENDPOINT}
+              description="Do not route the custom-domain root to an MCP server."
+            >
+              No root mapping
+            </SelectItem>
+            {endpointGroups.map((group) => (
+              <SelectGroup key={group.projectId}>
+                <SelectLabel>{group.projectName}</SelectLabel>
+                {group.endpoints.map((endpoint) => (
+                  <SelectItem
+                    key={endpoint.id}
+                    value={endpoint.id}
+                    description={`/mcp/${endpoint.slug}`}
+                  >
+                    {mcpServerLabel(endpoint)}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            ))}
+          </SelectContent>
+        </Select>
+        {currentEndpoint ? (
+          <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
+            <code>{`https://${domain.domain}/`}</code>
+            <span aria-hidden="true">→</span>
+            <code>{`/mcp/${currentEndpoint.slug}`}</code>
+          </div>
+        ) : (
+          <Type variant="body" className="text-muted-foreground text-sm">
+            Requests to the custom-domain root are not mapped.
+          </Type>
+        )}
+        {!canManage && (
+          <Type variant="body" className="text-muted-foreground text-sm">
+            Organization admin permission is required to change this mapping.
+          </Type>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-border mt-4 border-t pt-4">
+      <Type variant="body" className="font-medium">
+        Default MCP server
+      </Type>
+      <Type
+        variant="body"
+        className="text-muted-foreground mt-1 mb-3 max-w-[65ch] text-sm"
+      >
+        Route requests to the custom-domain root to one MCP server.
+      </Type>
+      {content}
+    </div>
+  );
+}
+
+function ChatGPTAppVerificationControl({
+  domain,
+  canManage,
+}: {
+  domain: CustomDomain;
+  canManage: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const savedToken = domain.openaiAppsChallengeToken ?? "";
+  const [token, setToken] = useState(savedToken);
+  const [error, setError] = useState("");
+  const verificationURL = `https://${domain.domain}/.well-known/openai-apps-challenge`;
+
+  useEffect(() => {
+    setToken(savedToken);
+  }, [savedToken]);
+
+  const updateTokenMutation = useUpdateDomainMutation({
+    onSuccess: async (updatedDomain) => {
+      const updatedToken = updatedDomain.openaiAppsChallengeToken ?? "";
+      setToken(updatedToken);
+      setError("");
+      await invalidateAllGetDomain(queryClient);
+      toast.success(
+        updatedToken
+          ? "ChatGPT app verification token saved"
+          : "ChatGPT app verification token cleared",
+      );
+    },
+    onError: (mutationError) => {
+      setError(
+        mutationError.message || "Failed to save the verification token",
+      );
+    },
+  });
+
+  function updateToken(nextToken: string) {
+    updateTokenMutation.mutate({
+      security: { sessionHeaderGramSession: "" },
+      request: {
+        updateDomainRequestBody: {
+          openaiAppsChallengeToken: nextToken,
+        },
+      },
+    });
+  }
+
+  const hasChanges = token !== savedToken;
+
+  return (
+    <div className="border-border mt-4 border-t pt-4">
+      <Type variant="body" className="font-medium">
+        ChatGPT app verification
+      </Type>
+      <Type
+        variant="body"
+        className="text-muted-foreground mt-1 max-w-[65ch] text-sm"
+      >
+        OpenAI&apos;s app-submission flow fetches this token to verify ownership
+        of your custom domain.
+      </Type>
+      <div className="mt-3 max-w-xl space-y-3">
+        <div className="bg-muted flex items-center gap-2 rounded-md px-3 py-2">
+          <code className="min-w-0 flex-1 text-xs break-all">
+            {verificationURL}
+          </code>
+          <CopyButton
+            text={verificationURL}
+            size="inline"
+            tooltip="Copy verification URL"
+            className="shrink-0"
+          />
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Input
+            aria-label="ChatGPT app verification token"
+            placeholder="Paste verification token"
+            value={token}
+            onChange={(value) => {
+              setToken(value);
+              setError("");
+            }}
+            onEnter={() => {
+              if (canManage && hasChanges && !updateTokenMutation.isPending) {
+                updateToken(token);
+              }
+            }}
+            maxLength={256}
+            disabled={!canManage || updateTokenMutation.isPending}
+            className="font-mono"
+          />
+          <div className="flex shrink-0 gap-2">
+            <Button
+              size="sm"
+              onClick={() => updateToken(token)}
+              disabled={
+                !canManage || !hasChanges || updateTokenMutation.isPending
+              }
+            >
+              {updateTokenMutation.isPending ? "Saving..." : "Save"}
+            </Button>
+            {savedToken && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => updateToken("")}
+                disabled={!canManage || updateTokenMutation.isPending}
+              >
+                Clear
+              </Button>
+            )}
+          </div>
+        </div>
+        {error && (
+          <Type variant="body" className="text-destructive text-sm">
+            {error}
+          </Type>
+        )}
+        {domain.ipAllowlist.length > 0 && (
+          <div className="text-muted-foreground flex items-start gap-2 text-sm">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              Your IP allowlist also applies to this URL and may block
+              OpenAI&apos;s verifier.
+            </span>
+          </div>
+        )}
+        {!canManage && (
+          <Type variant="body" className="text-muted-foreground text-sm">
+            Organization admin permission is required to change this token.
+          </Type>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function OrgDomainsInner() {
   const organization = useOrganization();
   const productTier = useProductTier();
+  const { hasScope } = useRBAC();
+  const canManageDomains = hasScope("org:admin");
   const queryClient = useQueryClient();
   const [isAddDomainDialogOpen, setIsAddDomainDialogOpen] = useState(false);
   const [isCnameCopied, setIsCnameCopied] = useState(false);
@@ -383,12 +689,16 @@ function OrgDomainsInner() {
     },
   });
 
-  // Preview which MCP endpoints will be cascaded by the delete. Only fetched
-  // while the confirmation dialog is open and a domain is configured.
-  const impactQuery = useCustomDomainMcpEndpoints(undefined, undefined, {
-    enabled: isDeleteDomainDialogOpen && Boolean(domain?.domain),
-  });
-  const impactedEndpoints = impactQuery.data?.mcpEndpoints ?? [];
+  // The same domain-wide list backs both root selection and the delete impact
+  // preview, avoiding duplicate queries for identical organization state.
+  const domainEndpointsQuery = useCustomDomainMcpEndpoints(
+    undefined,
+    undefined,
+    {
+      enabled: Boolean(domain?.domain),
+    },
+  );
+  const impactedEndpoints = domainEndpointsQuery.data?.mcpEndpoints ?? [];
 
   const handleDomainInputChange = (value: string) => {
     setDomainInput(value);
@@ -614,6 +924,16 @@ function OrgDomainsInner() {
               </div>
             </Alert>
           )}
+          <DefaultMcpServerControl
+            domain={domain}
+            endpoints={impactedEndpoints}
+            isLoading={domainEndpointsQuery.isLoading}
+            canManage={canManageDomains}
+          />
+          <ChatGPTAppVerificationControl
+            domain={domain}
+            canManage={canManageDomains}
+          />
         </div>
       ) : (
         !domainIsLoading && (

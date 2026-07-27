@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -27,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -445,6 +447,17 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
 
+	var affectedDomainIDs []uuid.UUID
+	if payload.Visibility == VisibilityDisabled {
+		affectedDomainIDs, err = mcpendpointsrepo.New(s.db).ListCustomDomainIDsByMCPServerID(ctx, mcpendpointsrepo.ListCustomDomainIDsByMCPServerIDParams{
+			McpServerID: serverID,
+			ProjectID:   *authCtx.ProjectID,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list custom domains for mcp server").LogError(ctx, logger)
+		}
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -453,7 +466,21 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 
 	txRepo := repo.New(dbtx)
 
-	existing, err := txRepo.GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{
+	if err := lockMcpServerCustomDomains(ctx, dbtx, affectedDomainIDs); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock custom domains").LogError(ctx, logger)
+	}
+	var rootEndpoints []mcpendpointsrepo.McpEndpoint
+	if payload.Visibility == VisibilityDisabled {
+		rootEndpoints, err = mcpendpointsrepo.New(dbtx).LockRootMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockRootMCPEndpointsByMCPServerIDParams{
+			McpServerID: serverID,
+			ProjectID:   *authCtx.ProjectID,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock root mcp endpoints").LogError(ctx, logger)
+		}
+	}
+
+	existing, err := txRepo.LockMCPServerByIDAndProjectID(ctx, repo.LockMCPServerByIDAndProjectIDParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -550,6 +577,18 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp server update").LogError(ctx, logger)
 	}
 
+	if updated.Visibility == VisibilityDisabled {
+		if _, err := mcpendpointsrepo.New(dbtx).ClearRootMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ClearRootMCPEndpointsByMCPServerIDParams{
+			McpServerID: updated.ID,
+			ProjectID:   *authCtx.ProjectID,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "clear root mcp endpoints").LogError(ctx, logger)
+		}
+		if err := s.logMcpServerRootAutoClears(ctx, dbtx, authCtx, rootEndpoints); err != nil {
+			return nil, err
+		}
+	}
+
 	// A server that was just enabled is publishable if it already has an
 	// endpoint — attach it to the Default plugin so it reaches the
 	// auto-published marketplace. This is the counterpart to
@@ -571,6 +610,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 
 	s.triggerInitialPublishIfNeeded(ctx, authCtx, pluginCreated)
+	if err := s.reconcileMcpServerCustomDomains(ctx, rootDomainIDs(rootEndpoints)); err != nil {
+		return nil, err
+	}
 
 	return afterView, nil
 }
@@ -662,6 +704,14 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
 
+	affectedDomainIDs, err := mcpendpointsrepo.New(s.db).ListCustomDomainIDsByMCPServerID(ctx, mcpendpointsrepo.ListCustomDomainIDsByMCPServerIDParams{
+		McpServerID: serverID,
+		ProjectID:   *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list custom domains for mcp server").LogError(ctx, logger)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -669,6 +719,26 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+
+	if err := lockMcpServerCustomDomains(ctx, dbtx, affectedDomainIDs); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock custom domains").LogError(ctx, logger)
+	}
+	rootEndpoints, err := mcpendpointsrepo.New(dbtx).LockRootMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockRootMCPEndpointsByMCPServerIDParams{
+		McpServerID: serverID,
+		ProjectID:   *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock root mcp endpoints").LogError(ctx, logger)
+	}
+	if _, err := txRepo.LockMCPServerByIDAndProjectID(ctx, repo.LockMCPServerByIDAndProjectIDParams{
+		ID:        serverID,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, logger)
+		}
+		return oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
+	}
 
 	deleted, err := txRepo.DeleteMCPServer(ctx, repo.DeleteMCPServerParams{
 		ID:        serverID,
@@ -690,6 +760,9 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete child mcp endpoints").LogError(ctx, logger)
+	}
+	if err := s.logMcpServerRootAutoClears(ctx, dbtx, authCtx, rootEndpoints); err != nil {
+		return err
 	}
 
 	for _, endpoint := range deletedEndpoints {
@@ -809,6 +882,89 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
+	if err := s.reconcileMcpServerCustomDomains(ctx, rootDomainIDs(rootEndpoints)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func lockMcpServerCustomDomains(ctx context.Context, dbtx pgx.Tx, domainIDs []uuid.UUID) error {
+	slices.SortFunc(domainIDs, func(a, b uuid.UUID) int {
+		return strings.Compare(a.String(), b.String())
+	})
+	repository := customdomainsrepo.New(dbtx)
+	for _, domainID := range domainIDs {
+		if _, err := repository.LockCustomDomainByID(ctx, domainID); err != nil {
+			return fmt.Errorf("lock custom domain %s: %w", domainID, err)
+		}
+	}
+	return nil
+}
+
+func rootDomainIDs(endpoints []mcpendpointsrepo.McpEndpoint) []uuid.UUID {
+	seen := make(map[uuid.UUID]struct{}, len(endpoints))
+	result := make([]uuid.UUID, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		if !endpoint.CustomDomainID.Valid {
+			continue
+		}
+		if _, ok := seen[endpoint.CustomDomainID.UUID]; ok {
+			continue
+		}
+		seen[endpoint.CustomDomainID.UUID] = struct{}{}
+		result = append(result, endpoint.CustomDomainID.UUID)
+	}
+	slices.SortFunc(result, func(a, b uuid.UUID) int {
+		return strings.Compare(a.String(), b.String())
+	})
+	return result
+}
+
+func (s *Service) logMcpServerRootAutoClears(
+	ctx context.Context,
+	dbtx pgx.Tx,
+	authCtx *contextvalues.AuthContext,
+	rootEndpoints []mcpendpointsrepo.McpEndpoint,
+) error {
+	repository := customdomainsrepo.New(dbtx)
+	for _, endpoint := range rootEndpoints {
+		if !endpoint.CustomDomainID.Valid {
+			continue
+		}
+		domain, err := repository.GetCustomDomainByID(ctx, endpoint.CustomDomainID.UUID)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "load custom domain for root cleanup audit").LogError(ctx, s.logger)
+		}
+		if err := s.audit.LogCustomDomainUpdate(ctx, dbtx, audit.LogCustomDomainUpdateEvent{
+			OrganizationID:             authCtx.ActiveOrganizationID,
+			Actor:                      urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:           authCtx.Email,
+			ActorSlug:                  nil,
+			CustomDomainURN:            urn.NewCustomDomain(domain.ID),
+			DomainName:                 domain.Domain,
+			CustomDomainSnapshotBefore: mv.BuildCustomDomainView(domain, false, endpoint.ID),
+			CustomDomainSnapshotAfter:  mv.BuildCustomDomainView(domain, false, uuid.Nil),
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "log automatic root endpoint cleanup").LogError(ctx, s.logger)
+		}
+	}
+	return nil
+}
+
+func (s *Service) reconcileMcpServerCustomDomains(ctx context.Context, customDomainIDs []uuid.UUID) error {
+	if s.temporalEnv == nil {
+		return nil
+	}
+	for _, customDomainID := range customDomainIDs {
+		run, err := (&background.CustomDomainRegistrationClient{TemporalEnv: s.temporalEnv}).ExecuteCustomDomainReconcile(ctx, customDomainID)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "start custom domain reconciliation").LogError(ctx, s.logger)
+		}
+		if err := run.Get(ctx, nil); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "custom domain reconciliation failed").LogError(ctx, s.logger)
+		}
+	}
 	return nil
 }
 

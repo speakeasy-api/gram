@@ -140,6 +140,23 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		return noNotification, fmt.Errorf("get custom domain for health check: %w", err)
 	}
 
+	route, err := repository.GetCustomDomainRouteConfig(ctx, domain.ID)
+	if err != nil {
+		return noNotification, fmt.Errorf("get custom domain route for health check: %w", err)
+	}
+	rootResourceName := ""
+	wellKnownRootResourceName := ""
+	if route.RootMcpEndpointID != uuid.Nil {
+		rootResourceName, err = k8s.RootIngressNameForDomain(domain.Domain)
+		if err != nil {
+			return noNotification, fmt.Errorf("derive custom domain root resource name: %w", err)
+		}
+		wellKnownRootResourceName, err = k8s.WellKnownRootIngressNameForDomain(domain.Domain)
+		if err != nil {
+			return noNotification, fmt.Errorf("derive custom domain well-known root resource name: %w", err)
+		}
+	}
+
 	preserveCertificateExpiry := false
 
 	observation := customdomains.HealthObservation{
@@ -173,10 +190,12 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		preserveCertificateExpiry = true
 	default:
 		infrastructureHealth, infrastructureErr := c.infrastructure.CheckCustomDomainInfrastructure(ctx, k8s.CustomDomainInfrastructureCheck{
-			Domain:          domain.Domain,
-			ResourceName:    domain.IngressName.String,
-			CertSecretName:  domain.CertSecretName.String,
-			ProvisionerKind: k8s.ProvisionerKind(domain.ProvisionerKind),
+			Domain:                    domain.Domain,
+			ResourceName:              domain.IngressName.String,
+			RootResourceName:          rootResourceName,
+			WellKnownRootResourceName: wellKnownRootResourceName,
+			CertSecretName:            domain.CertSecretName.String,
+			ProvisionerKind:           k8s.ProvisionerKind(domain.ProvisionerKind),
 		})
 		if infrastructureErr != nil {
 			if !isFinalHealthCheckAttempt(ctx) {
@@ -382,15 +401,42 @@ func (c *CustomDomainHealth) FindOrphanResources(ctx context.Context) error {
 		return nil
 	}
 
-	activeResources, err := customdomainsrepo.New(c.db).ListActivatedCustomDomainResources(ctx)
+	repository := customdomainsrepo.New(c.db)
+	activeResources, err := repository.ListActivatedCustomDomainResources(ctx)
 	if err != nil {
 		return fmt.Errorf("list activated custom domain resources: %w", err)
 	}
-	active := make(map[k8s.ManagedCustomDomainResource]struct{}, len(activeResources))
+	active := make(map[k8s.ManagedCustomDomainResource]struct{}, len(activeResources)*3)
 	for _, resource := range activeResources {
 		active[k8s.ManagedCustomDomainResource{
 			Kind:   k8s.ProvisionerKind(resource.ProvisionerKind),
 			Name:   resource.ResourceName,
+			Domain: resource.Domain,
+		}] = struct{}{}
+
+		route, err := repository.GetCustomDomainRouteConfig(ctx, resource.ID)
+		if err != nil {
+			return fmt.Errorf("get custom domain route for orphan reconciliation: %w", err)
+		}
+		if route.RootMcpEndpointID == uuid.Nil {
+			continue
+		}
+		rootName, err := k8s.RootIngressNameForDomain(resource.Domain)
+		if err != nil {
+			return fmt.Errorf("derive custom domain root resource name for orphan reconciliation: %w", err)
+		}
+		active[k8s.ManagedCustomDomainResource{
+			Kind:   k8s.ProvisionerKindIngress,
+			Name:   rootName,
+			Domain: resource.Domain,
+		}] = struct{}{}
+		wellKnownRootName, err := k8s.WellKnownRootIngressNameForDomain(resource.Domain)
+		if err != nil {
+			return fmt.Errorf("derive custom domain well-known root resource name for orphan reconciliation: %w", err)
+		}
+		active[k8s.ManagedCustomDomainResource{
+			Kind:   k8s.ProvisionerKindIngress,
+			Name:   wellKnownRootName,
 			Domain: resource.Domain,
 		}] = struct{}{}
 	}

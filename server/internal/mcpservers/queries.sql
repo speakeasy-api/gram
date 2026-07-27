@@ -32,6 +32,21 @@ SELECT *
 FROM mcp_servers
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
+-- name: LockMCPServerByIDAndProjectID :one
+SELECT *
+FROM mcp_servers
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: LockMCPServersByIDs :many
+SELECT *
+FROM mcp_servers
+WHERE project_id = @project_id
+  AND id = ANY(@ids::uuid[])
+  AND deleted IS FALSE
+ORDER BY id
+FOR UPDATE;
+
 -- name: GetMCPServerByIDAndOrganizationID :one
 -- Fetch an MCP server by id scoped to an organization via its project's
 -- organization_id. For organization-administrator flows that span projects but

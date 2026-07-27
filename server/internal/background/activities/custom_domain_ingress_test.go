@@ -129,10 +129,10 @@ func TestCustomDomainIngress_Setup_Ingress_UpdatesDB(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Setup → Get, in that order
+	// Apply → Get, in that order
 	calls := stub.Calls()
 	require.Len(t, calls, 2)
-	require.Equal(t, "Setup", calls[0].Method)
+	require.Equal(t, "Apply", calls[0].Method)
 	require.Equal(t, domain, calls[0].Domain)
 	require.Equal(t, "Get", calls[1].Method)
 
@@ -164,11 +164,20 @@ func TestCustomDomainIngress_Reapply_AppliesAllowlist(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = customdomainsRepo.New(conn).CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
+	created, err := customdomainsRepo.New(conn).CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
 		OrganizationID:  orgID,
 		Domain:          domain,
 		ProvisionerKind: "ingress",
-		IpAllowlist:     []string{},
+		IpAllowlist:     []string{"1.2.3.4", "10.0.0.0/8"},
+	})
+	require.NoError(t, err)
+	_, err = customdomainsRepo.New(conn).UpdateCustomDomain(ctx, customdomainsRepo.UpdateCustomDomainParams{
+		ID:              created.ID,
+		Verified:        true,
+		Activated:       true,
+		IngressName:     pgtype.Text{String: "reapply-example-com", Valid: true},
+		CertSecretName:  pgtype.Text{String: "reapply-example-com-tls", Valid: true},
+		ProvisionerKind: "ingress",
 	})
 	require.NoError(t, err)
 
@@ -184,11 +193,11 @@ func TestCustomDomainIngress_Reapply_AppliesAllowlist(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Reapply runs a single idempotent Setup with the allowlist from args
-	// (not the DB) — no convergence Get, no DB write.
+	// Reapply runs a single idempotent Apply with desired state from the DB —
+	// no convergence Get and no activation write for an already-active domain.
 	calls := stub.Calls()
 	require.Len(t, calls, 1)
-	require.Equal(t, "Setup", calls[0].Method)
+	require.Equal(t, "Apply", calls[0].Method)
 	require.Equal(t, domain, calls[0].Domain)
 	require.Equal(t, []string{"1.2.3.4", "10.0.0.0/8"}, calls[0].IPAllowlist)
 }

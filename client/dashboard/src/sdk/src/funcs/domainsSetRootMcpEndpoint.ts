@@ -31,23 +31,23 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  UpdateDomainRequest,
-  UpdateDomainRequest$outboundSchema,
-  UpdateDomainSecurity,
-} from "../models/operations/updatedomain.js";
+  SetRootMcpEndpointRequest,
+  SetRootMcpEndpointRequest$outboundSchema,
+  SetRootMcpEndpointSecurity,
+} from "../models/operations/setrootmcpendpoint.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * updateDomain domains
+ * setRootMcpEndpoint domains
  *
  * @remarks
- * Update settings for the organization's custom domain
+ * Set or clear the MCP endpoint mapped to the organization's custom-domain root
  */
-export function domainsUpdateDomain(
+export function domainsSetRootMcpEndpoint(
   client: GramCore,
-  request: UpdateDomainRequest,
-  security?: UpdateDomainSecurity | undefined,
+  request: SetRootMcpEndpointRequest,
+  security?: SetRootMcpEndpointSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function domainsUpdateDomain(
 
 async function $do(
   client: GramCore,
-  request: UpdateDomainRequest,
-  security?: UpdateDomainSecurity | undefined,
+  request: SetRootMcpEndpointRequest,
+  security?: SetRootMcpEndpointSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -95,18 +95,18 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(UpdateDomainRequest$outboundSchema, value),
+    (value) => z.parse(SetRootMcpEndpointRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.UpdateDomainRequestBody, {
+  const body = encodeJSON("body", payload.SetRootMcpEndpointRequestBody, {
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/domain.update")();
+  const path = pathToFunc("/rpc/domain.setRootMcpEndpoint")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -130,7 +130,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "updateDomain",
+    operationID: "setRootMcpEndpoint",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,

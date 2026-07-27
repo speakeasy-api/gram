@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { domainsUpdateDomain } from "../funcs/domainsUpdateDomain.js";
+import { domainsSetRootMcpEndpoint } from "../funcs/domainsSetRootMcpEndpoint.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { CustomDomain } from "../models/components/customdomain.js";
@@ -24,22 +24,22 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  UpdateDomainRequest,
-  UpdateDomainSecurity,
-} from "../models/operations/updatedomain.js";
+  SetRootMcpEndpointRequest,
+  SetRootMcpEndpointSecurity,
+} from "../models/operations/setrootmcpendpoint.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type UpdateDomainMutationVariables = {
-  request: UpdateDomainRequest;
-  security?: UpdateDomainSecurity | undefined;
+export type SetRootMcpEndpointMutationVariables = {
+  request: SetRootMcpEndpointRequest;
+  security?: SetRootMcpEndpointSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type UpdateDomainMutationData = CustomDomain;
+export type SetRootMcpEndpointMutationData = CustomDomain;
 
-export type UpdateDomainMutationError =
+export type SetRootMcpEndpointMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -51,49 +51,49 @@ export type UpdateDomainMutationError =
   | SDKValidationError;
 
 /**
- * updateDomain domains
+ * setRootMcpEndpoint domains
  *
  * @remarks
- * Update settings for the organization's custom domain
+ * Set or clear the MCP endpoint mapped to the organization's custom-domain root
  */
-export function useUpdateDomainMutation(
+export function useSetRootMcpEndpointMutation(
   options?: MutationHookOptions<
-    UpdateDomainMutationData,
-    UpdateDomainMutationError,
-    UpdateDomainMutationVariables
+    SetRootMcpEndpointMutationData,
+    SetRootMcpEndpointMutationError,
+    SetRootMcpEndpointMutationVariables
   >,
 ): UseMutationResult<
-  UpdateDomainMutationData,
-  UpdateDomainMutationError,
-  UpdateDomainMutationVariables
+  SetRootMcpEndpointMutationData,
+  SetRootMcpEndpointMutationError,
+  SetRootMcpEndpointMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildUpdateDomainMutation(client, options),
+    ...buildSetRootMcpEndpointMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyUpdateDomain(): MutationKey {
-  return ["@gram/client", "domains", "updateDomain"];
+export function mutationKeySetRootMcpEndpoint(): MutationKey {
+  return ["@gram/client", "domains", "setRootMcpEndpoint"];
 }
 
-export function buildUpdateDomainMutation(
+export function buildSetRootMcpEndpointMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: UpdateDomainMutationVariables,
-  ) => Promise<UpdateDomainMutationData>;
+    variables: SetRootMcpEndpointMutationVariables,
+  ) => Promise<SetRootMcpEndpointMutationData>;
 } {
   return {
-    mutationKey: mutationKeyUpdateDomain(),
-    mutationFn: function updateDomainMutationFn({
+    mutationKey: mutationKeySetRootMcpEndpoint(),
+    mutationFn: function setRootMcpEndpointMutationFn({
       request,
       security,
       options,
-    }): Promise<UpdateDomainMutationData> {
+    }): Promise<SetRootMcpEndpointMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -106,7 +106,7 @@ export function buildUpdateDomainMutation(
           ),
         },
       };
-      return unwrapAsync(domainsUpdateDomain(
+      return unwrapAsync(domainsSetRootMcpEndpoint(
         client$,
         request,
         security,

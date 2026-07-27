@@ -14,6 +14,10 @@ import {
 import { Text } from "@/components/ui/Text";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
+import {
+  invalidateRootMcpEndpointQueries,
+  useRootMcpEndpointMutation,
+} from "@/hooks/useRootMcpEndpoint";
 import { useCustomDomains } from "@/hooks/useToolsetUrl";
 import { getServerURL } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
@@ -21,8 +25,8 @@ import type { CustomDomain } from "@gram/client/models/components/customdomain.j
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useDeleteMcpEndpointMutation } from "@gram/client/react-query/deleteMcpEndpoint.js";
-import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useUpdateMcpEndpointMutation } from "@gram/client/react-query/updateMcpEndpoint.js";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Stack } from "@/components/ui/Stack";
@@ -176,6 +180,7 @@ export function ServerUrlSection({
                     endpoint={endpoint}
                     domains={availableDomains}
                     isLastEndpoint={endpoints.length === 1}
+                    canManageDomainRoot={canManageDomains}
                   />
                 ))}
                 {addingCustom && (
@@ -226,11 +231,13 @@ function AddressRow({
   endpoint,
   domains,
   isLastEndpoint,
+  canManageDomainRoot = false,
 }: {
   mcpServer: McpServer;
   endpoint: McpEndpoint;
   domains?: CustomDomain[];
   isLastEndpoint: boolean;
+  canManageDomainRoot?: boolean;
 }) {
   const { orgSlug } = useSlugs();
   // Platform endpoints must carry the `${orgSlug}-` prefix. It's folded into
@@ -256,7 +263,7 @@ function AddressRow({
   const queryClient = useQueryClient();
   const update = useUpdateMcpEndpointMutation({
     onSuccess: async () => {
-      await invalidateAllMcpEndpoints(queryClient, { refetchType: "all" });
+      await invalidateRootMcpEndpointQueries(queryClient);
       toast.success("Address updated");
     },
     onError: (error) => {
@@ -269,7 +276,7 @@ function AddressRow({
   const remove = useDeleteMcpEndpointMutation({
     onSuccess: async () => {
       setConfirmRemoveOpen(false);
-      await invalidateAllMcpEndpoints(queryClient, { refetchType: "all" });
+      await invalidateRootMcpEndpointQueries(queryClient);
       toast.success("Address removed");
     },
     onError: (error) => {
@@ -286,6 +293,7 @@ function AddressRow({
   );
 
   const dirty = fullSlug !== endpoint.slug;
+  const rootMutation = useRootMcpEndpointMutation();
 
   const customDomainLabel =
     endpoint.customDomainId &&
@@ -358,6 +366,34 @@ function AddressRow({
       </Stack>
       {slugError && <FieldError className="text-xs">{slugError}</FieldError>}
       {update.isError && <FieldError>{update.error.message}</FieldError>}
+      {endpoint.customDomainId && (
+        <div className="flex flex-wrap items-center gap-2">
+          {endpoint.isDomainRoot && (
+            <Badge variant="success" background>
+              Domain root
+            </Badge>
+          )}
+          <Button
+            variant="tertiary"
+            size="sm"
+            disabled={!canManageDomainRoot || rootMutation.isPending}
+            title={
+              canManageDomainRoot
+                ? undefined
+                : "Organization admin permission is required"
+            }
+            onClick={() =>
+              rootMutation.setRootMcpEndpoint(
+                endpoint.isDomainRoot ? undefined : endpoint.id,
+              )
+            }
+          >
+            <Button.Text>
+              {endpoint.isDomainRoot ? "Clear root" : "Set as domain root"}
+            </Button.Text>
+          </Button>
+        </div>
+      )}
       <RemoveLastAddressDialog
         isOpen={confirmRemoveOpen}
         isLoading={remove.isPending}
@@ -446,7 +482,7 @@ function NewPlatformAddressRow({
           slug: fullSlug,
         },
       });
-      await invalidateAllMcpEndpoints(queryClient, { refetchType: "all" });
+      await invalidateRootMcpEndpointQueries(queryClient);
       toast.success("Address added");
       onClose();
     } catch (error) {
@@ -544,7 +580,7 @@ function NewCustomAddressRow({
           customDomainId: domainId,
         },
       });
-      await invalidateAllMcpEndpoints(queryClient, { refetchType: "all" });
+      await invalidateRootMcpEndpointQueries(queryClient);
       toast.success("Address added");
       onClose();
     } catch (error) {

@@ -1448,6 +1448,7 @@ func marshalTypesMcpEndpointToMcpEndpointResponseBody(v *types.McpEndpoint) *Mcp
 		CustomDomainID: v.CustomDomainID,
 		McpServerID:    v.McpServerID,
 		Slug:           string(v.Slug),
+		IsDomainRoot:   v.IsDomainRoot,
 		CreatedAt:      v.CreatedAt,
 		UpdatedAt:      v.UpdatedAt,
 	}

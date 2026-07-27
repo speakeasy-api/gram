@@ -24,11 +24,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-type stubTemporalRun struct{}
+type stubTemporalRun struct {
+	err error
+}
 
-func (stubTemporalRun) Get(ctx context.Context, valuePtr any) error { return nil }
-func (stubTemporalRun) GetWithOptions(ctx context.Context, valuePtr any, options client.WorkflowRunGetOptions) error {
-	return nil
+func (s stubTemporalRun) Get(ctx context.Context, valuePtr any) error { return s.err }
+func (s stubTemporalRun) GetWithOptions(ctx context.Context, valuePtr any, options client.WorkflowRunGetOptions) error {
+	return s.err
 }
 func (stubTemporalRun) GetID() string    { return "workflow" }
 func (stubTemporalRun) GetRunID() string { return "run" }
@@ -37,10 +39,13 @@ type stubTemporalClient struct {
 	registrationCalls int
 	deletionCalls     int
 	updateCalls       int
+	reconcileCalls    int
 	healthCheckCalls  int
 	lastDomain        string
 	lastOrganization  string
 	lastHealthCheckID uuid.UUID
+	lastReconcileID   uuid.UUID
+	reconcileErr      error
 }
 
 func (s *stubTemporalClient) GetWorkflowInfo(ctx context.Context, orgID string, domain string) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
@@ -63,6 +68,12 @@ func (s *stubTemporalClient) ExecuteCustomDomainUpdate(ctx context.Context, orgI
 	s.updateCalls++
 	s.lastDomain = domain
 	return stubTemporalRun{}, nil
+}
+
+func (s *stubTemporalClient) ExecuteCustomDomainReconcile(ctx context.Context, customDomainID uuid.UUID) (client.WorkflowRun, error) {
+	s.reconcileCalls++
+	s.lastReconcileID = customDomainID
+	return stubTemporalRun{err: s.reconcileErr}, nil
 }
 
 func (s *stubTemporalClient) ExecuteCustomDomainHealthCheck(ctx context.Context, organizationID string, customDomainID uuid.UUID) (client.WorkflowRun, error) {
