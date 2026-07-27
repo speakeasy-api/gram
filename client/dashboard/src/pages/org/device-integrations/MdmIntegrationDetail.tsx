@@ -74,11 +74,11 @@ function MdmIntegrationDetailInner({
   const ui = providerUI(provider);
   const Icon = ui.icon;
 
-  const { data: coverage } = useDeviceIntegrationCoverage(
-    { provider: provider.id },
-    undefined,
-    { throwOnError: false, staleTime: COVERAGE_STALE_TIME },
-  );
+  const { data: coverage, isError: coverageError } =
+    useDeviceIntegrationCoverage({ provider: provider.id }, undefined, {
+      throwOnError: false,
+      staleTime: COVERAGE_STALE_TIME,
+    });
   const devicesQuery = useManagedDevicesInfinite(
     { provider: provider.id, limit: 200 },
     undefined,
@@ -164,6 +164,11 @@ function MdmIntegrationDetailInner({
         </Page.Section.CTA>
         <Page.Section.Body>
           <Stack gap={4}>
+            {coverageError ? (
+              <Type muted>
+                Coverage could not be loaded. It will retry automatically.
+              </Type>
+            ) : null}
             {coverage ? <CoverageHeadline coverage={coverage} /> : null}
             {coverage && coverage.totalDevices > 0 ? (
               <CoverageSummaryTiles coverage={coverage} />
