@@ -45,6 +45,10 @@ type Service interface {
 	// Pin or unpin a chat. Pinned chats surface in a dedicated section above
 	// recents on the chat page.
 	SetPinned(context.Context, *SetPinnedPayload) (err error)
+	// Generate or return a persisted LLM summary of a chat session transcript.
+	// When a summary already exists and regenerate is false, returns the cached
+	// summary without calling the model.
+	Summarize(context.Context, *SummarizePayload) (res *SummarizeChatResult, err error)
 	// Submit user feedback for a chat (success/failure)
 	SubmitFeedback(context.Context, *SubmitFeedbackPayload) (res *SubmitFeedbackResult, err error)
 	// List the distinct agent sources present in this project's chats, for
@@ -74,7 +78,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"listChats", "getWorkUnitsTrend", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "submitFeedback", "listSources"}
+var MethodNames = [10]string{"listChats", "getWorkUnitsTrend", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "summarize", "submitFeedback", "listSources"}
 
 type AgentUsage struct {
 	// The agent usage payload discriminator.
@@ -164,6 +168,12 @@ type Chat struct {
 	// Email of the AI account that produced the chat, resolved from the linked AI
 	// account. May differ from the employee's work email (e.g. a personal account).
 	AccountEmail *string
+	// True when the chat is pinned
+	Pinned *bool
+	// Persisted LLM summary of the session transcript, if one has been generated
+	Summary *string
+	// When the session summary was last generated.
+	SummaryGeneratedAt *string
 }
 
 type ChatMessage struct {
@@ -249,6 +259,12 @@ type ChatOverview struct {
 	// Email of the AI account that produced the chat, resolved from the linked AI
 	// account. May differ from the employee's work email (e.g. a personal account).
 	AccountEmail *string
+	// True when the chat is pinned
+	Pinned *bool
+	// Persisted LLM summary of the session transcript, if one has been generated
+	Summary *string
+	// When the session summary was last generated.
+	SummaryGeneratedAt *string
 }
 
 // Trace-entry counts across the entire returned generation, independent of
@@ -542,6 +558,26 @@ type SubmitFeedbackPayload struct {
 type SubmitFeedbackResult struct {
 	// Whether the feedback was submitted successfully
 	Success bool
+}
+
+// SummarizeChatResult is the result type of the chat service summarize method.
+type SummarizeChatResult struct {
+	// The session summary text
+	Summary string
+	// When the summary was last generated.
+	SummaryGeneratedAt string
+	// True when an existing summary was returned without regenerating
+	Cached bool
+}
+
+// SummarizePayload is the payload type of the chat service summarize method.
+type SummarizePayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The ID of the chat to summarize
+	ID string
+	// When true, regenerate and overwrite any existing summary. Defaults to false.
+	Regenerate bool
 }
 
 type WorkUnitsTrendBucket struct {
