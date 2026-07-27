@@ -14,7 +14,7 @@ import (
 )
 
 type KubernetesClients struct {
-	Clientset             *kubernetes.Clientset
+	Clientset             kubernetes.Interface
 	DynamicClient         dynamic.Interface
 	gatewayClient         gatewayclient.Interface
 	logger                *slog.Logger

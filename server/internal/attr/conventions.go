@@ -202,19 +202,23 @@ const (
 	HTTPStatusCodePatternKey       = attribute.Key("gram.http.status_code_pattern")
 	IngressNameKey                 = attribute.Key("gram.ingress.name")
 	CustomDomainProvisionerKindKey = attribute.Key("gram.custom_domain.provisioner.kind")
-	McpMethodKey                   = attribute.Key("gram.mcp.method")
-	McpRequestedTagsKey            = attribute.Key("gram.mcp.requested_tags")
-	McpToolsReturnedKey            = attribute.Key("gram.mcp.tools_returned")
-	McpToolsFilteredKey            = attribute.Key("gram.mcp.tools_filtered")
-	McpServerIDKey                 = attribute.Key("gram.mcp_server.id")
-	McpURLKey                      = attribute.Key("gram.mcp.url")
-	ToolVariationsGroupIDKey       = attribute.Key("gram.tool_variations_group.id")
-	MetricNameKey                  = attribute.Key("gram.metric.name")
-	MimeTypeKey                    = attribute.Key("mime.type")
-	OAuthAuthorizationEndpointKey  = attribute.Key("gram.oauth.authorization_endpoint")
-	OAuthClientIDKey               = attribute.Key("gram.oauth.client_id")
-	OAuthClientNameKey             = attribute.Key("gram.oauth.client_name")
-	OAuthClientSecretGeneratedKey  = attribute.Key("gram.oauth.client_secret_generated")
+
+	CustomDomainHealthStatusKey         = attribute.Key("gram.custom_domain.health.status")
+	CustomDomainHealthIssueKey          = attribute.Key("gram.custom_domain.health.issue")
+	CustomDomainNotifyRecipientCountKey = attribute.Key("gram.custom_domain.notify.recipient_count")
+	McpMethodKey                        = attribute.Key("gram.mcp.method")
+	McpRequestedTagsKey                 = attribute.Key("gram.mcp.requested_tags")
+	McpToolsReturnedKey                 = attribute.Key("gram.mcp.tools_returned")
+	McpToolsFilteredKey                 = attribute.Key("gram.mcp.tools_filtered")
+	McpServerIDKey                      = attribute.Key("gram.mcp_server.id")
+	McpURLKey                           = attribute.Key("gram.mcp.url")
+	ToolVariationsGroupIDKey            = attribute.Key("gram.tool_variations_group.id")
+	MetricNameKey                       = attribute.Key("gram.metric.name")
+	MimeTypeKey                         = attribute.Key("mime.type")
+	OAuthAuthorizationEndpointKey       = attribute.Key("gram.oauth.authorization_endpoint")
+	OAuthClientIDKey                    = attribute.Key("gram.oauth.client_id")
+	OAuthClientNameKey                  = attribute.Key("gram.oauth.client_name")
+	OAuthClientSecretGeneratedKey       = attribute.Key("gram.oauth.client_secret_generated")
 	// OAuthErrorKey / OAuthErrorDescriptionKey carry the `error` /
 	// `error_description` parameters from RFC 6749 / RFC 7591 error responses
 	// — used across DCR registration, /authorize, /token, and /revoke.
@@ -1018,6 +1022,30 @@ func CustomDomainProvisionerKind(v string) attribute.KeyValue {
 
 func SlogCustomDomainProvisionerKind(v string) slog.Attr {
 	return slog.String(string(CustomDomainProvisionerKindKey), v)
+}
+
+func CustomDomainHealthStatus(v string) attribute.KeyValue {
+	return CustomDomainHealthStatusKey.String(v)
+}
+
+func SlogCustomDomainHealthStatus(v string) slog.Attr {
+	return slog.String(string(CustomDomainHealthStatusKey), v)
+}
+
+func CustomDomainHealthIssue(v string) attribute.KeyValue {
+	return CustomDomainHealthIssueKey.String(v)
+}
+
+func SlogCustomDomainHealthIssue(v string) slog.Attr {
+	return slog.String(string(CustomDomainHealthIssueKey), v)
+}
+
+func CustomDomainNotifyRecipientCount(v int) attribute.KeyValue {
+	return CustomDomainNotifyRecipientCountKey.Int(v)
+}
+
+func SlogCustomDomainNotifyRecipientCount(v int) slog.Attr {
+	return slog.Int(string(CustomDomainNotifyRecipientCountKey), v)
 }
 
 func MetricName(v string) attribute.KeyValue { return MetricNameKey.String(v) }

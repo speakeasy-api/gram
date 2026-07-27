@@ -119,8 +119,8 @@ func (p *GatewayProvisioner) buildHTTPRoute(name, domain string) *gatewayv1.HTTP
 			Name:      name,
 			Namespace: p.namespace,
 			Labels: map[string]string{
-				"app.kubernetes.io/managed-by": "custom-domain-chart",
-				"custom-domain":                domain,
+				managedByLabelKey:    managedByLabelValue,
+				customDomainLabelKey: domain,
 			},
 		},
 		Spec: gatewayv1.HTTPRouteSpec{
