@@ -337,3 +337,18 @@ func TestDescriptorRegistered(t *testing.T) {
 	secrets := desc.SecretFields()
 	require.Len(t, secrets, 2, "client id and secret are write-only")
 }
+
+func TestUnusableDeviceIDFailsLoudly(t *testing.T) {
+	t.Parallel()
+
+	// Keyset pagination anchors the next window on the last numeric id; a
+	// non-numeric id cannot advance the cursor, so the pull must fail loudly
+	// rather than risk a non-advancing loop.
+	fake := newFakeJamf(t, 2)
+	fake.devMu.Lock()
+	fake.devices[0]["id"] = "not-numeric"
+	fake.devMu.Unlock()
+
+	_, err := fake.newSource().ListDevices(t.Context(), fake.creds(), fake.settings(), "")
+	require.ErrorContains(t, err, "unusable id")
+}
