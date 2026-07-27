@@ -6,6 +6,7 @@ import { Type } from "@/components/ui/type";
 import type { DeviceIntegrationCoverage } from "@gram/client/models/components/deviceintegrationcoverage.js";
 import type { DeviceIntegrationProvider } from "@gram/client/models/components/deviceintegrationprovider.js";
 import { useDeviceIntegrationCoverage } from "@gram/client/react-query/deviceIntegrationCoverage.js";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { useDeviceIntegrationProviders } from "@gram/client/react-query/deviceIntegrationProviders.js";
 import { useManagedDevicesInfinite } from "@gram/client/react-query/managedDevices.js";
 import { Button, Stack } from "@speakeasy-api/moonshine";
@@ -34,14 +35,20 @@ const COVERAGE_STALE_TIME = 30_000;
 
 // Detail page for one MDM integration: its connection state and controls,
 // the vendor-scoped coverage breakdown, sync schedules, and the synced
-// device inventory.
+// device inventory. Routed below the Device Agent tab shell, so it carries
+// its own rollout-flag gate.
 export default function MdmIntegrationDetail(): JSX.Element | null {
+  const telemetry = useTelemetry();
+  const mdmEnabled = telemetry.isFeatureEnabled("gram-device-integrations");
   const { provider: providerID = "" } = useParams<{ provider: string }>();
   const { data, isLoading } = useDeviceIntegrationProviders(
     undefined,
     undefined,
     { staleTime: COVERAGE_STALE_TIME },
   );
+
+  if (mdmEnabled === undefined) return null;
+  if (!mdmEnabled) return <Navigate to=".." replace />;
 
   const provider = data?.providers.find((p) => p.id === providerID);
   if (isLoading) return null;

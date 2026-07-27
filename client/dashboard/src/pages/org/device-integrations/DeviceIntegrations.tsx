@@ -1,49 +1,15 @@
 import { Page } from "@/components/page-layout";
-import { RequireScope } from "@/components/require-scope";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useDeviceIntegrationProviders } from "@gram/client/react-query/deviceIntegrationProviders.js";
 import React from "react";
-import { Navigate, Outlet } from "react-router";
 import { DeviceIntegrationConnectionRow } from "./device-integration-connection-row";
 
-// Route shell: gates the whole MDM Integrations surface — the catalog index
-// and per-provider detail pages — behind the rollout flag.
-export function DeviceIntegrationsRoot(): React.JSX.Element | null {
-  const telemetry = useTelemetry();
-  const isEnabled = telemetry.isFeatureEnabled("gram-device-integrations");
-
-  // Flags haven't resolved yet — render nothing rather than flashing a redirect.
-  if (isEnabled === undefined) {
-    return null;
-  }
-
-  if (!isEnabled) {
-    return <Navigate to=".." replace />;
-  }
-
-  return <Outlet />;
-}
-
-// MDM Integrations catalog: one row per vendor; clicking a row opens its
-// detail page with coverage, schedules, and the synced device inventory.
-export default function DeviceIntegrations(): React.JSX.Element {
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope={["org:read", "org:admin"]} level="page">
-          <DeviceIntegrationsInner />
-        </RequireScope>
-      </Page.Body>
-    </Page>
-  );
-}
-
-function DeviceIntegrationsInner() {
+// MDM Integrations catalog, rendered as a tab of the Device Agent page: one
+// row per vendor; clicking a row opens its detail page with coverage,
+// schedules, and the synced device inventory. The tab itself is gated behind
+// the gram-device-integrations flag by the Device Agent tab shell.
+export function MdmIntegrationsTab(): React.JSX.Element {
   const { data, isLoading } = useDeviceIntegrationProviders(
     undefined,
     undefined,
@@ -54,7 +20,7 @@ function DeviceIntegrationsInner() {
 
   return (
     <Page.Section>
-      <Page.Section.Title stage="preview">MDM Integrations</Page.Section.Title>
+      <Page.Section.Title>MDM Integrations</Page.Section.Title>
       <Page.Section.Description>
         Connect your MDM and compliance vendors. MDM inventory reveals which
         managed devices are missing the device agent; compliance connections
