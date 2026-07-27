@@ -62,14 +62,15 @@ func (s *Service) requireOrgAdmin(ctx context.Context) (*contextvalues.AuthConte
 }
 
 func (s *Service) requireProjectInOrganization(ctx context.Context, organizationID string, projectID uuid.UUID) error {
-	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, projectID)
+	_, err := projectsrepo.New(s.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{
+		ID:             projectID,
+		OrganizationID: organizationID,
+	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return oops.E(oops.CodeNotFound, nil, "project not found").LogError(ctx, s.logger)
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "get project").LogError(ctx, s.logger)
-	case project.OrganizationID != organizationID:
-		return oops.E(oops.CodeNotFound, nil, "project not found").LogError(ctx, s.logger)
 	default:
 		return nil
 	}
