@@ -43,7 +43,7 @@ function DeviceIntegrationsInner() {
 
   return (
     <Page.Section>
-      <Page.Section.Title>Device Integrations</Page.Section.Title>
+      <Page.Section.Title>MDM Integrations</Page.Section.Title>
       <Page.Section.Description>
         Connect your MDM and compliance vendors. MDM inventory reveals which
         managed devices are missing the device agent; compliance connections
