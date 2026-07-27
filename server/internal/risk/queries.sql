@@ -1543,6 +1543,15 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: ListUserEmailsByIDs :many
+-- Display-email lookup for the ClickHouse-backed overview top-users list. The
+-- ids come from findings already scoped to the caller's project; mirroring the
+-- Postgres overview query, no deleted filter is applied so findings from
+-- since-removed users keep a resolvable email.
+SELECT id, email
+FROM users
+WHERE id = ANY(@ids::text[]);
+
 -- name: GetChatMessageAttribution :many
 -- Resolves the denormalized attribution (chat id, user ids) the ClickHouse
 -- finding writer stamps on risk_findings rows at ingest. Message-level ids win

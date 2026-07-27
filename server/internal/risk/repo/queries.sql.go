@@ -3273,6 +3273,41 @@ func (q *Queries) ListRiskUserRuleBreakdown(ctx context.Context, arg ListRiskUse
 	return items, nil
 }
 
+const listUserEmailsByIDs = `-- name: ListUserEmailsByIDs :many
+SELECT id, email
+FROM users
+WHERE id = ANY($1::text[])
+`
+
+type ListUserEmailsByIDsRow struct {
+	ID    string
+	Email string
+}
+
+// Display-email lookup for the ClickHouse-backed overview top-users list. The
+// ids come from findings already scoped to the caller's project; mirroring the
+// Postgres overview query, no deleted filter is applied so findings from
+// since-removed users keep a resolvable email.
+func (q *Queries) ListUserEmailsByIDs(ctx context.Context, ids []string) ([]ListUserEmailsByIDsRow, error) {
+	rows, err := q.db.Query(ctx, listUserEmailsByIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserEmailsByIDsRow
+	for rows.Next() {
+		var i ListUserEmailsByIDsRow
+		if err := rows.Scan(&i.ID, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markMessagesRiskAnalyzed = `-- name: MarkMessagesRiskAnalyzed :exec
 UPDATE chat_messages
 SET risk_analyzed_at = clock_timestamp()
