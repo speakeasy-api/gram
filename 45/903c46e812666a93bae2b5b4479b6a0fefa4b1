@@ -1,0 +1,298 @@
+server/migrations/20260727165008_chat-content-parts.sql
+  s_d91d1a4a046c46::t_59fbfd6d053a28 1-33
+server/internal/chat/queries.sql
+  s_d91d1a4a046c46::t_8a8f0398d7c089 264-267
+  s_d91d1a4a046c46::t_cda76902908c2b 244-249,251-263,268-277
+  s_d91d1a4a046c46::t_9a533bf358d8fb 756
+  s_d91d1a4a046c46::t_864382a6d9ffd0 213-218,220-232,234-243,278
+  s_d91d1a4a046c46::t_57e7cbdb26ac88 219,233,250
+  s_d91d1a4a046c46::t_c9330a9d2444b1 279
+server/internal/risk/chrepo/queries.go
+  s_d91d1a4a046c46::t_f60bde14d6f295 28,98,130
+server/internal/background/activities.go
+  s_d91d1a4a046c46::t_b5c029c64711bd 183
+server/internal/scanners/publish.go
+  s_d91d1a4a046c46::t_4b69f7e70d1ae8 23,43,84
+server/internal/background/activities/risk_analysis/risk_result_writer.go
+  s_d91d1a4a046c46::t_3927984aa55145 48,52,58,66,85-86,224,235,242-243,258,265-266
+  s_d91d1a4a046c46::t_44fd0b46cc8f24 168-186
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_d91d1a4a046c46::t_b5c029c64711bd 155,204,313,382,458,568,673,832
+  s_d91d1a4a046c46::t_f66dc1fbb15f45 7,23-24
+  s_d91d1a4a046c46::t_799e9409bed5b6 439
+  s_d91d1a4a046c46::t_3172a71f1d8281 280
+  s_d91d1a4a046c46::t_5202bc030bd1c7 527
+  s_d91d1a4a046c46::t_340362b53a8bd2 264-279,281-288,290-299
+  s_d91d1a4a046c46::t_418a8ee0fa91e7 289
+  s_d91d1a4a046c46::t_d74c0740d43f44 1307-1308,1310-1316,1324,1352
+server/internal/assistants/service.go
+  s_d91d1a4a046c46::t_37dda39c978bb0 3342-3366
+server/clickhouse/local/golang_migrate/20260727130935_chat-content-parts.up.sql
+  s_d91d1a4a046c46::t_fe216da238de5b 1-2
+server/internal/hooks/codex_hooks.go
+  s_d91d1a4a046c46::t_37dda39c978bb0 548-572,595-619,643-667,691-715
+server/internal/hooks/ingest_hooks_test.go
+  s_d91d1a4a046c46::t_19993fe6d6c9b3 6,21,28,49-56
+  s_d91d1a4a046c46::t_7b32191f9cf1f4 18,33,1138-1181
+  s_d91d1a4a046c46::t_3172a71f1d8281 1123-1124
+  s_d91d1a4a046c46::t_24b7b191e06755 1126
+  s_d91d1a4a046c46::t_041a4e6c2ccd28 1183-1219
+  s_d91d1a4a046c46::t_c5c897392554d7 10-11,1047,1125,1127-1131
+  s_d91d1a4a046c46::t_78a4a126ce09c3 1098-1099,1111,1114-1122,1132-1134,1220
+  s_d91d1a4a046c46::t_407ae5b6403c9e 57
+  s_d91d1a4a046c46::t_7cbbec429223a8 1182
+server/internal/chat/repo/copyfrom.go
+  s_d91d1a4a046c46::t_1b34529675ec0b 52
+  s_d91d1a4a046c46::t_ee606c1558065f 36
+  s_d91d1a4a046c46::t_4c2469f96d0558 12-35,37-51,53-54,112
+server/internal/background/activities/risk_analysis/scan_presidio.go
+  s_d91d1a4a046c46::t_c95eb1cacc5a58 42,55
+  s_d91d1a4a046c46::t_800c9249537dc0 39-41
+server/internal/background/activities/risk_analysis/message_types_test.go
+  s_d91d1a4a046c46::t_76731ee23e9fdd 14,23,26-28,31,37
+  s_d91d1a4a046c46::t_50f30b1879f8e5 24-25
+server/internal/hooks/session_capture.go
+  s_d91d1a4a046c46::t_37dda39c978bb0 405-429,476-500,529-553
+server/internal/outbox/events/risk_finding_created.go
+  s_d91d1a4a046c46::t_bfe80b3c0cc416 28-29
+  s_d91d1a4a046c46::t_37dda39c978bb0 23-27,30-34
+server/clickhouse/migrations/atlas.sum
+  s_d91d1a4a046c46::t_fe216da238de5b 1,85
+server/internal/database/models.go
+  s_d91d1a4a046c46::t_4c2469f96d0558 352-357,359-370,372-403,1669-1670
+  s_d91d1a4a046c46::t_1b34529675ec0b 358
+server/internal/background/activities/risk_analysis/prompt_judge_batch.go
+  s_d91d1a4a046c46::t_378d6c45910e1f 147
+  s_d91d1a4a046c46::t_c95eb1cacc5a58 148-149
+server/internal/chat/repo/models.go
+  s_d91d1a4a046c46::t_4c2469f96d0558 14-45
+server/internal/chat/impl.go
+  s_d91d1a4a046c46::t_37dda39c978bb0 815-828,859-872,1992-2005,2251-2275
+  s_d91d1a4a046c46::t_3352d0c55dbf7e 1969-1972,1974,1976,1978-1979
+  s_d91d1a4a046c46::t_9e1555f4dfe094 1002-1015
+  s_d91d1a4a046c46::t_7b0d54b305efca 1973
+  s_d91d1a4a046c46::t_15c16fdad1df65 989-995,1019,1021,1049
+  s_d91d1a4a046c46::t_88f01efb412af8 38,996-1001,1016-1018,1020,1967-1968,1975,1977
+server/internal/assistants/compaction_persist.go
+  s_d91d1a4a046c46::t_37dda39c978bb0 133-157
+server/internal/risk/finding_ch.go
+  s_d91d1a4a046c46::t_dc10d729380ad8 77-80,183-186,189-196,216-217,284-287,291-301
+  s_d91d1a4a046c46::t_43e1f514430cb0 264-266,288-290,304,306-326
+  s_d91d1a4a046c46::t_acadc288601cb5 302-303
+  s_d91d1a4a046c46::t_7b572423c4a6a0 305
+  s_d91d1a4a046c46::t_ee569f1f3be78c 327
+server/internal/hooks/session_capture_test.go
+  s_d91d1a4a046c46::t_3f47e7a1e8ff9c 362
+server/internal/scanners/publish_test.go
+  s_d91d1a4a046c46::t_58c3ca58877a61 86-102,107
+server/internal/chat/setup_test.go
+  s_d91d1a4a046c46::t_6207c07880533e 15,59,119-120,128
+  s_d91d1a4a046c46::t_21e470ee1d83e5 16
+client/dashboard/src/pages/chatLogs/ChatTranscript.tsx
+  s_d91d1a4a046c46::t_07a669fdfaffc8 460,468-470,528,571-575,598-604,622
+server/internal/background/activities/risk_analysis/batch_messages.go
+  s_d91d1a4a046c46::t_fe70f8bb60ddaa 63,68-71
+  s_d91d1a4a046c46::t_eebd7cd234ca1e 60-62,64-67,72-73
+  s_d91d1a4a046c46::t_f31b88957035c5 101,103,112
+  s_d91d1a4a046c46::t_da198de7f0d549 21,102,105-111,113-126,140,155-156,158-163,165-168,181-185,187-188
+  s_d91d1a4a046c46::t_9028f2c961c406 104,157,164
+  s_d91d1a4a046c46::t_312d5e250cb7a6 87,131-132,194
+server/internal/chat/load_chat_test.go
+  s_d91d1a4a046c46::t_77e78d3bf95d0e 102
+  s_d91d1a4a046c46::t_c89121d6b43dc2 142
+  s_d91d1a4a046c46::t_3821d24d7e6e73 143
+  s_d91d1a4a046c46::t_bc35471b1393a7 144-146
+  s_d91d1a4a046c46::t_061ded1986813f 16
+  s_d91d1a4a046c46::t_84a2350743f846 5,18,195,201,203-206
+  s_d91d1a4a046c46::t_76426af3eef51a 7,14,17,140-141,147-194,196-200,202
+  s_d91d1a4a046c46::t_82639de30efb60 207-208
+server/internal/attr/conventions.go
+  s_d91d1a4a046c46::t_0e3179cd55312c 124-129
+  s_d91d1a4a046c46::t_03d2704c4a9923 130-132,825-828
+  s_d91d1a4a046c46::t_3713e7d7960126 829
+server/internal/chat/list_chats_test.go
+  s_d91d1a4a046c46::t_77e78d3bf95d0e 90,131
+infra/gen_py/gram/risk/v1/finding_pb2.pyi
+  s_3d388cbf35fcf4::t_85db1cd7cc0ba0 11,29,47-48
+server/internal/scanners/customruleanalyzer/handler.go
+  s_d91d1a4a046c46::t_e6284a60454804 103
+server/internal/hooks/claude_hooks.go
+  s_d91d1a4a046c46::t_78a4a126ce09c3 1302
+server/internal/background/activities/risk_analysis/category_scopes_test.go
+  s_d91d1a4a046c46::t_e33d7a9f359f4e 192,200-201
+server/internal/hooks/cursor_hooks.go
+  s_d91d1a4a046c46::t_37dda39c978bb0 727-751,797-821,846-870,911-935
+server/internal/risk/overview_test.go
+  s_d91d1a4a046c46::t_27a9d6a9af3b67 54
+server/internal/hooks/ingest_hooks.go
+  s_d91d1a4a046c46::t_8e52852ac0d886 13
+  s_d91d1a4a046c46::t_c9748f5c8a20cc 1072,1126-1128,1130,1135,1137,1141,1144,1158-1159
+  s_d91d1a4a046c46::t_59d39a0e819e05 1153
+  s_d91d1a4a046c46::t_37dda39c978bb0 967-989
+  s_d91d1a4a046c46::t_fc80b68007a5e9 1073-1086,1102-1108,1111,1114-1121,1123-1125,1131-1133,1136,1138,1140,1164-1166,1169-1170,1175,1177-1184,1186-1189,1192-1205
+  s_d91d1a4a046c46::t_74968e81e5c117 1129,1134
+  s_d91d1a4a046c46::t_77b457cdd6d79f 1139
+server/internal/background/activities/risk_analysis/scan_custom_rules.go
+  s_d91d1a4a046c46::t_67c8b9218958cd 58-60
+  s_d91d1a4a046c46::t_c95eb1cacc5a58 70,83
+server/internal/risk/chrepo_roundtrip_test.go
+  s_d91d1a4a046c46::t_4b09e61887f6b3 40
+server/internal/risk/queries.sql
+  s_d91d1a4a046c46::t_abdcf4369075d3 1597-1614,1625
+  s_d91d1a4a046c46::t_c49fbbedd7c68a 878
+  s_d91d1a4a046c46::t_354c76588a2da6 844-861,885,887-894,971,991,1011-1015
+  s_d91d1a4a046c46::t_15f8124c51f981 886,1626-1627
+  s_d91d1a4a046c46::t_e0d2a7e08a94be 1016
+  s_d91d1a4a046c46::t_09f09e0f2ad6ba 1628-1629
+server/migrations/atlas.sum
+  s_d91d1a4a046c46::t_59fbfd6d053a28 1,299
+server/internal/assets/blobio/blobio.go
+  s_d91d1a4a046c46::t_9f62fa3c353fc9 1-44
+server/database/schema.sql
+  s_d91d1a4a046c46::t_22c9309121b767 2015-2024,2026-2058
+  s_d91d1a4a046c46::t_15f8124c51f981 2025
+  s_d91d1a4a046c46::t_7ffc8f7d570908 4096-4097,4138-4140,4165-4166
+  s_d91d1a4a046c46::t_d7348479ecdec6 2059
+  s_d91d1a4a046c46::t_b13f72a732cc15 4167
+server/internal/background/activities/risk_analysis/scan_gitleaks.go
+  s_d91d1a4a046c46::t_dcb22cf1ea42e0 28-30
+  s_d91d1a4a046c46::t_c95eb1cacc5a58 31,42
+client/dashboard/src/pages/chatLogs/ChatDetailPanel.tsx
+  s_d91d1a4a046c46::t_771d0ea1430ca4 997-998
+server/clickhouse/local/golang_migrate/atlas.sum
+  s_d91d1a4a046c46::t_fe216da238de5b 1,80
+server/internal/background/risk_analysis_coordinator.go
+  s_d91d1a4a046c46::t_a4ede722e7f76f 97
+  s_d91d1a4a046c46::t_37dda39c978bb0 116-124,128-129
+  s_d91d1a4a046c46::t_b5fd45a0e26ce8 86,114-115,125-127,130-132,144-146
+server/internal/scanners/gitleaks/handler.go
+  s_d91d1a4a046c46::t_9bc4d8b0f1f7c5 71
+server/internal/chat/message_store.go
+  s_d91d1a4a046c46::t_38d093cbd29a90 16,59-62,64,67-70,72,75-88,90-97,99-102,104-106,108-109,111-112,114-125,127
+  s_d91d1a4a046c46::t_29e2fe41a9adca 4,6-7,9,11,63,65-66,71,73-74,89,113,126,128
+  s_d91d1a4a046c46::t_1402fe4e2726a3 98,103,107,110
+  s_d91d1a4a046c46::t_b0fc10a3f08826 129
+server/internal/risk/results_test.go
+  s_d91d1a4a046c46::t_27a9d6a9af3b67 71,487
+server/internal/background/activities/risk_analysis/eval_guardrail.go
+  s_d91d1a4a046c46::t_20f652521e44f6 65
+server/internal/background/activities/risk_analysis/scan_prompt_injection.go
+  s_d91d1a4a046c46::t_2c1f22ccb638b6 54-56
+server/internal/scanners/promptpolicy/handler.go
+  s_d91d1a4a046c46::t_f507e0a5d6f144 66
+server/internal/chat/message_capture_strategy.go
+  s_d91d1a4a046c46::t_37dda39c978bb0 372-396
+server/internal/background/activities/risk_analysis/scan_account_identity_test.go
+  s_d91d1a4a046c46::t_3e682107c8b307 207,233,267
+  s_d91d1a4a046c46::t_b13db7bb4d77c9 358
+  s_d91d1a4a046c46::t_b5c029c64711bd 136
+  s_d91d1a4a046c46::t_3f47e7a1e8ff9c 433
+server/internal/hooks/setup_test.go
+  s_d91d1a4a046c46::t_c9f305200a46b3 21,69,129-130,170
+  s_d91d1a4a046c46::t_485bc5c7743881 22
+server/internal/scanners/promptinjection/handler.go
+  s_d91d1a4a046c46::t_924acbd005bc25 69
+server/internal/background/activities/risk_analysis/mark_analyzed.go
+  s_d91d1a4a046c46::t_a0aa211f1418a6 34-36,43,52-59,61-67
+server/internal/risk/impl.go
+  s_d91d1a4a046c46::t_e33d7a9f359f4e 1697,1729
+client/dashboard/src/pages/chatLogs/transcript.ts
+  s_d91d1a4a046c46::t_33ed590510ee17 331
+  s_d91d1a4a046c46::t_9697d75b22ff56 374
+  s_d91d1a4a046c46::t_f184aa2b16aac0 94
+  s_d91d1a4a046c46::t_771d0ea1430ca4 2,97,112,116,131,133,137,142,145,162,165,168-170,172-173,177,217-224
+  s_d91d1a4a046c46::t_848e56538b7e82 128-130
+  s_d91d1a4a046c46::t_51799b6d084e41 134,299,373
+  s_d91d1a4a046c46::t_49daac33ac5afd 311-316
+server/internal/chat/transcript_order_test.go
+  s_d91d1a4a046c46::t_37dda39c978bb0 188-194
+server/internal/testenv/testrepo/models.go
+  s_d91d1a4a046c46::t_4c2469f96d0558 105-106
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_d91d1a4a046c46::t_e0a1e5df038984 238
+  s_d91d1a4a046c46::t_149faa6638ed07 277
+  s_d91d1a4a046c46::t_75fdebe7b49796 385-386,390,398-399,404,408,413,415
+  s_d91d1a4a046c46::t_607a7e185c2269 68,74
+  s_d91d1a4a046c46::t_cbc2ae4e45c0e5 342-352
+  s_d91d1a4a046c46::t_c4edc15edb6fa8 17,110,387-389,394-395,397,400-403,405-407,409-412,414,416-418,420-422,424
+  s_d91d1a4a046c46::t_ab8d271ebbc1d3 137,167,181,215,219,324,329-332,359,363-384
+  s_d91d1a4a046c46::t_31a9c0669752e3 67
+  s_d91d1a4a046c46::t_627df7b68d45e6 21,396,419,423
+  s_d91d1a4a046c46::t_928a8b16c58ba6 47
+server/design/chat/design.go
+  s_d91d1a4a046c46::t_cda76902908c2b 431,442-460
+server/clickhouse/local/golang_migrate/20260727130935_chat-content-parts.down.sql
+  s_d91d1a4a046c46::t_fe216da238de5b 1-2
+server/clickhouse/schema.sql
+  s_d91d1a4a046c46::t_b636a138421794 1206,1256
+server/clickhouse/migrations/20260727130929_chat-content-parts.sql
+  s_d91d1a4a046c46::t_fe216da238de5b 1-2
+server/internal/risk/repo/copyfrom.go
+  s_d91d1a4a046c46::t_e68a03a242a958 38,58
+server/internal/background/activities/risk_analysis/fetch_unanalyzed.go
+  s_d91d1a4a046c46::t_a0aa211f1418a6 53-55,78-80,84,92-99,102-104,109-111
+infra/proto/gram/risk/v1/finding.proto
+  s_d91d1a4a046c46::t_aa6c0dfed919a2 32
+server/internal/risk/finding_ch_test.go
+  s_d91d1a4a046c46::t_3172a71f1d8281 530
+  s_d91d1a4a046c46::t_fe49af7ee48a28 548-549
+  s_d91d1a4a046c46::t_3c67472430ceb7 499-529,531-533,539-547,550-561
+  s_d91d1a4a046c46::t_52fd15fdc59167 60
+  s_d91d1a4a046c46::t_1c9c56b09237e2 534-538
+.speakeasy/out.openapi.yaml
+  s_d91d1a4a046c46::t_3ff1f3f53116ee 48249-48253,48345,48380-48413
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_d91d1a4a046c46::t_2f54e27aea1460 555,5882
+client/dashboard/src/sdk/src/models/components/chat.ts
+  s_d91d1a4a046c46::t_2099c5b6ca6eed 11-14,37-40,147,189
+client/dashboard/src/sdk/src/models/components/chatcontentpart.ts
+  s_d91d1a4a046c46::t_0a64540c4d7da1 1-82
+infra/gen/gram/risk/v1/finding.pb.go
+  s_3d388cbf35fcf4::t_47285f12935ba1 47,234-243,246,251,256,261,266,271,276,281,286,291,296,301,306,315,320,325-330,445-451,532-536,557,565,569,573,577,581,585,589,593,597,601,605,609,613,618,622,626,629-632,640,664-665
+infra/gen_py/gram/risk/v1/finding_pb2.py
+  s_3d388cbf35fcf4::t_68a16f133ef58c 28,39
+server/gen/chat/service.go
+  s_d91d1a4a046c46::t_7ea729e20aabbd 91-92,171-189
+server/gen/http/chat/client/encode_decode.go
+  s_d91d1a4a046c46::t_317cabe82dd7c3 2254-2284
+server/gen/http/chat/client/types.go
+  s_d91d1a4a046c46::t_2504c781af881a 71-72,1919-1938,2432-2439,3600-3602,3640-3646,5966-5992
+server/gen/http/chat/server/encode_decode.go
+  s_d91d1a4a046c46::t_ff989ba968c98c 2331-2361
+server/gen/http/chat/server/types.go
+  s_d91d1a4a046c46::t_794aac7b42d617 72-73,1920-1939,2115-2126
+server/gen/http/openapi3.yaml
+  s_d91d1a4a046c46::t_2964a8fae07b5f 48558-48562,48654,48689-48722
+server/internal/chat/repo/queries.sql.go
+  s_d91d1a4a046c46::t_2add7c3fa443ef 333-347,349-373,975,1223-1323,1325,1392,1492,1597,2205-2244,2246,2315,2339,2357-2391,2467,2484,2504-2538,2910
+server/internal/hooks/repo/queries.sql.go
+  s_d91d1a4a046c46::t_b48eb83072a609 301
+server/internal/risk/repo/queries.sql.go
+  s_d91d1a4a046c46::t_403cb0dd1b40d7 443-471,906-923,942-980,1174-1224,1273-1324,1361,1375-1381,1877-1878,2672,2709-2710,2757,2792,2829-2830,2881,3045,3470-3486
+server/internal/testenv/testrepo/queries.sql.go
+  s_d91d1a4a046c46::t_0e2badff3ea9d0 433,464
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "45903c46e812666a93bae2b5b4479b6a0fefa4b1",
+  "prompts": {},
+  "sessions": {
+    "s_3d388cbf35fcf4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "acec37c7-b1cc-4ee7-82c8-afd405d96140",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_d91d1a4a046c46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa265-7139-7c02-9009-a76952cd8302",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
