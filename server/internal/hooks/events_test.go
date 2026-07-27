@@ -88,12 +88,11 @@ func TestParseOpencodeHookEvent(t *testing.T) {
 	}{
 		{raw: "session.created", expected: HookEventSessionStart, ok: true},
 		{raw: "session.idle", expected: HookEventSessionEnd, ok: true},
-		{raw: "session.deleted", expected: HookEventSessionEnd, ok: true},
+		{raw: "server.instance.disposed", expected: HookEventSessionEnd, ok: true},
 		{raw: "tool.execute.before", expected: HookEventPreToolUse, ok: true},
 		{raw: "tool.execute.after", expected: HookEventPostToolUse, ok: true},
-		{raw: "tool.execute.error", expected: HookEventPostToolUseFailure, ok: true},
-		{raw: "message.submitted", expected: HookEventUserPromptSubmit, ok: true},
-		{raw: "message.completed", expected: HookEventAfterAgentResponse, ok: true},
+		{raw: "message.part.updated", expected: HookEventPostToolUseFailure, ok: true},
+		{raw: "chat.message", expected: HookEventUserPromptSubmit, ok: true},
 		{raw: "permission.asked", expected: HookEventPermissionRequest, ok: true},
 		{raw: "unknown", expected: HookEventUnknown, ok: false},
 	}

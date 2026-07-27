@@ -93,27 +93,28 @@ func parseCursorHookEvent(raw string) (HookEvent, bool) {
 	}
 }
 
-// parseOpencodeHookEvent maps the source.raw_event_name values the opencode
-// observability plugin emits (Phase 2) to canonical HookEvent names. Some of
-// these are not 1:1 opencode bus events — the plugin synthesizes
-// "tool.execute.error", "message.submitted", and "message.completed" from
-// opencode's raw events, so keep this switch in lockstep with the plugin.
+// parseOpencodeHookEvent maps source.raw_event_name values to canonical
+// HookEvent names. The TS plugin is retired; these are agenthooks' native
+// NativeNames (see codec_opencode.go's opencodeKind) — the OpenCode SDK's own
+// hook/event type strings, not synthesized names.
 func parseOpencodeHookEvent(raw string) (HookEvent, bool) {
 	switch raw {
 	case "session.created":
 		return HookEventSessionStart, true
-	case "session.idle", "session.deleted":
+	case "session.idle":
+		return HookEventSessionEnd, true
+	case "server.instance.disposed":
 		return HookEventSessionEnd, true
 	case "tool.execute.before":
 		return HookEventPreToolUse, true
 	case "tool.execute.after":
 		return HookEventPostToolUse, true
-	case "tool.execute.error":
+	case "message.part.updated":
+		// The only native signal for a failed tool call: tool.execute.after
+		// does not fire when a tool errors (decodeOpenCodeToolError).
 		return HookEventPostToolUseFailure, true
-	case "message.submitted":
+	case "chat.message":
 		return HookEventUserPromptSubmit, true
-	case "message.completed":
-		return HookEventAfterAgentResponse, true
 	case "permission.asked":
 		return HookEventPermissionRequest, true
 	default:
