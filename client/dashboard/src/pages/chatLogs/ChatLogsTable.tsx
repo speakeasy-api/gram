@@ -27,6 +27,10 @@ interface ChatLogsTableProps {
   onDeleteChat: (chatId: string) => void;
   isLoading: boolean;
   error: Error | null;
+  emptyState?: {
+    title: string;
+    description: string;
+  };
 }
 
 function getTraceId(chatId: string): string {
@@ -177,6 +181,7 @@ export function ChatLogsTable({
   onDeleteChat,
   isLoading,
   error,
+  emptyState,
 }: ChatLogsTableProps): JSX.Element {
   const { user } = useSession();
   const { data: membersData } = useMembers();
@@ -223,10 +228,11 @@ export function ChatLogsTable({
           </div>
           <div>
             <p className="text-foreground text-sm font-medium">
-              No traces found
+              {emptyState?.title ?? "No traces found"}
             </p>
             <p className="text-muted-foreground mt-1 text-xs">
-              Try adjusting your filters or time range
+              {emptyState?.description ??
+                "Try adjusting your filters or time range"}
             </p>
           </div>
         </div>
