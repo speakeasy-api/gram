@@ -90,6 +90,11 @@ func socketIdentityEmail(ctx context.Context) string {
 		DialContext: func(dialCtx context.Context, _, _ string) (net.Conn, error) {
 			return dialAgentSocket(dialCtx, socket)
 		},
+		// One-shot client: without this, the transport pools the socket
+		// connection (plus its read/write goroutines) for the process
+		// lifetime — a per-invocation leak, since the transport is never
+		// reused or closed.
+		DisableKeepAlives: true,
 	}}
 	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, "http://speakeasy-agent/v1/identity", nil)
 	if err != nil {

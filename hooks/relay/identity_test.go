@@ -52,7 +52,14 @@ func startIdentitySocket(t *testing.T, status int, body string) string {
 	ln, err := net.Listen("unix", socket)
 	require.NoError(t, err)
 	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/v1/identity", r.URL.Path)
+		// Not require: FailNow from a non-test goroutine can hang the test.
+		// t.Errorf is goroutine-safe, and the 404 makes the client-side
+		// assertion fail loudly too.
+		if r.URL.Path != "/v1/identity" {
+			t.Errorf("unexpected request path %q", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte(body))
 	})}
