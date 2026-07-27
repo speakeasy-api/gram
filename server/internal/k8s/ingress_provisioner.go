@@ -252,10 +252,11 @@ func (p *IngressProvisioner) buildIngress(domain string, ipAllowlist []string) (
 
 func (p *IngressProvisioner) buildRootIngress(name, domain, secretName string, ipAllowlist []string, rootTarget string) *networkingv1.Ingress {
 	nginxIngressClassName := "nginx"
-	pathTypeExact := networkingv1.PathTypeExact
+	pathTypeImplementationSpecific := networkingv1.PathTypeImplementationSpecific
 	annotations := map[string]string{
 		"nginx.ingress.kubernetes.io/proxy-body-size": "15m",
 		"nginx.ingress.kubernetes.io/rewrite-target":  rootTarget,
+		"nginx.ingress.kubernetes.io/use-regex":       "true",
 	}
 	if len(ipAllowlist) > 0 {
 		annotations["nginx.ingress.kubernetes.io/whitelist-source-range"] = strings.Join(ipAllowlist, ",")
@@ -281,8 +282,8 @@ func (p *IngressProvisioner) buildRootIngress(name, domain, secretName string, i
 						HTTP: &networkingv1.HTTPIngressRuleValue{
 							Paths: []networkingv1.HTTPIngressPath{
 								{
-									Path:     "/",
-									PathType: &pathTypeExact,
+									Path:     "/$",
+									PathType: &pathTypeImplementationSpecific,
 									Backend: networkingv1.IngressBackend{
 										Service: &networkingv1.IngressServiceBackend{
 											Name: "gram-server",
