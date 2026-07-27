@@ -54,6 +54,10 @@ type ApproveSuggestionRequestBody struct {
 	// Optional edited complete SKILL.md content. Handlers enforce a maximum size
 	// of 65,536 UTF-8 bytes.
 	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
+	// Optional zero-based index of the single proposed change to take. The
+	// suggestion stays open carrying whatever is left. Cannot be combined with
+	// edited content.
+	Hunk *int `form:"hunk,omitempty" json:"hunk,omitempty" xml:"hunk,omitempty"`
 }
 
 // DismissSuggestionRequestBody is the type of the "skills" service
@@ -200,7 +204,8 @@ type ListSuggestionsResponseBody struct {
 type ApproveSuggestionResponseBody struct {
 	// The resulting suggestion state.
 	Suggestion *SkillEditSuggestionResponseBody `form:"suggestion,omitempty" json:"suggestion,omitempty" xml:"suggestion,omitempty"`
-	// Whether the suggestion created a version or was stale.
+	// Whether the suggestion created a version, created one and stayed open
+	// carrying its remaining changes, or was stale.
 	Outcome *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
 	// The created version for an applied approval.
 	Version *SkillVersionResponseBody `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
@@ -3905,6 +3910,7 @@ func NewApproveSuggestionRequestBody(p *skills.ApproveSuggestionPayload) *Approv
 	body := &ApproveSuggestionRequestBody{
 		ID:      p.ID,
 		Content: p.Content,
+		Hunk:    p.Hunk,
 	}
 	return body
 }
@@ -7066,8 +7072,8 @@ func ValidateApproveSuggestionResponseBody(body *ApproveSuggestionResponseBody) 
 		}
 	}
 	if body.Outcome != nil {
-		if !(*body.Outcome == "applied" || *body.Outcome == "superseded") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.outcome", *body.Outcome, []any{"applied", "superseded"}))
+		if !(*body.Outcome == "applied" || *body.Outcome == "partially_applied" || *body.Outcome == "superseded") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.outcome", *body.Outcome, []any{"applied", "partially_applied", "superseded"}))
 		}
 	}
 	if body.Version != nil {

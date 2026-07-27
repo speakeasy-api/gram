@@ -32,6 +32,19 @@ type Service interface {
 	// List active skills in the project. The implementation requires the skills
 	// product feature and skill read scope.
 	List(context.Context, *ListPayload) (res *ListSkillsResult, err error)
+	// List open skill edit suggestions in the project, newest first. The
+	// implementation requires the skills product feature and skill read scope.
+	ListSuggestions(context.Context, *ListSuggestionsPayload) (res *ListSkillSuggestionsResult, err error)
+	// Approve an open skill edit suggestion, optionally replacing its proposed
+	// SKILL.md content or taking only one of its changes. Stale suggestions are
+	// superseded instead.
+	ApproveSuggestion(context.Context, *ApproveSuggestionPayload) (res *ApproveSkillSuggestionResult, err error)
+	// Idempotently dismiss an open skill edit suggestion. Approved and superseded
+	// suggestions conflict.
+	DismissSuggestion(context.Context, *DismissSuggestionPayload) (res *types.SkillEditSuggestion, err error)
+	// Snapshot and independently process every open skill edit suggestion in the
+	// project. One conflict or failure does not stop the remaining approvals.
+	ApproveAllSuggestions(context.Context, *ApproveAllSuggestionsPayload) (res *ApproveAllSkillSuggestionsResult, err error)
 	// Get an active skill and its latest version. The implementation requires the
 	// skills product feature and skill read scope.
 	Get(context.Context, *GetPayload) (res *GetSkillResult, err error)
@@ -85,7 +98,7 @@ const ServiceName = "skills"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [14]string{"create", "addVersion", "update", "list", "get", "listUnknownActivations", "listVersions", "archive", "distribute", "undistribute", "share", "unshare", "getShared", "listDistributions"}
+var MethodNames = [18]string{"create", "addVersion", "update", "list", "listSuggestions", "approveSuggestion", "dismissSuggestion", "approveAllSuggestions", "get", "listUnknownActivations", "listVersions", "archive", "distribute", "undistribute", "share", "unshare", "getShared", "listDistributions"}
 
 // AddVersionPayload is the payload type of the skills service addVersion
 // method.
@@ -102,6 +115,50 @@ type AddVersionPayload struct {
 	ProjectSlugInput     *string
 }
 
+// ApproveAllSkillSuggestionsResult is the result type of the skills service
+// approveAllSuggestions method.
+type ApproveAllSkillSuggestionsResult struct {
+	// The outcomes in snapshot order.
+	Items []*SkillSuggestionApprovalItem
+}
+
+// ApproveAllSuggestionsPayload is the payload type of the skills service
+// approveAllSuggestions method.
+type ApproveAllSuggestionsPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ApproveSkillSuggestionResult is the result type of the skills service
+// approveSuggestion method.
+type ApproveSkillSuggestionResult struct {
+	// The resulting suggestion state.
+	Suggestion *types.SkillEditSuggestion
+	// Whether the suggestion created a version, created one and stayed open
+	// carrying its remaining changes, or was stale.
+	Outcome string
+	// The created version for an applied approval.
+	Version *types.SkillVersion
+}
+
+// ApproveSuggestionPayload is the payload type of the skills service
+// approveSuggestion method.
+type ApproveSuggestionPayload struct {
+	// The suggestion ID.
+	ID string
+	// Optional edited complete SKILL.md content. Handlers enforce a maximum size
+	// of 65,536 UTF-8 bytes.
+	Content *string
+	// Optional zero-based index of the single proposed change to take. The
+	// suggestion stays open carrying whatever is left. Cannot be combined with
+	// edited content.
+	Hunk             *int
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // ArchivePayload is the payload type of the skills service archive method.
 type ArchivePayload struct {
 	// The skill ID.
@@ -116,6 +173,16 @@ type CreatePayload struct {
 	// The complete uploaded SKILL.md content. Handlers enforce a maximum size of
 	// 65,536 UTF-8 bytes.
 	Content          string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// DismissSuggestionPayload is the payload type of the skills service
+// dismissSuggestion method.
+type DismissSuggestionPayload struct {
+	// The suggestion ID.
+	ID               string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -205,6 +272,17 @@ type ListSkillDistributionsResult struct {
 	NextCursor *string
 }
 
+// ListSkillSuggestionsResult is the result type of the skills service
+// listSuggestions method.
+type ListSkillSuggestionsResult struct {
+	// The open suggestions in this page.
+	Suggestions []*types.SkillEditSuggestion
+	// The total number of matching open suggestions, independent of pagination.
+	TotalOpenCount int64
+	// Cursor for the next page; absent when exhausted.
+	NextCursor *string
+}
+
 // ListSkillVersionsResult is the result type of the skills service
 // listVersions method.
 type ListSkillVersionsResult struct {
@@ -220,6 +298,20 @@ type ListSkillsResult struct {
 	Skills []*types.Skill
 	// Cursor for the next page; absent when exhausted.
 	NextCursor *string
+}
+
+// ListSuggestionsPayload is the payload type of the skills service
+// listSuggestions method.
+type ListSuggestionsPayload struct {
+	// Only return suggestions for this skill.
+	SkillID *string
+	// Cursor for the next page of suggestions.
+	Cursor *string
+	// The number of suggestions to return per page.
+	Limit            int
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // ListUnknownActivationsPayload is the payload type of the skills service
@@ -339,6 +431,24 @@ type SkillSightingTimelinePoint struct {
 	BucketStart string
 	// Activations observed during the day.
 	ActivationCount int64
+}
+
+// The result of one item in a bulk suggestion approval.
+type SkillSuggestionApprovalItem struct {
+	// The suggestion ID.
+	SuggestionID string
+	// The targeted skill ID.
+	SkillID string
+	// The canonical skill name.
+	SkillName string
+	// The user-facing skill name.
+	SkillDisplayName string
+	// The item's processing outcome.
+	Outcome string
+	// The created version for an applied item.
+	ResultingVersionID *string
+	// A safe explanation for a conflict or failure.
+	Message *string
 }
 
 // UndistributePayload is the payload type of the skills service undistribute

@@ -129,7 +129,7 @@ func TestSkillsApproveSuggestionHappyEditedAndAuditPrivacy(t *testing.T) {
 
 	edited := skillManifest(created.Skill.Name, "Edited.", editedMarker)
 	result, err := ti.service.ApproveSuggestion(ctx, &gen.ApproveSuggestionPayload{
-		ID: suggestion.ID.String(), Content: &edited, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		ID: suggestion.ID.String(), Content: &edited, Hunk: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "applied", result.Outcome)
@@ -179,7 +179,7 @@ func TestSkillsApproveSuggestionStaleAndHistoricalDuplicate(t *testing.T) {
 	})
 	require.NoError(t, err)
 	staleResult, err := ti.service.ApproveSuggestion(ctx, &gen.ApproveSuggestionPayload{
-		ID: stale.ID.String(), Content: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		ID: stale.ID.String(), Content: nil, Hunk: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "superseded", staleResult.Outcome)
@@ -195,7 +195,7 @@ func TestSkillsApproveSuggestionStaleAndHistoricalDuplicate(t *testing.T) {
 	require.NoError(t, err)
 	duplicate := createSuggestion(t, ti, current, firstContent, "duplicate rationale")
 	_, err = ti.service.ApproveSuggestion(ctx, &gen.ApproveSuggestionPayload{
-		ID: duplicate.ID.String(), Content: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		ID: duplicate.ID.String(), Content: nil, Hunk: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
 	preserved, err := ti.repo.GetSkillEditSuggestionForUpdate(ctx, repo.GetSkillEditSuggestionForUpdateParams{
@@ -228,7 +228,7 @@ func TestSkillsApproveSuggestionRejectsConcurrentSuggestionUpdate(t *testing.T) 
 	finished := make(chan approveResult, 1)
 	go func() {
 		result, approveErr := ti.service.ApproveSuggestion(ctx, &gen.ApproveSuggestionPayload{
-			ID: suggestion.ID.String(), Content: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+			ID: suggestion.ID.String(), Content: nil, Hunk: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 		})
 		finished <- approveResult{result: result, err: approveErr}
 	}()
@@ -293,7 +293,7 @@ func TestSkillsDismissSuggestionIdempotentAndConflicts(t *testing.T) {
 	approvedSkill := createSkill(t, ctx, ti, "suggestion-dismiss-approved", "Base.")
 	approvedSuggestion := createSuggestion(t, ti, approvedSkill, skillManifest(approvedSkill.Skill.Name, "Proposed.", "proposal"), "rationale")
 	_, err = ti.service.ApproveSuggestion(ctx, &gen.ApproveSuggestionPayload{
-		ID: approvedSuggestion.ID.String(), Content: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		ID: approvedSuggestion.ID.String(), Content: nil, Hunk: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
 	_, err = ti.service.DismissSuggestion(ctx, &gen.DismissSuggestionPayload{
@@ -381,7 +381,7 @@ func TestSkillsSuggestionManagementRBACDenied(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.ApproveSuggestion(deniedCtx, &gen.ApproveSuggestionPayload{
-		ID: suggestion.ID.String(), Content: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		ID: suggestion.ID.String(), Content: nil, Hunk: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.DismissSuggestion(deniedCtx, &gen.DismissSuggestionPayload{
@@ -399,7 +399,7 @@ func TestSkillsSuggestionManagementRBACDenied(t *testing.T) {
 	})
 	require.NoError(t, err)
 	_, err = ti.service.ApproveSuggestion(readOnlyCtx, &gen.ApproveSuggestionPayload{
-		ID: suggestion.ID.String(), Content: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		ID: suggestion.ID.String(), Content: nil, Hunk: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.DismissSuggestion(readOnlyCtx, &gen.DismissSuggestionPayload{
@@ -428,23 +428,106 @@ func TestSkillsApproveSuggestionNonOpenConflicts(t *testing.T) {
 	})
 	require.NoError(t, err)
 	_, err = ti.service.ApproveSuggestion(ctx, &gen.ApproveSuggestionPayload{
-		ID: suggestion.ID.String(), Content: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		ID: suggestion.ID.String(), Content: nil, Hunk: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
 
 	_, err = ti.service.ApproveSuggestion(ctx, &gen.ApproveSuggestionPayload{
-		ID: uuid.NewString(), Content: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		ID: uuid.NewString(), Content: nil, Hunk: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
 	_, err = ti.service.ApproveSuggestion(ctx, &gen.ApproveSuggestionPayload{
-		ID: "not-a-uuid", Content: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		ID: "not-a-uuid", Content: nil, Hunk: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 	openSkill := createSkill(t, ctx, ti, "suggestion-invalid-edit", "Base.")
 	openSuggestion := createSuggestion(t, ti, openSkill, skillManifest(openSkill.Skill.Name, "Proposed.", "proposal"), "rationale")
 	_, err = ti.service.ApproveSuggestion(ctx, &gen.ApproveSuggestionPayload{
 		ID: openSuggestion.ID.String(), Content: conv.PtrEmpty(strings.Repeat("x", 65537)),
-		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		Hunk: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// The two edited lines sit far enough apart that they render as separate
+// hunks rather than one merged hunk.
+const twoChangeBody = `Announce the window in the release channel.
+Confirm the rollback artifact exists.
+Check the error budget.
+Watch the canary for ten minutes.
+Compare latency against the previous release.
+Stop on any regression.
+Drain the old revision.
+Verify the health checks pass.
+Update the status page.
+Note the release in the changelog.
+Tag the deployment.
+Close the window.`
+
+func TestSkillsApproveSuggestionTakesOneChangeAndKeepsTheRestOpen(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created, err := ti.service.Create(ctx, &gen.CreatePayload{
+		Content:          skillManifest("suggestion-approve-partial", "Runbook.", twoChangeBody),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	proposedBody := strings.NewReplacer(
+		"Check the error budget.", "Check the error budget and page the on-call.",
+		"Close the window.", "Close the window and record the duration.",
+	).Replace(twoChangeBody)
+	proposed := skillManifest(created.Skill.Name, "Proposed.", proposedBody)
+	suggestion := createSuggestion(t, ti, created, proposed, "take these one at a time")
+
+	first := 0
+	partial, err := ti.service.ApproveSuggestion(ctx, &gen.ApproveSuggestionPayload{
+		ID: suggestion.ID.String(), Content: nil, Hunk: &first, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "partially_applied", partial.Outcome)
+	require.NotNil(t, partial.Version)
+	require.Contains(t, partial.Version.Content, "page the on-call")
+	require.NotContains(t, partial.Version.Content, "record the duration")
+
+	// The suggestion survives, now proposing only what was left against the
+	// version the first change created.
+	require.Equal(t, string(skills.EditSuggestionStatusOpen), partial.Suggestion.Status)
+	require.Equal(t, partial.Version.ID, partial.Suggestion.BaseVersionID)
+	require.True(t, partial.Suggestion.AppliesCleanly)
+	require.NotContains(t, partial.Suggestion.ProposedDiff, "page the on-call")
+	require.Contains(t, partial.Suggestion.ProposedDiff, "+Close the window and record the duration.")
+	require.Equal(t, proposed, partial.Suggestion.ProposedContent)
+
+	remaining := 0
+	final, err := ti.service.ApproveSuggestion(ctx, &gen.ApproveSuggestionPayload{
+		ID: suggestion.ID.String(), Content: nil, Hunk: &remaining, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "applied", final.Outcome)
+	require.NotNil(t, final.Version)
+	require.Equal(t, proposed, final.Version.Content)
+	require.Equal(t, string(skills.EditSuggestionStatusApproved), final.Suggestion.Status)
+}
+
+func TestSkillsApproveSuggestionRejectsUnknownHunkAndEditedCombination(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "suggestion-approve-hunk-guards", "Base.")
+	suggestion := createSuggestion(t, ti, created, skillManifest(created.Skill.Name, "Proposed.", "proposal"), "rationale")
+
+	missing := 7
+	_, err := ti.service.ApproveSuggestion(ctx, &gen.ApproveSuggestionPayload{
+		ID: suggestion.ID.String(), Content: nil, Hunk: &missing, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.ErrorContains(t, err, "no longer part of this suggestion")
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	edited := skillManifest(created.Skill.Name, "Edited.", "edited")
+	only := 0
+	_, err = ti.service.ApproveSuggestion(ctx, &gen.ApproveSuggestionPayload{
+		ID: suggestion.ID.String(), Content: &edited, Hunk: &only, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }

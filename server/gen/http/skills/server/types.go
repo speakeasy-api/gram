@@ -56,6 +56,10 @@ type ApproveSuggestionRequestBody struct {
 	// Optional edited complete SKILL.md content. Handlers enforce a maximum size
 	// of 65,536 UTF-8 bytes.
 	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
+	// Optional zero-based index of the single proposed change to take. The
+	// suggestion stays open carrying whatever is left. Cannot be combined with
+	// edited content.
+	Hunk *int `form:"hunk,omitempty" json:"hunk,omitempty" xml:"hunk,omitempty"`
 }
 
 // DismissSuggestionRequestBody is the type of the "skills" service
@@ -202,7 +206,8 @@ type ListSuggestionsResponseBody struct {
 type ApproveSuggestionResponseBody struct {
 	// The resulting suggestion state.
 	Suggestion *SkillEditSuggestionResponseBody `form:"suggestion" json:"suggestion" xml:"suggestion"`
-	// Whether the suggestion created a version or was stale.
+	// Whether the suggestion created a version, created one and stayed open
+	// carrying its remaining changes, or was stale.
 	Outcome string `form:"outcome" json:"outcome" xml:"outcome"`
 	// The created version for an applied approval.
 	Version *SkillVersionResponseBody `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
@@ -6789,6 +6794,7 @@ func NewApproveSuggestionPayload(body *ApproveSuggestionRequestBody, sessionToke
 	v := &skills.ApproveSuggestionPayload{
 		ID:      *body.ID,
 		Content: body.Content,
+		Hunk:    body.Hunk,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -7012,6 +7018,11 @@ func ValidateApproveSuggestionRequestBody(body *ApproveSuggestionRequestBody) (e
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Hunk != nil {
+		if *body.Hunk < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.hunk", *body.Hunk, 0, true))
+		}
 	}
 	return
 }

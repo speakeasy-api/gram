@@ -172,11 +172,12 @@ var _ = Service("skills", func() {
 	})
 
 	Method("approveSuggestion", func() {
-		Description("Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content. Stale suggestions are superseded instead.")
+		Description("Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only one of its changes. Stale suggestions are superseded instead.")
 
 		Payload(func() {
 			Attribute("id", String, "The suggestion ID.", func() { Format(FormatUUID) })
 			Attribute("content", String, "Optional edited complete SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
+			Attribute("hunk", Int, "Optional zero-based index of the single proposed change to take. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.", func() { Minimum(0) })
 			Required("id")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -580,6 +581,7 @@ var ApproveSkillSuggestionRequestBody = Type("ApproveSkillSuggestionRequestBody"
 
 	Attribute("id", String, "The suggestion ID.", func() { Format(FormatUUID) })
 	Attribute("content", String, "Optional edited complete SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
+	Attribute("hunk", Int, "Optional zero-based index of the single proposed change to take. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.", func() { Minimum(0) })
 	Required("id")
 })
 
@@ -787,7 +789,7 @@ var ListSkillSuggestionsResult = Type("ListSkillSuggestionsResult", func() {
 var ApproveSkillSuggestionResult = Type("ApproveSkillSuggestionResult", func() {
 	Description("The result of approving one suggestion.")
 	Attribute("suggestion", SkillEditSuggestion, "The resulting suggestion state.")
-	Attribute("outcome", String, "Whether the suggestion created a version or was stale.", func() { Enum("applied", "superseded") })
+	Attribute("outcome", String, "Whether the suggestion created a version, created one and stayed open carrying its remaining changes, or was stale.", func() { Enum("applied", "partially_applied", "superseded") })
 	Attribute("version", SkillVersion, "The created version for an applied approval.")
 	Required("suggestion", "outcome")
 })

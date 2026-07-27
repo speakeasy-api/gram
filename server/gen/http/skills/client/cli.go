@@ -219,6 +219,197 @@ func BuildListPayload(skillsListCursor string, skillsListLimit string, skillsLis
 	return v, nil
 }
 
+// BuildListSuggestionsPayload builds the payload for the skills
+// listSuggestions endpoint from CLI flags.
+func BuildListSuggestionsPayload(skillsListSuggestionsSkillID string, skillsListSuggestionsCursor string, skillsListSuggestionsLimit string, skillsListSuggestionsSessionToken string, skillsListSuggestionsApikeyToken string, skillsListSuggestionsProjectSlugInput string) (*skills.ListSuggestionsPayload, error) {
+	var err error
+	var skillID *string
+	{
+		if skillsListSuggestionsSkillID != "" {
+			skillID = &skillsListSuggestionsSkillID
+			err = goa.MergeErrors(err, goa.ValidateFormat("skill_id", *skillID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var cursor *string
+	{
+		if skillsListSuggestionsCursor != "" {
+			cursor = &skillsListSuggestionsCursor
+		}
+	}
+	var limit int
+	{
+		if skillsListSuggestionsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(skillsListSuggestionsLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 50 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 50, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsListSuggestionsSessionToken != "" {
+			sessionToken = &skillsListSuggestionsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsListSuggestionsApikeyToken != "" {
+			apikeyToken = &skillsListSuggestionsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsListSuggestionsProjectSlugInput != "" {
+			projectSlugInput = &skillsListSuggestionsProjectSlugInput
+		}
+	}
+	v := &skills.ListSuggestionsPayload{}
+	v.SkillID = skillID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildApproveSuggestionPayload builds the payload for the skills
+// approveSuggestion endpoint from CLI flags.
+func BuildApproveSuggestionPayload(skillsApproveSuggestionBody string, skillsApproveSuggestionSessionToken string, skillsApproveSuggestionApikeyToken string, skillsApproveSuggestionProjectSlugInput string) (*skills.ApproveSuggestionPayload, error) {
+	var err error
+	var body ApproveSuggestionRequestBody
+	{
+		err = json.Unmarshal([]byte(skillsApproveSuggestionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"abc123\",\n      \"hunk\": 1,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.Hunk != nil {
+			if *body.Hunk < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.hunk", *body.Hunk, 0, true))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsApproveSuggestionSessionToken != "" {
+			sessionToken = &skillsApproveSuggestionSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsApproveSuggestionApikeyToken != "" {
+			apikeyToken = &skillsApproveSuggestionApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsApproveSuggestionProjectSlugInput != "" {
+			projectSlugInput = &skillsApproveSuggestionProjectSlugInput
+		}
+	}
+	v := &skills.ApproveSuggestionPayload{
+		ID:      body.ID,
+		Content: body.Content,
+		Hunk:    body.Hunk,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDismissSuggestionPayload builds the payload for the skills
+// dismissSuggestion endpoint from CLI flags.
+func BuildDismissSuggestionPayload(skillsDismissSuggestionBody string, skillsDismissSuggestionSessionToken string, skillsDismissSuggestionApikeyToken string, skillsDismissSuggestionProjectSlugInput string) (*skills.DismissSuggestionPayload, error) {
+	var err error
+	var body DismissSuggestionRequestBody
+	{
+		err = json.Unmarshal([]byte(skillsDismissSuggestionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsDismissSuggestionSessionToken != "" {
+			sessionToken = &skillsDismissSuggestionSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsDismissSuggestionApikeyToken != "" {
+			apikeyToken = &skillsDismissSuggestionApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsDismissSuggestionProjectSlugInput != "" {
+			projectSlugInput = &skillsDismissSuggestionProjectSlugInput
+		}
+	}
+	v := &skills.DismissSuggestionPayload{
+		ID: body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildApproveAllSuggestionsPayload builds the payload for the skills
+// approveAllSuggestions endpoint from CLI flags.
+func BuildApproveAllSuggestionsPayload(skillsApproveAllSuggestionsSessionToken string, skillsApproveAllSuggestionsApikeyToken string, skillsApproveAllSuggestionsProjectSlugInput string) (*skills.ApproveAllSuggestionsPayload, error) {
+	var sessionToken *string
+	{
+		if skillsApproveAllSuggestionsSessionToken != "" {
+			sessionToken = &skillsApproveAllSuggestionsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsApproveAllSuggestionsApikeyToken != "" {
+			apikeyToken = &skillsApproveAllSuggestionsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsApproveAllSuggestionsProjectSlugInput != "" {
+			projectSlugInput = &skillsApproveAllSuggestionsProjectSlugInput
+		}
+	}
+	v := &skills.ApproveAllSuggestionsPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetPayload builds the payload for the skills get endpoint from CLI
 // flags.
 func BuildGetPayload(skillsGetID string, skillsGetSessionToken string, skillsGetApikeyToken string, skillsGetProjectSlugInput string) (*skills.GetPayload, error) {

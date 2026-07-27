@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -98,7 +99,12 @@ func (s *Service) approveSuggestion(
 	logger *slog.Logger,
 	suggestionID uuid.UUID,
 	editedContent *string,
+	hunk *int,
 ) (approval suggestionApproval, err error) {
+	if hunk != nil && editedContent != nil {
+		return approval, oops.E(oops.CodeBadRequest, nil, "cannot take a single proposed change and edited content together")
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return approval, oops.E(oops.CodeUnexpected, err, "begin approve skill suggestion transaction").LogError(ctx, logger)
@@ -136,9 +142,9 @@ func (s *Service) approveSuggestion(
 	if editedContent != nil {
 		content = *editedContent
 	} else {
-		content, err = skilldiff.Apply(details.BaseContent, details.SkillEditSuggestion.ProposedDiff)
+		content, _, err = approvalContent(details.BaseContent, details.SkillEditSuggestion.ProposedDiff, hunk)
 		if err != nil {
-			return approval, oops.E(oops.CodeConflict, nil, "skill suggestion no longer applies to its base version")
+			return approval, err
 		}
 	}
 	initialParsed, err := parseSkillManifest(content)
@@ -212,10 +218,11 @@ func (s *Service) approveSuggestion(
 		return approval, nil
 	}
 
+	remainingDiff := ""
 	if editedContent == nil {
-		content, err = skilldiff.Apply(base.BaseContent, suggestion.ProposedDiff)
+		content, remainingDiff, err = approvalContent(base.BaseContent, suggestion.ProposedDiff, hunk)
 		if err != nil {
-			return approval, oops.E(oops.CodeConflict, nil, "skill suggestion no longer applies to its base version")
+			return approval, err
 		}
 	}
 
@@ -232,14 +239,32 @@ func (s *Service) approveSuggestion(
 		return approval, oops.E(oops.CodeUnexpected, err, "parse validated skill suggestion").LogError(ctx, logger)
 	}
 
-	approved, err := queries.ApproveOpenSkillEditSuggestion(ctx, repo.ApproveOpenSkillEditSuggestionParams{
-		ApprovedByUserID: conv.ToPGText(authCtx.UserID),
-		ProjectID:        *authCtx.ProjectID,
-		SkillID:          suggestion.SkillID,
-		ID:               suggestion.ID,
-	})
-	if err != nil {
-		return approval, oops.E(oops.CodeUnexpected, err, "mark skill suggestion approved").LogError(ctx, logger)
+	// Taking one change leaves the suggestion open carrying the rest. Writing
+	// the remainder before the version exists lets recordVersion's replay
+	// repoint it at the version this creates; closing it first, as a whole
+	// approval does, is what keeps that replay off an approval's own work.
+	var approved repo.SkillEditSuggestion
+	if remainingDiff != "" {
+		approved, err = queries.RebaseOpenSkillEditSuggestion(ctx, repo.RebaseOpenSkillEditSuggestionParams{
+			BaseVersionID: suggestion.BaseVersionID,
+			ProposedDiff:  remainingDiff,
+			ProjectID:     *authCtx.ProjectID,
+			SkillID:       suggestion.SkillID,
+			ID:            suggestion.ID,
+		})
+		if err != nil {
+			return approval, oops.E(oops.CodeUnexpected, err, "carry remaining skill suggestion changes forward").LogError(ctx, logger)
+		}
+	} else {
+		approved, err = queries.ApproveOpenSkillEditSuggestion(ctx, repo.ApproveOpenSkillEditSuggestionParams{
+			ApprovedByUserID: conv.ToPGText(authCtx.UserID),
+			ProjectID:        *authCtx.ProjectID,
+			SkillID:          suggestion.SkillID,
+			ID:               suggestion.ID,
+		})
+		if err != nil {
+			return approval, oops.E(oops.CodeUnexpected, err, "mark skill suggestion approved").LogError(ctx, logger)
+		}
 	}
 	recorded, err := s.recordVersion(
 		ctx,
@@ -278,14 +303,63 @@ func (s *Service) approveSuggestion(
 	}); err != nil {
 		return approval, oops.E(oops.CodeUnexpected, err, "log skill suggestion approval").LogError(ctx, logger)
 	}
+	approval.outcome = "applied"
+	if remainingDiff != "" {
+		// Re-read what the replay left behind so the reviewer sees the
+		// remaining changes against the version they just created.
+		approved, err = queries.GetOpenSkillEditSuggestion(ctx, repo.GetOpenSkillEditSuggestionParams{
+			ProjectID: *authCtx.ProjectID,
+			SkillID:   suggestion.SkillID,
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			// The replay found nothing left to propose and retired it.
+		case err != nil:
+			return approval, oops.E(oops.CodeUnexpected, err, "re-read remaining skill suggestion").LogError(ctx, logger)
+		default:
+			approval.evidence.BaseContent = validated.Content
+			approval.outcome = "partially_applied"
+		}
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return approval, oops.E(oops.CodeUnexpected, err, "commit skill suggestion approval").LogError(ctx, logger)
 	}
 
 	approval.suggestion = approved
 	approval.version = recorded.Version
-	approval.outcome = "applied"
 	return approval, nil
+}
+
+// approvalContent resolves what a reviewer is taking from a suggestion: the
+// whole proposal, or a single proposed change with the rest still to propose.
+// The remainder is the edit from what they took to what was proposed, so a
+// change already taken drops out of it rather than being replayed twice.
+func approvalContent(baseContent, proposedDiff string, hunk *int) (content string, remaining string, err error) {
+	proposed, err := skilldiff.Apply(baseContent, proposedDiff)
+	if err != nil {
+		return "", "", oops.E(oops.CodeConflict, nil, "skill suggestion no longer applies to its base version")
+	}
+	if hunk == nil {
+		return proposed, "", nil
+	}
+
+	hunks := skilldiff.Hunks(proposedDiff)
+	if *hunk < 0 || *hunk >= len(hunks) {
+		return "", "", oops.E(oops.CodeConflict, nil, "that proposed change is no longer part of this suggestion")
+	}
+	content, err = skilldiff.Apply(baseContent, hunks[*hunk])
+	if err != nil {
+		return "", "", oops.E(oops.CodeConflict, nil, "skill suggestion no longer applies to its base version")
+	}
+	remaining, err = skilldiff.Unified(content, proposed)
+	if err != nil {
+		return "", "", oops.E(oops.CodeUnexpected, err, "render remaining skill suggestion changes")
+	}
+	if strings.TrimSpace(remaining) == "" {
+		remaining = ""
+	}
+
+	return content, remaining, nil
 }
 
 func (s *Service) ApproveSuggestion(ctx context.Context, payload *gen.ApproveSuggestionPayload) (*gen.ApproveSkillSuggestionResult, error) {
@@ -298,7 +372,7 @@ func (s *Service) ApproveSuggestion(ctx context.Context, payload *gen.ApproveSug
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill suggestion id")
 	}
 
-	approval, err := s.approveSuggestion(ctx, authCtx, logger, suggestionID, payload.Content)
+	approval, err := s.approveSuggestion(ctx, authCtx, logger, suggestionID, payload.Content, payload.Hunk)
 	if err != nil {
 		return nil, err
 	}
@@ -415,7 +489,7 @@ func (s *Service) ApproveAllSuggestions(ctx context.Context, _ *gen.ApproveAllSu
 
 	items := make([]*gen.SkillSuggestionApprovalItem, 0, len(snapshot))
 	for _, suggestion := range snapshot {
-		approval, approveErr := s.approveSuggestion(ctx, authCtx, logger, suggestion.ID, nil)
+		approval, approveErr := s.approveSuggestion(ctx, authCtx, logger, suggestion.ID, nil, nil)
 		item := &gen.SkillSuggestionApprovalItem{
 			SuggestionID:       suggestion.ID.String(),
 			SkillID:            suggestion.SkillID.String(),

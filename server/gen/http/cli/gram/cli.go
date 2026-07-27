@@ -17,6 +17,7 @@ import (
 	accessc "github.com/speakeasy-api/gram/server/gen/http/access/client"
 	adminc "github.com/speakeasy-api/gram/server/gen/http/admin/client"
 	adminchatanalysisc "github.com/speakeasy-api/gram/server/gen/http/admin_chat_analysis/client"
+	adminexternalcredentialsc "github.com/speakeasy-api/gram/server/gen/http/admin_external_credentials/client"
 	adminremotesessionsc "github.com/speakeasy-api/gram/server/gen/http/admin_remote_sessions/client"
 	agentc "github.com/speakeasy-api/gram/server/gen/http/agent/client"
 	aiintegrationsc "github.com/speakeasy-api/gram/server/gen/http/ai_integrations/client"
@@ -97,11 +98,11 @@ func UsageCommands() []string {
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
-		"chat (list-chats|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|submit-feedback|list-sources)",
+		"chat (list-chats|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|submit-feedback|list-sources)",
 		"chat-sessions (create|revoke)",
 		"cli-auth (authorize|redeem)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
-		"domains (get-domain|create-domain|update-domain|delete-domain|list-mcp-endpoints)",
+		"domains (get-domain|create-domain|update-domain|check-health|delete-domain|list-mcp-endpoints)",
 		"environments (create-environment|list-environments|update-environment|clone-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
 		"external-credentials (create-aws-iam-credential|update-aws-iam-credential|create-gcp-iam-credential|update-gcp-iam-credential|list-external-credentials|list-aws-iam-credentials|list-gcp-iam-credentials|get-aws-iam-credential|get-gcp-iam-credential|delete-aws-iam-credential|delete-gcp-iam-credential)",
 		"external-keys (create-aws-kms-key|update-aws-kms-key|create-gcp-kms-key|update-gcp-kms-key|list-external-keys|list-aws-kms-keys|list-gcp-kms-keys|get-aws-kms-key|get-gcp-kms-key|delete-aws-kms-key|delete-gcp-kms-key)",
@@ -109,7 +110,7 @@ func UsageCommands() []string {
 		"collections (create|list|update|delete|attach-server|detach-server|list-servers)",
 		"functions get-signed-asset-url",
 		"hooks-server-names (list|upsert|delete)",
-		"hooks (claude|cursor|codex|ingest|upload-skill-content|logs|metrics)",
+		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics)",
 		"instances get-instance",
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
@@ -121,6 +122,7 @@ func UsageCommands() []string {
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"admin-chat-analysis (get-settings|upsert-work-units-settings|trigger-analysis)",
+		"admin-external-credentials (create-gcp-iam-platform-credential|list-platform-external-credentials|update-gcp-iam-platform-credential|get-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
@@ -135,7 +137,7 @@ func UsageCommands() []string {
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
-		"skills (create|add-version|update|list|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
+		"skills (create|add-version|update|list|list-suggestions|approve-suggestion|dismiss-suggestion|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
 		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|archive-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview|list-actor-attributes)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
@@ -663,6 +665,11 @@ func ParseEndpoint(
 		chatSetPinnedSessionTokenFlag     = chatSetPinnedFlags.String("session-token", "", "")
 		chatSetPinnedProjectSlugInputFlag = chatSetPinnedFlags.String("project-slug-input", "", "")
 
+		chatSummarizeFlags                = flag.NewFlagSet("summarize", flag.ExitOnError)
+		chatSummarizeBodyFlag             = chatSummarizeFlags.String("body", "REQUIRED", "")
+		chatSummarizeSessionTokenFlag     = chatSummarizeFlags.String("session-token", "", "")
+		chatSummarizeProjectSlugInputFlag = chatSummarizeFlags.String("project-slug-input", "", "")
+
 		chatSubmitFeedbackFlags                 = flag.NewFlagSet("submit-feedback", flag.ExitOnError)
 		chatSubmitFeedbackBodyFlag              = chatSubmitFeedbackFlags.String("body", "REQUIRED", "")
 		chatSubmitFeedbackSessionTokenFlag      = chatSubmitFeedbackFlags.String("session-token", "", "")
@@ -759,6 +766,9 @@ func ParseEndpoint(
 		domainsUpdateDomainFlags            = flag.NewFlagSet("update-domain", flag.ExitOnError)
 		domainsUpdateDomainBodyFlag         = domainsUpdateDomainFlags.String("body", "REQUIRED", "")
 		domainsUpdateDomainSessionTokenFlag = domainsUpdateDomainFlags.String("session-token", "", "")
+
+		domainsCheckHealthFlags            = flag.NewFlagSet("check-health", flag.ExitOnError)
+		domainsCheckHealthSessionTokenFlag = domainsCheckHealthFlags.String("session-token", "", "")
 
 		domainsDeleteDomainFlags            = flag.NewFlagSet("delete-domain", flag.ExitOnError)
 		domainsDeleteDomainSessionTokenFlag = domainsDeleteDomainFlags.String("session-token", "", "")
@@ -1037,6 +1047,11 @@ func ParseEndpoint(
 		hooksUploadSkillContentBodyFlag             = hooksUploadSkillContentFlags.String("body", "REQUIRED", "")
 		hooksUploadSkillContentApikeyTokenFlag      = hooksUploadSkillContentFlags.String("apikey-token", "", "")
 		hooksUploadSkillContentProjectSlugInputFlag = hooksUploadSkillContentFlags.String("project-slug-input", "", "")
+
+		hooksSkillFeedbackFlags                = flag.NewFlagSet("skill-feedback", flag.ExitOnError)
+		hooksSkillFeedbackBodyFlag             = hooksSkillFeedbackFlags.String("body", "REQUIRED", "")
+		hooksSkillFeedbackApikeyTokenFlag      = hooksSkillFeedbackFlags.String("apikey-token", "", "")
+		hooksSkillFeedbackProjectSlugInputFlag = hooksSkillFeedbackFlags.String("project-slug-input", "", "")
 
 		hooksLogsFlags                = flag.NewFlagSet("logs", flag.ExitOnError)
 		hooksLogsBodyFlag             = hooksLogsFlags.String("body", "REQUIRED", "")
@@ -1358,6 +1373,32 @@ func ParseEndpoint(
 
 		adminChatAnalysisTriggerAnalysisFlags            = flag.NewFlagSet("trigger-analysis", flag.ExitOnError)
 		adminChatAnalysisTriggerAnalysisSessionTokenFlag = adminChatAnalysisTriggerAnalysisFlags.String("session-token", "", "")
+
+		adminExternalCredentialsFlags = flag.NewFlagSet("admin-external-credentials", flag.ContinueOnError)
+
+		adminExternalCredentialsCreateGcpIamPlatformCredentialFlags            = flag.NewFlagSet("create-gcp-iam-platform-credential", flag.ExitOnError)
+		adminExternalCredentialsCreateGcpIamPlatformCredentialBodyFlag         = adminExternalCredentialsCreateGcpIamPlatformCredentialFlags.String("body", "REQUIRED", "")
+		adminExternalCredentialsCreateGcpIamPlatformCredentialSessionTokenFlag = adminExternalCredentialsCreateGcpIamPlatformCredentialFlags.String("session-token", "", "")
+
+		adminExternalCredentialsListPlatformExternalCredentialsFlags            = flag.NewFlagSet("list-platform-external-credentials", flag.ExitOnError)
+		adminExternalCredentialsListPlatformExternalCredentialsProviderFlag     = adminExternalCredentialsListPlatformExternalCredentialsFlags.String("provider", "", "")
+		adminExternalCredentialsListPlatformExternalCredentialsSessionTokenFlag = adminExternalCredentialsListPlatformExternalCredentialsFlags.String("session-token", "", "")
+
+		adminExternalCredentialsUpdateGcpIamPlatformCredentialFlags            = flag.NewFlagSet("update-gcp-iam-platform-credential", flag.ExitOnError)
+		adminExternalCredentialsUpdateGcpIamPlatformCredentialBodyFlag         = adminExternalCredentialsUpdateGcpIamPlatformCredentialFlags.String("body", "REQUIRED", "")
+		adminExternalCredentialsUpdateGcpIamPlatformCredentialSessionTokenFlag = adminExternalCredentialsUpdateGcpIamPlatformCredentialFlags.String("session-token", "", "")
+
+		adminExternalCredentialsGetGcpIamPlatformCredentialFlags            = flag.NewFlagSet("get-gcp-iam-platform-credential", flag.ExitOnError)
+		adminExternalCredentialsGetGcpIamPlatformCredentialIDFlag           = adminExternalCredentialsGetGcpIamPlatformCredentialFlags.String("id", "REQUIRED", "")
+		adminExternalCredentialsGetGcpIamPlatformCredentialSessionTokenFlag = adminExternalCredentialsGetGcpIamPlatformCredentialFlags.String("session-token", "", "")
+
+		adminExternalCredentialsVerifyGcpIamPlatformCredentialFlags            = flag.NewFlagSet("verify-gcp-iam-platform-credential", flag.ExitOnError)
+		adminExternalCredentialsVerifyGcpIamPlatformCredentialIDFlag           = adminExternalCredentialsVerifyGcpIamPlatformCredentialFlags.String("id", "REQUIRED", "")
+		adminExternalCredentialsVerifyGcpIamPlatformCredentialSessionTokenFlag = adminExternalCredentialsVerifyGcpIamPlatformCredentialFlags.String("session-token", "", "")
+
+		adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags            = flag.NewFlagSet("delete-gcp-iam-platform-credential", flag.ExitOnError)
+		adminExternalCredentialsDeleteGcpIamPlatformCredentialIDFlag           = adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags.String("id", "REQUIRED", "")
+		adminExternalCredentialsDeleteGcpIamPlatformCredentialSessionTokenFlag = adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags.String("session-token", "", "")
 
 		pluginsFlags = flag.NewFlagSet("plugins", flag.ContinueOnError)
 
@@ -2178,6 +2219,31 @@ func ParseEndpoint(
 		skillsListApikeyTokenFlag      = skillsListFlags.String("apikey-token", "", "")
 		skillsListProjectSlugInputFlag = skillsListFlags.String("project-slug-input", "", "")
 
+		skillsListSuggestionsFlags                = flag.NewFlagSet("list-suggestions", flag.ExitOnError)
+		skillsListSuggestionsSkillIDFlag          = skillsListSuggestionsFlags.String("skill-id", "", "")
+		skillsListSuggestionsCursorFlag           = skillsListSuggestionsFlags.String("cursor", "", "")
+		skillsListSuggestionsLimitFlag            = skillsListSuggestionsFlags.String("limit", "20", "")
+		skillsListSuggestionsSessionTokenFlag     = skillsListSuggestionsFlags.String("session-token", "", "")
+		skillsListSuggestionsApikeyTokenFlag      = skillsListSuggestionsFlags.String("apikey-token", "", "")
+		skillsListSuggestionsProjectSlugInputFlag = skillsListSuggestionsFlags.String("project-slug-input", "", "")
+
+		skillsApproveSuggestionFlags                = flag.NewFlagSet("approve-suggestion", flag.ExitOnError)
+		skillsApproveSuggestionBodyFlag             = skillsApproveSuggestionFlags.String("body", "REQUIRED", "")
+		skillsApproveSuggestionSessionTokenFlag     = skillsApproveSuggestionFlags.String("session-token", "", "")
+		skillsApproveSuggestionApikeyTokenFlag      = skillsApproveSuggestionFlags.String("apikey-token", "", "")
+		skillsApproveSuggestionProjectSlugInputFlag = skillsApproveSuggestionFlags.String("project-slug-input", "", "")
+
+		skillsDismissSuggestionFlags                = flag.NewFlagSet("dismiss-suggestion", flag.ExitOnError)
+		skillsDismissSuggestionBodyFlag             = skillsDismissSuggestionFlags.String("body", "REQUIRED", "")
+		skillsDismissSuggestionSessionTokenFlag     = skillsDismissSuggestionFlags.String("session-token", "", "")
+		skillsDismissSuggestionApikeyTokenFlag      = skillsDismissSuggestionFlags.String("apikey-token", "", "")
+		skillsDismissSuggestionProjectSlugInputFlag = skillsDismissSuggestionFlags.String("project-slug-input", "", "")
+
+		skillsApproveAllSuggestionsFlags                = flag.NewFlagSet("approve-all-suggestions", flag.ExitOnError)
+		skillsApproveAllSuggestionsSessionTokenFlag     = skillsApproveAllSuggestionsFlags.String("session-token", "", "")
+		skillsApproveAllSuggestionsApikeyTokenFlag      = skillsApproveAllSuggestionsFlags.String("apikey-token", "", "")
+		skillsApproveAllSuggestionsProjectSlugInputFlag = skillsApproveAllSuggestionsFlags.String("project-slug-input", "", "")
+
 		skillsGetFlags                = flag.NewFlagSet("get", flag.ExitOnError)
 		skillsGetIDFlag               = skillsGetFlags.String("id", "REQUIRED", "")
 		skillsGetSessionTokenFlag     = skillsGetFlags.String("session-token", "", "")
@@ -2974,6 +3040,7 @@ func ParseEndpoint(
 	chatCreditUsageFlags.Usage = chatCreditUsageUsage
 	chatDeleteChatFlags.Usage = chatDeleteChatUsage
 	chatSetPinnedFlags.Usage = chatSetPinnedUsage
+	chatSummarizeFlags.Usage = chatSummarizeUsage
 	chatSubmitFeedbackFlags.Usage = chatSubmitFeedbackUsage
 	chatListSourcesFlags.Usage = chatListSourcesUsage
 
@@ -2999,6 +3066,7 @@ func ParseEndpoint(
 	domainsGetDomainFlags.Usage = domainsGetDomainUsage
 	domainsCreateDomainFlags.Usage = domainsCreateDomainUsage
 	domainsUpdateDomainFlags.Usage = domainsUpdateDomainUsage
+	domainsCheckHealthFlags.Usage = domainsCheckHealthUsage
 	domainsDeleteDomainFlags.Usage = domainsDeleteDomainUsage
 	domainsListMcpEndpointsFlags.Usage = domainsListMcpEndpointsUsage
 
@@ -3070,6 +3138,7 @@ func ParseEndpoint(
 	hooksCodexFlags.Usage = hooksCodexUsage
 	hooksIngestFlags.Usage = hooksIngestUsage
 	hooksUploadSkillContentFlags.Usage = hooksUploadSkillContentUsage
+	hooksSkillFeedbackFlags.Usage = hooksSkillFeedbackUsage
 	hooksLogsFlags.Usage = hooksLogsUsage
 	hooksMetricsFlags.Usage = hooksMetricsUsage
 
@@ -3151,6 +3220,14 @@ func ParseEndpoint(
 	adminChatAnalysisGetSettingsFlags.Usage = adminChatAnalysisGetSettingsUsage
 	adminChatAnalysisUpsertWorkUnitsSettingsFlags.Usage = adminChatAnalysisUpsertWorkUnitsSettingsUsage
 	adminChatAnalysisTriggerAnalysisFlags.Usage = adminChatAnalysisTriggerAnalysisUsage
+
+	adminExternalCredentialsFlags.Usage = adminExternalCredentialsUsage
+	adminExternalCredentialsCreateGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsCreateGcpIamPlatformCredentialUsage
+	adminExternalCredentialsListPlatformExternalCredentialsFlags.Usage = adminExternalCredentialsListPlatformExternalCredentialsUsage
+	adminExternalCredentialsUpdateGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsUpdateGcpIamPlatformCredentialUsage
+	adminExternalCredentialsGetGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsGetGcpIamPlatformCredentialUsage
+	adminExternalCredentialsVerifyGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsVerifyGcpIamPlatformCredentialUsage
+	adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsDeleteGcpIamPlatformCredentialUsage
 
 	pluginsFlags.Usage = pluginsUsage
 	pluginsListPluginsFlags.Usage = pluginsListPluginsUsage
@@ -3319,6 +3396,10 @@ func ParseEndpoint(
 	skillsAddVersionFlags.Usage = skillsAddVersionUsage
 	skillsUpdateFlags.Usage = skillsUpdateUsage
 	skillsListFlags.Usage = skillsListUsage
+	skillsListSuggestionsFlags.Usage = skillsListSuggestionsUsage
+	skillsApproveSuggestionFlags.Usage = skillsApproveSuggestionUsage
+	skillsDismissSuggestionFlags.Usage = skillsDismissSuggestionUsage
+	skillsApproveAllSuggestionsFlags.Usage = skillsApproveAllSuggestionsUsage
 	skillsGetFlags.Usage = skillsGetUsage
 	skillsListUnknownActivationsFlags.Usage = skillsListUnknownActivationsUsage
 	skillsListVersionsFlags.Usage = skillsListVersionsUsage
@@ -3546,6 +3627,8 @@ func ParseEndpoint(
 			svcf = packagesFlags
 		case "admin-chat-analysis":
 			svcf = adminChatAnalysisFlags
+		case "admin-external-credentials":
+			svcf = adminExternalCredentialsFlags
 		case "plugins":
 			svcf = pluginsFlags
 		case "features":
@@ -3926,6 +4009,9 @@ func ParseEndpoint(
 			case "set-pinned":
 				epf = chatSetPinnedFlags
 
+			case "summarize":
+				epf = chatSummarizeFlags
+
 			case "submit-feedback":
 				epf = chatSubmitFeedbackFlags
 
@@ -3992,6 +4078,9 @@ func ParseEndpoint(
 
 			case "update-domain":
 				epf = domainsUpdateDomainFlags
+
+			case "check-health":
+				epf = domainsCheckHealthFlags
 
 			case "delete-domain":
 				epf = domainsDeleteDomainFlags
@@ -4189,6 +4278,9 @@ func ParseEndpoint(
 
 			case "upload-skill-content":
 				epf = hooksUploadSkillContentFlags
+
+			case "skill-feedback":
+				epf = hooksSkillFeedbackFlags
 
 			case "logs":
 				epf = hooksLogsFlags
@@ -4410,6 +4502,28 @@ func ParseEndpoint(
 
 			case "trigger-analysis":
 				epf = adminChatAnalysisTriggerAnalysisFlags
+
+			}
+
+		case "admin-external-credentials":
+			switch epn {
+			case "create-gcp-iam-platform-credential":
+				epf = adminExternalCredentialsCreateGcpIamPlatformCredentialFlags
+
+			case "list-platform-external-credentials":
+				epf = adminExternalCredentialsListPlatformExternalCredentialsFlags
+
+			case "update-gcp-iam-platform-credential":
+				epf = adminExternalCredentialsUpdateGcpIamPlatformCredentialFlags
+
+			case "get-gcp-iam-platform-credential":
+				epf = adminExternalCredentialsGetGcpIamPlatformCredentialFlags
+
+			case "verify-gcp-iam-platform-credential":
+				epf = adminExternalCredentialsVerifyGcpIamPlatformCredentialFlags
+
+			case "delete-gcp-iam-platform-credential":
+				epf = adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags
 
 			}
 
@@ -4884,6 +4998,18 @@ func ParseEndpoint(
 
 			case "list":
 				epf = skillsListFlags
+
+			case "list-suggestions":
+				epf = skillsListSuggestionsFlags
+
+			case "approve-suggestion":
+				epf = skillsApproveSuggestionFlags
+
+			case "dismiss-suggestion":
+				epf = skillsDismissSuggestionFlags
+
+			case "approve-all-suggestions":
+				epf = skillsApproveAllSuggestionsFlags
 
 			case "get":
 				epf = skillsGetFlags
@@ -5624,6 +5750,9 @@ func ParseEndpoint(
 			case "set-pinned":
 				endpoint = c.SetPinned()
 				data, err = chatc.BuildSetPinnedPayload(*chatSetPinnedBodyFlag, *chatSetPinnedSessionTokenFlag, *chatSetPinnedProjectSlugInputFlag)
+			case "summarize":
+				endpoint = c.Summarize()
+				data, err = chatc.BuildSummarizePayload(*chatSummarizeBodyFlag, *chatSummarizeSessionTokenFlag, *chatSummarizeProjectSlugInputFlag)
 			case "submit-feedback":
 				endpoint = c.SubmitFeedback()
 				data, err = chatc.BuildSubmitFeedbackPayload(*chatSubmitFeedbackBodyFlag, *chatSubmitFeedbackSessionTokenFlag, *chatSubmitFeedbackProjectSlugInputFlag, *chatSubmitFeedbackChatSessionsTokenFlag)
@@ -5691,6 +5820,9 @@ func ParseEndpoint(
 			case "update-domain":
 				endpoint = c.UpdateDomain()
 				data, err = domainsc.BuildUpdateDomainPayload(*domainsUpdateDomainBodyFlag, *domainsUpdateDomainSessionTokenFlag)
+			case "check-health":
+				endpoint = c.CheckHealth()
+				data, err = domainsc.BuildCheckHealthPayload(*domainsCheckHealthSessionTokenFlag)
 			case "delete-domain":
 				endpoint = c.DeleteDomain()
 				data, err = domainsc.BuildDeleteDomainPayload(*domainsDeleteDomainSessionTokenFlag)
@@ -5888,6 +6020,9 @@ func ParseEndpoint(
 			case "upload-skill-content":
 				endpoint = c.UploadSkillContent()
 				data, err = hooksc.BuildUploadSkillContentPayload(*hooksUploadSkillContentBodyFlag, *hooksUploadSkillContentApikeyTokenFlag, *hooksUploadSkillContentProjectSlugInputFlag)
+			case "skill-feedback":
+				endpoint = c.SkillFeedback()
+				data, err = hooksc.BuildSkillFeedbackPayload(*hooksSkillFeedbackBodyFlag, *hooksSkillFeedbackApikeyTokenFlag, *hooksSkillFeedbackProjectSlugInputFlag)
 			case "logs":
 				endpoint = c.Logs()
 				data, err = hooksc.BuildLogsPayload(*hooksLogsBodyFlag, *hooksLogsApikeyTokenFlag, *hooksLogsProjectSlugInputFlag)
@@ -6109,6 +6244,28 @@ func ParseEndpoint(
 			case "trigger-analysis":
 				endpoint = c.TriggerAnalysis()
 				data, err = adminchatanalysisc.BuildTriggerAnalysisPayload(*adminChatAnalysisTriggerAnalysisSessionTokenFlag)
+			}
+		case "admin-external-credentials":
+			c := adminexternalcredentialsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create-gcp-iam-platform-credential":
+				endpoint = c.CreateGcpIamPlatformCredential()
+				data, err = adminexternalcredentialsc.BuildCreateGcpIamPlatformCredentialPayload(*adminExternalCredentialsCreateGcpIamPlatformCredentialBodyFlag, *adminExternalCredentialsCreateGcpIamPlatformCredentialSessionTokenFlag)
+			case "list-platform-external-credentials":
+				endpoint = c.ListPlatformExternalCredentials()
+				data, err = adminexternalcredentialsc.BuildListPlatformExternalCredentialsPayload(*adminExternalCredentialsListPlatformExternalCredentialsProviderFlag, *adminExternalCredentialsListPlatformExternalCredentialsSessionTokenFlag)
+			case "update-gcp-iam-platform-credential":
+				endpoint = c.UpdateGcpIamPlatformCredential()
+				data, err = adminexternalcredentialsc.BuildUpdateGcpIamPlatformCredentialPayload(*adminExternalCredentialsUpdateGcpIamPlatformCredentialBodyFlag, *adminExternalCredentialsUpdateGcpIamPlatformCredentialSessionTokenFlag)
+			case "get-gcp-iam-platform-credential":
+				endpoint = c.GetGcpIamPlatformCredential()
+				data, err = adminexternalcredentialsc.BuildGetGcpIamPlatformCredentialPayload(*adminExternalCredentialsGetGcpIamPlatformCredentialIDFlag, *adminExternalCredentialsGetGcpIamPlatformCredentialSessionTokenFlag)
+			case "verify-gcp-iam-platform-credential":
+				endpoint = c.VerifyGcpIamPlatformCredential()
+				data, err = adminexternalcredentialsc.BuildVerifyGcpIamPlatformCredentialPayload(*adminExternalCredentialsVerifyGcpIamPlatformCredentialIDFlag, *adminExternalCredentialsVerifyGcpIamPlatformCredentialSessionTokenFlag)
+			case "delete-gcp-iam-platform-credential":
+				endpoint = c.DeleteGcpIamPlatformCredential()
+				data, err = adminexternalcredentialsc.BuildDeleteGcpIamPlatformCredentialPayload(*adminExternalCredentialsDeleteGcpIamPlatformCredentialIDFlag, *adminExternalCredentialsDeleteGcpIamPlatformCredentialSessionTokenFlag)
 			}
 		case "plugins":
 			c := pluginsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -6583,6 +6740,18 @@ func ParseEndpoint(
 			case "list":
 				endpoint = c.List()
 				data, err = skillsc.BuildListPayload(*skillsListCursorFlag, *skillsListLimitFlag, *skillsListSessionTokenFlag, *skillsListApikeyTokenFlag, *skillsListProjectSlugInputFlag)
+			case "list-suggestions":
+				endpoint = c.ListSuggestions()
+				data, err = skillsc.BuildListSuggestionsPayload(*skillsListSuggestionsSkillIDFlag, *skillsListSuggestionsCursorFlag, *skillsListSuggestionsLimitFlag, *skillsListSuggestionsSessionTokenFlag, *skillsListSuggestionsApikeyTokenFlag, *skillsListSuggestionsProjectSlugInputFlag)
+			case "approve-suggestion":
+				endpoint = c.ApproveSuggestion()
+				data, err = skillsc.BuildApproveSuggestionPayload(*skillsApproveSuggestionBodyFlag, *skillsApproveSuggestionSessionTokenFlag, *skillsApproveSuggestionApikeyTokenFlag, *skillsApproveSuggestionProjectSlugInputFlag)
+			case "dismiss-suggestion":
+				endpoint = c.DismissSuggestion()
+				data, err = skillsc.BuildDismissSuggestionPayload(*skillsDismissSuggestionBodyFlag, *skillsDismissSuggestionSessionTokenFlag, *skillsDismissSuggestionApikeyTokenFlag, *skillsDismissSuggestionProjectSlugInputFlag)
+			case "approve-all-suggestions":
+				endpoint = c.ApproveAllSuggestions()
+				data, err = skillsc.BuildApproveAllSuggestionsPayload(*skillsApproveAllSuggestionsSessionTokenFlag, *skillsApproveAllSuggestionsApikeyTokenFlag, *skillsApproveAllSuggestionsProjectSlugInputFlag)
 			case "get":
 				endpoint = c.Get()
 				data, err = skillsc.BuildGetPayload(*skillsGetIDFlag, *skillsGetSessionTokenFlag, *skillsGetApikeyTokenFlag, *skillsGetProjectSlugInputFlag)
@@ -8954,6 +9123,7 @@ func chatUsage() {
 	fmt.Fprintln(os.Stderr, `    credit-usage: Get the total number of chat credits and usage for the current billing period`)
 	fmt.Fprintln(os.Stderr, `    delete-chat: Soft-delete a chat by its ID`)
 	fmt.Fprintln(os.Stderr, `    set-pinned: Pin or unpin a chat. Pinned chats surface in a dedicated section above recents on the chat page.`)
+	fmt.Fprintln(os.Stderr, `    summarize: Generate or return a persisted LLM summary of a chat session transcript. When a summary already exists and regenerate is false, returns the cached summary without calling the model.`)
 	fmt.Fprintln(os.Stderr, `    submit-feedback: Submit user feedback for a chat (success/failure)`)
 	fmt.Fprintln(os.Stderr, `    list-sources: List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.`)
 	fmt.Fprintln(os.Stderr)
@@ -9162,6 +9332,28 @@ func chatSetPinnedUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat set-pinned --body '{\n      \"id\": \"abc123\",\n      \"pinned\": false\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func chatSummarizeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] chat summarize", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Generate or return a persisted LLM summary of a chat session transcript. When a summary already exists and regenerate is false, returns the cached summary without calling the model.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat summarize --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"regenerate\": false\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func chatSubmitFeedbackUsage() {
@@ -9537,6 +9729,7 @@ func domainsUsage() {
 	fmt.Fprintln(os.Stderr, `    get-domain: Get the custom domain for an organization`)
 	fmt.Fprintln(os.Stderr, `    create-domain: Create a custom domain for an organization`)
 	fmt.Fprintln(os.Stderr, `    update-domain: Update the IP allowlist for the organization's custom domain`)
+	fmt.Fprintln(os.Stderr, `    check-health: Check the routing and certificate health of the organization's custom domain`)
 	fmt.Fprintln(os.Stderr, `    delete-domain: Delete a custom domain`)
 	fmt.Fprintln(os.Stderr, `    list-mcp-endpoints: List the MCP endpoints registered under the organization's custom domain across every project. Returns enriched rows that include the parent MCP server and project so callers can preview what a custom-domain deletion would cascade through.`)
 	fmt.Fprintln(os.Stderr)
@@ -9599,6 +9792,24 @@ func domainsUpdateDomainUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "domains update-domain --body '{\n      \"ip_allowlist\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
+}
+
+func domainsCheckHealthUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] domains check-health", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Check the routing and certificate health of the organization's custom domain`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "domains check-health --session-token \"abc123\"")
 }
 
 func domainsDeleteDomainUsage() {
@@ -10787,6 +10998,7 @@ func hooksUsage() {
 	fmt.Fprintln(os.Stderr, `    codex: Endpoint for Codex hook events. Handles SessionStart, PreToolUse, PermissionRequest, PostToolUse, UserPromptSubmit, and Stop.`)
 	fmt.Fprintln(os.Stderr, `    ingest: Feature-first unified endpoint for hook events from supported coding assistants.`)
 	fmt.Fprintln(os.Stderr, `    upload-skill-content: Uploads skill manifest content requested by the unified hook ingest endpoint.`)
+	fmt.Fprintln(os.Stderr, `    skill-feedback: Records agent-volunteered feedback about a distributed skill.`)
 	fmt.Fprintln(os.Stderr, `    logs: Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.`)
 	fmt.Fprintln(os.Stderr, `    metrics: Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication.`)
 	fmt.Fprintln(os.Stderr)
@@ -10917,6 +11129,28 @@ func hooksUploadSkillContentUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks upload-skill-content --body '{\n      \"content\": \"abc123\",\n      \"raw_sha256\": \"1111111111111111111111111111111111111111111111111111111111111111\",\n      \"schema_version\": \"hook.skill-content.v1\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func hooksSkillFeedbackUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] hooks skill-feedback", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Records agent-volunteered feedback about a distributed skill.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks skill-feedback --body '{\n      \"note\": \"aaa\",\n      \"outcome\": \"partially_helped\",\n      \"schema_version\": \"hook.skill-feedback.v1\",\n      \"skill\": \"aa\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func hooksLogsUsage() {
@@ -12388,6 +12622,142 @@ func adminChatAnalysisTriggerAnalysisUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-chat-analysis trigger-analysis --session-token \"abc123\"")
+}
+
+// adminExternalCredentialsUsage displays the usage of the
+// admin-external-credentials command and its subcommands.
+func adminExternalCredentialsUsage() {
+	fmt.Fprintln(os.Stderr, `Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] admin-external-credentials COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create-gcp-iam-platform-credential: Create a platform GCP IAM external credential (organization_id NULL, project_id NULL). Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    list-platform-external-credentials: List the platform external credentials (provider-independent summary). Optionally filter by provider. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    update-gcp-iam-platform-credential: Replace a platform GCP IAM external credential's configuration. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    get-gcp-iam-platform-credential: Get a platform GCP IAM external credential by ID. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    verify-gcp-iam-platform-credential: Run a live 'who am I' probe against a platform GCP IAM credential's resolved identity and report the effective principal. Ephemeral: nothing is persisted. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    delete-gcp-iam-platform-credential: Soft-delete a platform GCP IAM external credential by ID. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s admin-external-credentials COMMAND --help\n", os.Args[0])
+}
+func adminExternalCredentialsCreateGcpIamPlatformCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-external-credentials create-gcp-iam-platform-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a platform GCP IAM external credential (organization_id NULL, project_id NULL). Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-external-credentials create-gcp-iam-platform-credential --body '{\n      \"impersonate_service_account\": \"abc123\",\n      \"name\": \"abc123\",\n      \"wif_pool_id\": \"abc123\",\n      \"wif_project_number\": \"abc123\",\n      \"wif_provider_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func adminExternalCredentialsListPlatformExternalCredentialsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-external-credentials list-platform-external-credentials", os.Args[0])
+	fmt.Fprint(os.Stderr, " -provider STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the platform external credentials (provider-independent summary). Optionally filter by provider. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-external-credentials list-platform-external-credentials --provider \"gcp_iam\" --session-token \"abc123\"")
+}
+
+func adminExternalCredentialsUpdateGcpIamPlatformCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-external-credentials update-gcp-iam-platform-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace a platform GCP IAM external credential's configuration. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-external-credentials update-gcp-iam-platform-credential --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"impersonate_service_account\": \"abc123\",\n      \"name\": \"abc123\",\n      \"wif_pool_id\": \"abc123\",\n      \"wif_project_number\": \"abc123\",\n      \"wif_provider_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func adminExternalCredentialsGetGcpIamPlatformCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-external-credentials get-gcp-iam-platform-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a platform GCP IAM external credential by ID. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-external-credentials get-gcp-iam-platform-credential --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func adminExternalCredentialsVerifyGcpIamPlatformCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-external-credentials verify-gcp-iam-platform-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Run a live 'who am I' probe against a platform GCP IAM credential's resolved identity and report the effective principal. Ephemeral: nothing is persisted. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-external-credentials verify-gcp-iam-platform-credential --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func adminExternalCredentialsDeleteGcpIamPlatformCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-external-credentials delete-gcp-iam-platform-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete a platform GCP IAM external credential by ID. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-external-credentials delete-gcp-iam-platform-credential --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 // pluginsUsage displays the usage of the plugins command and its subcommands.
@@ -15805,6 +16175,10 @@ func skillsUsage() {
 	fmt.Fprintln(os.Stderr, `    add-version: Record an uploaded SKILL.md as a version of an existing skill. The implementation requires the skills product feature and skill write scope, and returns the existing canonical version as a no-op when appropriate.`)
 	fmt.Fprintln(os.Stderr, `    update: Rename an active skill or update its display name and summary. The implementation requires the skills product feature and skill write scope.`)
 	fmt.Fprintln(os.Stderr, `    list: List active skills in the project. The implementation requires the skills product feature and skill read scope.`)
+	fmt.Fprintln(os.Stderr, `    list-suggestions: List open skill edit suggestions in the project, newest first. The implementation requires the skills product feature and skill read scope.`)
+	fmt.Fprintln(os.Stderr, `    approve-suggestion: Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only one of its changes. Stale suggestions are superseded instead.`)
+	fmt.Fprintln(os.Stderr, `    dismiss-suggestion: Idempotently dismiss an open skill edit suggestion. Approved and superseded suggestions conflict.`)
+	fmt.Fprintln(os.Stderr, `    approve-all-suggestions: Snapshot and independently process every open skill edit suggestion in the project. One conflict or failure does not stop the remaining approvals.`)
 	fmt.Fprintln(os.Stderr, `    get: Get an active skill and its latest version. The implementation requires the skills product feature and skill read scope.`)
 	fmt.Fprintln(os.Stderr, `    list-unknown-activations: List terminal skill activations that could not be attributed to a skill version.`)
 	fmt.Fprintln(os.Stderr, `    list-versions: List immutable versions of an active skill, newest first. The implementation requires the skills product feature and skill read scope.`)
@@ -15915,6 +16289,104 @@ func skillsListUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills list --cursor \"abc123\" --limit 2 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsListSuggestionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills list-suggestions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -skill-id STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List open skill edit suggestions in the project, newest first. The implementation requires the skills product feature and skill read scope.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -skill-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills list-suggestions --skill-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --limit 2 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsApproveSuggestionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills approve-suggestion", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only one of its changes. Stale suggestions are superseded instead.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills approve-suggestion --body '{\n      \"content\": \"abc123\",\n      \"hunk\": 1,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsDismissSuggestionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills dismiss-suggestion", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Idempotently dismiss an open skill edit suggestion. Approved and superseded suggestions conflict.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills dismiss-suggestion --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsApproveAllSuggestionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills approve-all-suggestions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Snapshot and independently process every open skill edit suggestion in the project. One conflict or failure does not stop the remaining approvals.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills approve-all-suggestions --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func skillsGetUsage() {

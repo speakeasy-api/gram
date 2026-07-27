@@ -35636,7 +35636,7 @@ paths:
                 name: ApproveAllSkillSuggestions
     /rpc/skills.approveSuggestion:
         post:
-            description: Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content. Stale suggestions are superseded instead.
+            description: Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only one of its changes. Stale suggestions are superseded instead.
             operationId: approveSkillSuggestion
             parameters:
                 - allowEmptyValue: true
@@ -48863,6 +48863,11 @@ components:
                 content:
                     type: string
                     description: Optional edited complete SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.
+                hunk:
+                    type: integer
+                    description: Optional zero-based index of the single proposed change to take. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.
+                    format: int64
+                    minimum: 0
                 id:
                     type: string
                     description: The suggestion ID.
@@ -48874,9 +48879,10 @@ components:
             properties:
                 outcome:
                     type: string
-                    description: Whether the suggestion created a version or was stale.
+                    description: Whether the suggestion created a version, created one and stayed open carrying its remaining changes, or was stale.
                     enum:
                         - applied
+                        - partially_applied
                         - superseded
                 suggestion:
                     $ref: '#/components/schemas/SkillEditSuggestion'
