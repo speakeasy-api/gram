@@ -55,7 +55,8 @@ type TunnelPublicConfig struct {
 	// SessionTTL is the sliding lifetime of an anonymous session mapping.
 	SessionTTL time.Duration
 	// LiveSessionCap bounds concurrently tracked anonymous sessions per
-	// tunnel.
+	// tunnel. At the cap, a new initialize evicts the least-recently-refreshed
+	// sessions rather than being rejected.
 	LiveSessionCap int
 	// InitializeRate bounds anonymous initialize requests per tunnel.
 	InitializeRate ratelimit.Rate
@@ -72,7 +73,7 @@ func (c TunnelPublicConfig) withDefaults() TunnelPublicConfig {
 		c.SessionTTL = 24 * time.Hour
 	}
 	if c.LiveSessionCap <= 0 {
-		c.LiveSessionCap = 100
+		c.LiveSessionCap = 10000
 	}
 	if !c.InitializeRate.Valid() {
 		c.InitializeRate = ratelimit.PerSecond(5).WithBurst(20)
@@ -264,13 +265,13 @@ func (s *Service) serveTunneledPublicInit(
 			return oops.E(oops.CodeUnexpected, err, "mint anonymous tunnel session id").LogError(ctx, logger)
 		}
 
-		if err := rt.sessions.Reserve(ctx, tunnelID, mcpServerID, sid); err != nil {
-			var capErr *tunnelsessions.CapacityError
-			if errors.As(err, &capErr) {
-				w.Header().Set("Retry-After", strconv.Itoa(int(capErr.RetryAfter.Seconds())+1))
-				return oops.E(oops.CodeRateLimitExceeded, nil, "this MCP server is at its anonymous session capacity").LogWarn(ctx, logger)
-			}
+		evicted, err := rt.sessions.Reserve(ctx, tunnelID, mcpServerID, sid)
+		if err != nil {
 			return oops.E(oops.CodeUnavailable, err, "service temporarily unavailable").LogError(ctx, logger)
+		}
+		if evicted > 0 {
+			logger.WarnContext(ctx, "evicted anonymous tunnel sessions at capacity",
+				attr.SlogTunnelEvictedSessionsCount(evicted))
 		}
 		reserved = true
 	}

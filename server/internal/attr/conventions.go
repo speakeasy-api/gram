@@ -491,6 +491,9 @@ const (
 	// anonymous tunnel session id. The raw id is bearer-like and must never
 	// be logged.
 	TunnelAnonymousSessionHashKey = attribute.Key("gram.tunneled_mcp_server.anonymous_session_hash")
+	// TunnelEvictedSessionsCountKey counts anonymous sessions evicted to admit
+	// a new one at the per-tunnel live-session cap.
+	TunnelEvictedSessionsCountKey = attribute.Key("gram.tunneled_mcp_server.evicted_sessions_count")
 
 	WorkOSEventIDKey             = attribute.Key("gram.workos_event.id")
 	WorkOSEventTypeKey           = attribute.Key("gram.workos_event.type")
@@ -1384,6 +1387,13 @@ func TunnelAnonymousSessionHash(v string) attribute.KeyValue {
 }
 func SlogTunnelAnonymousSessionHash(v string) slog.Attr {
 	return slog.String(string(TunnelAnonymousSessionHashKey), v)
+}
+
+func TunnelEvictedSessionsCount(v int64) attribute.KeyValue {
+	return TunnelEvictedSessionsCountKey.Int64(v)
+}
+func SlogTunnelEvictedSessionsCount(v int64) slog.Attr {
+	return slog.Int64(string(TunnelEvictedSessionsCountKey), v)
 }
 
 func RemoteMCPProxyInterceptor(v string) attribute.KeyValue {
