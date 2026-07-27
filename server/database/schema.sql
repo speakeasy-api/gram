@@ -2024,6 +2024,51 @@ CREATE INDEX IF NOT EXISTS chat_messages_risk_analyzed_at_null_idx
 ON chat_messages (project_id, id)
 WHERE risk_analyzed_at IS NULL;
 
+CREATE TABLE IF NOT EXISTS chat_content_parts (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  chat_id uuid NOT NULL,
+  project_id uuid,
+
+  -- Discriminator: 'prompt_attachment' now, 'artifact' next. Validated in app
+  -- code. Trust tier is derived from this rather than stored, so a row cannot
+  -- contradict itself.
+  kind TEXT NOT NULL,
+
+  content_asset_url TEXT NOT NULL,
+  -- Provider identity: attachment transcript entry uuid, artifact id.
+  external_id TEXT,
+  -- The turn this content hangs off, resolved at persist time. For an
+  -- attachment, the user prompt it was expanded under.
+  parent_chat_message_id uuid,
+  -- Version grain for mutable content (artifacts). NULL for immutable kinds.
+  version INTEGER,
+  source TEXT,
+  -- Sparse per-kind metadata, e.g. {"display_path":...,"kind":"file"} for
+  -- attachments, {"artifact_type":...,"title":...,"language":...} for artifacts.
+  metadata JSONB,
+
+  -- Joins the same unanalyzed-sweep model as chat_messages.
+  risk_analyzed_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT chat_content_parts_pkey PRIMARY KEY (id),
+  CONSTRAINT chat_content_parts_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE,
+  CONSTRAINT chat_content_parts_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT chat_content_parts_parent_chat_message_id_fkey FOREIGN KEY (parent_chat_message_id) REFERENCES chat_messages (id) ON DELETE SET NULL
+);
+
+-- Unanalyzed sweep, mirroring chat_messages_risk_analyzed_at_null_idx.
+CREATE INDEX IF NOT EXISTS chat_content_parts_risk_analyzed_at_null_idx
+ON chat_content_parts (project_id, id) WHERE risk_analyzed_at IS NULL;
+
+-- Read path: attachments for a chat / a parent turn.
+CREATE INDEX IF NOT EXISTS chat_content_parts_chat_id_idx
+ON chat_content_parts (chat_id);
+
 -- Serves the chat analysis enqueue walk, which pages a project's chats on the
 -- immutable (created_at, id) keyset within a bounded lookback.
 CREATE INDEX IF NOT EXISTS chats_project_id_created_at_id_idx
@@ -4066,7 +4111,8 @@ CREATE TABLE IF NOT EXISTS risk_results (
   organization_id TEXT NOT NULL,
   risk_policy_id uuid NOT NULL,
   risk_policy_version BIGINT NOT NULL,
-  chat_message_id uuid NOT NULL,
+  chat_message_id uuid,
+  chat_content_part_id uuid,
   source TEXT NOT NULL,
 
   found BOOLEAN NOT NULL,
@@ -4107,7 +4153,9 @@ CREATE TABLE IF NOT EXISTS risk_results (
   CONSTRAINT risk_results_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
   CONSTRAINT risk_results_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
   CONSTRAINT risk_results_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies(id) ON DELETE CASCADE,
-  CONSTRAINT risk_results_chat_message_id_fkey FOREIGN KEY (chat_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
+  CONSTRAINT risk_results_chat_message_id_fkey FOREIGN KEY (chat_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE,
+  CONSTRAINT risk_results_chat_content_part_id_fkey FOREIGN KEY (chat_content_part_id) REFERENCES chat_content_parts(id) ON DELETE CASCADE,
+  CONSTRAINT risk_results_anchor_check CHECK ((chat_message_id IS NULL) <> (chat_content_part_id IS NULL))
 ) WITH (
   -- This table is append-heavy and rarely updated, so the only autovacuum
   -- trigger that ever fires is the insert one. With the global 0.2 scale
@@ -4131,6 +4179,9 @@ ON risk_results (project_id, risk_policy_id, risk_policy_version, chat_message_i
 
 CREATE INDEX IF NOT EXISTS risk_results_project_chat_message_idx
 ON risk_results (project_id, chat_message_id);
+
+CREATE INDEX IF NOT EXISTS risk_results_project_chat_content_part_idx
+ON risk_results (project_id, chat_content_part_id);
 
 CREATE INDEX IF NOT EXISTS risk_results_project_found_idx
 ON risk_results (project_id, created_at DESC)

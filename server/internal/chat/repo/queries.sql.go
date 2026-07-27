@@ -2761,7 +2761,7 @@ type SeedRiskResultParams struct {
 	ProjectID      uuid.UUID
 	OrganizationID string
 	RiskPolicyID   uuid.UUID
-	ChatMessageID  uuid.UUID
+	ChatMessageID  uuid.NullUUID
 	Found          bool
 }
 

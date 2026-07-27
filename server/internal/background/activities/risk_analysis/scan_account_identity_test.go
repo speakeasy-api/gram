@@ -203,7 +203,7 @@ func TestAnalyzeBatch_AccountIdentityPersonalAccountOnePerChat(t *testing.T) {
 	require.Len(t, findings, 1, "session-scoped finding should be emitted once per chat, not per message")
 	assert.Equal(t, "identity.personal_account", findings[0].RuleID.String)
 	assert.Equal(t, "jane@gmail.com", findings[0].Match.String)
-	assert.Contains(t, []uuid.UUID{msg1, msg2}, findings[0].ChatMessageID)
+	assert.Contains(t, []uuid.UUID{msg1, msg2}, findings[0].ChatMessageID.UUID)
 }
 
 func TestAnalyzeBatch_AccountIdentityDedupesAcrossBatches(t *testing.T) {
@@ -229,7 +229,7 @@ func TestAnalyzeBatch_AccountIdentityDedupesAcrossBatches(t *testing.T) {
 	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg1})
 	findings := accountIdentityFindings(t, conn, td, policyID)
 	require.Len(t, findings, 1)
-	assert.Equal(t, msg1, findings[0].ChatMessageID)
+	assert.Equal(t, msg1, findings[0].ChatMessageID.UUID)
 }
 
 func TestAnalyzeBatch_AccountIdentityEnrichesMatchWhenEmailLearnedLater(t *testing.T) {
@@ -263,7 +263,7 @@ func TestAnalyzeBatch_AccountIdentityEnrichesMatchWhenEmailLearnedLater(t *testi
 
 	findings = accountIdentityFindings(t, conn, td, policyID)
 	require.Len(t, findings, 1, "enrichment must update in place, not add a second finding")
-	assert.Equal(t, msg1, findings[0].ChatMessageID)
+	assert.Equal(t, msg1, findings[0].ChatMessageID.UUID)
 	assert.Equal(t, "jane@gmail.com", findings[0].Match.String)
 	assert.Equal(t, `Session authenticated with the personal AI account "jane@gmail.com".`, findings[0].Description.String)
 }
@@ -354,7 +354,7 @@ func TestAnalyzeBatch_AccountIdentityUnapprovedDomainMatrix(t *testing.T) {
 
 	rulesByEmail := make(map[string][]string)
 	for _, finding := range accountIdentityFindings(t, conn, td, policyID) {
-		email := msgByEmail[finding.ChatMessageID]
+		email := msgByEmail[finding.ChatMessageID.UUID]
 		rulesByEmail[email] = append(rulesByEmail[email], finding.RuleID.String)
 		assert.Equal(t, email, finding.Match.String)
 	}
@@ -429,7 +429,7 @@ func TestAnalyzeBatch_AccountIdentityBypassesMessageTypeFilter(t *testing.T) {
 	findings := accountIdentityFindings(t, conn, td, policyID)
 	require.Len(t, findings, 1)
 	assert.Equal(t, "identity.personal_account", findings[0].RuleID.String)
-	assert.Equal(t, msgID, findings[0].ChatMessageID)
+	assert.Equal(t, msgID, findings[0].ChatMessageID.UUID)
 }
 
 func TestAnalyzeBatch_AccountIdentityBypassesCELScope(t *testing.T) {

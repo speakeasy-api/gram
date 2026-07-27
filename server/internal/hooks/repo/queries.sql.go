@@ -329,7 +329,7 @@ type InsertShadowMCPBlockResultParams struct {
 	OrganizationID    string
 	RiskPolicyID      uuid.UUID
 	RiskPolicyVersion int64
-	ChatMessageID     uuid.UUID
+	ChatMessageID     uuid.NullUUID
 	Description       pgtype.Text
 	Match             pgtype.Text
 	Confidence        pgtype.Float8
