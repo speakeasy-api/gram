@@ -283,16 +283,32 @@ func (m *ChallengeManager) validateAndRefresh(
 // surfacing it.
 var errRefreshRaceLost = errors.New("remotesessions: refresh lost to a concurrent rotation")
 
+// The ordering of these three is the invariant that makes single-flight sound:
+//
+//	refreshUpstreamTimeout < refreshLockTTL <= refreshWaitBudget
+//
+// Invert it and a waiter gives up while the holder is still mid-POST, then
+// presents the same refresh token to the upstream — the exact failure the lock
+// exists to prevent. Guarded by TestRefreshTimingInvariant.
 const (
-	// A lease, not a mutex: a lost or expired one is caught by the
-	// compare-and-swap in refreshSessionTokens.
-	refreshLockTTL = 15 * time.Second
+	// Bounds the token POST. guardian's pooled client sets no
+	// http.Client.Timeout of its own (its 30s is dial-only) and the MCP mux
+	// deliberately sets no WriteTimeout, so nothing else bounds it.
+	refreshUpstreamTimeout = 10 * time.Second
 
-	// Must exceed a normal upstream refresh round-trip. Expiring it early
-	// reintroduces the duplicate POST the lock exists to prevent.
-	refreshWaitBudget = 5 * time.Second
+	// Covers the POST plus the encrypt-and-write that follows it. A lease, not
+	// a mutex: a lost or expired one is caught by the compare-and-swap in
+	// refreshSessionTokens.
+	refreshLockTTL = 12 * time.Second
+
+	// Giving up therefore means the holder is gone, not merely slow. Rarely
+	// spent in full — the poll below exits as soon as the holder writes.
+	refreshWaitBudget = 12 * time.Second
 
 	refreshWaitPoll = 20 * time.Millisecond
+
+	// Bounds the detached lock release.
+	refreshReleaseTimeout = 5 * time.Second
 )
 
 // refreshLockKey scopes the lock to the pair the partial unique index makes
@@ -343,7 +359,15 @@ func (m *ChallengeManager) refreshAccessToken(
 			attr.SlogCacheKey(lockKey),
 		)
 	default:
-		defer o11y.LogDefer(ctx, m.logger, func() error { return m.locks.Delete(ctx, lockKey) })
+		defer o11y.LogDefer(ctx, m.logger, func() error {
+			// Detached from the request: MCP clients routinely disconnect
+			// mid-refresh, and a release skipped on cancellation strands the
+			// lease for its full TTL with every other caller waiting it out.
+			releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
+			defer cancel()
+
+			return m.locks.Delete(releaseCtx, lockKey)
+		})
 	}
 
 	_, accessToken, refreshErr := refreshSessionTokens(ctx, q, m.enc, m.policy, sess, resource)
@@ -475,7 +499,12 @@ func refreshSessionTokens(
 		form.Set("resource", resource)
 	}
 
-	req, err := newTokenEndpointRequest(ctx, client.TokenEndpoint.String, form, authMethod, client.ExternalClientID, clientSecret)
+	// Scoped to the exchange alone so an unresponsive upstream cannot outlive
+	// the single-flight lease; the persist below still runs on ctx.
+	postCtx, cancel := context.WithTimeout(ctx, refreshUpstreamTimeout)
+	defer cancel()
+
+	req, err := newTokenEndpointRequest(postCtx, client.TokenEndpoint.String, form, authMethod, client.ExternalClientID, clientSecret)
 	if err != nil {
 		return zero, "", fmt.Errorf("new refresh request: %w", err)
 	}
