@@ -3527,18 +3527,14 @@ type UpsertRemoteSessionIfUnchangedParams struct {
 	ExpectedUpdatedAt     pgtype.Timestamptz
 }
 
-// Compare-and-swap variant of UpsertRemoteSession, used by the refresh path.
-// The upstream token POST runs outside any transaction, so two concurrent
-// refreshes for one (subject, client) can both return holding a rotated token
-// pair. Without the updated_at guard the slower writer overwrites the faster
-// one and persists a refresh token the provider has already consumed, leaving
-// the session permanently unusable until the user re-links.
+// Compare-and-swap variant of UpsertRemoteSession for the refresh path. Two
+// concurrent refreshes can both come back holding a rotated token pair; without
+// the guard the slower writer persists a refresh token the provider has already
+// consumed, and the session stays broken until the user re-links. No rows means
+// another writer got there first.
 //
-// Returns no rows when another writer rotated the row first; the caller adopts
-// that writer's tokens rather than clobbering them. The INSERT branch is
-// unreachable for a live session (the row exists, so the conflict target
-// matches) and is retained only so a session revoked mid-refresh behaves the
-// same as it does under UpsertRemoteSession.
+// The INSERT branch is unreachable for a live session; it is kept so a session
+// revoked mid-refresh behaves as it does under UpsertRemoteSession.
 func (q *Queries) UpsertRemoteSessionIfUnchanged(ctx context.Context, arg UpsertRemoteSessionIfUnchangedParams) (RemoteSession, error) {
 	row := q.db.QueryRow(ctx, upsertRemoteSessionIfUnchanged,
 		arg.SubjectUrn,
