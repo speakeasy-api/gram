@@ -635,8 +635,8 @@ func (s *Service) RestoreVersion(ctx context.Context, payload *gen.RestoreVersio
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "sync restored skill summary").LogError(ctx, logger)
 		}
-		if err := supersedeOpenSuggestionAfterBaseChange(ctx, queries, *authCtx.ProjectID, skill.ID); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "supersede stale skill suggestion").LogError(ctx, logger)
+		if err := ReplayOpenSuggestionOntoBase(ctx, queries, *authCtx.ProjectID, skill.ID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "replay open skill suggestion").LogError(ctx, logger)
 		}
 	}
 

@@ -25,6 +25,7 @@ type Endpoints struct {
 	ListFeedback           goa.Endpoint
 	ApproveSuggestion      goa.Endpoint
 	DismissSuggestion      goa.Endpoint
+	ListSuggestionFeedback goa.Endpoint
 	ApproveAllSuggestions  goa.Endpoint
 	Get                    goa.Endpoint
 	ListUnknownActivations goa.Endpoint
@@ -52,6 +53,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListFeedback:           NewListFeedbackEndpoint(s, a.APIKeyAuth),
 		ApproveSuggestion:      NewApproveSuggestionEndpoint(s, a.APIKeyAuth),
 		DismissSuggestion:      NewDismissSuggestionEndpoint(s, a.APIKeyAuth),
+		ListSuggestionFeedback: NewListSuggestionFeedbackEndpoint(s, a.APIKeyAuth),
 		ApproveAllSuggestions:  NewApproveAllSuggestionsEndpoint(s, a.APIKeyAuth),
 		Get:                    NewGetEndpoint(s, a.APIKeyAuth),
 		ListUnknownActivations: NewListUnknownActivationsEndpoint(s, a.APIKeyAuth),
@@ -77,6 +79,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListFeedback = m(e.ListFeedback)
 	e.ApproveSuggestion = m(e.ApproveSuggestion)
 	e.DismissSuggestion = m(e.DismissSuggestion)
+	e.ListSuggestionFeedback = m(e.ListSuggestionFeedback)
 	e.ApproveAllSuggestions = m(e.ApproveAllSuggestions)
 	e.Get = m(e.Get)
 	e.ListUnknownActivations = m(e.ListUnknownActivations)
@@ -618,6 +621,65 @@ func NewDismissSuggestionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 			return nil, err
 		}
 		return s.DismissSuggestion(ctx, p)
+	}
+}
+
+// NewListSuggestionFeedbackEndpoint returns an endpoint function that calls
+// the method "listSuggestionFeedback" of service "skills".
+func NewListSuggestionFeedbackEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListSuggestionFeedbackPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListSuggestionFeedback(ctx, p)
 	}
 }
 

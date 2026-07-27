@@ -491,6 +491,66 @@ func BuildDismissSuggestionPayload(skillsDismissSuggestionBody string, skillsDis
 	return v, nil
 }
 
+// BuildListSuggestionFeedbackPayload builds the payload for the skills
+// listSuggestionFeedback endpoint from CLI flags.
+func BuildListSuggestionFeedbackPayload(skillsListSuggestionFeedbackID string, skillsListSuggestionFeedbackLimit string, skillsListSuggestionFeedbackSessionToken string, skillsListSuggestionFeedbackApikeyToken string, skillsListSuggestionFeedbackProjectSlugInput string) (*skills.ListSuggestionFeedbackPayload, error) {
+	var err error
+	var id string
+	{
+		id = skillsListSuggestionFeedbackID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var limit int
+	{
+		if skillsListSuggestionFeedbackLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(skillsListSuggestionFeedbackLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 50 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 50, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsListSuggestionFeedbackSessionToken != "" {
+			sessionToken = &skillsListSuggestionFeedbackSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsListSuggestionFeedbackApikeyToken != "" {
+			apikeyToken = &skillsListSuggestionFeedbackApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsListSuggestionFeedbackProjectSlugInput != "" {
+			projectSlugInput = &skillsListSuggestionFeedbackProjectSlugInput
+		}
+	}
+	v := &skills.ListSuggestionFeedbackPayload{}
+	v.ID = id
+	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildApproveAllSuggestionsPayload builds the payload for the skills
 // approveAllSuggestions endpoint from CLI flags.
 func BuildApproveAllSuggestionsPayload(skillsApproveAllSuggestionsBody string, skillsApproveAllSuggestionsSessionToken string, skillsApproveAllSuggestionsApikeyToken string, skillsApproveAllSuggestionsProjectSlugInput string) (*skills.ApproveAllSuggestionsPayload, error) {

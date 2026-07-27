@@ -37826,6 +37826,125 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: SkillFeedback
+  /rpc/skills.listSuggestionFeedback:
+    get:
+      description: List the agent feedback a skill edit suggestion was generated from, newest first.
+      operationId: listSkillSuggestionFeedback
+      parameters:
+        - allowEmptyValue: true
+          description: The suggestion ID.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The suggestion ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The number of feedback records to return.
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: The number of feedback records to return.
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSkillSuggestionFeedbackResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listSuggestionFeedback skills
+      tags:
+        - skills
+      x-speakeasy-name-override: listSuggestionFeedback
+      x-speakeasy-react-hook:
+        name: SkillSuggestionFeedback
   /rpc/skills.listSuggestions:
     get:
       description: List open skill edit suggestions in the project, newest first. The implementation requires the skills product feature and skill read scope.
@@ -58268,6 +58387,17 @@ components:
       description: All-time outcome counts and a newest-first page of feedback for a skill.
       required:
         - counts
+        - feedback
+    ListSkillSuggestionFeedbackResult:
+      type: object
+      properties:
+        feedback:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillFeedback'
+          description: The feedback records linked to the suggestion.
+      description: The agent feedback a suggestion was generated from, newest first.
+      required:
         - feedback
     ListSkillSuggestionsResult:
       type: object

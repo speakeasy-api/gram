@@ -57,7 +57,8 @@ func TestRestoreSkillVersionUpdatesCurrentResolversWithoutMovingPins(t *testing.
 	link, err := ti.service.Share(ctx, &gen.SharePayload{SkillID: first.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	open, err := ti.repo.CreateSkillEditSuggestion(ctx, repo.CreateSkillEditSuggestionParams{
-		ProposedContent: third.Version.Content, Rationale: "stale", FeedbackCount: 0, ScoredSessionCount: 0,
+		ProposedDiff: diffTo(t, third.Version.Content, skillManifest("restorable", "Third summary.", "third, expanded")),
+		Rationale:    "stale", ScoredSessionCount: 0,
 		BaseVersionID: thirdID, ProjectID: ti.projectID, SkillID: skillID,
 	})
 	require.NoError(t, err)
@@ -220,8 +221,8 @@ func TestRestoreSkillVersionPromotesCurrentCapturedTargetToManual(t *testing.T) 
 	require.NoError(t, err)
 	require.Equal(t, manual.Version.ID, distribution.ResolvedVersionID)
 	open, err := ti.repo.CreateSkillEditSuggestion(ctx, repo.CreateSkillEditSuggestionParams{
-		ProposedContent: capturedManifest("restore-current-captured", "Suggested.", "suggested"),
-		Rationale:       "stale", FeedbackCount: 0, ScoredSessionCount: 0,
+		ProposedDiff: diffTo(t, manual.Version.Content, skillManifest("restore-current-captured", "Manual.", "# restore-current-captured, expanded")),
+		Rationale:    "stale", ScoredSessionCount: 0,
 		BaseVersionID: uuid.MustParse(manual.Version.ID), ProjectID: ti.projectID, SkillID: captured.SkillID,
 	})
 	require.NoError(t, err)

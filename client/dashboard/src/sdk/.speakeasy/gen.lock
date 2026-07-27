@@ -408,6 +408,7 @@ trackedFiles:
   src/funcs/skillsList.ts: {}
   src/funcs/skillsListDistributions.ts: {}
   src/funcs/skillsListFeedback.ts: {}
+  src/funcs/skillsListSuggestionFeedback.ts: {}
   src/funcs/skillsListSuggestions.ts: {}
   src/funcs/skillsListUnknownActivations.ts: {}
   src/funcs/skillsListVersions.ts: {}
@@ -844,6 +845,7 @@ trackedFiles:
   src/models/components/listskilldistributionsresult.ts: {}
   src/models/components/listskillfeedbackresult.ts: {}
   src/models/components/listskillsresult.ts: {}
+  src/models/components/listskillsuggestionfeedbackresult.ts: {}
   src/models/components/listskillsuggestionsresult.ts: {}
   src/models/components/listskillversionsresult.ts: {}
   src/models/components/listsourcesresult.ts: {}
@@ -1575,6 +1577,7 @@ trackedFiles:
   src/models/operations/listskilldistributions.ts: {}
   src/models/operations/listskillfeedback.ts: {}
   src/models/operations/listskills.ts: {}
+  src/models/operations/listskillsuggestionfeedback.ts: {}
   src/models/operations/listskillsuggestions.ts: {}
   src/models/operations/listskillversions.ts: {}
   src/models/operations/listspendruleactorattributes.ts: {}
@@ -2331,6 +2334,8 @@ trackedFiles:
   src/react-query/skillEfficacySettings.ts: {}
   src/react-query/skillFeedback.core.ts: {}
   src/react-query/skillFeedback.ts: {}
+  src/react-query/skillSuggestionFeedback.core.ts: {}
+  src/react-query/skillSuggestionFeedback.ts: {}
   src/react-query/skillSuggestions.core.ts: {}
   src/react-query/skillSuggestions.ts: {}
   src/react-query/skillVersions.core.ts: {}
@@ -5946,6 +5951,19 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listSkillSuggestionFeedback:
+    speakeasy-default-list-skill-suggestion-feedback:
+      parameters:
+        query:
+          id: "fc109e0d-bdc5-488f-9394-65823e53bb7c"
+          limit: 50
+      responses:
+        "200":
+          application/json: {"feedback": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listSkillSuggestions:
     speakeasy-default-list-skill-suggestions:
       parameters:

@@ -14,6 +14,7 @@ import { skillsGetShared } from "../funcs/skillsGetShared.js";
 import { skillsList } from "../funcs/skillsList.js";
 import { skillsListDistributions } from "../funcs/skillsListDistributions.js";
 import { skillsListFeedback } from "../funcs/skillsListFeedback.js";
+import { skillsListSuggestionFeedback } from "../funcs/skillsListSuggestionFeedback.js";
 import { skillsListSuggestions } from "../funcs/skillsListSuggestions.js";
 import { skillsListUnknownActivations } from "../funcs/skillsListUnknownActivations.js";
 import { skillsListVersions } from "../funcs/skillsListVersions.js";
@@ -26,6 +27,7 @@ import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ApproveAllSkillSuggestionsResult } from "../models/components/approveallskillsuggestionsresult.js";
 import { ApproveSkillSuggestionResult } from "../models/components/approveskillsuggestionresult.js";
 import { GetSkillResult } from "../models/components/getskillresult.js";
+import { ListSkillSuggestionFeedbackResult } from "../models/components/listskillsuggestionfeedbackresult.js";
 import { RecordSkillResult } from "../models/components/recordskillresult.js";
 import { Skill } from "../models/components/skill.js";
 import { SkillDistribution } from "../models/components/skilldistribution.js";
@@ -82,6 +84,10 @@ import {
   ListSkillsResponse,
   ListSkillsSecurity,
 } from "../models/operations/listskills.js";
+import {
+  ListSkillSuggestionFeedbackRequest,
+  ListSkillSuggestionFeedbackSecurity,
+} from "../models/operations/listskillsuggestionfeedback.js";
 import {
   ListSkillSuggestionsRequest,
   ListSkillSuggestionsResponse,
@@ -340,6 +346,25 @@ export class Skills extends ClientSDK {
     options?: RequestOptions,
   ): Promise<PageIterator<ListSkillFeedbackResponse, { cursor: string }>> {
     return unwrapResultIterator(skillsListFeedback(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listSuggestionFeedback skills
+   *
+   * @remarks
+   * List the agent feedback a skill edit suggestion was generated from, newest first.
+   */
+  async listSuggestionFeedback(
+    request: ListSkillSuggestionFeedbackRequest,
+    security?: ListSkillSuggestionFeedbackSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListSkillSuggestionFeedbackResult> {
+    return unwrapAsync(skillsListSuggestionFeedback(
       this,
       request,
       security,

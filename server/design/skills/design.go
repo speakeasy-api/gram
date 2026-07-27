@@ -291,6 +291,39 @@ var _ = Service("skills", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DismissSkillSuggestion"}`)
 	})
 
+	Method("listSuggestionFeedback", func() {
+		Description("List the agent feedback a skill edit suggestion was generated from, newest first.")
+
+		Payload(func() {
+			Attribute("id", String, "The suggestion ID.", func() { Format(FormatUUID) })
+			Attribute("limit", Int, "The number of feedback records to return.", func() {
+				Default(50)
+				Minimum(1)
+				Maximum(50)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListSkillSuggestionFeedbackResult)
+
+		HTTP(func() {
+			GET("/rpc/skills.listSuggestionFeedback")
+			Param("id")
+			Param("limit")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listSkillSuggestionFeedback")
+		Meta("openapi:extension:x-speakeasy-name-override", "listSuggestionFeedback")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SkillSuggestionFeedback"}`)
+	})
+
 	Method("approveAllSuggestions", func() {
 		Description("Snapshot and independently process selected skill edit suggestions, or every open suggestion when no IDs are supplied. One conflict or failure does not stop the remaining approvals.")
 
@@ -914,6 +947,12 @@ var ListSkillFeedbackResult = Type("ListSkillFeedbackResult", func() {
 	Attribute("feedback", ArrayOf(SkillFeedback))
 	Attribute("next_cursor", String, "Cursor for the next page; absent when exhausted.")
 	Required("counts", "feedback")
+})
+
+var ListSkillSuggestionFeedbackResult = Type("ListSkillSuggestionFeedbackResult", func() {
+	Description("The agent feedback a suggestion was generated from, newest first.")
+	Attribute("feedback", ArrayOf(SkillFeedback), "The feedback records linked to the suggestion.")
+	Required("feedback")
 })
 
 var ListSkillSuggestionsResult = Type("ListSkillSuggestionsResult", func() {

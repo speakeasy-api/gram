@@ -48,6 +48,9 @@ type Service interface {
 	// Idempotently dismiss an open skill edit suggestion. Approved and superseded
 	// suggestions conflict.
 	DismissSuggestion(context.Context, *DismissSuggestionPayload) (res *types.SkillEditSuggestion, err error)
+	// List the agent feedback a skill edit suggestion was generated from, newest
+	// first.
+	ListSuggestionFeedback(context.Context, *ListSuggestionFeedbackPayload) (res *ListSkillSuggestionFeedbackResult, err error)
 	// Snapshot and independently process selected skill edit suggestions, or every
 	// open suggestion when no IDs are supplied. One conflict or failure does not
 	// stop the remaining approvals.
@@ -105,7 +108,7 @@ const ServiceName = "skills"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [20]string{"create", "addVersion", "restoreVersion", "update", "list", "listSuggestions", "listFeedback", "approveSuggestion", "dismissSuggestion", "approveAllSuggestions", "get", "listUnknownActivations", "listVersions", "archive", "distribute", "undistribute", "share", "unshare", "getShared", "listDistributions"}
+var MethodNames = [21]string{"create", "addVersion", "restoreVersion", "update", "list", "listSuggestions", "listFeedback", "approveSuggestion", "dismissSuggestion", "listSuggestionFeedback", "approveAllSuggestions", "get", "listUnknownActivations", "listVersions", "archive", "distribute", "undistribute", "share", "unshare", "getShared", "listDistributions"}
 
 // AddVersionPayload is the payload type of the skills service addVersion
 // method.
@@ -304,6 +307,13 @@ type ListSkillFeedbackResult struct {
 	NextCursor *string
 }
 
+// ListSkillSuggestionFeedbackResult is the result type of the skills service
+// listSuggestionFeedback method.
+type ListSkillSuggestionFeedbackResult struct {
+	// The feedback records linked to the suggestion.
+	Feedback []*SkillFeedback
+}
+
 // ListSkillSuggestionsResult is the result type of the skills service
 // listSuggestions method.
 type ListSkillSuggestionsResult struct {
@@ -330,6 +340,18 @@ type ListSkillsResult struct {
 	Skills []*types.Skill
 	// Cursor for the next page; absent when exhausted.
 	NextCursor *string
+}
+
+// ListSuggestionFeedbackPayload is the payload type of the skills service
+// listSuggestionFeedback method.
+type ListSuggestionFeedbackPayload struct {
+	// The suggestion ID.
+	ID string
+	// The number of feedback records to return.
+	Limit            int
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // ListSuggestionsPayload is the payload type of the skills service
