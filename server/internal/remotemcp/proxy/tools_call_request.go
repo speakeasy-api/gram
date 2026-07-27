@@ -106,3 +106,25 @@ func (r *ToolsCallRequest) SetArguments(arguments json.RawMessage) error {
 	r.UserRequest.dirty = true
 	return nil
 }
+
+// SetName replaces the tool name on a tools/call request. This lets a
+// tools/list interceptor expose a curated alias while the proxy still invokes
+// the upstream tool's canonical name.
+func (r *ToolsCallRequest) SetName(name string) error {
+	rpcReq, ok := r.UserRequest.JSONRPCMessages[0].(*jsonrpc.Request)
+	if !ok {
+		return &MutationError{Op: "set name", Cause: fmt.Errorf("underlying message is %T, want *jsonrpc.Request", r.UserRequest.JSONRPCMessages[0])}
+	}
+
+	staged := *r.Params
+	staged.Name = name
+	payload, err := json.Marshal(&staged)
+	if err != nil {
+		return &MutationError{Op: "set name", Cause: fmt.Errorf("marshal mutated CallToolParamsRaw: %w", err)}
+	}
+
+	r.Params.Name = name
+	rpcReq.Params = payload
+	r.UserRequest.dirty = true
+	return nil
+}

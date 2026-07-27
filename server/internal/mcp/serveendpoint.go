@@ -386,7 +386,17 @@ func (s *Service) serveRemoteBackend(
 		return oops.E(oops.CodeUnexpected, nil, "remote MCP proxy manager is unavailable").LogError(ctx, logger)
 	}
 
-	p := s.remoteProxyManager.Build(logger, &server, mcpServer.ID.String(), headers, mcpServer.Visibility, endpoint.ProjectID.String(), upstreamAuth, wwwAuthenticate)
+	p := s.remoteProxyManager.Build(
+		logger,
+		&server,
+		mcpServer.ID.String(),
+		headers,
+		mcpServer.Visibility,
+		endpoint.ProjectID,
+		mcpServer.ToolVariationsGroupID,
+		upstreamAuth,
+		wwwAuthenticate,
+	)
 
 	return serveProxyBackend(w, r.WithContext(ctx), p)
 }

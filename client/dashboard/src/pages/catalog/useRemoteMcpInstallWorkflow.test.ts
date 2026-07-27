@@ -7,6 +7,8 @@ const mockCreateServerHeader = vi.fn();
 const mockDiscoverProtectedResourceMetadata = vi.fn();
 const mockMcpServersCreate = vi.fn();
 const mockMcpEndpointsCreate = vi.fn();
+const mockUpsertGlobalVariation = vi.fn();
+const mockDeleteGlobalVariation = vi.fn();
 const mockAuthedFetch = vi.fn();
 
 // Return a stable client reference to avoid re-render loops from useCallback deps
@@ -22,6 +24,10 @@ const mockClient = {
   },
   mcpEndpoints: {
     create: mockMcpEndpointsCreate,
+  },
+  variations: {
+    upsertGlobal: mockUpsertGlobalVariation,
+    deleteGlobal: mockDeleteGlobalVariation,
   },
 };
 
@@ -132,6 +138,14 @@ describe("useRemoteMcpInstallWorkflow", () => {
       id: "endpoint-1",
       slug: "test-org-abc123",
     });
+    mockUpsertGlobalVariation
+      .mockResolvedValueOnce({
+        variation: { id: "variation-1", groupId: "group-1" },
+      })
+      .mockResolvedValueOnce({
+        variation: { id: "variation-2", groupId: "group-1" },
+      });
+    mockDeleteGlobalVariation.mockResolvedValue(undefined);
     mockDeleteServer.mockResolvedValue(undefined);
   });
 
@@ -429,6 +443,44 @@ describe("useRemoteMcpInstallWorkflow", () => {
     if (state.phase !== "complete") throw new Error("unexpected phase");
     expect(state.statuses[0]).toMatchObject({ status: "failed" });
     expect(state.statuses[0]!.error).toContain("boom");
+  });
+
+  it("installs curated rich-document tools for Google Workspace", async () => {
+    const servers = [
+      makeServer({
+        registrySpecifier: "io.github.taylorwilsdon/workspace-mcp",
+      }),
+    ];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+
+    await startInstall(result);
+
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+    expect(mockUpsertGlobalVariation).toHaveBeenCalledTimes(2);
+    expect(mockUpsertGlobalVariation).toHaveBeenNthCalledWith(
+      1,
+      {
+        upsertGlobalToolVariationForm: expect.objectContaining({
+          srcToolName: "import_to_google_doc",
+          srcToolUrn: "tools:externalmcp:rms-1:import_to_google_doc",
+          name: "create_rich_doc",
+        }),
+      },
+      undefined,
+      undefined,
+    );
+    expect(mockMcpServersCreate).toHaveBeenCalledWith(
+      {
+        createMcpServerForm: expect.objectContaining({
+          remoteMcpServerId: "rms-1",
+          toolVariationsGroupId: "group-1",
+        }),
+      },
+      undefined,
+      undefined,
+    );
   });
 
   it("continues installing remaining servers after one fails", async () => {
