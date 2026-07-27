@@ -592,7 +592,7 @@ func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg
 }
 
 const getChat = `-- name: GetChat :one
-SELECT c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.user_account_id, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
+SELECT c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.user_account_id, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
   at.assistant_id, a.name AS assistant_name
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
@@ -602,24 +602,26 @@ WHERE c.id = $1 AND c.deleted IS FALSE
 `
 
 type GetChatRow struct {
-	ID               uuid.UUID
-	ProjectID        uuid.UUID
-	OrganizationID   string
-	UserID           pgtype.Text
-	ExternalUserID   pgtype.Text
-	ExternalChatID   pgtype.Text
-	Title            pgtype.Text
-	TitleManuallySet bool
-	PinnedAt         pgtype.Timestamptz
-	UserAccountID    uuid.NullUUID
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-	DeletedAt        pgtype.Timestamptz
-	Deleted          bool
-	AccountType      string
-	AccountEmail     string
-	AssistantID      uuid.NullUUID
-	AssistantName    pgtype.Text
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	OrganizationID     string
+	UserID             pgtype.Text
+	ExternalUserID     pgtype.Text
+	ExternalChatID     pgtype.Text
+	Title              pgtype.Text
+	TitleManuallySet   bool
+	PinnedAt           pgtype.Timestamptz
+	Summary            pgtype.Text
+	SummaryGeneratedAt pgtype.Timestamptz
+	UserAccountID      uuid.NullUUID
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	Deleted            bool
+	AccountType        string
+	AccountEmail       string
+	AssistantID        uuid.NullUUID
+	AssistantName      pgtype.Text
 }
 
 // Loads a chat plus the team/personal classification of the AI account that
@@ -639,6 +641,8 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (GetChatRow, error)
 		&i.Title,
 		&i.TitleManuallySet,
 		&i.PinnedAt,
+		&i.Summary,
+		&i.SummaryGeneratedAt,
 		&i.UserAccountID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
