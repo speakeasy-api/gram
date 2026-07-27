@@ -36,6 +36,7 @@ const PLATFORM_ADMIN_KEY = "gram-dev-platform-admin";
 const DEV_TOOLBAR_PORTAL_SELECTOR = "[data-rbac-dev-toolbar-portal='true']";
 const TOOLBAR_WIDTH_PX = 384;
 const TOOLBAR_VIEWPORT_GUTTER_PX = 24;
+const TOOLBAR_HORIZONTAL_MARGIN_PX = 32;
 
 // Shared className for the toolkit's top-level tabs. shrink-0 keeps tabs from
 // compressing; the tab bar scrolls horizontally when they overflow the panel.
@@ -229,8 +230,13 @@ function loadPosition(): { x: number; y: number } | null {
     const raw = localStorage.getItem(POSITION_KEY);
     if (raw) {
       const pos = JSON.parse(raw);
+      const renderedWidth = Math.min(
+        TOOLBAR_WIDTH_PX,
+        Math.max(0, window.innerWidth - TOOLBAR_HORIZONTAL_MARGIN_PX),
+      );
+      const maxX = Math.max(0, window.innerWidth - renderedWidth);
       return {
-        x: Math.max(0, Math.min(pos.x, window.innerWidth - TOOLBAR_WIDTH_PX)),
+        x: Math.max(0, Math.min(pos.x, maxX)),
         y: Math.max(0, Math.min(pos.y, window.innerHeight - 44)),
       };
     }

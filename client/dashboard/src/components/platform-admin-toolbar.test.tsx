@@ -31,9 +31,15 @@ vi.mock("./ui/switch", () => ({
 
 import { PlatformAdminToolbar } from "./platform-admin-toolbar";
 
+const initialWindowWidth = window.innerWidth;
+
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value: initialWindowWidth,
+  });
 });
 
 describe("PlatformAdminToolbar", () => {
@@ -46,6 +52,24 @@ describe("PlatformAdminToolbar", () => {
 
     expect(panel).not.toBeNull();
     expect(toolbar?.classList.contains("select-none")).toBe(false);
+  });
+
+  it("restores a valid dragged position on a narrow viewport", () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 360,
+    });
+    localStorage.setItem(
+      "gram-rbac-dev-toolbar-pos",
+      JSON.stringify({ x: 24, y: 10 }),
+    );
+
+    render(<PlatformAdminToolbar />);
+
+    const toolbar = screen
+      .getByText("Developer Toolkit")
+      .closest<HTMLElement>("[class~='fixed']");
+    expect(toolbar?.style.left).toBe("24px");
   });
 
   it("expands from the caret after the toolbar has been dragged", () => {
