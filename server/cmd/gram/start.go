@@ -54,6 +54,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
+	"github.com/speakeasy-api/gram/server/internal/chatanalysis"
 	chatsessionssvc "github.com/speakeasy-api/gram/server/internal/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/cliauth"
 	"github.com/speakeasy-api/gram/server/internal/collections"
@@ -112,6 +113,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/skillefficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	"github.com/speakeasy-api/gram/server/internal/spendrules"
+	spendcelenv "github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/templates"
@@ -1052,6 +1055,11 @@ func newStartCommand() *cli.Command {
 			}
 			policyBypass := risk.NewPolicyBypassEvaluator(logger, db)
 
+			spendCelEngine, err := spendcelenv.New()
+			if err != nil {
+				return fmt.Errorf("create spend rules cel engine: %w", err)
+			}
+
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
 			roleManager := access.NewRoleManager(logger, db, roleClient, auditLogger)
@@ -1135,6 +1143,11 @@ func newStartCommand() *cli.Command {
 			plugins.Attach(mux, pluginsSvc)
 			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine, auditLogger))
 			skillefficacy.Attach(mux, skillefficacy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger, telemetryrepo.New(chDB)))
+			// The manual trigger bypasses the write-throttled signaler on purpose:
+			// an admin pressing "run now" wants the coordinator woken immediately,
+			// not coalesced into the chat-write cooldown.
+			chatanalysis.Attach(mux, chatanalysis.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger,
+				&background.TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger}))
 			skillsService := skills.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger)
 			skills.Attach(mux, skillsService)
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil)
@@ -1222,6 +1235,20 @@ func newStartCommand() *cli.Command {
 			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
+
+			// Mutation-triggered re-evaluation is wired in the spend-control
+			// runtime PR; the API serves reads/writes with a nil signaler.
+			spendrules.Attach(mux, spendrules.NewService(
+				logger,
+				tracerProvider,
+				db,
+				chDB,
+				sessionManager,
+				authzEngine,
+				auditLogger,
+				spendCelEngine,
+				nil,
+			))
 
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantChatsTools(chatService)...)
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantUsersTools(organizationsService)...)

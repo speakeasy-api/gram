@@ -19,6 +19,7 @@ const (
 	subjectTypeAwsIamCredential         subjectType = "aws_iam_credential"
 	subjectTypeAwsKmsKey                subjectType = "aws_kms_key"
 	subjectTypeBillingMetadata          subjectType = "billing_metadata"
+	subjectTypeChatAnalysisSettings     subjectType = "chat_analysis_settings"
 	subjectTypeChatSession              subjectType = "chat_session"
 	subjectTypeCustomDomain             subjectType = "custom_domain"
 	subjectTypeDeployment               subjectType = "deployment"
@@ -55,6 +56,7 @@ const (
 	subjectTypeRemoteSession            subjectType = "remote_session"
 	subjectTypeRemoteSessionClient      subjectType = "remote_session_client"
 	subjectTypeRemoteSessionIssuer      subjectType = "remote_session_issuer"
+	subjectTypeSpendRule                subjectType = "spend_rule"
 )
 
 type Action string

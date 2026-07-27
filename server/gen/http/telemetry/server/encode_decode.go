@@ -7225,6 +7225,9 @@ func marshalTelemetryQueryMeasuresToQueryMeasuresResponseBody(v *telemetry.Query
 		CacheCreationInputTokens: v.CacheCreationInputTokens,
 		TotalToolCalls:           v.TotalToolCalls,
 		TotalChats:               v.TotalChats,
+		TotalWorkUnits:           v.TotalWorkUnits,
+		ScoredCost:               v.ScoredCost,
+		ScoredTokens:             v.ScoredTokens,
 	}
 
 	return res

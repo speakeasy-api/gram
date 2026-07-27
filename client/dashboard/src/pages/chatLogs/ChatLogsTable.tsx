@@ -7,6 +7,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { WorkUnitsRowMetrics } from "@/pages/chatLogs/WorkUnitsMetrics";
 import { useSession } from "@/contexts/Auth";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import { useMembers } from "@gram/client/react-query/members.js";
@@ -296,6 +297,7 @@ export function ChatLogsTable({
                           {chat.totalCost.toFixed(4)}
                         </span>
                       )}
+                      <WorkUnitsRowMetrics chat={chat} />
                     </div>
                   </div>
 

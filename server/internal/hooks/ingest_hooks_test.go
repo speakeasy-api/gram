@@ -1212,6 +1212,66 @@ func TestIngest_PermissionRequestsNotPersistedAsToolCalls(t *testing.T) {
 	require.Empty(t, msgs, "permission prompts must not persist chat rows")
 }
 
+// A sender that omits per-call tool ids must still produce a joinable
+// (recorded id, trace id) pair: the shadow-MCP provenance lookup joins via
+// trace_id = hashToolCallIDToTraceID(recorded id) (DNO-604).
+func TestCanonicalToolCallIDAndTraceID_JoinWithoutPerCallID(t *testing.T) {
+	t.Parallel()
+
+	toolName := "mcp__linear__get_issue"
+	payload := canonicalIngestPayload("custom-adapter", "tool.requested", "join-session")
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			Name: &toolName,
+		},
+	}
+
+	require.Equal(t, "12|join-session|mcp__linear__get_issue", canonicalChatToolCallID(payload))
+	require.Equal(t, hashToolCallIDToTraceID(canonicalChatToolCallID(payload)), canonicalTraceID(payload))
+
+	// A per-call id, when present, takes precedence on both sides.
+	id := "call_123"
+	payload.Data.ToolCall.ID = &id
+	require.Equal(t, id, canonicalChatToolCallID(payload))
+	require.Equal(t, hashToolCallIDToTraceID(id), canonicalTraceID(payload))
+
+	// Without a tool name there is no per-tool key: non-tool events keep the
+	// per-session trace.
+	require.Equal(t,
+		hashToolCallIDToTraceID("join-session"),
+		canonicalTraceID(canonicalIngestPayload("custom-adapter", "prompt.submitted", "join-session")),
+	)
+
+	// A non-tool event carrying tool_call data must also keep the per-session
+	// trace: only tool events have a recorded chat side to join, and anything
+	// else migrating into the tool trace would regroup trace_summaries rows.
+	skillPayload := canonicalIngestPayload("custom-adapter", "skill.activated", "join-session")
+	skillPayload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			Name: &toolName,
+		},
+	}
+	require.Equal(t, hashToolCallIDToTraceID("join-session"), canonicalTraceID(skillPayload))
+}
+
+// The synthetic key encoding must be injective: session ids are
+// client-controlled, so a "|" inside one must not let two distinct
+// (session, tool) pairs share a recorded id — a collision would let the
+// provenance lookup resolve one call to another call's MCP server.
+func TestSyntheticToolCallID_InjectiveEncoding(t *testing.T) {
+	t.Parallel()
+
+	require.NotEqual(t,
+		syntheticToolCallID("a|b", "c"),
+		syntheticToolCallID("a", "b|c"),
+	)
+	require.Equal(t, "3|a|b|c", syntheticToolCallID("a|b", "c"))
+	require.Equal(t, "1|a|b|c", syntheticToolCallID("a", "b|c"))
+
+	require.Empty(t, syntheticToolCallID("", "tool"))
+	require.Empty(t, syntheticToolCallID("session", ""))
+}
+
 func canonicalIngestPayload(adapter, eventType, sessionID string) *gen.IngestPayload {
 	return &gen.IngestPayload{
 		SchemaVersion: hookIngestSchemaV1,

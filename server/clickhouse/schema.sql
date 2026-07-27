@@ -793,6 +793,59 @@ GROUP BY
     mcp_tool_name,
     hook_hostname;
 
+-- spend_rule_usage_summaries is a narrow, enforcement-oriented rollup for
+-- spend controls. It intentionally avoids the analytics dimensions in
+-- attribute_metrics_summaries so rule evaluation can read exact per-actor spend
+-- at minute granularity without coupling to telemetry.query schema changes.
+CREATE TABLE IF NOT EXISTS spend_rule_usage_summaries (
+    gram_project_id UUID,
+    user_email String,
+    time_bucket DateTime('UTC'),
+    total_cost Float64
+) ENGINE = SummingMergeTree
+ORDER BY (gram_project_id, user_email, time_bucket)
+TTL time_bucket + INTERVAL 400 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Minute-grained per-user LLM cost rollup for spend-rule evaluation.';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS spend_rule_usage_summaries_mv TO spend_rule_usage_summaries AS
+WITH
+    -- Keep these predicates aligned with attribute_metrics_summaries_mv's cost
+    -- source rows so spend controls reconcile with the cost dashboard.
+    -- Claude provenance is anchored on the OTEL log stream URN stamped at
+    -- ingest, mirroring is_claude_otel_row in attribute_metrics_summaries_mv:
+    -- service.name, body, and log attributes are writer-controlled, so
+    -- without the URN guard a Claude-formatted row arriving through any other
+    -- path would count toward enforcement but not the dashboard, warning or
+    -- blocking users on inflated spend.
+    (
+        gram_urn = 'claude-code:otel:logs'
+        AND chat_id != ''
+        AND toString(attributes.prompt.id) != ''
+        AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')
+    ) AS is_claude_api_request,
+    -- Only Codex/Cursor usage-metric rows count. Generic gen_ai chat rows
+    -- (Gram-hosted completions and other sources) are deliberately excluded so
+    -- spend-rule enforcement reconciles with the cost dashboard's agent
+    -- surfaces. claude_chat:usage / claude_chat:cost rows (Claude web/desktop
+    -- spend polled from the Anthropic Admin API), which
+    -- attribute_metrics_summaries_mv does count, are also deliberately
+    -- excluded for now: spend rules govern agent/CLI spend until a product
+    -- decision includes Claude Chat in enforcement budgets.
+    (
+        startsWith(gram_urn, 'codex:usage')
+        OR startsWith(gram_urn, 'cursor:usage')
+    ) AS is_generic_usage_row
+SELECT
+    gram_project_id,
+    user_email,
+    toStartOfMinute(fromUnixTimestamp64Nano(time_unix_nano)) AS time_bucket,
+    sum(if(is_claude_api_request, multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), toFloat64OrZero(toString(attributes.gen_ai.usage.cost)))) AS total_cost
+FROM telemetry_logs
+WHERE user_email != ''
+  AND (is_claude_api_request OR is_generic_usage_row)
+GROUP BY gram_project_id, user_email, time_bucket;
+
 CREATE TABLE IF NOT EXISTS chat_token_summaries (
     -- Key columns
     gram_project_id UUID,
@@ -1151,6 +1204,12 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     request_id String DEFAULT '' COMMENT 'Internal request ID that produced the finding, when set.' CODEC(ZSTD),
     chat_message_id String DEFAULT '' COMMENT 'Chat message the finding was detected in.' CODEC(ZSTD),
 
+    -- Denormalized attribution, resolved from Postgres at ingest so
+    -- session-level and per-user rollups never need a cross-store join.
+    chat_id String DEFAULT '' COMMENT 'Denormalized chats.id of the chat the finding was detected in. Empty when unresolved.' CODEC(ZSTD),
+    user_id String DEFAULT '' COMMENT 'Resolved internal user id: chat_messages.user_id with fallback to chats.user_id. Empty when unresolved.' CODEC(ZSTD),
+    external_user_id String DEFAULT '' COMMENT 'Resolved external user id: chat_messages.external_user_id with fallback to chats.external_user_id. Empty when unresolved.' CODEC(ZSTD),
+
     -- Owning policy
     risk_policy_id String DEFAULT '' COMMENT 'Risk policy the message was scanned against.' CODEC(ZSTD),
     risk_policy_version Int64 DEFAULT 0 COMMENT 'Version of the risk policy at scan time.',
@@ -1160,6 +1219,7 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     description String DEFAULT '' COMMENT 'Human-readable description of the rule that fired.' CODEC(ZSTD),
     source LowCardinality(String) COMMENT 'Detection source: gitleaks | presidio | shadow_mcp | prompt_injection | llm_judge | account_identity.',
     confidence Float64 DEFAULT 0 COMMENT 'Detection confidence in the range 0.0 to 1.0.',
+    category LowCardinality(String) DEFAULT '' COMMENT 'Risk category derived from rule_id and source at ingest, e.g. pii or secrets. Empty when the rule maps to no category.',
     tags Array(LowCardinality(String)) COMMENT 'Category tags for the finding, e.g. [pii].',
     start_pos Int32 DEFAULT 0 COMMENT 'Byte offset of the match start within the scanned field.',
     end_pos Int32 DEFAULT 0 COMMENT 'Byte offset of the match end within the scanned field.',
@@ -1180,7 +1240,8 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     -- it is recorded here rather than dropped, so excluded findings remain
     -- auditable and can be filtered in or out at read time.
     excluded_at Nullable(DateTime64(9)) COMMENT 'Time the finding was suppressed by an exclusion. Null when the finding is not excluded.' CODEC(DoubleDelta, ZSTD),
-    exclusion_id Nullable(UUID) COMMENT 'Id of the risk_exclusions row that suppressed the finding. Null when the finding is not excluded.' CODEC(ZSTD)
+    exclusion_id Nullable(UUID) COMMENT 'Id of the risk_exclusions row that suppressed the finding. Null when the finding is not excluded.' CODEC(ZSTD),
+    false_positive_at Nullable(DateTime64(9)) COMMENT 'Time the finding was marked a false positive, mirrored from Postgres after the fact. Null when the finding is not marked.' CODEC(DoubleDelta, ZSTD)
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(created_at)
 ORDER BY (organization_id, project_id, created_at, id)
@@ -1191,6 +1252,7 @@ COMMENT 'Risk findings event log: one row per detected secret or sensitive-data 
 -- Bloom filter indices for point lookups (organization_id and project_id are
 -- already in the ORDER BY so no bloom filters needed for them).
 CREATE INDEX IF NOT EXISTS idx_risk_findings_chat_message_id ON risk_findings (chat_message_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_risk_findings_chat_id ON risk_findings (chat_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_risk_policy_id ON risk_findings (risk_policy_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_rule_id ON risk_findings (rule_id) TYPE set(0) GRANULARITY 4;
 

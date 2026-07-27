@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -164,6 +165,14 @@ func TestFindingCHWriter_HandleBatch_MapsAllFields(t *testing.T) {
 	require.Empty(t, row.DeadLetterReason)
 	require.True(t, time.Date(2026, 6, 27, 12, 30, 0, 0, time.UTC).Equal(row.CreatedAt))
 
+	// "chat-1" is not a UUID, so attribution resolution is skipped and the
+	// denormalized fields stay empty. The classifier still runs: ("input",
+	// "rule-1") matches nothing and falls back to custom.
+	require.Empty(t, row.ChatID)
+	require.Empty(t, row.UserID)
+	require.Empty(t, row.ExternalUserID)
+	require.Equal(t, "custom", row.Category)
+
 	// Hashes-only: the raw match is never stored, only its length + redaction.
 	require.Equal(t, uint32(len("hunter2")), row.MatchLen)
 	require.Equal(t, wantRedacted(t, "org-1", "hunter2"), row.MatchRedacted)
@@ -229,6 +238,32 @@ func TestFindingCHWriter_HandleBatch_DeadLetterSuppressesFingerprintsAndRedactio
 	require.Empty(t, row.FingerprintTenantHS256)
 	require.Empty(t, row.MatchRedacted)
 	require.Equal(t, uint32(0), row.MatchLen)
+	require.Empty(t, row.Category, "dead-letter sentinels get no category, not the custom fallback")
+}
+
+func TestFindingCHWriter_HandleBatch_ClassifiesCategory(t *testing.T) {
+	t.Parallel()
+
+	w, ins := newCHWriter(t)
+
+	pii := chFinding()
+	pii.SetSource("presidio")
+	pii.SetRuleId("pii.email_address")
+
+	secret := chFinding()
+	secret.SetSource("gitleaks")
+	secret.SetRuleId("secret.aws_access_key")
+
+	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{pii, secret}, nil))
+
+	rows := chRows(t, ins)
+	require.Len(t, rows, 2)
+	byID := map[uuid.UUID]chrepo.RiskFindingRow{}
+	for _, r := range rows {
+		byID[r.ID] = r
+	}
+	require.Equal(t, "pii", byID[uuid.MustParse(pii.GetId())].Category)
+	require.Equal(t, "secrets", byID[uuid.MustParse(secret.GetId())].Category)
 }
 
 func TestFindingCHWriter_HandleBatch_TenantFingerprintRequiresOrg(t *testing.T) {
@@ -376,6 +411,88 @@ func TestFindingCHWriter_HandleBatch_AnnotatesExcludedFindings(t *testing.T) {
 	keptRow := byID[uuid.MustParse(kept.GetId())]
 	require.Nil(t, keptRow.ExclusionID, "non-excluded finding must not carry an exclusion id")
 	require.Nil(t, keptRow.ExcludedAt, "non-excluded finding must not carry excluded_at")
+}
+
+// Integration test against a real Postgres: the writer batch-resolves the
+// denormalized attribution (chat id, user ids) for findings that reference a
+// real chat message. Message-level ids win over chat-level ids; unresolvable
+// message ids leave the attribution empty without dropping the finding.
+func TestFindingCHWriter_HandleBatch_ResolvesAttribution(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	queries := riskrepo.New(ti.conn)
+	chatID, err := queries.CreateChatForTest(t.Context(), riskrepo.CreateChatForTestParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText("chat-user"),
+		ExternalUserID: conv.ToPGText("chat-user@example.com"),
+	})
+	require.NoError(t, err)
+
+	// Message with its own attribution: message-level ids win over the chat's.
+	msgOwn, err := queries.CreateChatMessageForTest(t.Context(), riskrepo.CreateChatMessageForTestParams{
+		ChatID:         chatID,
+		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		Content:        "hello",
+		UserID:         conv.ToPGText("msg-user"),
+		ExternalUserID: conv.ToPGText("msg-user@example.com"),
+	})
+	require.NoError(t, err)
+
+	// Message without its own attribution: falls back to the chat's ids.
+	msgFallback, err := queries.CreateChatMessageForTest(t.Context(), riskrepo.CreateChatMessageForTestParams{
+		ChatID:         chatID,
+		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		Content:        "hello again",
+		UserID:         conv.ToPGTextEmpty(""),
+		ExternalUserID: conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+
+	ins := &fakeCHInserter{}
+	fp, err := risk.ParsePepperKeyRing(keyRingJSON(t, testPepperVersion, map[string][]byte{testPepperVersion: testPepperKey}))
+	require.NoError(t, err)
+	w := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins, fp)
+
+	own := chFinding()
+	own.SetChatMessageId(msgOwn.String())
+
+	fallback := chFinding()
+	fallback.SetChatMessageId(msgFallback.String())
+
+	// Well-formed UUID that matches no chat message: enrichment resolves
+	// nothing, the finding still inserts with empty attribution.
+	unknown := chFinding()
+	unknown.SetChatMessageId(uuid.Must(uuid.NewV7()).String())
+
+	require.NoError(t, w.HandleBatch(ctx, []*riskv1.Finding{own, fallback, unknown}, nil))
+
+	rows := chRows(t, ins)
+	require.Len(t, rows, 3)
+	byID := map[uuid.UUID]chrepo.RiskFindingRow{}
+	for _, r := range rows {
+		byID[r.ID] = r
+	}
+
+	ownRow := byID[uuid.MustParse(own.GetId())]
+	require.Equal(t, chatID.String(), ownRow.ChatID)
+	require.Equal(t, "msg-user", ownRow.UserID)
+	require.Equal(t, "msg-user@example.com", ownRow.ExternalUserID)
+
+	fallbackRow := byID[uuid.MustParse(fallback.GetId())]
+	require.Equal(t, chatID.String(), fallbackRow.ChatID)
+	require.Equal(t, "chat-user", fallbackRow.UserID)
+	require.Equal(t, "chat-user@example.com", fallbackRow.ExternalUserID)
+
+	unknownRow := byID[uuid.MustParse(unknown.GetId())]
+	require.Empty(t, unknownRow.ChatID)
+	require.Empty(t, unknownRow.UserID)
+	require.Empty(t, unknownRow.ExternalUserID)
 }
 
 // chMessagesInsertedPoint returns the single data point for the CH

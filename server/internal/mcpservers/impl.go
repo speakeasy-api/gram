@@ -698,6 +698,38 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		}
 	}
 
+	// Detach the server from any plugins (Default or manually curated). The
+	// (plugin_id, display_name) unique index only excludes soft-deleted rows,
+	// so a live attachment left behind would keep holding the display name and
+	// block a later same-named server from ever attaching — i.e. from being
+	// enabled at all via UpdateMcpServer's attach-on-enable path.
+	detachedPluginServers, err := pluginsrepo.New(dbtx).SoftDeletePluginServersByMCPServerID(ctx, pluginsrepo.SoftDeletePluginServersByMCPServerIDParams{
+		ProjectID:   *authCtx.ProjectID,
+		McpServerID: uuid.NullUUID{UUID: deleted.ID, Valid: true},
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "detach mcp server from plugins").LogError(ctx, logger)
+	}
+
+	deletedServerURN := urn.NewMcpServer(deleted.ID)
+	for _, pluginServer := range detachedPluginServers {
+		if err := s.audit.LogPluginServerRemove(ctx, dbtx, audit.LogPluginServerRemoveEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			ProjectID:        *authCtx.ProjectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			PluginID:         pluginServer.PluginID,
+			PluginName:       pluginServer.PluginName,
+			PluginSlug:       pluginServer.PluginSlug,
+			ServerID:         pluginServer.ID,
+			ToolsetURN:       nil,
+			McpServerURN:     &deletedServerURN,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "log mcp server plugin detachment").LogError(ctx, logger)
+		}
+	}
+
 	// Remote- and tunneled-backed servers own the issuer minted with them.
 	// An issuer may also be referenced by another server or toolset, so only
 	// cascade once this deletion leaves it without an active owner.

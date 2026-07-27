@@ -441,6 +441,14 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 	if payload.SessionID != nil && *payload.SessionID != "" {
 		attrs[attr.GenAIConversationIDKey] = *payload.SessionID
 		attrs[attr.TraceIDKey] = hashToolCallIDToTraceID(*payload.SessionID)
+		// Tool events trace per (session, tool) rather than per session so the
+		// trace id stays derivable from the recorded chat tool-call id — the
+		// provenance join requires trace_id = hash(recorded id), and
+		// writeCodexToolCallRequestToPG records this same key (DNO-604). The
+		// full tool name is used, not the server/function split applied below.
+		if key := syntheticToolCallID(*payload.SessionID, toolName); key != "" {
+			attrs[attr.TraceIDKey] = hashToolCallIDToTraceID(key)
+		}
 	}
 
 	if payload.HookEventName == "UserPromptSubmit" && payload.Prompt != nil && *payload.Prompt != "" {
@@ -518,11 +526,15 @@ func (s *Service) writeCodexToolCallRequestToPG(ctx context.Context, payload *ge
 
 	chatID := sessionIDToUUID(metadata.SessionID)
 
+	// The recorded id must hash to the telemetry trace id written by
+	// buildCodexTelemetryAttributes or the shadow-MCP provenance lookup can
+	// never join this call back to its hook log (DNO-604).
+	toolName := conv.PtrValOr(payload.ToolName, "")
 	toolCalls := []map[string]any{{
-		"id":   conv.PtrValOr(payload.ToolName, ""),
+		"id":   syntheticToolCallID(metadata.SessionID, toolName),
 		"type": "function",
 		"function": map[string]any{
-			"name":      conv.PtrValOr(payload.ToolName, ""),
+			"name":      toolName,
 			"arguments": marshalToJSON(payload.ToolInput),
 		},
 	}}
@@ -588,7 +600,7 @@ func (s *Service) writeCodexToolCallResultToPG(ctx context.Context, payload *gen
 		Content:          marshalToJSON(payload.ToolOutput),
 		UserID:           conv.ToPGTextEmpty(metadata.UserID),
 		Source:           conv.ToPGText("Codex"),
-		ToolCallID:       conv.ToPGTextEmpty(conv.PtrValOr(payload.ToolName, "")),
+		ToolCallID:       conv.ToPGTextEmpty(syntheticToolCallID(metadata.SessionID, conv.PtrValOr(payload.ToolName, ""))),
 		PromptTokens:     0,
 		CompletionTokens: 0,
 		TotalTokens:      0,

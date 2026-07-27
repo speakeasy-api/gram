@@ -18,15 +18,16 @@ import (
 
 // Server lists the chat service endpoint HTTP handlers.
 type Server struct {
-	Mounts         []*MountPoint
-	ListChats      http.Handler
-	LoadChat       http.Handler
-	GenerateTitle  http.Handler
-	CreditUsage    http.Handler
-	DeleteChat     http.Handler
-	SetPinned      http.Handler
-	SubmitFeedback http.Handler
-	ListSources    http.Handler
+	Mounts            []*MountPoint
+	ListChats         http.Handler
+	GetWorkUnitsTrend http.Handler
+	LoadChat          http.Handler
+	GenerateTitle     http.Handler
+	CreditUsage       http.Handler
+	DeleteChat        http.Handler
+	SetPinned         http.Handler
+	SubmitFeedback    http.Handler
+	ListSources       http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -57,6 +58,7 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"ListChats", "GET", "/rpc/chat.list"},
+			{"GetWorkUnitsTrend", "GET", "/rpc/chat.getWorkUnitsTrend"},
 			{"LoadChat", "GET", "/rpc/chat.load"},
 			{"GenerateTitle", "POST", "/rpc/chat.generateTitle"},
 			{"CreditUsage", "GET", "/rpc/chat.creditUsage"},
@@ -65,14 +67,15 @@ func New(
 			{"SubmitFeedback", "POST", "/rpc/chat.submitFeedback"},
 			{"ListSources", "GET", "/rpc/chat.listSources"},
 		},
-		ListChats:      NewListChatsHandler(e.ListChats, mux, decoder, encoder, errhandler, formatter),
-		LoadChat:       NewLoadChatHandler(e.LoadChat, mux, decoder, encoder, errhandler, formatter),
-		GenerateTitle:  NewGenerateTitleHandler(e.GenerateTitle, mux, decoder, encoder, errhandler, formatter),
-		CreditUsage:    NewCreditUsageHandler(e.CreditUsage, mux, decoder, encoder, errhandler, formatter),
-		DeleteChat:     NewDeleteChatHandler(e.DeleteChat, mux, decoder, encoder, errhandler, formatter),
-		SetPinned:      NewSetPinnedHandler(e.SetPinned, mux, decoder, encoder, errhandler, formatter),
-		SubmitFeedback: NewSubmitFeedbackHandler(e.SubmitFeedback, mux, decoder, encoder, errhandler, formatter),
-		ListSources:    NewListSourcesHandler(e.ListSources, mux, decoder, encoder, errhandler, formatter),
+		ListChats:         NewListChatsHandler(e.ListChats, mux, decoder, encoder, errhandler, formatter),
+		GetWorkUnitsTrend: NewGetWorkUnitsTrendHandler(e.GetWorkUnitsTrend, mux, decoder, encoder, errhandler, formatter),
+		LoadChat:          NewLoadChatHandler(e.LoadChat, mux, decoder, encoder, errhandler, formatter),
+		GenerateTitle:     NewGenerateTitleHandler(e.GenerateTitle, mux, decoder, encoder, errhandler, formatter),
+		CreditUsage:       NewCreditUsageHandler(e.CreditUsage, mux, decoder, encoder, errhandler, formatter),
+		DeleteChat:        NewDeleteChatHandler(e.DeleteChat, mux, decoder, encoder, errhandler, formatter),
+		SetPinned:         NewSetPinnedHandler(e.SetPinned, mux, decoder, encoder, errhandler, formatter),
+		SubmitFeedback:    NewSubmitFeedbackHandler(e.SubmitFeedback, mux, decoder, encoder, errhandler, formatter),
+		ListSources:       NewListSourcesHandler(e.ListSources, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -82,6 +85,7 @@ func (s *Server) Service() string { return "chat" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListChats = m(s.ListChats)
+	s.GetWorkUnitsTrend = m(s.GetWorkUnitsTrend)
 	s.LoadChat = m(s.LoadChat)
 	s.GenerateTitle = m(s.GenerateTitle)
 	s.CreditUsage = m(s.CreditUsage)
@@ -97,6 +101,7 @@ func (s *Server) MethodNames() []string { return chat.MethodNames[:] }
 // Mount configures the mux to serve the chat endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountListChatsHandler(mux, h.ListChats)
+	MountGetWorkUnitsTrendHandler(mux, h.GetWorkUnitsTrend)
 	MountLoadChatHandler(mux, h.LoadChat)
 	MountGenerateTitleHandler(mux, h.GenerateTitle)
 	MountCreditUsageHandler(mux, h.CreditUsage)
@@ -141,6 +146,59 @@ func NewListChatsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listChats")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "chat")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetWorkUnitsTrendHandler configures the mux to serve the "chat" service
+// "getWorkUnitsTrend" endpoint.
+func MountGetWorkUnitsTrendHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/chat.getWorkUnitsTrend", f)
+}
+
+// NewGetWorkUnitsTrendHandler creates a HTTP handler which loads the HTTP
+// request and calls the "chat" service "getWorkUnitsTrend" endpoint.
+func NewGetWorkUnitsTrendHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetWorkUnitsTrendRequest(mux, decoder)
+		encodeResponse = EncodeGetWorkUnitsTrendResponse(encoder)
+		encodeError    = EncodeGetWorkUnitsTrendError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getWorkUnitsTrend")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "chat")
 		payload, err := decodeRequest(r)
 		if err != nil {

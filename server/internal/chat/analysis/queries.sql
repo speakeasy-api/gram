@@ -43,6 +43,46 @@ SET enabled = excluded.enabled,
     updated_at = clock_timestamp()
 RETURNING *;
 
+-- name: LockOrganizationChatAnalysisBudget :exec
+-- Settings updates share the reservation lock so their audit snapshots and the
+-- budgets observed by reservations both describe committed state.
+SELECT pg_advisory_xact_lock(hashtextextended('chat-analysis:' || @organization_id::text, 0));
+
+-- name: GetChatAnalysisSettingForOrganizationJudge :one
+SELECT *
+FROM chat_analysis_settings
+WHERE organization_id = @organization_id
+  AND judge = @judge;
+
+-- name: UpsertChatAnalysisSettingForOrganizationJudge :one
+INSERT INTO chat_analysis_settings (
+  organization_id,
+  judge,
+  enabled,
+  daily_cap
+)
+VALUES (
+  @organization_id,
+  @judge,
+  @enabled,
+  @daily_cap
+)
+ON CONFLICT (organization_id, judge) DO UPDATE
+SET enabled = excluded.enabled,
+    daily_cap = excluded.daily_cap,
+    updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: ListChatAnalysisProjectsForOrganization :many
+-- Live projects of an organization, read by the management API's manual
+-- trigger: the coordinator workflow is keyed by project, so waking a whole
+-- organization means signaling each of its projects.
+SELECT id
+FROM projects
+WHERE organization_id = @organization_id::text
+  AND deleted IS FALSE
+ORDER BY id;
+
 -- name: LockProjectOrganizationChatAnalysisBudget :exec
 -- First statement of the reservation transaction: serialises counting and
 -- reserving per organization, entered through the project, and held to commit.

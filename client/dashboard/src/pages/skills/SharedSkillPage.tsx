@@ -42,6 +42,11 @@ function SharedSkillBody({ token }: { token: string | undefined }) {
       enabled: !!token,
       retry: false,
       refetchOnWindowFocus: false,
+      // The QueryClient default rethrows non-403 errors to the nearest error
+      // boundary, which for this standalone page is the full-page crash
+      // screen. A dead or mistyped link is an expected state here — handle
+      // it inline with the friendly unavailable panel instead.
+      throwOnError: false,
     },
   );
 
@@ -126,12 +131,14 @@ function SharedSkillDocument({ skill }: { skill: SharedSkill2 }): JSX.Element {
 
 function SharedSkillUnavailable(): JSX.Element {
   return (
-    <Stack gap={2} align="center" className="py-24">
+    <Stack gap={3} align="center" className="py-24">
+      <Icon name="link-2-off" className="text-muted-foreground size-8" />
       <Type variant="subheading" className="text-center">
         This skill isn't available
       </Type>
       <Type muted small className="max-w-md text-center">
-        The link may have been turned off or the address is wrong.
+        The link may have been turned off by its owner, or the address might not
+        be quite right. Ask whoever shared it with you for a fresh link.
       </Type>
     </Stack>
   );
