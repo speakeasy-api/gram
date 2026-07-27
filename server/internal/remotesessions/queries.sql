@@ -446,44 +446,24 @@ DO UPDATE SET
     updated_at = clock_timestamp()
 RETURNING *;
 
--- name: UpsertRemoteSessionIfUnchanged :one
--- Compare-and-swap variant of UpsertRemoteSession for the refresh path. Two
--- concurrent refreshes can both come back holding a rotated token pair; without
--- the guard the slower writer persists a refresh token the provider has already
--- consumed, and the session stays broken until the user re-links. No rows means
--- another writer got there first.
---
--- The INSERT branch is unreachable for a live session; it is kept so a session
--- revoked mid-refresh behaves as it does under UpsertRemoteSession.
-INSERT INTO remote_sessions (
-    subject_urn,
-    user_session_issuer_id,
-    remote_session_client_id,
-    access_token_encrypted,
-    access_expires_at,
-    refresh_token_encrypted,
-    refresh_expires_at,
-    scopes
-)
-VALUES (
-    @subject_urn,
-    @user_session_issuer_id,
-    @remote_session_client_id,
-    @access_token_encrypted,
-    @access_expires_at,
-    @refresh_token_encrypted,
-    @refresh_expires_at,
-    @scopes
-)
-ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
-DO UPDATE SET
-    access_token_encrypted = EXCLUDED.access_token_encrypted,
-    access_expires_at = EXCLUDED.access_expires_at,
-    refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
-    refresh_expires_at = EXCLUDED.refresh_expires_at,
-    scopes = EXCLUDED.scopes,
+-- name: UpdateRemoteSessionTokensIfUnchanged :one
+-- Compare-and-swap write for the refresh path. Update-only on purpose: the
+-- refresh path must never create a session, or a revocation landing mid-refresh
+-- would be undone by an INSERT. No rows means another writer got there first or
+-- the session was revoked, and both correctly end in a re-auth challenge.
+UPDATE remote_sessions
+SET
+    access_token_encrypted = @access_token_encrypted,
+    access_expires_at = @access_expires_at,
+    refresh_token_encrypted = @refresh_token_encrypted,
+    refresh_expires_at = @refresh_expires_at,
+    scopes = @scopes,
     updated_at = clock_timestamp()
-WHERE remote_sessions.updated_at = @expected_updated_at
+WHERE subject_urn = @subject_urn
+  AND user_session_issuer_id = @user_session_issuer_id
+  AND remote_session_client_id = @remote_session_client_id
+  AND deleted IS FALSE
+  AND updated_at = @expected_updated_at
 RETURNING *;
 
 -- name: GetActiveRemoteSession :one

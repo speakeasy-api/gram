@@ -3403,6 +3403,70 @@ func (q *Queries) UpdateRemoteSessionIssuer(ctx context.Context, arg UpdateRemot
 	return i, err
 }
 
+const updateRemoteSessionTokensIfUnchanged = `-- name: UpdateRemoteSessionTokensIfUnchanged :one
+UPDATE remote_sessions
+SET
+    access_token_encrypted = $1,
+    access_expires_at = $2,
+    refresh_token_encrypted = $3,
+    refresh_expires_at = $4,
+    scopes = $5,
+    updated_at = clock_timestamp()
+WHERE subject_urn = $6
+  AND user_session_issuer_id = $7
+  AND remote_session_client_id = $8
+  AND deleted IS FALSE
+  AND updated_at = $9
+RETURNING id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, refresh_expires_at, scopes, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateRemoteSessionTokensIfUnchangedParams struct {
+	AccessTokenEncrypted  string
+	AccessExpiresAt       pgtype.Timestamptz
+	RefreshTokenEncrypted pgtype.Text
+	RefreshExpiresAt      pgtype.Timestamptz
+	Scopes                []string
+	SubjectUrn            urn.SessionSubject
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	ExpectedUpdatedAt     pgtype.Timestamptz
+}
+
+// Compare-and-swap write for the refresh path. Update-only on purpose: the
+// refresh path must never create a session, or a revocation landing mid-refresh
+// would be undone by an INSERT. No rows means another writer got there first or
+// the session was revoked, and both correctly end in a re-auth challenge.
+func (q *Queries) UpdateRemoteSessionTokensIfUnchanged(ctx context.Context, arg UpdateRemoteSessionTokensIfUnchangedParams) (RemoteSession, error) {
+	row := q.db.QueryRow(ctx, updateRemoteSessionTokensIfUnchanged,
+		arg.AccessTokenEncrypted,
+		arg.AccessExpiresAt,
+		arg.RefreshTokenEncrypted,
+		arg.RefreshExpiresAt,
+		arg.Scopes,
+		arg.SubjectUrn,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.ExpectedUpdatedAt,
+	)
+	var i RemoteSession
+	err := row.Scan(
+		&i.ID,
+		&i.SubjectUrn,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.AccessTokenEncrypted,
+		&i.AccessExpiresAt,
+		&i.RefreshTokenEncrypted,
+		&i.RefreshExpiresAt,
+		&i.Scopes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const upsertRemoteSession = `-- name: UpsertRemoteSession :one
 INSERT INTO remote_sessions (
     subject_urn,
@@ -3462,90 +3526,6 @@ func (q *Queries) UpsertRemoteSession(ctx context.Context, arg UpsertRemoteSessi
 		arg.RefreshTokenEncrypted,
 		arg.RefreshExpiresAt,
 		arg.Scopes,
-	)
-	var i RemoteSession
-	err := row.Scan(
-		&i.ID,
-		&i.SubjectUrn,
-		&i.UserSessionIssuerID,
-		&i.RemoteSessionClientID,
-		&i.AccessTokenEncrypted,
-		&i.AccessExpiresAt,
-		&i.RefreshTokenEncrypted,
-		&i.RefreshExpiresAt,
-		&i.Scopes,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
-const upsertRemoteSessionIfUnchanged = `-- name: UpsertRemoteSessionIfUnchanged :one
-INSERT INTO remote_sessions (
-    subject_urn,
-    user_session_issuer_id,
-    remote_session_client_id,
-    access_token_encrypted,
-    access_expires_at,
-    refresh_token_encrypted,
-    refresh_expires_at,
-    scopes
-)
-VALUES (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5,
-    $6,
-    $7,
-    $8
-)
-ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
-DO UPDATE SET
-    access_token_encrypted = EXCLUDED.access_token_encrypted,
-    access_expires_at = EXCLUDED.access_expires_at,
-    refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
-    refresh_expires_at = EXCLUDED.refresh_expires_at,
-    scopes = EXCLUDED.scopes,
-    updated_at = clock_timestamp()
-WHERE remote_sessions.updated_at = $9
-RETURNING id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, refresh_expires_at, scopes, created_at, updated_at, deleted_at, deleted
-`
-
-type UpsertRemoteSessionIfUnchangedParams struct {
-	SubjectUrn            urn.SessionSubject
-	UserSessionIssuerID   uuid.UUID
-	RemoteSessionClientID uuid.UUID
-	AccessTokenEncrypted  string
-	AccessExpiresAt       pgtype.Timestamptz
-	RefreshTokenEncrypted pgtype.Text
-	RefreshExpiresAt      pgtype.Timestamptz
-	Scopes                []string
-	ExpectedUpdatedAt     pgtype.Timestamptz
-}
-
-// Compare-and-swap variant of UpsertRemoteSession for the refresh path. Two
-// concurrent refreshes can both come back holding a rotated token pair; without
-// the guard the slower writer persists a refresh token the provider has already
-// consumed, and the session stays broken until the user re-links. No rows means
-// another writer got there first.
-//
-// The INSERT branch is unreachable for a live session; it is kept so a session
-// revoked mid-refresh behaves as it does under UpsertRemoteSession.
-func (q *Queries) UpsertRemoteSessionIfUnchanged(ctx context.Context, arg UpsertRemoteSessionIfUnchangedParams) (RemoteSession, error) {
-	row := q.db.QueryRow(ctx, upsertRemoteSessionIfUnchanged,
-		arg.SubjectUrn,
-		arg.UserSessionIssuerID,
-		arg.RemoteSessionClientID,
-		arg.AccessTokenEncrypted,
-		arg.AccessExpiresAt,
-		arg.RefreshTokenEncrypted,
-		arg.RefreshExpiresAt,
-		arg.Scopes,
-		arg.ExpectedUpdatedAt,
 	)
 	var i RemoteSession
 	err := row.Scan(

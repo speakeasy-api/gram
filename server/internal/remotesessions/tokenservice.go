@@ -558,8 +558,10 @@ func refreshSessionTokens(
 
 	// Compare-and-swap on the updated_at read before the POST. Whoever got
 	// there first owns the row; overwriting it would persist a refresh token
-	// the provider has already consumed and break the session for good.
-	updated, err := q.UpsertRemoteSessionIfUnchanged(ctx, remotesessions_repo.UpsertRemoteSessionIfUnchangedParams{
+	// the provider has already consumed and break the session for good. A
+	// revocation that landed during the POST also drops the row out of scope,
+	// so it stays revoked.
+	updated, err := q.UpdateRemoteSessionTokensIfUnchanged(ctx, remotesessions_repo.UpdateRemoteSessionTokensIfUnchangedParams{
 		SubjectUrn:            sess.SubjectUrn,
 		UserSessionIssuerID:   sess.UserSessionIssuerID,
 		RemoteSessionClientID: sess.RemoteSessionClientID,
