@@ -12,6 +12,10 @@ export type GetDeviceIntegrationCoverageSecurity = {
 
 export type GetDeviceIntegrationCoverageRequest = {
   /**
+   * Optionally scope coverage to one provider (e.g. jamf).
+   */
+  provider?: string | undefined;
+  /**
    * API Key header
    */
   gramKey?: string | undefined;
@@ -56,6 +60,7 @@ export function getDeviceIntegrationCoverageSecurityToJSON(
 
 /** @internal */
 export type GetDeviceIntegrationCoverageRequest$Outbound = {
+  provider?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
@@ -66,6 +71,7 @@ export const GetDeviceIntegrationCoverageRequest$outboundSchema: z.ZodMiniType<
   GetDeviceIntegrationCoverageRequest
 > = z.pipe(
   z.object({
+    provider: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),
