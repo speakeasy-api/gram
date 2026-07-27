@@ -51,7 +51,7 @@ export function DeviceIntegrationConnectionRow({
   };
 
   return (
-    <div className="hover:bg-muted/50 flex flex-col transition-colors">
+    <div className="hover:bg-muted/50 relative flex flex-col transition-colors">
       <Stack
         direction="horizontal"
         justify="space-between"
@@ -59,10 +59,13 @@ export function DeviceIntegrationConnectionRow({
         gap={4}
         className="p-4"
       >
+        {/* Stretched link: the ::after overlay makes the whole row navigate
+            while the markup stays a single non-nested anchor. Interactive
+            controls opt out by sitting above it with relative + z-10. */}
         <Link
           to={orgRoutes.deviceIntegrations.detail.href(provider.id)}
           aria-label={`Open ${provider.displayName} details`}
-          className="min-w-0 flex-1 focus-visible:outline-none"
+          className="min-w-0 flex-1 focus-visible:outline-none after:absolute after:inset-0 after:content-['']"
         >
           <Stack gap={1} className="min-w-0">
             <Stack
@@ -105,7 +108,7 @@ export function DeviceIntegrationConnectionRow({
                   : "Connect the provider before enabling it."
               }
             >
-              <span>
+              <span className="relative z-10">
                 <Switch
                   checked={form.enabled}
                   onCheckedChange={form.saveEnabled}
@@ -121,6 +124,7 @@ export function DeviceIntegrationConnectionRow({
             <Button
               variant="secondary"
               size="sm"
+              className="relative z-10"
               onClick={() => setConfigureOpen(true)}
             >
               <Button.LeftIcon>
