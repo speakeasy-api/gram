@@ -160,15 +160,19 @@ func (s *source) bearerToken(ctx context.Context, creds providers.Credentials, b
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := readBoundedBody(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("read token response: %w", err)
-	}
+	// Classify by status before touching the body: the error branches never
+	// need it, and an oversized error response must not mask a credential
+	// rejection as a generic read failure.
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
 		return "", providers.NewAuthError(fmt.Errorf("token request rejected with status %d", resp.StatusCode))
 	case resp.StatusCode != http.StatusOK:
 		return "", fmt.Errorf("token request failed with status %d", resp.StatusCode)
+	}
+
+	body, err := readBoundedBody(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read token response: %w", err)
 	}
 
 	var payload struct {
@@ -262,10 +266,9 @@ func (s *source) fetchInventoryPage(ctx context.Context, creds providers.Credent
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := readBoundedBody(resp.Body)
-	if err != nil {
-		return inventoryPage{}, fmt.Errorf("read inventory response: %w", err)
-	}
+	// Classify by status before touching the body: the error branches never
+	// need it, and an oversized error response must not mask a credential
+	// rejection as a generic read failure.
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
 		// Reachable when the token expires while a request is in flight (the
@@ -280,6 +283,11 @@ func (s *source) fetchInventoryPage(ctx context.Context, creds providers.Credent
 		return inventoryPage{}, providers.NewAuthError(fmt.Errorf("inventory request rejected with status %d", resp.StatusCode))
 	case resp.StatusCode != http.StatusOK:
 		return inventoryPage{}, fmt.Errorf("inventory request failed with status %d", resp.StatusCode)
+	}
+
+	body, err := readBoundedBody(resp.Body)
+	if err != nil {
+		return inventoryPage{}, fmt.Errorf("read inventory response: %w", err)
 	}
 
 	var parsed inventoryPage
