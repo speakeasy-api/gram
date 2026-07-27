@@ -512,23 +512,25 @@ function ChatGPTAppVerificationControl({
           />
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Input
-            aria-label="ChatGPT app verification token"
-            placeholder="Paste verification token"
-            value={token}
-            onChange={(value) => {
-              setToken(value);
-              setError("");
-            }}
-            onEnter={() => {
-              if (canManage && hasChanges && !updateTokenMutation.isPending) {
-                updateToken(token);
-              }
-            }}
-            maxLength={256}
-            disabled={!canManage || updateTokenMutation.isPending}
-            className="font-mono"
-          />
+          <div className="min-w-0 flex-1">
+            <Input
+              aria-label="ChatGPT app verification token"
+              placeholder="Paste verification token"
+              value={token}
+              onChange={(value) => {
+                setToken(value);
+                setError("");
+              }}
+              onEnter={() => {
+                if (canManage && hasChanges && !updateTokenMutation.isPending) {
+                  updateToken(token);
+                }
+              }}
+              maxLength={256}
+              disabled={!canManage || updateTokenMutation.isPending}
+              className="font-mono"
+            />
+          </div>
           <div className="flex shrink-0 gap-2">
             <Button
               size="sm"
