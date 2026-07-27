@@ -109,11 +109,12 @@ func TestCIMD_OutboundRoundTripAgainstDevIDP(t *testing.T) {
 
 	subject := urn.NewUserSubject("cimd-e2e-subject")
 	authURL, err := mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
-		ID:                  uuid.NewString(),
-		ProjectID:           *authCtx.ProjectID,
-		UserSessionIssuerID: userIssuer,
-		Subject:             &subject,
-		McpSlug:             "cimd-e2e",
+		ID:                     uuid.NewString(),
+		ProjectID:              *authCtx.ProjectID,
+		UserSessionIssuerID:    userIssuer,
+		Subject:                &subject,
+		McpSlug:                "cimd-e2e",
+		RemoteOAuthRedirectURI: "",
 	}, clients[0])
 	require.NoError(t, err)
 

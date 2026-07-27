@@ -120,6 +120,10 @@ type AuthnChallengeState struct {
 	// upstream providers, but there is no client to approve or redirect back to
 	// — completing the connections is terminal.
 	FirstParty bool `json:"first_party,omitempty"`
+	// RemoteOAuthRedirectURI is the device agent's per-flow loopback callback.
+	// It is accepted only on first-party connect, validated before storage, and
+	// forwarded to each upstream remote OAuth challenge.
+	RemoteOAuthRedirectURI string `json:"remote_oauth_redirect_uri,omitempty"`
 }
 
 var _ cache.CacheableObject[AuthnChallengeState] = (*AuthnChallengeState)(nil)

@@ -118,12 +118,13 @@ func TestBuildAuthorizationUrl_AudienceResolution(t *testing.T) {
 
 			subject := urn.NewUserSubject("aud-subject")
 			authURL, err := mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
-				ID:                  uuid.NewString(),
-				ProjectID:           *authCtx.ProjectID,
-				UserSessionIssuerID: userIssuer,
-				Subject:             &subject,
-				McpSlug:             "",
-				FinalRedirectURI:    "",
+				ID:                     uuid.NewString(),
+				ProjectID:              *authCtx.ProjectID,
+				UserSessionIssuerID:    userIssuer,
+				Subject:                &subject,
+				McpSlug:                "",
+				FinalRedirectURI:       "",
+				RemoteOAuthRedirectURI: "",
 			}, clients[0])
 			require.NoError(t, err)
 

@@ -201,12 +201,13 @@ func TestRemoteLoginChallenge_CustomDomainRegistersGramCallback(t *testing.T) {
 
 	userSubject := urn.NewUserSubject(uuid.NewString())
 	authURL, err := mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
-		ID:                  uuid.NewString(),
-		ProjectID:           result.Toolset.ProjectID,
-		UserSessionIssuerID: result.UserSessionIssuer.ID,
-		Subject:             &userSubject,
-		McpSlug:             result.Toolset.McpSlug.String,
-		FinalRedirectURI:    "",
+		ID:                     uuid.NewString(),
+		ProjectID:              result.Toolset.ProjectID,
+		UserSessionIssuerID:    result.UserSessionIssuer.ID,
+		Subject:                &userSubject,
+		McpSlug:                result.Toolset.McpSlug.String,
+		FinalRedirectURI:       "",
+		RemoteOAuthRedirectURI: "",
 	}, clients[0])
 	require.NoError(t, err)
 
@@ -250,12 +251,13 @@ func runRemoteLoginRoundTrip(
 	require.Len(t, clients, 1)
 
 	parent := remotesessions.ParentChallenge{
-		ID:                  parentChallengeID,
-		ProjectID:           result.Toolset.ProjectID,
-		UserSessionIssuerID: result.UserSessionIssuer.ID,
-		Subject:             expectedSubject,
-		McpSlug:             result.Toolset.McpSlug.String,
-		FinalRedirectURI:    finalRedirectURI,
+		ID:                     parentChallengeID,
+		ProjectID:              result.Toolset.ProjectID,
+		UserSessionIssuerID:    result.UserSessionIssuer.ID,
+		Subject:                expectedSubject,
+		McpSlug:                result.Toolset.McpSlug.String,
+		FinalRedirectURI:       finalRedirectURI,
+		RemoteOAuthRedirectURI: "",
 	}
 	authURL, err := mgr.BuildAuthorizationUrl(ctx, parent, clients[0])
 	require.NoError(t, err)
