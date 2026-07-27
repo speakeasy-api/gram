@@ -8,7 +8,6 @@ packages:
   - cli
   - tunnel
   - hooks
-  - hooks/opencode
   - functions
   - docs
   - evaluation

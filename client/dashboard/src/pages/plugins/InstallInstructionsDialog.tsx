@@ -658,20 +658,18 @@ function CodexInstallContent({
 /**
  * opencode install. opencode has no plugin-marketplace or deep-link concept
  * (unlike Claude Code / Cursor / Codex), so this covers the two things that
- * actually apply: registering the Gram observability plugin (an npm-style
- * package, configured via env vars — see hooks/opencode/README.md) and
- * connecting an MCP server through opencode's own `mcp` config block. The MCP
- * snippet uses placeholders — grab the real name/URL from that server's own
- * hosted install page.
+ * actually apply: installing the speakeasy-hooks binary and running its
+ * `install --provider=opencode` command to render the observability plugin
+ * (`.opencode/plugin/agenthooks.ts` + `speakeasy.json`) directly into the
+ * repo, and connecting an MCP server through opencode's own `mcp` config
+ * block. The MCP snippet uses placeholders — grab the real name/URL from that
+ * server's own hosted install page.
  */
 function OpencodeInstallContent(): JSX.Element {
-  const pluginConfig = `{
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["@gram-ai/opencode-observability"]
-}`;
+  const installBinary = `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`;
 
-  const envConfig = `export GRAM_KEY="your-hooks-scoped-api-key"
-export GRAM_PROJECT="your-project-slug"`;
+  const installCommand = `GRAM_HOOKS_ORG_KEY="your-hooks-scoped-api-key" \\
+speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`;
 
   const mcpConfig = `{
   "$schema": "https://opencode.ai/config.json",
@@ -694,20 +692,25 @@ export GRAM_PROJECT="your-project-slug"`;
           Send tool telemetry to Gram
         </h3>
         <p className="text-muted-foreground mb-3 text-sm">
-          Merge this into{" "}
+          Install the{" "}
           <code className="bg-muted rounded px-1 py-0.5 text-xs">
-            opencode.json
+            speakeasy-hooks
           </code>{" "}
-          to register the Gram observability plugin:
-        </p>
-        <CodeBlock language="json" className="bg-background">
-          {pluginConfig}
-        </CodeBlock>
-        <p className="text-muted-foreground mt-3 mb-2 text-sm">
-          Then export these environment variables before launching opencode:
+          binary:
         </p>
         <CodeBlock language="bash" className="bg-background">
-          {envConfig}
+          {installBinary}
+        </CodeBlock>
+        <p className="text-muted-foreground mt-3 mb-2 text-sm">
+          Then run it from your repo to render the Gram observability plugin
+          into{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            .opencode/plugin/
+          </code>
+          :
+        </p>
+        <CodeBlock language="bash" className="bg-background">
+          {installCommand}
         </CodeBlock>
       </div>
 

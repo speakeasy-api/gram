@@ -214,21 +214,18 @@ exporter = { otlp-http = { endpoint = "https://app.getgram.ai/rpc/hooks.otel/v1/
     connected: false,
     setupSteps: [
       {
-        title: "Register the observability plugin",
+        title: "Install the speakeasy-hooks binary",
         description:
-          "Merge this into opencode.json to load the Gram observability plugin, which maps opencode's events to Speakeasy's dashboard.",
-        code: `{
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["@gram-ai/opencode-observability"]
-}`,
-        language: "json",
+          "opencode has no plugin marketplace, so the observability plugin is rendered straight into your repo by the speakeasy-hooks CLI. Install the binary first.",
+        code: `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`,
+        language: "bash",
       },
       {
-        title: "Set the required environment variables",
+        title: "Render the plugin into your repo",
         description:
-          "The plugin reads its Gram credentials from the environment, not from opencode.json. Export these before launching opencode (or add them to your shell profile).",
-        code: `export GRAM_KEY="{{GRAM_API_KEY}}"
-export GRAM_PROJECT="<your-project-slug>"`,
+          "Run this from the repo you use opencode in. It writes .opencode/plugin/agenthooks.ts and speakeasy.json, which map opencode's events to Speakeasy's dashboard.",
+        code: `GRAM_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
+speakeasy-hooks install --provider=opencode --dir=. --project=<your-project-slug>`,
         language: "bash",
         requiresApiKey: true,
       },
