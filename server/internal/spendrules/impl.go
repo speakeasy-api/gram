@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -60,6 +61,16 @@ type EvaluationSignaler interface {
 	Signal(ctx context.Context, organizationID string) error
 }
 
+type ActorEvaluationSignal struct {
+	OrganizationID string
+	UserID         string
+	Email          string
+}
+
+type ActorEvaluationSignaler interface {
+	SignalActor(ctx context.Context, signal ActorEvaluationSignal) error
+}
+
 type Service struct {
 	tracer trace.Tracer
 	logger *slog.Logger
@@ -69,6 +80,7 @@ type Service struct {
 	authz  *authz.Engine
 	audit  *audit.Logger
 	celEng *celenv.Engine
+	cache  cache.Cache
 	// signaler is optional; nil disables mutation-triggered re-evaluation.
 	signaler EvaluationSignaler
 }
@@ -82,6 +94,7 @@ func NewService(
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	celEng *celenv.Engine,
+	cacheImpl cache.Cache,
 	signaler EvaluationSignaler,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("spendrules"))
@@ -95,6 +108,7 @@ func NewService(
 		authz:    authzEngine,
 		audit:    auditLogger,
 		celEng:   celEng,
+		cache:    cacheImpl,
 		signaler: signaler,
 	}
 }
@@ -199,6 +213,9 @@ func (s *Service) CreateSpendRule(ctx context.Context, payload *gen.CreateSpendR
 		return nil, oops.E(oops.CodeUnexpected, err, "commit spend rule create").LogError(ctx, s.logger)
 	}
 
+	if err := s.refreshGateRules(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "refresh spend gate rules").LogError(ctx, s.logger)
+	}
 	s.signalEvaluation(ctx, authCtx.ActiveOrganizationID)
 
 	return buildSpendRuleView(row), nil
@@ -451,6 +468,9 @@ func (s *Service) UpdateSpendRule(ctx context.Context, payload *gen.UpdateSpendR
 		return nil, oops.E(oops.CodeUnexpected, err, "commit spend rule update").LogError(ctx, s.logger)
 	}
 
+	if err := s.refreshGateRules(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "refresh spend gate rules").LogError(ctx, s.logger)
+	}
 	s.signalEvaluation(ctx, authCtx.ActiveOrganizationID)
 
 	return buildSpendRuleView(row), nil
@@ -523,6 +543,9 @@ func (s *Service) ArchiveSpendRule(ctx context.Context, payload *gen.ArchiveSpen
 		return oops.E(oops.CodeUnexpected, err, "commit spend rule archive").LogError(ctx, s.logger)
 	}
 
+	if err := s.refreshGateRules(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "refresh spend gate rules").LogError(ctx, s.logger)
+	}
 	s.signalEvaluation(ctx, authCtx.ActiveOrganizationID)
 
 	return nil
@@ -842,6 +865,16 @@ func (s *Service) signalEvaluation(ctx context.Context, organizationID string) {
 	if err := s.signaler.Signal(ctx, organizationID); err != nil {
 		s.logger.ErrorContext(ctx, "signal spend rule evaluation", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
 	}
+}
+
+func (s *Service) refreshGateRules(ctx context.Context, organizationID string) error {
+	if s.cache == nil {
+		return nil
+	}
+	if err := WriteGateRulesFromDB(ctx, s.cache, repo.New(s.db), organizationID, time.Now().UTC()); err != nil {
+		return fmt.Errorf("refresh gate rules from db: %w", err)
+	}
+	return nil
 }
 
 // ruleSlug derives the URN slug for a new rule from its name, appending a

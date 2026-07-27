@@ -113,6 +113,21 @@ func (c *gateCache) DeleteByPrefix(_ context.Context, prefix string) error {
 	return nil
 }
 
+func writeGateRules(t *testing.T, ctx context.Context, cacheImpl *gateCache, organizationID string, rules ...spendrules.GateRule) {
+	t.Helper()
+
+	require.NoError(t, spendrules.WriteGateRules(ctx, cacheImpl, organizationID, spendrules.GateRules{
+		SourceUpdatedAt: time.Now().UTC(),
+		Rules:           rules,
+	}))
+}
+
+func writeGateActor(t *testing.T, ctx context.Context, cacheImpl *gateCache, organizationID string, actor spendrules.Actor, spend chrepo.ActorWindowSpendRow) {
+	t.Helper()
+
+	require.NoError(t, spendrules.WriteGateActor(ctx, cacheImpl, organizationID, spendrules.NewGateActor(actor, spend, time.Now().UTC())))
+}
+
 func TestGateEvaluatesRuleCELAgainstCachedUsage(t *testing.T) {
 	t.Parallel()
 
@@ -122,8 +137,7 @@ func TestGateEvaluatesRuleCELAgainstCachedUsage(t *testing.T) {
 	// Future window: the block must fire on cached usage, not be skipped as an
 	// already-reset window.
 	windowEnd := time.Now().UTC().AddDate(0, 0, 7)
-	state := spendrules.NewGateState("org_123", actors)
-	state.Rules = append(state.Rules, spendrules.GateRule{
+	writeGateRules(t, ctx, cacheImpl, "org_123", spendrules.GateRule{
 		RuleURN:    "spend_rule:engineering:v1",
 		RuleName:   "Engineering budget",
 		Action:     spendrules.ActionBlock,
@@ -134,18 +148,15 @@ func TestGateEvaluatesRuleCELAgainstCachedUsage(t *testing.T) {
 		WindowKind: spendrules.WindowMonthly,
 		WindowEnd:  windowEnd,
 	})
-	state.SetActorWindowSpend("org_123", actors[0], chrepo.ActorWindowSpendRow{
+	writeGateActor(t, ctx, cacheImpl, "org_123", actors[0], chrepo.ActorWindowSpendRow{
 		Email:       "ada@acme.com",
 		DailyCost:   0,
 		WeeklyCost:  0,
 		MonthlyCost: 90,
 	})
-	require.Contains(t, state.Actors, "org_123:ada@acme.com")
-
-	require.NoError(t, spendrules.WriteGateState(ctx, cacheImpl, "org_123", state))
 	gate := newTestGate(t, cacheImpl)
 
-	block, err := gate.CheckBlocked(ctx, "org_123", "Ada@Acme.com")
+	block, err := gate.CheckBlocked(ctx, "org_123", "user_ada")
 	require.NoError(t, err)
 	require.NotNil(t, block)
 	require.Equal(t, "spend_rule:engineering:v1", block.RuleURN)
@@ -159,8 +170,7 @@ func TestGateSkipsExpiredWindow(t *testing.T) {
 	ctx := t.Context()
 	cacheImpl := newGateCache()
 	actors := testActors()
-	state := spendrules.NewGateState("org_123", actors)
-	state.Rules = append(state.Rules, spendrules.GateRule{
+	writeGateRules(t, ctx, cacheImpl, "org_123", spendrules.GateRule{
 		RuleURN:    "spend_rule:engineering:v1",
 		RuleName:   "Engineering budget",
 		Action:     spendrules.ActionBlock,
@@ -169,21 +179,19 @@ func TestGateSkipsExpiredWindow(t *testing.T) {
 		LimitUSD:   100,
 		WarnAtPct:  80,
 		WindowKind: spendrules.WindowMonthly,
-		// Window already ended: the snapshot's spend belongs to a window that
+		// Window already ended: the actor entry's spend belongs to a window that
 		// has reset, so the block must lift even though the cached usage breaches.
 		WindowEnd: time.Now().UTC().Add(-time.Hour),
 	})
-	state.SetActorWindowSpend("org_123", actors[0], chrepo.ActorWindowSpendRow{
+	writeGateActor(t, ctx, cacheImpl, "org_123", actors[0], chrepo.ActorWindowSpendRow{
 		Email:       "ada@acme.com",
 		DailyCost:   0,
 		WeeklyCost:  0,
 		MonthlyCost: 90,
 	})
-
-	require.NoError(t, spendrules.WriteGateState(ctx, cacheImpl, "org_123", state))
 	gate := newTestGate(t, cacheImpl)
 
-	block, err := gate.CheckBlocked(ctx, "org_123", "Ada@Acme.com")
+	block, err := gate.CheckBlocked(ctx, "org_123", "user_ada")
 	require.NoError(t, err)
 	require.Nil(t, block)
 }
@@ -194,8 +202,7 @@ func TestGateEvaluatesTargetCELBeforeRuleCEL(t *testing.T) {
 	ctx := t.Context()
 	cacheImpl := newGateCache()
 	actors := testActors()
-	state := spendrules.NewGateState("org_123", actors)
-	state.Rules = append(state.Rules, spendrules.GateRule{
+	writeGateRules(t, ctx, cacheImpl, "org_123", spendrules.GateRule{
 		RuleURN:    "spend_rule:engineering:v1",
 		RuleName:   "Engineering budget",
 		Action:     spendrules.ActionBlock,
@@ -206,17 +213,15 @@ func TestGateEvaluatesTargetCELBeforeRuleCEL(t *testing.T) {
 		WindowKind: spendrules.WindowMonthly,
 		WindowEnd:  time.Now().UTC().AddDate(0, 0, 7),
 	})
-	state.SetActorWindowSpend("org_123", actors[1], chrepo.ActorWindowSpendRow{
+	writeGateActor(t, ctx, cacheImpl, "org_123", actors[1], chrepo.ActorWindowSpendRow{
 		Email:       "sam@acme.com",
 		DailyCost:   0,
 		WeeklyCost:  0,
 		MonthlyCost: 150,
 	})
-
-	require.NoError(t, spendrules.WriteGateState(ctx, cacheImpl, "org_123", state))
 	gate := newTestGate(t, cacheImpl)
 
-	block, err := gate.CheckBlocked(ctx, "org_123", "Sam@Acme.com")
+	block, err := gate.CheckBlocked(ctx, "org_123", "user_sam")
 	require.NoError(t, err)
 	require.Nil(t, block)
 }
@@ -229,7 +234,7 @@ func TestGateSkipsUnresolvedIdentity(t *testing.T) {
 	cacheImpl.getErr = errors.New("gate must not read the cache for unresolved identities")
 	gate := newTestGate(t, cacheImpl)
 
-	block, err := gate.CheckBlocked(ctx, "", "ada@acme.com")
+	block, err := gate.CheckBlocked(ctx, "", "user_ada")
 	require.NoError(t, err)
 	require.Nil(t, block)
 
@@ -246,34 +251,26 @@ func TestGateSurfacesCacheFailuresForFailOpen(t *testing.T) {
 	cacheImpl.getErr = errors.New("redis unavailable")
 	gate := newTestGate(t, cacheImpl)
 
-	block, err := gate.CheckBlocked(ctx, "org_123", "ada@acme.com")
+	block, err := gate.CheckBlocked(ctx, "org_123", "user_ada")
 	require.Error(t, err)
 	require.Nil(t, block)
 }
 
-func TestGateWriteEmptyStateClearsCache(t *testing.T) {
+func TestGateEmptyRulesAllow(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	cacheImpl := newGateCache()
-	state := spendrules.NewGateState("org_123", testActors())
-	state.Rules = append(state.Rules, spendrules.GateRule{
-		RuleURN:    "spend_rule:engineering:v1",
-		RuleName:   "Engineering budget",
-		Action:     spendrules.ActionBlock,
-		TargetExpr: `department_name == "Engineering"`,
-		RuleExpr:   `spend_usd >= limit_usd`,
-		LimitUSD:   100,
-		WarnAtPct:  80,
-		WindowKind: spendrules.WindowMonthly,
-		WindowEnd:  time.Date(2026, time.July, 5, 0, 0, 0, 0, time.UTC),
+	writeGateActor(t, ctx, cacheImpl, "org_123", testActors()[0], chrepo.ActorWindowSpendRow{
+		Email:       "ada@acme.com",
+		DailyCost:   0,
+		WeeklyCost:  0,
+		MonthlyCost: 150,
 	})
-
-	require.NoError(t, spendrules.WriteGateState(ctx, cacheImpl, "org_123", state))
-	require.NoError(t, spendrules.WriteGateState(ctx, cacheImpl, "org_123", spendrules.GateState{Rules: nil, Actors: nil}))
+	writeGateRules(t, ctx, cacheImpl, "org_123")
 
 	gate := newTestGate(t, cacheImpl)
-	block, err := gate.CheckBlocked(ctx, "org_123", "ada@acme.com")
+	block, err := gate.CheckBlocked(ctx, "org_123", "user_ada")
 	require.NoError(t, err)
 	require.Nil(t, block)
 }

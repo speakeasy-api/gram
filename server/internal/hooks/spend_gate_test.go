@@ -2,21 +2,21 @@ package hooks
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
-	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	"github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
 	"github.com/speakeasy-api/gram/server/internal/spendrules/chrepo"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 // recordingRiskScanner counts ScanForEnforcement calls so tests can assert
@@ -51,32 +51,32 @@ func seedSpendBlock(t *testing.T, ctx context.Context, ti *testInstance, organiz
 	t.Helper()
 	ruleURN := "spend_rule:33333333-3333-3333-3333-333333333333:v2"
 
-	state := spendrules.NewGateState(organizationID, nil)
-	err := ti.spendGateCache.Get(ctx, "spend_gate:"+organizationID, &state)
-	if err != nil && !errors.Is(err, redisCache.ErrCacheMiss) {
-		require.NoError(t, err)
-	}
-	if state.Actors == nil {
-		state.Actors = map[string]spendrules.GateActor{}
-	}
-	state.Rules = []spendrules.GateRule{{
-		RuleURN:    ruleURN,
-		RuleName:   "Intern hard limit",
-		Action:     spendrules.ActionBlock,
-		TargetExpr: `true`,
-		RuleExpr:   `spend_usd >= limit_usd`,
-		LimitUSD:   100,
-		WarnAtPct:  80,
-		WindowKind: spendrules.WindowMonthly,
-		WindowEnd:  time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
-	}}
+	require.NoError(t, spendrules.WriteGateRules(ctx, ti.spendGateCache, organizationID, spendrules.GateRules{
+		SourceUpdatedAt: time.Now().UTC(),
+		Rules: []spendrules.GateRule{{
+			RuleURN:    ruleURN,
+			RuleName:   "Intern hard limit",
+			Action:     spendrules.ActionBlock,
+			TargetExpr: `true`,
+			RuleExpr:   `spend_usd >= limit_usd`,
+			LimitUSD:   100,
+			WarnAtPct:  80,
+			WindowKind: spendrules.WindowMonthly,
+			WindowEnd:  time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+		}},
+	}))
 	for _, email := range emails {
+		user, err := usersrepo.New(ti.conn).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
+			Email:          conv.NormalizeEmail(email),
+			OrganizationID: organizationID,
+		})
+		require.NoError(t, err)
 		actor := spendrules.Actor{
-			UserID:      "",
-			Email:       email,
+			UserID:      user.ID,
+			Email:       user.Email,
 			DisplayName: "",
 			Attrs: celenv.Actor{
-				Email:          email,
+				Email:          user.Email,
 				DepartmentName: "",
 				JobTitle:       "",
 				EmployeeType:   "",
@@ -90,15 +90,13 @@ func seedSpendBlock(t *testing.T, ctx context.Context, ti *testInstance, organiz
 				WarnAtPct:      0,
 			},
 		}
-		state.SetActor(organizationID, actor)
-		state.SetActorWindowSpend(organizationID, actor, chrepo.ActorWindowSpendRow{
+		require.NoError(t, spendrules.WriteGateActor(ctx, ti.spendGateCache, organizationID, spendrules.NewGateActor(actor, chrepo.ActorWindowSpendRow{
 			Email:       actor.Email,
 			DailyCost:   0,
 			WeeklyCost:  0,
 			MonthlyCost: 100,
-		})
+		}, time.Now().UTC())))
 	}
-	require.NoError(t, spendrules.WriteGateState(ctx, ti.spendGateCache, organizationID, state))
 }
 
 func TestClaude_UserPromptSubmit_SpendGateBlocksBeforeRiskScan(t *testing.T) {
@@ -211,6 +209,7 @@ func TestClaude_SpendGateAllowsUnblockedUser(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	// A different actor is blocked; the caller must pass through.
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "user_someone_else", "someone-else@example.com")
 	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, "someone-else@example.com")
 
 	sessionID := uuid.NewString()

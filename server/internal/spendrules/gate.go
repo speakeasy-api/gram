@@ -19,15 +19,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/spendrules/chrepo"
 )
 
-// EvaluationInterval is how often the background evaluator recomputes spend
-// against every enabled rule and rewrites the spend gate snapshot.
-const EvaluationInterval = 5 * time.Minute
+// EvaluationInterval is how often the background reconciler recomputes spend
+// against every enabled rule and repairs actor spend cache entries.
+const EvaluationInterval = 30 * time.Second
 
-// spendGateSnapshotTTL bounds how long a gate snapshot survives without the
-// evaluator rewriting it. It must comfortably exceed one scheduled sweep
-// (SpendRuleEvaluationWorkflow's run timeout) so a slow-but-progressing sweep
-// does not let snapshots expire and enforcement fail open between cycles.
-const spendGateSnapshotTTL = 4 * EvaluationInterval
+// spendGateTTL bounds how long request-path gate data survives without an API
+// write or evaluator refresh. It must comfortably exceed one scheduled sweep so
+// a slow-but-progressing reconciler does not let entries expire and enforcement
+// fail open between cycles.
+const spendGateTTL = 4 * EvaluationInterval
 
 // maxGatePrograms bounds the compiled-CEL cache. Rule edits mint new target
 // and rule expressions over a long-lived gate process, so the cache is flushed
@@ -44,9 +44,9 @@ type Block struct {
 	WindowEnd time.Time `json:"window_end"`
 }
 
-// GateRule is the request-path view of a spend rule. The evaluator refreshes
-// these alongside actor usage so the hook gate can evaluate the same CEL
-// predicates as background evaluation without touching Postgres or ClickHouse.
+// GateRule is the request-path view of a spend rule. The API refreshes these
+// on rule mutations so the hook gate can evaluate the same CEL predicates as
+// background evaluation without touching Postgres or ClickHouse.
 type GateRule struct {
 	RuleURN    string    `json:"rule_urn"`
 	RuleName   string    `json:"rule_name"`
@@ -59,7 +59,13 @@ type GateRule struct {
 	WindowEnd  time.Time `json:"window_end"`
 }
 
+type GateRules struct {
+	SourceUpdatedAt time.Time  `json:"source_updated_at"`
+	Rules           []GateRule `json:"rules"`
+}
+
 type GateActor struct {
+	ComputedAt  time.Time                  `json:"computed_at"`
 	UserID      string                     `json:"user_id"`
 	Email       string                     `json:"email"`
 	DisplayName string                     `json:"display_name"`
@@ -67,29 +73,24 @@ type GateActor struct {
 	Spend       chrepo.ActorWindowSpendRow `json:"spend"`
 }
 
-// GateState is the full request-path state for one organization. Actors are
-// keyed by "{org_id}:{user_email}" with normalized email so a hook event can
-// resolve its actor without scanning the organization.
-type GateState struct {
-	Rules  []GateRule           `json:"rules"`
-	Actors map[string]GateActor `json:"actors"`
+type mutatingCache interface {
+	Mutate(ctx context.Context, key string, value any, ttl time.Duration, fn func(exists bool) error) error
 }
 
-func spendGateSnapshotKey(organizationID string) string {
-	return "spend_gate:" + organizationID
+func spendGateRulesKey(organizationID string) string {
+	return "spend_gate:rules:" + organizationID
 }
 
-func spendGateActorKey(organizationID, email string) string {
-	if organizationID == "" || email == "" {
+func spendGateActorKey(organizationID, userID string) string {
+	if organizationID == "" || userID == "" {
 		return ""
 	}
-	return organizationID + ":" + conv.NormalizeEmail(email)
+	return "spend_gate:actor:" + organizationID + ":" + userID
 }
 
 // Gate is the hot-path spend check consulted by the Claude hooks handlers
-// before risk-policy scans. Reads are a single cache GET; every failure mode
-// resolves to "not blocked" (fail-open) so a cache outage never denies
-// traffic.
+// before risk-policy scans. Reads stay Redis-only; every failure mode resolves
+// to "not blocked" (fail-open) so a cache outage never denies traffic.
 type Gate struct {
 	logger       *slog.Logger
 	cache        cache.Cache
@@ -119,41 +120,46 @@ func NewGate(logger *slog.Logger, cacheImpl cache.Cache, celEng *celenv.Engine) 
 }
 
 // CheckBlocked reports whether the given actor is currently blocked by a spend
-// rule. The actor is looked up only by "{org_id}:{user_email}". A nil Block
-// means the actor is not blocked. Errors are cache infrastructure failures —
-// callers should treat them as "not blocked" (fail-open); they are returned for
-// logging.
-func (g *Gate) CheckBlocked(ctx context.Context, organizationID, email string) (*Block, error) {
-	actorKey := spendGateActorKey(organizationID, email)
+// rule. The actor is looked up only by stable Gram user ID. A nil Block means
+// the actor is not blocked. Errors are cache infrastructure failures — callers
+// should treat them as "not blocked" (fail-open); they are returned for logging.
+func (g *Gate) CheckBlocked(ctx context.Context, organizationID, userID string) (*Block, error) {
+	actorKey := spendGateActorKey(organizationID, userID)
 	if actorKey == "" || g.celEng == nil {
 		return nil, nil
 	}
 
-	var state GateState
-	err := g.cache.Get(ctx, spendGateSnapshotKey(organizationID), &state)
+	var rules GateRules
+	err := g.cache.Get(ctx, spendGateRulesKey(organizationID), &rules)
 	if errors.Is(err, redisCache.ErrCacheMiss) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read spend gate state: %w", err)
+		return nil, fmt.Errorf("read spend gate rules: %w", err)
 	}
-
-	actor, ok := state.Actors[actorKey]
-	if !ok {
+	if len(rules.Rules) == 0 {
 		return nil, nil
 	}
 
+	var actor GateActor
+	err = g.cache.Get(ctx, actorKey, &actor)
+	if errors.Is(err, redisCache.ErrCacheMiss) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read spend gate actor: %w", err)
+	}
+
 	now := time.Now().UTC()
-	for _, rule := range state.Rules {
+	for _, rule := range rules.Rules {
 		if rule.Action != ActionBlock {
 			continue
 		}
 
-		// The snapshot holds the spend for the window that was current when the
+		// The actor entry holds spend for the window that was current when the
 		// evaluator last wrote it. Once that window has ended, the block must
 		// lift immediately (spend resets to zero for the new window) rather than
-		// keep denying on stale spend until the next evaluation cycle rewrites
-		// the snapshot.
+		// keep denying on stale spend until the next refresh.
 		if !rule.WindowEnd.IsZero() && !now.Before(rule.WindowEnd) {
 			continue
 		}
@@ -246,74 +252,105 @@ func (g *Gate) compile(expr string) (cel.Program, error) {
 	return typed, nil
 }
 
-func NewGateState(organizationID string, actors []Actor) GateState {
-	state := GateState{
-		Rules:  []GateRule{},
-		Actors: map[string]GateActor{},
-	}
-	for _, actor := range actors {
-		state.SetActor(organizationID, actor)
-	}
-	return state
-}
-
-func (s *GateState) SetActor(organizationID string, actor Actor) {
-	actorKey := spendGateActorKey(organizationID, actor.Email)
-	if actorKey == "" {
-		return
-	}
-
-	gateActor := GateActor{
+func NewGateActor(actor Actor, spend chrepo.ActorWindowSpendRow, computedAt time.Time) GateActor {
+	return GateActor{
+		ComputedAt:  computedAt.UTC(),
 		UserID:      actor.UserID,
 		Email:       actor.Email,
 		DisplayName: actor.DisplayName,
 		Attrs:       actor.Attrs,
-		Spend: chrepo.ActorWindowSpendRow{
-			Email:       "",
-			DailyCost:   0,
-			WeeklyCost:  0,
-			MonthlyCost: 0,
-		},
+		Spend:       spend,
 	}
-	s.Actors[actorKey] = gateActor
 }
 
-func (s *GateState) SetActorWindowSpend(organizationID string, actor Actor, spend chrepo.ActorWindowSpendRow) {
-	actorKey := spendGateActorKey(organizationID, actor.Email)
-	if actorKey == "" {
-		return
+func EmptyActorSpend(email string) chrepo.ActorWindowSpendRow {
+	return chrepo.ActorWindowSpendRow{
+		Email:       conv.NormalizeEmail(email),
+		DailyCost:   0,
+		WeeklyCost:  0,
+		MonthlyCost: 0,
 	}
-	gateActor, ok := s.Actors[actorKey]
-	if !ok {
-		gateActor = GateActor{
-			UserID:      actor.UserID,
-			Email:       actor.Email,
-			DisplayName: actor.DisplayName,
-			Attrs:       actor.Attrs,
-			Spend: chrepo.ActorWindowSpendRow{
-				Email:       "",
-				DailyCost:   0,
-				WeeklyCost:  0,
-				MonthlyCost: 0,
-			},
-		}
-	}
-	gateActor.Spend = spend
-	s.Actors[actorKey] = gateActor
 }
 
-// WriteGateState replaces the organization's request-path state. An empty set
-// deletes the key so the gate's common case stays a cheap miss.
-func WriteGateState(ctx context.Context, cacheImpl cache.Cache, organizationID string, state GateState) error {
-	key := spendGateSnapshotKey(organizationID)
-	if len(state.Rules) == 0 {
-		if err := cacheImpl.Delete(ctx, key); err != nil && !errors.Is(err, redisCache.ErrCacheMiss) {
-			return fmt.Errorf("clear spend gate state: %w", err)
+// WriteGateRules replaces the organization's request-path rules only when the
+// payload was built from at least as fresh a DB source as the existing value.
+func WriteGateRules(ctx context.Context, cacheImpl cache.Cache, organizationID string, rules GateRules) error {
+	key := spendGateRulesKey(organizationID)
+	rules.SourceUpdatedAt = rules.SourceUpdatedAt.UTC()
+	if rules.Rules == nil {
+		rules.Rules = []GateRule{}
+	}
+	if mutable, ok := cacheImpl.(mutatingCache); ok {
+		current := GateRules{SourceUpdatedAt: time.Time{}, Rules: nil}
+		if err := mutable.Mutate(ctx, key, &current, spendGateTTL, func(exists bool) error {
+			if exists && current.SourceUpdatedAt.After(rules.SourceUpdatedAt) {
+				return nil
+			}
+			current = rules
+			return nil
+		}); err != nil {
+			return fmt.Errorf("write spend gate rules: %w", err)
 		}
 		return nil
 	}
-	if err := cacheImpl.Set(ctx, key, state, spendGateSnapshotTTL); err != nil {
-		return fmt.Errorf("write spend gate state: %w", err)
+	if err := cacheImpl.Set(ctx, key, rules, spendGateTTL); err != nil {
+		return fmt.Errorf("write spend gate rules: %w", err)
+	}
+	return nil
+}
+
+// WriteGateActor stores one actor's ClickHouse spend snapshot. Concurrent
+// refreshers use write-if-newer semantics so an older org reconciler run cannot
+// overwrite a fresher per-actor usage-triggered refresh.
+func WriteGateActor(ctx context.Context, cacheImpl cache.Cache, organizationID string, actor GateActor) error {
+	key := spendGateActorKey(organizationID, actor.UserID)
+	if key == "" {
+		return nil
+	}
+	actor.ComputedAt = actor.ComputedAt.UTC()
+	if mutable, ok := cacheImpl.(mutatingCache); ok {
+		current := GateActor{
+			ComputedAt:  time.Time{},
+			UserID:      "",
+			Email:       "",
+			DisplayName: "",
+			Attrs: celenv.Actor{
+				Email:          "",
+				DepartmentName: "",
+				JobTitle:       "",
+				EmployeeType:   "",
+				DivisionName:   "",
+				CostCenterName: "",
+				Groups:         nil,
+				Roles:          nil,
+				SpendUSD:       0,
+				LimitUSD:       0,
+				UsedPct:        0,
+				WarnAtPct:      0,
+			},
+			Spend: chrepo.ActorWindowSpendRow{Email: "", DailyCost: 0, WeeklyCost: 0, MonthlyCost: 0},
+		}
+		if err := mutable.Mutate(ctx, key, &current, spendGateTTL, func(exists bool) error {
+			if exists && current.ComputedAt.After(actor.ComputedAt) {
+				return nil
+			}
+			current = actor
+			return nil
+		}); err != nil {
+			return fmt.Errorf("write spend gate actor: %w", err)
+		}
+		return nil
+	}
+	var current GateActor
+	err := cacheImpl.Get(ctx, key, &current)
+	if err == nil && current.ComputedAt.After(actor.ComputedAt) {
+		return nil
+	}
+	if err != nil && !errors.Is(err, redisCache.ErrCacheMiss) {
+		return fmt.Errorf("read spend gate actor for write: %w", err)
+	}
+	if err := cacheImpl.Set(ctx, key, actor, spendGateTTL); err != nil {
+		return fmt.Errorf("write spend gate actor: %w", err)
 	}
 	return nil
 }

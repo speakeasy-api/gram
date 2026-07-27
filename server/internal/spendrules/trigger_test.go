@@ -15,22 +15,22 @@ import (
 
 type usageSignalerStub struct {
 	mu    sync.Mutex
-	calls []string
+	calls []spendrules.ActorEvaluationSignal
 }
 
-func (s *usageSignalerStub) Signal(_ context.Context, organizationID string) error {
+func (s *usageSignalerStub) SignalActor(_ context.Context, signal spendrules.ActorEvaluationSignal) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.calls = append(s.calls, organizationID)
+	s.calls = append(s.calls, signal)
 	return nil
 }
 
-func (s *usageSignalerStub) Calls() []string {
+func (s *usageSignalerStub) Calls() []spendrules.ActorEvaluationSignal {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := make([]string, len(s.calls))
-	copy(out, s.calls)
-	return out
+	signals := make([]spendrules.ActorEvaluationSignal, len(s.calls))
+	copy(signals, s.calls)
+	return signals
 }
 
 func usageRow(organizationID, urn string) telemetry.LogParams {
@@ -50,13 +50,12 @@ func usageRow(organizationID, urn string) telemetry.LogParams {
 	}
 }
 
-// writeTestGateSnapshot puts a minimal gate snapshot in the cache so the
-// trigger sees the organization as having enabled spend rules.
-func writeTestGateSnapshot(t *testing.T, ctx context.Context, cacheImpl *gateCache, organizationID string) {
+// writeTestGateRules puts minimal rules in the cache so the trigger sees the
+// organization as having enabled spend rules.
+func writeTestGateRules(t *testing.T, ctx context.Context, cacheImpl *gateCache, organizationID string) {
 	t.Helper()
 
-	state := spendrules.NewGateState(organizationID, testActors())
-	state.Rules = append(state.Rules, spendrules.GateRule{
+	writeGateRules(t, ctx, cacheImpl, organizationID, spendrules.GateRule{
 		RuleURN:    "spend_rule:engineering:v1",
 		RuleName:   "Engineering budget",
 		Action:     spendrules.ActionBlock,
@@ -67,7 +66,6 @@ func writeTestGateSnapshot(t *testing.T, ctx context.Context, cacheImpl *gateCac
 		WindowKind: spendrules.WindowMonthly,
 		WindowEnd:  time.Now().UTC().AddDate(0, 0, 7),
 	})
-	require.NoError(t, spendrules.WriteGateState(ctx, cacheImpl, organizationID, state))
 }
 
 func TestUsageTriggerSignalsOrgWithGateSnapshot(t *testing.T) {
@@ -75,7 +73,7 @@ func TestUsageTriggerSignalsOrgWithGateSnapshot(t *testing.T) {
 
 	ctx := t.Context()
 	cacheImpl := newGateCache()
-	writeTestGateSnapshot(t, ctx, cacheImpl, "org_123")
+	writeTestGateRules(t, ctx, cacheImpl, "org_123")
 
 	sig := &usageSignalerStub{}
 	trigger := spendrules.NewUsageTrigger(testenv.NewLogger(t), cacheImpl, sig, time.Hour)
@@ -90,7 +88,7 @@ func TestUsageTriggerSignalsOrgWithGateSnapshot(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return len(sig.Calls()) == 1
 	}, 2*time.Second, 5*time.Millisecond)
-	require.Equal(t, []string{"org_123"}, sig.Calls())
+	require.Equal(t, []spendrules.ActorEvaluationSignal{{OrganizationID: "org_123", UserID: "", Email: "ada@acme.com"}}, sig.Calls())
 }
 
 func TestUsageTriggerIgnoresIrrelevantRows(t *testing.T) {
@@ -98,7 +96,7 @@ func TestUsageTriggerIgnoresIrrelevantRows(t *testing.T) {
 
 	ctx := t.Context()
 	cacheImpl := newGateCache()
-	writeTestGateSnapshot(t, ctx, cacheImpl, "org_123")
+	writeTestGateRules(t, ctx, cacheImpl, "org_123")
 
 	sig := &usageSignalerStub{}
 	trigger := spendrules.NewUsageTrigger(testenv.NewLogger(t), cacheImpl, sig, time.Hour)
@@ -137,8 +135,8 @@ func TestUsageTriggerDedupesOrgsWithinBatch(t *testing.T) {
 
 	ctx := t.Context()
 	cacheImpl := newGateCache()
-	writeTestGateSnapshot(t, ctx, cacheImpl, "org_a")
-	writeTestGateSnapshot(t, ctx, cacheImpl, "org_b")
+	writeTestGateRules(t, ctx, cacheImpl, "org_a")
+	writeTestGateRules(t, ctx, cacheImpl, "org_b")
 
 	sig := &usageSignalerStub{}
 	trigger := spendrules.NewUsageTrigger(testenv.NewLogger(t), cacheImpl, sig, time.Hour)
@@ -154,7 +152,10 @@ func TestUsageTriggerDedupesOrgsWithinBatch(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return len(sig.Calls()) == 2
 	}, 2*time.Second, 5*time.Millisecond)
-	require.ElementsMatch(t, []string{"org_a", "org_b"}, sig.Calls())
+	require.ElementsMatch(t, []spendrules.ActorEvaluationSignal{
+		{OrganizationID: "org_a", UserID: "", Email: "ada@acme.com"},
+		{OrganizationID: "org_b", UserID: "", Email: "ada@acme.com"},
+	}, sig.Calls())
 }
 
 func TestUsageTriggerThrottlesAndFlushesTrailingEdge(t *testing.T) {
@@ -162,7 +163,7 @@ func TestUsageTriggerThrottlesAndFlushesTrailingEdge(t *testing.T) {
 
 	ctx := t.Context()
 	cacheImpl := newGateCache()
-	writeTestGateSnapshot(t, ctx, cacheImpl, "org_123")
+	writeTestGateRules(t, ctx, cacheImpl, "org_123")
 
 	sig := &usageSignalerStub{}
 	trigger := spendrules.NewUsageTrigger(testenv.NewLogger(t), cacheImpl, sig, time.Hour)
@@ -174,10 +175,13 @@ func TestUsageTriggerThrottlesAndFlushesTrailingEdge(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return len(sig.Calls()) == 1
 	}, 2*time.Second, 5*time.Millisecond)
-	require.Equal(t, []string{"org_123"}, sig.Calls())
+	require.Equal(t, []spendrules.ActorEvaluationSignal{{OrganizationID: "org_123", UserID: "", Email: "ada@acme.com"}}, sig.Calls())
 
 	// Shutdown flushes the pending trailing signal while Temporal would
 	// still be reachable.
 	require.NoError(t, trigger.Shutdown(ctx))
-	require.Equal(t, []string{"org_123", "org_123"}, sig.Calls())
+	require.Equal(t, []spendrules.ActorEvaluationSignal{
+		{OrganizationID: "org_123", UserID: "", Email: "ada@acme.com"},
+		{OrganizationID: "org_123", UserID: "", Email: "ada@acme.com"},
+	}, sig.Calls())
 }

@@ -404,6 +404,7 @@ func NewTemporalWorker(
 	// Spend rule evaluation activities
 	temporalWorker.RegisterActivity(activities.ListSpendRuleOrgs)
 	temporalWorker.RegisterActivity(activities.EvaluateOrgSpendRules)
+	temporalWorker.RegisterActivity(activities.RefreshSpendRuleActor)
 	// Skill efficacy activities — the database steps run on the main queue and
 	// only the judged publication goes to the dedicated worker.
 	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.EnqueueSkillEfficacyPage)
@@ -485,6 +486,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(SpendRuleEvaluationWorkflow)
 	temporalWorker.RegisterWorkflow(SpendRuleOrgEvaluationWorkflow)
 	temporalWorker.RegisterWorkflow(SpendRuleOrgEvaluationWorkflowDebounced)
+	temporalWorker.RegisterWorkflow(SpendRuleActorEvaluationWorkflow)
+	temporalWorker.RegisterWorkflow(SpendRuleActorEvaluationWorkflowDebounced)
 	// Skill efficacy workflows
 	temporalWorker.RegisterWorkflow(SkillEfficacyCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(SkillEfficacySweepWorkflow)

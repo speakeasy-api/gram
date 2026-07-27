@@ -12,17 +12,17 @@ import (
 // checkSpendGate consults the spend rule circuit for the actor on a hook
 // event. It runs BEFORE risk-policy scans — an over-budget actor is denied
 // before any policy evaluation. Every failure mode resolves to "not blocked"
-// (fail-open): a nil gate, an unresolved org/email identity (same guard as
-// scanHookEventForEnforcement), and cache infrastructure errors.
+// (fail-open): a nil gate, an unresolved org/user identity, and cache
+// infrastructure errors.
 func (s *Service) checkSpendGate(ctx context.Context, ev hookevents.Event) *spendrules.Block {
 	if s.spendGate == nil {
 		return nil
 	}
-	if ev.Context.OrganizationID == "" || ev.Context.User.Email == "" {
+	if ev.Context.OrganizationID == "" || ev.Context.User.ID == "" {
 		return nil
 	}
 
-	block, err := s.spendGate.CheckBlocked(ctx, ev.Context.OrganizationID, ev.Context.User.Email)
+	block, err := s.spendGate.CheckBlocked(ctx, ev.Context.OrganizationID, ev.Context.User.ID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "spend gate check failed; failing open",
 			attr.SlogError(err),

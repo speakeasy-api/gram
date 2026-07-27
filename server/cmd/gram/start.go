@@ -1251,6 +1251,7 @@ func newStartCommand() *cli.Command {
 				authzEngine,
 				auditLogger,
 				spendCelEngine,
+				cache.NewRedisCacheAdapter(redisClient),
 				spendEvaluator,
 			))
 

@@ -15,15 +15,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/throttle"
 )
 
-// usageSignalTimeout bounds one signal attempt (a Redis snapshot read plus a
+// usageSignalTimeout bounds one signal attempt (a Redis rules read plus a
 // Temporal SignalWithStart). It caps how long a fired signal can run so a slow
 // dependency cannot pin a leading-edge goroutine or hold graceful shutdown open
 // while trailing signals flush.
 const usageSignalTimeout = 10 * time.Second
 
-// UsageSignalCooldown is the per-organization throttle window for
+// UsageSignalCooldown is the per-actor throttle window for
 // usage-triggered evaluation signals. The first spend-relevant telemetry
-// write for an org signals immediately (leading edge); writes inside the
+// write for an actor signals immediately (leading edge); writes inside the
 // window coalesce into one trailing signal, so breach-to-block latency is
 // bounded by roughly this window plus one evaluation instead of the
 // scheduled sweep interval.
@@ -40,38 +40,34 @@ func isSpendRelevantURN(urn string) bool {
 		strings.HasPrefix(urn, "cursor:usage")
 }
 
-// UsageTrigger turns spend-relevant telemetry writes into debounced per-org
-// evaluation signals. It observes the telemetry logger, throttles per
-// organization, and only signals organizations that currently have a spend
-// gate snapshot — the evaluator maintains one for every org with enabled
-// rules and the budgets flag on, so its absence means evaluation would be a
-// no-op. Orgs whose snapshot is missing (first rule just created, Redis
-// flush) are covered by the mutation-time signal and the scheduled sweep.
+// UsageTrigger turns spend-relevant telemetry writes into debounced per-actor
+// evaluation signals. It observes the telemetry logger, throttles per raw actor
+// identity, and only signals organizations that currently have spend gate rules.
 type UsageTrigger struct {
 	logger   *slog.Logger
 	cache    cache.Cache
-	signaler EvaluationSignaler
-	throttle *throttle.Throttle[string, string]
+	signaler ActorEvaluationSignaler
+	throttle *throttle.Throttle[string, ActorEvaluationSignal]
 }
 
 var _ telemetry.LogObserver = (*UsageTrigger)(nil)
 
-func NewUsageTrigger(logger *slog.Logger, cacheImpl cache.Cache, signaler EvaluationSignaler, cooldown time.Duration) *UsageTrigger {
+func NewUsageTrigger(logger *slog.Logger, cacheImpl cache.Cache, signaler ActorEvaluationSignaler, cooldown time.Duration) *UsageTrigger {
 	t := &UsageTrigger{
 		logger:   logger.With(attr.SlogComponent("spendrules_usage_trigger")),
 		cache:    cacheImpl,
 		signaler: signaler,
 		throttle: nil,
 	}
-	t.throttle = throttle.New(cooldown, func(organizationID string) string {
-		return organizationID
-	}, func(organizationID string) error {
+	t.throttle = throttle.New(cooldown, func(signal ActorEvaluationSignal) string {
+		return signal.OrganizationID + ":" + signal.UserID + ":" + strings.ToLower(signal.Email)
+	}, func(signal ActorEvaluationSignal) error {
 		// Trailing edge fires from a timer goroutine after the request
 		// context that suppressed it is gone. Bound it so a stuck Redis or
 		// Temporal call cannot outlive the graceful-shutdown flush.
 		bctx, cancel := context.WithTimeout(context.Background(), usageSignalTimeout)
 		defer cancel()
-		t.signal(bctx, organizationID)
+		t.signal(bctx, signal)
 		return nil
 	})
 	return t
@@ -84,12 +80,21 @@ func (t *UsageTrigger) OnTelemetryLogsWritten(ctx context.Context, params []tele
 		if organizationID == "" || !isSpendRelevantURN(p.ToolInfo.URN) {
 			continue
 		}
-		if _, ok := seen[organizationID]; ok {
+		signal := ActorEvaluationSignal{
+			OrganizationID: organizationID,
+			UserID:         p.UserInfo.UserID(),
+			Email:          p.UserInfo.Email(),
+		}
+		if signal.UserID == "" && signal.Email == "" {
 			continue
 		}
-		seen[organizationID] = struct{}{}
-		if t.throttle.Do(organizationID) {
-			t.signalAsync(ctx, organizationID)
+		key := organizationID + ":" + signal.UserID + ":" + strings.ToLower(signal.Email)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		if t.throttle.Do(signal) {
+			t.signalAsync(ctx, signal)
 		}
 	}
 }
@@ -101,33 +106,36 @@ func (t *UsageTrigger) OnTelemetryLogsWritten(ctx context.Context, params []tele
 // values, and bounds the work with usageSignalTimeout. A completed ClickHouse
 // write therefore still wakes enforcement even when the request/activity that
 // produced it is already gone.
-func (t *UsageTrigger) signalAsync(ctx context.Context, organizationID string) {
+func (t *UsageTrigger) signalAsync(ctx context.Context, signal ActorEvaluationSignal) {
 	detached := context.WithoutCancel(ctx)
 	go func() {
 		bctx, cancel := context.WithTimeout(detached, usageSignalTimeout)
 		defer cancel()
-		t.signal(bctx, organizationID)
+		t.signal(bctx, signal)
 	}()
 }
 
-func (t *UsageTrigger) signal(ctx context.Context, organizationID string) {
-	var state GateState
-	err := t.cache.Get(ctx, spendGateSnapshotKey(organizationID), &state)
+func (t *UsageTrigger) signal(ctx context.Context, signal ActorEvaluationSignal) {
+	var rules GateRules
+	err := t.cache.Get(ctx, spendGateRulesKey(signal.OrganizationID), &rules)
 	if errors.Is(err, redisCache.ErrCacheMiss) {
 		return
 	}
 	if err != nil {
-		t.logger.WarnContext(ctx, "read spend gate snapshot for usage trigger",
+		t.logger.WarnContext(ctx, "read spend gate rules for usage trigger",
 			attr.SlogError(err),
-			attr.SlogOrganizationID(organizationID),
+			attr.SlogOrganizationID(signal.OrganizationID),
 		)
 		return
 	}
+	if len(rules.Rules) == 0 {
+		return
+	}
 
-	if err := t.signaler.Signal(ctx, organizationID); err != nil {
+	if err := t.signaler.SignalActor(ctx, signal); err != nil {
 		t.logger.WarnContext(ctx, "signal spend rule evaluation for fresh usage",
 			attr.SlogError(err),
-			attr.SlogOrganizationID(organizationID),
+			attr.SlogOrganizationID(signal.OrganizationID),
 		)
 	}
 }

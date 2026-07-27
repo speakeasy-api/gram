@@ -646,3 +646,10 @@ func (a *Activities) EvaluateOrgSpendRules(ctx context.Context, args spend_rules
 	}
 	return nil
 }
+
+func (a *Activities) RefreshSpendRuleActor(ctx context.Context, args spend_rules.EvaluateActorArgs) error {
+	if err := a.evaluateOrgSpendRules.RefreshActor(ctx, args); err != nil {
+		return fmt.Errorf("refresh spend rule actor: %w", err)
+	}
+	return nil
+}

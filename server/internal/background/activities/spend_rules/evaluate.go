@@ -1,7 +1,7 @@
 // Package spend_rules holds the background activities that evaluate spend
 // control rules: per-organization budget evaluation against ClickHouse spend,
-// warning/breach event writes, and spend gate snapshot publication for the
-// hooks gate.
+// warning/breach event writes, and spend gate cache publication for the hooks
+// gate.
 package spend_rules
 
 import (
@@ -52,8 +52,8 @@ func (a *ListOrgs) Do(ctx context.Context) ([]string, error) {
 
 // EvaluateOrg evaluates every enabled spend rule for one organization:
 // CEL-matches directory actors, sums their window spend from ClickHouse,
-// records warning/breach events (deduped by the unique index), and replaces
-// the organization's spend gate snapshot.
+// records warning/breach events (deduped by the unique index), and refreshes
+// the organization's spend gate cache entries.
 type EvaluateOrg struct {
 	logger    *slog.Logger
 	tracer    trace.Tracer
@@ -97,6 +97,12 @@ type EvaluateOrgArgs struct {
 	OrganizationID string
 }
 
+type EvaluateActorArgs struct {
+	OrganizationID string
+	UserID         string
+	Email          string
+}
+
 func (a *EvaluateOrg) Do(ctx context.Context, args EvaluateOrgArgs) (err error) {
 	ctx, span := a.tracer.Start(ctx, "spendrules.evaluateOrg")
 	defer func() {
@@ -110,13 +116,13 @@ func (a *EvaluateOrg) Do(ctx context.Context, args EvaluateOrgArgs) (err error) 
 	queries := spendrepo.New(a.db)
 
 	// The Budgets rollout flag (feature.FlagBudgets) gates enforcement org by
-	// org — the same key hides the dashboard surface. When the flag is off
-	// the org's rules stay dormant: no warning/breach events are recorded and
-	// the gate snapshot is cleared, so an already-open circuit lifts on this
+	// org — the same key hides the dashboard surface. When the flag is off the
+	// org's rules stay dormant: no warning/breach events are recorded and the
+	// gate rules payload is cleared, so an already-open circuit lifts on this
 	// cycle instead of blocking users on a feature they cannot see.
 	if !a.budgetsEnabled(ctx, logger, args.OrganizationID) {
-		if err := spendrules.WriteGateState(ctx, a.cacheImpl, args.OrganizationID, spendrules.GateState{Rules: nil, Actors: nil}); err != nil {
-			return fmt.Errorf("clear spend gate snapshot: %w", err)
+		if err := spendrules.WriteGateRules(ctx, a.cacheImpl, args.OrganizationID, spendrules.GateRules{SourceUpdatedAt: time.Now().UTC(), Rules: nil}); err != nil {
+			return fmt.Errorf("clear spend gate rules: %w", err)
 		}
 		return nil
 	}
@@ -126,10 +132,16 @@ func (a *EvaluateOrg) Do(ctx context.Context, args EvaluateOrgArgs) (err error) 
 		return fmt.Errorf("list enabled spend rules: %w", err)
 	}
 
+	now := time.Now().UTC()
+	gateRules, err := spendrules.BuildGateRules(rules, now)
+	if err != nil {
+		return fmt.Errorf("build spend gate rules: %w", err)
+	}
+	if err := spendrules.WriteGateRules(ctx, a.cacheImpl, args.OrganizationID, gateRules); err != nil {
+		return fmt.Errorf("write spend gate rules: %w", err)
+	}
+
 	if len(rules) == 0 {
-		if err := spendrules.WriteGateState(ctx, a.cacheImpl, args.OrganizationID, spendrules.GateState{Rules: nil, Actors: nil}); err != nil {
-			return fmt.Errorf("clear spend gate snapshot: %w", err)
-		}
 		return nil
 	}
 
@@ -155,15 +167,19 @@ func (a *EvaluateOrg) Do(ctx context.Context, args EvaluateOrgArgs) (err error) 
 		return fmt.Errorf("spend rule evaluation requires a ClickHouse connection")
 	}
 
-	now := time.Now().UTC()
 	actorWindowSpend, err := chrepo.LoadActorWindowSpend(ctx, a.chQueries, projectIDs, now)
 	if err != nil {
 		return fmt.Errorf("load actor window spend: %w", err)
 	}
 
-	gateState := spendrules.NewGateState(args.OrganizationID, actors)
 	for _, actor := range actors {
-		gateState.SetActorWindowSpend(args.OrganizationID, actor, actorWindowSpend[conv.NormalizeEmail(actor.Email)])
+		spend := actorWindowSpend[conv.NormalizeEmail(actor.Email)]
+		if spend.Email == "" {
+			spend = spendrules.EmptyActorSpend(actor.Email)
+		}
+		if err := spendrules.WriteGateActor(ctx, a.cacheImpl, args.OrganizationID, spendrules.NewGateActor(actor, spend, now)); err != nil {
+			return fmt.Errorf("write spend gate actor: %w", err)
+		}
 	}
 
 	// evaluateRule logs and skips per-rule logic errors (a bad expression must
@@ -171,23 +187,104 @@ func (a *EvaluateOrg) Do(ctx context.Context, args EvaluateOrgArgs) (err error) 
 	// only errors it returns are transient event-write failures.
 	var eventWriteErrs []error
 	for _, rule := range rules {
-		if err := a.evaluateRule(ctx, logger, queries, rule, actors, actorWindowSpend, now, &gateState); err != nil {
+		if err := a.evaluateRule(ctx, logger, queries, rule, actors, actorWindowSpend, now); err != nil {
 			eventWriteErrs = append(eventWriteErrs, err)
 		}
 	}
 
-	if err := spendrules.WriteGateState(ctx, a.cacheImpl, args.OrganizationID, gateState); err != nil {
-		return fmt.Errorf("write spend gate snapshot: %w", err)
-	}
-
 	// A transient failure recording warning/breach events must fail the
-	// activity so Temporal retries it. The snapshot is already written and
-	// events dedupe on the unique index, so the retry is idempotent.
+	// activity so Temporal retries it. Actor cache entries are already written
+	// and events dedupe on the unique index, so the retry is idempotent.
 	if len(eventWriteErrs) > 0 {
 		return fmt.Errorf("record spend rule events: %w", errors.Join(eventWriteErrs...))
 	}
 
 	return nil
+}
+
+func (a *EvaluateOrg) RefreshActor(ctx context.Context, args EvaluateActorArgs) (err error) {
+	ctx, span := a.tracer.Start(ctx, "spendrules.refreshActor")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
+	logger := a.logger.With(attr.SlogOrganizationID(args.OrganizationID))
+	if args.OrganizationID == "" || (args.UserID == "" && args.Email == "") {
+		return nil
+	}
+	if !a.budgetsEnabled(ctx, logger, args.OrganizationID) {
+		return nil
+	}
+
+	queries := spendrepo.New(a.db)
+	actors, err := spendrules.LoadActors(ctx, queries, args.OrganizationID)
+	if err != nil {
+		return fmt.Errorf("load directory actors: %w", err)
+	}
+	actor, ok := findActor(actors, args.UserID, args.Email)
+	if !ok || actor.UserID == "" {
+		return nil
+	}
+
+	if a.chQueries == nil {
+		return fmt.Errorf("spend rule actor refresh requires a ClickHouse connection")
+	}
+
+	projects, err := projectsRepo.New(a.db).ListProjectsByOrganization(ctx, args.OrganizationID)
+	if err != nil {
+		return fmt.Errorf("list organization projects: %w", err)
+	}
+	projectIDs := make([]string, 0, len(projects))
+	for _, p := range projects {
+		projectIDs = append(projectIDs, p.ID.String())
+	}
+
+	computedAt := time.Now().UTC()
+	spend, err := chrepo.LoadActorWindowSpendByEmail(ctx, a.chQueries, projectIDs, actor.Email, computedAt)
+	if err != nil {
+		return fmt.Errorf("load actor window spend by email: %w", err)
+	}
+	if spend.Email == "" {
+		spend = spendrules.EmptyActorSpend(actor.Email)
+	}
+	if err := spendrules.WriteGateActor(ctx, a.cacheImpl, args.OrganizationID, spendrules.NewGateActor(actor, spend, computedAt)); err != nil {
+		return fmt.Errorf("write spend gate actor: %w", err)
+	}
+	return nil
+}
+
+func findActor(actors []spendrules.Actor, userID, email string) (spendrules.Actor, bool) {
+	normalizedEmail := conv.NormalizeEmail(email)
+	for _, actor := range actors {
+		if userID != "" && actor.UserID == userID {
+			return actor, true
+		}
+		if normalizedEmail != "" && conv.NormalizeEmail(actor.Email) == normalizedEmail {
+			return actor, true
+		}
+	}
+	return spendrules.Actor{
+		UserID:      "",
+		Email:       "",
+		DisplayName: "",
+		Attrs: celenv.Actor{
+			Email:          "",
+			DepartmentName: "",
+			JobTitle:       "",
+			EmployeeType:   "",
+			DivisionName:   "",
+			CostCenterName: "",
+			Groups:         nil,
+			Roles:          nil,
+			SpendUSD:       0,
+			LimitUSD:       0,
+			UsedPct:        0,
+			WarnAtPct:      0,
+		},
+	}, false
 }
 
 // budgetsEnabled reports whether the Budgets rollout flag is on for the
@@ -231,7 +328,6 @@ func (a *EvaluateOrg) evaluateRule(
 	actors []spendrules.Actor,
 	actorWindowSpend map[string]chrepo.ActorWindowSpendRow,
 	now time.Time,
-	gateState *spendrules.GateState,
 ) error {
 	windowStart, windowEnd, err := spendrules.WindowBounds(rule.WindowKind, now)
 	if err != nil {
@@ -247,17 +343,6 @@ func (a *EvaluateOrg) evaluateRule(
 		return nil
 	}
 
-	gateState.Rules = append(gateState.Rules, spendrules.GateRule{
-		RuleURN:    ruleURN.String(),
-		RuleName:   rule.Name,
-		Action:     rule.Action,
-		TargetExpr: rule.TargetExpr,
-		RuleExpr:   rule.RuleExpr,
-		LimitUSD:   limitUSD,
-		WarnAtPct:  rule.WarnAtPct,
-		WindowKind: rule.WindowKind,
-		WindowEnd:  windowEnd,
-	})
 	if len(matched) == 0 {
 		return nil
 	}

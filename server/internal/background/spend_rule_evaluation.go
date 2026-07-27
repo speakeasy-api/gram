@@ -123,6 +123,55 @@ func SpendRuleOrgEvaluationWorkflowDebounced(ctx workflow.Context, organizationI
 	)(ctx, organizationID)
 }
 
+// SpendRuleActorEvaluationWorkflow refreshes one actor's spend cache. Identity
+// resolution is owned by the activity: signals may carry a Gram user ID, an
+// email, or both, and unresolved actors are skipped.
+func SpendRuleActorEvaluationWorkflow(ctx workflow.Context, signal spendrules.ActorEvaluationSignal) error {
+	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: spendRuleEvaluationActivityTimeout,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts:    3,
+			InitialInterval:    5 * time.Second,
+			BackoffCoefficient: 2,
+		},
+	})
+
+	var a *Activities
+	if err := workflow.ExecuteActivity(activityCtx, a.RefreshSpendRuleActor, spend_rules.EvaluateActorArgs{
+		OrganizationID: signal.OrganizationID,
+		UserID:         signal.UserID,
+		Email:          signal.Email,
+	}).Get(activityCtx, nil); err != nil {
+		return fmt.Errorf("refresh spend rule actor: %w", err)
+	}
+	return nil
+}
+
+func buildSpendRuleActorEvaluationWorkflowID(signal spendrules.ActorEvaluationSignal) string {
+	key := signal.UserID
+	if key == "" {
+		key = signal.Email
+	}
+	return "v1:spend-rule-actor-eval:" + signal.OrganizationID + ":" + key
+}
+
+func spendRuleActorEvaluationDebounceSignal(spendrules.ActorEvaluationSignal) string {
+	return "v1:spend-rule-actor-eval/signal"
+}
+
+type SpendRuleActorEvaluationResult struct{}
+
+func SpendRuleActorEvaluationWorkflowDebounced(ctx workflow.Context, signal spendrules.ActorEvaluationSignal) (SpendRuleActorEvaluationResult, error) {
+	return Debounce(
+		func(ctx workflow.Context, signal spendrules.ActorEvaluationSignal) (SpendRuleActorEvaluationResult, error) {
+			return SpendRuleActorEvaluationResult{}, SpendRuleActorEvaluationWorkflow(ctx, signal)
+		},
+		SpendRuleActorEvaluationWorkflowDebounced,
+		spendRuleActorEvaluationDebounceSignal,
+		func(spendrules.ActorEvaluationSignal, SpendRuleActorEvaluationResult) bool { return false },
+	)(ctx, signal)
+}
+
 // TemporalSpendRuleEvaluator implements spendrules.EvaluationSignaler by
 // signal-with-starting the debounced per-org evaluation workflow. If a run is
 // already in flight the signal enqueues exactly one follow-up run, so state
@@ -133,6 +182,7 @@ type TemporalSpendRuleEvaluator struct {
 }
 
 var _ spendrules.EvaluationSignaler = (*TemporalSpendRuleEvaluator)(nil)
+var _ spendrules.ActorEvaluationSignaler = (*TemporalSpendRuleEvaluator)(nil)
 
 func (e *TemporalSpendRuleEvaluator) Signal(ctx context.Context, organizationID string) error {
 	id := buildSpendRuleOrgEvaluationWorkflowID(organizationID)
@@ -152,6 +202,28 @@ func (e *TemporalSpendRuleEvaluator) Signal(ctx context.Context, organizationID 
 	)
 	if err != nil {
 		return fmt.Errorf("signal spend rule org evaluation: %w", err)
+	}
+	return nil
+}
+
+func (e *TemporalSpendRuleEvaluator) SignalActor(ctx context.Context, signal spendrules.ActorEvaluationSignal) error {
+	id := buildSpendRuleActorEvaluationWorkflowID(signal)
+	_, err := e.TemporalEnv.Client().SignalWithStartWorkflow(
+		ctx,
+		id,
+		spendRuleActorEvaluationDebounceSignal(signal),
+		"enqueue",
+		client.StartWorkflowOptions{
+			ID:                       id,
+			TaskQueue:                string(e.TemporalEnv.Queue()),
+			WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+		},
+		SpendRuleActorEvaluationWorkflowDebounced,
+		signal,
+	)
+	if err != nil {
+		return fmt.Errorf("signal spend rule actor evaluation: %w", err)
 	}
 	return nil
 }

@@ -97,6 +97,7 @@ func newTestSpendRulesService(t *testing.T) (context.Context, *testInstance) {
 		authzEngine,
 		audit.NewLogger(),
 		celEng,
+		cache.NewRedisCacheAdapter(redisClient),
 		sig,
 	)
 
