@@ -35,19 +35,18 @@ export function SkillManifestReview({
     return groupHunksByAnchor(parseSkillDiffHunks(suggestion.proposedDiff));
   }, [suggestion]);
 
+  const renderGutter = (anchor: SkillDiffAnchor): JSX.Element => (
+    <SkillSuggestionMarker
+      count={anchor.hunks.length}
+      open={openLine === anchor.line}
+      onToggle={() =>
+        setOpenLine((current) => (current === anchor.line ? null : anchor.line))
+      }
+    />
+  );
+
   const renderAnchor = (anchor: SkillDiffAnchor): JSX.Element | null => {
-    if (!suggestion) return null;
-    if (openLine !== anchor.line) {
-      return (
-        <div className="px-4 py-1">
-          <SkillSuggestionMarker
-            count={anchor.hunks.length}
-            open={false}
-            onToggle={() => setOpenLine(anchor.line)}
-          />
-        </div>
-      );
-    }
+    if (!suggestion || openLine !== anchor.line) return null;
     return (
       <div className="px-4">
         <SkillSuggestionComment
@@ -106,6 +105,7 @@ export function SkillManifestReview({
         <SkillManifestSource
           content={latestVersion.content}
           anchors={anchors}
+          renderGutter={renderGutter}
           renderAnchor={renderAnchor}
         />
       </Suspense>

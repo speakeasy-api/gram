@@ -1,51 +1,54 @@
-import { HighlightProvider } from "@/components/diffs/provider";
-import type { FileOptions, LineAnnotation, ThemeTypes } from "@pierre/diffs";
-import { File } from "@pierre/diffs/react";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 import type { SkillDiffAnchor } from "./skill-diff-anchors";
 
 /**
- * Renders SKILL.md exactly as agents load it, with review markers pinned to the
- * lines a suggestion touches. Line numbers must match the stored manifest, so
- * this renders the raw source including frontmatter.
+ * Renders SKILL.md exactly as agents load it, one line per row, with a review
+ * gutter beside the lines a suggestion changes. Line numbers address the stored
+ * manifest, so this renders the raw source including frontmatter.
  */
 export default function SkillManifestSource({
   content,
   anchors,
+  renderGutter,
   renderAnchor,
 }: {
   content: string;
   anchors: SkillDiffAnchor[];
+  renderGutter: (anchor: SkillDiffAnchor) => ReactNode;
   renderAnchor: (anchor: SkillDiffAnchor) => ReactNode;
 }): JSX.Element {
-  const { theme } = useMoonshineConfig();
-  let themeType: ThemeTypes = "system";
-  if (theme === "light") themeType = "light";
-  if (theme === "dark") themeType = "dark";
-
-  const options: FileOptions<SkillDiffAnchor> = {
-    theme: { dark: "pierre-dark", light: "pierre-light" },
-    themeType,
-    disableFileHeader: true,
-    disableLineNumbers: false,
-    overflow: "wrap",
-  };
-
-  const lineAnnotations: LineAnnotation<SkillDiffAnchor>[] = anchors.map(
-    (anchor) => ({ lineNumber: anchor.line, metadata: anchor }),
-  );
+  const lines = content.replace(/\n$/, "").split("\n");
+  const anchorsByLine = new Map(anchors.map((anchor) => [anchor.line, anchor]));
 
   return (
-    <HighlightProvider langs={["markdown"]}>
-      <div className="overflow-x-auto rounded-lg border">
-        <File
-          file={{ name: "SKILL.md", contents: content, lang: "markdown" }}
-          options={options}
-          lineAnnotations={lineAnnotations}
-          renderAnnotation={(annotation) => renderAnchor(annotation.metadata)}
-        />
-      </div>
-    </HighlightProvider>
+    <ol className="font-mono text-xs">
+      {lines.map((line, index) => {
+        const lineNumber = index + 1;
+        const anchor = anchorsByLine.get(lineNumber);
+
+        return (
+          <li key={lineNumber}>
+            <div
+              className={cn(
+                "grid grid-cols-[2.25rem_2.5rem_1fr] items-start",
+                anchor && "bg-muted/40",
+              )}
+            >
+              <span className="flex justify-center py-0.5">
+                {anchor ? renderGutter(anchor) : null}
+              </span>
+              <span className="text-muted-foreground/60 py-0.5 pr-3 text-right select-none">
+                {lineNumber}
+              </span>
+              <code className="py-0.5 pr-4 break-words whitespace-pre-wrap">
+                {line || " "}
+              </code>
+            </div>
+            {anchor ? renderAnchor(anchor) : null}
+          </li>
+        );
+      })}
+    </ol>
   );
 }
