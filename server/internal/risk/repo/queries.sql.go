@@ -3273,6 +3273,50 @@ func (q *Queries) ListRiskUserRuleBreakdown(ctx context.Context, arg ListRiskUse
 	return items, nil
 }
 
+const listUserEmailsByIDs = `-- name: ListUserEmailsByIDs :many
+SELECT u.id, u.email
+FROM users u
+JOIN organization_user_relationships our
+  ON our.user_id = u.id
+  AND our.organization_id = $1
+WHERE u.id = ANY($2::text[])
+`
+
+type ListUserEmailsByIDsParams struct {
+	OrganizationID string
+	Ids            []string
+}
+
+type ListUserEmailsByIDsRow struct {
+	ID    string
+	Email string
+}
+
+// Display-email lookup for the ClickHouse-backed overview top-users list,
+// tenant-bound through org membership so a caller can never resolve emails of
+// users outside its organization. Soft-deleted memberships are intentionally
+// included: findings from since-removed org members keep a resolvable email,
+// mirroring the Postgres overview query's unconditional users join.
+func (q *Queries) ListUserEmailsByIDs(ctx context.Context, arg ListUserEmailsByIDsParams) ([]ListUserEmailsByIDsRow, error) {
+	rows, err := q.db.Query(ctx, listUserEmailsByIDs, arg.OrganizationID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserEmailsByIDsRow
+	for rows.Next() {
+		var i ListUserEmailsByIDsRow
+		if err := rows.Scan(&i.ID, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markMessagesRiskAnalyzed = `-- name: MarkMessagesRiskAnalyzed :exec
 UPDATE chat_messages
 SET risk_analyzed_at = clock_timestamp()

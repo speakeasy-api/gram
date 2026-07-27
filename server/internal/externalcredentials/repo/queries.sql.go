@@ -141,11 +141,13 @@ func (q *Queries) CreateGcpIamCredential(ctx context.Context, arg CreateGcpIamCr
 }
 
 const getAwsIamCredential = `-- name: GetAwsIamCredential :one
+
 SELECT ec.id, ec.organization_id, ec.project_id, ec.provider, ec.name, ec.created_at, ec.updated_at, ec.deleted_at, ec.deleted, aws.external_credential_id, aws.external_credentials_provider, aws.assume_role_arn, aws.external_id, aws.oidc_audience, aws.oidc_subject, aws.sts_region, aws.created_at, aws.updated_at
 FROM external_credentials AS ec
 JOIN aws_iam_credentials AS aws ON aws.external_credential_id = ec.id
 WHERE ec.id = $1
-  AND ec.organization_id = $2
+  AND ec.organization_id IS NOT DISTINCT FROM $2
+  AND ec.project_id IS NULL
   AND ec.provider = 'aws_iam'
   AND ec.deleted IS FALSE
 `
@@ -160,6 +162,13 @@ type GetAwsIamCredentialRow struct {
 	AwsIamCredential   AwsIamCredential
 }
 
+// Tenancy for the reads and writes below is a single nullable parameter:
+// @organization_id is a customer organization for organization-scoped rows, or
+// NULL for platform-scoped rows (Gram's own credentials, managed by the
+// platform-admin surface). IS NOT DISTINCT FROM makes NULL match NULL, so both
+// tiers share one query set; the platform-admin handlers pass a NULL
+// organization_id, exactly as they already do for CreateExternalCredential.
+// project_id is always NULL for these rows in both tiers.
 func (q *Queries) GetAwsIamCredential(ctx context.Context, arg GetAwsIamCredentialParams) (GetAwsIamCredentialRow, error) {
 	row := q.db.QueryRow(ctx, getAwsIamCredential, arg.ID, arg.OrganizationID)
 	var i GetAwsIamCredentialRow
@@ -191,7 +200,8 @@ SELECT ec.id, ec.organization_id, ec.project_id, ec.provider, ec.name, ec.create
 FROM external_credentials AS ec
 JOIN gcp_iam_credentials AS gcp ON gcp.external_credential_id = ec.id
 WHERE ec.id = $1
-  AND ec.organization_id = $2
+  AND ec.organization_id IS NOT DISTINCT FROM $2
+  AND ec.project_id IS NULL
   AND ec.provider = 'gcp_iam'
   AND ec.deleted IS FALSE
 `
@@ -234,7 +244,8 @@ func (q *Queries) GetGcpIamCredential(ctx context.Context, arg GetGcpIamCredenti
 const listExternalCredentials = `-- name: ListExternalCredentials :many
 SELECT id, organization_id, project_id, provider, name, created_at, updated_at, deleted_at, deleted
 FROM external_credentials
-WHERE organization_id = $1
+WHERE organization_id IS NOT DISTINCT FROM $1
+  AND project_id IS NULL
   AND deleted IS FALSE
   AND ($2::text IS NULL OR provider = $2::text)
 ORDER BY id DESC
@@ -279,7 +290,8 @@ const softDeleteExternalCredential = `-- name: SoftDeleteExternalCredential :one
 UPDATE external_credentials
 SET deleted_at = clock_timestamp()
 WHERE id = $1
-  AND organization_id = $2
+  AND organization_id IS NOT DISTINCT FROM $2
+  AND project_id IS NULL
   AND provider = $3
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, provider, name, created_at, updated_at, deleted_at, deleted
@@ -361,7 +373,8 @@ UPDATE external_credentials
 SET name = $1,
     updated_at = clock_timestamp()
 WHERE id = $2
-  AND organization_id = $3
+  AND organization_id IS NOT DISTINCT FROM $3
+  AND project_id IS NULL
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, provider, name, created_at, updated_at, deleted_at, deleted
 `

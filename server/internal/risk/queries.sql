@@ -1543,6 +1543,19 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: ListUserEmailsByIDs :many
+-- Display-email lookup for the ClickHouse-backed overview top-users list,
+-- tenant-bound through org membership so a caller can never resolve emails of
+-- users outside its organization. Soft-deleted memberships are intentionally
+-- included: findings from since-removed org members keep a resolvable email,
+-- mirroring the Postgres overview query's unconditional users join.
+SELECT u.id, u.email
+FROM users u
+JOIN organization_user_relationships our
+  ON our.user_id = u.id
+  AND our.organization_id = @organization_id
+WHERE u.id = ANY(@ids::text[]);
+
 -- name: GetChatMessageAttribution :many
 -- Resolves the denormalized attribution (chat id, user ids) the ClickHouse
 -- finding writer stamps on risk_findings rows at ingest. Message-level ids win

@@ -684,7 +684,7 @@ function OrgInfoSection(): ReactElement {
           {organization.slug}
         </dd>
         <dt className="text-muted-foreground">ID</dt>
-        <dd className="text-foreground truncate font-mono">
+        <dd className="text-foreground break-all font-mono">
           {organization.id}
         </dd>
       </dl>
