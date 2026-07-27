@@ -339,6 +339,90 @@ CREATE TABLE IF NOT EXISTS skill_version_origins (
 CREATE INDEX IF NOT EXISTS skill_version_origins_project_id_skill_id_idx
 ON skill_version_origins (project_id, skill_id);
 
+CREATE TABLE IF NOT EXISTS skill_feedback (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  skill_id uuid,
+  skill_version_id uuid,
+
+  skill_name TEXT NOT NULL,
+  source TEXT NOT NULL,
+  outcome TEXT NOT NULL,
+  note TEXT,
+  session_id TEXT,
+  user_id TEXT,
+  user_email TEXT,
+  reviewed_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_feedback_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_feedback_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skill_feedback_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE NO ACTION,
+  CONSTRAINT skill_feedback_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE NO ACTION,
+  CONSTRAINT skill_feedback_note_size_check CHECK (note <> '' AND CHAR_LENGTH(note) <= 4000),
+  CONSTRAINT skill_feedback_skill_id_skill_version_id_check CHECK (skill_version_id IS NULL OR skill_id IS NOT NULL)
+);
+
+CREATE INDEX IF NOT EXISTS skill_feedback_project_id_skill_name_created_at_id_idx
+ON skill_feedback (project_id, skill_name, created_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS skill_feedback_project_id_skill_name_created_at_unreviewed_idx
+ON skill_feedback (project_id, skill_name, created_at)
+WHERE reviewed_at IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_feedback_project_id_id_key
+ON skill_feedback (project_id, id);
+
+CREATE TABLE IF NOT EXISTS skill_edit_suggestions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  base_version_id uuid NOT NULL,
+
+  proposed_diff TEXT NOT NULL,
+  rationale TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  scored_session_count bigint NOT NULL DEFAULT 0,
+  approved_by_user_id TEXT,
+  approved_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_edit_suggestions_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_edit_suggestions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skill_edit_suggestions_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE NO ACTION,
+  CONSTRAINT skill_edit_suggestions_skill_id_base_version_id_fkey FOREIGN KEY (skill_id, base_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE NO ACTION,
+  CONSTRAINT skill_edit_suggestions_proposed_diff_size_check CHECK (octet_length(proposed_diff) <= 131072)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_edit_suggestions_skill_id_open_key
+ON skill_edit_suggestions (skill_id)
+WHERE status = 'open';
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_edit_suggestions_project_id_id_key
+ON skill_edit_suggestions (project_id, id);
+
+CREATE INDEX IF NOT EXISTS skill_edit_suggestions_project_id_skill_id_created_at_idx
+ON skill_edit_suggestions (project_id, skill_id, created_at DESC);
+
+-- Evidence linking each suggestion to the feedback rows it was generated from.
+CREATE TABLE IF NOT EXISTS skill_edit_suggestion_feedback (
+  project_id uuid NOT NULL,
+  suggestion_id uuid NOT NULL,
+  feedback_id uuid NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_edit_suggestion_feedback_pkey PRIMARY KEY (suggestion_id, feedback_id),
+  CONSTRAINT skill_edit_suggestion_feedback_project_id_suggestion_id_fkey FOREIGN KEY (project_id, suggestion_id) REFERENCES skill_edit_suggestions (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT skill_edit_suggestion_feedback_project_id_feedback_id_fkey FOREIGN KEY (project_id, feedback_id) REFERENCES skill_feedback (project_id, id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS skill_edit_suggestion_feedback_project_id_feedback_id_idx
+ON skill_edit_suggestion_feedback (project_id, feedback_id);
+
 CREATE TABLE IF NOT EXISTS skill_observations (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
