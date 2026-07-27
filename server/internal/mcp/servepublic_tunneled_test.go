@@ -84,7 +84,6 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Clear-Site-Data", `"cookies"`)
 	}
 
-	// Customer backend behavior.
 	switch r.Method {
 	case http.MethodDelete:
 		if g.backendSessionID == "" || r.Header.Get("Mcp-Session-Id") != g.backendSessionID {
@@ -105,7 +104,6 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabilities":{},"serverInfo":{"name":"fake-tunnel-backend","version":"1.0.0"}}}`)
 			return
 		}
-		// Session-bearing method: the backend only knows its own session id.
 		if g.backendSessionID != "" && r.Header.Get("Mcp-Session-Id") != g.backendSessionID {
 			http.Error(w, "unknown session", http.StatusNotFound)
 			return
@@ -118,9 +116,6 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// publicTunnelFixture seeds a tunneled source with allow_public consent, a
-// public mcp_server fronting it, an mcp_endpoint, and a live fake gateway
-// route.
 type publicTunnelFixture struct {
 	endpointSlug string
 	tunnelID     uuid.UUID
@@ -192,8 +187,6 @@ func newPublicTunnelFixture(t *testing.T, ctx context.Context, ti *testInstance,
 	}
 }
 
-// serveTunneledPublicRequest drives an anonymous request through ServePublic
-// with an arbitrary method and optional Mcp-Session-Id.
 func serveTunneledPublicRequest(t *testing.T, ti *testInstance, slug, method string, body []byte, sessionID string) (*httptest.ResponseRecorder, error) {
 	t.Helper()
 
@@ -221,8 +214,6 @@ func serveTunneledPublicRequest(t *testing.T, ti *testInstance, slug, method str
 	return w, nil
 }
 
-// initializeTunneledPublicSession runs a successful anonymous initialize and
-// returns the Gram-owned session id from the response.
 func initializeTunneledPublicSession(t *testing.T, ti *testInstance, fixture publicTunnelFixture) string {
 	t.Helper()
 
@@ -234,10 +225,6 @@ func initializeTunneledPublicSession(t *testing.T, ti *testInstance, fixture pub
 	return sid
 }
 
-// TestServePublic_Tunneled_AnonymousInitializeMintsGramSession: the core
-// anonymous flow — initialize succeeds with no credentials, the response
-// carries a Gram-owned session id (never the backend's), and the forward
-// carried no Authorization header into the tunnel.
 func TestServePublic_Tunneled_AnonymousInitializeMintsGramSession(t *testing.T) {
 	t.Parallel()
 
@@ -253,9 +240,6 @@ func TestServePublic_Tunneled_AnonymousInitializeMintsGramSession(t *testing.T) 
 	require.Empty(t, forwarded.Get(wire.HeaderTunnelAgentSession), "initialize must not pin an exact target")
 }
 
-// TestServePublic_Tunneled_SessionRequestPinsExactTarget: a session-bearing
-// request resolves the mapping, forwards the backend's own session id, and
-// pins the exact agent session that served the initialize.
 func TestServePublic_Tunneled_SessionRequestPinsExactTarget(t *testing.T) {
 	t.Parallel()
 
@@ -275,9 +259,8 @@ func TestServePublic_Tunneled_SessionRequestPinsExactTarget(t *testing.T) {
 	require.NotEmpty(t, forwarded.Get(wire.HeaderTunnelConsumerSession))
 }
 
-// TestServePublic_Tunneled_UnknownOrMalformedSessionIs404: session ids that
-// are not Gram-minted, or valid-shaped but unknown, must 404 so MCP clients
-// re-initialize — and must never be forwarded into the tunnel.
+// Session ids that are not Gram-minted, or valid-shaped but unknown, must
+// never be forwarded into the tunnel.
 func TestServePublic_Tunneled_UnknownOrMalformedSessionIs404(t *testing.T) {
 	t.Parallel()
 
@@ -298,10 +281,8 @@ func TestServePublic_Tunneled_UnknownOrMalformedSessionIs404(t *testing.T) {
 	require.Zero(t, gateway.forwardCount(), "unknown sessions must not reach the tunnel")
 }
 
-// TestServePublic_Tunneled_DeadAgentSessionTranslatesTo404: when the pinned
-// agent session is gone the gateway answers no-live-session; Gram must
-// translate that to 404 and drop the mapping so the client re-initializes
-// rather than seeing 502s forever.
+// A dead pinned agent session must surface as 404 and drop the mapping so
+// the client re-initializes rather than seeing 502s forever.
 func TestServePublic_Tunneled_DeadAgentSessionTranslatesTo404(t *testing.T) {
 	t.Parallel()
 
@@ -321,7 +302,6 @@ func TestServePublic_Tunneled_DeadAgentSessionTranslatesTo404(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 
-	// The mapping is gone: the same sid now 404s before reaching the tunnel.
 	before := gateway.forwardCount()
 	_, err = serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeToolsListBody(), sid)
 	require.Error(t, err)
@@ -330,8 +310,6 @@ func TestServePublic_Tunneled_DeadAgentSessionTranslatesTo404(t *testing.T) {
 	require.Equal(t, before, gateway.forwardCount(), "dropped session must not be re-forwarded")
 }
 
-// TestServePublic_Tunneled_DeleteTerminatesSession: DELETE forwards the
-// backend session id and drops the mapping on success.
 func TestServePublic_Tunneled_DeleteTerminatesSession(t *testing.T) {
 	t.Parallel()
 
@@ -353,8 +331,7 @@ func TestServePublic_Tunneled_DeleteTerminatesSession(t *testing.T) {
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
-// TestServePublic_Tunneled_SessionlessBackendGetsNoSyntheticSession: a
-// backend that returns no Mcp-Session-Id is sessionless per the MCP spec;
+// A backend that returns no Mcp-Session-Id is sessionless per the MCP spec;
 // Gram must not synthesize a session header the backend did not produce.
 func TestServePublic_Tunneled_SessionlessBackendGetsNoSyntheticSession(t *testing.T) {
 	t.Parallel()
@@ -368,16 +345,14 @@ func TestServePublic_Tunneled_SessionlessBackendGetsNoSyntheticSession(t *testin
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Empty(t, w.Header().Get("Mcp-Session-Id"))
 
-	// Follow-up sessionless traffic still serves.
 	w, err = serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeToolsListBody(), "")
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 }
 
-// TestServePublic_Tunneled_LegacyGatewayFailsClosed: a gateway that does not
-// report the agent session it served cannot support exact-target pinning; a
-// session-bearing initialize must fail closed rather than mint an untrackable
-// session.
+// A gateway that does not report the agent session it served cannot support
+// exact-target pinning; a session-bearing initialize must fail closed rather
+// than mint an untrackable session.
 func TestServePublic_Tunneled_LegacyGatewayFailsClosed(t *testing.T) {
 	t.Parallel()
 
@@ -394,9 +369,9 @@ func TestServePublic_Tunneled_LegacyGatewayFailsClosed(t *testing.T) {
 	require.Equal(t, oops.CodeUnavailable, oopsErr.Code)
 }
 
-// TestServePublic_Tunneled_StripsBackendChallenge: a WWW-Authenticate
-// challenge from the customer's backend must never reach an anonymous caller
-// — this endpoint has no authorization server to direct them to.
+// A WWW-Authenticate challenge from the customer's backend must never reach
+// an anonymous caller — this endpoint has no authorization server to direct
+// them to.
 func TestServePublic_Tunneled_StripsBackendChallenge(t *testing.T) {
 	t.Parallel()
 
@@ -413,9 +388,6 @@ func TestServePublic_Tunneled_StripsBackendChallenge(t *testing.T) {
 	require.Empty(t, w.Header().Get(wire.HeaderTunnelAgentSession), "internal tunnel headers must not leak")
 }
 
-// TestServePublic_Tunneled_LiveSessionCapRejectsInitialize: once the
-// per-tunnel anonymous session cap is reached, further initializes are
-// rejected before touching the customer's backend.
 func TestServePublic_Tunneled_LiveSessionCapRejectsInitialize(t *testing.T) {
 	t.Parallel()
 
@@ -443,9 +415,8 @@ func TestServePublic_Tunneled_LiveSessionCapRejectsInitialize(t *testing.T) {
 	require.Equal(t, forwardsAfterFirst, gateway.forwardCount(), "capacity rejection must not reach the backend")
 }
 
-// TestServePublic_Tunneled_OAuthSurfaceIs404: the OAuth discovery and grant
-// surface must not exist for anonymous public tunneled endpoints even though
-// the issuer column is populated.
+// The OAuth discovery and grant surface must not exist for anonymous public
+// tunneled endpoints even though the issuer column is populated.
 func TestServePublic_Tunneled_OAuthSurfaceIs404(t *testing.T) {
 	t.Parallel()
 
@@ -467,8 +438,6 @@ func TestServePublic_Tunneled_OAuthSurfaceIs404(t *testing.T) {
 	err = ti.service.ServeWellKnownAuthorizationServerForServer(w, req, logger, mcpEndpoint, mcpServer, "mcp")
 	requireNotFoundOops(t, err)
 
-	// The issuer-gated grant handlers resolve through
-	// LoadResolvedMcpEndpointBySlug, which must refuse the slug outright.
 	_, err = ti.service.LoadResolvedMcpEndpointBySlug(ctx, logger, fixture.endpointSlug, "mcp")
 	requireNotFoundOops(t, err)
 }
@@ -481,9 +450,8 @@ func requireNotFoundOops(t *testing.T, err error) {
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
-// TestServePublic_Tunneled_PrivateVisibilityUnaffected: a tunneled server
-// with private visibility still requires authentication even when the source
-// has allow_public set — consent alone must not open anything.
+// Consent alone must not open anything: a private tunneled server still
+// requires authentication even when the source has allow_public set.
 func TestServePublic_Tunneled_PrivateVisibilityUnaffected(t *testing.T) {
 	t.Parallel()
 
@@ -536,8 +504,6 @@ func TestServePublic_Tunneled_PrivateVisibilityUnaffected(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Anonymous request against a private tunneled server: still challenged,
-	// never anonymous.
 	w, err := serveTunneledPublicRequest(t, ti, endpointSlug, http.MethodPost, makeInitializeBody(), "")
 	if err == nil {
 		require.Equal(t, http.StatusUnauthorized, w.Code)

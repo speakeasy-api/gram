@@ -260,9 +260,6 @@ func TestCreateMcpServer_RBACForbidden(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
-// TestCreateMcpServer_TunneledMcpPublicAllowedWithConsent: the double opt-in —
-// once the tunnel source owner sets allow_public, a fronting mcp_server may
-// take public visibility.
 func TestCreateMcpServer_TunneledMcpPublicAllowedWithConsent(t *testing.T) {
 	t.Parallel()
 

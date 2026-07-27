@@ -185,8 +185,6 @@ func TestPurgeDropsAllTunnelSessions(t *testing.T) {
 	require.Zero(t, count)
 }
 
-// TestResolveWithoutRefreshDoesNotExtendSession: DELETE-path resolution must
-// not slide the session lifetime forward.
 func TestResolveWithoutRefreshDoesNotExtendSession(t *testing.T) {
 	t.Parallel()
 
@@ -198,17 +196,14 @@ func TestResolveWithoutRefreshDoesNotExtendSession(t *testing.T) {
 	require.NoError(t, store.Reserve(t.Context(), tunnelID, "server-1", sid))
 	require.NoError(t, store.Commit(t.Context(), tunnelID, "server-1", sid, Session{BackendSessionID: "b", GatewayAddr: "a", AgentSessionID: "s"}))
 
-	// Keep resolving without refresh; the session must still expire on its
-	// original TTL rather than being kept alive by the reads.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		_, resolveErr := store.Resolve(t.Context(), tunnelID, "server-1", sid, false)
 		assert.ErrorIs(c, resolveErr, ErrNotFound)
 	}, 5*time.Second, 20*time.Millisecond)
 }
 
-// TestCommitRequiresLiveReservation: a Commit after the reservation's live-set
-// member is gone (a concurrent Purge won) must fail with ErrReservationLost
-// and must not recreate the mapping.
+// A Commit after a concurrent Purge won the race must fail with
+// ErrReservationLost and must not recreate the mapping.
 func TestCommitRequiresLiveReservation(t *testing.T) {
 	t.Parallel()
 
@@ -218,7 +213,6 @@ func TestCommitRequiresLiveReservation(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, store.Reserve(t.Context(), tunnelID, "server-1", sid))
-	// Purge (consent withdrawn) removes the reservation before Commit.
 	require.NoError(t, store.Purge(t.Context(), tunnelID))
 
 	err = store.Commit(t.Context(), tunnelID, "server-1", sid, Session{BackendSessionID: "b", GatewayAddr: "a", AgentSessionID: "s"})
@@ -231,11 +225,9 @@ func TestCommitRequiresLiveReservation(t *testing.T) {
 	require.Zero(t, count)
 }
 
-// TestCommitRealignsLiveSetToMappingTTL: a delayed Commit must re-align the
-// live-set member's expiry to the mapping's fresh TTL, so a mapping cannot
-// outlive its live-set member (which would leave it uncounted and
-// unpurgeable). A refreshed session must never drift into resolvable-but-
-// uncounted.
+// A delayed Commit must re-align the live-set member's expiry to the
+// mapping's fresh TTL so a session never drifts into
+// resolvable-but-uncounted (uncounted and unpurgeable).
 func TestCommitRealignsLiveSetToMappingTTL(t *testing.T) {
 	t.Parallel()
 
@@ -259,8 +251,6 @@ func TestCommitRealignsLiveSetToMappingTTL(t *testing.T) {
 	}, 800*time.Millisecond, 50*time.Millisecond)
 }
 
-// TestPurgeIsAtomicAcrossMembers: Purge drops every mapping AND the live set
-// in one shot, leaving nothing resolvable or counted.
 func TestPurgeIsAtomicAcrossMembers(t *testing.T) {
 	t.Parallel()
 

@@ -753,8 +753,6 @@ func TestUpdateMcpServer_AlreadyEnabledUpdateDoesNotAttach(t *testing.T) {
 	require.Empty(t, servers)
 }
 
-// TestUpdateMcpServer_TunneledMcpPublicAllowedWithConsent: flipping a private
-// tunneled server to public succeeds once the source owner has consented.
 func TestUpdateMcpServer_TunneledMcpPublicAllowedWithConsent(t *testing.T) {
 	t.Parallel()
 

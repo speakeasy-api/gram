@@ -249,8 +249,6 @@ func (s *Service) ServeWellKnownAuthorizationServerForServer(
 ) error {
 	ctx := r.Context()
 
-	// Public tunneled servers are anonymous: no OAuth metadata exists for
-	// them despite the populated issuer column.
 	if isTunneledPublic(mcpServer) {
 		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
 	}

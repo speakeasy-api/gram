@@ -230,14 +230,11 @@ type Proxy struct {
 	// relayed to the user. It may mutate resp.Header (headers are copied to
 	// the client afterwards). A non-nil error aborts the relay entirely; no
 	// status or headers have been written yet, so the caller's error path
-	// owns the client response. Used by anonymous tunneled MCP to translate
-	// the backend session header and fail closed when its session state
-	// cannot be recorded.
+	// owns the client response.
 	UpstreamResponseInterceptor func(ctx context.Context, resp *http.Response) error
 
 	// DisableRedirects stops the upstream client from following redirect
-	// responses; the 3xx relays to the caller as-is. Tunneled forwards set
-	// this: a redirect target is never another tunnel hop, and following one
+	// responses; the 3xx relays to the caller as-is. Following a redirect
 	// would replay Gram's internal forward headers (including the tunnel
 	// forward token) against an upstream-controlled URL.
 	DisableRedirects bool

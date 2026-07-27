@@ -46,9 +46,6 @@ import (
 	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
-// anonymousAffinityPrefix namespaces the consumer-session key derived from a
-// Gram-minted anonymous session id, distinguishing it from the "auth" prefix
-// used for token-derived affinity keys.
 const anonymousAffinityPrefix = "anonsid"
 
 // TunnelPublicConfig carries the operator-tunable knobs for anonymous public
@@ -90,8 +87,7 @@ func (c TunnelPublicConfig) withDefaults() TunnelPublicConfig {
 }
 
 // tunnelPublicRuntime bundles the session store and rate limiters for the
-// anonymous public tunnel path. Nil on a Service means the capability is not
-// wired (no Redis) and every public tunneled request fails closed.
+// anonymous public tunnel path.
 type tunnelPublicRuntime struct {
 	cfg               TunnelPublicConfig
 	sessions          *tunnelsessions.Store
@@ -114,8 +110,7 @@ func newTunnelPublicRuntime(redisClient *redis.Client, cfg TunnelPublicConfig) *
 }
 
 // isTunneledPublic reports whether the mcp_server is a tunneled backend with
-// public visibility — the anonymous serving mode. All issuer-gate skips,
-// OAuth-surface 404s, and consent checks key off this predicate.
+// public visibility — the anonymous serving mode.
 func isTunneledPublic(mcpServer *mcpserversrepo.McpServer) bool {
 	return mcpServer.TunneledMcpServerID.Valid && mcpServer.Visibility == mcpservers.VisibilityPublic
 }
@@ -179,8 +174,6 @@ func (s *Service) serveTunneledPublicBackend(
 	}
 	rt := s.tunnelPublic
 
-	// Hard-bound the whole exchange, including SSE streams: the proxy's idle
-	// timeout alone would let an active stream outlive its session slot.
 	ctx, cancel := context.WithTimeout(ctx, rt.cfg.MaxRequestLifetime)
 	defer cancel()
 	r = r.WithContext(ctx)
@@ -199,10 +192,6 @@ func (s *Service) serveTunneledPublicBackend(
 		return oops.E(oops.CodeRateLimitExceeded, nil, "too many requests to this MCP server").LogWarn(ctx, logger)
 	}
 
-	// Identity probe + project context, shared with the other public
-	// backends: anonymous callers pass through untouched; Gram-authenticated
-	// callers get their context stamped. Invalid supplied credentials are
-	// rejected (parity with public remote/toolset backends).
 	ctx, err = s.prepareProxyBackendContext(ctx, w, r, logger, endpoint, mcpServer)
 	if err != nil {
 		return err
@@ -472,8 +461,6 @@ func (s *Service) serveTunneledPublicSession(
 	}
 	logger = logger.With(attr.SlogTunnelAnonymousSessionHash(hashSessionID(sid)))
 
-	// DELETE resolves without extending the session's life; POST/GET slide
-	// the TTL forward.
 	refresh := r.Method != http.MethodDelete
 	session, err := rt.sessions.Resolve(ctx, tunnelID, mcpServerID, sid, refresh)
 	switch {
@@ -516,8 +503,7 @@ func (s *Service) serveTunneledPublicSession(
 			StaticValue:            session.AgentSessionID,
 			ValueFromRequestHeader: "",
 		},
-		// Forward the backend's own session id in place of the Gram-owned
-		// one; configured headers win over copied request headers.
+		// Configured headers win over copied request headers.
 		proxy.ConfiguredHeader{
 			IsRequired:             true,
 			Name:                   proxy.McpSessionIDHeader,
@@ -540,8 +526,7 @@ func (s *Service) serveTunneledPublicSession(
 		"",
 		"",
 	)
-	// Same rationale as buildProxy: never follow a backend-controlled
-	// redirect with Gram's internal forward headers attached.
+	// Redirects won't work across a tunnel boundary; disable.
 	p.DisableRedirects = true
 	if len(m.gatewayCIDRs) > 0 {
 		p.GuardianClientOptions = []guardian.ClientOption{guardian.WithAllowedCIDRBlocks(m.gatewayCIDRs...)}

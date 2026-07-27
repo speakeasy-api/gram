@@ -155,8 +155,6 @@ func seedTunneledMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	return server.ID
 }
 
-// enableTunneledPublicConsent records the tunnel source owner's allow_public
-// consent, unblocking public visibility on fronting mcp_servers.
 func enableTunneledPublicConsent(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, tunneledServerID uuid.UUID) {
 	t.Helper()
 

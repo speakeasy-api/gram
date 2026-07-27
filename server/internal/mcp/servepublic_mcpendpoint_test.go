@@ -148,13 +148,9 @@ func createRemoteMcpEndpoint(
 	return mcpServer, remoteServer
 }
 
-// TestServePublic_McpEndpoint_PublicTunneledBacked_FailsClosed: a tunneled
-// MCP server with public visibility only serves anonymously when the tunnel
-// source's owner has set allow_public (double opt-in). This test seeds the
-// non-consented state directly through the repo layer (the shape a manual SQL
-// edit or future write path would produce) and asserts the serve path fails
-// closed — as a 404, so unauthenticated callers cannot distinguish a gated
-// endpoint from a missing one — rather than proxying into the tunnel.
+// A tunneled MCP server with public visibility but no allow_public consent
+// must fail closed — as a 404, so unauthenticated callers cannot distinguish
+// a gated endpoint from a missing one.
 func TestServePublic_McpEndpoint_PublicTunneledBacked_FailsClosed(t *testing.T) {
 	t.Parallel()
 

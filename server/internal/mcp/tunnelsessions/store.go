@@ -69,8 +69,7 @@ type Store struct {
 	redis *redis.Client
 	// ttl is the sliding session lifetime: set at reserve, refreshed on every
 	// session-bearing POST/GET.
-	ttl time.Duration
-	// liveCap bounds concurrently tracked sessions per tunnel.
+	ttl     time.Duration
 	liveCap int
 }
 
@@ -313,10 +312,9 @@ func (s *Store) Purge(ctx context.Context, tunnelID string) error {
 	return Purge(ctx, s.redis, tunnelID)
 }
 
-// Purge is the package-level variant of [Store.Purge] for callers (e.g. the
-// tunneledmcp management service) that only revoke sessions and have no use
-// for a fully configured store. Atomic (single Lua) so it cannot interleave
-// with a concurrent Commit.
+// Purge is the package-level variant of [Store.Purge] for callers that only
+// revoke sessions and have no use for a fully configured store. Atomic
+// (single Lua) so it cannot interleave with a concurrent Commit.
 func Purge(ctx context.Context, redisClient *redis.Client, tunnelID string) error {
 	// mappingKey prefix a member is appended to: keep in sync with mappingKey.
 	prefix := "tunnelsess:map:" + tunnelID + ":"

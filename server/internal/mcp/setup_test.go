@@ -93,9 +93,7 @@ type testInstance struct {
 	enc                 *encryption.Client
 	authzEngine         *authz.Engine
 	audit               *audit.Logger
-	// tunnelRoutes is the in-memory tunnel route store wired into the
-	// service; tunneled-MCP tests publish fake gateway addresses into it.
-	tunnelRoutes route.Store
+	tunnelRoutes        route.Store
 }
 
 // newTestMCPService wires a permissive identity resolver. Tests asserting

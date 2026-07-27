@@ -335,9 +335,6 @@ func newYamuxSession(t *testing.T) *yamux.Session {
 	return client
 }
 
-// TestRegistryBeginForwardExactSessionHitsOnlyThatSession: an exact-target
-// forward must land on the named agent session every time, regardless of
-// round-robin or consumer-session rendezvous state.
 func TestRegistryBeginForwardExactSessionHitsOnlyThatSession(t *testing.T) {
 	reg := newRegistry()
 	sessionA := newYamuxSession(t)
@@ -354,10 +351,8 @@ func TestRegistryBeginForwardExactSessionHitsOnlyThatSession(t *testing.T) {
 	}
 }
 
-// TestRegistryBeginForwardExactSessionMissingIsNoSession: when the exact
-// target agent session is gone, the forward must fail with no-live-session
-// rather than spill to a live sibling — the sibling's backend does not know
-// the MCP session pinned to the dead agent.
+// A missing exact target must fail with no-live-session rather than spill
+// to a live sibling whose backend does not know the pinned MCP session.
 func TestRegistryBeginForwardExactSessionMissingIsNoSession(t *testing.T) {
 	reg := newRegistry()
 	sessionA := newYamuxSession(t)
@@ -368,8 +363,8 @@ func TestRegistryBeginForwardExactSessionMissingIsNoSession(t *testing.T) {
 	require.Equal(t, forwardNoSession, failure)
 }
 
-// TestRegistryBeginForwardExactSessionAtCapIsBusy: an exact target at its
-// substream cap is busy (healthy, do not unpublish), not no-session.
+// An exact target at its substream cap is busy (healthy, do not unpublish),
+// not no-session.
 func TestRegistryBeginForwardExactSessionAtCapIsBusy(t *testing.T) {
 	reg := newRegistry()
 	sessionA := newYamuxSession(t)
@@ -384,10 +379,8 @@ func TestRegistryBeginForwardExactSessionAtCapIsBusy(t *testing.T) {
 	require.Equal(t, forwardBusy, failure)
 }
 
-// TestForwardHandlerReportsAgentSessionAndStripsExactHeader: the gateway must
-// echo the served agent session id in the response header and must not leak
-// the exact-target request header (or any internal tunnel header) to the
-// agent.
+// The gateway must echo the served agent session id and must not leak the
+// exact-target header (or any internal tunnel header) to the agent.
 func TestForwardHandlerReportsAgentSessionAndStripsExactHeader(t *testing.T) {
 	t.Parallel()
 

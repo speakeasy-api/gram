@@ -324,8 +324,7 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		}
 		// A tunnel flipped to public visibility mid-OAuth-flow has no OAuth
 		// surface: reject the cached-ref resumption (e.g. /mcp/idp_callback)
-		// so a visibility change closes in-flight flows, matching the by-slug
-		// resolver and the well-known handlers.
+		// so a visibility change closes in-flight flows.
 		if !mcpServer.UserSessionIssuerID.Valid || isTunneledPublic(&mcpServer) {
 			return nil, oops.E(oops.CodeNotFound, nil, "not found")
 		}

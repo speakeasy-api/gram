@@ -332,8 +332,6 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	// Withdrawing public consent revokes every live anonymous session so a
-	// later re-enable cannot resurrect them.
 	if existing.AllowPublic && !updated.AllowPublic {
 		s.revokeAnonymousSessions(ctx, logger, serverID)
 	}

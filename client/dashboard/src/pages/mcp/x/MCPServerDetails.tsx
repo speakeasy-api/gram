@@ -196,9 +196,6 @@ type VisibilityOption = {
   hoverDotClass: string;
 };
 
-// The dropdown only offers the states that gate whether the server serves
-// traffic. Any other stored visibility values render their label via
-// currentLabel below.
 const VISIBILITY_OPTIONS: VisibilityOption[] = [
   {
     value: "disabled",
@@ -217,8 +214,7 @@ const VISIBILITY_OPTIONS: VisibilityOption[] = [
 ];
 
 // Public visibility is only offered for tunneled-backed servers, and only
-// once the tunnel source owner has consented (double opt-in). Other backend
-// types manage public visibility through their own flows.
+// once the tunnel source owner has consented (double opt-in).
 const PUBLIC_VISIBILITY_OPTION: VisibilityOption = {
   value: "public",
   label: "Public",
@@ -293,8 +289,6 @@ export function MCPServerStatusDropdown({
         ? "Public"
         : "Private";
 
-  // Tunneled-backed servers may go public once the source consents; other
-  // backends only ever offer disabled/private here.
   const isTunneled = Boolean(server.tunneledMcpServerId);
   const { data: tunneledSource } = useGetTunneledMcpServer(
     getTunneledMcpServerArgs(server.tunneledMcpServerId ?? ""),

@@ -685,10 +685,8 @@ function PublicAccessSection({
 
   const allowPublic = tunneledMcpServer.allowPublic;
 
-  // Rethrows on failure so callers can keep a confirmation dialog open; a
-  // toast still surfaces the error. The shared mutation (see SettingsTab)
-  // serializes this with the display-name edit so neither submits a stale
-  // name over the other.
+  // Rethrow so a confirmation dialog can stay open on failure; a toast still
+  // surfaces the error.
   const applyAllowPublic = async (next: boolean) => {
     try {
       await update.mutateAsync({

@@ -80,9 +80,7 @@ func isSkippedResponseHeader(name string) bool {
 		// upstream response object; external MCP clients must not see it.
 		"x-gram-tunnel-error",
 		// Internal gateway→gram-server agent-session report
-		// (wire.HeaderTunnelAgentSession). The anonymous tunnel session
-		// adapter consumes it from the upstream response object; external
-		// MCP clients must not see it.
+		// (wire.HeaderTunnelAgentSession); external MCP clients must not see it.
 		"x-gram-tunnel-agent-session":
 		return true
 	}

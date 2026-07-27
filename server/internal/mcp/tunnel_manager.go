@@ -85,10 +85,7 @@ func (m *tunnelManager) buildProxy(
 		wwwAuthenticate,
 	)
 	p.UpstreamResponseRetryer = tunnelrouting.Retryer(m.routes, tunnelID, addr, clientAffinityKey, m.forwardToken)
-	// A tunnel forward's redirect target is never another tunnel hop;
-	// following one would replay the forward token (and, with the gateway
-	// CIDR allowance below, reach in-cluster addresses) at a
-	// backend-controlled URL. Relay 3xx responses verbatim instead.
+	// Redirects won't work across a tunnel boundary; disable.
 	p.DisableRedirects = true
 	if len(m.gatewayCIDRs) > 0 {
 		p.GuardianClientOptions = []guardian.ClientOption{guardian.WithAllowedCIDRBlocks(m.gatewayCIDRs...)}

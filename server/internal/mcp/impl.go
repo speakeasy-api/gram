@@ -138,9 +138,7 @@ type Service struct {
 	// helpers but never serves a runtime request).
 	remoteProxyManager *remotemcp.ProxyManager
 	tunnelManager      *tunnelManager
-	// tunnelPublic backs anonymous public serving of tunneled MCP servers.
-	// Nil when no Redis client was wired (e.g. contexts that never serve
-	// runtime requests); every public tunneled request then fails closed.
+	// Nil when no Redis was wired; every public tunneled request then fails closed.
 	tunnelPublic *tunnelPublicRuntime
 }
 

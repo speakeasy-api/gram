@@ -2597,8 +2597,6 @@ func TestProxy_Post_ToolsListResponse_SetTools_RewritesRelayedEvent_SSEPath(t *t
 	require.Contains(t, out, "id: terminal-7\n", "id: field must be preserved on mutation re-emit")
 }
 
-// TestProxy_Post_UpstreamResponseInterceptorRuns: the interceptor sees the
-// upstream response and its header mutations reach the client.
 func TestProxy_Post_UpstreamResponseInterceptorRuns(t *testing.T) {
 	t.Parallel()
 
@@ -2629,10 +2627,8 @@ func TestProxy_Post_UpstreamResponseInterceptorRuns(t *testing.T) {
 	require.Equal(t, "gram-sid", rr.Header().Get("Mcp-Session-Id"), "interceptor header mutation must reach the client")
 }
 
-// TestProxy_Post_UpstreamResponseInterceptorErrorAbortsBeforeFlush: a
-// non-nil interceptor error aborts the relay with nothing written to the
-// client — the fail-closed contract the anonymous tunnel session adapter
-// relies on.
+// An interceptor error must abort the relay with nothing written to the
+// client, so callers can fail closed.
 func TestProxy_Post_UpstreamResponseInterceptorErrorAbortsBeforeFlush(t *testing.T) {
 	t.Parallel()
 
