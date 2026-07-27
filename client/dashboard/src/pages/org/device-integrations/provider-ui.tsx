@@ -1,5 +1,5 @@
 import type { DeviceIntegrationProvider } from "@gram/client/models/components/deviceintegrationprovider.js";
-import { MonitorSmartphone, ShieldCheck } from "lucide-react";
+import { Apple, MonitorSmartphone, ShieldCheck } from "lucide-react";
 
 // Presentation extras the backend registry doesn't carry: an icon, a richer
 // description, and optional setup guidance for the configure sheet. Provider
@@ -14,7 +14,18 @@ export type ProviderUI = {
   setupSteps?: string[];
 };
 
-const PROVIDER_UI: Record<string, ProviderUI> = {};
+const PROVIDER_UI: Record<string, ProviderUI> = {
+  jamf: {
+    icon: Apple,
+    description:
+      "Pulls the computer inventory from your Jamf Pro tenant so agent coverage can be computed across your Apple fleet.",
+    setupSteps: [
+      "In Jamf Pro, go to Settings → System → API roles and clients and create an API role with only the “Read Computers” privilege.",
+      "Create an API client bound to that role, enable it, and copy the client ID and the one-time client secret.",
+      "Enter your tenant root URL (https://yourtenant.jamfcloud.com) and the client credentials, save, then test the connection.",
+    ],
+  },
+};
 
 export function providerUI(provider: DeviceIntegrationProvider): ProviderUI {
   return PROVIDER_UI[provider.id] ?? defaultProviderUI(provider);
