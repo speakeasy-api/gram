@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"maps"
+	"net/url"
 	"strings"
 	"time"
 
@@ -215,6 +216,16 @@ func validateFields(desc providers.Descriptor, creds providers.Credentials, sett
 		}
 		if f.Required && (!supplied || strings.TrimSpace(value) == "") {
 			return oops.E(oops.CodeInvalid, nil, "%s is required for provider %s", f.Key, desc.ID)
+		}
+		// URL-kind fields get a save-time syntax check so a scheme-less or
+		// http URL is rejected at the sheet instead of surfacing an hour
+		// later as a deterministic sync failure. Providers still enforce
+		// their own stricter shape (tenant root, no path) at request time.
+		if f.Kind == providers.FieldKindURL && supplied && strings.TrimSpace(value) != "" {
+			parsed, err := url.Parse(strings.TrimSpace(value))
+			if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+				return oops.E(oops.CodeInvalid, nil, "%s must be a valid https URL", f.Key)
+			}
 		}
 	}
 	return nil

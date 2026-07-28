@@ -8,10 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -69,6 +71,17 @@ func asInfra(err error) error {
 func isInfra(err error) bool {
 	var ie *infraError
 	return errors.As(err, &ie)
+}
+
+// isVendorDataError reports whether the database rejected the row CONTENT
+// rather than failing operationally: SQLSTATE class 22 (data exception),
+// e.g. jsonb refusing a Unicode NUL escape inside a vendor-supplied record.
+// Retrying cannot succeed until the vendor data changes, so these must
+// surface as visible, backed-off schedule failures — classifying them as
+// infra would hot-loop the Temporal retry with nothing on the dashboard.
+func isVendorDataError(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && strings.HasPrefix(pgErr.Code, "22")
 }
 
 // SyncCandidate is one due schedule the coordinator should run.
@@ -263,6 +276,9 @@ func (s *Syncer) runInventorySync(ctx context.Context, target repo.GetSyncTarget
 			}
 			userID, err := s.resolveMember(ctx, memberCache, target.OrganizationID, device.UserEmail)
 			if err != nil {
+				if isVendorDataError(err) {
+					return fmt.Errorf("resolve member for device %s: %w", device.ExternalID, err)
+				}
 				return asInfra(err)
 			}
 			raw := device.Raw
@@ -288,6 +304,9 @@ func (s *Syncer) runInventorySync(ctx context.Context, target repo.GetSyncTarget
 				ConfigUpdatedAt:           target.ConfigUpdatedAt,
 			})
 			if err != nil {
+				if isVendorDataError(err) {
+					return fmt.Errorf("upsert mdm device %s: %w", device.ExternalID, err)
+				}
 				return asInfra(oops.E(oops.CodeUnexpected, err, "upsert mdm device"))
 			}
 			if rows == 0 {
