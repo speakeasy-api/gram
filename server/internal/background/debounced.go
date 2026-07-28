@@ -41,11 +41,15 @@ func Debounce[Params any, Result any](
 	reenqueue func(params Params, result Result) bool,
 ) func(ctx workflow.Context, params Params) (result Result, err error) {
 	return func(ctx workflow.Context, params Params) (result Result, err error) {
-		discard := ""
 		signalCh := workflow.GetSignalChannel(ctx, signalIDFunc(params))
-		// Drain the signal that triggered this run via signal-with-start so it
-		// doesn't double-count toward the post-run reenqueue check.
-		_ = signalCh.ReceiveAsync(&discard)
+		// Drain the signal-with-start trigger and every StartDelay burst signal so
+		// they coalesce into this analysis rather than forcing a redundant run.
+		for {
+			var message string
+			if !signalCh.ReceiveAsync(&message) {
+				break
+			}
+		}
 
 		res, err := wrapped(ctx, params)
 		if err != nil {
@@ -60,7 +64,7 @@ func Debounce[Params any, Result any](
 			recv++
 		}
 		for {
-			message := ""
+			var message string
 			received := signalCh.ReceiveAsync(&message)
 			if !received {
 				break

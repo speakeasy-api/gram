@@ -61,6 +61,9 @@ const (
 	// a customer-configurable BYOK slot. The judge uses the platform's internal
 	// key and remains excluded from both Polar and TUM billing.
 	ModelUsageSourceSkillEfficacy ModelUsageSource = "skill-efficacy"
+	// ModelUsageSourceSkillSuggestions tags the platform-funded skill edit
+	// suggestion judge. It is internal-only like skill efficacy.
+	ModelUsageSourceSkillSuggestions ModelUsageSource = "skill-suggestions"
 	// ModelUsageSourceChatAnalysis tags the chat analysis judges (work units and
 	// friends). Unregistered for the same reason as skill efficacy: platform
 	// internal key, excluded from Polar and TUM billing, never a BYOK slot.
@@ -101,7 +104,7 @@ func ModelUsageSourceStrings() []string {
 // traffic, and everything Gram itself spends (reactive scanning inference
 // and user-initiated hosted chat alike) is out of scope.
 func GramHostedHookSourceStrings() []string {
-	return append(ModelUsageSourceStrings(), string(ModelUsageSourceAssistants), string(ModelUsageSourceSkillEfficacy), string(ModelUsageSourceChatAnalysis), "")
+	return append(ModelUsageSourceStrings(), string(ModelUsageSourceAssistants), string(ModelUsageSourceSkillEfficacy), string(ModelUsageSourceSkillSuggestions), string(ModelUsageSourceChatAnalysis), "")
 }
 
 type ModelUsageEvent struct {
