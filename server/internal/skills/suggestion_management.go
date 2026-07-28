@@ -539,12 +539,28 @@ func (s *Service) DismissSuggestion(ctx context.Context, payload *gen.DismissSug
 	return mv.BuildSkillEditSuggestionView(dismissed, evidence), nil
 }
 
-func (s *Service) ApproveAllSuggestions(ctx context.Context, _ *gen.ApproveAllSuggestionsPayload) (*gen.ApproveAllSkillSuggestionsResult, error) {
+func (s *Service) ApproveAllSuggestions(ctx context.Context, payload *gen.ApproveAllSuggestionsPayload) (*gen.ApproveAllSkillSuggestionsResult, error) {
 	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
 	if err != nil {
 		return nil, err
 	}
-	snapshot, err := repo.New(s.db).ListOpenSkillEditSuggestionsForApproval(ctx, *authCtx.ProjectID)
+	suggestionIDs := make([]uuid.UUID, 0, len(payload.SuggestionIds))
+	seen := make(map[uuid.UUID]struct{}, len(payload.SuggestionIds))
+	for _, value := range payload.SuggestionIds {
+		id, err := uuid.Parse(value)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "suggestion_ids must contain UUIDs")
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		suggestionIDs = append(suggestionIDs, id)
+	}
+	snapshot, err := repo.New(s.db).ListOpenSkillEditSuggestionsForApproval(ctx, repo.ListOpenSkillEditSuggestionsForApprovalParams{
+		ProjectID:     *authCtx.ProjectID,
+		SuggestionIds: suggestionIDs,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "snapshot open skill suggestions").LogError(ctx, logger)
 	}
@@ -582,4 +598,39 @@ func (s *Service) ApproveAllSuggestions(ctx context.Context, _ *gen.ApproveAllSu
 	}
 
 	return &gen.ApproveAllSkillSuggestionsResult{Items: items}, nil
+}
+
+func (s *Service) ListSuggestionFeedback(ctx context.Context, payload *gen.ListSuggestionFeedbackPayload) (*gen.ListSkillSuggestionFeedbackResult, error) {
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
+	if err != nil {
+		return nil, err
+	}
+	if payload.Limit < 1 || payload.Limit > 50 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "skill suggestion feedback limit must be between 1 and 50")
+	}
+	changeID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill suggestion change id")
+	}
+
+	queries := repo.New(s.db)
+	if _, err := queries.GetSkillEditSuggestionChange(ctx, repo.GetSkillEditSuggestionChangeParams{
+		ProjectID: *authCtx.ProjectID,
+		ID:        changeID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, nil, "proposed change not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get proposed change for feedback").LogError(ctx, logger)
+	}
+	rows, err := queries.ListSkillEditSuggestionFeedback(ctx, repo.ListSkillEditSuggestionFeedbackParams{
+		ProjectID: *authCtx.ProjectID,
+		ChangeID:  changeID,
+		PageLimit: conv.SafeInt32(payload.Limit),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list proposed change feedback").LogError(ctx, logger)
+	}
+
+	return &gen.ListSkillSuggestionFeedbackResult{Feedback: mv.BuildSkillFeedbackListView(rows)}, nil
 }

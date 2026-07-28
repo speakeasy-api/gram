@@ -15,6 +15,7 @@ import (
 const (
 	ActionSkillCreate             Action = "skill:create"
 	ActionSkillAddVersion         Action = "skill:add_version"
+	ActionSkillRestoreVersion     Action = "skill:restore_version"
 	ActionSkillUpdate             Action = "skill:update"
 	ActionSkillArchive            Action = "skill:archive"
 	ActionSkillDistribute         Action = "skill:distribute"
@@ -227,8 +228,7 @@ type LogSkillUpdateEvent struct {
 	SkillSnapshotAfter  *SkillSnapshot
 }
 
-func (l *Logger) LogSkillUpdate(ctx context.Context, dbtx repo.DBTX, event LogSkillUpdateEvent) error {
-	action := ActionSkillUpdate
+func (l *Logger) logSkillUpdate(ctx context.Context, dbtx repo.DBTX, action Action, event LogSkillUpdateEvent) error {
 	beforeSnapshot, err := marshalAuditPayload(event.SkillSnapshotBefore)
 	if err != nil {
 		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
@@ -256,6 +256,29 @@ func (l *Logger) LogSkillUpdate(ctx context.Context, dbtx repo.DBTX, event LogSk
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.SkillV1})
+}
+
+func (l *Logger) LogSkillUpdate(ctx context.Context, dbtx repo.DBTX, event LogSkillUpdateEvent) error {
+	return l.logSkillUpdate(ctx, dbtx, ActionSkillUpdate, event)
+}
+
+type LogSkillRestoreVersionEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	SkillURN            urn.Skill
+	SkillName           string
+	SkillDisplayName    string
+	SkillSnapshotBefore *SkillSnapshot
+	SkillSnapshotAfter  *SkillSnapshot
+}
+
+func (l *Logger) LogSkillRestoreVersion(ctx context.Context, dbtx repo.DBTX, event LogSkillRestoreVersionEvent) error {
+	return l.logSkillUpdate(ctx, dbtx, ActionSkillRestoreVersion, LogSkillUpdateEvent(event))
 }
 
 type LogSkillArchiveEvent struct {

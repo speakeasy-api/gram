@@ -29,7 +29,6 @@ import {
 } from "@gram/client/react-query/listToolsets.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateTemplate } from "@gram/client/react-query/template.js";
-import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
 import { ResizablePanel } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
@@ -47,6 +46,7 @@ import { PlaygroundElements } from "./PlaygroundElements";
 import { PlaygroundLogsPanel } from "./PlaygroundLogsPanel";
 import { PlaygroundProxiedChat } from "./PlaygroundProxiedChat";
 import { ShareChatButton } from "./ShareChatButton";
+import { invalidatePlaygroundToolQueries } from "./playgroundToolQueries";
 import { useProxiedMcpConnection } from "./useProxiedMcpConnection";
 
 // A single selectable server in the playground. Toolset-backed and
@@ -506,7 +506,7 @@ function ToolsetPanel({
           ...updates,
         },
       });
-      void invalidateTemplate(queryClient, [{ name: tool.name }]);
+      await invalidateTemplate(queryClient, [{ name: tool.name }]);
     } else {
       const form = {
         ...tool.variation,
@@ -520,11 +520,7 @@ function ToolsetPanel({
       });
     }
 
-    // Invalidate to refresh tool data in the sidebar
-    void invalidateAllToolset(queryClient);
-    void queryClient.invalidateQueries({
-      queryKey: queryKeyInstance({ toolsetSlug }),
-    });
+    await invalidatePlaygroundToolQueries(queryClient, toolsetSlug);
   };
 
   return (
@@ -596,6 +592,7 @@ function ToolsetPanel({
           currentTools={toolset.tools}
           onAddTools={(toolUrns) => handleAddTools(toolUrns)}
           onRemoveTools={(toolUrns) => handleRemoveTools(toolUrns)}
+          onToolUpdate={handleToolUpdate}
           initialGroup={manageToolsGroup}
         />
       )}

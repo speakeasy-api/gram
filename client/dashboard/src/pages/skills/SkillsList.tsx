@@ -12,12 +12,13 @@ import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import type { Skill } from "@gram/client/models/components/skill.js";
 import { useSkillEfficacyInsights } from "@gram/client/react-query/skillEfficacyInsights.js";
 import { useSkillsInfinite } from "@gram/client/react-query/skills.js";
-import { type Column, Icon, Table } from "@speakeasy-api/moonshine";
+import { Badge, type Column, Icon, Table } from "@speakeasy-api/moonshine";
 import { useRoutes } from "@/routes";
 import { useQueryState } from "nuqs";
 import { useDeferredValue, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { toast } from "sonner";
+import { ApproveAllSkillSuggestions } from "./ApproveAllSkillSuggestions";
 import { skillShareUrl } from "./share-link";
 import { SkillManifestDialog } from "./SkillManifestDialog";
 import {
@@ -33,6 +34,7 @@ import {
 } from "./skills-list-helpers";
 import { UnknownSkillActivationsSection } from "./UnknownSkillActivationsSection";
 import { useDrainSkillPages } from "./use-drain-skill-pages";
+import { useOpenSkillSuggestions } from "./use-open-skill-suggestions";
 
 const SKILL_FILTERS = defineFilters([
   { id: "sourceKind", label: "Source", kind: "multiselect", pinned: true },
@@ -100,6 +102,7 @@ export default function SkillsList(): JSX.Element {
     throwOnError: false,
     enabled: skills.length > 0,
   });
+  const openSuggestions = useOpenSkillSuggestions();
   const metricsBySkill = useMemo(
     () =>
       new Map(
@@ -164,6 +167,11 @@ export default function SkillsList(): JSX.Element {
           >
             {skill.displayName}
           </Link>
+          {openSuggestions.skillIds.has(skill.id) && (
+            <Badge variant="information" className="ml-2">
+              Suggested edit
+            </Badge>
+          )}
           <Type small muted className="truncate font-mono">
             {skill.name}
           </Type>
@@ -362,16 +370,25 @@ export default function SkillsList(): JSX.Element {
                     }}
                     options={INSIGHT_SORT_OPTIONS}
                   />
+                  <Page.Toolbar.Actions>
+                    <ApproveAllSkillSuggestions
+                      suggestions={openSuggestions.suggestions}
+                      total={openSuggestions.total}
+                      fullyLoaded={openSuggestions.fullyLoaded}
+                    />
+                  </Page.Toolbar.Actions>
                   <Page.Toolbar.Refresh
                     onRefresh={() => {
                       void Promise.all([
                         query.refetch(),
                         insightsQuery.refetch(),
+                        openSuggestions.query.refetch(),
                       ]);
                     }}
                     isRefreshing={
                       (query.isFetching && !query.isFetchingNextPage) ||
-                      insightsQuery.isFetching
+                      insightsQuery.isFetching ||
+                      openSuggestions.query.isFetching
                     }
                   />
                 </Page.Toolbar>
@@ -382,6 +399,30 @@ export default function SkillsList(): JSX.Element {
                   Loading all skills to finish this view...
                 </Type>
               )}
+
+              {openSuggestions.query.error && (
+                <div className="space-y-2">
+                  <ErrorAlert
+                    title="Unable to load suggested edits"
+                    error={openSuggestions.query.error}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void openSuggestions.query.refetch()}
+                  >
+                    Retry suggested edits
+                  </Button>
+                </div>
+              )}
+
+              {openSuggestions.total > 0 &&
+                !openSuggestions.fullyLoaded &&
+                !openSuggestions.query.error && (
+                  <Type small muted role="status" aria-live="polite">
+                    Loading all suggested edits...
+                  </Type>
+                )}
 
               {insightsUnavailable && (
                 <div className="space-y-2">

@@ -1,6 +1,5 @@
 import { ErrorAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import type { UnknownSkillActivation } from "@gram/client/models/components/unknownskillactivation.js";
@@ -15,35 +14,26 @@ const reasonLabels: Record<string, string> = {
 };
 
 export function UnknownSkillActivationsSection(): JSX.Element | null {
-  const [enabled, setEnabled] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const query = useUnknownSkillActivationsInfinite({ limit: 50 }, undefined, {
-    enabled,
     throwOnError: false,
   });
   const activations =
     query.data?.pages.flatMap((page) => page.result.activations) ?? [];
 
-  if (!enabled) {
+  if (query.isPending && !query.data) return null;
+  if (!query.error && activations.length === 0) return null;
+
+  if (!expanded && activations.length > 0) {
     return (
       <section
         className="space-y-3 pt-6"
         aria-labelledby="unknown-skills-title"
       >
         <UnknownActivationsHeading />
-        <Button variant="outline" onClick={() => setEnabled(true)}>
+        <Button variant="outline" onClick={() => setExpanded(true)}>
           View unknown activations
         </Button>
-      </section>
-    );
-  }
-  if (query.isPending && !query.data) {
-    return (
-      <section
-        className="space-y-3 pt-6"
-        aria-label="Loading unknown activations"
-      >
-        <UnknownActivationsHeading />
-        <SkeletonTable />
       </section>
     );
   }

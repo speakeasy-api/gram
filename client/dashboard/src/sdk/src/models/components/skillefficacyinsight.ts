@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  SkillEfficacyRegressionSignal,
+  SkillEfficacyRegressionSignal$inboundSchema,
+} from "./skillefficacyregressionsignal.js";
+import {
   SkillInsightMetrics,
   SkillInsightMetrics$inboundSchema,
 } from "./skillinsightmetrics.js";
@@ -18,6 +22,10 @@ import {
 
 export type SkillEfficacyInsight = {
   metrics: SkillInsightMetrics;
+  /**
+   * The current skill version's efficacy comparison using the server suggestion policy.
+   */
+  regressionSignal?: SkillEfficacyRegressionSignal | undefined;
   skillId: string;
   versions: Array<SkillVersionInsight>;
 };
@@ -29,11 +37,13 @@ export const SkillEfficacyInsight$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     metrics: SkillInsightMetrics$inboundSchema,
+    regression_signal: z.optional(SkillEfficacyRegressionSignal$inboundSchema),
     skill_id: z.string(),
     versions: z.array(SkillVersionInsight$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "regression_signal": "regressionSignal",
       "skill_id": "skillId",
     });
   }),

@@ -67,15 +67,15 @@ func TestRegressionRequiresComparableSessionCountsAndDelta(t *testing.T) {
 	config := DefaultConfig()
 	currentID := uuid.New()
 	previousID := uuid.New()
-	base := repo.ResolveSkillSuggestionBaseRow{BaseVersionID: currentID, PredecessorVersionID: previousID}
-	insufficient := summarizeTrend(config, base, []telemetryrepo.SkillInsightBucket{
+	base := TrendBase{BaseVersionID: currentID, PredecessorVersionID: previousID}
+	insufficient := EvaluateTrend(config, base, []telemetryrepo.SkillInsightBucket{
 		{SkillVersionID: currentID.String(), ScoredSessions: 9, ScoreSum: 4.5},
 		{SkillVersionID: previousID.String(), ScoredSessions: 20, ScoreSum: 16},
 	})
 	require.False(t, insufficient.Comparable)
 	require.False(t, insufficient.Regression)
 
-	comparableTrend := summarizeTrend(config, base, []telemetryrepo.SkillInsightBucket{
+	comparableTrend := EvaluateTrend(config, base, []telemetryrepo.SkillInsightBucket{
 		{SkillVersionID: currentID.String(), ScoredSessions: 10, ScoreSum: 6},
 		{SkillVersionID: previousID.String(), ScoredSessions: 10, ScoreSum: 7},
 	})

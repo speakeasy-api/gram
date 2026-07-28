@@ -203,6 +203,45 @@ func TestAssistantSkillQueriesResolveLatestPinArchiveAndRevoke(t *testing.T) {
 	loaded, err = queries.LoadAttachedAssistantSkill(ctx, loadParams)
 	require.NoError(t, err)
 	require.Equal(t, second.Content, loaded.Content)
+	captured, err := skillsrepo.New(conn).CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
+		Content:          "---\nname: query-skill\ndescription: captured\n---\n\ncaptured body\n",
+		CanonicalSha256:  uuid.NewString(),
+		RawSha256:        uuid.NewString(),
+		Description:      pgtype.Text{String: "captured", Valid: true},
+		Metadata:         []byte(`{}`),
+		SpecValid:        true,
+		ValidationErrors: []byte(`[]`),
+		CreatedByUserID:  "user-test",
+		ProjectID:        projectID,
+		SkillID:          skill.ID,
+	})
+	require.NoError(t, err)
+	err = skillsrepo.New(conn).InsertCapturedSkillVersionOrigin(ctx, skillsrepo.InsertCapturedSkillVersionOriginParams{
+		ProjectID: projectID, SkillID: skill.ID, SkillVersionID: captured.ID,
+	})
+	require.NoError(t, err)
+	loaded, err = queries.LoadAttachedAssistantSkill(ctx, loadParams)
+	require.NoError(t, err)
+	require.Equal(t, second.Content, loaded.Content)
+	attached, err := queries.LoadAssistantSkills(ctx, listParams)
+	require.NoError(t, err)
+	require.Len(t, attached, 1)
+	require.Equal(t, second.ID, attached[0].ResolvedVersionID)
+
+	_, err = skillsrepo.New(conn).UpdateSkillDistribution(ctx, skillsrepo.UpdateSkillDistributionParams{
+		PinnedVersionID: uuid.NullUUID{UUID: captured.ID, Valid: true},
+		ProjectID:       projectID, SkillID: skill.ID, PluginID: uuid.NullUUID{},
+		AssistantID: uuid.NullUUID{UUID: record.ID, Valid: true}, Channel: "assistant",
+	})
+	require.NoError(t, err)
+	loaded, err = queries.LoadAttachedAssistantSkill(ctx, loadParams)
+	require.NoError(t, err)
+	require.Equal(t, captured.Content, loaded.Content)
+	_, err = skillsrepo.New(conn).UpdateSkillDistribution(ctx, skillsrepo.UpdateSkillDistributionParams{
+		PinnedVersionID: uuid.NullUUID{}, ProjectID: projectID, SkillID: skill.ID, PluginID: uuid.NullUUID{},
+		AssistantID: uuid.NullUUID{UUID: record.ID, Valid: true}, Channel: "assistant",
+	})
+	require.NoError(t, err)
 
 	invalid, err := skillsrepo.New(conn).CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
 		Content:          "invalid",
@@ -228,7 +267,7 @@ func TestAssistantSkillQueriesResolveLatestPinArchiveAndRevoke(t *testing.T) {
 	require.NoError(t, err)
 	_, err = queries.LoadAttachedAssistantSkill(ctx, loadParams)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-	attached, err := queries.LoadAssistantSkills(ctx, listParams)
+	attached, err = queries.LoadAssistantSkills(ctx, listParams)
 	require.NoError(t, err)
 	require.Empty(t, attached)
 

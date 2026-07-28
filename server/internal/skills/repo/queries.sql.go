@@ -551,6 +551,47 @@ func (q *Queries) CountSkillEfficacyVersionLifetimeSpend(ctx context.Context, ar
 	return items, nil
 }
 
+const countSkillFeedbackOutcomes = `-- name: CountSkillFeedbackOutcomes :one
+SELECT
+  COUNT(*)::bigint AS total,
+  COUNT(*) FILTER (WHERE outcome = 'helped')::bigint AS helped,
+  COUNT(*) FILTER (WHERE outcome = 'partially_helped')::bigint AS partially_helped,
+  COUNT(*) FILTER (WHERE outcome = 'did_not_help')::bigint AS did_not_help,
+  COUNT(*) FILTER (WHERE outcome = 'misleading')::bigint AS misleading,
+  COUNT(*) FILTER (WHERE outcome = 'harmful')::bigint AS harmful
+FROM skill_feedback
+WHERE project_id = $1
+  AND skill_id = $2
+`
+
+type CountSkillFeedbackOutcomesParams struct {
+	ProjectID uuid.UUID
+	SkillID   uuid.NullUUID
+}
+
+type CountSkillFeedbackOutcomesRow struct {
+	Total           int64
+	Helped          int64
+	PartiallyHelped int64
+	DidNotHelp      int64
+	Misleading      int64
+	Harmful         int64
+}
+
+func (q *Queries) CountSkillFeedbackOutcomes(ctx context.Context, arg CountSkillFeedbackOutcomesParams) (CountSkillFeedbackOutcomesRow, error) {
+	row := q.db.QueryRow(ctx, countSkillFeedbackOutcomes, arg.ProjectID, arg.SkillID)
+	var i CountSkillFeedbackOutcomesRow
+	err := row.Scan(
+		&i.Total,
+		&i.Helped,
+		&i.PartiallyHelped,
+		&i.DidNotHelp,
+		&i.Misleading,
+		&i.Harmful,
+	)
+	return i, err
+}
+
 const countUnreviewedSkillFeedback = `-- name: CountUnreviewedSkillFeedback :one
 SELECT COUNT(*)
 FROM skill_feedback
@@ -1517,7 +1558,7 @@ JOIN LATERAL (
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
     AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
-  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE sd.project_id = $1
@@ -1677,7 +1718,7 @@ WHERE s.project_id = $1
   AND s.id = $2
   AND s.archived_at IS NULL
   AND sv.spec_valid IS TRUE
-ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
 LIMIT 1
 `
 
@@ -1803,10 +1844,10 @@ JOIN skills s
   AND s.id = l.skill_id
   AND s.archived_at IS NULL
 JOIN LATERAL (
-  SELECT sv.content, sv.created_at
+  SELECT sv.content, COALESCE(sv.promoted_at, sv.created_at) AS created_at
   FROM skill_versions sv
   WHERE sv.skill_id = l.skill_id
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) latest ON TRUE
 WHERE l.token = $1
@@ -1823,7 +1864,7 @@ type GetSharedSkillByTokenRow struct {
 
 // Public read for the unauthenticated share-link endpoint. The join pins the
 // share link to its owning project's skill and the lateral picks the latest
-// version by creation order.
+// version by effective promotion time.
 func (q *Queries) GetSharedSkillByToken(ctx context.Context, token string) (GetSharedSkillByTokenRow, error) {
 	row := q.db.QueryRow(ctx, getSharedSkillByToken, token)
 	var i GetSharedSkillByTokenRow
@@ -1974,7 +2015,7 @@ LEFT JOIN LATERAL (
     COUNT(*) OVER()::bigint AS version_count
   FROM skill_versions sv
   WHERE sv.skill_id = s.id
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) state ON TRUE
 LEFT JOIN skill_share_links l
@@ -2478,7 +2519,7 @@ LEFT JOIN LATERAL (
     COUNT(*) OVER()::bigint AS version_count
   FROM skill_versions sv
   WHERE sv.skill_id = s.id
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) state ON TRUE
 WHERE s.project_id = $1
@@ -2844,7 +2885,7 @@ JOIN LATERAL (
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
     AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
-  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE sd.project_id = $1
@@ -3079,10 +3120,21 @@ JOIN skills s
   ON s.project_id = suggestion.project_id
   AND s.id = suggestion.skill_id
 WHERE suggestion.project_id = $1
-  AND suggestion.status = 'open'
   AND s.archived_at IS NULL
+  AND (
+    (
+      COALESCE(cardinality($2::uuid[]), 0) = 0
+      AND suggestion.status = 'open'
+    )
+    OR suggestion.id = ANY($2::uuid[])
+  )
 ORDER BY suggestion.created_at DESC, suggestion.id DESC
 `
+
+type ListOpenSkillEditSuggestionsForApprovalParams struct {
+	ProjectID     uuid.UUID
+	SuggestionIds []uuid.UUID
+}
 
 type ListOpenSkillEditSuggestionsForApprovalRow struct {
 	ID               uuid.UUID
@@ -3091,8 +3143,8 @@ type ListOpenSkillEditSuggestionsForApprovalRow struct {
 	SkillDisplayName string
 }
 
-func (q *Queries) ListOpenSkillEditSuggestionsForApproval(ctx context.Context, projectID uuid.UUID) ([]ListOpenSkillEditSuggestionsForApprovalRow, error) {
-	rows, err := q.db.Query(ctx, listOpenSkillEditSuggestionsForApproval, projectID)
+func (q *Queries) ListOpenSkillEditSuggestionsForApproval(ctx context.Context, arg ListOpenSkillEditSuggestionsForApprovalParams) ([]ListOpenSkillEditSuggestionsForApprovalRow, error) {
+	rows, err := q.db.Query(ctx, listOpenSkillEditSuggestionsForApproval, arg.ProjectID, arg.SuggestionIds)
 	if err != nil {
 		return nil, err
 	}
@@ -3887,7 +3939,7 @@ JOIN LATERAL (
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
     AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
-  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE sd.project_id = $1
@@ -4159,6 +4211,70 @@ func (q *Queries) ListSkillEfficacyEvaluationUnits(ctx context.Context, arg List
 	return items, nil
 }
 
+const listSkillFeedbackByID = `-- name: ListSkillFeedbackByID :many
+SELECT id, project_id, skill_id, skill_version_id, skill_name, source, outcome, note, session_id, user_id, user_email, reviewed_at, created_at
+FROM skill_feedback
+WHERE project_id = $1
+  AND skill_id = $2
+  AND (
+    $3::timestamptz IS NULL
+    OR (created_at, id) < (
+      $3::timestamptz,
+      $4::uuid
+    )
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT $5
+`
+
+type ListSkillFeedbackByIDParams struct {
+	ProjectID       uuid.UUID
+	SkillID         uuid.NullUUID
+	CursorCreatedAt pgtype.Timestamptz
+	CursorID        uuid.NullUUID
+	PageLimit       int32
+}
+
+func (q *Queries) ListSkillFeedbackByID(ctx context.Context, arg ListSkillFeedbackByIDParams) ([]SkillFeedback, error) {
+	rows, err := q.db.Query(ctx, listSkillFeedbackByID,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SkillFeedback
+	for rows.Next() {
+		var i SkillFeedback
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.SkillID,
+			&i.SkillVersionID,
+			&i.SkillName,
+			&i.Source,
+			&i.Outcome,
+			&i.Note,
+			&i.SessionID,
+			&i.UserID,
+			&i.UserEmail,
+			&i.ReviewedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSkillSightingTimeline = `-- name: ListSkillSightingTimeline :many
 SELECT
   (date_trunc('day', so.seen_at AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')::timestamptz AS bucket_start,
@@ -4373,7 +4489,7 @@ LEFT JOIN LATERAL (
     COUNT(*) OVER()::bigint AS version_count
   FROM skill_versions sv
   WHERE sv.skill_id = s.id
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) latest ON TRUE
 LEFT JOIN skill_share_links l
@@ -4836,6 +4952,45 @@ func (q *Queries) PromoteObservedSkillToManual(ctx context.Context, arg PromoteO
 	return i, err
 }
 
+const promoteSkillVersion = `-- name: PromoteSkillVersion :one
+UPDATE skill_versions sv
+SET promoted_at = clock_timestamp()
+FROM skills s
+WHERE s.project_id = $1
+  AND s.id = $2
+  AND s.archived_at IS NULL
+  AND sv.skill_id = s.id
+  AND sv.id = $3
+  AND sv.spec_valid IS TRUE
+RETURNING sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.promoted_at, sv.created_by_user_id
+`
+
+type PromoteSkillVersionParams struct {
+	ProjectID      uuid.UUID
+	SkillID        uuid.UUID
+	SkillVersionID uuid.UUID
+}
+
+func (q *Queries) PromoteSkillVersion(ctx context.Context, arg PromoteSkillVersionParams) (SkillVersion, error) {
+	row := q.db.QueryRow(ctx, promoteSkillVersion, arg.ProjectID, arg.SkillID, arg.SkillVersionID)
+	var i SkillVersion
+	err := row.Scan(
+		&i.ID,
+		&i.SkillID,
+		&i.Content,
+		&i.CanonicalSha256,
+		&i.RawSha256,
+		&i.Description,
+		&i.Metadata,
+		&i.SpecValid,
+		&i.ValidationErrors,
+		&i.CreatedAt,
+		&i.PromotedAt,
+		&i.CreatedByUserID,
+	)
+	return i, err
+}
+
 const rebaseOpenSkillEditSuggestion = `-- name: RebaseOpenSkillEditSuggestion :one
 UPDATE skill_edit_suggestions suggestion
 SET base_version_id = $1,
@@ -5115,6 +5270,86 @@ func (q *Queries) ResolveSkillObservationVersions(ctx context.Context, arg Resol
 	return items, nil
 }
 
+const resolveSkillRegressionBases = `-- name: ResolveSkillRegressionBases :many
+WITH bases AS (
+  SELECT DISTINCT ON (s.id)
+    s.id AS skill_id,
+    sv.id,
+    sv.promoted_at,
+    sv.created_at
+  FROM skills s
+  JOIN skill_versions sv ON sv.skill_id = s.id
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = s.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
+  WHERE s.project_id = $1
+    AND s.id = ANY($2::uuid[])
+    AND s.archived_at IS NULL
+    AND sv.spec_valid IS TRUE
+  ORDER BY s.id, (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
+)
+SELECT
+  base.skill_id,
+  base.id AS base_version_id,
+  COALESCE(predecessor.id, '00000000-0000-0000-0000-000000000000'::uuid) AS predecessor_version_id
+FROM bases base
+LEFT JOIN skill_version_lineages lineage
+  ON lineage.skill_id = base.skill_id
+  AND lineage.skill_version_id = base.id
+LEFT JOIN LATERAL (
+  SELECT previous.id
+  FROM skill_versions previous
+  LEFT JOIN skill_version_origins previous_origin
+    ON previous_origin.project_id = $1
+    AND previous_origin.skill_id = previous.skill_id
+    AND previous_origin.skill_version_id = previous.id
+  WHERE previous.skill_id = base.skill_id
+    AND (
+      (base.promoted_at IS NULL AND previous.id = lineage.derived_from_version_id)
+      OR (
+        (base.promoted_at IS NOT NULL OR lineage.derived_from_version_id IS NULL)
+        AND previous.spec_valid IS TRUE
+        AND (COALESCE(previous.promoted_at, previous.created_at), previous.id) < (COALESCE(base.promoted_at, base.created_at), base.id)
+      )
+    )
+  ORDER BY (previous_origin.origin IS DISTINCT FROM 'captured') DESC, COALESCE(previous.promoted_at, previous.created_at) DESC, previous.id DESC
+  LIMIT 1
+) predecessor ON TRUE
+ORDER BY base.skill_id
+`
+
+type ResolveSkillRegressionBasesParams struct {
+	ProjectID uuid.UUID
+	SkillIds  []uuid.UUID
+}
+
+type ResolveSkillRegressionBasesRow struct {
+	SkillID              uuid.UUID
+	BaseVersionID        uuid.UUID
+	PredecessorVersionID uuid.UUID
+}
+
+func (q *Queries) ResolveSkillRegressionBases(ctx context.Context, arg ResolveSkillRegressionBasesParams) ([]ResolveSkillRegressionBasesRow, error) {
+	rows, err := q.db.Query(ctx, resolveSkillRegressionBases, arg.ProjectID, arg.SkillIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ResolveSkillRegressionBasesRow
+	for rows.Next() {
+		var i ResolveSkillRegressionBasesRow
+		if err := rows.Scan(&i.SkillID, &i.BaseVersionID, &i.PredecessorVersionID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const resolveSkillSuggestionBase = `-- name: ResolveSkillSuggestionBase :one
 WITH base AS (
   SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.promoted_at, sv.created_by_user_id
@@ -5128,12 +5363,12 @@ WITH base AS (
     AND s.id = $2
     AND s.archived_at IS NULL
     AND sv.spec_valid IS TRUE
-  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 )
 SELECT
   base.id AS base_version_id,
-  base.created_at AS base_floor_reference_at,
+  COALESCE(base.promoted_at, base.created_at) AS base_floor_reference_at,
   base.content AS base_content,
   base.canonical_sha256 AS base_canonical_sha256,
   COALESCE(predecessor.id, '00000000-0000-0000-0000-000000000000'::uuid) AS predecessor_version_id,
@@ -5146,16 +5381,20 @@ LEFT JOIN skill_version_lineages lineage
 LEFT JOIN LATERAL (
   SELECT previous.id, previous.content, previous.canonical_sha256
   FROM skill_versions previous
+  LEFT JOIN skill_version_origins previous_origin
+    ON previous_origin.project_id = $1
+    AND previous_origin.skill_id = previous.skill_id
+    AND previous_origin.skill_version_id = previous.id
   WHERE previous.skill_id = base.skill_id
     AND (
-      previous.id = lineage.derived_from_version_id
+      (base.promoted_at IS NULL AND previous.id = lineage.derived_from_version_id)
       OR (
-        lineage.derived_from_version_id IS NULL
+        (base.promoted_at IS NOT NULL OR lineage.derived_from_version_id IS NULL)
         AND previous.spec_valid IS TRUE
-        AND (previous.created_at, previous.id) < (base.created_at, base.id)
+        AND (COALESCE(previous.promoted_at, previous.created_at), previous.id) < (COALESCE(base.promoted_at, base.created_at), base.id)
       )
     )
-  ORDER BY previous.created_at DESC, previous.id DESC
+  ORDER BY (previous_origin.origin IS DISTINCT FROM 'captured') DESC, COALESCE(previous.promoted_at, previous.created_at) DESC, previous.id DESC
   LIMIT 1
 ) predecessor ON TRUE
 `
@@ -5279,7 +5518,7 @@ JOIN LATERAL (
   WHERE sv.skill_id = prev.skill_id
     AND sv.spec_valid IS TRUE
     AND (prev.pinned_version_id IS NULL OR sv.id = prev.pinned_version_id)
-  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE prev.id = sd.id
