@@ -657,15 +657,20 @@ function CodexInstallContent({
 
 /**
  * opencode install. opencode has no plugin-marketplace or deep-link concept
- * (unlike Claude Code / Cursor / Codex), so this covers the two things that
- * actually apply: installing the speakeasy-hooks binary and running its
- * `install --provider=opencode` command to render the observability plugin
- * (`.opencode/plugin/agenthooks.ts` + `speakeasy.json`) directly into the
- * repo, and connecting an MCP server through opencode's own `mcp` config
- * block. The MCP snippet uses placeholders — grab the real name/URL from that
- * server's own hosted install page.
+ * (unlike Claude Code / Cursor / Codex), so the primary path is the
+ * server-generated observability ZIP (plugins.downloadObservabilityPlugin) —
+ * a self-contained `.opencode` plugin (`plugin/agenthooks.ts` + `speakeasy.json`
+ * + bootstrappers) with a freshly-minted hooks-scoped key already embedded,
+ * extracted straight into a repo's `.opencode/`. The manual CLI path
+ * (speakeasy-hooks install --provider=opencode) is kept as a fallback, plus
+ * connecting an MCP server through opencode's own `mcp` config block. The MCP
+ * snippet uses placeholders — grab the real name/URL from that server's own
+ * hosted install page.
  */
 function OpencodeInstallContent(): JSX.Element {
+  const { fetch: authFetch } = useFetcher();
+  const [isDownloading, setIsDownloading] = useState(false);
+
   const installBinary = `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`;
 
   const installCommand = `GRAM_HOOKS_ORG_KEY="your-hooks-scoped-api-key" \\
@@ -685,14 +690,77 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
   }
 }`;
 
+  const handleDownloadPlugin = async () => {
+    setIsDownloading(true);
+    try {
+      const resp = await authFetch(
+        "/rpc/plugins.downloadObservabilityPlugin?platform=opencode",
+        {},
+      );
+      if (!resp.ok) return;
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download =
+        resp.headers
+          .get("Content-Disposition")
+          ?.match(/filename="(.+)"/)?.[1] ?? "observability-opencode.zip";
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
     <div className="min-w-0 space-y-6">
+      {/* ── Quick install ─────────────────────────────────────────────────── */}
       <div>
-        <h3 className="mb-2 text-sm font-semibold">
-          Send tool telemetry to Gram
-        </h3>
+        <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
         <p className="text-muted-foreground mb-3 text-sm">
-          Install the{" "}
+          Download the Gram observability plugin as a ZIP — a self-contained{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            .opencode
+          </code>{" "}
+          plugin with a hooks-scoped API key already embedded (no CLI, no key to
+          export). Extract it into your repo's{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            .opencode/
+          </code>{" "}
+          (or{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            ~/.config/opencode/
+          </code>{" "}
+          for every repo) and opencode auto-discovers it on next start.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={isDownloading}
+          onClick={() => void handleDownloadPlugin()}
+          className="inline-flex items-center gap-2"
+        >
+          <Download className="size-4" />
+          {isDownloading ? "Downloading…" : "Download Plugin"}
+        </Button>
+        <p className="text-muted-foreground mt-2 text-xs">
+          Then extract:{" "}
+          <code className="bg-muted rounded px-1 py-0.5">
+            unzip observability-opencode.zip -d .opencode
+          </code>
+        </p>
+      </div>
+
+      <div className="border-t" />
+
+      {/* ── Manual setup ──────────────────────────────────────────────────── */}
+      <div className="space-y-4">
+        <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+          Manual setup
+        </p>
+        <p className="text-muted-foreground text-sm">
+          Prefer the CLI? Install the{" "}
           <code className="bg-muted rounded px-1 py-0.5 text-xs">
             speakeasy-hooks
           </code>{" "}
@@ -701,9 +769,8 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
         <CodeBlock language="bash" className="bg-background">
           {installBinary}
         </CodeBlock>
-        <p className="text-muted-foreground mt-3 mb-2 text-sm">
-          Then run it from your repo to render the Gram observability plugin
-          into{" "}
+        <p className="text-muted-foreground text-sm">
+          Then run it from your repo to render the same plugin into{" "}
           <code className="bg-muted rounded px-1 py-0.5 text-xs">
             .opencode/plugin/
           </code>
@@ -714,6 +781,7 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
         </CodeBlock>
       </div>
 
+      {/* ── Connect an MCP server ─────────────────────────────────────────── */}
       <div>
         <h3 className="mb-2 text-sm font-semibold">Connect an MCP server</h3>
         <p className="text-muted-foreground mb-3 text-sm">
@@ -724,12 +792,8 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
             opencode.json
           </code>
           . Replace the placeholders with the name, URL, and auth token from
-          that server's own install page — that token is separate from the
-          hooks-scoped{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
-            GRAM_HOOKS_ORG_KEY
-          </code>{" "}
-          above.
+          that server's own install page — that token is separate from the Gram
+          hooks credential.
         </p>
         <CodeBlock language="json" className="bg-background">
           {mcpConfig}
