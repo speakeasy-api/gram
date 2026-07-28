@@ -29,11 +29,21 @@ const syncErrorMaxLen = 500
 // runner's per-call deadline.
 func boundedProviderClient(policy *guardian.Policy) *guardian.HTTPClient {
 	client := policy.Client(guardian.WithRetryConfig(&guardian.RetryConfig{
-		WaitMin:      1 * time.Second,
-		WaitMax:      10 * time.Second,
-		MaxAttempts:  3,
-		CheckRetry:   retryablehttp.DefaultRetryPolicy,
-		Backoff:      retryablehttp.DefaultBackoff,
+		WaitMin:     1 * time.Second,
+		WaitMax:     10 * time.Second,
+		MaxAttempts: 3,
+		CheckRetry:  retryablehttp.DefaultRetryPolicy,
+		// DefaultBackoff honors a 429/503 Retry-After header VERBATIM,
+		// ignoring WaitMax — a vendor asking for minutes would stall the
+		// sync run inside one attempt. Clamp it: a wait beyond the cap
+		// means giving up and letting the schedule's own backoff handle it.
+		Backoff: func(minWait, maxWait time.Duration, attemptNum int, resp *http.Response) time.Duration {
+			delay := retryablehttp.DefaultBackoff(minWait, maxWait, attemptNum, resp)
+			if delay > maxWait {
+				return maxWait
+			}
+			return delay
+		},
 		ErrorHandler: nil,
 		PrepareRetry: nil,
 	}))
