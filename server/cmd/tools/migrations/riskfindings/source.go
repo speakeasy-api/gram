@@ -54,6 +54,15 @@ type SourceRow struct {
 	DeadLetterReason  *string
 	ExcludedAt        *time.Time
 	ExclusionID       *uuid.UUID
+	FalsePositiveAt   *time.Time
+
+	// Denormalized attribution resolved by the source's LEFT JOINs, mirroring
+	// the live writer's GetChatMessageAttribution lookup: message-level user
+	// ids win over chat-level ones. All empty when the chat message no longer
+	// resolves (deleted chat, missing message).
+	ChatID         string
+	UserID         string
+	ExternalUserID string
 }
 
 // selectPage walks risk_results in id order (uuidv7). The id is used ONLY as a
@@ -73,28 +82,39 @@ type SourceRow struct {
 // dead-letter rows — which never reach ClickHouse through the live path — are
 // excluded here too.
 //
-// false_positive_at IS NULL additionally drops rows the Presidio false-positive
-// sweep has classified as noise. ClickHouse is becoming the source of truth for
-// risk findings and has no false-positive column, so importing known noise would
-// leave permanently-unannotated junk in the store. We keep the backfilled set
-// clean; if false-positive tracking is needed later, a dedicated column can be
-// added.
+// Rows the Presidio false-positive sweep has marked are migrated WITH their
+// false_positive_at timestamp rather than dropped: risk_findings mirrors the
+// mark in its own Nullable column and every read query filters
+// false_positive_at IS NULL, so backfilling them preserves pre-cutover marks
+// (the live FP mutation path — PR 3 — is deferred) without inflating counts.
+//
+// The LEFT JOINs denormalize attribution the same way the live writer's
+// GetChatMessageAttribution query does (risk/queries.sql): chat id plus
+// resolved user ids, message-level values winning over chat-level ones,
+// everything collapsing to ” when the message or chat is gone.
 const selectPage = `
-SELECT id, created_at, organization_id, project_id, risk_policy_id,
-       risk_policy_version, chat_message_id, source, found, rule_id, description,
-       match, start_pos, end_pos, confidence, tags, dead_letter_reason,
-       excluded_at, excluded_exclusion_id
-FROM risk_results
-WHERE ($1::text IS NULL OR organization_id = $1)
-  AND ($2::uuid IS NULL OR project_id = $2)
-  AND ($3::uuid IS NULL OR risk_policy_id = $3)
-  AND ($4::timestamptz IS NULL OR created_at >= $4)
-  AND ($5::timestamptz IS NULL OR created_at < $5)
-  AND id > $6
-  AND found IS TRUE
-  AND rule_id IS NOT NULL
-  AND false_positive_at IS NULL
-ORDER BY id
+SELECT r.id, r.created_at, r.organization_id, r.project_id, r.risk_policy_id,
+       r.risk_policy_version, r.chat_message_id, r.source, r.found, r.rule_id, r.description,
+       r.match, r.start_pos, r.end_pos, r.confidence, r.tags, r.dead_letter_reason,
+       r.excluded_at, r.excluded_exclusion_id, r.false_positive_at,
+       COALESCE(cm.chat_id::text, '') AS chat_id,
+       COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id,
+       COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
+FROM risk_results r
+LEFT JOIN chat_messages cm
+  ON cm.id = r.chat_message_id
+LEFT JOIN chats c
+  ON c.id = cm.chat_id
+  AND c.deleted IS FALSE
+WHERE ($1::text IS NULL OR r.organization_id = $1)
+  AND ($2::uuid IS NULL OR r.project_id = $2)
+  AND ($3::uuid IS NULL OR r.risk_policy_id = $3)
+  AND ($4::timestamptz IS NULL OR r.created_at >= $4)
+  AND ($5::timestamptz IS NULL OR r.created_at < $5)
+  AND r.id > $6
+  AND r.found IS TRUE
+  AND r.rule_id IS NOT NULL
+ORDER BY r.id
 LIMIT $7
 `
 
@@ -177,7 +197,8 @@ func (s *Source) Read(ctx context.Context, criteria pipeline.Criteria, out chan<
 				&r.ID, &r.CreatedAt, &r.OrganizationID, &r.ProjectID, &r.RiskPolicyID,
 				&r.RiskPolicyVersion, &r.ChatMessageID, &r.Source, &r.Found, &r.RuleID, &r.Description,
 				&r.Match, &r.StartPos, &r.EndPos, &r.Confidence, &r.Tags, &r.DeadLetterReason,
-				&r.ExcludedAt, &r.ExclusionID,
+				&r.ExcludedAt, &r.ExclusionID, &r.FalsePositiveAt,
+				&r.ChatID, &r.UserID, &r.ExternalUserID,
 			); err != nil {
 				rows.Close()
 				return fmt.Errorf("scan row after %s: %w", cursor, err)

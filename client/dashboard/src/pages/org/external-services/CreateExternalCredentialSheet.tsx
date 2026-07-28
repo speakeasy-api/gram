@@ -134,7 +134,7 @@ export function CreateExternalCredentialSheet({
               <Input
                 value={name}
                 onChange={setName}
-                placeholder="Gram platform identity"
+                placeholder="Speakeasy platform identity"
               />
             </Stack>
 
@@ -184,8 +184,8 @@ function GcpCredentialFields({
   return (
     <Stack gap={4}>
       <Type muted small>
-        Leave blank to use Gram's ambient attached identity, or set a service
-        account for Gram to impersonate.
+        Leave blank to use the platform's ambient attached identity, or set a
+        service account for the platform to impersonate.
       </Type>
       <Stack gap={2}>
         <Label className="text-muted-foreground text-xs">

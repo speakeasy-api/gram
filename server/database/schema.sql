@@ -339,6 +339,108 @@ CREATE TABLE IF NOT EXISTS skill_version_origins (
 CREATE INDEX IF NOT EXISTS skill_version_origins_project_id_skill_id_idx
 ON skill_version_origins (project_id, skill_id);
 
+CREATE TABLE IF NOT EXISTS skill_feedback (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  skill_id uuid,
+  skill_version_id uuid,
+
+  skill_name TEXT NOT NULL,
+  source TEXT NOT NULL,
+  outcome TEXT NOT NULL,
+  note TEXT,
+  session_id TEXT,
+  user_id TEXT,
+  user_email TEXT,
+  reviewed_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_feedback_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_feedback_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skill_feedback_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE NO ACTION,
+  CONSTRAINT skill_feedback_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE NO ACTION,
+  CONSTRAINT skill_feedback_note_size_check CHECK (note <> '' AND CHAR_LENGTH(note) <= 4000),
+  CONSTRAINT skill_feedback_skill_id_skill_version_id_check CHECK (skill_version_id IS NULL OR skill_id IS NOT NULL)
+);
+
+CREATE INDEX IF NOT EXISTS skill_feedback_project_id_skill_name_created_at_id_idx
+ON skill_feedback (project_id, skill_name, created_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS skill_feedback_project_id_skill_name_created_at_unreviewed_idx
+ON skill_feedback (project_id, skill_name, created_at)
+WHERE reviewed_at IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_feedback_project_id_id_key
+ON skill_feedback (project_id, id);
+
+CREATE TABLE IF NOT EXISTS skill_edit_suggestions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  base_version_id uuid NOT NULL,
+
+  rationale TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  scored_session_count bigint NOT NULL DEFAULT 0,
+  approved_by_user_id TEXT,
+  approved_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_edit_suggestions_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_edit_suggestions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skill_edit_suggestions_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE NO ACTION,
+  CONSTRAINT skill_edit_suggestions_skill_id_base_version_id_fkey FOREIGN KEY (skill_id, base_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE NO ACTION
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_edit_suggestions_skill_id_open_key
+ON skill_edit_suggestions (skill_id)
+WHERE status = 'open';
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_edit_suggestions_project_id_id_key
+ON skill_edit_suggestions (project_id, id);
+
+CREATE INDEX IF NOT EXISTS skill_edit_suggestions_project_id_skill_id_created_at_idx
+ON skill_edit_suggestions (project_id, skill_id, created_at DESC);
+
+-- Evidence linking each suggestion to the feedback rows it was generated from.
+CREATE TABLE IF NOT EXISTS skill_edit_suggestion_changes (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  suggestion_id uuid NOT NULL,
+
+  proposed_diff TEXT NOT NULL,
+  rationale TEXT NOT NULL,
+  position integer NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_edit_suggestion_changes_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_edit_suggestion_changes_project_id_suggestion_id_fkey FOREIGN KEY (project_id, suggestion_id) REFERENCES skill_edit_suggestions (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT skill_edit_suggestion_changes_proposed_diff_size_check CHECK (octet_length(proposed_diff) <= 131072)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_edit_suggestion_changes_project_id_id_key ON skill_edit_suggestion_changes (project_id, id);
+
+CREATE INDEX IF NOT EXISTS skill_edit_suggestion_changes_suggestion_position_idx ON skill_edit_suggestion_changes (project_id, suggestion_id, position);
+
+CREATE TABLE IF NOT EXISTS skill_edit_suggestion_feedback (
+  project_id uuid NOT NULL,
+  change_id uuid NOT NULL,
+  feedback_id uuid NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_edit_suggestion_feedback_pkey PRIMARY KEY (change_id, feedback_id),
+  CONSTRAINT skill_edit_suggestion_feedback_project_id_change_id_fkey FOREIGN KEY (project_id, change_id) REFERENCES skill_edit_suggestion_changes (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT skill_edit_suggestion_feedback_project_id_feedback_id_fkey FOREIGN KEY (project_id, feedback_id) REFERENCES skill_feedback (project_id, id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS skill_edit_suggestion_feedback_project_id_feedback_id_idx
+ON skill_edit_suggestion_feedback (project_id, feedback_id);
+
 CREATE TABLE IF NOT EXISTS skill_observations (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
@@ -2023,6 +2125,51 @@ WHERE external_message_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS chat_messages_risk_analyzed_at_null_idx
 ON chat_messages (project_id, id)
 WHERE risk_analyzed_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS chat_content_parts (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  chat_id uuid NOT NULL,
+  project_id uuid,
+
+  -- Discriminator: 'prompt_attachment' now, 'artifact' next. Validated in app
+  -- code. Trust tier is derived from this rather than stored, so a row cannot
+  -- contradict itself.
+  kind TEXT NOT NULL,
+
+  content_asset_url TEXT NOT NULL,
+  -- Provider identity: attachment transcript entry uuid, artifact id.
+  external_id TEXT,
+  -- The turn this content hangs off, resolved at persist time. For an
+  -- attachment, the user prompt it was expanded under.
+  parent_chat_message_id uuid,
+  -- Version grain for mutable content (artifacts). NULL for immutable kinds.
+  version INTEGER,
+  source TEXT,
+  -- Sparse per-kind metadata, e.g. {"display_path":...,"kind":"file"} for
+  -- attachments, {"artifact_type":...,"title":...,"language":...} for artifacts.
+  metadata JSONB,
+
+  -- Joins the same unanalyzed-sweep model as chat_messages.
+  risk_analyzed_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT chat_content_parts_pkey PRIMARY KEY (id),
+  CONSTRAINT chat_content_parts_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE,
+  CONSTRAINT chat_content_parts_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT chat_content_parts_parent_chat_message_id_fkey FOREIGN KEY (parent_chat_message_id) REFERENCES chat_messages (id) ON DELETE SET NULL
+);
+
+-- Unanalyzed sweep, mirroring chat_messages_risk_analyzed_at_null_idx.
+CREATE INDEX IF NOT EXISTS chat_content_parts_risk_analyzed_at_null_idx
+ON chat_content_parts (project_id, id) WHERE risk_analyzed_at IS NULL;
+
+-- Read path: attachments for a chat / a parent turn.
+CREATE INDEX IF NOT EXISTS chat_content_parts_chat_id_idx
+ON chat_content_parts (chat_id);
 
 -- Serves the chat analysis enqueue walk, which pages a project's chats on the
 -- immutable (created_at, id) keyset within a bounded lookback.
@@ -3946,6 +4093,14 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   scope_exempt TEXT,
   action TEXT NOT NULL DEFAULT 'flag',
   audience_type TEXT NOT NULL DEFAULT 'everyone',
+  -- Default disposition for shadow MCP blocking policies (action = 'block'
+  -- with the 'shadow_mcp' source): 'block_all' blocks every non-Gram-hosted
+  -- server unless allowed, 'allow_all' permits every server unless blocked.
+  -- Both exception lists live in RBAC grants (allow list = risk_policy:bypass,
+  -- block list = risk_policy:block), not on this row. NULL means 'block_all'
+  -- (the original behavior). Immutable after create; switching posture
+  -- requires delete + recreate. Valid values enforced in application layer.
+  shadow_mcp_disposition TEXT,
   auto_name BOOLEAN NOT NULL DEFAULT TRUE,
   user_message TEXT,
   -- For policy_type = 'prompt_based': the prompt-based guardrail the LLM judge
@@ -4066,7 +4221,8 @@ CREATE TABLE IF NOT EXISTS risk_results (
   organization_id TEXT NOT NULL,
   risk_policy_id uuid NOT NULL,
   risk_policy_version BIGINT NOT NULL,
-  chat_message_id uuid NOT NULL,
+  chat_message_id uuid,
+  chat_content_part_id uuid,
   source TEXT NOT NULL,
 
   found BOOLEAN NOT NULL,
@@ -4107,7 +4263,9 @@ CREATE TABLE IF NOT EXISTS risk_results (
   CONSTRAINT risk_results_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
   CONSTRAINT risk_results_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
   CONSTRAINT risk_results_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies(id) ON DELETE CASCADE,
-  CONSTRAINT risk_results_chat_message_id_fkey FOREIGN KEY (chat_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
+  CONSTRAINT risk_results_chat_message_id_fkey FOREIGN KEY (chat_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE,
+  CONSTRAINT risk_results_chat_content_part_id_fkey FOREIGN KEY (chat_content_part_id) REFERENCES chat_content_parts(id) ON DELETE CASCADE,
+  CONSTRAINT risk_results_anchor_check CHECK ((chat_message_id IS NULL) <> (chat_content_part_id IS NULL))
 ) WITH (
   -- This table is append-heavy and rarely updated, so the only autovacuum
   -- trigger that ever fires is the insert one. With the global 0.2 scale
@@ -4131,6 +4289,9 @@ ON risk_results (project_id, risk_policy_id, risk_policy_version, chat_message_i
 
 CREATE INDEX IF NOT EXISTS risk_results_project_chat_message_idx
 ON risk_results (project_id, chat_message_id);
+
+CREATE INDEX IF NOT EXISTS risk_results_project_chat_content_part_idx
+ON risk_results (project_id, chat_content_part_id);
 
 CREATE INDEX IF NOT EXISTS risk_results_project_found_idx
 ON risk_results (project_id, created_at DESC)

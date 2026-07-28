@@ -21,6 +21,7 @@ type Endpoints struct {
 	Codex              goa.Endpoint
 	Ingest             goa.Endpoint
 	UploadSkillContent goa.Endpoint
+	SkillFeedback      goa.Endpoint
 	Logs               goa.Endpoint
 	Metrics            goa.Endpoint
 }
@@ -35,6 +36,7 @@ func NewEndpoints(s Service) *Endpoints {
 		Codex:              NewCodexEndpoint(s, a.APIKeyAuth),
 		Ingest:             NewIngestEndpoint(s),
 		UploadSkillContent: NewUploadSkillContentEndpoint(s, a.APIKeyAuth),
+		SkillFeedback:      NewSkillFeedbackEndpoint(s, a.APIKeyAuth),
 		Logs:               NewLogsEndpoint(s, a.APIKeyAuth),
 		Metrics:            NewMetricsEndpoint(s, a.APIKeyAuth),
 	}
@@ -47,6 +49,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Codex = m(e.Codex)
 	e.Ingest = m(e.Ingest)
 	e.UploadSkillContent = m(e.UploadSkillContent)
+	e.SkillFeedback = m(e.SkillFeedback)
 	e.Logs = m(e.Logs)
 	e.Metrics = m(e.Metrics)
 }
@@ -171,6 +174,41 @@ func NewUploadSkillContentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return nil, s.UploadSkillContent(ctx, p)
+	}
+}
+
+// NewSkillFeedbackEndpoint returns an endpoint function that calls the method
+// "skillFeedback" of service "hooks".
+func NewSkillFeedbackEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SkillFeedbackPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"hooks"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"hooks"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.SkillFeedback(ctx, p)
 	}
 }
 

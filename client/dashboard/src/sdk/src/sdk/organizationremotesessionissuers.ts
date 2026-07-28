@@ -4,18 +4,22 @@
 
 import { organizationRemoteSessionIssuersCreate } from "../funcs/organizationRemoteSessionIssuersCreate.js";
 import { organizationRemoteSessionIssuersDelete } from "../funcs/organizationRemoteSessionIssuersDelete.js";
+import { organizationRemoteSessionIssuersFetchMetadata } from "../funcs/organizationRemoteSessionIssuersFetchMetadata.js";
 import { organizationRemoteSessionIssuersGet } from "../funcs/organizationRemoteSessionIssuersGet.js";
 import { organizationRemoteSessionIssuersGetDeletePreflight } from "../funcs/organizationRemoteSessionIssuersGetDeletePreflight.js";
 import { organizationRemoteSessionIssuersGetMigratePreflight } from "../funcs/organizationRemoteSessionIssuersGetMigratePreflight.js";
 import { organizationRemoteSessionIssuersList } from "../funcs/organizationRemoteSessionIssuersList.js";
 import { organizationRemoteSessionIssuersMigrate } from "../funcs/organizationRemoteSessionIssuersMigrate.js";
 import { organizationRemoteSessionIssuersMove } from "../funcs/organizationRemoteSessionIssuersMove.js";
+import { organizationRemoteSessionIssuersRefreshMetadata } from "../funcs/organizationRemoteSessionIssuersRefreshMetadata.js";
 import { organizationRemoteSessionIssuersUpdate } from "../funcs/organizationRemoteSessionIssuersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { MigrateOrganizationRemoteSessionIssuerResult } from "../models/components/migrateorganizationremotesessionissuerresult.js";
 import { OrganizationIssuerDeletePreflight } from "../models/components/organizationissuerdeletepreflight.js";
 import { OrganizationIssuerMigratePreflight } from "../models/components/organizationissuermigratepreflight.js";
 import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js";
+import { RemoteSessionIssuerDraft } from "../models/components/remotesessionissuerdraft.js";
+import { RemoteSessionIssuerRefresh } from "../models/components/remotesessionissuerrefresh.js";
 import {
   CreateOrganizationRemoteSessionIssuerRequest,
   CreateOrganizationRemoteSessionIssuerSecurity,
@@ -24,6 +28,10 @@ import {
   DeleteOrganizationRemoteSessionIssuerRequest,
   DeleteOrganizationRemoteSessionIssuerSecurity,
 } from "../models/operations/deleteorganizationremotesessionissuer.js";
+import {
+  FetchOrganizationRemoteSessionIssuerMetadataRequest,
+  FetchOrganizationRemoteSessionIssuerMetadataSecurity,
+} from "../models/operations/fetchorganizationremotesessionissuermetadata.js";
 import {
   GetOrganizationRemoteSessionIssuerRequest,
   GetOrganizationRemoteSessionIssuerSecurity,
@@ -49,6 +57,10 @@ import {
   MoveOrganizationRemoteSessionIssuerRequest,
   MoveOrganizationRemoteSessionIssuerSecurity,
 } from "../models/operations/moveorganizationremotesessionissuer.js";
+import {
+  RefreshOrganizationRemoteSessionIssuerMetadataRequest,
+  RefreshOrganizationRemoteSessionIssuerMetadataSecurity,
+} from "../models/operations/refreshorganizationremotesessionissuermetadata.js";
 import {
   UpdateOrganizationRemoteSessionIssuerRequest,
   UpdateOrganizationRemoteSessionIssuerSecurity,
@@ -88,6 +100,25 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(organizationRemoteSessionIssuersDelete(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * fetchIssuerMetadata organizationRemoteSessionIssuers
+   *
+   * @remarks
+   * Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for organizationRemoteSessionIssuers.create. Keyed by issuer URL; no record need exist and nothing is persisted. The organization-scoped counterpart of remoteSessionIssuers.fetchMetadata, so creating an organization-level issuer no longer has to borrow an unrelated project's scope. Requires org:admin.
+   */
+  async fetchMetadata(
+    request: FetchOrganizationRemoteSessionIssuerMetadataRequest,
+    security?: FetchOrganizationRemoteSessionIssuerMetadataSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RemoteSessionIssuerDraft> {
+    return unwrapAsync(organizationRemoteSessionIssuersFetchMetadata(
       this,
       request,
       security,
@@ -211,6 +242,27 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuer> {
     return unwrapAsync(organizationRemoteSessionIssuersMove(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * refreshIssuerMetadata organizationRemoteSessionIssuers
+   *
+   * @remarks
+   * Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id; serves both organizational and project-specific issuers in the caller's organization. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires org:admin.
+   */
+  async refreshMetadata(
+    request: RefreshOrganizationRemoteSessionIssuerMetadataRequest,
+    security?:
+      | RefreshOrganizationRemoteSessionIssuerMetadataSecurity
+      | undefined,
+    options?: RequestOptions,
+  ): Promise<RemoteSessionIssuerRefresh> {
+    return unwrapAsync(organizationRemoteSessionIssuersRefreshMetadata(
       this,
       request,
       security,

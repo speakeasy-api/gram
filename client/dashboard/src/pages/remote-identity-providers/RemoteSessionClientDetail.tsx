@@ -94,7 +94,12 @@ export default function RemoteSessionClientDetail(): JSX.Element {
             <Type small muted>
               Remote Session Client
             </Type>
-            {client && <ScopeBadge projectScoped={Boolean(client.projectId)} />}
+            {client && (
+              <ScopeBadge
+                projectId={client.projectId}
+                organizationId={client.organizationId}
+              />
+            )}
           </div>
           <Heading variant="h1" className="break-all normal-case">
             {label}

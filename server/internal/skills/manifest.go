@@ -614,7 +614,7 @@ func normalizeSkillName(displayName string) (string, error) {
 
 func validateSkillSpec(fields map[string]*yaml.Node, displayName string) []validationError {
 	validationErrors := make([]validationError, 0)
-	if !validSpecName(displayName) {
+	if !ValidSpecName(displayName) {
 		validationErrors = append(validationErrors, validationError{
 			Code:    "invalid_format",
 			Field:   "name",
@@ -684,7 +684,8 @@ func validateSkillSpec(fields map[string]*yaml.Node, displayName string) []valid
 	return validationErrors
 }
 
-func validSpecName(name string) bool {
+// ValidSpecName reports whether name is already in canonical skill-spec form.
+func ValidSpecName(name string) bool {
 	if len(name) == 0 || len(name) > 64 || name[0] == '-' || name[len(name)-1] == '-' {
 		return false
 	}

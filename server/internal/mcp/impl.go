@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -137,6 +138,8 @@ type Service struct {
 	// helpers but never serves a runtime request).
 	remoteProxyManager *remotemcp.ProxyManager
 	tunnelManager      *tunnelManager
+	// Nil when no Redis was wired; every public tunneled request then fails closed.
+	tunnelPublic *tunnelPublicRuntime
 }
 
 // oauthTokenInputs is one upstream OAuth access token collected during MCP
@@ -262,6 +265,8 @@ func NewService(
 	tunnelRoutes route.Store,
 	tunnelForwardToken string,
 	tunnelGatewayCIDRs []string,
+	redisClient *redis.Client,
+	tunnelPublicConfig TunnelPublicConfig,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -338,6 +343,7 @@ func NewService(
 		remoteChallengeMgr: remoteChallengeMgr,
 		remoteProxyManager: remoteProxyManager,
 		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
+		tunnelPublic:       newTunnelPublicRuntime(redisClient, tunnelPublicConfig),
 	}
 }
 
@@ -995,6 +1001,11 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 // strictPlatform=true to assert that the original challenge was minted
 // on the platform domain — the value is an explicit assertion rather
 // than a route inference.
+//
+// Disabled toolsets (mcp_enabled false) surface as errToolsetNotFound so
+// every legacy-routed surface (serving, well-known metadata, OAuth
+// challenges) treats them as nonexistent — mirroring how the
+// mcp_endpoints → mcp_servers path handles visibility 'disabled'.
 func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainID uuid.NullUUID, strictPlatform bool) (*toolsets_repo.Toolset, error) {
 	var toolset toolsets_repo.Toolset
 	var err error
@@ -1014,6 +1025,9 @@ func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainI
 		return nil, errToolsetNotFound
 	case err != nil:
 		return nil, fmt.Errorf("lookup toolset: %w", err)
+	}
+	if !toolset.McpEnabled {
+		return nil, errToolsetNotFound
 	}
 	return &toolset, nil
 }

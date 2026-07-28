@@ -30,10 +30,10 @@ func TestSkillsLoadWakesEfficacyAfterRecordedActivation(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, observations, 1)
 
-	// A repeat load of the same version is a durable no-op and wakes nothing.
+	// A repeat load refreshes recency and may harmlessly wake efficacy again.
 	out.Reset()
 	require.NoError(t, tool.Call(ctx, skillToolCallEnv(chatID.String()), bytes.NewBufferString(`{"name":"waking-skill"}`), &out))
-	require.Equal(t, []uuid.UUID{fixture.projectID}, signaler.signaled())
+	require.Equal(t, []uuid.UUID{fixture.projectID, fixture.projectID}, signaler.signaled())
 }
 
 func TestSkillsLoadSignalFailureDoesNotAlterResult(t *testing.T) {

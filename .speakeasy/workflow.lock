@@ -31,7 +31,7 @@ workflow:
                 - location: overlays/goa.yaml
             transformations:
                 - filterOperations:
-                    operations: ingestHookEvent,uploadSkillContent
+                    operations: ingestHookEvent,uploadSkillContent,skillFeedback
                 - removeUnused: true
             output: .speakeasy/openapi-hooks.yaml
     targets:
