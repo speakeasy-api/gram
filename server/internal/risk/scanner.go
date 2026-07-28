@@ -564,6 +564,10 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 		}
 	}
 
+	// Sentinel-only presidio result held back so the remaining sources still
+	// run; returned only when no real finding matches (see the presidio case).
+	var deadLetterResult *ScanResult
+
 	for _, source := range policy.Sources {
 		if !categoryScope.SourceInScope(view, source) {
 			continue
@@ -611,8 +615,11 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 					// A Presidio failure surfaces as a dead-letter sentinel finding
 					// (DeadLetterReason set) rather than an error. Prefer a real
 					// finding when one is present so the sentinel never shadows
-					// actual PII; a sentinel-only result propagates with
-					// DeadLetterReason set and the warn path skips the challenge.
+					// actual PII. A sentinel-only result must not short-circuit the
+					// policy either: hold it and keep scanning the remaining sources
+					// so a healthy detector (e.g. gitleaks) can still match; it is
+					// returned only when nothing real matches, and the warn path
+					// then skips the challenge.
 					f := filtered[0]
 					for _, cand := range filtered {
 						if cand.DeadLetterReason == "" {
@@ -620,7 +627,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 							break
 						}
 					}
-					return &ScanResult{
+					result := &ScanResult{
 						Action:           policy.Action,
 						PolicyID:         policy.ID.String(),
 						PolicyName:       policy.Name,
@@ -633,7 +640,14 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 						Entity:           f.RuleID,
 						CallFingerprint:  "",
 						DeadLetterReason: f.DeadLetterReason,
-					}, nil
+					}
+					if f.DeadLetterReason != "" {
+						if deadLetterResult == nil {
+							deadLetterResult = result
+						}
+						continue
+					}
+					return result, nil
 				}
 			}
 		case ra.SourcePromptInjection:
@@ -675,6 +689,9 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 			CallFingerprint:  "",
 			DeadLetterReason: "",
 		}, nil
+	}
+	if deadLetterResult != nil {
+		return deadLetterResult, nil
 	}
 	return nil, nil
 }

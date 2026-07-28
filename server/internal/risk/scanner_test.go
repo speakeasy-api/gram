@@ -729,6 +729,41 @@ func TestScanner_PresidioDeadLetterWarnKeepsRealFindings(t *testing.T) {
 	require.Empty(t, result.DeadLetterReason)
 }
 
+// TestScanner_PresidioDeadLetterDoesNotSkipLaterSources verifies a sentinel
+// does not short-circuit the policy's remaining sources: with sources
+// [presidio, gitleaks] and Presidio dead-lettering, a real secret must still
+// be caught by gitleaks and fire under its own rule.
+func TestScanner_PresidioDeadLetterDoesNotSkipLaterSources(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	require.NotNil(t, authCtx.ProjectID)
+	policyID := uuid.New()
+	_, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID:               policyID,
+		ProjectID:        *authCtx.ProjectID,
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		Name:             "pii then secrets",
+		Sources:          []string{risk_analysis.SourcePresidio, risk_analysis.SourceGitleaks},
+		PresidioEntities: []string{"EMAIL_ADDRESS"},
+		Enabled:          true,
+		Action:           "warn",
+		AudienceType:     "everyone",
+		AutoName:         false,
+	})
+	require.NoError(t, err)
+	grantRiskPolicyToAllUsers(t, ti, ctx, authCtx.ActiveOrganizationID, policyID)
+
+	scanner := newDeadLetterScanner(t, ti, &deadLetterPIIScanner{})
+
+	result, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "export GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab", message.User, "")
+	require.NoError(t, err)
+	require.NotNil(t, result, "gitleaks must still run when presidio dead-letters")
+	require.Equal(t, risk_analysis.SourceGitleaks, result.Source)
+	require.Equal(t, "warn", result.Action)
+	require.Empty(t, result.DeadLetterReason)
+}
+
 // TestScanner_PresidioDeadLetterBlockStillDenies pins the fail-closed side:
 // a block policy still denies on a dead-letter sentinel (the message could not
 // be scanned), carrying DeadLetterReason so callers can tell outage from match.
