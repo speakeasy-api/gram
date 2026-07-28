@@ -27,8 +27,7 @@ const (
 // AWS access key id rule. Our composite secret rule requires it as an anchor.
 const awsAccessTokenRuleID = "aws-access-token"
 
-//go:fix inline
-func intPtr(i int) *int { return new(i) }
+func intPtr(i int) *int { return &i }
 
 // awsRules returns the custom rules layered onto gitleaks' default config to
 // close its AWS coverage gap. The stock config detects only the access key id
@@ -67,7 +66,7 @@ func awsRules() []config.Rule {
 			// on fragments that could contain an anchor in the first place.
 			Keywords: []string{"akia", "asia", "abia", "acca", "a3t", "agpa", "aida", "aipa", "anpa", "anva", "aroa", "apka", "asca"},
 			RequiredRules: []*config.Required{
-				{RuleID: awsAccessTokenRuleID, WithinLines: new(4)},
+				{RuleID: awsAccessTokenRuleID, WithinLines: intPtr(4)},
 			},
 			Tags: []string{"aws"},
 		},
