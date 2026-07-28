@@ -62,8 +62,12 @@ type benchSet struct {
 	MinimumApplyRate float64 `json:"minimum_apply_rate"`
 	// MinimumDecisionAccuracy gates how often the model proposes when there is a
 	// gap and declines when there is not.
-	MinimumDecisionAccuracy float64    `json:"minimum_decision_accuracy"`
-	Cases                   []testCase `json:"cases"`
+	MinimumDecisionAccuracy float64 `json:"minimum_decision_accuracy"`
+	// MinimumEvidenceRate gates the share of served changes that cite feedback.
+	// Evidence is the point of the feature, so a model that writes plausible
+	// edits without citing anything must not win on apply rate alone.
+	MinimumEvidenceRate float64    `json:"minimum_evidence_rate"`
+	Cases               []testCase `json:"cases"`
 }
 
 type feedbackItem struct {
@@ -93,6 +97,7 @@ type result struct {
 	Changes       int           `json:"changes"`
 	WantChanges   int           `json:"want_changes"`
 	Applied       bool          `json:"applied"`
+	Corrected     bool          `json:"corrected,omitempty"`
 	Validated     bool          `json:"validated"`
 	EvidenceCited int           `json:"evidence_cited"`
 	Latency       time.Duration `json:"latency"`
@@ -176,7 +181,7 @@ func main() {
 	for _, model := range models {
 		summary := summarize(model, results)
 		printSummary(summary, set)
-		passed = passed && summary.ApplyRate >= set.MinimumApplyRate && summary.DecisionAccuracy >= set.MinimumDecisionAccuracy
+		passed = passed && summary.ApplyRate >= set.MinimumApplyRate && summary.DecisionAccuracy >= set.MinimumDecisionAccuracy && summary.EvidenceRate >= set.MinimumEvidenceRate
 	}
 	printFailures(results)
 
@@ -246,6 +251,7 @@ func evaluate(
 		Changes:       0,
 		WantChanges:   tc.ExpectMinChanges,
 		Applied:       false,
+		Corrected:     false,
 		Validated:     false,
 		EvidenceCited: 0,
 		Latency:       0,
@@ -255,10 +261,77 @@ func evaluate(
 		Error:         "",
 	}
 
-	request, err := buildRequest(model, tc, reasoning)
+	generation, ok := generateOnce(client, model, tc, "", timeout, reasoning, &res)
+	if !ok {
+		return res
+	}
+
+	// Mirror Engine.Run: an invalid proposal gets exactly one correction round
+	// with the validation error, a no-op becomes a decline, and a proposal that
+	// stays invalid after correction is served as a decline. The bench judges
+	// the decision production would serve, not the model's first draft.
+	if generation.Decision == suggest.DecisionPropose {
+		resolvedCount, failure := applyProposal(tc, generation)
+		switch {
+		case failure == nil:
+			res.Applied = true
+			res.Validated = true
+			res.Changes = resolvedCount
+		case errors.Is(failure, skills.ErrSkillSuggestionNoOp):
+			generation = suggest.Generation{Decision: suggest.DecisionDecline, Changes: nil, Rationale: "no-op"}
+		default:
+			res.Corrected = true
+			generation, ok = generateOnce(client, model, tc, failure.Error(), timeout, reasoning, &res)
+			if !ok {
+				return res
+			}
+			if generation.Decision == suggest.DecisionPropose {
+				resolvedCount, failure = applyProposal(tc, generation)
+				switch {
+				case failure == nil:
+					res.Applied = true
+					res.Validated = true
+					res.Changes = resolvedCount
+				case errors.Is(failure, skills.ErrSkillSuggestionNoOp):
+					generation = suggest.Generation{Decision: suggest.DecisionDecline, Changes: nil, Rationale: "no-op"}
+				default:
+					res.Failure = fmt.Sprintf("invalid after correction: %v", failure)
+					generation = suggest.Generation{Decision: suggest.DecisionDecline, Changes: nil, Rationale: "discarded"}
+				}
+			}
+		}
+	}
+
+	res.GotDecision = string(generation.Decision)
+	res.Changes = 0
+	res.EvidenceCited = 0
+	if generation.Decision == suggest.DecisionPropose {
+		res.Changes = len(generation.Changes)
+		for _, change := range generation.Changes {
+			if len(change.Evidence) > 0 {
+				res.EvidenceCited++
+			}
+		}
+	}
+	return res
+}
+
+// generateOnce performs a single production-shaped generator call and folds
+// its latency, tokens, and cost into the result. It reports false when the
+// call or its validation failed, with the reason recorded on the result.
+func generateOnce(
+	client openrouter.CompletionClient,
+	model string,
+	tc testCase,
+	validationError string,
+	timeout time.Duration,
+	reasoning *openrouter.Reasoning,
+	res *result,
+) (suggest.Generation, bool) {
+	request, err := buildRequest(model, tc, validationError, reasoning)
 	if err != nil {
 		res.Error = fmt.Sprintf("invalid case: %v", err)
-		return res
+		return suggest.Generation{}, false
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -266,67 +339,52 @@ func evaluate(
 
 	started := time.Now()
 	response, err := client.GetObjectCompletion(ctx, request)
-	res.Latency = time.Since(started)
+	res.Latency += time.Since(started)
 	if err != nil {
 		res.Error = fmt.Sprintf("completion failed: %v", err)
-		return res
+		return suggest.Generation{}, false
 	}
 	if response == nil || response.Message == nil {
 		res.Error = "empty response"
-		return res
+		return suggest.Generation{}, false
 	}
-	res.Tokens = response.Usage.TotalTokens
-	res.CostUSD = response.Usage.Cost
+	res.Tokens += response.Usage.TotalTokens
+	if response.Usage.Cost != nil {
+		total := *response.Usage.Cost
+		if res.CostUSD != nil {
+			total += *res.CostUSD
+		}
+		res.CostUSD = &total
+	}
 
 	var generation suggest.Generation
 	raw := strings.TrimSpace(openrouter.GetText(*response.Message))
 	if err := json.Unmarshal([]byte(raw), &generation); err != nil {
 		res.Failure = "response is not the declared schema"
-		return res
+		return suggest.Generation{}, false
 	}
 	if err := suggest.ValidateGeneration(&generation, len(tc.Feedback)); err != nil {
 		res.Failure = fmt.Sprintf("invalid generation: %v", err)
-		return res
+		return suggest.Generation{}, false
 	}
+	return generation, true
+}
 
-	res.GotDecision = string(generation.Decision)
-	res.Changes = len(generation.Changes)
-	for _, change := range generation.Changes {
-		if len(change.Evidence) > 0 {
-			res.EvidenceCited++
-		}
-	}
-
-	if generation.Decision == suggest.DecisionDecline {
-		// Nothing to anchor or validate: a decline is judged on the label alone.
-		res.Applied = true
-		res.Validated = true
-		return res
-	}
-
+// applyProposal anchors and validates a proposal exactly as resolveGeneration
+// does in production, returning the number of applied changes.
+func applyProposal(tc testCase, generation suggest.Generation) (int, error) {
 	content, resolved, err := suggest.ResolveChanges(tc.SkillContent, generation.Changes)
 	if err != nil {
-		res.Failure = fmt.Sprintf("anchor: %v", err)
-		return res
+		return 0, fmt.Errorf("anchor: %w", err)
 	}
-	if len(resolved) == 0 {
-		res.Failure = "changes left the manifest unchanged"
-		return res
-	}
-	res.Applied = true
-	res.Changes = len(resolved)
-
 	baseSHA, err := canonicalSHA(tc.SkillContent, tc.SkillName)
 	if err != nil {
-		res.Error = fmt.Sprintf("invalid case manifest: %v", err)
-		return res
+		return 0, fmt.Errorf("invalid case manifest: %w", err)
 	}
 	if _, err := skills.ValidateSkillSuggestion(content, tc.SkillName, baseSHA); err != nil {
-		res.Failure = fmt.Sprintf("validate: %v", err)
-		return res
+		return 0, fmt.Errorf("validate: %w", err)
 	}
-	res.Validated = true
-	return res
+	return len(resolved), nil
 }
 
 // canonicalSHA returns the canonical digest of a manifest by validating it
@@ -341,7 +399,7 @@ func canonicalSHA(content, name string) (string, error) {
 	return validated.CanonicalSHA256, nil
 }
 
-func buildRequest(model string, tc testCase, reasoning *openrouter.Reasoning) (openrouter.ObjectCompletionRequest, error) {
+func buildRequest(model string, tc testCase, validationError string, reasoning *openrouter.Reasoning) (openrouter.ObjectCompletionRequest, error) {
 	projectID, err := uuid.Parse(benchProjectID)
 	if err != nil {
 		return openrouter.ObjectCompletionRequest{}, fmt.Errorf("parse bench project id: %w", err)
@@ -390,7 +448,7 @@ func buildRequest(model string, tc testCase, reasoning *openrouter.Reasoning) (o
 			Regression:      false,
 		},
 		Transcripts:     nil,
-		ValidationError: "",
+		ValidationError: validationError,
 	})
 	if err != nil {
 		return openrouter.ObjectCompletionRequest{}, fmt.Errorf("build prompt: %w", err)
@@ -430,14 +488,23 @@ func summarize(model string, results []result) modelSummary {
 		AverageTokens: 0, AverageCostUSD: 0,
 	}
 	var latencies []time.Duration
-	var decisionHits, applied, validated, changes, evidence, tokens int
+	var decisionHits, proposeRuns, applied, validated, changes, evidence, tokens int
 	var cost float64
 
+	// Every scheduled run stays in every denominator. A run that errored is a
+	// run production would have failed, so it counts as a miss in both gates
+	// rather than shrinking them.
 	for _, res := range results {
 		if res.Model != model {
 			continue
 		}
 		summary.Runs++
+		if res.WantDecision == string(suggest.DecisionPropose) {
+			proposeRuns++
+			if res.Changes < res.WantChanges {
+				summary.ChangeShortfall++
+			}
+		}
 		if res.Error != "" {
 			summary.Errors++
 			continue
@@ -450,24 +517,30 @@ func summarize(model string, results []result) modelSummary {
 		if res.GotDecision == res.WantDecision {
 			decisionHits++
 		}
-		if res.Applied {
-			applied++
-		}
-		if res.Validated {
-			validated++
-		}
-		if res.WantDecision == string(suggest.DecisionPropose) && res.Changes < res.WantChanges {
-			summary.ChangeShortfall++
+		// Apply is only meaningful where the label demands an edit: a decline on
+		// a propose-labeled case is a failure to produce the edit, and a decline
+		// on a decline-labeled case has nothing to apply.
+		if res.WantDecision == string(suggest.DecisionPropose) {
+			if res.Applied && res.Validated {
+				applied++
+			}
+			if res.Validated {
+				validated++
+			}
 		}
 		changes += res.Changes
 		evidence += res.EvidenceCited
 	}
 
+	if summary.Runs > 0 {
+		summary.DecisionAccuracy = float64(decisionHits) / float64(summary.Runs)
+	}
+	if proposeRuns > 0 {
+		summary.ApplyRate = float64(applied) / float64(proposeRuns)
+		summary.ValidateRate = float64(validated) / float64(proposeRuns)
+	}
 	scored := summary.Runs - summary.Errors
 	if scored > 0 {
-		summary.DecisionAccuracy = float64(decisionHits) / float64(scored)
-		summary.ApplyRate = float64(applied) / float64(scored)
-		summary.ValidateRate = float64(validated) / float64(scored)
 		summary.AverageTokens = float64(tokens) / float64(scored)
 		summary.AverageCostUSD = cost / float64(scored)
 	}
@@ -484,15 +557,15 @@ func summarize(model string, results []result) modelSummary {
 
 func printSummary(summary modelSummary, set benchSet) {
 	verdict := "PASS"
-	if summary.ApplyRate < set.MinimumApplyRate || summary.DecisionAccuracy < set.MinimumDecisionAccuracy {
+	if summary.ApplyRate < set.MinimumApplyRate || summary.DecisionAccuracy < set.MinimumDecisionAccuracy || summary.EvidenceRate < set.MinimumEvidenceRate {
 		verdict = "FAIL"
 	}
 	fmt.Printf(
-		"%s model=%s apply=%.1f%% (gate=%.0f%%) decision=%.1f%% (gate=%.0f%%) validate=%.1f%% evidence=%.1f%% shortfall=%d errors=%d p50=%s p95=%s avg_tokens=%.0f avg_cost_usd=%.6f\n",
+		"%s model=%s apply=%.1f%% (gate=%.0f%%) decision=%.1f%% (gate=%.0f%%) validate=%.1f%% evidence=%.1f%% (gate=%.0f%%) shortfall=%d errors=%d p50=%s p95=%s avg_tokens=%.0f avg_cost_usd=%.6f\n",
 		verdict, summary.Model,
 		summary.ApplyRate*100, set.MinimumApplyRate*100,
 		summary.DecisionAccuracy*100, set.MinimumDecisionAccuracy*100,
-		summary.ValidateRate*100, summary.EvidenceRate*100,
+		summary.ValidateRate*100, summary.EvidenceRate*100, set.MinimumEvidenceRate*100,
 		summary.ChangeShortfall, summary.Errors,
 		summary.P50.Round(time.Millisecond), summary.P95.Round(time.Millisecond),
 		summary.AverageTokens, summary.AverageCostUSD,
@@ -547,6 +620,9 @@ func loadBenchSet(path string) (benchSet, error) {
 	}
 	if set.MinimumDecisionAccuracy <= 0 || set.MinimumDecisionAccuracy > 1 {
 		return benchSet{}, errors.New("minimum_decision_accuracy must be greater than 0 and at most 1")
+	}
+	if set.MinimumEvidenceRate <= 0 || set.MinimumEvidenceRate > 1 {
+		return benchSet{}, errors.New("minimum_evidence_rate must be greater than 0 and at most 1")
 	}
 	if !openrouter.IsModelAllowed(set.Model) {
 		return benchSet{}, fmt.Errorf("corpus model %q is not allowlisted", set.Model)

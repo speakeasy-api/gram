@@ -189,7 +189,10 @@ const (
 	judgeTimeout = 30 * time.Second
 	// judgeAttempts bounds retries of a case whose response did not parse. Three
 	// is enough for a truncated body without masking a model that cannot hold to
-	// the schema, which still fails every attempt and is reported.
+	// the schema, which still fails every attempt and is reported. Only
+	// errUnparseableVerdict is retried: transport and upstream errors (auth,
+	// missing model, 429) fail the same way on every attempt, and immediate
+	// re-calls would amplify an outage.
 	judgeAttempts = 3
 	// benchOrgID/benchProjectID label the judge calls. The judge needs an
 	// org/project for the request shape; these are inert identifiers (the
@@ -587,7 +590,7 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 			var err error
 			for attempt := 1; attempt <= judgeAttempts; attempt++ {
 				isAttack, confidence, err = judgeOne(ctx, client, opts.judgeModel, msg, reasoning)
-				if err == nil || ctx.Err() != nil {
+				if err == nil || !errors.Is(err, errUnparseableVerdict) || ctx.Err() != nil {
 					break
 				}
 			}
@@ -635,6 +638,11 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 // the structured message payload, piopenrouter's system prompt and verdict
 // schema, temperature 0. No copy of the prompt/schema to keep in sync - it
 // drives the production constants directly.
+
+// errUnparseableVerdict marks a completion that arrived but did not carry a
+// usable verdict, the one failure class where an immediate retry can help.
+var errUnparseableVerdict = errors.New("unparseable judge verdict")
+
 func judgeOne(ctx context.Context, client openrouter.CompletionClient, model string, msg judgemessage.Message, reasoning *openrouter.Reasoning) (isAttack bool, confidence float64, err error) {
 	payload, err := json.Marshal(struct {
 		Message judgemessage.Payload `json:"message"`
@@ -676,18 +684,18 @@ func judgeOne(ctx context.Context, client openrouter.CompletionClient, model str
 		return false, 0, fmt.Errorf("openrouter object completion: %w", err)
 	}
 	if resp == nil || resp.Message == nil {
-		return false, 0, fmt.Errorf("empty completion response")
+		return false, 0, fmt.Errorf("empty completion response: %w", errUnparseableVerdict)
 	}
 	raw := strings.TrimSpace(openrouter.GetText(*resp.Message))
 	if raw == "" {
-		return false, 0, fmt.Errorf("empty completion content")
+		return false, 0, fmt.Errorf("empty completion content: %w", errUnparseableVerdict)
 	}
 	var verdict struct {
 		IsAttack   bool    `json:"is_attack"`
 		Confidence float64 `json:"confidence"`
 	}
 	if err := json.Unmarshal([]byte(raw), &verdict); err != nil {
-		return false, 0, fmt.Errorf("parse judge response: %w", err)
+		return false, 0, fmt.Errorf("parse judge response: %w: %w", errUnparseableVerdict, err)
 	}
 	return verdict.IsAttack, max(0, min(1, verdict.Confidence)), nil
 }

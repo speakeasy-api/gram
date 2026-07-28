@@ -21,13 +21,13 @@ There is no second model grading prose here. Every check is one the production
 pipeline already performs, so a case that passes is a suggestion that would have
 reached a reviewer.
 
-| Metric      | Meaning                                                                                                                                 |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `apply`     | Share of generations whose changes all located in the manifest. **The gate that decides whether a model can drive the feature at all.** |
-| `decision`  | How often propose/decline matched the label.                                                                                            |
-| `validate`  | Share whose resolved manifest survived `ValidateSkillSuggestion`.                                                                       |
-| `evidence`  | Share of changes citing at least one in-range feedback ref.                                                                             |
-| `shortfall` | Proposals that returned fewer changes than the feedback justified.                                                                      |
+| Metric      | Meaning                                                                                                                                                                                                                                                |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `apply`     | Share of propose-labeled runs served as an anchored, validated proposal, after the same single correction round production allows. Errors and wrong declines count against it. **The gate that decides whether a model can drive the feature at all.** |
+| `decision`  | How often propose/decline matched the label.                                                                                                                                                                                                           |
+| `validate`  | Share whose resolved manifest survived `ValidateSkillSuggestion`.                                                                                                                                                                                      |
+| `evidence`  | Share of served changes citing at least one in-range feedback ref. Gated by `minimum_evidence_rate`.                                                                                                                                                   |
+| `shortfall` | Proposals that returned fewer changes than the feedback justified.                                                                                                                                                                                     |
 
 `apply` is the interesting one. A change is a find/replace against the manifest,
 so the model has to reproduce document text **verbatim and uniquely** —
@@ -58,8 +58,10 @@ reviewer would agree with.
 
 ## Gates
 
-`minimum_apply_rate` and `minimum_decision_accuracy` live in `cases.json`. The
-command exits nonzero when a model misses either, so it can gate a model change.
+`minimum_apply_rate`, `minimum_decision_accuracy`, and `minimum_evidence_rate`
+live in `cases.json`. The command exits nonzero when a model misses any of
+them, so it can gate a model change. Every scheduled run counts in every
+denominator: completion errors are misses, not exclusions.
 
 ## Reasoning
 
