@@ -31,6 +31,8 @@ type Service interface {
 	Ingest(context.Context, *IngestPayload) (res *IngestHookResult, err error)
 	// Uploads skill manifest content requested by the unified hook ingest endpoint.
 	UploadSkillContent(context.Context, *UploadSkillContentPayload) (err error)
+	// Records agent-volunteered feedback about a distributed skill.
+	SkillFeedback(context.Context, *SkillFeedbackPayload) (err error)
 	// Endpoint to receive OTEL logs data from Claude Code. Requires API key
 	// authentication.
 	Logs(context.Context, *LogsPayload) (err error)
@@ -59,7 +61,7 @@ const ServiceName = "hooks"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"claude", "cursor", "codex", "ingest", "uploadSkillContent", "logs", "metrics"}
+var MethodNames = [8]string{"claude", "cursor", "codex", "ingest", "uploadSkillContent", "skillFeedback", "logs", "metrics"}
 
 // ClaudeHookResult is the result type of the hooks service claude method.
 type ClaudeHookResult struct {
@@ -630,6 +632,21 @@ type OTELSum struct {
 	IsMonotonic *bool
 	// Data points
 	DataPoints []*OTELNumberDataPoint
+}
+
+// SkillFeedbackPayload is the payload type of the hooks service skillFeedback
+// method.
+type SkillFeedbackPayload struct {
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// Contract version.
+	SchemaVersion string
+	// Canonical name of the skill that was used.
+	Skill string
+	// How the skill affected the task.
+	Outcome string
+	// Optional concise context about the outcome.
+	Note *string
 }
 
 // UploadSkillContentPayload is the payload type of the hooks service

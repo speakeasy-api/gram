@@ -71,6 +71,7 @@ func newProxyForTest(t *testing.T, upstreamURL string) *proxy.Proxy {
 		Headers:                           nil,
 		AuthorizationOverride:             "",
 		UpstreamResponseRetryer:           nil,
+		UpstreamResponseInterceptor:       nil,
 		UserRequestInterceptors:           nil,
 		InitializeRequestInterceptors:     nil,
 		RemoteMessageInterceptors:         nil,
@@ -119,6 +120,44 @@ func TestProxy_Post_ForwardsRequestAndResponse(t *testing.T) {
 	require.Equal(t, http.StatusOK, rr.Code)
 	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
 	require.Contains(t, rr.Body.String(), `"protocolVersion":"2025-06-18"`)
+}
+
+func TestProxy_Post_DisableRedirectsRelaysRedirectWithoutFollowing(t *testing.T) {
+	t.Parallel()
+
+	var targetHits atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		targetHits.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(target.Close)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusFound)
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.DisableRedirects = true
+	p.Headers = []proxy.ConfiguredHeader{{
+		Name:                   "X-Gram-Tunnel-Forward-Token",
+		StaticValue:            "internal-secret",
+		ValueFromRequestHeader: "",
+		IsRequired:             true,
+	}}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+
+	// The redirect relays to the caller verbatim; the target — which would
+	// have received the internal forward headers — is never contacted.
+	require.Equal(t, http.StatusFound, rr.Code)
+	require.Equal(t, target.URL, rr.Header().Get("Location"))
+	require.Equal(t, int32(0), targetHits.Load())
 }
 
 func TestProxy_Post_RetriesUpstreamResponseBeforeRelay(t *testing.T) {
@@ -2556,4 +2595,62 @@ func TestProxy_Post_ToolsListResponse_SetTools_RewritesRelayedEvent_SSEPath(t *t
 	// runtime sees the same event type and id as the upstream sent.
 	require.Contains(t, out, "event: response\n", "event: field must be preserved on mutation re-emit")
 	require.Contains(t, out, "id: terminal-7\n", "id: field must be preserved on mutation re-emit")
+}
+
+func TestProxy_Post_UpstreamResponseInterceptorRuns(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Mcp-Session-Id", "backend-sid")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	var sawStatus int
+	p.UpstreamResponseInterceptor = func(_ context.Context, resp *http.Response) error {
+		sawStatus = resp.StatusCode
+		resp.Header.Set("Mcp-Session-Id", "gram-sid")
+		return nil
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+
+	require.Equal(t, http.StatusOK, sawStatus)
+	require.Equal(t, "gram-sid", rr.Header().Get("Mcp-Session-Id"), "interceptor header mutation must reach the client")
+}
+
+// An interceptor error must abort the relay with nothing written to the
+// client, so callers can fail closed.
+func TestProxy_Post_UpstreamResponseInterceptorErrorAbortsBeforeFlush(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.UpstreamResponseInterceptor = func(_ context.Context, _ *http.Response) error {
+		return oops.E(oops.CodeGatewayError, nil, "record session failed")
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+
+	rr := httptest.NewRecorder()
+	err := p.Post(rr, req)
+	require.Error(t, err)
+	require.Equal(t, http.StatusOK, rr.Code, "recorder default; nothing was written via WriteHeader")
+	require.Empty(t, rr.Body.String(), "no body may reach the client when the interceptor fails closed")
 }

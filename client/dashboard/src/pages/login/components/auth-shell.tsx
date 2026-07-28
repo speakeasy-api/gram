@@ -1,5 +1,6 @@
 import speakeasyIcon from "@/assets/speakeasy-icon.svg";
 import { BrandGradientLine } from "@/components/brand-gradient-line";
+import { cn } from "@/lib/utils";
 import { AgentSessionShowcase } from "./agent-session-showcase";
 import { SpeakeasyWordmark } from "./speakeasy-wordmark";
 import { TermsFooter } from "./terms-footer";
@@ -74,9 +75,17 @@ function BrandLockup() {
 
 export function AuthShell({
   page,
+  headerAction,
+  contentClassName,
+  showTerms = true,
   children,
 }: {
-  page: "Login" | "Register";
+  page: string;
+  /** Extra control on the right of the header, e.g. a Log out link. */
+  headerAction?: React.ReactNode;
+  /** Overrides the right-pane column width (default max-w-[380px]). */
+  contentClassName?: string;
+  showTerms?: boolean;
   children: React.ReactNode;
 }): JSX.Element {
   return (
@@ -90,8 +99,11 @@ export function AuthShell({
           <img src={speakeasyIcon} alt="" className="h-[22px] w-[22px]" />
           Speakeasy AI Control Plane
         </span>
-        <span className="auth-mono text-[13px] text-[var(--muted)]">
-          {page}
+        <span className="flex items-center gap-6">
+          <span className="auth-mono text-[13px] text-[var(--muted)]">
+            {page}
+          </span>
+          {headerAction}
         </span>
       </header>
 
@@ -99,14 +111,21 @@ export function AuthShell({
         <AgentSessionShowcase />
 
         <section className="relative flex flex-col items-center justify-center border-[var(--edge-soft)] bg-[var(--card)] px-8 pt-16 pb-28 xl:border-l">
-          <div className="flex w-full max-w-[380px] flex-col items-center gap-6">
+          <div
+            className={cn(
+              "flex w-full max-w-[380px] flex-col items-center gap-6",
+              contentClassName,
+            )}
+          >
             <BrandLockup />
             {children}
           </div>
-          <TermsFooter
-            className="absolute right-12 bottom-7 left-12 text-[var(--muted-strong)]"
-            linkClassName="text-[var(--link)] hover:text-[var(--focus)]"
-          />
+          {showTerms && (
+            <TermsFooter
+              className="absolute right-12 bottom-7 left-12 text-[var(--muted-strong)]"
+              linkClassName="text-[var(--link)] hover:text-[var(--focus)]"
+            />
+          )}
         </section>
       </div>
     </main>

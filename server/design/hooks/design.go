@@ -236,6 +236,25 @@ var UploadSkillContentPayload = Type("UploadSkillContentPayload", func() {
 	Attribute("content", String, "Raw UTF-8 skill manifest content. The server rejects content whose UTF-8 encoding exceeds 65,536 bytes.")
 })
 
+var SkillFeedbackPayload = Type("SkillFeedbackPayload", func() {
+	Description("Agent-volunteered feedback about a distributed skill.")
+	Required("schema_version", "skill", "outcome")
+	Attribute("schema_version", String, "Contract version.", func() {
+		Enum("hook.skill-feedback.v1")
+	})
+	Attribute("skill", String, "Canonical name of the skill that was used.", func() {
+		MinLength(1)
+		MaxLength(64)
+		Pattern(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+	})
+	Attribute("outcome", String, "How the skill affected the task.", func() {
+		Enum("helped", "partially_helped", "did_not_help", "misleading", "harmful")
+	})
+	Attribute("note", String, "Optional concise context about the outcome.", func() {
+		MaxLength(4000)
+	})
+})
+
 var HookNotificationData = Type("HookNotificationData", func() {
 	Description("Local agent notification payload.")
 	Attribute("type", String, "Notification type.")
@@ -435,6 +454,32 @@ var _ = Service("hooks", func() {
 
 		Meta("openapi:operationId", "uploadSkillContent")
 		Meta("openapi:extension:x-speakeasy-name-override", "uploadSkillContent")
+	})
+
+	Method("skillFeedback", func() {
+		Description("Records agent-volunteered feedback about a distributed skill.")
+
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("hooks")
+		})
+
+		Payload(func() {
+			Extend(SkillFeedbackPayload)
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(Empty)
+
+		HTTP(func() {
+			POST("/rpc/hooks.skillFeedback")
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "skillFeedback")
+		Meta("openapi:extension:x-speakeasy-name-override", "skillFeedback")
 	})
 
 	Method("logs", func() {

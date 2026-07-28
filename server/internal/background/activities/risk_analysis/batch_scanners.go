@@ -105,7 +105,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 	}
 
 	if sources.Has(shadowmcp.SourceShadowMCP) {
-		shadowMCPFindings = a.scanShadowMCP(ctx, args.OrganizationID, args.ProjectID, messages)
+		shadowMCPFindings = a.scanShadowMCP(ctx, args.OrganizationID, args.ProjectID, args.RiskPolicyID, messages)
 		activity.RecordHeartbeat(ctx, shadowmcp.SourceShadowMCP)
 	}
 	if sources.Has(shadowmcp.SourceDestructiveTool) {

@@ -126,6 +126,7 @@ type ChallengeManager struct {
 	enc       *encryption.Client
 	policy    *guardian.Policy
 	cache     cache.TypedCacheObject[RemoteLoginState]
+	locks     cache.Cache
 	serverURL *url.URL
 	// authorizeInterceptors adapt the outgoing upstream authorize request to
 	// per-provider, non-standard requirements (e.g. Google's offline access).
@@ -152,6 +153,7 @@ func NewChallengeManager(
 			cacheImpl,
 			cache.SuffixNone,
 		),
+		locks:     cacheImpl,
 		serverURL: serverURL,
 		authorizeInterceptors: []interceptors.AuthorizeInterceptor{
 			interceptors.NewGoogle(logger),

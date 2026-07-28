@@ -51,7 +51,7 @@ func seedRiskOverviewResult(
 		OrganizationID:    orgID,
 		RiskPolicyID:      policyID,
 		RiskPolicyVersion: 1,
-		ChatMessageID:     msgID,
+		ChatMessageID:     uuid.NullUUID{UUID: msgID, Valid: true},
 		Source:            source,
 		Found:             found,
 		RuleID:            ruleIDValue,

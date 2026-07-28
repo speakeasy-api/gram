@@ -40,8 +40,11 @@ const (
 	ToolNameGetUserSession         = "platform_get_user_session"
 )
 
-// ToolNameSkillsLoad is externally specified by the skills RFC without the platform_ prefix.
-const ToolNameSkillsLoad = "skills_load"
+// Skill tool names are externally specified by the skills RFC.
+const (
+	ToolNameSkillsLoad            = "skills_load"
+	ToolNamePlatformSkillFeedback = "platform_skill_feedback"
+)
 
 type Dependencies struct {
 	Logger           *slog.Logger

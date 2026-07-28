@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -277,6 +278,100 @@ func TestPolicyBypassEvaluator_AudienceSemantics(t *testing.T) {
 		PolicyID:       rolePolicyID,
 		Target:         &roleTarget,
 	}))
+}
+
+func TestPolicyBypassEvaluator_LegacyCombinedGrantMatchesCanonicalURLTarget(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	policyID := "policy_legacy_combined_target"
+	serverURL := "https://mcp.example.com/legacy"
+	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
+	selector[authz.SelectorKeyServerURL] = serverURL
+	selector[authz.SelectorKeyServerIdentity] = "legacy-alias"
+	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     policyID,
+		},
+		Effect:     authz.PolicyEffectAllow,
+		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
+		Selector:   selector,
+	}))
+
+	target := risk.ShadowMCPPolicyBypassTarget(shadowmcp.AccessEvidence{
+		FullURL:        serverURL,
+		URLHost:        "",
+		ServerIdentity: "",
+	}, "list_events")
+	require.NotNil(t, target)
+	require.NotContains(t, target.Dimensions, authz.SelectorKeyServerIdentity)
+	require.True(t, risk.NewPolicyBypassEvaluator(testenv.NewLogger(t), ti.conn).CanBypass(ctx, risk.PolicyBypassEvaluation{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         authCtx.UserID,
+		PolicyID:       policyID,
+		Target:         target,
+	}))
+}
+
+func TestPolicyBypassEvaluator_UnresolvedTargetMatchesOnlyWholePolicyGrant(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	scopedPolicyID := "policy_scoped_unresolved"
+	scopedSelector := authz.NewSelector(authz.ScopeRiskPolicyBypass, scopedPolicyID)
+	scopedSelector[authz.SelectorKeyServerURL] = "https://mcp.example.com/scoped"
+	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     scopedPolicyID,
+		},
+		Effect:     authz.PolicyEffectAllow,
+		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
+		Selector:   scopedSelector,
+	}))
+
+	wholePolicyID := "policy_whole_unresolved"
+	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     wholePolicyID,
+		},
+		Effect:     authz.PolicyEffectAllow,
+		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
+		Selector:   authz.NewSelector(authz.ScopeRiskPolicyBypass, wholePolicyID),
+	}))
+
+	scopedEvaluation := risk.PolicyBypassEvaluation{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         authCtx.UserID,
+		PolicyID:       scopedPolicyID,
+		Target:         nil,
+	}
+	wholeEvaluation := risk.PolicyBypassEvaluation{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         authCtx.UserID,
+		PolicyID:       wholePolicyID,
+		Target:         nil,
+	}
+	decisions := risk.NewPolicyBypassEvaluator(testenv.NewLogger(t), ti.conn).CanBypassBatch(ctx, []risk.PolicyBypassEvaluation{
+		scopedEvaluation,
+		wholeEvaluation,
+	})
+
+	require.False(t, decisions[scopedEvaluation], "an unresolved call must not match a server-scoped grant")
+	require.True(t, decisions[wholeEvaluation], "an unresolved call may match an explicit whole-policy grant")
 }
 
 func TestApprovePolicyBypassRequest_CanGrantRole(t *testing.T) {
