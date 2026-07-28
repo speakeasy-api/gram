@@ -18,6 +18,9 @@ import (
 // every non-Gram-hosted server unless explicitly allowed (the original
 // behavior); allow_all permits every server unless it appears on the policy's
 // blocked-URL list. The disposition is immutable after create.
+//
+// Must stay in sync with RiskPolicyShadowMCPDispositionEnum in
+// server/design/shared/risk.go — the design package cannot import this one.
 const (
 	ShadowMCPDispositionBlockAll = "block_all"
 	ShadowMCPDispositionAllowAll = "allow_all"

@@ -68,6 +68,9 @@ func RiskPolicyAudienceTypeEnum() {
 // server unless it appears on the policy's blocked-URL list. The disposition is
 // immutable after create — switching posture requires deleting and recreating
 // the policy.
+//
+// Must stay in sync with the ShadowMCPDisposition* constants in
+// server/internal/risk/shadow_mcp_policy_setup.go.
 func RiskPolicyShadowMCPDispositionEnum() {
 	Enum("block_all", "allow_all")
 }
