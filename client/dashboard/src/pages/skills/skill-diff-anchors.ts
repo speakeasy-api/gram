@@ -1,7 +1,7 @@
 import type { SkillEditSuggestionChange } from "@gram/client/models/components/skilleditsuggestionchange.js";
 
 /** Which side of a rendered diff an anchor belongs to. */
-export type SkillDiffSide = "additions" | "deletions";
+type SkillDiffSide = "additions" | "deletions";
 
 export type SkillDiffAnchor = {
   side: SkillDiffSide;
