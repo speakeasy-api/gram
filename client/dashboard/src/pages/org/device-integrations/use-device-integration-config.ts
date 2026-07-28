@@ -69,6 +69,11 @@ export function useDeviceIntegrationConfigForm(
   const [enabled, setEnabled] = useState(false);
   const [credentials, setCredentials] = useState<FieldValues>({});
   const [settings, setSettings] = useState<FieldValues>({});
+  // The settings the server is known to hold, tracked locally so the dirty
+  // flag clears the moment a save succeeds instead of flapping through the
+  // config refetch window (and sticking if that refetch fails).
+  const [savedSettings, setSavedSettings] = useState<FieldValues>({});
+  const pendingSavedSettingsRef = useRef<FieldValues>({});
   const [testResult, setTestResult] = useState<TestConnectionResult | null>(
     null,
   );
@@ -88,6 +93,7 @@ export function useDeviceIntegrationConfigForm(
     onSuccess: () => {
       toast.success("Device integration saved");
       setCredentials({});
+      setSavedSettings(pendingSavedSettingsRef.current);
       setTestResult(null);
       invalidate();
       options.onSaveSuccess?.();
@@ -117,6 +123,7 @@ export function useDeviceIntegrationConfigForm(
         setEnabled(false);
         setCredentials({});
         setSettings({});
+        setSavedSettings({});
         setTestResult(null);
         invalidate();
         options.onDeleteSuccess?.();
@@ -145,6 +152,7 @@ export function useDeviceIntegrationConfigForm(
       setEnabled(false);
       setCredentials({});
       setSettings({});
+      setSavedSettings({});
       return;
     }
 
@@ -153,6 +161,7 @@ export function useDeviceIntegrationConfigForm(
     setEnabled(data.enabled);
     setCredentials({});
     setSettings(data.settings);
+    setSavedSettings(data.settings);
   }, [data]);
 
   const isMutating = upsertStatus === "pending" || deleteStatus === "pending";
@@ -181,16 +190,20 @@ export function useDeviceIntegrationConfigForm(
   ]);
 
   const hasUnsavedChanges = useMemo(() => {
-    if (Object.values(credentials).some((value) => value.trim() !== "")) {
+    // Any typed characters in a secret field count — even whitespace-only,
+    // which renders as masked dots and would otherwise leave the test
+    // enabled against the old saved secret while looking populated.
+    if (Object.values(credentials).some((value) => value !== "")) {
       return true;
     }
-    const savedSettings = data?.settings ?? {};
-    return provider.fields.some(
-      (field) =>
-        !field.secret &&
-        (settings[field.key] ?? "") !== (savedSettings[field.key] ?? ""),
+    const keys = new Set([
+      ...Object.keys(settings),
+      ...Object.keys(savedSettings),
+    ]);
+    return [...keys].some(
+      (key) => (settings[key] ?? "") !== (savedSettings[key] ?? ""),
     );
-  }, [credentials, data, provider.fields, settings]);
+  }, [credentials, savedSettings, settings]);
 
   const save = () => {
     // Only send secret values the user actually typed: omitted keys keep the
@@ -199,6 +212,9 @@ export function useDeviceIntegrationConfigForm(
     for (const [key, value] of Object.entries(credentials)) {
       if (value.trim() !== "") suppliedCredentials[key] = value.trim();
     }
+    // Recorded now, promoted to savedSettings on success — the values the
+    // server will hold if this save lands.
+    pendingSavedSettingsRef.current = settings;
     upsert({
       request: {
         upsertConfigRequestBody2: {
@@ -219,6 +235,9 @@ export function useDeviceIntegrationConfigForm(
   const saveEnabled = (nextEnabled: boolean) => {
     setEnabled(nextEnabled);
     if (!isConfigured) return;
+    // The shared onSuccess promotes this ref; an enabled-only flip leaves
+    // the server's settings untouched, so carry the current snapshot.
+    pendingSavedSettingsRef.current = savedSettings;
     upsert({
       request: {
         upsertConfigRequestBody2: {

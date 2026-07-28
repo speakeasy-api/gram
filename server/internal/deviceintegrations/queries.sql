@@ -200,6 +200,17 @@ FROM device_integration_schedules sch
 WHERE s.device_integration_schedule_id = sch.id
   AND sch.device_integration_config_id = @device_integration_config_id;
 
+-- Enabling a connection means "sync now": mark every schedule due without
+-- disturbing failure history or the push digest (unlike the full reset a
+-- credential rotation performs).
+-- name: MarkConfigSyncsDue :exec
+UPDATE device_integration_syncs s
+SET next_poll_after = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM device_integration_schedules sch
+WHERE s.device_integration_schedule_id = sch.id
+  AND sch.device_integration_config_id = @device_integration_config_id;
+
 -- RetrySchedule makes one schedule due immediately, lifting any automatic
 -- pause and clearing its failure state. The stored error is cleared
 -- deliberately — the user acknowledged it by retrying, and a failing sync

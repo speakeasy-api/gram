@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,6 +13,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -231,11 +233,14 @@ func buildDeviceIntegrationSyncScheduleOptions(temporalEnv *tenv.Environment) cl
 
 // DeviceIntegrationSyncTrigger runs the sync coordinator schedule
 // immediately, so user actions that make a sync due (enabling a connection,
-// "Sync now") take effect in seconds instead of at the next tick. The
-// schedule's overlap-skip policy makes a trigger racing a live tick
-// harmless.
+// fixing credentials, "Sync now") take effect in seconds instead of at the
+// next tick. BUFFER_ONE queues the trigger behind an in-flight coordinator
+// run: a run that already selected its candidates cannot see work made due
+// after selection, so a skipped (rather than buffered) trigger would
+// silently fall back to full tick latency.
 type DeviceIntegrationSyncTrigger struct {
 	TemporalEnv *tenv.Environment
+	Logger      *slog.Logger
 }
 
 var _ deviceintegrations.SyncTrigger = (*DeviceIntegrationSyncTrigger)(nil)
@@ -243,9 +248,11 @@ var _ deviceintegrations.SyncTrigger = (*DeviceIntegrationSyncTrigger)(nil)
 func (t *DeviceIntegrationSyncTrigger) TriggerSyncNow(ctx context.Context) error {
 	handle := t.TemporalEnv.Client().ScheduleClient().GetHandle(ctx, deviceIntegrationSyncCoordinatorScheduleID)
 	if err := handle.Trigger(ctx, client.ScheduleTriggerOptions{
-		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		Overlap: enums.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
 	}); err != nil {
 		return fmt.Errorf("trigger device integration sync coordinator: %w", err)
 	}
+	t.Logger.DebugContext(ctx, "triggered device integration sync coordinator",
+		attr.SlogTemporalWorkflowID(deviceIntegrationSyncCoordinatorScheduleID))
 	return nil
 }

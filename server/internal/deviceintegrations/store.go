@@ -241,6 +241,11 @@ type UpsertResult struct {
 	// Before is the config state the transaction observed prior to the
 	// write; nil when the call created the config.
 	Before *Config
+	// SyncsMadeDue reports that this save left the config's schedules due to
+	// run now (creation seeds them due, a credential/settings change resets
+	// them, and an enable transition marks them due) — the caller's signal
+	// to kick the sync machinery instead of waiting for its next tick.
+	SyncsMadeDue bool
 }
 
 // upsertWithTx creates or updates the org+provider config and ensures a
@@ -384,6 +389,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, desc providers
 	if err := s.ensureSchedules(ctx, q, desc, row.ID); err != nil {
 		return UpsertResult{}, err
 	}
+	syncsMadeDue := !exists // creation seeds every schedule due
 	if exists && credentialsSupplied {
 		// A rotated credential is a fresh start: stale failure state must not
 		// keep rendering "failed" after the fix, and last_push_digest must
@@ -391,15 +397,27 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, desc providers
 		if err := q.ResetSyncStateForConfig(ctx, row.ID); err != nil {
 			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "reset device integration sync state")
 		}
+		syncsMadeDue = true
 	} else if err := q.ClearAutoPauses(ctx, row.ID); err != nil {
 		return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "clear device integration sync pauses")
+	}
+
+	// An enable transition means "sync now", not "sync whenever the old
+	// next_poll_after comes around": a config re-enabled mid-interval would
+	// otherwise sit idle for the rest of the hour. Failure history and the
+	// push digest are deliberately untouched.
+	if exists && enabled && before != nil && !before.Enabled && !syncsMadeDue {
+		if err := q.MarkConfigSyncsDue(ctx, row.ID); err != nil {
+			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "mark device integration syncs due")
+		}
+		syncsMadeDue = true
 	}
 
 	cfg, err := configFromRow(row)
 	if err != nil {
 		return UpsertResult{}, err
 	}
-	return UpsertResult{Config: cfg, Created: !exists, Before: before}, nil
+	return UpsertResult{Config: cfg, Created: !exists, Before: before, SyncsMadeDue: syncsMadeDue}, nil
 }
 
 // ensureSchedules materializes a schedule row and its 1:1 sync row for every

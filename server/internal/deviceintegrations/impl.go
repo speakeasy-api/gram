@@ -100,17 +100,25 @@ func NewService(
 	}
 }
 
-// kickSync asks Temporal to run the sync coordinator immediately, so an
-// enable or a manual retry syncs in seconds instead of at the next tick.
-// Best-effort by design: failures are logged and the periodic tick picks
+// kickSync asks Temporal to run the sync coordinator immediately, so a save
+// that made work due (enable, credential fix, "Sync now") syncs in seconds
+// instead of at the next tick. It runs on its own goroutine with a detached,
+// bounded context: the response must not wait on Temporal's health, and a
+// client disconnecting right after the commit must not lose the nudge.
+// Best-effort by design — failures are logged and the periodic tick picks
 // the due work up regardless.
 func (s *Service) kickSync(ctx context.Context, logger *slog.Logger) {
 	if s.syncTrigger == nil {
 		return
 	}
-	if err := s.syncTrigger.TriggerSyncNow(ctx); err != nil {
-		logger.WarnContext(ctx, "failed to trigger immediate device integration sync", attr.SlogError(err))
-	}
+	detached := context.WithoutCancel(ctx)
+	go func() {
+		triggerCtx, cancel := context.WithTimeout(detached, 10*time.Second)
+		defer cancel()
+		if err := s.syncTrigger.TriggerSyncNow(triggerCtx); err != nil {
+			logger.WarnContext(triggerCtx, "failed to trigger immediate device integration sync", attr.SlogError(err))
+		}
+	}()
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -241,11 +249,10 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 		return nil, oops.E(oops.CodeUnexpected, err, "commit device integration upsert").LogError(ctx, logger)
 	}
 
-	// An enable transition should sync right away — the schedules are
-	// already due (fresh configs seed next_poll_after to now), so all that
-	// stands between the user and their first inventory is the coordinator's
-	// next tick.
-	if cfg.Enabled && (result.Before == nil || !result.Before.Enabled) {
+	// When the save left schedules due (creation, credential fix, enable
+	// transition — the store reports it), run them now: all that stands
+	// between the user and fresh data is the coordinator's next tick.
+	if cfg.Enabled && result.SyncsMadeDue {
 		s.kickSync(ctx, logger)
 	}
 
@@ -493,6 +500,12 @@ func (s *Service) SetScheduleEnabled(ctx context.Context, payload *gen.SetSchedu
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit device integration schedule update").LogError(ctx, logger)
+	}
+
+	// A resumed schedule may already be past-due; run it now so the
+	// schedule-level switch behaves like the connection-level one.
+	if payload.Enabled {
+		s.kickSync(ctx, logger)
 	}
 
 	row, err := s.repo.GetScheduleWithSync(ctx, repo.GetScheduleWithSyncParams{
