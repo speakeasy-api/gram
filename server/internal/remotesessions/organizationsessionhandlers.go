@@ -154,8 +154,9 @@ func (s *Service) RevokeSession(ctx context.Context, payload *orgsessionsgen.Rev
 // caller's organization, regardless of current access-token expiry, and returns
 // the updated session view.
 //
-// The upstream token POST is an external call, so the refresh runs on the pool;
-// only the audit log is wrapped in a short transaction afterwards.
+// The upstream token POST is an external call, so the refresh (load client →
+// POST → upsert) runs on the pool, never inside a transaction; only the audit
+// log is wrapped in a short transaction afterwards.
 func (s *Service) RefreshSession(ctx context.Context, payload *orgsessionsgen.RefreshSessionPayload) (*types.RemoteSession, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
@@ -197,6 +198,7 @@ func (s *Service) RefreshSession(ctx context.Context, payload *orgsessionsgen.Re
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers for client").LogError(ctx, logger)
 	}
 
+	// Refresh on the pool — the upstream token POST must not run inside a tx.
 	updated, _, err := refreshSessionTokens(ctx, repo.New(s.db), s.enc, s.policy, row.RemoteSession, clientUpstreamResource(mcpRows))
 	if err != nil {
 		// Operator-actionable failures carry a public-safe reason; surface it so
