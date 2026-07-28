@@ -21,24 +21,48 @@ import (
 // devices endpoint with limit/offset pagination and the vendor's
 // empty-string-user quirk.
 type fakeIru struct {
-	t *testing.T
-
+	// mu guards every field the handler goroutine shares with the test
+	// goroutine (the fleet and the accepted token); tests mutate them only
+	// through the accessors below.
+	mu       sync.Mutex
 	apiToken string
-
-	// devMu guards devices so tests can mutate the fleet between requests
-	// without racing the handler goroutine.
-	devMu   sync.Mutex
-	devices []map[string]any
+	devices  []map[string]any
 
 	server *httptest.Server
+}
+
+// setDevices replaces the fleet mid-test (enrollment churn).
+func (f *fakeIru) setDevices(devices []map[string]any) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.devices = devices
+}
+
+// removeDevice unenrolls one device mid-test.
+func (f *fakeIru) removeDevice(externalID string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	kept := f.devices[:0]
+	for _, d := range f.devices {
+		if d["device_id"] != externalID {
+			kept = append(kept, d)
+		}
+	}
+	f.devices = kept
+}
+
+// setToken rotates the token the fake accepts.
+func (f *fakeIru) setToken(token string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.apiToken = token
 }
 
 func newFakeIru(t *testing.T, deviceCount int) *fakeIru {
 	t.Helper()
 	f := &fakeIru{
-		t:        t,
+		mu:       sync.Mutex{},
 		apiToken: "test-api-token",
-		devMu:    sync.Mutex{},
 		devices:  nil,
 		server:   nil,
 	}
@@ -61,22 +85,23 @@ func newFakeIru(t *testing.T, deviceCount int) *fakeIru {
 	mux.HandleFunc("/api/v1/devices", func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodGet, r.Method)
 		assert.Equal(t, userAgent, r.Header.Get("User-Agent"), "every request carries the integration User-Agent")
-		if r.Header.Get("Authorization") != "Bearer "+f.apiToken {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
 
 		limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
 		assert.NoError(t, err, "limit must always be set")
 		offset, err := strconv.Atoi(r.URL.Query().Get("offset"))
 		assert.NoError(t, err, "offset must always be set")
 
-		f.devMu.Lock()
+		f.mu.Lock()
+		authorized := r.Header.Get("Authorization") == "Bearer "+f.apiToken
 		results := []map[string]any{}
 		for i := offset; i < len(f.devices) && len(results) < limit; i++ {
 			results = append(results, f.devices[i])
 		}
-		f.devMu.Unlock()
+		f.mu.Unlock()
+		if !authorized {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		// The real API returns a bare array, not an envelope.
@@ -88,6 +113,8 @@ func newFakeIru(t *testing.T, deviceCount int) *fakeIru {
 }
 
 func (f *fakeIru) creds() providers.Credentials {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return providers.Credentials{fieldAPIToken: f.apiToken}
 }
 
@@ -119,7 +146,9 @@ func listAll(t *testing.T, s providers.InventorySource, creds providers.Credenti
 func TestListDevicesPaginatesAndMaps(t *testing.T) {
 	t.Parallel()
 
-	fake := newFakeIru(t, 650) // three pages at size 300
+	// Three full-or-partial pages at size 300, plus the final empty page
+	// that terminates the listing.
+	fake := newFakeIru(t, 650)
 	s := fake.newSource()
 
 	devices := listAll(t, s, fake.creds(), fake.settings())
@@ -147,12 +176,12 @@ func TestUnassignedUserRepresentations(t *testing.T) {
 	t.Parallel()
 
 	fake := newFakeIru(t, 0)
-	fake.devices = []map[string]any{
+	fake.setDevices([]map[string]any{
 		// The API's unassigned-device quirk: user is an empty string.
 		{"device_id": "uuid-a", "device_name": "a", "serial_number": "SA", "platform": "Mac", "os_version": "15.1", "user": "", "last_check_in": ""},
 		{"device_id": "uuid-b", "device_name": "b", "serial_number": "SB", "platform": "Mac", "os_version": "15.1", "user": nil, "last_check_in": ""},
 		{"device_id": "uuid-c", "device_name": "c", "serial_number": "SC", "platform": "Mac", "os_version": "15.1"},
-	}
+	})
 
 	devices := listAll(t, fake.newSource(), fake.creds(), fake.settings())
 	require.Len(t, devices, 3)
@@ -160,6 +189,69 @@ func TestUnassignedUserRepresentations(t *testing.T) {
 		require.Empty(t, d.UserEmail, "device %s must map to no assigned user", d.ExternalID)
 		require.True(t, d.LastCheckInAt.IsZero(), "device %s has no check-in time", d.ExternalID)
 	}
+}
+
+func TestUserSchemaDriftFailsLoudly(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeIru(t, 0)
+	// An assigned-but-undecodable user is schema drift, not "unassigned":
+	// swallowing it would quietly zero the fleet's coverage attribution.
+	fake.setDevices([]map[string]any{
+		{"device_id": "uuid-a", "device_name": "a", "serial_number": "SA", "platform": "Mac", "os_version": "15.1", "user": 123},
+	})
+
+	_, err := fake.newSource().ListDevices(t.Context(), fake.creds(), fake.settings(), "")
+	require.ErrorContains(t, err, "decode user")
+}
+
+func TestUnparseableCheckInFailsLoudly(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeIru(t, 0)
+	fake.setDevices([]map[string]any{
+		{"device_id": "uuid-a", "device_name": "a", "serial_number": "SA", "platform": "Mac", "os_version": "15.1", "user": "", "last_check_in": "07/28/2026 10:00"},
+	})
+
+	_, err := fake.newSource().ListDevices(t.Context(), fake.creds(), fake.settings(), "")
+	require.ErrorContains(t, err, "last_check_in", "a format drift must fail loudly, not silently NULL stored check-ins")
+}
+
+func TestMidPullDeletionSkipsAtMostBoundaryDevices(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeIru(t, 650)
+	s := fake.newSource()
+
+	first, err := s.ListDevices(t.Context(), fake.creds(), fake.settings(), "")
+	require.NoError(t, err)
+	require.Len(t, first.Devices, 300)
+
+	// A device already consumed is unenrolled mid-pull. Offset pagination
+	// shifts every later row one slot down, so exactly one boundary device
+	// (the old index-300 row, which slides into the already-consumed window)
+	// is skipped — this test pins the documented blast radius: no
+	// duplicates, and at most one omission per unenrollment.
+	fake.removeDevice("uuid-0010")
+
+	seen := make(map[string]bool, 650)
+	for _, d := range first.Devices {
+		seen[d.ExternalID] = true
+	}
+	cursor := first.NextCursor
+	for cursor != "" {
+		page, err := s.ListDevices(t.Context(), fake.creds(), fake.settings(), cursor)
+		require.NoError(t, err)
+		for _, d := range page.Devices {
+			require.False(t, seen[d.ExternalID], "device %s repeated across pages", d.ExternalID)
+			seen[d.ExternalID] = true
+		}
+		cursor = page.NextCursor
+	}
+
+	require.True(t, seen["uuid-0010"], "the unenrolled device was consumed before removal")
+	require.Len(t, seen, 649, "exactly one boundary device is skipped per mid-pull unenrollment")
+	require.False(t, seen["uuid-0301"], "the skipped device is the one that slid across the page boundary")
 }
 
 func TestTestConnection(t *testing.T) {
@@ -188,7 +280,7 @@ func TestAuthRejectionMidPullClassifiesAsAuth(t *testing.T) {
 	// The tenant rotates the token between pages: our stored credential is
 	// now stale, and the failure must classify as an auth error so the sync
 	// runner counts it toward auto-pause.
-	fake.apiToken = "rotated-away"
+	fake.setToken("rotated-away")
 	_, err = s.ListDevices(t.Context(), staleCreds, fake.settings(), first.NextCursor)
 	require.Error(t, err)
 	require.True(t, providers.IsAuthError(err))
@@ -198,9 +290,9 @@ func TestMissingDeviceIDFailsLoudly(t *testing.T) {
 	t.Parallel()
 
 	fake := newFakeIru(t, 0)
-	fake.devices = []map[string]any{
+	fake.setDevices([]map[string]any{
 		{"device_id": "", "device_name": "ghost", "serial_number": "SG", "platform": "Mac", "os_version": "15.1"},
-	}
+	})
 
 	_, err := fake.newSource().ListDevices(t.Context(), fake.creds(), fake.settings(), "")
 	require.ErrorContains(t, err, "device_id")

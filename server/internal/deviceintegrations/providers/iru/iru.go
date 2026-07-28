@@ -109,7 +109,7 @@ func instanceBaseURL(settings providers.Settings) (string, error) {
 	}
 	parsed, err := url.Parse(raw)
 	if err != nil {
-		return "", fmt.Errorf("instance_url is not a valid URL")
+		return "", fmt.Errorf("instance_url is not a valid URL: %w", err)
 	}
 	if parsed.Scheme != "https" {
 		return "", fmt.Errorf("instance_url must use https")
@@ -134,19 +134,23 @@ type deviceRecord struct {
 	LastCheckIn string          `json:"last_check_in"`
 }
 
-// userEmail extracts the assigned user's email, tolerating the API's
-// unassigned representations: an empty string, null, or a missing field.
-func (d deviceRecord) userEmail() string {
-	if len(d.User) == 0 {
-		return ""
+// userEmail extracts the assigned user's email. The API's unassigned
+// representations — an empty-string user (confirmed against the real
+// tenant), null, or an absent field — map to "". Any other undecodable
+// shape is schema drift and fails loudly: silently treating it as
+// unassigned would quietly zero the whole fleet's coverage attribution.
+func (d deviceRecord) userEmail() (string, error) {
+	trimmed := strings.TrimSpace(string(d.User))
+	if trimmed == "" || trimmed == `""` || trimmed == "null" {
+		return "", nil
 	}
 	var user struct {
 		Email string `json:"email"`
 	}
 	if err := json.Unmarshal(d.User, &user); err != nil {
-		return ""
+		return "", fmt.Errorf("decode user: %w", err)
 	}
-	return strings.TrimSpace(user.Email)
+	return strings.TrimSpace(user.Email), nil
 }
 
 // fetchDevicesPage requests one page of the Devices API at the given offset.
@@ -211,11 +215,14 @@ func (s *source) TestConnection(ctx context.Context, creds providers.Credentials
 //
 // The Devices API only offers limit/offset pagination — no sort or id-window
 // filter — so unlike Jamf's keyset cursor this pull is not immune to mid-pull
-// churn: a device unenrolled between pages shifts later rows one slot down
-// and can drop one boundary device from the pull. The blast radius is one
-// device marked missing for one cycle (mark-missing is completion-gated and
-// the next hourly pull sees the device again); pageSize is pinned at the API
-// maximum to minimize the number of boundaries per pull.
+// churn: each device unenrolled between pages shifts later rows one slot
+// down and can drop one boundary device from the pull (N unenrollments can
+// drop up to N). The default listing order was verified stable across
+// back-to-back requests against a real tenant. Skipped devices are marked
+// missing for at most one cycle (see the snapshot-consistency note on
+// providers.InventorySource) — though an evidence-sink push firing inside
+// that window exports the mis-mark until its next push. pageSize is pinned
+// at the API maximum to minimize boundaries per pull.
 func (s *source) ListDevices(ctx context.Context, creds providers.Credentials, settings providers.Settings, cursor string) (providers.DevicePage, error) {
 	offset := 0
 	if cursor != "" {
@@ -246,10 +253,19 @@ func (s *source) ListDevices(ctx context.Context, creds providers.Credentials, s
 		var lastCheckIn time.Time
 		if d.LastCheckIn != "" {
 			// Iru emits RFC3339 with sub-second precision and a numeric
-			// offset (e.g. 2026-07-01T19:02:37.320664+00:00).
-			if parsed, err := time.Parse(time.RFC3339, d.LastCheckIn); err == nil {
-				lastCheckIn = parsed.UTC()
+			// offset (e.g. 2026-07-01T19:02:37.320664+00:00). An
+			// unparseable value fails loudly: a vendor format drift would
+			// otherwise silently NULL every stored check-in on the next
+			// pull, fleet-wide, with nothing surfaced anywhere.
+			parsed, err := time.Parse(time.RFC3339, d.LastCheckIn)
+			if err != nil {
+				return providers.DevicePage{Devices: nil, NextCursor: ""}, fmt.Errorf("device %s carried unparseable last_check_in %q", d.DeviceID, d.LastCheckIn)
 			}
+			lastCheckIn = parsed.UTC()
+		}
+		email, err := d.userEmail()
+		if err != nil {
+			return providers.DevicePage{Devices: nil, NextCursor: ""}, fmt.Errorf("device %s: %w", d.DeviceID, err)
 		}
 		devices = append(devices, providers.Device{
 			ExternalID:    d.DeviceID,
@@ -257,17 +273,22 @@ func (s *source) ListDevices(ctx context.Context, creds providers.Credentials, s
 			Hostname:      d.DeviceName,
 			OSName:        d.Platform,
 			OSVersion:     d.OSVersion,
-			UserEmail:     d.userEmail(),
+			UserEmail:     email,
 			LastCheckInAt: lastCheckIn,
 			Raw:           raw,
 		})
 	}
 
-	// A short page means the listing is exhausted; a full page continues at
-	// the next offset.
+	// A page is final only when it is EMPTY. Stopping on the first short
+	// page would trust the vendor never to serve fewer records than
+	// requested mid-listing (a silently clamped limit, a lowered API
+	// maximum): a non-final short page would truncate the pull, and the
+	// completion-gated mark-missing would then flag the entire unfetched
+	// remainder of the fleet as missing. One extra empty-page request per
+	// pull buys immunity to that failure mode.
 	next := ""
-	if len(results) == pageSize {
-		next = strconv.Itoa(offset + pageSize)
+	if len(results) > 0 {
+		next = strconv.Itoa(offset + len(results))
 	}
 	return providers.DevicePage{Devices: devices, NextCursor: next}, nil
 }
