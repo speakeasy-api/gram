@@ -102,7 +102,11 @@ export const DeviceIntegrationSchedulesTable = memo(
         columns={scheduleColumns}
         data={rows}
         rowKey={(row) => row.key}
-        noResultsMessage={<Type muted>No schedules</Type>}
+        noResultsMessage={
+          <Type muted className="block px-4 py-8 text-center">
+            No schedules
+          </Type>
+        }
       />
     );
   },

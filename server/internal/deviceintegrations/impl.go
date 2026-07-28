@@ -50,16 +50,25 @@ const (
 	activeWindow = time.Hour
 )
 
+// SyncTrigger nudges the background sync machinery to run promptly instead
+// of waiting for the coordinator's next tick. Implementations are
+// best-effort: the periodic tick remains the reliability backstop, so a
+// failed trigger only costs latency, never a sync.
+type SyncTrigger interface {
+	TriggerSyncNow(ctx context.Context) error
+}
+
 type Service struct {
-	tracer   trace.Tracer
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	auth     *auth.Auth
-	authz    *authz.Engine
-	audit    *audit.Logger
-	store    *Store
-	repo     *repo.Queries
-	guardian *guardian.Policy
+	tracer      trace.Tracer
+	logger      *slog.Logger
+	db          *pgxpool.Pool
+	auth        *auth.Auth
+	authz       *authz.Engine
+	audit       *audit.Logger
+	store       *Store
+	repo        *repo.Queries
+	guardian    *guardian.Policy
+	syncTrigger SyncTrigger
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -74,18 +83,33 @@ func NewService(
 	auditLogger *audit.Logger,
 	encryptionClient *encryption.Client,
 	guardianPolicy *guardian.Policy,
+	syncTrigger SyncTrigger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("deviceintegrations.api"))
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/deviceintegrations"),
-		logger:   logger,
-		db:       db,
-		auth:     auth.New(logger, db, sessions, authzEngine),
-		authz:    authzEngine,
-		audit:    auditLogger,
-		store:    NewStore(logger, db, encryptionClient),
-		repo:     repo.New(db),
-		guardian: guardianPolicy,
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/deviceintegrations"),
+		logger:      logger,
+		db:          db,
+		auth:        auth.New(logger, db, sessions, authzEngine),
+		authz:       authzEngine,
+		audit:       auditLogger,
+		store:       NewStore(logger, db, encryptionClient),
+		repo:        repo.New(db),
+		guardian:    guardianPolicy,
+		syncTrigger: syncTrigger,
+	}
+}
+
+// kickSync asks Temporal to run the sync coordinator immediately, so an
+// enable or a manual retry syncs in seconds instead of at the next tick.
+// Best-effort by design: failures are logged and the periodic tick picks
+// the due work up regardless.
+func (s *Service) kickSync(ctx context.Context, logger *slog.Logger) {
+	if s.syncTrigger == nil {
+		return
+	}
+	if err := s.syncTrigger.TriggerSyncNow(ctx); err != nil {
+		logger.WarnContext(ctx, "failed to trigger immediate device integration sync", attr.SlogError(err))
 	}
 }
 
@@ -215,6 +239,14 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit device integration upsert").LogError(ctx, logger)
+	}
+
+	// An enable transition should sync right away — the schedules are
+	// already due (fresh configs seed next_poll_after to now), so all that
+	// stands between the user and their first inventory is the coordinator's
+	// next tick.
+	if cfg.Enabled && (result.Before == nil || !result.Before.Enabled) {
+		s.kickSync(ctx, logger)
 	}
 
 	return buildConfigView(cfg), nil
@@ -521,6 +553,10 @@ func (s *Service) RetrySchedule(ctx context.Context, payload *gen.RetryScheduleP
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit device integration schedule retry").LogError(ctx, logger)
 	}
+
+	// "Sync now" means now: the schedule is due as of this commit, so run
+	// the coordinator instead of waiting out its tick.
+	s.kickSync(ctx, logger)
 
 	row, err := s.repo.GetScheduleWithSync(ctx, repo.GetScheduleWithSyncParams{
 		DeviceIntegrationConfigID: cfg.ID,

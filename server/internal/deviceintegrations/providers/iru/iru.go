@@ -117,6 +117,14 @@ func instanceBaseURL(settings providers.Settings) (string, error) {
 	if parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
 		return "", fmt.Errorf("instance_url must be the tenant API root, e.g. https://yourtenant.api.iru.com")
 	}
+	// The single most common paste mistake is the web-console URL
+	// (yourtenant.iru.com) instead of the API root (yourtenant.api.iru.com).
+	// The console host never serves the API, so catch it here with a precise
+	// message instead of a generic request failure at test time.
+	host := strings.ToLower(parsed.Hostname())
+	if (strings.HasSuffix(host, ".iru.com") || strings.HasSuffix(host, ".kandji.io")) && !strings.Contains(host, ".api.") {
+		return "", fmt.Errorf("instance_url looks like the console URL; use the API URL shown under Settings → Access, e.g. https://yourtenant.api.iru.com")
+	}
 	return "https://" + parsed.Host, nil
 }
 

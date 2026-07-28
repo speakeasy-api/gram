@@ -338,6 +338,12 @@ func TestInstanceURLValidation(t *testing.T) {
 	require.ErrorContains(t, err, "https")
 	_, err = s.ListDevices(t.Context(), fake.creds(), providers.Settings{fieldInstanceURL: "https://tenant.api.kandji.io/some/path"}, "")
 	require.ErrorContains(t, err, "tenant API root")
+	// The console URL is the most common paste mistake: reject it with a
+	// message that names the right value.
+	_, err = s.ListDevices(t.Context(), fake.creds(), providers.Settings{fieldInstanceURL: "https://tenant.iru.com"}, "")
+	require.ErrorContains(t, err, "console URL")
+	_, err = s.ListDevices(t.Context(), fake.creds(), providers.Settings{fieldInstanceURL: "https://tenant.kandji.io"}, "")
+	require.ErrorContains(t, err, "console URL")
 	_, err = s.ListDevices(t.Context(), fake.creds(), providers.Settings{fieldInstanceURL: ""}, "")
 	require.ErrorContains(t, err, "not configured")
 }

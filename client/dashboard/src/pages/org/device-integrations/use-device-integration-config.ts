@@ -38,6 +38,10 @@ export type DeviceIntegrationConfigForm = {
   setSetting: (key: string, value: string) => void;
   isMutating: boolean;
   canSave: boolean;
+  // True while the draft differs from the saved config: a typed secret or a
+  // changed setting. The connection test always runs against SAVED values,
+  // so a dirty draft means "save before testing".
+  hasUnsavedChanges: boolean;
   save: () => void;
   saveEnabled: (nextEnabled: boolean) => void;
   remove: () => void;
@@ -176,6 +180,18 @@ export function useDeviceIntegrationConfigForm(
     settings,
   ]);
 
+  const hasUnsavedChanges = useMemo(() => {
+    if (Object.values(credentials).some((value) => value.trim() !== "")) {
+      return true;
+    }
+    const savedSettings = data?.settings ?? {};
+    return provider.fields.some(
+      (field) =>
+        !field.secret &&
+        (settings[field.key] ?? "") !== (savedSettings[field.key] ?? ""),
+    );
+  }, [credentials, data, provider.fields, settings]);
+
   const save = () => {
     // Only send secret values the user actually typed: omitted keys keep the
     // stored secret (per-key merge on the server).
@@ -259,6 +275,7 @@ export function useDeviceIntegrationConfigForm(
     },
     isMutating,
     canSave,
+    hasUnsavedChanges,
     save,
     saveEnabled,
     remove,

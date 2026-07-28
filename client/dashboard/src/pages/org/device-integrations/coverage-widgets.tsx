@@ -285,7 +285,11 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
         columns={columns}
         data={filteredDevices}
         rowKey={(row) => row.id}
-        noResultsMessage={<Type muted>No matching devices</Type>}
+        noResultsMessage={
+          <Type muted className="block px-4 py-8 text-center">
+            No matching devices
+          </Type>
+        }
       />
       {hasMore ? (
         <Stack direction="horizontal" align="center" gap={3}>

@@ -228,3 +228,24 @@ func buildDeviceIntegrationSyncScheduleOptions(temporalEnv *tenv.Environment) cl
 		},
 	}
 }
+
+// DeviceIntegrationSyncTrigger runs the sync coordinator schedule
+// immediately, so user actions that make a sync due (enabling a connection,
+// "Sync now") take effect in seconds instead of at the next tick. The
+// schedule's overlap-skip policy makes a trigger racing a live tick
+// harmless.
+type DeviceIntegrationSyncTrigger struct {
+	TemporalEnv *tenv.Environment
+}
+
+var _ deviceintegrations.SyncTrigger = (*DeviceIntegrationSyncTrigger)(nil)
+
+func (t *DeviceIntegrationSyncTrigger) TriggerSyncNow(ctx context.Context) error {
+	handle := t.TemporalEnv.Client().ScheduleClient().GetHandle(ctx, deviceIntegrationSyncCoordinatorScheduleID)
+	if err := handle.Trigger(ctx, client.ScheduleTriggerOptions{
+		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+	}); err != nil {
+		return fmt.Errorf("trigger device integration sync coordinator: %w", err)
+	}
+	return nil
+}
