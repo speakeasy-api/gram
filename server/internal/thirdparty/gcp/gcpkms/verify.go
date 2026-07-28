@@ -155,6 +155,12 @@ func verifyReasonFor(err error) VerifyReason {
 		return ReasonInvalidResourceName
 	case errors.Is(err, ErrUnsupportedAlgorithm):
 		return ReasonUnsupportedAlgorithm
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
+		// A bare context error carries no gRPC status, so without this it would
+		// fall through to ReasonUnexpected and callers would not retry something
+		// that is purely transient. gRPC returns a proper DeadlineExceeded status
+		// for in-call expiry, but the retry layer can surface the raw error.
+		return ReasonUnavailable
 	}
 
 	sts, ok := status.FromError(err)

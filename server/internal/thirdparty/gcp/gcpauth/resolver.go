@@ -77,9 +77,9 @@ func resolveAmbient(ctx context.Context) (Principal, error) {
 	// Credentials. ADC reads the metadata server in-cluster and the local
 	// credentials off-GCP, so success means the identity can actually obtain a
 	// token, not merely that a service account is attached.
-	creds, err := google.FindDefaultCredentials(ctx, cloudPlatformScope)
+	creds, err := ambientCredentials(ctx)
 	if err != nil {
-		return Principal{}, fmt.Errorf("resolve application default credentials: %w", err)
+		return Principal{}, err
 	}
 	if _, err := creds.TokenSource.Token(); err != nil {
 		return Principal{}, fmt.Errorf("mint token from application default credentials: %w", err)
@@ -112,9 +112,9 @@ func (r *DefaultResolver) TokenSource(ctx context.Context, cred Credential) (oau
 	case modeImpersonation:
 		return impersonatedTokenSource(ctx, cred.ImpersonateServiceAccount)
 	case modeAmbient:
-		creds, err := google.FindDefaultCredentials(ctx, cloudPlatformScope)
+		creds, err := ambientCredentials(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("resolve application default credentials: %w", err)
+			return nil, err
 		}
 		return creds.TokenSource, nil
 	case modeWIF:
@@ -122,6 +122,22 @@ func (r *DefaultResolver) TokenSource(ctx context.Context, cred Credential) (oau
 	default:
 		return nil, ErrUnsupportedMode
 	}
+}
+
+// ambientCredentials loads Gram's own Application Default Credentials, which
+// read the metadata server in-cluster and local credentials off-GCP.
+//
+// Both the principal probe and the token source go through it. ResolvePrincipal
+// cannot simply call TokenSource, because it also needs the credentials JSON to
+// recover a service-account email, so this is the shared point that stops the
+// two paths drifting in which credentials they load or how a failure reads.
+func ambientCredentials(ctx context.Context) (*google.Credentials, error) {
+	creds, err := google.FindDefaultCredentials(ctx, cloudPlatformScope)
+	if err != nil {
+		return nil, fmt.Errorf("resolve application default credentials: %w", err)
+	}
+
+	return creds, nil
 }
 
 // resolveImpersonated proves Gram's own identity can impersonate the target

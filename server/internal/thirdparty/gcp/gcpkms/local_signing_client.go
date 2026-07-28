@@ -61,7 +61,15 @@ func NewLocalSigningClient(alg jose.SignatureAlgorithm) (*LocalSigningClient, er
 // client validates it, so a malformed name fails here too rather than passing in
 // tests and failing in production; beyond that the name is not otherwise used,
 // since this client holds exactly one key.
-func (c *LocalSigningClient) GetPublicKey(_ context.Context, resourceName string) (*PublicKey, error) {
+//
+// A canceled or expired context fails the call, as it would against real KMS. A
+// stand-in that kept working after the caller gave up would report a key usable
+// under conditions where production reports nothing at all.
+func (c *LocalSigningClient) GetPublicKey(ctx context.Context, resourceName string) (*PublicKey, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("get local %s public key: %w", c.alg, err)
+	}
+
 	if err := ValidateKeyVersionName(resourceName); err != nil {
 		return nil, err
 	}
@@ -93,9 +101,14 @@ func (c *LocalSigningClient) GetPublicKey(_ context.Context, resourceName string
 // verification code they would against GCP.
 //
 // The digest width and the algorithm are checked as strictly as the real client
-// checks them, so a caller cannot pass something here that KMS would reject.
+// checks them, so a caller cannot pass something here that KMS would reject, and
+// a canceled or expired context fails the call as it would against real KMS.
 // There are no checksums to verify: nothing crosses a wire.
-func (c *LocalSigningClient) AsymmetricSign(_ context.Context, resourceName string, alg jose.SignatureAlgorithm, digest []byte) ([]byte, error) {
+func (c *LocalSigningClient) AsymmetricSign(ctx context.Context, resourceName string, alg jose.SignatureAlgorithm, digest []byte) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("sign digest with local %s key: %w", c.alg, err)
+	}
+
 	if err := ValidateKeyVersionName(resourceName); err != nil {
 		return nil, err
 	}

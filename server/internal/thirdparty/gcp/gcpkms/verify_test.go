@@ -34,6 +34,7 @@ func TestVerifySigningKey_ES256(t *testing.T) {
 	require.True(t, result.Verified, "detail: %s", result.Detail)
 	require.Equal(t, ReasonVerified, result.Reason)
 	require.Equal(t, jose.ES256, result.Algorithm)
+	require.Empty(t, result.Detail)
 }
 
 // The stored algorithm drives how Gram advertises the key, so a healthy key
@@ -127,6 +128,11 @@ func TestVerifySigningKey_ClassifiesProviderFailures(t *testing.T) {
 		{status.Error(codes.ResourceExhausted, "quota exceeded"), ReasonUnavailable},
 		{status.Error(codes.InvalidArgument, "malformed request"), ReasonUnexpected},
 		{ErrUnsupportedAlgorithm, ReasonUnsupportedAlgorithm},
+
+		// Bare context errors carry no gRPC status. Without explicit handling they
+		// would classify as unexpected, and a caller would not retry a timeout.
+		{context.DeadlineExceeded, ReasonUnavailable},
+		{context.Canceled, ReasonUnavailable},
 	} {
 		client := unreachableClient{SigningClient: local, err: tc.err}
 
