@@ -568,6 +568,21 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 	// run; returned only when no real finding matches (see the presidio case).
 	var deadLetterResult *ScanResult
 
+	// failWithHeldSentinel prefers a held dead-letter sentinel over a later
+	// source error: propagating the error would discard the whole policy and
+	// fail a block policy open. Cancellation still propagates so the fan-out
+	// in ScanForEnforcement can discard the scan.
+	failWithHeldSentinel := func(err error) (*ScanResult, error) {
+		if deadLetterResult == nil || errors.Is(err, context.Canceled) {
+			return nil, err
+		}
+		s.logger.WarnContext(ctx, "source scan failed after presidio dead-letter; enforcing sentinel",
+			attr.SlogError(err),
+			attr.SlogRiskPolicyID(policy.ID.String()),
+		)
+		return deadLetterResult, nil
+	}
+
 	for _, source := range policy.Sources {
 		if !categoryScope.SourceInScope(view, source) {
 			continue
@@ -576,7 +591,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 		case ra.SourceGitleaks:
 			gitleaksFindings, err := s.scanGitleaks(ctx, text)
 			if err != nil {
-				return nil, fmt.Errorf("gitleaks scan: %w", err)
+				return failWithHeldSentinel(fmt.Errorf("gitleaks scan: %w", err))
 			}
 			findings := categoryScope.FilterFindings(view, filter(gitleaksFindings))
 			if len(findings) > 0 {
@@ -607,7 +622,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 				func() {},
 			)
 			if err != nil {
-				return nil, fmt.Errorf("presidio scan: %w", err)
+				return failWithHeldSentinel(fmt.Errorf("presidio scan: %w", err))
 			}
 			if len(batchResults) > 0 {
 				filtered := categoryScope.FilterFindings(view, filter(batchResults[0]))
@@ -653,7 +668,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 		case ra.SourcePromptInjection:
 			findings, err := s.piScanner.Scan(ctx, text, policy.OrganizationID, policy.ProjectID.String(), userID, judgemessage.New(messageType, toolName, text))
 			if err != nil {
-				return nil, fmt.Errorf("prompt injection scan: %w", err)
+				return failWithHeldSentinel(fmt.Errorf("prompt injection scan: %w", err))
 			}
 			findings = categoryScope.FilterFindings(view, filter(findings))
 			if len(findings) > 0 {
