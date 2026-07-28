@@ -103,7 +103,7 @@ function bucketDisplay(bucket: CoverageBucket): BucketDisplay {
   return BUCKETS[bucket] ?? FALLBACK_BUCKET;
 }
 
-export function CoverageBucketBadge({
+function CoverageBucketBadge({
   bucket,
 }: {
   bucket: CoverageBucket;
