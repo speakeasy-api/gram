@@ -4,7 +4,7 @@ import type { Action } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
-import { useFetcher } from "@/contexts/Fetcher";
+import { useSdkClient } from "@/contexts/Sdk";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import {
@@ -38,7 +38,7 @@ export function PluginCard({
 }): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
-  const { fetch: authFetch } = useFetcher();
+  const client = useSdkClient();
   const detailHref = routes.plugins.detail.href(plugin.id);
   const serverCount = plugin.serverCount ?? 0;
   const skillCount = plugin.skillCount ?? 0;
@@ -61,7 +61,7 @@ export function PluginCard({
   const handleDownload = async (platform: PluginDownloadPlatform) => {
     setIsDownloadMenuOpen(false);
     try {
-      await downloadPluginPackage(authFetch, plugin.id, platform);
+      await downloadPluginPackage(client, plugin.id, platform);
     } catch (_err) {
       toast.error("Failed to download plugin package");
     }

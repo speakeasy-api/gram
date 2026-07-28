@@ -24914,6 +24914,7 @@ paths:
               - claude
               - cursor
               - codex
+              - opencode
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -25031,6 +25032,7 @@ paths:
               - claude
               - cursor
               - codex
+              - opencode
             type: string
         - allowEmptyValue: true
           description: Session header

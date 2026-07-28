@@ -62,7 +62,7 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useProject } from "@/contexts/Auth";
-import { useFetcher } from "@/contexts/Fetcher";
+import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { toast } from "sonner";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
@@ -120,7 +120,7 @@ export default function PluginDetail(): JSX.Element | null {
     refetchInterval: 5_000,
   });
 
-  const { fetch: authFetch } = useFetcher();
+  const client = useSdkClient();
 
   const { data: toolsetsData, isLoading: isLoadingToolsets } =
     useListToolsets();
@@ -345,7 +345,7 @@ export default function PluginDetail(): JSX.Element | null {
   const handleDownload = async (platform: PluginDownloadPlatform) => {
     setIsDownloadMenuOpen(false);
     try {
-      await downloadPluginPackage(authFetch, pluginId!, platform);
+      await downloadPluginPackage(client, pluginId!, platform);
     } catch (_err) {
       toast.error("Failed to download plugin package");
     }

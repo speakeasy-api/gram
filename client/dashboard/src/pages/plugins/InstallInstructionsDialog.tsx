@@ -14,6 +14,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useFetcher } from "@/contexts/Fetcher";
+import { useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { usePlugins } from "@gram/client/react-query/plugins";
@@ -670,7 +671,7 @@ function OpenCodeInstallContent({
   pluginId: string | undefined;
   pluginSlug: string | undefined;
 }) {
-  const { fetch: authFetch } = useFetcher();
+  const client = useSdkClient();
   const [isDownloading, setIsDownloading] = useState(false);
 
   const zipName = `${pluginSlug ?? "plugin"}.zip`;
@@ -679,7 +680,7 @@ function OpenCodeInstallContent({
     if (!pluginId) return;
     setIsDownloading(true);
     try {
-      await downloadPluginPackage(authFetch, pluginId, "opencode");
+      await downloadPluginPackage(client, pluginId, "opencode");
     } finally {
       setIsDownloading(false);
     }
