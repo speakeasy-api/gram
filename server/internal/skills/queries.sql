@@ -62,6 +62,386 @@ WHERE project_id = @project_id
   AND id = ANY(@ids::uuid[])
   AND reviewed_at IS NULL;
 
+-- name: CountUnreviewedSkillFeedback :one
+SELECT COUNT(*)
+FROM skill_feedback
+WHERE project_id = @project_id
+  AND skill_name = @skill_name
+  AND reviewed_at IS NULL;
+
+-- name: ResolveSkillSuggestionBase :one
+WITH base AS (
+  SELECT sv.*
+  FROM skills s
+  JOIN skill_versions sv ON sv.skill_id = s.id
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = s.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
+  WHERE s.project_id = @project_id
+    AND s.id = @skill_id
+    AND s.archived_at IS NULL
+    AND sv.spec_valid IS TRUE
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+  LIMIT 1
+)
+SELECT
+  base.id AS base_version_id,
+  base.created_at AS base_floor_reference_at,
+  base.content AS base_content,
+  base.canonical_sha256 AS base_canonical_sha256,
+  COALESCE(predecessor.id, '00000000-0000-0000-0000-000000000000'::uuid) AS predecessor_version_id,
+  COALESCE(predecessor.content, '')::text AS predecessor_content,
+  COALESCE(predecessor.canonical_sha256, '')::text AS predecessor_canonical_sha256
+FROM base
+LEFT JOIN skill_version_lineages lineage
+  ON lineage.skill_id = base.skill_id
+  AND lineage.skill_version_id = base.id
+LEFT JOIN LATERAL (
+  SELECT previous.id, previous.content, previous.canonical_sha256
+  FROM skill_versions previous
+  WHERE previous.skill_id = base.skill_id
+    AND (
+      previous.id = lineage.derived_from_version_id
+      OR (
+        lineage.derived_from_version_id IS NULL
+        AND previous.spec_valid IS TRUE
+        AND (previous.created_at, previous.id) < (base.created_at, base.id)
+      )
+    )
+  ORDER BY previous.created_at DESC, previous.id DESC
+  LIMIT 1
+) predecessor ON TRUE;
+
+-- name: GetOpenSkillEditSuggestion :one
+SELECT suggestion.*
+FROM skill_edit_suggestions suggestion
+JOIN skills s
+  ON s.project_id = suggestion.project_id
+  AND s.id = suggestion.skill_id
+WHERE suggestion.project_id = @project_id
+  AND suggestion.skill_id = @skill_id
+  AND suggestion.status = 'open'
+  AND s.archived_at IS NULL;
+
+-- name: GetLatestSkillEditSuggestion :one
+SELECT suggestion.*
+FROM skill_edit_suggestions suggestion
+JOIN skills s
+  ON s.project_id = suggestion.project_id
+  AND s.id = suggestion.skill_id
+WHERE suggestion.project_id = @project_id
+  AND suggestion.skill_id = @skill_id
+  AND s.archived_at IS NULL
+ORDER BY suggestion.created_at DESC, suggestion.id DESC
+LIMIT 1;
+
+-- name: CountScoredSkillEvaluationsAfter :one
+SELECT COUNT(*)
+FROM skill_efficacy_evaluations evaluation
+JOIN skills s
+  ON s.project_id = evaluation.project_id
+  AND s.id = evaluation.skill_id
+WHERE evaluation.project_id = @project_id
+  AND evaluation.skill_id = @skill_id
+  AND evaluation.skill_version_id = @base_version_id
+  AND evaluation.state = 'scored'
+  AND evaluation.scored_at > @scored_after
+  AND s.archived_at IS NULL;
+
+-- name: DismissSkillEditSuggestion :one
+UPDATE skill_edit_suggestions suggestion
+SET status = 'dismissed',
+    updated_at = clock_timestamp()
+FROM skills s
+WHERE suggestion.project_id = @project_id
+  AND suggestion.skill_id = @skill_id
+  AND suggestion.id = @id
+  AND suggestion.status = 'open'
+  AND s.project_id = suggestion.project_id
+  AND s.id = suggestion.skill_id
+  AND s.archived_at IS NULL
+RETURNING suggestion.*;
+
+-- name: CreateSkillEditSuggestion :one
+INSERT INTO skill_edit_suggestions (
+  project_id,
+  skill_id,
+  base_version_id,
+  rationale,
+  scored_session_count
+)
+SELECT
+  s.project_id,
+  s.id,
+  sv.id,
+  @rationale,
+  @scored_session_count
+FROM skills s
+JOIN skill_versions sv
+  ON sv.skill_id = s.id
+  AND sv.id = @base_version_id
+WHERE s.project_id = @project_id
+  AND s.id = @skill_id
+  AND s.archived_at IS NULL
+RETURNING *;
+
+-- name: UpdateOpenSkillEditSuggestion :one
+UPDATE skill_edit_suggestions suggestion
+SET rationale = @rationale,
+    scored_session_count = @scored_session_count,
+    updated_at = clock_timestamp()
+FROM skills s
+WHERE suggestion.project_id = @project_id
+  AND suggestion.skill_id = @skill_id
+  AND suggestion.base_version_id = @base_version_id
+  AND suggestion.status = 'open'
+  AND s.project_id = suggestion.project_id
+  AND s.id = suggestion.skill_id
+  AND s.archived_at IS NULL
+RETURNING suggestion.*;
+
+-- name: UpdateLatestSkillEditSuggestionWatermark :one
+WITH latest AS (
+  SELECT suggestion.id
+  FROM skill_edit_suggestions suggestion
+  JOIN skills s
+    ON s.project_id = suggestion.project_id
+    AND s.id = suggestion.skill_id
+  WHERE suggestion.project_id = @project_id
+    AND suggestion.skill_id = @skill_id
+    AND suggestion.base_version_id = @base_version_id
+    AND s.archived_at IS NULL
+  ORDER BY suggestion.created_at DESC, suggestion.id DESC
+  LIMIT 1
+)
+UPDATE skill_edit_suggestions suggestion
+SET scored_session_count = @scored_session_count,
+    updated_at = clock_timestamp()
+FROM latest
+WHERE suggestion.project_id = @project_id
+  AND suggestion.skill_id = @skill_id
+  AND suggestion.base_version_id = @base_version_id
+  AND suggestion.id = latest.id
+RETURNING suggestion.*;
+
+-- name: CreateSkillEditSuggestionWatermark :one
+INSERT INTO skill_edit_suggestions (
+  project_id,
+  skill_id,
+  base_version_id,
+  rationale,
+  status,
+  scored_session_count
+)
+SELECT
+  s.project_id,
+  s.id,
+  sv.id,
+  @rationale,
+  'superseded',
+  @scored_session_count
+FROM skills s
+JOIN skill_versions sv
+  ON sv.skill_id = s.id
+  AND sv.id = @base_version_id
+WHERE s.project_id = @project_id
+  AND s.id = @skill_id
+  AND s.archived_at IS NULL
+RETURNING *;
+
+-- name: LinkSkillEditSuggestionFeedback :execrows
+INSERT INTO skill_edit_suggestion_feedback (
+  project_id,
+  change_id,
+  feedback_id
+)
+SELECT
+  feedback.project_id,
+  @change_id,
+  feedback.id
+FROM skill_feedback feedback
+WHERE feedback.project_id = @project_id
+  AND feedback.id = ANY(@feedback_ids::uuid[])
+ON CONFLICT DO NOTHING;
+
+-- name: CountSkillEditSuggestionFeedback :one
+SELECT COUNT(*)
+FROM skill_edit_suggestion_feedback link
+JOIN skill_edit_suggestion_changes change
+  ON change.project_id = link.project_id
+  AND change.id = link.change_id
+WHERE link.project_id = @project_id
+  AND change.suggestion_id = @suggestion_id;
+
+-- name: CreateSkillEditSuggestionChange :one
+INSERT INTO skill_edit_suggestion_changes (
+  project_id,
+  suggestion_id,
+  proposed_diff,
+  rationale,
+  position
+)
+SELECT
+  suggestion.project_id,
+  suggestion.id,
+  @proposed_diff,
+  @rationale,
+  @position
+FROM skill_edit_suggestions suggestion
+WHERE suggestion.project_id = @project_id
+  AND suggestion.id = @suggestion_id
+RETURNING *;
+
+-- name: DeleteSkillEditSuggestionChanges :exec
+DELETE FROM skill_edit_suggestion_changes
+WHERE project_id = @project_id
+  AND suggestion_id = @suggestion_id;
+
+-- name: DeleteSkillEditSuggestionChange :exec
+DELETE FROM skill_edit_suggestion_changes
+WHERE project_id = @project_id
+  AND id = @id;
+
+-- name: RebaseSkillEditSuggestionChange :exec
+UPDATE skill_edit_suggestion_changes
+SET proposed_diff = @proposed_diff,
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND id = @id;
+
+-- name: ListSkillEditSuggestionChanges :many
+SELECT
+  change.*,
+  (
+    SELECT COUNT(*)
+    FROM skill_edit_suggestion_feedback link
+    WHERE link.project_id = change.project_id
+      AND link.change_id = change.id
+  )::bigint AS feedback_count,
+  (
+    SELECT COUNT(DISTINCT feedback.session_id)
+    FROM skill_edit_suggestion_feedback link
+    JOIN skill_feedback feedback
+      ON feedback.project_id = link.project_id
+      AND feedback.id = link.feedback_id
+    WHERE link.project_id = change.project_id
+      AND link.change_id = change.id
+      AND feedback.session_id IS NOT NULL
+  )::bigint AS feedback_session_count
+FROM skill_edit_suggestion_changes change
+WHERE change.project_id = @project_id
+  AND change.suggestion_id = ANY(@suggestion_ids::uuid[])
+ORDER BY change.suggestion_id, change.position, change.id;
+
+-- name: GetSkillEditSuggestionChange :one
+SELECT change.*, suggestion.skill_id, suggestion.base_version_id, suggestion.status
+FROM skill_edit_suggestion_changes change
+JOIN skill_edit_suggestions suggestion
+  ON suggestion.project_id = change.project_id
+  AND suggestion.id = change.suggestion_id
+WHERE change.project_id = @project_id
+  AND change.id = @id;
+
+-- name: RebaseOpenSkillEditSuggestion :one
+UPDATE skill_edit_suggestions suggestion
+SET base_version_id = @base_version_id,
+    updated_at = clock_timestamp()
+FROM skills s
+WHERE suggestion.project_id = @project_id
+  AND suggestion.skill_id = @skill_id
+  AND suggestion.id = @id
+  AND suggestion.status = 'open'
+  AND s.project_id = suggestion.project_id
+  AND s.id = suggestion.skill_id
+  AND s.archived_at IS NULL
+RETURNING suggestion.*;
+
+-- name: SupersedeOpenSkillEditSuggestion :one
+UPDATE skill_edit_suggestions suggestion
+SET status = 'superseded',
+    updated_at = clock_timestamp()
+FROM skills s
+WHERE suggestion.project_id = @project_id
+  AND suggestion.skill_id = @skill_id
+  AND suggestion.base_version_id <> @current_base_version_id
+  AND suggestion.status = 'open'
+  AND s.project_id = suggestion.project_id
+  AND s.id = suggestion.skill_id
+  AND s.archived_at IS NULL
+RETURNING suggestion.*;
+
+-- name: ListRecentlyActiveSkills :many
+SELECT *
+FROM skills
+WHERE project_id = @project_id
+  AND archived_at IS NULL
+  AND last_seen_at >= @active_since
+  AND EXISTS (
+    SELECT 1
+    FROM skill_versions sv
+    WHERE sv.skill_id = skills.id
+      AND sv.spec_valid IS TRUE
+  )
+  AND (
+    sqlc.narg(cursor_last_seen_at)::timestamptz IS NULL
+    OR (last_seen_at, id) < (
+      sqlc.narg(cursor_last_seen_at)::timestamptz,
+      sqlc.narg(cursor_id)::uuid
+    )
+  )
+ORDER BY last_seen_at DESC, id DESC
+LIMIT @page_limit;
+
+-- name: ListSkillSuggestionProjects :many
+SELECT p.id AS project_id
+FROM projects p
+WHERE p.deleted IS FALSE
+  AND p.id > @after_project_id
+  AND EXISTS (
+    SELECT 1
+    FROM skills s
+    WHERE s.project_id = p.id
+      AND s.archived_at IS NULL
+      AND s.last_seen_at >= @active_since
+      AND EXISTS (
+        SELECT 1
+        FROM skill_versions sv
+        WHERE sv.skill_id = s.id
+          AND sv.spec_valid IS TRUE
+      )
+  )
+ORDER BY p.id
+LIMIT @page_limit;
+
+-- name: ListRecentScoredSkillEvaluationChats :many
+WITH recent AS (
+  SELECT DISTINCT ON (evaluation.chat_id)
+    evaluation.chat_id,
+    evaluation.surface,
+    evaluation.skill_version_id,
+    evaluation.scored_at
+  FROM skill_efficacy_evaluations evaluation
+  JOIN skills s
+    ON s.project_id = evaluation.project_id
+    AND s.id = evaluation.skill_id
+  JOIN chats c
+    ON c.project_id = evaluation.project_id
+    AND c.id = evaluation.chat_id
+    AND c.deleted IS FALSE
+  WHERE evaluation.project_id = @project_id
+    AND evaluation.skill_id = @skill_id
+    AND evaluation.skill_version_id = ANY(@version_ids::uuid[])
+    AND evaluation.state = 'scored'
+    AND evaluation.scored_at >= @scored_since
+    AND s.archived_at IS NULL
+  ORDER BY evaluation.chat_id, evaluation.scored_at DESC, evaluation.id DESC
+)
+SELECT *
+FROM recent
+ORDER BY scored_at DESC, chat_id DESC
+LIMIT @page_limit;
+
 -- name: GetSkillByNameForUpdate :one
 SELECT *
 FROM skills
@@ -1468,6 +1848,45 @@ SET claim_token = NULL
 WHERE project_id = @project_id
   AND id = @id
   AND state = 'reserved';
+
+-- name: CreateScoredSkillEfficacyEvaluationFixture :one
+-- Test-only fixture for suggestion evidence timestamp and watermark tests.
+INSERT INTO skill_efficacy_evaluations (
+  organization_id,
+  project_id,
+  surface,
+  session_id,
+  chat_id,
+  skill_id,
+  skill_version_id,
+  canonical_sha256,
+  observed_at,
+  state,
+  scored_at
+)
+SELECT
+  p.organization_id,
+  s.project_id,
+  @surface,
+  @session_id,
+  @chat_id,
+  s.id,
+  sv.id,
+  sv.canonical_sha256,
+  @scored_at,
+  'scored',
+  @scored_at
+FROM skills s
+JOIN projects p
+  ON p.id = s.project_id
+  AND p.deleted IS FALSE
+JOIN skill_versions sv
+  ON sv.skill_id = s.id
+  AND sv.id = @base_version_id
+WHERE s.project_id = @project_id
+  AND s.id = @skill_id
+  AND s.archived_at IS NULL
+RETURNING skill_efficacy_evaluations.*;
 
 -- name: RecoverStaleSkillEfficacyReservations :one
 -- Bounded recovery for abandoned reservations. The row lock keeps concurrent

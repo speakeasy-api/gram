@@ -117,6 +117,13 @@ type ScanResult struct {
 	// acknowledging one command clears only an identical retry, not every call
 	// of the same tool under the same policy. Not sensitive (a one-way digest).
 	CallFingerprint string
+
+	// DeadLetterReason is non-empty when the "match" is a scanner dead-letter
+	// sentinel (the analyzer failed after exhausting retries, e.g. rule
+	// pii.dead_letter) rather than an actual finding. A warn policy must not
+	// challenge the user over an analyzer outage, so ScanForEnforcement skips
+	// the challenge for such results; block policies still deny (fail closed).
+	DeadLetterReason string
 }
 
 // callFingerprint is the stable per-call key for a warn acknowledgement: a hex
@@ -361,6 +368,18 @@ func (s *Scanner) ScanForEnforcement(
 				}
 				return nil
 			}
+			// A warn match that is really a dead-letter sentinel (the analyzer
+			// failed, e.g. pii.dead_letter) must not challenge the user: the
+			// challenge would report an analyzer outage as a policy violation.
+			// Skipping the CAS also keeps the sentinel from shadowing a genuine
+			// warn match from a sibling policy.
+			if result.DeadLetterReason != "" {
+				s.logger.WarnContext(gctx, "skipping warn challenge for dead-letter sentinel",
+					attr.SlogRiskPolicyID(result.PolicyID),
+					attr.SlogRiskRuleID(result.RuleID),
+				)
+				return nil
+			}
 			warnWinner.CompareAndSwap(nil, result)
 			return nil
 		})
@@ -545,6 +564,26 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 		}
 	}
 
+	// Sentinel-only presidio result held back so the remaining sources still
+	// run; returned only when no real finding matches (see the presidio case).
+	var deadLetterResult *ScanResult
+
+	// failWithHeldSentinel prefers a held dead-letter sentinel over a later
+	// source error: propagating the error would discard the whole policy and
+	// fail a block policy open. Cancellation and deadline expiry still
+	// propagate so the fan-out in ScanForEnforcement discards the scan
+	// instead of enforcing a stale sentinel after the request is gone.
+	failWithHeldSentinel := func(err error) (*ScanResult, error) {
+		if deadLetterResult == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
+		}
+		s.logger.WarnContext(ctx, "source scan failed after presidio dead-letter; enforcing sentinel",
+			attr.SlogError(err),
+			attr.SlogRiskPolicyID(policy.ID.String()),
+		)
+		return deadLetterResult, nil
+	}
+
 	for _, source := range policy.Sources {
 		if !categoryScope.SourceInScope(view, source) {
 			continue
@@ -553,22 +592,23 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 		case ra.SourceGitleaks:
 			gitleaksFindings, err := s.scanGitleaks(ctx, text)
 			if err != nil {
-				return nil, fmt.Errorf("gitleaks scan: %w", err)
+				return failWithHeldSentinel(fmt.Errorf("gitleaks scan: %w", err))
 			}
 			findings := categoryScope.FilterFindings(view, filter(gitleaksFindings))
 			if len(findings) > 0 {
 				return &ScanResult{
-					Action:          policy.Action,
-					PolicyID:        policy.ID.String(),
-					PolicyName:      policy.Name,
-					Source:          ra.SourceGitleaks,
-					MessageType:     messageType,
-					RuleID:          findings[0].RuleID,
-					Description:     findings[0].Description,
-					UserMessage:     conv.FromPGText[string](policy.UserMessage),
-					MatchedValue:    findings[0].Match,
-					Entity:          findings[0].RuleID,
-					CallFingerprint: "",
+					Action:           policy.Action,
+					PolicyID:         policy.ID.String(),
+					PolicyName:       policy.Name,
+					Source:           ra.SourceGitleaks,
+					MessageType:      messageType,
+					RuleID:           findings[0].RuleID,
+					Description:      findings[0].Description,
+					UserMessage:      conv.FromPGText[string](policy.UserMessage),
+					MatchedValue:     findings[0].Match,
+					Entity:           findings[0].RuleID,
+					CallFingerprint:  "",
+					DeadLetterReason: "",
 				}, nil
 			}
 		case ra.SourcePresidio:
@@ -583,64 +623,91 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 				func() {},
 			)
 			if err != nil {
-				return nil, fmt.Errorf("presidio scan: %w", err)
+				return failWithHeldSentinel(fmt.Errorf("presidio scan: %w", err))
 			}
 			if len(batchResults) > 0 {
 				filtered := categoryScope.FilterFindings(view, filter(batchResults[0]))
 				if len(filtered) > 0 {
+					// A Presidio failure surfaces as a dead-letter sentinel finding
+					// (DeadLetterReason set) rather than an error. Prefer a real
+					// finding when one is present so the sentinel never shadows
+					// actual PII. A sentinel-only result must not short-circuit the
+					// policy either: hold it and keep scanning the remaining sources
+					// so a healthy detector (e.g. gitleaks) can still match; it is
+					// returned only when nothing real matches, and the warn path
+					// then skips the challenge.
 					f := filtered[0]
-					return &ScanResult{
-						Action:          policy.Action,
-						PolicyID:        policy.ID.String(),
-						PolicyName:      policy.Name,
-						Source:          ra.SourcePresidio,
-						MessageType:     messageType,
-						RuleID:          f.RuleID,
-						Description:     f.Description,
-						UserMessage:     conv.FromPGText[string](policy.UserMessage),
-						MatchedValue:    f.Match,
-						Entity:          f.RuleID,
-						CallFingerprint: "",
-					}, nil
+					for _, cand := range filtered {
+						if cand.DeadLetterReason == "" {
+							f = cand
+							break
+						}
+					}
+					result := &ScanResult{
+						Action:           policy.Action,
+						PolicyID:         policy.ID.String(),
+						PolicyName:       policy.Name,
+						Source:           ra.SourcePresidio,
+						MessageType:      messageType,
+						RuleID:           f.RuleID,
+						Description:      f.Description,
+						UserMessage:      conv.FromPGText[string](policy.UserMessage),
+						MatchedValue:     f.Match,
+						Entity:           f.RuleID,
+						CallFingerprint:  "",
+						DeadLetterReason: f.DeadLetterReason,
+					}
+					if f.DeadLetterReason != "" {
+						if deadLetterResult == nil {
+							deadLetterResult = result
+						}
+						continue
+					}
+					return result, nil
 				}
 			}
 		case ra.SourcePromptInjection:
 			findings, err := s.piScanner.Scan(ctx, text, policy.OrganizationID, policy.ProjectID.String(), userID, judgemessage.New(messageType, toolName, text))
 			if err != nil {
-				return nil, fmt.Errorf("prompt injection scan: %w", err)
+				return failWithHeldSentinel(fmt.Errorf("prompt injection scan: %w", err))
 			}
 			findings = categoryScope.FilterFindings(view, filter(findings))
 			if len(findings) > 0 {
 				return &ScanResult{
-					Action:          policy.Action,
-					PolicyID:        policy.ID.String(),
-					PolicyName:      policy.Name,
-					Source:          ra.SourcePromptInjection,
-					MessageType:     messageType,
-					RuleID:          findings[0].RuleID,
-					Description:     findings[0].Description,
-					UserMessage:     conv.FromPGText[string](policy.UserMessage),
-					MatchedValue:    findings[0].Match,
-					Entity:          findings[0].RuleID,
-					CallFingerprint: "",
+					Action:           policy.Action,
+					PolicyID:         policy.ID.String(),
+					PolicyName:       policy.Name,
+					Source:           ra.SourcePromptInjection,
+					MessageType:      messageType,
+					RuleID:           findings[0].RuleID,
+					Description:      findings[0].Description,
+					UserMessage:      conv.FromPGText[string](policy.UserMessage),
+					MatchedValue:     findings[0].Match,
+					Entity:           findings[0].RuleID,
+					CallFingerprint:  "",
+					DeadLetterReason: "",
 				}, nil
 			}
 		}
 	}
 	if denyFindings := filter(customFindings); len(denyFindings) > 0 {
 		return &ScanResult{
-			Action:          policy.Action,
-			PolicyID:        policy.ID.String(),
-			PolicyName:      policy.Name,
-			Source:          ra.SourceCustom,
-			MessageType:     messageType,
-			RuleID:          denyFindings[0].RuleID,
-			Description:     denyFindings[0].Description,
-			UserMessage:     conv.FromPGText[string](policy.UserMessage),
-			MatchedValue:    denyFindings[0].Match,
-			Entity:          denyFindings[0].RuleID,
-			CallFingerprint: "",
+			Action:           policy.Action,
+			PolicyID:         policy.ID.String(),
+			PolicyName:       policy.Name,
+			Source:           ra.SourceCustom,
+			MessageType:      messageType,
+			RuleID:           denyFindings[0].RuleID,
+			Description:      denyFindings[0].Description,
+			UserMessage:      conv.FromPGText[string](policy.UserMessage),
+			MatchedValue:     denyFindings[0].Match,
+			Entity:           denyFindings[0].RuleID,
+			CallFingerprint:  "",
+			DeadLetterReason: "",
 		}, nil
+	}
+	if deadLetterResult != nil {
+		return deadLetterResult, nil
 	}
 	return nil, nil
 }
@@ -683,9 +750,10 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 		Description: finding.Description,
 		UserMessage: conv.FromPGText[string](policy.UserMessage),
 		// Judge findings have no literal matched substring; Entity mirrors RuleID.
-		MatchedValue:    finding.Match,
-		Entity:          finding.RuleID,
-		CallFingerprint: "",
+		MatchedValue:     finding.Match,
+		Entity:           finding.RuleID,
+		CallFingerprint:  "",
+		DeadLetterReason: "",
 	}
 }
 
