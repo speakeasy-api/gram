@@ -484,7 +484,22 @@ async function prepareOpenCodeEnv(rootDir, pluginDir) {
     JSON.stringify(
       {
         $schema: "https://opencode.ai/config.json",
-        model: "openai/gpt-5.4-mini",
+        model: "baseten/zai-org/GLM-5.2-Fast",
+        // Baseten's Model APIs are OpenAI-compatible; the key is read from
+        // BASETEN_API_KEY in the run environment (runProcess forwards it).
+        provider: {
+          baseten: {
+            npm: "@ai-sdk/openai-compatible",
+            name: "Baseten",
+            options: {
+              baseURL: "https://inference.baseten.co/v1",
+              apiKey: "{env:BASETEN_API_KEY}",
+            },
+            models: {
+              "zai-org/GLM-5.2-Fast": { name: "GLM-5.2-Fast (Baseten)" },
+            },
+          },
+        },
         plugin: [pathToFileURL(shim).href],
         // Headless runs auto-reject permission prompts; the temp workspace
         // counts as an external directory. The bypass-permissions analogue
