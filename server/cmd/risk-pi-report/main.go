@@ -173,19 +173,24 @@ type options struct {
 	outFile          string
 	checkFloors      bool
 	judgeModel       string
+	reasoningEffort  string
 	judgeConcurrency int
 	sources          string
 }
 
 const (
 	// defaultJudgeModel is the report's judge model when none is provided.
-	defaultJudgeModel = "anthropic/claude-haiku-4.5"
+	defaultJudgeModel = "google/gemini-3.1-flash-lite"
 	// judgeConcurrency bounds concurrent judge calls. The corpus is a few hundred
 	// rows; 8 keeps it brisk without tripping provider rate limits.
 	defaultJudgeConcurrency = 8
 	// judgeTimeout bounds a single judge completion call in the bench. Generous
 	// vs prod's 10s — accuracy matters more than latency here.
 	judgeTimeout = 30 * time.Second
+	// judgeAttempts bounds retries of a case whose response did not parse. Three
+	// is enough for a truncated body without masking a model that cannot hold to
+	// the schema, which still fails every attempt and is reported.
+	judgeAttempts = 3
 	// benchOrgID/benchProjectID label the judge calls. The judge needs an
 	// org/project for the request shape; these are inert identifiers (the
 	// dev-key provisioner ignores the org, projectID must parse as a UUID).
@@ -207,6 +212,7 @@ func parseFlags() options {
 		outFile:          "",
 		checkFloors:      false,
 		judgeModel:       "",
+		reasoningEffort:  "",
 		judgeConcurrency: 0,
 		sources:          "",
 	}
@@ -214,6 +220,7 @@ func parseFlags() options {
 	flag.StringVar(&opts.outFile, "out", defaultOutFile, "path to write metrics JSON")
 	flag.BoolVar(&opts.checkFloors, "check-floors", true, "fail if judge metrics violate floors.json")
 	flag.StringVar(&opts.judgeModel, "judge-model", defaultJudgeModel, "OpenRouter model id for the judge (must be allowlisted)")
+	flag.StringVar(&opts.reasoningEffort, "reasoning-effort", "", "reasoning effort override; empty matches production, which disables reasoning. Routes that reject a disabled setting need an effort such as \"low\"")
 	flag.IntVar(&opts.judgeConcurrency, "judge-concurrency", defaultJudgeConcurrency, "max concurrent judge calls")
 	flag.StringVar(&opts.sources, "sources", "", "comma-separated source substrings to keep (empty = all); use to judge a cheap iteration slice")
 	flag.Parse()
@@ -550,6 +557,11 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 	out := make([][]scanners.Finding, len(corpus))
 	ruleID, description := promptinjection.Describe()
 
+	var reasoning *openrouter.Reasoning
+	if opts.reasoningEffort != "" {
+		reasoning = &openrouter.Reasoning{Effort: opts.reasoningEffort, MaxTokens: nil, Exclude: nil, Enabled: nil}
+	}
+
 	sem := make(chan struct{}, opts.judgeConcurrency)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -565,7 +577,20 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 
 			text := corpus[i].Text
 			msg := corpus[i].judgeMessage()
-			isAttack, confidence, err := judgeOne(ctx, client, opts.judgeModel, msg)
+
+			// A truncated or empty response fails one case, and a single failure
+			// voids the whole corpus below. Retrying is the honest fix: skipping
+			// the case would leave out[i] empty, which scores as "benign" and
+			// quietly understates recall rather than reporting a gap.
+			var isAttack bool
+			var confidence float64
+			var err error
+			for attempt := 1; attempt <= judgeAttempts; attempt++ {
+				isAttack, confidence, err = judgeOne(ctx, client, opts.judgeModel, msg, reasoning)
+				if err == nil || ctx.Err() != nil {
+					break
+				}
+			}
 
 			mu.Lock()
 			defer mu.Unlock()
@@ -610,7 +635,7 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 // the structured message payload, piopenrouter's system prompt and verdict
 // schema, temperature 0. No copy of the prompt/schema to keep in sync - it
 // drives the production constants directly.
-func judgeOne(ctx context.Context, client openrouter.CompletionClient, model string, msg judgemessage.Message) (isAttack bool, confidence float64, err error) {
+func judgeOne(ctx context.Context, client openrouter.CompletionClient, model string, msg judgemessage.Message, reasoning *openrouter.Reasoning) (isAttack bool, confidence float64, err error) {
 	payload, err := json.Marshal(struct {
 		Message judgemessage.Payload `json:"message"`
 	}{Message: judgemessage.RenderPayload(msg)})
@@ -645,6 +670,7 @@ func judgeOne(ctx context.Context, client openrouter.CompletionClient, model str
 		UserEmail:      "",
 		HTTPMetadata:   nil,
 		JSONSchema:     &schema,
+		Reasoning:      reasoning,
 	})
 	if err != nil {
 		return false, 0, fmt.Errorf("openrouter object completion: %w", err)
