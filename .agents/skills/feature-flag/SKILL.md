@@ -131,12 +131,18 @@ if err != nil || !enabled {
 
 ### Checking in the React dashboard
 
-Use the `useTelemetry()` hook from `client/dashboard/src/contexts/Telemetry.tsx` — never import PostHog hooks directly:
+New frontend code should use the typed `useFeatureFlag()` hook from
+`client/dashboard/src/hooks/useFeatureFlag.ts`:
 
 ```tsx
-const telemetry = useTelemetry();
-const myFeatureEnabled = telemetry.isFeatureEnabled("my-new-feature") ?? false;
+const rbacEnabled = useFeatureFlag("gram-rbac"); // defaults off while loading
+const deploymentsEnabled = useFeatureFlag("gram-deployments-page", "on");
+const tunneledMcpEnabled = useFeatureFlag("gram-tunneled-mcp", "unresolved"); // boolean | undefined
 ```
+
+Add new keys to the hook's `FeatureFlag` union. The hook stays reactive as
+PostHog flags load; on localhost, the development telemetry provider enables
+every flag. Never import PostHog hooks directly.
 
 ---
 
