@@ -201,6 +201,9 @@ func DogfoodPluginFiles() (map[string][]byte, error) {
 	if err := generateCursorObservabilityPluginInDir(files, "plugin-cursor", "plugin-cursor", cfg); err != nil {
 		return nil, fmt.Errorf("generate dogfood cursor plugin: %w", err)
 	}
+	if err := generateOpenCodeObservabilityPluginInDir(files, "plugin-opencode", cfg); err != nil {
+		return nil, fmt.Errorf("generate dogfood opencode plugin: %w", err)
+	}
 	for p := range files {
 		if strings.Contains(p, ".claude-plugin/") || strings.Contains(p, ".cursor-plugin/") {
 			delete(files, p)
