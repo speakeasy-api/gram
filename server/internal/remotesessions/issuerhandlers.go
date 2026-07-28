@@ -58,10 +58,12 @@ type rfc8414Document struct {
 	ClientIDMetadataDocumentSupported bool `json:"client_id_metadata_document_supported"`
 }
 
-// DiscoverRemoteSessionIssuer fetches the upstream issuer's RFC 8414 metadata
-// document and returns a draft suitable for createRemoteSessionIssuer. No
-// persistence; the caller decides whether the draft is worth storing.
-func (s *Service) DiscoverRemoteSessionIssuer(ctx context.Context, payload *gen.DiscoverRemoteSessionIssuerPayload) (*types.RemoteSessionIssuerDraft, error) {
+// FetchRemoteSessionIssuerMetadata fetches the upstream issuer's RFC 8414
+// metadata document and returns a draft suitable for createRemoteSessionIssuer.
+// Keyed by issuer URL, so no record need exist; nothing is persisted and the
+// caller decides whether the draft is worth storing. RefreshRemoteSessionIssuerMetadata
+// is the persisting counterpart for an issuer that already exists.
+func (s *Service) FetchRemoteSessionIssuerMetadata(ctx context.Context, payload *gen.FetchRemoteSessionIssuerMetadataPayload) (*types.RemoteSessionIssuerDraft, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -84,35 +86,116 @@ func (s *Service) DiscoverRemoteSessionIssuer(ctx context.Context, payload *gen.
 
 	doc, warnings, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
 	if err != nil {
-		if df, ok := errors.AsType[*discoveryError](err); ok {
-			return nil, oops.E(oops.CodeGatewayError, err, "%s", df.UserMessage()).LogError(ctx, logger)
+		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeBadRequest)
+	}
+
+	return buildIssuerDraft(doc, issuerURL, warnings), nil
+}
+
+// RefreshRemoteSessionIssuerMetadata re-reads a project-owned issuer's RFC 8414
+// metadata document and persists the discovered values, returning the updated
+// issuer alongside any warnings.
+//
+// Organization-level issuers are inherited into projects for reading but are
+// not writable here; they refresh through
+// organizationRemoteSessionIssuers.refreshMetadata, matching how
+// UpdateRemoteSessionIssuer scopes its write.
+func (s *Service) RefreshRemoteSessionIssuerMetadata(ctx context.Context, payload *gen.RefreshRemoteSessionIssuerMetadataPayload) (*types.RemoteSessionIssuerRefresh, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	issuerID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, logger)
+	}
+
+	// project:write, not project:read: this persists.
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	// Loaded before the transaction opens, because discovery below is an
+	// upstream HTTP call under a ten-second budget and must not run while
+	// holding a pooled connection. The update re-asserts this row's identity,
+	// so a concurrent move or issuer rename aborts the write rather than
+	// letting the gap be exploited.
+	existing, err := repo.New(s.db).GetRemoteSessionIssuerByIDProjectOwned(ctx, repo.GetRemoteSessionIssuerByIDProjectOwnedParams{
+		ID:        issuerID,
+		ProjectID: uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogError(ctx, logger)
 		}
-		return nil, oops.E(oops.CodeGatewayError, err, "discover issuer metadata").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get remote session issuer").LogError(ctx, logger)
 	}
 
-	draft := &types.RemoteSessionIssuerDraft{
-		Issuer:                conv.Default(doc.Issuer, issuerURL),
-		AuthorizationEndpoint: conv.PtrEmpty(doc.AuthorizationEndpoint),
-		TokenEndpoint:         conv.PtrEmpty(doc.TokenEndpoint),
-		RegistrationEndpoint:  conv.PtrEmpty(doc.RegistrationEndpoint),
-		JwksURI:               conv.PtrEmpty(doc.JwksURI),
-		// The issuer controls these and downstream surfaces render them as links,
-		// so a value that is not an absolute http(s) URL is discarded rather than
-		// carried into the draft the create form submits back.
-		ServiceDocumentation:              conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTP(doc.ServiceDocumentation), doc.ServiceDocumentation, "")),
-		OpPolicyURI:                       conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTP(doc.OpPolicyURI), doc.OpPolicyURI, "")),
-		OpTosURI:                          conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTP(doc.OpTosURI), doc.OpTosURI, "")),
-		ScopesSupported:                   doc.ScopesSupported,
-		GrantTypesSupported:               doc.GrantTypesSupported,
-		ResponseTypesSupported:            doc.ResponseTypesSupported,
-		TokenEndpointAuthMethodsSupported: doc.TokenEndpointAuthMethodsSupported,
-		ClientIDMetadataDocumentSupported: doc.ClientIDMetadataDocumentSupported,
-		Oidc:                              false,
-		Passthrough:                       false,
-		DiscoveryWarnings:                 warnings,
+	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, existing)
+	if err != nil {
+		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeGatewayError)
 	}
 
-	return draft, nil
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := repo.New(dbtx)
+
+	// Re-read under a row lock rather than reusing the pre-discovery read: an
+	// updateIssuer that committed while discovery ran would otherwise land in
+	// this entry's before/after diff and be attributed to the refresh. The lock
+	// is taken after discovery finished, so it is never held across the upstream
+	// call.
+	locked, err := txRepo.GetRemoteSessionIssuerByIDForUpdate(ctx, repo.GetRemoteSessionIssuerByIDForUpdateParams{
+		ID:        issuerID,
+		ProjectID: uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeConflict, err, "%s", refreshConflictMessage).LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "lock remote session issuer").LogError(ctx, logger)
+	}
+
+	beforeView := mv.BuildRemoteSessionIssuerView(locked)
+
+	updated, err := txRepo.UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeConflict, err, "%s", refreshConflictMessage).LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "update remote session issuer discovered metadata").LogError(ctx, logger)
+	}
+
+	afterView := mv.BuildRemoteSessionIssuerView(updated)
+
+	if err := s.auditLogger.LogRemoteSessionIssuerUpdate(ctx, dbtx, audit.LogRemoteSessionIssuerUpdateEvent{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Actor:                  urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:       authCtx.Email,
+		ActorSlug:              nil,
+		RemoteSessionIssuerURN: urn.NewRemoteSessionIssuer(updated.ID),
+		Slug:                   updated.Slug,
+		IssuerURL:              updated.Issuer,
+		Name:                   conv.FromPGText[string](updated.Name),
+		SnapshotBefore:         beforeView,
+		SnapshotAfter:          afterView,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log remote session issuer update").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	return &types.RemoteSessionIssuerRefresh{Issuer: afterView, DiscoveryWarnings: warnings}, nil
 }
 
 // CreateRemoteSessionIssuer persists a new remote_session_issuer in the

@@ -29,6 +29,9 @@ type Server struct {
 	Archive                http.Handler
 	Distribute             http.Handler
 	Undistribute           http.Handler
+	Share                  http.Handler
+	Unshare                http.Handler
+	GetShared              http.Handler
 	ListDistributions      http.Handler
 }
 
@@ -69,6 +72,9 @@ func New(
 			{"Archive", "POST", "/rpc/skills.archive"},
 			{"Distribute", "POST", "/rpc/skills.distribute"},
 			{"Undistribute", "POST", "/rpc/skills.undistribute"},
+			{"Share", "POST", "/rpc/skills.share"},
+			{"Unshare", "POST", "/rpc/skills.unshare"},
+			{"GetShared", "GET", "/rpc/skills.getShared"},
 			{"ListDistributions", "GET", "/rpc/skills.listDistributions"},
 		},
 		Create:                 NewCreateHandler(e.Create, mux, decoder, encoder, errhandler, formatter),
@@ -81,6 +87,9 @@ func New(
 		Archive:                NewArchiveHandler(e.Archive, mux, decoder, encoder, errhandler, formatter),
 		Distribute:             NewDistributeHandler(e.Distribute, mux, decoder, encoder, errhandler, formatter),
 		Undistribute:           NewUndistributeHandler(e.Undistribute, mux, decoder, encoder, errhandler, formatter),
+		Share:                  NewShareHandler(e.Share, mux, decoder, encoder, errhandler, formatter),
+		Unshare:                NewUnshareHandler(e.Unshare, mux, decoder, encoder, errhandler, formatter),
+		GetShared:              NewGetSharedHandler(e.GetShared, mux, decoder, encoder, errhandler, formatter),
 		ListDistributions:      NewListDistributionsHandler(e.ListDistributions, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -100,6 +109,9 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Archive = m(s.Archive)
 	s.Distribute = m(s.Distribute)
 	s.Undistribute = m(s.Undistribute)
+	s.Share = m(s.Share)
+	s.Unshare = m(s.Unshare)
+	s.GetShared = m(s.GetShared)
 	s.ListDistributions = m(s.ListDistributions)
 }
 
@@ -118,6 +130,9 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountArchiveHandler(mux, h.Archive)
 	MountDistributeHandler(mux, h.Distribute)
 	MountUndistributeHandler(mux, h.Undistribute)
+	MountShareHandler(mux, h.Share)
+	MountUnshareHandler(mux, h.Unshare)
+	MountGetSharedHandler(mux, h.GetShared)
 	MountListDistributionsHandler(mux, h.ListDistributions)
 }
 
@@ -633,6 +648,165 @@ func NewUndistributeHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "undistribute")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountShareHandler configures the mux to serve the "skills" service "share"
+// endpoint.
+func MountShareHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/skills.share", f)
+}
+
+// NewShareHandler creates a HTTP handler which loads the HTTP request and
+// calls the "skills" service "share" endpoint.
+func NewShareHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeShareRequest(mux, decoder)
+		encodeResponse = EncodeShareResponse(encoder)
+		encodeError    = EncodeShareError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "share")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUnshareHandler configures the mux to serve the "skills" service
+// "unshare" endpoint.
+func MountUnshareHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/skills.unshare", f)
+}
+
+// NewUnshareHandler creates a HTTP handler which loads the HTTP request and
+// calls the "skills" service "unshare" endpoint.
+func NewUnshareHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUnshareRequest(mux, decoder)
+		encodeResponse = EncodeUnshareResponse(encoder)
+		encodeError    = EncodeUnshareError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "unshare")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetSharedHandler configures the mux to serve the "skills" service
+// "getShared" endpoint.
+func MountGetSharedHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/skills.getShared", f)
+}
+
+// NewGetSharedHandler creates a HTTP handler which loads the HTTP request and
+// calls the "skills" service "getShared" endpoint.
+func NewGetSharedHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetSharedRequest(mux, decoder)
+		encodeResponse = EncodeGetSharedResponse(encoder)
+		encodeError    = EncodeGetSharedError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getShared")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -986,10 +986,13 @@ func TestGenerateCodexObservabilityPluginHooksJSONIncludesBootstrapCommands(t *t
 		require.Len(t, groups, 1)
 		require.Len(t, groups[0].Hooks, 1)
 
-		async := event == "PostToolUse" || event == "Stop"
+		async := event == "PostToolUse" || event == "SessionEnd" || event == "Stop"
 		timeoutSeconds := 60
-		if event == "SessionStart" {
+		switch event {
+		case "SessionStart":
 			timeoutSeconds = 330
+		case "SessionEnd":
+			timeoutSeconds = 3
 		}
 		expectedSuffix := fmt.Sprintf(` --config="${PLUGIN_ROOT}/speakeasy.json" agenthooks run --provider=codex --timeout=%ds`, timeoutSeconds)
 		expectedWindowsSuffix := fmt.Sprintf(` --config="${PLUGIN_ROOT}\speakeasy.json" agenthooks run --provider=codex --timeout=%ds`, timeoutSeconds)
@@ -999,6 +1002,11 @@ func TestGenerateCodexObservabilityPluginHooksJSONIncludesBootstrapCommands(t *t
 		}
 		require.Equal(t, `bash "${PLUGIN_ROOT}/hooks/bootstrap.sh"`+expectedSuffix, groups[0].Hooks[0].Command)
 		require.Equal(t, `powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "${PLUGIN_ROOT}\hooks\bootstrap.ps1"`+expectedWindowsSuffix, groups[0].Hooks[0].CommandWindows)
+		if event == "SessionEnd" {
+			require.Equal(t, 3, groups[0].Hooks[0].Timeout)
+		} else {
+			require.Zero(t, groups[0].Hooks[0].Timeout)
+		}
 		require.Equal(t, async, strings.HasSuffix(groups[0].Hooks[0].Command, " --async"))
 		require.Equal(t, async, strings.HasSuffix(groups[0].Hooks[0].CommandWindows, " --async"))
 	}
@@ -1023,6 +1031,27 @@ func TestComputeCodexHookApprovalsIncludesSingleSessionStartCommand(t *testing.T
 	require.Len(t, sessionStartApprovals, 1, "SessionStart has one bootstrap command to approve")
 	require.Equal(t, sessionStartPrefix+"0", sessionStartApprovals[0].StateKey)
 	require.NotEmpty(t, sessionStartApprovals[0].TrustedHash)
+}
+
+func TestComputeCodexHookApprovalsIncludesSessionEndTrustState(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
+	plugin := CodexObservabilitySlug(cfg)
+
+	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	require.NoError(t, err)
+
+	prefix := plugin + "@" + marketplace + ":hooks/hooks.json:session_end:0:"
+	var sessionEndApprovals []codexHookApproval
+	for _, approval := range approvals {
+		if strings.HasPrefix(approval.StateKey, prefix) {
+			sessionEndApprovals = append(sessionEndApprovals, approval)
+		}
+	}
+	require.Len(t, sessionEndApprovals, 1)
+	require.Equal(t, prefix+"0", sessionEndApprovals[0].StateKey)
+	require.NotEmpty(t, sessionEndApprovals[0].TrustedHash)
 }
 
 // runCodexInstallScript executes the generated install script under an
@@ -1053,19 +1082,44 @@ func execCodexInstallScript(t *testing.T, script []byte, home string) {
 
 	bashPath, err := exec.LookPath("bash")
 	require.NoError(t, err, "bash is required to run the generated install script")
-	pythonPath, err := exec.LookPath("python3")
-	require.NoError(t, err, "python3 is required by the generated install script")
 
-	scriptPath := filepath.Join(t.TempDir(), "install.sh")
+	scriptDir := t.TempDir()
+	scriptPath := filepath.Join(scriptDir, "install.sh")
 	require.NoError(t, os.WriteFile(scriptPath, script, 0o755))
 
 	cmd := exec.Command(bashPath, scriptPath)
+	// Run from outside the repository so nothing the script executes can pick
+	// up repo-local configuration by walking up from the working directory.
+	cmd.Dir = scriptDir
 	cmd.Env = []string{
 		"HOME=" + home,
-		"PATH=" + filepath.Dir(pythonPath) + ":/usr/bin:/bin",
+		"PATH=" + realPythonBinDir(t) + ":/usr/bin:/bin",
 	}
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "install script failed: %s", out)
+}
+
+// realPythonBinDir returns a directory whose only entry is a python3 symlink
+// pointing at the real interpreter. exec.LookPath can resolve python3 to a
+// version-manager shim (e.g. mise), and putting the shim directory on the
+// subprocess PATH breaks the test's isolation twice over: the directory holds
+// shims for every managed tool (including codex, defeating the stub), and each
+// shim re-execs the manager, which under the scrubbed HOME cannot see the
+// user's per-machine trust state and refuses to run at all. Asking the
+// interpreter for sys.executable pierces any shim.
+func realPythonBinDir(t *testing.T) string {
+	t.Helper()
+
+	pythonPath, err := exec.LookPath("python3")
+	require.NoError(t, err, "python3 is required by the generated install script")
+	out, err := exec.Command(pythonPath, "-c", "import sys; print(sys.executable)").Output()
+	require.NoError(t, err, "resolve the real python3 interpreter")
+	realPython := strings.TrimSpace(string(out))
+	require.NotEmpty(t, realPython, "sys.executable must not be empty")
+
+	dir := t.TempDir()
+	require.NoError(t, os.Symlink(realPython, filepath.Join(dir, "python3")))
+	return dir
 }
 
 func seededCodexInstallConfig(plugin, marketplace string, approvals []codexHookApproval) string {

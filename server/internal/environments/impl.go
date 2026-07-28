@@ -88,6 +88,23 @@ func (s *Service) requireProjectEnvironmentWrite(ctx context.Context, projectID 
 	})
 }
 
+// requireProjectEnvironmentRead gates on an environment:read grant confined to
+// this project via the project_id dimension. A wildcard env:read grant (or, by
+// scope expansion, env:write) satisfies it; a single-env grant does not. Used
+// by the source/toolset link handlers: binding an environment to a source or
+// toolset exposes that environment's secret values to a resource the caller can
+// invoke, so the caller must already hold read access to those secrets. Gating
+// on project:write instead would let a caller without environment:read
+// exfiltrate secrets by linking an environment to a resource they can run.
+func (s *Service) requireProjectEnvironmentRead(ctx context.Context, projectID uuid.UUID) error {
+	return s.authz.Require(ctx, authz.Check{
+		Scope:        authz.ScopeEnvironmentRead,
+		ResourceKind: "environment",
+		ResourceID:   projectID.String(),
+		Dimensions:   map[string]string{"project_id": projectID.String()},
+	})
+}
+
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
@@ -627,7 +644,7 @@ func (s *Service) SetSourceEnvironmentLink(ctx context.Context, payload *gen.Set
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireProjectEnvironmentRead(ctx, *authCtx.ProjectID); err != nil {
 		return nil, err
 	}
 
@@ -669,7 +686,7 @@ func (s *Service) DeleteSourceEnvironmentLink(ctx context.Context, payload *gen.
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireProjectEnvironmentRead(ctx, *authCtx.ProjectID); err != nil {
 		return err
 	}
 
@@ -722,7 +739,7 @@ func (s *Service) SetToolsetEnvironmentLink(ctx context.Context, payload *gen.Se
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireProjectEnvironmentRead(ctx, *authCtx.ProjectID); err != nil {
 		return nil, err
 	}
 
@@ -767,7 +784,7 @@ func (s *Service) DeleteToolsetEnvironmentLink(ctx context.Context, payload *gen
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireProjectEnvironmentRead(ctx, *authCtx.ProjectID); err != nil {
 		return err
 	}
 

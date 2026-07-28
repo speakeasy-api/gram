@@ -1,6 +1,6 @@
 {
   "name": "server",
-  "version": "0.91.0",
+  "version": "0.94.0",
   "description": "",
   "private": true,
   "main": "index.js",
@@ -10,5 +10,5 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "packageManager": "pnpm@11.10.0"
+  "packageManager": "pnpm@11.17.0"
 }

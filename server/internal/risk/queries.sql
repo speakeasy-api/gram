@@ -486,18 +486,6 @@ WHERE rr.project_id = @project_id
   AND rr.risk_policy_id = @risk_policy_id
   AND rr.risk_policy_version = @risk_policy_version;
 
--- name: CountAnalyzedMessagesByProject :many
--- Batched form of CountAnalyzedMessages: the analyzed-message count for every
--- (policy, version) in a project in one query, so ListRiskPolicies avoids a
--- per-policy round trip.
-SELECT
-    rr.risk_policy_id
-  , rr.risk_policy_version
-  , COUNT(DISTINCT rr.chat_message_id)::BIGINT AS analyzed_messages
-FROM risk_results rr
-WHERE rr.project_id = @project_id
-GROUP BY rr.risk_policy_id, rr.risk_policy_version;
-
 -- name: CountFindingsByPolicy :one
 SELECT COUNT(*)::BIGINT
 FROM risk_results
@@ -1554,6 +1542,44 @@ WHERE project_id = @project_id
   AND reviewed_by = @reviewed_by
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: ListUserEmailsByIDs :many
+-- Display-email lookup for the ClickHouse-backed overview top-users list,
+-- tenant-bound through org membership so a caller can never resolve emails of
+-- users outside its organization. Soft-deleted memberships are intentionally
+-- included: findings from since-removed org members keep a resolvable email,
+-- mirroring the Postgres overview query's unconditional users join.
+SELECT u.id, u.email
+FROM users u
+JOIN organization_user_relationships our
+  ON our.user_id = u.id
+  AND our.organization_id = @organization_id
+WHERE u.id = ANY(@ids::text[]);
+
+-- name: GetChatMessageAttribution :many
+-- Resolves the denormalized attribution (chat id, user ids) the ClickHouse
+-- finding writer stamps on risk_findings rows at ingest. Message-level ids win
+-- over chat-level ids; both empty and NULL collapse to ''.
+SELECT
+    cm.id
+  , cm.chat_id
+  , COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id
+  , COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
+FROM chat_messages cm
+LEFT JOIN chats c
+  ON c.id = cm.chat_id
+  AND c.deleted IS FALSE
+WHERE cm.id = ANY(@ids::uuid[]);
+
+-- name: CreateChatForTest :one
+INSERT INTO chats (project_id, organization_id, user_id, external_user_id)
+VALUES (@project_id, @organization_id, @user_id, @external_user_id)
+RETURNING id;
+
+-- name: CreateChatMessageForTest :one
+INSERT INTO chat_messages (chat_id, project_id, role, content, user_id, external_user_id)
+VALUES (@chat_id, @project_id, 'user', @content, @user_id, @external_user_id)
+RETURNING id;
 
 -- name: SetRiskResultExcludedForTest :exec
 UPDATE risk_results

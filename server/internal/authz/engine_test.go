@@ -70,6 +70,7 @@ func TestEngineRequire_mapsDeniedToForbidden(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	require.Equal(t, "permission denied", oopsErr.Error())
 }
 
 func TestEngineRequire_mapsMissingGrantsToUnexpected(t *testing.T) {

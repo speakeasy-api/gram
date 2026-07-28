@@ -1,16 +1,9 @@
-// tokenservice_concurrent_refresh_test.go reproduces the production failure
-// behind repeated "please reconnect" reports on issuer-gated MCP servers.
-//
-// Refreshing is a read-modify-write with an external POST in the middle:
-//
-//	GetActiveRemoteSession  ->  POST grant_type=refresh_token  ->  UpsertRemoteSession
-//
-// Unserialized, concurrent resolves for one subject all present the same stored
-// refresh token. A provider that rotates single-use tokens honours the first
-// and rejects the rest, so the losers resolve to nothing even though the winner
-// has already repaired the row -- and the user is asked to reconnect.
-//
-// An httptest server stands in for the upstream, so no real provider is used.
+// Reproduces the production failure behind repeated "please reconnect" reports
+// on issuer-gated MCP servers. Refreshing is a read-modify-write around an
+// external POST, so unserialized, concurrent resolves for one subject all
+// present the same stored refresh token. A provider that rotates single-use
+// tokens honours the first and rejects the rest, stranding the losers even
+// though the winner has already repaired the row.
 
 package remotesessions_test
 
@@ -28,24 +21,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
-// Any value above one exercises the race; eight makes a lost race
-// overwhelmingly likely on the pre-fix code.
+// Any value above one exercises the race; eight makes it near-certain.
 const concurrentRefreshCallers = 8
 
 const initialRefreshToken = "refresh-initial"
 
-// refreshGateSettle releases the gate when no further callers are arriving,
-// which post-fix is always (only one request reaches the upstream). Must stay
-// well under the losers' wait budget, or they give up on the lock holder and
-// issue the duplicate POST the fix exists to prevent.
+// Releases the gate when no further callers are arriving, which post-fix is
+// always. Must stay well under the losers' wait budget, or they give up on the
+// lock holder and issue the duplicate POST the fix exists to prevent.
 const refreshGateSettle = 300 * time.Millisecond
 
-// rotatingUpstream models an OAuth provider that rotates refresh tokens on use
-// and rejects a consumed one. The 401 body is the verbatim shape observed in
-// production.
-//
-// Refresh requests are held at a gate until every caller has arrived, so the
-// overlap is deterministic rather than dependent on goroutine scheduling.
+// rotatingUpstream models a provider that rotates refresh tokens on use and
+// rejects a consumed one, with the verbatim 401 body seen in production.
+// Requests are gated until every caller arrives so the overlap is deterministic.
 type rotatingUpstream struct {
 	mu        sync.Mutex
 	live      map[string]bool
@@ -129,8 +117,7 @@ func resolveConcurrently(t *testing.T, slugSuffix string, upstream *rotatingUpst
 	ctx, env := newSyntheticExpiryEnv(t, slugSuffix, upstream.handler)
 
 	// Push updated_at outside the refresh cadence so the next resolve must
-	// refresh: the state a user is in when several MCP requests land together
-	// after their upstream token aged out.
+	// refresh, which is the state a user is in when their token has aged out.
 	require.NoError(t, env.q.SetRemoteSessionUpdatedAt(ctx, repo.SetRemoteSessionUpdatedAtParams{
 		ID:        env.session.ID,
 		ProjectID: conv.ToNullUUID(env.projectID),

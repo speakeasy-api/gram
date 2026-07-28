@@ -2051,6 +2051,131 @@ async function seedRiskFindings(init: {
   }
 }
 
+// Mirrors the project's Postgres risk_results into the ClickHouse
+// risk_findings table the way the enriched FindingCHWriter would have written
+// them: denormalized chat/user attribution, category from the shared
+// classifier's rules, and the already-redacted match display string. This is
+// what the ClickHouse-backed Risk Overview read path (the
+// risk-overview-from-clickhouse flag) reads locally. Must run AFTER every
+// risk_results writer (seedRiskFindings, seedNonCorporateAccountFindings) so
+// the copy sees the final Postgres state.
+async function seedRiskFindingsClickHouse(init: {
+  projectId: string;
+}): Promise<void> {
+  const { projectId } = init;
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+
+  // The CASE mirrors internal/risk/categories Classify (the single source of
+  // truth the CH writer stamps categories with): source-owned categories
+  // first, then rule-id lists/prefixes, then scanner-source fallbacks.
+  const copySQL = `
+    COPY (
+      SELECT
+        rr.id,
+        rr.created_at,
+        rr.organization_id,
+        rr.project_id::text,
+        COALESCE(rr.chat_message_id::text, ''),
+        COALESCE(rr.risk_policy_id::text, ''),
+        COALESCE(rr.risk_policy_version, 1),
+        COALESCE(rr.rule_id, ''),
+        COALESCE(rr.description, ''),
+        rr.source,
+        COALESCE(rr.confidence, 0),
+        COALESCE(cm.chat_id::text, ''),
+        COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), ''),
+        COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), ''),
+        CASE
+          WHEN rr.source = 'shadow_mcp' THEN 'shadow_mcp'
+          WHEN rr.source = 'destructive_tool' THEN 'destructive_tool'
+          WHEN rr.source = 'cli_destructive' THEN 'cli_destructive'
+          WHEN rr.source = 'account_identity' THEN 'account_identity'
+          WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
+          WHEN rr.source = 'prompt_injection' THEN 'prompt_injection'
+          WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
+          WHEN rr.rule_id IN ('pii.credit_card','pii.iban_code','pii.us_bank_number','pii.crypto') THEN 'financial'
+          WHEN rr.rule_id IN (
+            'pii.us_ssn','pii.us_passport','pii.us_itin','pii.uk_nhs','pii.uk_nino','pii.uk_passport',
+            'pii.es_nif','pii.it_fiscal_code','pii.au_tfn','pii.in_pan','pii.in_aadhaar','pii.sg_nric_fin'
+          ) THEN 'government_ids'
+          WHEN rr.rule_id IN (
+            'pii.medical_license','pii.us_mbi','pii.us_npi','pii.medical_disease_disorder','pii.medical_medication',
+            'pii.medical_therapeutic_procedure','pii.medical_clinical_event','pii.medical_biological_attribute','pii.medical_family_history'
+          ) THEN 'healthcare'
+          WHEN rr.rule_id IN (
+            'pii.harmful_content_request','pii.policy_violation','pii.unauthorized_action','pii.topic_boundary_violation'
+          ) THEN 'off_policy'
+          WHEN rr.rule_id LIKE 'pii.%' THEN 'pii'
+          WHEN rr.source = 'gitleaks' THEN 'secrets'
+          WHEN rr.source = 'presidio' THEN 'pii'
+          ELSE 'custom'
+        END,
+        -- ClickHouse must never hold a plaintext match. Catalog matches are
+        -- already redacted display strings and pass through; anything else
+        -- (e.g. account_identity emails, stored verbatim in Postgres only)
+        -- collapses to a length-only placeholder, mirroring the writer.
+        CASE
+          WHEN COALESCE(rr.match, '') = '' THEN ''
+          WHEN rr.match LIKE '<redacted%' THEN rr.match
+          ELSE '<redacted len=' || length(rr.match) || '>'
+        END,
+        rr.excluded_at,
+        rr.false_positive_at
+      FROM risk_results rr
+      LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
+      LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+      WHERE rr.project_id = '${projectId}' AND rr.found IS TRUE
+        -- risk_findings has a 90-day TTL; older rows would be dropped on
+        -- insert anyway, and skipping them keeps the daily partition count of
+        -- a single insert under ClickHouse's per-block limit.
+        AND rr.created_at >= now() - interval '90 days'
+    ) TO STDOUT WITH (FORMAT csv, NULL '\\N')`;
+
+  const insertSQL = `
+    INSERT INTO risk_findings (
+      id, created_at, organization_id, project_id, chat_message_id,
+      risk_policy_id, risk_policy_version, rule_id, description, source,
+      confidence, chat_id, user_id, external_user_id, category,
+      match_redacted, excluded_at, false_positive_at
+    ) FORMAT CSV`;
+
+  try {
+    // Idempotent reset scoped to this project (lightweight delete, applied
+    // synchronously enough for a local seed).
+    await runClickHouseSQL(
+      `DELETE FROM risk_findings WHERE project_id = '${projectId}';`,
+    );
+
+    const copied = await $({
+      input: copySQL,
+    })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -f -`.quiet();
+
+    const rows = copied.stdout.trim();
+    if (rows === "") {
+      log.info("No Postgres risk findings to mirror into ClickHouse");
+      return;
+    }
+
+    // psql renders timestamptz with a trailing offset (e.g. "+00");
+    // best_effort parsing accepts it. The partition limit stays raised as a
+    // safety net: the 90-day copy window keeps a single insert just under the
+    // default limit of 100 daily partitions.
+    await $({
+      input: rows + "\n",
+    })`docker compose exec -T clickhouse clickhouse-client --date_time_input_format=best_effort --max_partitions_per_insert_block=1000 --query ${insertSQL}`.quiet();
+
+    log.info(
+      `Mirrored ${rows.split("\n").length} risk findings into ClickHouse for the flagged Risk Overview read path`,
+    );
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; stdout?: string; message?: string };
+    log.stepFailed(
+      `Failed to mirror risk findings into ClickHouse: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
+    );
+  }
+}
+
 // Inserts an account_identity ("Non-Corporate Accounts") policy plus the risk
 // events it would produce over the personal-account chats seeded by
 // seedPersonalAccounts. Mirrors the scanner's real semantics: findings are
@@ -2221,6 +2346,8 @@ async function enableRBACForDevUser(init: {
     { scope: "mcp:connect", kind: "mcp" },
     { scope: "environment:read", kind: "environment" },
     { scope: "environment:write", kind: "environment" },
+    { scope: "skill:read", kind: "skill" },
+    { scope: "skill:write", kind: "skill" },
     { scope: "chat:read", kind: "chat" },
   ];
   const sqlStr = (v: string) => `'${v.replace(/'/g, "''")}'`;
@@ -2513,6 +2640,15 @@ async function seedPersonalAccounts(init: {
     ${usersValues.join(",\n")}
     ON CONFLICT (email) DO UPDATE SET display_name = EXCLUDED.display_name, workos_id = EXCLUDED.workos_id;
 
+    -- workos_membership_id is derived from the employee email only, but the row
+    -- also carries organization_id, which ./zero flips between runs. A prior
+    -- run can therefore leave a row with the same membership id under a
+    -- different org, which collides on the global
+    -- organization_user_relationships_workos_membership_id_key partial unique
+    -- index (not the (organization_id, user_id) arbiter below). Clear any prior
+    -- seeded rows for these users by their stable uid first, matching the
+    -- by-uid cleanup used for user_accounts/chats below.
+    DELETE FROM organization_user_relationships WHERE user_id IN (${uidList});
     INSERT INTO organization_user_relationships (organization_id, user_id, workos_user_id, workos_membership_id) VALUES
     ${orgRelValues.join(",\n")}
     ON CONFLICT (organization_id, user_id) DO NOTHING;
@@ -2522,14 +2658,26 @@ async function seedPersonalAccounts(init: {
     ON CONFLICT (organization_id, provider, device_id) WHERE deleted_at IS NULL
     DO UPDATE SET linked_user_id = EXCLUDED.linked_user_id, last_seen_at = clock_timestamp();
 
-    DELETE FROM user_accounts WHERE organization_id = ${sqlStr(organizationId)} AND user_id IN (${uidList});
+    -- Account ids derive from (provider, email) and are org-independent, but
+    -- ./zero flips organization_id between runs. Scoping this cleanup to the
+    -- current org would strand a prior run's row (same id, old org) that then
+    -- collides on user_accounts_pkey (id) — which the (org, provider,
+    -- external_account_uuid) arbiter below does not cover. Delete by uid across
+    -- every org so re-seeds are idempotent regardless of the active org.
+    DELETE FROM user_accounts WHERE user_id IN (${uidList});
     INSERT INTO user_accounts (id, organization_id, user_id, provider, external_org_id, external_account_uuid, external_account_id, email, account_type) VALUES
     ${accountValues.join(",\n")}
     ON CONFLICT (organization_id, provider, external_account_uuid) WHERE deleted_at IS NULL
     DO UPDATE SET user_id = EXCLUDED.user_id, account_type = EXCLUDED.account_type, email = EXCLUDED.email, external_org_id = EXCLUDED.external_org_id, last_seen_at = clock_timestamp();
 
-    DELETE FROM chat_messages WHERE chat_id IN (SELECT id FROM chats WHERE project_id = ${sqlStr(projectId)} AND user_id IN (${uidList}));
-    DELETE FROM chats WHERE project_id = ${sqlStr(projectId)} AND user_id IN (${uidList});
+    -- Chat ids derive from the account key and are project/org-independent, but
+    -- projectId (like organizationId) flips between ./zero runs. Scoping this
+    -- cleanup to the current project would strand a prior run's chats (same id,
+    -- old project) that then collide on chats_pkey (id) — the chats INSERT below
+    -- has no ON CONFLICT. Delete by uid across every project so re-seeds are
+    -- idempotent. Restricted to the seed employee uids, so no real chats match.
+    DELETE FROM chat_messages WHERE chat_id IN (SELECT id FROM chats WHERE user_id IN (${uidList}));
+    DELETE FROM chats WHERE user_id IN (${uidList});
     INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, user_account_id, title, created_at, updated_at) VALUES
     ${chatValues.join(",\n")};
     INSERT INTO chat_messages (chat_id, project_id, role, content, model, created_at) VALUES
@@ -4508,13 +4656,18 @@ function chatSessionBackfillSQL(
         ) AS is_claude_tool_result,
         (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
         (
-            hook_source IN ('codex', 'cursor')
+            hook_source = 'opencode'
+            AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
+            AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
+        ) AS is_opencode_usage_row,
+        (
+            hook_source IN ('codex', 'cursor', 'opencode')
             AND toString(attributes.gram.tool.name) != ''
             AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
             AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
         ) AS is_agent_tool_call,
         (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
-        (is_claude_api_request OR is_agent_usage_row) AS is_usage_row,
+        (is_claude_api_request OR is_agent_usage_row OR is_opencode_usage_row) AS is_usage_row,
         (
             (is_claude_tool_result AND toString(attributes.success) = 'false')
             OR (is_agent_tool_call AND (toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400))
@@ -4524,7 +4677,7 @@ function chatSessionBackfillSQL(
             toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id),
             toString(id)
         ) AS tool_call_dedup_id,
-        if(is_claude_api_request, toString(attributes.prompt.id), toString(attributes.gen_ai.response.id)) AS session_message_id,
+        multiIf(is_claude_api_request, toString(attributes.prompt.id), is_opencode_usage_row, toString(id), toString(attributes.gen_ai.response.id)) AS session_message_id,
         multiIf(
             is_claude_api_request AND toString(attributes.model) != '', toString(attributes.model),
             is_claude_api_request AND toString(attributes.gen_ai.request.model) != '', toString(attributes.gen_ai.request.model),
@@ -4567,7 +4720,7 @@ function chatSessionBackfillSQL(
     WHERE gram_project_id = '${projectId}'
       AND (${timePredicate})
       AND chat_id != ''
-      AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_agent_tool_call)
+      AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_opencode_usage_row OR is_agent_tool_call)
     GROUP BY gram_project_id, time_bucket, chat_id;
   `;
 }
@@ -4872,6 +5025,10 @@ async function seed() {
       projectId: firstProject.id,
       organizationId: activeOrgID,
     });
+    // Mirror the final risk_results state into ClickHouse risk_findings so
+    // the ClickHouse-backed Risk Overview read path has matching data. Must
+    // stay last among the risk seeders.
+    await seedRiskFindingsClickHouse({ projectId: firstProject.id });
   }
 
   // Give the local dev user the "see all org sessions" admin view that the

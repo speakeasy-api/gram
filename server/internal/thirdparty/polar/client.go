@@ -266,7 +266,7 @@ func (p *Client) TrackModelUsage(ctx context.Context, event billing.ModelUsageEv
 }
 
 func isPolarMeteredModelUsage(source billing.ModelUsageSource) bool {
-	return source != billing.ModelUsageSourceGram && source != billing.ModelUsageSourceRiskAnalysis && source != billing.ModelUsageSourceSkillEfficacy
+	return source != billing.ModelUsageSourceGram && source != billing.ModelUsageSourceRiskAnalysis && source != billing.ModelUsageSourceSkillEfficacy && source != billing.ModelUsageSourceChatAnalysis
 }
 
 func (p *Client) TrackToolCallUsage(ctx context.Context, event billing.ToolCallUsageEvent) {

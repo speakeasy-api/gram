@@ -1698,6 +1698,10 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 		return nil, fmt.Errorf("lookup toolset: %w", toolsetErr)
 	}
 
+	if !toolset.McpEnabled {
+		return nil, fmt.Errorf("%w: mcp disabled", errToolsetNotFound)
+	}
+
 	return &toolset, nil
 }
 

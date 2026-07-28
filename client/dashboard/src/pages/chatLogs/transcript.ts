@@ -50,7 +50,10 @@ export function argsToString(
   args: string | object | undefined,
 ): string | undefined {
   if (args === undefined) return undefined;
-  return typeof args === "string" ? args : JSON.stringify(args, null, 2);
+  if (typeof args === "string") {
+    return args.trim().length > 0 ? args : undefined;
+  }
+  return JSON.stringify(args, null, 2);
 }
 
 /** Case-insensitive, non-overlapping occurrences of `query` in `text`. The one

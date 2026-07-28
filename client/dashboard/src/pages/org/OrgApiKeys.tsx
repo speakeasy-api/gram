@@ -309,8 +309,9 @@ function OrgApiKeysInner() {
                         <RadioGroupItem value="producer" id="r2" />
                         <Label className="leading-normal" htmlFor="r2">
                           Producer: can upload OpenAPI documents, trigger
-                          deployments, query/modify toolsets, read data and
-                          access MCP servers.
+                          deployments, query/modify toolsets, read data
+                          (including exporting chat transcripts), and access MCP
+                          servers.
                         </Label>
                       </div>
                       <div className="flex items-center gap-3">

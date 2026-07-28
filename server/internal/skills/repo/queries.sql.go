@@ -995,6 +995,35 @@ func (q *Queries) GetActiveSkillDistributionRecord(ctx context.Context, arg GetA
 	return i, err
 }
 
+const getActiveSkillShareLink = `-- name: GetActiveSkillShareLink :one
+SELECT id, project_id, skill_id, token, created_by_user_id, revoked_at, created_at, updated_at
+FROM skill_share_links
+WHERE project_id = $1
+  AND skill_id = $2
+  AND revoked_at IS NULL
+`
+
+type GetActiveSkillShareLinkParams struct {
+	ProjectID uuid.UUID
+	SkillID   uuid.UUID
+}
+
+func (q *Queries) GetActiveSkillShareLink(ctx context.Context, arg GetActiveSkillShareLinkParams) (SkillShareLink, error) {
+	row := q.db.QueryRow(ctx, getActiveSkillShareLink, arg.ProjectID, arg.SkillID)
+	var i SkillShareLink
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.SkillID,
+		&i.Token,
+		&i.CreatedByUserID,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getAssistantForDistribution = `-- name: GetAssistantForDistribution :one
 SELECT id, name
 FROM assistants
@@ -1110,6 +1139,53 @@ func (q *Queries) GetProjectSkillVersion(ctx context.Context, arg GetProjectSkil
 	return i, err
 }
 
+const getSharedSkillByToken = `-- name: GetSharedSkillByToken :one
+SELECT
+  s.name,
+  s.display_name,
+  s.summary,
+  latest.content,
+  latest.created_at AS version_created_at
+FROM skill_share_links l
+JOIN skills s
+  ON s.project_id = l.project_id
+  AND s.id = l.skill_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.content, sv.created_at
+  FROM skill_versions sv
+  WHERE sv.skill_id = l.skill_id
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) latest ON TRUE
+WHERE l.token = $1
+  AND l.revoked_at IS NULL
+`
+
+type GetSharedSkillByTokenRow struct {
+	Name             string
+	DisplayName      string
+	Summary          pgtype.Text
+	Content          string
+	VersionCreatedAt pgtype.Timestamptz
+}
+
+// Public read for the unauthenticated share-link endpoint. The join pins the
+// share link to its owning project's skill and the lateral picks the latest
+// version by creation order.
+func (q *Queries) GetSharedSkillByToken(ctx context.Context, token string) (GetSharedSkillByTokenRow, error) {
+	row := q.db.QueryRow(ctx, getSharedSkillByToken, token)
+	var i GetSharedSkillByTokenRow
+	err := row.Scan(
+		&i.Name,
+		&i.DisplayName,
+		&i.Summary,
+		&i.Content,
+		&i.VersionCreatedAt,
+	)
+	return i, err
+}
+
 const getSkill = `-- name: GetSkill :one
 SELECT id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 FROM skills
@@ -1219,6 +1295,7 @@ func (q *Queries) GetSkillByNameForUpdate(ctx context.Context, arg GetSkillByNam
 const getSkillDetails = `-- name: GetSkillDetails :one
 SELECT
   s.id, s.project_id, s.name, s.display_name, s.summary, s.source_kind, s.classification, s.first_seen_at, s.last_seen_at, s.seen_count, s.archived_at, s.created_at, s.updated_at,
+  l.token AS share_token,
   COALESCE(state.latest_version_id, '00000000-0000-0000-0000-000000000000'::uuid) AS latest_version_id,
   COALESCE(state.version_count, 0)::bigint AS version_count,
   EXISTS (
@@ -1249,6 +1326,9 @@ LEFT JOIN LATERAL (
   ORDER BY sv.created_at DESC, sv.id DESC
   LIMIT 1
 ) state ON TRUE
+LEFT JOIN skill_share_links l
+  ON l.skill_id = s.id
+  AND l.revoked_at IS NULL
 WHERE s.project_id = $1
   AND s.id = $2
   AND s.archived_at IS NULL
@@ -1261,6 +1341,7 @@ type GetSkillDetailsParams struct {
 
 type GetSkillDetailsRow struct {
 	Skill           Skill
+	ShareToken      pgtype.Text
 	LatestVersionID uuid.UUID
 	VersionCount    int64
 	HasValidVersion bool
@@ -1284,6 +1365,7 @@ func (q *Queries) GetSkillDetails(ctx context.Context, arg GetSkillDetailsParams
 		&i.Skill.ArchivedAt,
 		&i.Skill.CreatedAt,
 		&i.Skill.UpdatedAt,
+		&i.ShareToken,
 		&i.LatestVersionID,
 		&i.VersionCount,
 		&i.HasValidVersion,
@@ -1782,6 +1864,56 @@ type InsertCapturedSkillVersionOriginParams struct {
 func (q *Queries) InsertCapturedSkillVersionOrigin(ctx context.Context, arg InsertCapturedSkillVersionOriginParams) error {
 	_, err := q.db.Exec(ctx, insertCapturedSkillVersionOrigin, arg.ProjectID, arg.SkillID, arg.SkillVersionID)
 	return err
+}
+
+const insertSkillShareLink = `-- name: InsertSkillShareLink :one
+INSERT INTO skill_share_links (
+  project_id,
+  skill_id,
+  token,
+  created_by_user_id
+)
+SELECT
+  s.project_id,
+  s.id,
+  $1,
+  $2
+FROM skills s
+WHERE s.project_id = $3
+  AND s.id = $4
+  AND s.archived_at IS NULL
+ON CONFLICT (token) DO NOTHING
+RETURNING id, project_id, skill_id, token, created_by_user_id, revoked_at, created_at, updated_at
+`
+
+type InsertSkillShareLinkParams struct {
+	Token           string
+	CreatedByUserID string
+	ProjectID       uuid.UUID
+	SkillID         uuid.UUID
+}
+
+// ON CONFLICT DO NOTHING turns the astronomically unlikely token collision
+// into a no-rows result the caller can retry without aborting its transaction.
+func (q *Queries) InsertSkillShareLink(ctx context.Context, arg InsertSkillShareLinkParams) (SkillShareLink, error) {
+	row := q.db.QueryRow(ctx, insertSkillShareLink,
+		arg.Token,
+		arg.CreatedByUserID,
+		arg.ProjectID,
+		arg.SkillID,
+	)
+	var i SkillShareLink
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.SkillID,
+		&i.Token,
+		&i.CreatedByUserID,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const listActiveMachineLatestVersions = `-- name: ListActiveMachineLatestVersions :many
@@ -2854,6 +2986,7 @@ func (q *Queries) ListSkillVersions(ctx context.Context, arg ListSkillVersionsPa
 const listSkills = `-- name: ListSkills :many
 SELECT
   s.id, s.project_id, s.name, s.display_name, s.summary, s.source_kind, s.classification, s.first_seen_at, s.last_seen_at, s.seen_count, s.archived_at, s.created_at, s.updated_at,
+  l.token AS share_token,
   COALESCE(latest.id, '00000000-0000-0000-0000-000000000000'::uuid) AS latest_version_id,
   COALESCE(latest.version_count, 0)::bigint AS version_count,
   EXISTS (
@@ -2870,6 +3003,9 @@ LEFT JOIN LATERAL (
   ORDER BY sv.created_at DESC, sv.id DESC
   LIMIT 1
 ) latest ON TRUE
+LEFT JOIN skill_share_links l
+  ON l.skill_id = s.id
+  AND l.revoked_at IS NULL
 WHERE s.project_id = $1
   AND s.archived_at IS NULL
   AND (
@@ -2888,6 +3024,7 @@ type ListSkillsParams struct {
 
 type ListSkillsRow struct {
 	Skill           Skill
+	ShareToken      pgtype.Text
 	LatestVersionID uuid.UUID
 	VersionCount    int64
 	HasValidVersion bool
@@ -2916,6 +3053,7 @@ func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListS
 			&i.Skill.ArchivedAt,
 			&i.Skill.CreatedAt,
 			&i.Skill.UpdatedAt,
+			&i.ShareToken,
 			&i.LatestVersionID,
 			&i.VersionCount,
 			&i.HasValidVersion,
@@ -3609,6 +3747,37 @@ func (q *Queries) RevokeAllSkillDistributionsBySkill(ctx context.Context, arg Re
 		return nil, err
 	}
 	return items, nil
+}
+
+const revokeSkillShareLink = `-- name: RevokeSkillShareLink :one
+UPDATE skill_share_links
+SET revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = $1
+  AND skill_id = $2
+  AND revoked_at IS NULL
+RETURNING id, project_id, skill_id, token, created_by_user_id, revoked_at, created_at, updated_at
+`
+
+type RevokeSkillShareLinkParams struct {
+	ProjectID uuid.UUID
+	SkillID   uuid.UUID
+}
+
+func (q *Queries) RevokeSkillShareLink(ctx context.Context, arg RevokeSkillShareLinkParams) (SkillShareLink, error) {
+	row := q.db.QueryRow(ctx, revokeSkillShareLink, arg.ProjectID, arg.SkillID)
+	var i SkillShareLink
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.SkillID,
+		&i.Token,
+		&i.CreatedByUserID,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const storeSkillRawHashAlias = `-- name: StoreSkillRawHashAlias :one

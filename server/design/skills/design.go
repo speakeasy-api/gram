@@ -320,6 +320,91 @@ var _ = Service("skills", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UndistributeSkill"}`)
 	})
 
+	Method("share", func() {
+		Description("Create a public share link for a skill. Repeated requests return the existing active link, so each skill has at most one active share token.")
+
+		Payload(func() {
+			Attribute("skill_id", String, "The skill ID.", func() { Format(FormatUUID) })
+			Required("skill_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(SkillShareLink)
+
+		HTTP(func() {
+			POST("/rpc/skills.share")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Body(ShareSkillRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "shareSkill")
+		Meta("openapi:extension:x-speakeasy-name-override", "share")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShareSkill"}`)
+	})
+
+	Method("unshare", func() {
+		Description("Revoke a skill's active public share link. Repeated requests are a no-op.")
+
+		Payload(func() {
+			Attribute("skill_id", String, "The skill ID.", func() { Format(FormatUUID) })
+			Required("skill_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/skills.unshare")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Body(UnshareSkillRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "unshareSkill")
+		Meta("openapi:extension:x-speakeasy-name-override", "unshare")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UnshareSkill"}`)
+	})
+
+	Method("getShared", func() {
+		Description("Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, and latest content.")
+
+		Payload(func() {
+			Attribute("token", String, "The public share token.", func() {
+				MinLength(32)
+				MaxLength(128)
+			})
+			Required("token")
+		})
+
+		Result(SharedSkill)
+
+		// Share tokens are unguessable capability URLs, so this endpoint is
+		// public by design (same pattern as assets.serveImage).
+		NoSecurity()
+
+		HTTP(func() {
+			GET("/rpc/skills.getShared")
+			Param("token")
+
+			Response(StatusOK, func() {
+				Header("cache_control:Cache-Control")
+				Header("x_robots_tag:X-Robots-Tag")
+				Header("referrer_policy:Referrer-Policy")
+			})
+		})
+
+		Meta("openapi:operationId", "getSharedSkill")
+		Meta("openapi:extension:x-speakeasy-name-override", "getShared")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SharedSkill"}`)
+	})
+
 	Method("listDistributions", func() {
 		Description("List active plugin skill distributions for the current project.")
 
@@ -422,6 +507,47 @@ var UndistributeSkillRequestBody = Type("UndistributeSkillRequestBody", func() {
 	})
 })
 
+var ShareSkillRequestBody = Type("ShareSkillRequestBody", func() {
+	Meta("openapi:typename", "ShareSkillRequestBody")
+
+	Attribute("skill_id", String, "The skill ID.", func() { Format(FormatUUID) })
+	Required("skill_id")
+})
+
+var UnshareSkillRequestBody = Type("UnshareSkillRequestBody", func() {
+	Meta("openapi:typename", "UnshareSkillRequestBody")
+
+	Attribute("skill_id", String, "The skill ID.", func() { Format(FormatUUID) })
+	Required("skill_id")
+})
+
+var SkillShareLink = Type("SkillShareLink", func() {
+	Meta("struct:pkg:path", "types")
+	Description("An active public share link for a skill.")
+
+	Attribute("token", String, "The public share token.")
+	Attribute("created_at", String, "When the share link was created.", func() {
+		Format(FormatDateTime)
+	})
+	Required("token", "created_at")
+})
+
+var SharedSkill = Type("SharedSkill", func() {
+	Description("The public view of a shared skill. It deliberately carries no project, organization, or user identifiers.")
+
+	Attribute("name", String, "The normalized skill name.")
+	Attribute("display_name", String, "The user-facing skill name.")
+	Attribute("summary", String, "The optional skill summary.")
+	Attribute("content", String, "The latest SKILL.md content.")
+	Attribute("updated_at", String, "When the shared content was last updated.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("cache_control", String, "The Cache-Control response header.")
+	Attribute("x_robots_tag", String, "The X-Robots-Tag response header.")
+	Attribute("referrer_policy", String, "The Referrer-Policy response header.")
+	Required("name", "display_name", "content", "updated_at")
+})
+
 var SkillValidationError = Type("SkillValidationError", func() {
 	Meta("struct:pkg:path", "types")
 	Description("A validation problem found in an uploaded skill manifest.")
@@ -455,6 +581,7 @@ var Skill = Type("Skill", func() {
 	Attribute("first_seen_at", String, "When this skill was first activated.", func() { Format(FormatDateTime) })
 	Attribute("last_seen_at", String, "When this skill was most recently activated.", func() { Format(FormatDateTime) })
 	Attribute("seen_count", Int64, "The number of reconciled activations observed for this skill.")
+	Attribute("share_token", String, "The active public share token, absent when the skill is not shared.")
 	Attribute("created_at", String, "When the skill was created.", func() {
 		Format(FormatDateTime)
 	})

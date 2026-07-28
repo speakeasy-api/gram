@@ -4,6 +4,7 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/copy-button";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
@@ -16,6 +17,8 @@ import { useRoutes } from "@/routes";
 import { useQueryState } from "nuqs";
 import { useDeferredValue, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
+import { toast } from "sonner";
+import { skillShareUrl } from "./share-link";
 import { SkillManifestDialog } from "./SkillManifestDialog";
 import {
   SKILL_CLASSIFICATION_OPTIONS,
@@ -257,6 +260,22 @@ export default function SkillsList(): JSX.Element {
           <HumanizeDateTime date={skill.updatedAt} />
         </Type>
       ),
+    },
+    {
+      key: "share",
+      header: "",
+      width: "48px",
+      render: (skill) =>
+        skill.shareToken ? (
+          <CopyButton
+            size="icon-sm"
+            text={skillShareUrl(skill.shareToken)}
+            tooltip="Copy public link"
+            onCopy={() => {
+              toast.success("Public link copied");
+            }}
+          />
+        ) : null,
     },
     {
       key: "open",

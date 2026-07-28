@@ -74,6 +74,23 @@ type SearchUsersRequestBody struct {
 	Sort string `form:"sort" json:"sort" xml:"sort"`
 	// Number of items to return (1-1000)
 	Limit int `form:"limit" json:"limit" xml:"limit"`
+	// Level of usage metrics to compute per user. 'full' (default) returns the
+	// complete set: chat counts, cost, cache tokens, tool-call totals, and the
+	// per-tool and per-hook-source breakdowns. 'basic' computes only user
+	// identity, first/last activity, and input/output token sums — a much cheaper
+	// aggregation for large orgs (e.g. the employee enrollment list, which renders
+	// only those fields). The remaining fields are zero/empty under 'basic'.
+	// Ignored when source='agent_metrics'.
+	Metrics string `form:"metrics" json:"metrics" xml:"metrics"`
+	// Where per-user summaries are read from (internal employee grouping only).
+	// 'logs' (default) scans raw telemetry_logs and computes the metrics selected
+	// by 'metrics'. 'agent_metrics' reads the pre-aggregated
+	// attribute_metrics_summaries view — canonical observed agent usage (Claude
+	// Code, Codex, Cursor, Claude Chat), keyed by email — which is far cheaper but
+	// returns only identity, last activity (hourly), and input/output/total token
+	// sums; users without an email in the window are surfaced separately from raw
+	// logs with activity but no token counts.
+	Source string `form:"source" json:"source" xml:"source"`
 }
 
 // CaptureEventRequestBody is the type of the "telemetry" service
@@ -6604,6 +6621,15 @@ type QueryMeasuresResponseBody struct {
 	TotalToolCalls *int64 `form:"total_tool_calls,omitempty" json:"total_tool_calls,omitempty" xml:"total_tool_calls,omitempty"`
 	// Number of distinct chat sessions
 	TotalChats *int64 `form:"total_chats,omitempty" json:"total_chats,omitempty" xml:"total_chats,omitempty"`
+	// Total work units delivered by scored sessions (work-units analysis)
+	TotalWorkUnits *float64 `form:"total_work_units,omitempty" json:"total_work_units,omitempty" xml:"total_work_units,omitempty"`
+	// Total cost in USD of the sessions that carry a work-units score. Divide by
+	// total_work_units for cost per unit; using total_cost would overstate it
+	// whenever analysis coverage is partial.
+	ScoredCost *float64 `form:"scored_cost,omitempty" json:"scored_cost,omitempty" xml:"scored_cost,omitempty"`
+	// Total tokens of the sessions that carry a work-units score. Divide by
+	// total_work_units for tokens per unit.
+	ScoredTokens *int64 `form:"scored_tokens,omitempty" json:"scored_tokens,omitempty" xml:"scored_tokens,omitempty"`
 }
 
 // QuerySeriesResponseBody is used to define fields on response body types.
@@ -7207,6 +7233,8 @@ func NewSearchUsersRequestBody(p *telemetry.SearchUsersPayload) *SearchUsersRequ
 		Cursor:   p.Cursor,
 		Sort:     p.Sort,
 		Limit:    p.Limit,
+		Metrics:  p.Metrics,
+		Source:   p.Source,
 	}
 	if p.Filter != nil {
 		body.Filter = marshalTelemetrySearchUsersFilterToSearchUsersFilterRequestBody(p.Filter)
@@ -7227,6 +7255,18 @@ func NewSearchUsersRequestBody(p *telemetry.SearchUsersPayload) *SearchUsersRequ
 		var zero int
 		if body.Limit == zero {
 			body.Limit = 50
+		}
+	}
+	{
+		var zero string
+		if body.Metrics == zero {
+			body.Metrics = "full"
+		}
+	}
+	{
+		var zero string
+		if body.Source == zero {
+			body.Source = "logs"
 		}
 	}
 	return body
@@ -21006,6 +21046,15 @@ func ValidateQueryMeasuresResponseBody(body *QueryMeasuresResponseBody) (err err
 	}
 	if body.TotalChats == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_chats", "body"))
+	}
+	if body.TotalWorkUnits == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_work_units", "body"))
+	}
+	if body.ScoredCost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scored_cost", "body"))
+	}
+	if body.ScoredTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scored_tokens", "body"))
 	}
 	return
 }

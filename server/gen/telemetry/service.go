@@ -1164,6 +1164,15 @@ type QueryMeasures struct {
 	TotalToolCalls int64
 	// Number of distinct chat sessions
 	TotalChats int64
+	// Total work units delivered by scored sessions (work-units analysis)
+	TotalWorkUnits float64
+	// Total cost in USD of the sessions that carry a work-units score. Divide by
+	// total_work_units for cost per unit; using total_cost would overstate it
+	// whenever analysis coverage is partial.
+	ScoredCost float64
+	// Total tokens of the sessions that carry a work-units score. Divide by
+	// total_work_units for tokens per unit.
+	ScoredTokens int64
 }
 
 // QueryPayload is the payload type of the telemetry service query method.
@@ -1458,6 +1467,23 @@ type SearchUsersPayload struct {
 	Sort string
 	// Number of items to return (1-1000)
 	Limit int
+	// Level of usage metrics to compute per user. 'full' (default) returns the
+	// complete set: chat counts, cost, cache tokens, tool-call totals, and the
+	// per-tool and per-hook-source breakdowns. 'basic' computes only user
+	// identity, first/last activity, and input/output token sums — a much cheaper
+	// aggregation for large orgs (e.g. the employee enrollment list, which renders
+	// only those fields). The remaining fields are zero/empty under 'basic'.
+	// Ignored when source='agent_metrics'.
+	Metrics string
+	// Where per-user summaries are read from (internal employee grouping only).
+	// 'logs' (default) scans raw telemetry_logs and computes the metrics selected
+	// by 'metrics'. 'agent_metrics' reads the pre-aggregated
+	// attribute_metrics_summaries view — canonical observed agent usage (Claude
+	// Code, Codex, Cursor, Claude Chat), keyed by email — which is far cheaper but
+	// returns only identity, last activity (hourly), and input/output/total token
+	// sums; users without an email in the window are surfaced separately from raw
+	// logs with activity but no token counts.
+	Source string
 }
 
 // SearchUsersResult is the result type of the telemetry service searchUsers

@@ -26,11 +26,14 @@ type Client struct {
 	ArchiveEndpoint                goa.Endpoint
 	DistributeEndpoint             goa.Endpoint
 	UndistributeEndpoint           goa.Endpoint
+	ShareEndpoint                  goa.Endpoint
+	UnshareEndpoint                goa.Endpoint
+	GetSharedEndpoint              goa.Endpoint
 	ListDistributionsEndpoint      goa.Endpoint
 }
 
 // NewClient initializes a "skills" service client given the endpoints.
-func NewClient(create, addVersion, update, list, get, listUnknownActivations, listVersions, archive, distribute, undistribute, listDistributions goa.Endpoint) *Client {
+func NewClient(create, addVersion, update, list, get, listUnknownActivations, listVersions, archive, distribute, undistribute, share, unshare, getShared, listDistributions goa.Endpoint) *Client {
 	return &Client{
 		CreateEndpoint:                 create,
 		AddVersionEndpoint:             addVersion,
@@ -42,6 +45,9 @@ func NewClient(create, addVersion, update, list, get, listUnknownActivations, li
 		ArchiveEndpoint:                archive,
 		DistributeEndpoint:             distribute,
 		UndistributeEndpoint:           undistribute,
+		ShareEndpoint:                  share,
+		UnshareEndpoint:                unshare,
+		GetSharedEndpoint:              getShared,
 		ListDistributionsEndpoint:      listDistributions,
 	}
 }
@@ -257,6 +263,68 @@ func (c *Client) Distribute(ctx context.Context, p *DistributePayload) (res *typ
 func (c *Client) Undistribute(ctx context.Context, p *UndistributePayload) (err error) {
 	_, err = c.UndistributeEndpoint(ctx, p)
 	return
+}
+
+// Share calls the "share" endpoint of the "skills" service.
+// Share may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Share(ctx context.Context, p *SharePayload) (res *types.SkillShareLink, err error) {
+	var ires any
+	ires, err = c.ShareEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.SkillShareLink), nil
+}
+
+// Unshare calls the "unshare" endpoint of the "skills" service.
+// Unshare may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Unshare(ctx context.Context, p *UnsharePayload) (err error) {
+	_, err = c.UnshareEndpoint(ctx, p)
+	return
+}
+
+// GetShared calls the "getShared" endpoint of the "skills" service.
+// GetShared may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetShared(ctx context.Context, p *GetSharedPayload) (res *SharedSkill, err error) {
+	var ires any
+	ires, err = c.GetSharedEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SharedSkill), nil
 }
 
 // ListDistributions calls the "listDistributions" endpoint of the "skills"

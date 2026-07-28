@@ -20,6 +20,8 @@ const (
 	ActionSkillDistribute         Action = "skill:distribute"
 	ActionSkillUpdateDistribution Action = "skill:update_distribution"
 	ActionSkillUndistribute       Action = "skill:undistribute"
+	ActionSkillShareLinkCreate    Action = "skill:share_link_create"
+	ActionSkillShareLinkRevoke    Action = "skill:share_link_revoke"
 )
 
 // SkillSnapshot captures content-free parent state for skill audit events. It
@@ -334,6 +336,86 @@ type LogSkillUpdateDistributionEvent struct {
 
 func (l *Logger) LogSkillUpdateDistribution(ctx context.Context, dbtx repo.DBTX, event LogSkillUpdateDistributionEvent) error {
 	return l.logSkillDistribution(ctx, dbtx, ActionSkillUpdateDistribution, skillDistributionEvent(event))
+}
+
+type skillShareLinkEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	SkillURN         urn.Skill
+	SkillName        string
+	SkillDisplayName string
+	ShareLinkURN     urn.SkillShareLink
+}
+
+// logSkillShareLink records share-link life-cycle events. The metadata carries
+// only the share-link row id — never the share token itself.
+func (l *Logger) logSkillShareLink(ctx context.Context, dbtx repo.DBTX, action Action, event skillShareLinkEvent) error {
+	metadata, err := marshalAuditPayload(map[string]any{
+		"share_link_id": event.ShareLinkURN.ID.String(),
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID:     event.OrganizationID,
+		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+		ActorID:            event.Actor.ID,
+		ActorType:          string(event.Actor.Type),
+		ActorDisplayName:   conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:          conv.PtrToPGTextEmpty(event.ActorSlug),
+		Action:             string(action),
+		SubjectID:          event.SkillURN.ID.String(),
+		SubjectType:        string(subjectTypeSkill),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.SkillDisplayName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.SkillName),
+		BeforeSnapshot:     nil,
+		AfterSnapshot:      nil,
+		Metadata:           metadata,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.SkillV1})
+}
+
+type LogSkillShareLinkCreateEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	SkillURN         urn.Skill
+	SkillName        string
+	SkillDisplayName string
+	ShareLinkURN     urn.SkillShareLink
+}
+
+func (l *Logger) LogSkillShareLinkCreate(ctx context.Context, dbtx repo.DBTX, event LogSkillShareLinkCreateEvent) error {
+	return l.logSkillShareLink(ctx, dbtx, ActionSkillShareLinkCreate, skillShareLinkEvent(event))
+}
+
+type LogSkillShareLinkRevokeEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	SkillURN         urn.Skill
+	SkillName        string
+	SkillDisplayName string
+	ShareLinkURN     urn.SkillShareLink
+}
+
+func (l *Logger) LogSkillShareLinkRevoke(ctx context.Context, dbtx repo.DBTX, event LogSkillShareLinkRevokeEvent) error {
+	return l.logSkillShareLink(ctx, dbtx, ActionSkillShareLinkRevoke, skillShareLinkEvent(event))
 }
 
 type LogSkillUndistributeEvent struct {

@@ -57,6 +57,21 @@ func UndistributeSkillsPath() string {
 	return "/rpc/skills.undistribute"
 }
 
+// ShareSkillsPath returns the URL path to the skills service share HTTP endpoint.
+func ShareSkillsPath() string {
+	return "/rpc/skills.share"
+}
+
+// UnshareSkillsPath returns the URL path to the skills service unshare HTTP endpoint.
+func UnshareSkillsPath() string {
+	return "/rpc/skills.unshare"
+}
+
+// GetSharedSkillsPath returns the URL path to the skills service getShared HTTP endpoint.
+func GetSharedSkillsPath() string {
+	return "/rpc/skills.getShared"
+}
+
 // ListDistributionsSkillsPath returns the URL path to the skills service listDistributions HTTP endpoint.
 func ListDistributionsSkillsPath() string {
 	return "/rpc/skills.listDistributions"

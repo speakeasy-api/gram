@@ -121,13 +121,11 @@ func (s RemoteLoginState) TTL() time.Duration            { return 10 * time.Minu
 
 // ChallengeManager drives the per-remote OAuth authn-challenge leg.
 type ChallengeManager struct {
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	enc    *encryption.Client
-	policy *guardian.Policy
-	cache  cache.TypedCacheObject[RemoteLoginState]
-	// locks is the same store as cache, held untyped because TypedCacheObject
-	// exposes no set-if-absent and the refresh single-flight needs a bare key.
+	logger    *slog.Logger
+	db        *pgxpool.Pool
+	enc       *encryption.Client
+	policy    *guardian.Policy
+	cache     cache.TypedCacheObject[RemoteLoginState]
 	locks     cache.Cache
 	serverURL *url.URL
 	// authorizeInterceptors adapt the outgoing upstream authorize request to

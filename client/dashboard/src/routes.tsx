@@ -13,6 +13,7 @@ import CatalogDetail, {
   CatalogDetailRoot,
 } from "./pages/catalog/CatalogDetail";
 import ChatSessions from "./pages/chatLogs/ChatLogs";
+import OrgMemory from "./components/observe/OrgMemory";
 import { ChatConversation, ChatHome, ChatRoot } from "./pages/chat/Chat";
 import Skills from "./pages/Skills";
 import SkillsList from "./pages/skills/SkillsList";
@@ -60,6 +61,12 @@ import OrgHome from "./pages/org/OrgHome";
 import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
+import OrgSkills from "./pages/org/OrgSkills";
+import ExternalCredentialDetail from "./pages/org/external-services/ExternalCredentialDetail";
+import {
+  ExternalServicesPage,
+  ExternalServicesRoot,
+} from "./pages/org/external-services/ExternalServices";
 import OrgWebhooks from "./pages/org/OrgWebhooks";
 import {
   RemoteIdentityProvidersPage,
@@ -516,6 +523,13 @@ const ROUTE_STRUCTURE = {
     icon: "message-square",
     component: ChatSessions,
   },
+  orgMemory: {
+    title: "Org Memory",
+    url: "org-memory",
+    icon: "brain",
+    stage: "preview",
+    component: OrgMemory,
+  },
   riskOverview: {
     title: "Risk Overview",
     url: "risk-overview",
@@ -876,6 +890,12 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "file-text",
     component: OrgLogs,
   },
+  skills: {
+    title: "Skills",
+    url: "skills",
+    icon: "terminal",
+    component: OrgSkills,
+  },
   aiIntegrations: {
     title: "AI Integrations",
     url: "ai-integrations",
@@ -887,6 +907,24 @@ const ORG_ROUTE_STRUCTURE = {
     url: "webhooks",
     icon: "webhook",
     component: OrgWebhooks,
+  },
+  externalServices: {
+    title: "External Services",
+    url: "external-services",
+    icon: "cloud",
+    component: ExternalServicesRoot,
+    indexComponent: ExternalServicesPage,
+    subPages: {
+      credentialDetail: {
+        title: "External Credential",
+        url: ":credentialId",
+        component: ExternalCredentialDetail,
+        subPages: {
+          overview: { title: "Overview", url: "overview" },
+          settings: { title: "Settings", url: "settings" },
+        },
+      },
+    },
   },
   auditLogs: {
     title: "Audit Logs",

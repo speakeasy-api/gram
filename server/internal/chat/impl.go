@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
 	"path"
@@ -50,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -352,6 +354,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 			lastMessageTimestamp = row.LastMessageTimestamp.Time.Format(time.RFC3339)
 		}
 		riskCount := int(row.RiskFindingsCount)
+		pinned := row.PinnedAt.Valid
 		result = append(result, &gen.ChatOverview{
 			ID:                   row.ID.String(),
 			UserID:               conv.FromPGText[string](row.UserID),
@@ -367,18 +370,168 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 			RiskFindingsCount:    &riskCount,
 			AccountType:          conv.PtrEmpty(row.AccountType),
 			AccountEmail:         conv.PtrEmpty(row.AccountEmail),
-			TotalInputTokens:     nil,
-			TotalOutputTokens:    nil,
-			TotalTokens:          nil,
-			TotalCost:            nil,
+			Pinned:               &pinned,
+			// List responses omit summary text to keep pages light; loadChat /
+			// summarize return the persisted summary when present.
+			Summary:            nil,
+			SummaryGeneratedAt: nil,
+			TotalInputTokens:   nil,
+			TotalOutputTokens:  nil,
+			TotalTokens:        nil,
+			TotalCost:          nil,
+			WorkUnits:          nil,
 		})
 	}
 
 	if err := s.enrichChatsWithMetrics(ctx, authCtx.ProjectID.String(), result); err != nil {
 		s.logger.WarnContext(ctx, "failed to enrich chats with metrics", attr.SlogError(err))
 	}
+	if err := s.enrichChatsWithWorkUnits(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), result); err != nil {
+		s.logger.WarnContext(ctx, "failed to enrich chats with work units", attr.SlogError(err))
+	}
 
 	return &gen.ListChatsResult{Chats: result, Total: int(total)}, nil
+}
+
+const (
+	workUnitsTrendDefaultWindow = 30 * 24 * time.Hour
+	workUnitsTrendMaxWindow     = 92 * 24 * time.Hour
+	// workUnitsTrendMaxVerdicts bounds the ClickHouse read; daily analysis caps
+	// keep real orgs far below it.
+	workUnitsTrendMaxVerdicts = 10000
+	// workUnitsTrendMetricsBatch chunks the per-chat metrics lookup so a large
+	// window never issues one query with thousands of chat ids in its IN list.
+	workUnitsTrendMetricsBatch = 1000
+)
+
+func (s *Service) GetWorkUnitsTrend(ctx context.Context, payload *gen.GetWorkUnitsTrendPayload) (*gen.WorkUnitsTrendResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	projectID := authCtx.ProjectID.String()
+
+	// Unlike chat listing, which degrades to own-session visibility, this is an
+	// org-wide aggregate: when RBAC is enforced, callers without chat:read get
+	// nothing rather than a narrowed view.
+	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize work units trend").LogError(ctx, s.logger)
+	} else if enforce {
+		allowed, err := s.authz.Evaluate(ctx, authz.ChatReadCheck(projectID))
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize work units trend").LogError(ctx, s.logger)
+		}
+		if !allowed {
+			return nil, oops.C(oops.CodeForbidden)
+		}
+	}
+
+	to := time.Now().UTC()
+	if payload.To != nil {
+		parsed, err := time.Parse(time.RFC3339, *payload.To)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid 'to' timestamp").LogError(ctx, s.logger)
+		}
+		to = parsed.UTC()
+	}
+	from := to.Add(-workUnitsTrendDefaultWindow)
+	if payload.From != nil {
+		parsed, err := time.Parse(time.RFC3339, *payload.From)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid 'from' timestamp").LogError(ctx, s.logger)
+		}
+		from = parsed.UTC()
+	}
+	if !from.Before(to) {
+		return nil, oops.E(oops.CodeInvalid, nil, "'from' must be before 'to'")
+	}
+	if to.Sub(from) > workUnitsTrendMaxWindow {
+		return nil, oops.E(oops.CodeInvalid, nil, "window must not exceed 92 days")
+	}
+
+	// One zero-filled bucket per UTC day so the chart's x-axis is continuous.
+	startDay := from.Truncate(24 * time.Hour)
+	buckets := make([]*gen.WorkUnitsTrendBucket, 0, int(to.Sub(startDay)/(24*time.Hour))+1)
+	bucketsByDay := make(map[time.Time]*gen.WorkUnitsTrendBucket)
+	for day := startDay; !day.After(to); day = day.Add(24 * time.Hour) {
+		bucket := &gen.WorkUnitsTrendBucket{
+			Timestamp:      day.Format(time.RFC3339),
+			ScoredSessions: 0,
+			WorkUnits:      0,
+			TotalCost:      0,
+			TotalTokens:    0,
+			CostPerUnit:    nil,
+			TokensPerUnit:  nil,
+		}
+		buckets = append(buckets, bucket)
+		bucketsByDay[day] = bucket
+	}
+
+	result := &gen.WorkUnitsTrendResult{ScoresAvailable: false, Buckets: buckets}
+	if s.telemetryService == nil {
+		return result, nil
+	}
+
+	verdicts, err := s.telemetryService.ListChatAnalysisVerdicts(ctx, telemetryrepo.ListChatAnalysisVerdictsParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Judge:          telemetryrepo.ChatAnalysisJudgeWorkUnits,
+		From:           from,
+		To:             to,
+		Limit:          workUnitsTrendMaxVerdicts,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load work units trend").LogError(ctx, s.logger)
+	}
+	if len(verdicts) == 0 {
+		return result, nil
+	}
+	if len(verdicts) == workUnitsTrendMaxVerdicts {
+		s.logger.WarnContext(ctx, "work units trend window hit verdict cap; buckets may be truncated", attr.SlogTelemetryCHRowCount(len(verdicts)))
+	}
+	result.ScoresAvailable = true
+
+	// Cost/token telemetry is best-effort, like the per-chat enrichment: a
+	// metrics miss leaves efficiency empty but never hides the work done.
+	metricsByChatID := make(map[string]telemetryrepo.ChatMetricsRow, len(verdicts))
+	chatIDs := make([]string, len(verdicts))
+	for i, verdict := range verdicts {
+		chatIDs[i] = verdict.ChatID
+	}
+	for batch := range slices.Chunk(chatIDs, workUnitsTrendMetricsBatch) {
+		metrics, err := s.telemetryService.GetChatMetricsByIDs(ctx, projectID, batch)
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to load chat metrics for work units trend", attr.SlogError(err))
+			break
+		}
+		maps.Copy(metricsByChatID, metrics)
+	}
+
+	for _, verdict := range verdicts {
+		bucket, found := bucketsByDay[verdict.ScoredAt.UTC().Truncate(24*time.Hour)]
+		if !found {
+			continue
+		}
+		bucket.ScoredSessions++
+		bucket.WorkUnits += verdict.Score
+		if metrics, found := metricsByChatID[verdict.ChatID]; found {
+			bucket.TotalCost += metrics.TotalCost
+			bucket.TotalTokens += metrics.TotalTokens
+		}
+	}
+	for _, bucket := range buckets {
+		if bucket.WorkUnits <= 0 {
+			continue
+		}
+		if bucket.TotalCost > 0 {
+			bucket.CostPerUnit = conv.PtrEmpty(bucket.TotalCost / bucket.WorkUnits)
+		}
+		if bucket.TotalTokens > 0 {
+			bucket.TokensPerUnit = conv.PtrEmpty(float64(bucket.TotalTokens) / bucket.WorkUnits)
+		}
+	}
+
+	return result, nil
 }
 
 // logChatAccess records an audit entry that a dashboard user opened a chat
@@ -547,10 +700,21 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// Off-dashboard callers must match the chat owner unless they're the
-	// managed-assistant runtime (see ListChats).
+	// External-user and chat-session-token callers must match the chat owner.
+	// First-party project credentials read any session in their project: the
+	// dashboard session, the managed-assistant runtime, and a direct API key,
+	// which the RBAC engine already treats as self-scoped (see
+	// authz.Engine.ShouldEnforce).
+	//
+	// A chat-session token minted via an API key restores that key's APIKeyID
+	// (chatsessions.Manager.Authorize), so APIKeyID alone does not prove the
+	// caller authenticated *as* the key — treating it as first-party would let
+	// an end user's chat-session token read every project chat. Only direct
+	// Gram-Key auth carries the key's scopes (auth.KeyBasedAuth); a chat-session
+	// token has none, so gate the exemption on the scopes being present.
 	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
-	if authCtx.SessionID == nil {
+	isDirectAPIKeyCall := authCtx.APIKeyID != "" && len(authCtx.APIKeyScopes) > 0
+	if authCtx.SessionID == nil && !isDirectAPIKeyCall {
 		if !isAssistantCall {
 			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
 				return nil, oops.C(oops.CodeUnauthorized)
@@ -838,6 +1002,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 	}
 
+	pinned := chat.PinnedAt.Valid
 	result := &gen.Chat{
 		ID:                   chat.ID.String(),
 		Title:                chat.Title.String,
@@ -853,6 +1018,9 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		RiskFindingsCount:    nil,
 		AccountType:          conv.PtrEmpty(chat.AccountType),
 		AccountEmail:         conv.PtrEmpty(chat.AccountEmail),
+		Pinned:               &pinned,
+		Summary:              conv.FromPGText[string](chat.Summary),
+		SummaryGeneratedAt:   formatOptionalTimestamptz(chat.SummaryGeneratedAt),
 		Messages:             resultMessages,
 		Generation:           int(generation),
 		MaxGeneration:        int(maxGeneration),
@@ -873,6 +1041,8 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		TotalTokens:       nil,
 		TotalCost:         nil,
 		AgentUsage:        nil,
+		WorkUnits:         nil,
+		WorkUnitsReport:   nil,
 	}
 
 	if isInitialLatest {
@@ -881,6 +1051,9 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 		if err := s.enrichChatWithClaudeTurnUsage(ctx, authCtx.ProjectID.String(), result); err != nil {
 			s.logger.WarnContext(ctx, "failed to enrich chat with Claude turn usage", attr.SlogError(err))
+		}
+		if err := s.enrichChatWithWorkUnits(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), result); err != nil {
+			s.logger.WarnContext(ctx, "failed to enrich chat with work units", attr.SlogError(err))
 		}
 	}
 
@@ -1645,6 +1818,197 @@ func (s *Service) SetPinned(ctx context.Context, payload *gen.SetPinnedPayload) 
 	return nil
 }
 
+const (
+	// maxSummarizeTranscriptRunes bounds the transcript fed to the summarizer.
+	// Whole messages are dropped oldest-first so the end of the session is kept.
+	maxSummarizeTranscriptRunes = 100000
+	// maxSummarizeMessageRunes caps one message body in the summarize transcript.
+	maxSummarizeMessageRunes   = 4000
+	summarizeCompletionTimeout = 60 * time.Second
+)
+
+func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) (*gen.SummarizeChatResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	chatID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid chat id").LogError(ctx, s.logger)
+	}
+
+	chat, err := s.repo.GetChat(ctx, chatID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
+	}
+
+	if chat.ProjectID != *authCtx.ProjectID {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// Off-dashboard callers must match the chat owner unless they're the
+	// managed-assistant runtime (same rule as SetPinned / LoadChat).
+	if authCtx.SessionID == nil {
+		if _, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx); !isAssistantCall {
+			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
+				return nil, oops.C(oops.CodeUnauthorized)
+			}
+		}
+	}
+
+	if chat.Summary.Valid && strings.TrimSpace(chat.Summary.String) != "" && !payload.Regenerate {
+		return &gen.SummarizeChatResult{
+			Summary:            chat.Summary.String,
+			SummaryGeneratedAt: chat.SummaryGeneratedAt.Time.Format(time.RFC3339),
+			Cached:             true,
+		}, nil
+	}
+
+	if s.completionClient == nil {
+		return nil, oops.E(oops.CodeUnexpected, nil, "summarization is unavailable").LogError(ctx, s.logger)
+	}
+
+	messages, err := s.repo.ListLatestGenerationChatMessages(ctx, repo.ListLatestGenerationChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: chat.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list chat messages").LogError(ctx, s.logger)
+	}
+
+	transcript := buildSummarizeTranscript(messages)
+	if strings.TrimSpace(transcript) == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "chat has no summarizable messages").LogError(ctx, s.logger)
+	}
+
+	summaryCtx, cancel := context.WithTimeout(ctx, summarizeCompletionTimeout)
+	defer cancel()
+
+	systemPrompt := "You summarize agent session transcripts for an operations dashboard. " +
+		"Write a concise summary in 2-4 short paragraphs covering: the user's goal, " +
+		"what the agent did (key steps and tools), the outcome, and any notable risks or blockers. " +
+		"Use plain prose only — no headings, bullets, or markdown. " +
+		"Do not invent details that are not supported by the transcript."
+
+	response, err := s.completionClient.GetCompletion(summaryCtx, openrouter.CompletionRequest{
+		OrgID:     authCtx.ActiveOrganizationID,
+		ProjectID: chat.ProjectID.String(),
+		ChatID:    uuid.Nil,
+		Messages: []or.ChatMessages{
+			openrouter.CreateMessageSystem(systemPrompt),
+			openrouter.CreateMessageUser(transcript),
+		},
+		Tools:                     nil,
+		Temperature:               nil,
+		Model:                     "",
+		Stream:                    false,
+		UsageSource:               billing.ModelUsageSourceGram,
+		KeyType:                   openrouter.KeyTypeInternal,
+		KeySlot:                   "",
+		UserID:                    "",
+		ExternalUserID:            "",
+		UserEmail:                 "",
+		HTTPMetadata:              nil,
+		APIKeyID:                  "",
+		JSONSchema:                nil,
+		Reasoning:                 &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
+		CacheControl:              nil,
+		NormalizeOutboundMessages: false,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate summary").LogError(ctx, s.logger)
+	}
+	if response == nil || response.Message == nil {
+		return nil, oops.E(oops.CodeUnexpected, nil, "empty summary response").LogError(ctx, s.logger)
+	}
+
+	summary := strings.TrimSpace(openrouter.GetText(*response.Message))
+	if summary == "" {
+		return nil, oops.E(oops.CodeUnexpected, nil, "empty summary response").LogError(ctx, s.logger)
+	}
+
+	updated, err := s.repo.UpdateChatSummary(ctx, repo.UpdateChatSummaryParams{
+		Summary:   pgtype.Text{String: summary, Valid: true},
+		ID:        chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "persist chat summary").LogError(ctx, s.logger)
+	}
+
+	return &gen.SummarizeChatResult{
+		Summary:            updated.Summary.String,
+		SummaryGeneratedAt: updated.SummaryGeneratedAt.Time.Format(time.RFC3339),
+		Cached:             false,
+	}, nil
+}
+
+func formatOptionalTimestamptz(ts pgtype.Timestamptz) *string {
+	if !ts.Valid {
+		return nil
+	}
+	formatted := ts.Time.Format(time.RFC3339)
+	return &formatted
+}
+
+// buildSummarizeTranscript concatenates user/assistant message bodies into a
+// bounded string for the summarizer. Oldest messages are dropped first when the
+// budget is exceeded so the end of the session is preserved.
+func buildSummarizeTranscript(messages []repo.ChatMessage) string {
+	parts := make([]string, 0, len(messages))
+	for _, msg := range messages {
+		if msg.Role != "user" && msg.Role != "assistant" {
+			continue
+		}
+		// Strip allowlisted harness envelopes (<message-context>, <notification>)
+		// so the summarizer sees the human turn, not framing boilerplate — same
+		// canonical tags title generation mines.
+		content := StripLeadingEnvelopes(msg.Content)
+		if content == "" {
+			continue
+		}
+		content = truncateRunes(content, maxSummarizeMessageRunes)
+		parts = append(parts, fmt.Sprintf("%s: %s", msg.Role, content))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+
+	// Drop oldest whole lines until the transcript fits the budget.
+	start := 0
+	for start < len(parts) {
+		joined := strings.Join(parts[start:], "\n")
+		if utf8.RuneCountInString(joined) <= maxSummarizeTranscriptRunes {
+			if start > 0 {
+				return fmt.Sprintf("[%d earlier messages omitted]\n%s", start, joined)
+			}
+			return joined
+		}
+		start++
+	}
+	// Hostile single-message case: keep a truncated newest line.
+	last := parts[len(parts)-1]
+	return truncateRunes(last, maxSummarizeTranscriptRunes)
+}
+
+func truncateRunes(s string, maxRunes int) string {
+	if maxRunes <= 0 || utf8.RuneCountInString(s) <= maxRunes {
+		return s
+	}
+	runes := []rune(s)
+	if maxRunes < 1 {
+		return ""
+	}
+	return string(runes[:maxRunes]) + "…"
+}
+
 func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbackPayload) (*gen.SubmitFeedbackResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -2130,6 +2494,55 @@ func (s *Service) enrichChatWithMetrics(ctx context.Context, projectID string, c
 		chat.TotalOutputTokens = &metrics.TotalOutputTokens
 		chat.TotalTokens = &metrics.TotalTokens
 		chat.TotalCost = &metrics.TotalCost
+	}
+
+	return nil
+}
+
+// enrichChatsWithWorkUnits attaches published work-units verdicts from
+// ClickHouse to chat overviews. Best-effort like the metric enrichment — and
+// most organizations have no work-units analysis at all, in which case every
+// chat is simply left without a score.
+func (s *Service) enrichChatsWithWorkUnits(ctx context.Context, organizationID string, projectID string, chats []*gen.ChatOverview) error {
+	if len(chats) == 0 || s.telemetryService == nil {
+		return nil
+	}
+
+	chatIDs := make([]string, len(chats))
+	for i, chat := range chats {
+		chatIDs[i] = chat.ID
+	}
+
+	verdicts, err := s.telemetryService.GetChatAnalysisVerdictsByChatIDs(ctx, organizationID, projectID, telemetryrepo.ChatAnalysisJudgeWorkUnits, chatIDs)
+	if err != nil {
+		return fmt.Errorf("get work units verdicts from ClickHouse: %w", err)
+	}
+
+	for _, chat := range chats {
+		if verdict, found := verdicts[chat.ID]; found {
+			chat.WorkUnits = &verdict.Score
+		}
+	}
+
+	return nil
+}
+
+// enrichChatWithWorkUnits attaches the published work-units verdict — score
+// and full report JSON — from ClickHouse to a single loaded chat. Best-effort
+// like the metric enrichment.
+func (s *Service) enrichChatWithWorkUnits(ctx context.Context, organizationID string, projectID string, chat *gen.Chat) error {
+	if s.telemetryService == nil {
+		return nil
+	}
+
+	verdicts, err := s.telemetryService.GetChatAnalysisVerdictsByChatIDs(ctx, organizationID, projectID, telemetryrepo.ChatAnalysisJudgeWorkUnits, []string{chat.ID})
+	if err != nil {
+		return fmt.Errorf("get work units verdict from ClickHouse: %w", err)
+	}
+
+	if verdict, found := verdicts[chat.ID]; found {
+		chat.WorkUnits = &verdict.Score
+		chat.WorkUnitsReport = &verdict.Detail
 	}
 
 	return nil

@@ -532,6 +532,115 @@ func BuildUndistributePayload(skillsUndistributeBody string, skillsUndistributeS
 	return v, nil
 }
 
+// BuildSharePayload builds the payload for the skills share endpoint from CLI
+// flags.
+func BuildSharePayload(skillsShareBody string, skillsShareSessionToken string, skillsShareApikeyToken string, skillsShareProjectSlugInput string) (*skills.SharePayload, error) {
+	var err error
+	var body ShareRequestBody
+	{
+		err = json.Unmarshal([]byte(skillsShareBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"skill_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.skill_id", body.SkillID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsShareSessionToken != "" {
+			sessionToken = &skillsShareSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsShareApikeyToken != "" {
+			apikeyToken = &skillsShareApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsShareProjectSlugInput != "" {
+			projectSlugInput = &skillsShareProjectSlugInput
+		}
+	}
+	v := &skills.SharePayload{
+		SkillID: body.SkillID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUnsharePayload builds the payload for the skills unshare endpoint from
+// CLI flags.
+func BuildUnsharePayload(skillsUnshareBody string, skillsUnshareSessionToken string, skillsUnshareApikeyToken string, skillsUnshareProjectSlugInput string) (*skills.UnsharePayload, error) {
+	var err error
+	var body UnshareRequestBody
+	{
+		err = json.Unmarshal([]byte(skillsUnshareBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"skill_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.skill_id", body.SkillID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsUnshareSessionToken != "" {
+			sessionToken = &skillsUnshareSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsUnshareApikeyToken != "" {
+			apikeyToken = &skillsUnshareApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsUnshareProjectSlugInput != "" {
+			projectSlugInput = &skillsUnshareProjectSlugInput
+		}
+	}
+	v := &skills.UnsharePayload{
+		SkillID: body.SkillID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetSharedPayload builds the payload for the skills getShared endpoint
+// from CLI flags.
+func BuildGetSharedPayload(skillsGetSharedToken string) (*skills.GetSharedPayload, error) {
+	var err error
+	var token string
+	{
+		token = skillsGetSharedToken
+		if utf8.RuneCountInString(token) < 32 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("token", token, utf8.RuneCountInString(token), 32, true))
+		}
+		if utf8.RuneCountInString(token) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("token", token, utf8.RuneCountInString(token), 128, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &skills.GetSharedPayload{}
+	v.Token = token
+
+	return v, nil
+}
+
 // BuildListDistributionsPayload builds the payload for the skills
 // listDistributions endpoint from CLI flags.
 func BuildListDistributionsPayload(skillsListDistributionsSkillID string, skillsListDistributionsPluginID string, skillsListDistributionsCursor string, skillsListDistributionsLimit string, skillsListDistributionsSessionToken string, skillsListDistributionsApikeyToken string, skillsListDistributionsProjectSlugInput string) (*skills.ListDistributionsPayload, error) {

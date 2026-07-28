@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -38,12 +39,25 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// recordingPromptJudge captures judge inputs under a mutex: judgeFanout calls
+// Evaluate from concurrent goroutines.
 type recordingPromptJudge struct {
+	mu     sync.Mutex
 	inputs []promptpolicy.Input
 }
 
+func (j *recordingPromptJudge) recorded() []promptpolicy.Input {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	out := make([]promptpolicy.Input, len(j.inputs))
+	copy(out, j.inputs)
+	return out
+}
+
 func (j *recordingPromptJudge) Evaluate(_ context.Context, in promptpolicy.Input) (*promptpolicy.Verdict, error) {
+	j.mu.Lock()
 	j.inputs = append(j.inputs, in)
+	j.mu.Unlock()
 	return &promptpolicy.Verdict{
 		Matched:          true,
 		Confidence:       0.9,
@@ -164,7 +178,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		ChatID:    td.chatID,
 		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
 		Role:      "user",
-		Content:   "AWS key AKIAIOSFODNN7REALKEY and email alice@example.com",
+		Content:   "AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd and email alice@example.com",
 	})
 	require.NoError(t, err)
 
@@ -546,8 +560,9 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 	require.NoError(t, val.Get(&result))
 	require.Equal(t, 1, result.Processed)
 	require.Equal(t, 1, result.Findings)
-	require.Len(t, judge.inputs, 1)
-	msg := judge.inputs[0].Message
+	inputs := judge.recorded()
+	require.Len(t, inputs, 1)
+	msg := inputs[0].Message
 	require.Equal(t, message.ToolRequest, msg.Type)
 	require.Equal(t, "Bash", msg.ToolName)
 	require.Empty(t, msg.MCPServer, "native tool has no MCP server")
@@ -647,10 +662,11 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 
 	var result risk_analysis.AnalyzeBatchResult
 	require.NoError(t, val.Get(&result))
-	require.Len(t, judge.inputs, 1)
+	inputs := judge.recorded()
+	require.Len(t, inputs, 1)
 
 	// The judge sees both calls, each with its own attribution - not an opaque blob.
-	msg := judge.inputs[0].Message
+	msg := inputs[0].Message
 	require.Equal(t, message.ToolRequest, msg.Type)
 	require.Empty(t, msg.ToolName, "multi-call message carries no single tool name")
 	require.Len(t, msg.ToolCalls, 2)
@@ -717,8 +733,10 @@ func TestAnalyzeBatch_Gitleaks_SecretInToolCallArgsOnly(t *testing.T) {
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
 
+	// A full credential pair: the access key id anchors detection (it is not
+	// itself reported), and the secret access key is the flagged value.
 	msgID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{
-		"command": "aws configure set aws_access_key_id AKIAIOSFODNN7REALKEY",
+		"command": "aws configure set aws_access_key_id ASIAZ2XY3WNBQR5TUVWX aws_secret_access_key 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",
 	})
 
 	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"})
@@ -736,9 +754,12 @@ func TestAnalyzeBatch_Gitleaks_SecretInToolCallArgsOnly(t *testing.T) {
 	var saw bool
 	for _, row := range rows {
 		if row.Source == "gitleaks" && row.Found {
-			assert.Equal(t, "secret.aws_access_token", row.RuleID.String)
-			assert.Contains(t, row.Match.String, "AKIA")
-			saw = true
+			assert.NotEqual(t, "secret.aws_access_token", row.RuleID.String,
+				"the access key id must not be reported as a finding")
+			if row.RuleID.String == "secret.aws_secret_access_key" {
+				assert.Contains(t, row.Match.String, "wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd")
+				saw = true
+			}
 		}
 	}
 	require.True(t, saw, "expected a gitleaks finding from tool-call arguments")
@@ -1511,7 +1532,7 @@ func TestAnalyzeBatch_SkipsWhenPolicyDisabled(t *testing.T) {
 		ChatID:    td.chatID,
 		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
 		Role:      "user",
-		Content:   "AWS key AKIAIOSFODNN7REALKEY",
+		Content:   "token ghp_R2D2C3POLuk3Skywalker1234567890ab",
 	})
 	require.NoError(t, err)
 
@@ -1538,7 +1559,7 @@ func TestAnalyzeBatch_SkipsWhenPolicyDeleted(t *testing.T) {
 		ChatID:    td.chatID,
 		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
 		Role:      "user",
-		Content:   "AWS key AKIAIOSFODNN7REALKEY",
+		Content:   "token ghp_R2D2C3POLuk3Skywalker1234567890ab",
 	})
 	require.NoError(t, err)
 

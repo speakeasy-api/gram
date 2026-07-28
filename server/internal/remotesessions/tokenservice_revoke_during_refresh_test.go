@@ -1,11 +1,6 @@
-// tokenservice_revoke_during_refresh_test.go guards the security property that
-// revoking a remote session is final: an MCP request already mid-refresh must
-// not write the rotated tokens back and resurrect the session.
-//
-// The refresh path is a read-modify-write around an external POST. While that
-// POST is in flight an admin can soft-delete the row, which drops it out of the
-// partial unique index the write targets. A write that can insert would then
-// undo the revocation; an update-only write cannot.
+// Guards that revocation is final: an MCP request already mid-refresh must not
+// write its rotated tokens back and resurrect the row. Soft-delete drops the row
+// out of the partial index the write targets, so an update-only write cannot.
 
 package remotesessions_test
 

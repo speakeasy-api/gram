@@ -26,6 +26,9 @@ type Endpoints struct {
 	Archive                goa.Endpoint
 	Distribute             goa.Endpoint
 	Undistribute           goa.Endpoint
+	Share                  goa.Endpoint
+	Unshare                goa.Endpoint
+	GetShared              goa.Endpoint
 	ListDistributions      goa.Endpoint
 }
 
@@ -44,6 +47,9 @@ func NewEndpoints(s Service) *Endpoints {
 		Archive:                NewArchiveEndpoint(s, a.APIKeyAuth),
 		Distribute:             NewDistributeEndpoint(s, a.APIKeyAuth),
 		Undistribute:           NewUndistributeEndpoint(s, a.APIKeyAuth),
+		Share:                  NewShareEndpoint(s, a.APIKeyAuth),
+		Unshare:                NewUnshareEndpoint(s, a.APIKeyAuth),
+		GetShared:              NewGetSharedEndpoint(s),
 		ListDistributions:      NewListDistributionsEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -60,6 +66,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Archive = m(e.Archive)
 	e.Distribute = m(e.Distribute)
 	e.Undistribute = m(e.Undistribute)
+	e.Share = m(e.Share)
+	e.Unshare = m(e.Unshare)
+	e.GetShared = m(e.GetShared)
 	e.ListDistributions = m(e.ListDistributions)
 }
 
@@ -650,6 +659,133 @@ func NewUndistributeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return nil, s.Undistribute(ctx, p)
+	}
+}
+
+// NewShareEndpoint returns an endpoint function that calls the method "share"
+// of service "skills".
+func NewShareEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SharePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.Share(ctx, p)
+	}
+}
+
+// NewUnshareEndpoint returns an endpoint function that calls the method
+// "unshare" of service "skills".
+func NewUnshareEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UnsharePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.Unshare(ctx, p)
+	}
+}
+
+// NewGetSharedEndpoint returns an endpoint function that calls the method
+// "getShared" of service "skills".
+func NewGetSharedEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetSharedPayload)
+		return s.GetShared(ctx, p)
 	}
 }
 

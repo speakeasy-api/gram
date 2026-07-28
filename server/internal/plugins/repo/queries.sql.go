@@ -1146,6 +1146,35 @@ func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, projectI
 	return items, nil
 }
 
+const pluginServerDisplayNameExists = `-- name: PluginServerDisplayNameExists :one
+SELECT EXISTS (
+  SELECT 1 FROM plugin_servers
+  JOIN plugins ON plugins.id = plugin_servers.plugin_id
+  WHERE plugin_servers.plugin_id = $1
+    AND plugins.project_id = $2
+    AND plugin_servers.display_name = $3
+    AND plugin_servers.deleted IS FALSE
+)
+`
+
+type PluginServerDisplayNameExistsParams struct {
+	PluginID    uuid.UUID
+	ProjectID   uuid.UUID
+	DisplayName string
+}
+
+// Reports whether a live plugin server on the plugin already uses the display
+// name. AttachToDefaultPlugin checks this before inserting so it can uniquify
+// the name instead of tripping the (plugin_id, display_name) unique index,
+// whose failed insert would abort the caller's surrounding transaction.
+// Joins plugins to scope by project_id as defense-in-depth against IDOR.
+func (q *Queries) PluginServerDisplayNameExists(ctx context.Context, arg PluginServerDisplayNameExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, pluginServerDisplayNameExists, arg.PluginID, arg.ProjectID, arg.DisplayName)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const promoteToDefaultPlugin = `-- name: PromoteToDefaultPlugin :one
 UPDATE plugins
 SET is_default = TRUE,
@@ -1337,6 +1366,122 @@ WHERE plugin_id = $1
 func (q *Queries) SoftDeletePluginServers(ctx context.Context, pluginID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, softDeletePluginServers, pluginID)
 	return err
+}
+
+const softDeletePluginServersByMCPServerID = `-- name: SoftDeletePluginServersByMCPServerID :many
+UPDATE plugin_servers
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM plugins
+WHERE plugins.id = plugin_servers.plugin_id
+  AND plugins.project_id = $1
+  AND plugin_servers.mcp_server_id = $2
+  AND plugin_servers.deleted IS FALSE
+RETURNING plugin_servers.id, plugin_servers.plugin_id, plugin_servers.toolset_id, plugin_servers.mcp_server_id, plugin_servers.display_name, plugin_servers.policy, plugin_servers.sort_order, plugin_servers.created_at, plugin_servers.updated_at, plugin_servers.deleted_at, plugin_servers.deleted, plugins.name AS plugin_name, plugins.slug AS plugin_slug
+`
+
+type SoftDeletePluginServersByMCPServerIDParams struct {
+	ProjectID   uuid.UUID
+	McpServerID uuid.NullUUID
+}
+
+type SoftDeletePluginServersByMCPServerIDRow struct {
+	ID          uuid.UUID
+	PluginID    uuid.UUID
+	ToolsetID   uuid.NullUUID
+	McpServerID uuid.NullUUID
+	DisplayName string
+	Policy      string
+	SortOrder   int32
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
+	Deleted     bool
+	PluginName  string
+	PluginSlug  string
+}
+
+// Soft-deletes every live plugin server backed by the mcp_server, joining
+// plugins for project scoping. Returns the removed rows with their plugin's
+// name and slug so callers can audit-log each removal. Used by mcpservers on
+// server deletion so a deleted server does not keep holding a plugin's
+// display name: the (plugin_id, display_name) unique index only excludes
+// soft-deleted rows.
+func (q *Queries) SoftDeletePluginServersByMCPServerID(ctx context.Context, arg SoftDeletePluginServersByMCPServerIDParams) ([]SoftDeletePluginServersByMCPServerIDRow, error) {
+	rows, err := q.db.Query(ctx, softDeletePluginServersByMCPServerID, arg.ProjectID, arg.McpServerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SoftDeletePluginServersByMCPServerIDRow
+	for rows.Next() {
+		var i SoftDeletePluginServersByMCPServerIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PluginID,
+			&i.ToolsetID,
+			&i.McpServerID,
+			&i.DisplayName,
+			&i.Policy,
+			&i.SortOrder,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.PluginName,
+			&i.PluginSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const syncMcpServerDisplayName = `-- name: SyncMcpServerDisplayName :execrows
+UPDATE plugin_servers ps
+SET display_name = $1,
+    updated_at = clock_timestamp()
+FROM plugins p
+WHERE ps.plugin_id = p.id
+  AND p.project_id = $2
+  AND p.deleted IS FALSE
+  AND ps.mcp_server_id = $3
+  AND ps.display_name = $4
+  AND ps.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM plugin_servers sibling
+    WHERE sibling.plugin_id = ps.plugin_id
+      AND sibling.id <> ps.id
+      AND sibling.display_name = $1
+      AND sibling.deleted IS FALSE
+  )
+`
+
+type SyncMcpServerDisplayNameParams struct {
+	NewDisplayName string
+	ProjectID      uuid.UUID
+	McpServerID    uuid.NullUUID
+	OldDisplayName string
+}
+
+// Keep auto-derived plugin server names in sync with their MCP server while
+// preserving names customized through UpdatePluginServer.
+func (q *Queries) SyncMcpServerDisplayName(ctx context.Context, arg SyncMcpServerDisplayNameParams) (int64, error) {
+	result, err := q.db.Exec(ctx, syncMcpServerDisplayName,
+		arg.NewDisplayName,
+		arg.ProjectID,
+		arg.McpServerID,
+		arg.OldDisplayName,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updatePlugin = `-- name: UpdatePlugin :one

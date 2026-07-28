@@ -661,6 +661,13 @@ CREATE TABLE IF NOT EXISTS device_agent_syncs (
   CONSTRAINT device_agent_syncs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
+-- Serves the device-integration coverage join, which matches MDM-reported
+-- device emails against agent heartbeats case-insensitively (the raw-column
+-- device_agent_syncs_org_email_key cannot serve a LOWER(email) lookup). See
+-- mdm_devices.
+CREATE INDEX IF NOT EXISTS device_agent_syncs_organization_id_lower_email_idx
+ON device_agent_syncs (organization_id, LOWER(email));
+
 CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   deployment_id uuid NOT NULL,
@@ -1598,6 +1605,11 @@ CREATE TABLE IF NOT EXISTS chats (
   -- dedicated section above recents; the timestamp orders them by pin time.
   pinned_at timestamptz,
 
+  -- On-demand LLM summary of the session transcript (NULL until generated).
+  -- Written by chat.summarize; regenerated in place when requested.
+  summary text,
+  summary_generated_at timestamptz,
+
   -- Personal-account tracking: the external AI account (user_accounts row) this
   -- session belongs to. Join to user_accounts for provider, account_type
   -- (team/personal), external_org_id, the owning employee, etc. — set by ingest.
@@ -1689,6 +1701,32 @@ CREATE INDEX IF NOT EXISTS skill_distributions_project_id_idx ON skill_distribut
 CREATE INDEX IF NOT EXISTS skill_distributions_skill_id_pinned_version_id_idx ON skill_distributions (skill_id, pinned_version_id);
 CREATE INDEX IF NOT EXISTS skill_distributions_plugin_id_idx ON skill_distributions (plugin_id);
 CREATE INDEX IF NOT EXISTS skill_distributions_assistant_id_idx ON skill_distributions (assistant_id);
+
+CREATE TABLE IF NOT EXISTS skill_share_links (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+
+  token TEXT NOT NULL,
+  created_by_user_id TEXT NOT NULL,
+  revoked_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_share_links_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_share_links_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skill_share_links_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_share_links_token_key ON skill_share_links (token);
+
+-- At most one active public share link per skill.
+CREATE UNIQUE INDEX IF NOT EXISTS skill_share_links_skill_id_key
+ON skill_share_links (skill_id)
+WHERE revoked_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS skill_share_links_project_id_idx ON skill_share_links (project_id);
 
 -- project_managed_assistants maps a project to its single platform-managed
 -- assistant (the one powering the AI Insights sidebar). Kept in its own table
@@ -1985,6 +2023,76 @@ WHERE external_message_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS chat_messages_risk_analyzed_at_null_idx
 ON chat_messages (project_id, id)
 WHERE risk_analyzed_at IS NULL;
+
+-- Serves the chat analysis enqueue walk, which pages a project's chats on the
+-- immutable (created_at, id) keyset within a bounded lookback.
+CREATE INDEX IF NOT EXISTS chats_project_id_created_at_id_idx
+ON chats (project_id, created_at, id);
+
+-- Per-(organization, judge) switches and budgets for the chat analysis
+-- pipeline (the generalized session judges: work units and whatever comes
+-- after it). One row per judge rather than one column per judge, so enabling a
+-- new judge for an organization is an insert, never a migration. A judge with
+-- no row for an organization is off: the pipeline is opt-in per judge.
+CREATE TABLE IF NOT EXISTS chat_analysis_settings (
+  organization_id TEXT NOT NULL,
+  judge TEXT NOT NULL,
+  enabled boolean NOT NULL,
+  daily_cap integer NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT chat_analysis_settings_pkey PRIMARY KEY (organization_id, judge),
+  CONSTRAINT chat_analysis_settings_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT chat_analysis_settings_daily_cap_check CHECK (daily_cap >= 0)
+);
+
+-- Durable queue for the chat analysis pipeline: one row per (chat, judge)
+-- scoring unit. Mirrors skill_efficacy_evaluations — pending rows are reserved
+-- against the organization's daily budget, judged, and marked scored; verdicts
+-- live only in the ClickHouse chat_analysis_scores sink while this table holds
+-- pipeline state.
+CREATE TABLE IF NOT EXISTS chat_analysis_evaluations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  chat_id uuid NOT NULL,
+  -- Raw agent session id the chat was captured under, empty when the unit was
+  -- enqueued from the chats walk. Chat ids are a one-way hash of session ids,
+  -- so judges whose domain data is keyed by session id (skill efficacy) need
+  -- the original string carried on the unit.
+  session_id TEXT NOT NULL DEFAULT '',
+  judge TEXT NOT NULL,
+  observed_at timestamptz NOT NULL,
+
+  state TEXT NOT NULL DEFAULT 'pending',
+  reserved_on date,
+  attempts integer NOT NULL DEFAULT 0,
+  last_error TEXT,
+  scored_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT chat_analysis_evaluations_pkey PRIMARY KEY (id),
+  CONSTRAINT chat_analysis_evaluations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT chat_analysis_evaluations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT chat_analysis_evaluations_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS chat_analysis_evaluations_scoring_unit_key
+ON chat_analysis_evaluations (project_id, chat_id, judge);
+
+CREATE INDEX IF NOT EXISTS chat_analysis_evaluations_pending_idx
+ON chat_analysis_evaluations (project_id, observed_at DESC, id DESC)
+WHERE state = 'pending';
+
+-- Spend is counted by reserved_on, not state: failed rows keep their
+-- reserved_on as immutable spend history, so they must stay in the index.
+CREATE INDEX IF NOT EXISTS chat_analysis_evaluations_org_spend_idx
+ON chat_analysis_evaluations (organization_id, reserved_on)
+WHERE reserved_on IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS chat_resolutions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -2410,6 +2518,14 @@ ON directory_users (organization_id);
 CREATE INDEX IF NOT EXISTS directory_users_user_id_idx
 ON directory_users (user_id)
 WHERE user_id IS NOT NULL;
+
+-- Case-insensitive email lookup for resolving an org member to their directory
+-- profile (spend-rule evaluation's ListOrgActors matches on LOWER(email)); the
+-- user_id branch is served by directory_users_user_id_idx, so together the two
+-- keep that per-member lookup off a sequential scan of the org's directory rows.
+CREATE INDEX IF NOT EXISTS directory_users_organization_id_lower_email_idx
+ON directory_users (organization_id, LOWER(email))
+WHERE deleted IS FALSE AND workos_deleted IS FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS directory_users_workos_directory_user_id_key
 ON directory_users (workos_directory_user_id);
@@ -3309,6 +3425,11 @@ CREATE TABLE IF NOT EXISTS tunneled_mcp_servers (
   key_prefix TEXT NOT NULL CHECK (key_prefix <> ''),
   -- Durable source lifecycle. Live connection state is derived from Redis.
   status TEXT NOT NULL DEFAULT 'created' CHECK (status IN ('created', 'active', 'revoked')),
+  -- Owner consent for serving this source through a public (anonymous) MCP
+  -- endpoint. An mcp_servers row fronting this source may only take
+  -- visibility=public while this is true (double opt-in, enforced in
+  -- application code at create/update validation and at serve time).
+  allow_public boolean NOT NULL DEFAULT false,
   -- Last persisted tunnel agent version reported for this source.
   agent_version TEXT CHECK (agent_version IS NULL OR agent_version <> ''),
   -- Most recent persisted heartbeat time, used when Redis liveness data is absent.
@@ -3342,6 +3463,7 @@ COMMENT ON COLUMN tunneled_mcp_servers.name IS 'User-facing display name for the
 COMMENT ON COLUMN tunneled_mcp_servers.key_hash IS 'Hash of the one-time tunnel key. Used for future tunnel authentication without storing the plaintext key.';
 COMMENT ON COLUMN tunneled_mcp_servers.key_prefix IS 'Non-secret prefix of the tunnel key shown in the UI so users can identify which key/source they are using.';
 COMMENT ON COLUMN tunneled_mcp_servers.status IS 'Durable lifecycle state for the source: created, active, or revoked. Live connection state is derived from Redis.';
+COMMENT ON COLUMN tunneled_mcp_servers.allow_public IS 'Owner consent for anonymous public MCP serving of this source. Double opt-in with mcp_servers.visibility=public, enforced in application code.';
 COMMENT ON COLUMN tunneled_mcp_servers.agent_version IS 'Last persisted tunnel agent version reported for this source. Per-connection agent versions are stored in Redis.';
 COMMENT ON COLUMN tunneled_mcp_servers.last_seen_at IS 'Most recent persisted heartbeat time for the source, used when Redis liveness data is absent or expired.';
 COMMENT ON COLUMN tunneled_mcp_servers.created_at IS 'Time when the tunneled MCP source was created.';
@@ -4574,3 +4696,375 @@ CREATE INDEX IF NOT EXISTS model_provider_keys_project_id_idx
 
 CREATE INDEX IF NOT EXISTS model_provider_keys_organization_id_idx
   ON model_provider_keys (organization_id);
+-- Org-scoped spend control rules. Each rule targets a set of actors via a CEL
+-- expression over org members' attributes (directory-synced attributes, group
+-- memberships, and org roles) and grants every matched actor a per-person USD
+-- budget for a UTC calendar window. A periodic evaluator compares each
+-- actor's spend against the limit and emits warning/breach events; rules with
+-- action = 'block' also open a circuit that denies the actor's Claude hook
+-- traffic until the window resets.
+--
+-- Rows are append-only version snapshots: editing a rule archives the current
+-- row (superseded_by points at its replacement) and inserts a new row with the
+-- same slug and version + 1. Config columns are never updated in place — only
+-- enabled (an operational toggle) and the archival columns change after
+-- insert — so events can join their exact rule row and always see the config
+-- that produced them. There is no hard delete; archiving ends a lineage while
+-- keeping its slug reserved and its history resolvable.
+CREATE TABLE IF NOT EXISTS spend_rules (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+
+  name TEXT NOT NULL,
+  -- URL-safe lineage identifier derived from the name at creation time and
+  -- shared by every version row of one rule. Immutable thereafter: the rule
+  -- URN ('spend_rule:<slug>:v<version>') embeds it, so renames must not
+  -- change it or historical events would detach from their rule. A slug is
+  -- never reused for a new rule, even after its lineage is archived (creation
+  -- checks the slug against all rows, archived included).
+  slug TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  -- CEL boolean expression over actor attributes (see
+  -- internal/spendrules/celenv). A rule applies to an actor when this
+  -- evaluates true.
+  target_expr TEXT NOT NULL,
+  -- Per-person budget in cents for one window. Must be positive; validated in
+  -- application code. External APIs and CEL still expose USD values.
+  limit_usd_cents BIGINT NOT NULL,
+  -- CEL boolean expression over the actor plus current-window usage. The
+  -- expression identifies budget breaches inside the target audience.
+  rule_expr TEXT NOT NULL DEFAULT 'spend_usd >= limit_usd',
+  -- UTC calendar window the budget covers ('daily', 'weekly' or 'monthly';
+  -- validated in application code). 'window' is a reserved keyword.
+  window_kind TEXT NOT NULL,
+  -- Percentage of the limit at which a warning event is emitted (1-100;
+  -- validated in application code).
+  warn_at_pct INT NOT NULL DEFAULT 80,
+  -- 'flag' or 'block'; validated in application code.
+  action TEXT NOT NULL DEFAULT 'flag',
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  -- Position of this row in its slug lineage; bumps by one on every edit.
+  version BIGINT NOT NULL DEFAULT 1,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  -- Set when the row stops being the live version of its lineage: either an
+  -- admin archived the rule, or an edit superseded this row.
+  archived_at timestamptz,
+  archived boolean NOT NULL GENERATED ALWAYS AS (archived_at IS NOT NULL) STORED,
+  -- The replacement row when this row was archived by an edit; NULL when an
+  -- admin archived the lineage outright (no successor).
+  superseded_by uuid,
+
+  CONSTRAINT spend_rules_pkey PRIMARY KEY (id),
+  -- Tenancy-pinning key: the superseded_by FK below and spend_rule_events
+  -- composite-FK (organization_id, id) here so neither can ever reference a
+  -- rule owned by another organization. A table-level constraint (not a
+  -- CREATE UNIQUE INDEX) because the self-referential FK must resolve inline;
+  -- the table is created in one migration so there is no online-index concern.
+  CONSTRAINT spend_rules_organization_id_id_key UNIQUE (organization_id, id),
+  CONSTRAINT spend_rules_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  -- Composite so the successor reference is pinned to the same organization —
+  -- a UUID-only FK would let a row point at another org's rule. No delete
+  -- action: rule rows are never hard-deleted individually (append-only,
+  -- archive-only), and the only delete path — the organization cascade —
+  -- removes referencer and referenced in one statement, which the
+  -- end-of-statement NO ACTION check accepts. ON DELETE SET NULL is not an
+  -- option here: on a composite key it would null organization_id (NOT NULL),
+  -- and Postgres 15's `SET NULL (column list)` form is not modeled by Atlas.
+  CONSTRAINT spend_rules_organization_id_superseded_by_fkey FOREIGN KEY (organization_id, superseded_by) REFERENCES spend_rules (organization_id, id)
+);
+
+-- URNs are unique because every (slug, version) pair maps to exactly one row.
+CREATE UNIQUE INDEX IF NOT EXISTS spend_rules_organization_id_slug_version_key
+ON spend_rules (organization_id, slug, version);
+
+-- At most one live (non-archived) version per lineage: an edit must archive
+-- the current row before inserting its replacement.
+CREATE UNIQUE INDEX IF NOT EXISTS spend_rules_organization_id_slug_live_key
+ON spend_rules (organization_id, slug)
+WHERE archived IS FALSE;
+
+-- Backs the self-referential (organization_id, superseded_by) foreign key's
+-- referencing side; without it every rule row delete (organization cascade)
+-- scans the table for referencing rows. superseded_by alone is selective
+-- enough — no need to widen it to the full key.
+CREATE INDEX IF NOT EXISTS spend_rules_superseded_by_idx
+ON spend_rules (superseded_by);
+
+-- Warning/breach events emitted by the spend rule evaluator. One row per
+-- (rule version row, actor, window, event type) — the unique index makes
+-- evaluator writes idempotent across its 5-minute cycles. spend_rule_id points
+-- at the exact (immutable) rule version row that fired, so every event
+-- resolves to the config that produced it; rule_urn carries the same identity
+-- in human-readable form. No soft delete: events are the audit trail shown in
+-- the dashboard events tab.
+CREATE TABLE IF NOT EXISTS spend_rule_events (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  spend_rule_id uuid NOT NULL,
+  -- Versioned rule URN, e.g. 'spend_rule:eng-monthly-cap:v3'.
+  rule_urn TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+
+  -- Actor identity as known at evaluation time. user_id is NULL when the
+  -- directory user has not been linked to a Gram user.
+  user_id TEXT,
+  email TEXT NOT NULL,
+  display_name TEXT,
+
+  spend_usd_cents BIGINT NOT NULL,
+  limit_usd_cents BIGINT NOT NULL,
+  window_start timestamptz NOT NULL,
+  window_end timestamptz NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT spend_rule_events_pkey PRIMARY KEY (id),
+  CONSTRAINT spend_rule_events_event_type_check CHECK (event_type IN ('warning', 'breach')),
+  CONSTRAINT spend_rule_events_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT spend_rule_events_organization_id_spend_rule_id_fkey FOREIGN KEY (organization_id, spend_rule_id) REFERENCES spend_rules (organization_id, id) ON DELETE CASCADE
+);
+
+-- spend_rule_id identifies one immutable rule version, so (rule row, actor,
+-- window, type) is the natural idempotency key for evaluator writes.
+CREATE UNIQUE INDEX IF NOT EXISTS spend_rule_events_dedupe_key
+ON spend_rule_events (spend_rule_id, event_type, email, window_start);
+
+-- Backs the events feed: filtered by organization, ordered by id DESC
+-- (UUIDv7, so id order is creation order) with an `id <` cursor.
+CREATE INDEX IF NOT EXISTS spend_rule_events_organization_id_id_idx
+ON spend_rule_events (organization_id, id DESC);
+
+-- Device integrations connect an organization to external device-management
+-- and compliance vendors, in two capability families: inventory sources
+-- (MDMs such as Jamf or Kandji, polled for the managed-device fleet) and
+-- evidence sinks (compliance platforms such as Drata or Vanta, pushed
+-- agent-coverage evidence). One row per (organization, provider). This is the
+-- audited, human-written identity of an integration; machine-churned
+-- scheduler state lives in device_integration_syncs and synced inventory in
+-- mdm_devices, so poller writes never contend with these rows.
+CREATE TABLE IF NOT EXISTS device_integration_configs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id TEXT NOT NULL,
+  -- Vendor identifier (e.g. 'jamf', 'kandji', 'drata', 'vanta'). Free-form
+  -- text validated against the provider registry in application code so new
+  -- vendors need no schema change.
+  provider TEXT NOT NULL,
+  -- Secret credential material only (API keys, OAuth client secrets),
+  -- encrypted as a JSON document whose fields are provider-specific. Write
+  -- only: the management API never returns the value, only whether one is
+  -- set.
+  credentials_encrypted TEXT NOT NULL,
+  -- Non-secret, admin-visible provider settings (e.g. the Jamf instance URL
+  -- or Drata region). Split from credentials_encrypted so the dashboard can
+  -- redisplay them; validated against the provider's credential spec in
+  -- application code.
+  settings jsonb NOT NULL DEFAULT '{}'::jsonb,
+  enabled boolean NOT NULL DEFAULT TRUE,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT device_integration_configs_pkey PRIMARY KEY (id),
+  CONSTRAINT device_integration_configs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+-- Partial unique index so a soft-deleted config doesn't block reconnecting
+-- the same provider (a plain UNIQUE would still cover deleted rows).
+CREATE UNIQUE INDEX IF NOT EXISTS device_integration_configs_organization_id_provider_key
+ON device_integration_configs (organization_id, provider)
+WHERE deleted IS FALSE;
+
+-- Non-partial index backing the organization_id FK's ON DELETE CASCADE. The
+-- unique index above is partial (excludes soft-deleted rows), so it can't
+-- serve a cascade delete, which must match every row for the org including
+-- deleted ones.
+CREATE INDEX IF NOT EXISTS device_integration_configs_organization_id_idx
+ON device_integration_configs (organization_id);
+
+-- Non-partial (organization_id, id) key serving as the composite FK target
+-- that tenant-pins child rows (mdm_devices) to their config's organization —
+-- same pattern as spend_rules. Declared as a unique index rather than a
+-- table constraint so Atlas creates it concurrently.
+CREATE UNIQUE INDEX IF NOT EXISTS device_integration_configs_organization_id_id_key
+ON device_integration_configs (organization_id, id);
+
+-- Device integration schedules: user-owned intent, one row per (config,
+-- schedule). Declares which of the provider's sync pipelines run for this
+-- integration and whether the user has paused one. Deliberately separate
+-- from device_integration_syncs (machine-owned execution state) so poller
+-- writes never touch user intent, and resetting sync state on a config
+-- update cannot clobber a user's pause by construction.
+CREATE TABLE IF NOT EXISTS device_integration_schedules (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  device_integration_config_id uuid NOT NULL,
+  -- Discriminator for the sync pipeline (e.g. 'jamf_inventory',
+  -- 'drata_evidence'). Declared by the provider's schedule spec.
+  schedule TEXT NOT NULL,
+  -- Set when a user explicitly pauses this schedule from the dashboard.
+  -- Only the user re-enabling the schedule clears it; config saves do not.
+  -- The machine-initiated counterpart (auto_paused_at) lives on the sync
+  -- row, so "you paused this" and "we paused this over a rejected
+  -- configuration" stay distinguishable.
+  disabled_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT device_integration_schedules_pkey PRIMARY KEY (id),
+  CONSTRAINT device_integration_schedules_device_integration_config_id_fkey FOREIGN KEY (device_integration_config_id) REFERENCES device_integration_configs (id) ON DELETE CASCADE
+);
+
+-- One schedule row per (config, schedule); the leading config_id column
+-- also backs the config FK's ON DELETE CASCADE.
+CREATE UNIQUE INDEX IF NOT EXISTS device_integration_schedules_config_id_schedule_key
+ON device_integration_schedules (device_integration_config_id, schedule);
+
+-- Device integration syncs: machine-owned execution state and failure
+-- metadata, exactly one row per schedule. The poller churns these rows
+-- every cycle; user intent lives on device_integration_schedules. A config
+-- update resets sync state by reinitializing these rows, leaving the
+-- schedule rows untouched.
+CREATE TABLE IF NOT EXISTS device_integration_syncs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  device_integration_schedule_id uuid NOT NULL,
+
+  -- Start time (database clock) of the last fully completed inventory
+  -- snapshot; advances only when a snapshot completes, never on a partial
+  -- pull. Bookkeeping only today: the mark-missing cutoff is the running
+  -- sync's own start time, not this stored value.
+  poll_watermark_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  next_poll_after timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_poll_success_at timestamptz,
+  last_poll_failed_at timestamptz,
+  last_poll_error TEXT,
+  consecutive_failures integer NOT NULL DEFAULT 0,
+  -- Consecutive credential-rejection (401/403-class) failures, tracked
+  -- separately from consecutive_failures so transient vendor errors cannot
+  -- contribute to the auto-pause threshold: only a pure streak of
+  -- credential rejections pauses a schedule.
+  consecutive_auth_rejections integer NOT NULL DEFAULT 0,
+  -- Digest of the last successfully pushed evidence snapshot. Evidence sinks
+  -- compare the current snapshot's digest against this and skip the push
+  -- when coverage hasn't changed. NULL for inventory schedules and before
+  -- the first successful push.
+  last_push_digest TEXT,
+  -- Set when the scheduler stops polling this schedule because the provider
+  -- repeatedly rejected the configuration (e.g. a revoked credential).
+  -- Paused schedules are skipped by candidate selection until the user
+  -- updates the integration, which resets the sync state and clears this.
+  -- The user-initiated counterpart (disabled_at) lives on the schedule row.
+  auto_paused_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT device_integration_syncs_pkey PRIMARY KEY (id),
+  CONSTRAINT device_integration_syncs_device_integration_schedule_id_fkey FOREIGN KEY (device_integration_schedule_id) REFERENCES device_integration_schedules (id) ON DELETE CASCADE
+);
+
+-- Exactly one sync row per schedule; also backs the schedule FK's
+-- ON DELETE CASCADE.
+CREATE UNIQUE INDEX IF NOT EXISTS device_integration_syncs_schedule_id_key
+ON device_integration_syncs (device_integration_schedule_id);
+
+-- Serves the coordinator's candidates query: due and not auto-paused.
+-- User-disabled filtering happens on the joined schedule row, and
+-- enabled/deleted filtering on the joined config row.
+CREATE INDEX IF NOT EXISTS device_integration_syncs_next_poll_after_idx
+ON device_integration_syncs (next_poll_after)
+WHERE auto_paused_at IS NULL;
+
+-- mdm_devices is the MDM-reported hardware inventory synced from a device
+-- integration (one row per device per config). NOTE: distinct from
+-- device_owners, which maps an AI provider's anonymous per-device id to an
+-- employee for personal-account attribution — that table knows nothing about
+-- hardware, and this one nothing about AI accounts. Rows hang off the config
+-- rather than (organization, provider) so disconnecting an integration
+-- (soft-deleting its config) makes its inventory invisible to coverage
+-- queries, and reconnecting repopulates fresh with no stale-row merge
+-- questions. The sync never hard-deletes rows: devices absent from the
+-- latest fully completed snapshot are stamped missing_since instead (a
+-- laptop in a drawer isn't gone), so this table deliberately has no
+-- deleted_at — missing_since is its lifecycle column and config teardown
+-- cascades the rest.
+CREATE TABLE IF NOT EXISTS mdm_devices (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  device_integration_config_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  -- The MDM's own identifier for the device, unique within one config.
+  external_id TEXT NOT NULL,
+  -- Hardware serial number as reported by the MDM. Reserved join point for
+  -- device-level agent attestation: once the agent reports its hardware
+  -- serial, coverage can match on it instead of the per-user email join.
+  serial_number TEXT,
+  hostname TEXT,
+  os_name TEXT,
+  os_version TEXT,
+  -- Email of the device's assigned user exactly as the MDM reported it. May
+  -- be absent or fail to resolve to an org member; coverage surfaces those
+  -- as distinct buckets rather than silently mis-bucketing.
+  user_email TEXT,
+  -- The resolved org member for user_email, resolved at sync time via the
+  -- case-insensitive email lookups (same pattern as user_accounts.user_id
+  -- and directory_users.user_id). NULL when the MDM reported no email or it
+  -- doesn't resolve.
+  user_id TEXT,
+  -- Last device check-in as reported by the MDM (distinct from last_seen_at,
+  -- which is when *our* sync last observed the device in a snapshot).
+  mdm_last_check_in_at timestamptz,
+  -- Full vendor device record as returned by the MDM API. Lets future
+  -- normalized fields be a code change instead of a re-sync, and is the
+  -- debugging trail when a device looks wrong.
+  raw jsonb NOT NULL DEFAULT '{}'::jsonb,
+
+  first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  -- Set when the device was absent from the latest fully completed
+  -- snapshot — SETTING it happens only in the transaction that records the
+  -- completed snapshot, never by a partial pull. CLEARING it happens on
+  -- reappearance, by the per-page inventory upsert.
+  missing_since timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT mdm_devices_pkey PRIMARY KEY (id),
+  CONSTRAINT mdm_devices_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  -- Composite FK tenant-pins each device to its config's organization: the
+  -- denormalized organization_id cannot disagree with the config it hangs
+  -- off (two independent FKs would allow that).
+  CONSTRAINT mdm_devices_organization_id_device_integration_config_id_fkey FOREIGN KEY (organization_id, device_integration_config_id) REFERENCES device_integration_configs (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT mdm_devices_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
+);
+
+-- Upsert key for inventory reconciliation; the leading config_id column also
+-- backs the config FK's ON DELETE CASCADE.
+CREATE UNIQUE INDEX IF NOT EXISTS mdm_devices_config_id_external_id_key
+ON mdm_devices (device_integration_config_id, external_id);
+
+-- Serves org-scoped coverage lookups by resolved member; the leading
+-- organization_id column also backs the org FK's ON DELETE CASCADE.
+CREATE INDEX IF NOT EXISTS mdm_devices_organization_id_user_id_idx
+ON mdm_devices (organization_id, user_id);
+
+-- Serves the coverage join's email fallback against present devices
+-- (missing devices are excluded from coverage). Pairs with
+-- device_agent_syncs_organization_id_lower_email_idx on the agent side.
+CREATE INDEX IF NOT EXISTS mdm_devices_organization_id_lower_user_email_idx
+ON mdm_devices (organization_id, LOWER(user_email))
+WHERE missing_since IS NULL;
+
+-- Backs the user FK's ON DELETE SET NULL, which must match every row for
+-- the user across orgs; the composite org-scoped index above cannot serve
+-- it.
+CREATE INDEX IF NOT EXISTS mdm_devices_user_id_idx
+ON mdm_devices (user_id)
+WHERE user_id IS NOT NULL;

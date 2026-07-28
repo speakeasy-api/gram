@@ -47,6 +47,10 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 		StartPos:                 3,
 		EndPos:                   10,
 		DeadLetterReason:         "",
+		ChatID:                   uuid.NewString(),
+		UserID:                   "user-1",
+		ExternalUserID:           "user-1@example.com",
+		Category:                 "pii",
 		MatchLen:                 7,
 		MatchRedacted:            "<redacted len=7 sha=deadbeef>",
 		FingerprintPepperVersion: "v1",
@@ -71,7 +75,7 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 	// flushes, so poll until both are visible.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		rows, err := conn.Query(t.Context(), `
-			SELECT id, tags, match_redacted, excluded_at, exclusion_id
+			SELECT id, tags, match_redacted, chat_id, user_id, external_user_id, category, excluded_at, exclusion_id
 			FROM risk_findings
 			WHERE organization_id = ?
 			ORDER BY created_at
@@ -81,29 +85,26 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 		}
 		defer func() { _ = rows.Close() }()
 
-		got := map[uuid.UUID]struct {
-			tags        []string
-			redacted    string
-			excludedAt  *time.Time
-			exclusionID *uuid.UUID
-		}{}
+		type foundRow struct {
+			tags           []string
+			redacted       string
+			chatID         string
+			userID         string
+			externalUserID string
+			category       string
+			excludedAt     *time.Time
+			exclusionID    *uuid.UUID
+		}
+		got := map[uuid.UUID]foundRow{}
 		for rows.Next() {
 			var (
-				id       uuid.UUID
-				tags     []string
-				redacted string
-				exAt     *time.Time
-				exID     *uuid.UUID
+				id  uuid.UUID
+				row foundRow
 			)
-			if !assert.NoError(c, rows.Scan(&id, &tags, &redacted, &exAt, &exID)) {
+			if !assert.NoError(c, rows.Scan(&id, &row.tags, &row.redacted, &row.chatID, &row.userID, &row.externalUserID, &row.category, &row.excludedAt, &row.exclusionID)) {
 				return
 			}
-			got[id] = struct {
-				tags        []string
-				redacted    string
-				excludedAt  *time.Time
-				exclusionID *uuid.UUID
-			}{tags, redacted, exAt, exID}
+			got[id] = row
 		}
 
 		if !assert.Contains(c, got, plain.ID) || !assert.Contains(c, got, excluded.ID) {
@@ -113,6 +114,10 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 		p := got[plain.ID]
 		assert.Equal(c, []string{"pii", "secret"}, p.tags, "tags array round-trips")
 		assert.Equal(c, plain.MatchRedacted, p.redacted)
+		assert.Equal(c, plain.ChatID, p.chatID, "attribution chat_id round-trips")
+		assert.Equal(c, plain.UserID, p.userID, "attribution user_id round-trips")
+		assert.Equal(c, plain.ExternalUserID, p.externalUserID, "attribution external_user_id round-trips")
+		assert.Equal(c, plain.Category, p.category, "category round-trips")
 		assert.Nil(c, p.excludedAt, "non-excluded row stores NULL excluded_at")
 		assert.Nil(c, p.exclusionID, "non-excluded row stores NULL exclusion_id")
 

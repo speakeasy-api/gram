@@ -18,11 +18,13 @@ import type { OrganizationRemoteSessionIssuer } from "@gram/client/models/compon
 import { useDeleteOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/deleteOrganizationRemoteSessionIssuer.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { useMoveOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/moveOrganizationRemoteSessionIssuer.js";
+import { invalidateAllOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { useOrganizationRemoteSessionIssuerDeletePreflight } from "@gram/client/react-query/organizationRemoteSessionIssuerDeletePreflight.js";
 import {
   invalidateAllOrganizationRemoteSessionIssuers,
   useOrganizationRemoteSessionIssuers,
 } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
+import { useRefreshOrganizationRemoteSessionIssuerMetadataMutation } from "@gram/client/react-query/refreshOrganizationRemoteSessionIssuerMetadata.js";
 import {
   Alert,
   Button,
@@ -108,6 +110,47 @@ function RemoteIdentityProvidersOverview() {
     });
   };
 
+  // One endpoint serves both tables: the org-scoped refresh resolves
+  // organizational and project-specific issuers alike.
+  const refreshMetadata =
+    useRefreshOrganizationRemoteSessionIssuerMetadataMutation({
+      onSuccess: async (result) => {
+        await Promise.all([
+          invalidateAllOrganizationRemoteSessionIssuers(queryClient, {
+            refetchType: "all",
+          }),
+          // The detail page reads the singular query, which the list
+          // invalidation above does not cover. Without this, opening the
+          // provider right after refreshing it shows the pre-refresh endpoints.
+          invalidateAllOrganizationRemoteSessionIssuer(queryClient, {
+            refetchType: "all",
+          }),
+        ]);
+        const label = issuerDisplayName(result.issuer);
+        if (result.discoveryWarnings.length > 0) {
+          // The refresh did persist — these describe RFC 8414 deviations worth
+          // an operator's attention, not a failure. Anything severe enough to
+          // distrust the document fails the request instead.
+          toast.warning(`Refreshed ${label} with warnings`, {
+            description: result.discoveryWarnings.join(" "),
+          });
+          return;
+        }
+        toast.success(`Refreshed discoverable metadata for ${label}`);
+      },
+      onError: (error) => {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to refresh metadata",
+        );
+      },
+    });
+
+  const handleRefreshMetadata = (item: OrganizationRemoteSessionIssuer) => {
+    refreshMetadata.mutate({
+      request: { riskIDRequestBody: { id: item.issuer.id } },
+    });
+  };
+
   return (
     <>
       <Page.Section>
@@ -139,6 +182,8 @@ function RemoteIdentityProvidersOverview() {
             onMakeOrganizational={handleMakeOrganizational}
             onMoveToProject={setMoveTarget}
             onConsolidate={setMigrateSource}
+            onRefreshMetadata={handleRefreshMetadata}
+            refreshPending={refreshMetadata.isPending}
           />
         </Page.Section.Body>
       </Page.Section>
@@ -160,6 +205,8 @@ function RemoteIdentityProvidersOverview() {
             onMakeOrganizational={handleMakeOrganizational}
             onMoveToProject={setMoveTarget}
             onConsolidate={setMigrateSource}
+            onRefreshMetadata={handleRefreshMetadata}
+            refreshPending={refreshMetadata.isPending}
           />
         </Page.Section.Body>
       </Page.Section>
@@ -205,6 +252,8 @@ function IssuerTable({
   onMakeOrganizational,
   onMoveToProject,
   onConsolidate,
+  onRefreshMetadata,
+  refreshPending,
 }: {
   items: OrganizationRemoteSessionIssuer[];
   isLoading: boolean;
@@ -214,6 +263,8 @@ function IssuerTable({
   onMakeOrganizational: (item: OrganizationRemoteSessionIssuer) => void;
   onMoveToProject: (item: OrganizationRemoteSessionIssuer) => void;
   onConsolidate: (item: OrganizationRemoteSessionIssuer) => void;
+  onRefreshMetadata: (item: OrganizationRemoteSessionIssuer) => void;
+  refreshPending: boolean;
 }) {
   const orgRoutes = useOrgRoutes();
 
@@ -281,6 +332,8 @@ function IssuerTable({
               onMakeOrganizational={() => onMakeOrganizational(item)}
               onMoveToProject={() => onMoveToProject(item)}
               onConsolidate={() => onConsolidate(item)}
+              onRefreshMetadata={() => onRefreshMetadata(item)}
+              refreshPending={refreshPending}
             />
           </td>
         </DotRow>
@@ -295,12 +348,16 @@ function RowActions({
   onMakeOrganizational,
   onMoveToProject,
   onConsolidate,
+  onRefreshMetadata,
+  refreshPending,
 }: {
   item: OrganizationRemoteSessionIssuer;
   onDelete: () => void;
   onMakeOrganizational: () => void;
   onMoveToProject: () => void;
   onConsolidate: () => void;
+  onRefreshMetadata: () => void;
+  refreshPending: boolean;
 }) {
   const isOrganizational = !item.issuer.projectId;
 
@@ -322,6 +379,13 @@ function RowActions({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={onRefreshMetadata}
+              disabled={refreshPending}
+            >
+              Refresh Discoverable Metadata
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             {isOrganizational ? (
               <DropdownMenuItem onClick={onMoveToProject}>
                 Make project-specific

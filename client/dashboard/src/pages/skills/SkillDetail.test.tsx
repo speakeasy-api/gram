@@ -12,6 +12,8 @@ import SkillDetail from "./SkillDetail";
 const testState = vi.hoisted(() => ({
   queryClient: { id: "query-client" },
   archive: { mutateAsync: vi.fn(), isPending: false },
+  share: { mutateAsync: vi.fn(), isPending: false },
+  unshare: { mutateAsync: vi.fn(), isPending: false },
   navigate: vi.fn(),
   invalidateSkills: vi.fn().mockResolvedValue(undefined),
   invalidateSkill: vi.fn().mockResolvedValue(undefined),
@@ -133,6 +135,12 @@ vi.mock("@gram/client/react-query/skills.js", () => ({
 }));
 vi.mock("@gram/client/react-query/archiveSkill.js", () => ({
   useArchiveSkillMutation: () => testState.archive,
+}));
+vi.mock("@gram/client/react-query/shareSkill.js", () => ({
+  useShareSkillMutation: () => testState.share,
+}));
+vi.mock("@gram/client/react-query/unshareSkill.js", () => ({
+  useUnshareSkillMutation: () => testState.unshare,
 }));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({

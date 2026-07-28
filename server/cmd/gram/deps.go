@@ -46,6 +46,7 @@ import (
 
 	"github.com/speakeasy-api/gram/infra/gen"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/admin"
@@ -779,6 +780,7 @@ func newTelemetryLogger(
 	chDB clickhouse.Conn,
 	logsEnabled telemetry.FeatureChecker,
 	toolIOLogsEnabled telemetry.FeatureChecker,
+	logPublisher *telemetry.LogPublisher,
 ) (*telemetry.Logger, func(context.Context) error) {
 	// #nosec G118 -- this context must be tied to the lifetime of the
 	// application and not cancelled coming out of this function.
@@ -790,7 +792,7 @@ func newTelemetryLogger(
 
 	users := telemetry.NewUserInfoResolver(logger, db, cacheImpl)
 
-	return telemetry.NewLogger(shutdownCtx, logger, tracerProvider, meterProvider, chDB, logsEnabled, toolIOLogsEnabled, users), shutdown
+	return telemetry.NewLogger(shutdownCtx, logger, tracerProvider, meterProvider, chDB, logsEnabled, toolIOLogsEnabled, users, logPublisher), shutdown
 }
 
 func newTriggersApp(
@@ -1020,6 +1022,23 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "customRulesAnalysis", pub: customRulesAnalysis})
 
+	// The telemetry shadow dual-write is best-effort and must stay bounded
+	// during a Pub/Sub outage: cap how long a publish may take and fail fast
+	// at enqueue once the buffer fills, instead of buffering unboundedly.
+	telemetryPublishSettings := pubsub.DefaultPublishSettings
+	telemetryPublishSettings.Timeout = 10 * time.Second
+	telemetryPublishSettings.FlowControlSettings.MaxOutstandingMessages = 10_000
+	telemetryPublishSettings.FlowControlSettings.MaxOutstandingBytes = 128 * 1024 * 1024
+	telemetryPublishSettings.FlowControlSettings.LimitExceededBehavior = pubsub.FlowControlSignalError
+
+	telemetryLogs, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &telemetryv1.LogRecord{},
+		gcp.WithPubSubPublishSettings(&telemetryPublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for telemetry logs: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "telemetryLogs", pub: telemetryLogs})
+
 	shutdown := func(ctx context.Context) error {
 		var err error
 		for _, pub := range pubs {
@@ -1036,5 +1055,6 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		PromptInjectionAnalysis: promptInjectionAnalysis,
 		PromptPolicyAnalysis:    promptPolicyAnalysis,
 		CustomRulesAnalysis:     customRulesAnalysis,
+		TelemetryLogs:           telemetryLogs,
 	}, shutdown, nil
 }

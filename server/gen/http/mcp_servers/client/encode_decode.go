@@ -10,6 +10,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -1475,6 +1476,1208 @@ func DecodeListToolFiltersResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildSetToolMetadataBatchRequest instantiates a HTTP request object with
+// method and path set to call the "mcpServers" service "setToolMetadataBatch"
+// endpoint
+func (c *Client) BuildSetToolMetadataBatchRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetToolMetadataBatchMcpServersPath()}
+	req, err := http.NewRequest("PUT", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpServers", "setToolMetadataBatch", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetToolMetadataBatchRequest returns an encoder for requests sent to
+// the mcpServers setToolMetadataBatch server.
+func EncodeSetToolMetadataBatchRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpservers.SetToolMetadataBatchPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpServers", "setToolMetadataBatch", "*mcpservers.SetToolMetadataBatchPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewSetToolMetadataBatchRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("mcpServers", "setToolMetadataBatch", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetToolMetadataBatchResponse returns a decoder for responses returned
+// by the mcpServers setToolMetadataBatch endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeSetToolMetadataBatchResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetToolMetadataBatchResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetToolMetadataBatchResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadataBatch", err)
+			}
+			err = ValidateSetToolMetadataBatchResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadataBatch", err)
+			}
+			res := NewSetToolMetadataBatchResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetToolMetadataBatchUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadataBatch", err)
+			}
+			err = ValidateSetToolMetadataBatchUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadataBatch", err)
+			}
+			return nil, NewSetToolMetadataBatchUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetToolMetadataBatchForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadataBatch", err)
+			}
+			err = ValidateSetToolMetadataBatchForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadataBatch", err)
+			}
+			return nil, NewSetToolMetadataBatchForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetToolMetadataBatchBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadataBatch", err)
+			}
+			err = ValidateSetToolMetadataBatchBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadataBatch", err)
+			}
+			return nil, NewSetToolMetadataBatchBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetToolMetadataBatchNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadataBatch", err)
+			}
+			err = ValidateSetToolMetadataBatchNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadataBatch", err)
+			}
+			return nil, NewSetToolMetadataBatchNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetToolMetadataBatchConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadataBatch", err)
+			}
+			err = ValidateSetToolMetadataBatchConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadataBatch", err)
+			}
+			return nil, NewSetToolMetadataBatchConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetToolMetadataBatchUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadataBatch", err)
+			}
+			err = ValidateSetToolMetadataBatchUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadataBatch", err)
+			}
+			return nil, NewSetToolMetadataBatchUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetToolMetadataBatchInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadataBatch", err)
+			}
+			err = ValidateSetToolMetadataBatchInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadataBatch", err)
+			}
+			return nil, NewSetToolMetadataBatchInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetToolMetadataBatchInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadataBatch", err)
+				}
+				err = ValidateSetToolMetadataBatchInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadataBatch", err)
+				}
+				return nil, NewSetToolMetadataBatchInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetToolMetadataBatchUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadataBatch", err)
+				}
+				err = ValidateSetToolMetadataBatchUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadataBatch", err)
+				}
+				return nil, NewSetToolMetadataBatchUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpServers", "setToolMetadataBatch", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetToolMetadataBatchGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadataBatch", err)
+			}
+			err = ValidateSetToolMetadataBatchGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadataBatch", err)
+			}
+			return nil, NewSetToolMetadataBatchGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpServers", "setToolMetadataBatch", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildAddToolMetadataBatchRequest instantiates a HTTP request object with
+// method and path set to call the "mcpServers" service "addToolMetadataBatch"
+// endpoint
+func (c *Client) BuildAddToolMetadataBatchRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: AddToolMetadataBatchMcpServersPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpServers", "addToolMetadataBatch", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeAddToolMetadataBatchRequest returns an encoder for requests sent to
+// the mcpServers addToolMetadataBatch server.
+func EncodeAddToolMetadataBatchRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpservers.AddToolMetadataBatchPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpServers", "addToolMetadataBatch", "*mcpservers.AddToolMetadataBatchPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewAddToolMetadataBatchRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("mcpServers", "addToolMetadataBatch", err)
+		}
+		return nil
+	}
+}
+
+// DecodeAddToolMetadataBatchResponse returns a decoder for responses returned
+// by the mcpServers addToolMetadataBatch endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeAddToolMetadataBatchResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeAddToolMetadataBatchResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body AddToolMetadataBatchResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "addToolMetadataBatch", err)
+			}
+			err = ValidateAddToolMetadataBatchResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "addToolMetadataBatch", err)
+			}
+			res := NewAddToolMetadataBatchResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body AddToolMetadataBatchUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "addToolMetadataBatch", err)
+			}
+			err = ValidateAddToolMetadataBatchUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "addToolMetadataBatch", err)
+			}
+			return nil, NewAddToolMetadataBatchUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body AddToolMetadataBatchForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "addToolMetadataBatch", err)
+			}
+			err = ValidateAddToolMetadataBatchForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "addToolMetadataBatch", err)
+			}
+			return nil, NewAddToolMetadataBatchForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body AddToolMetadataBatchBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "addToolMetadataBatch", err)
+			}
+			err = ValidateAddToolMetadataBatchBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "addToolMetadataBatch", err)
+			}
+			return nil, NewAddToolMetadataBatchBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body AddToolMetadataBatchNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "addToolMetadataBatch", err)
+			}
+			err = ValidateAddToolMetadataBatchNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "addToolMetadataBatch", err)
+			}
+			return nil, NewAddToolMetadataBatchNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body AddToolMetadataBatchConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "addToolMetadataBatch", err)
+			}
+			err = ValidateAddToolMetadataBatchConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "addToolMetadataBatch", err)
+			}
+			return nil, NewAddToolMetadataBatchConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body AddToolMetadataBatchUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "addToolMetadataBatch", err)
+			}
+			err = ValidateAddToolMetadataBatchUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "addToolMetadataBatch", err)
+			}
+			return nil, NewAddToolMetadataBatchUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body AddToolMetadataBatchInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "addToolMetadataBatch", err)
+			}
+			err = ValidateAddToolMetadataBatchInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "addToolMetadataBatch", err)
+			}
+			return nil, NewAddToolMetadataBatchInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body AddToolMetadataBatchInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpServers", "addToolMetadataBatch", err)
+				}
+				err = ValidateAddToolMetadataBatchInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpServers", "addToolMetadataBatch", err)
+				}
+				return nil, NewAddToolMetadataBatchInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body AddToolMetadataBatchUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpServers", "addToolMetadataBatch", err)
+				}
+				err = ValidateAddToolMetadataBatchUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpServers", "addToolMetadataBatch", err)
+				}
+				return nil, NewAddToolMetadataBatchUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpServers", "addToolMetadataBatch", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body AddToolMetadataBatchGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "addToolMetadataBatch", err)
+			}
+			err = ValidateAddToolMetadataBatchGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "addToolMetadataBatch", err)
+			}
+			return nil, NewAddToolMetadataBatchGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpServers", "addToolMetadataBatch", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListToolMetadataRequest instantiates a HTTP request object with method
+// and path set to call the "mcpServers" service "listToolMetadata" endpoint
+func (c *Client) BuildListToolMetadataRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListToolMetadataMcpServersPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpServers", "listToolMetadata", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListToolMetadataRequest returns an encoder for requests sent to the
+// mcpServers listToolMetadata server.
+func EncodeListToolMetadataRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpservers.ListToolMetadataPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpServers", "listToolMetadata", "*mcpservers.ListToolMetadataPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("mcp_server_id", p.McpServerID)
+		if p.IncludeDeleted != nil {
+			values.Add("include_deleted", fmt.Sprintf("%v", *p.IncludeDeleted))
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListToolMetadataResponse returns a decoder for responses returned by
+// the mcpServers listToolMetadata endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListToolMetadataResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListToolMetadataResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListToolMetadataResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listToolMetadata", err)
+			}
+			err = ValidateListToolMetadataResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listToolMetadata", err)
+			}
+			res := NewListToolMetadataResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListToolMetadataUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listToolMetadata", err)
+			}
+			err = ValidateListToolMetadataUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listToolMetadata", err)
+			}
+			return nil, NewListToolMetadataUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListToolMetadataForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listToolMetadata", err)
+			}
+			err = ValidateListToolMetadataForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listToolMetadata", err)
+			}
+			return nil, NewListToolMetadataForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListToolMetadataBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listToolMetadata", err)
+			}
+			err = ValidateListToolMetadataBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listToolMetadata", err)
+			}
+			return nil, NewListToolMetadataBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListToolMetadataNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listToolMetadata", err)
+			}
+			err = ValidateListToolMetadataNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listToolMetadata", err)
+			}
+			return nil, NewListToolMetadataNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListToolMetadataConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listToolMetadata", err)
+			}
+			err = ValidateListToolMetadataConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listToolMetadata", err)
+			}
+			return nil, NewListToolMetadataConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListToolMetadataUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listToolMetadata", err)
+			}
+			err = ValidateListToolMetadataUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listToolMetadata", err)
+			}
+			return nil, NewListToolMetadataUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListToolMetadataInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listToolMetadata", err)
+			}
+			err = ValidateListToolMetadataInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listToolMetadata", err)
+			}
+			return nil, NewListToolMetadataInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListToolMetadataInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpServers", "listToolMetadata", err)
+				}
+				err = ValidateListToolMetadataInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpServers", "listToolMetadata", err)
+				}
+				return nil, NewListToolMetadataInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListToolMetadataUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpServers", "listToolMetadata", err)
+				}
+				err = ValidateListToolMetadataUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpServers", "listToolMetadata", err)
+				}
+				return nil, NewListToolMetadataUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpServers", "listToolMetadata", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListToolMetadataGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listToolMetadata", err)
+			}
+			err = ValidateListToolMetadataGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listToolMetadata", err)
+			}
+			return nil, NewListToolMetadataGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpServers", "listToolMetadata", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSetToolMetadataRequest instantiates a HTTP request object with method
+// and path set to call the "mcpServers" service "setToolMetadata" endpoint
+func (c *Client) BuildSetToolMetadataRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetToolMetadataMcpServersPath()}
+	req, err := http.NewRequest("PUT", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpServers", "setToolMetadata", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetToolMetadataRequest returns an encoder for requests sent to the
+// mcpServers setToolMetadata server.
+func EncodeSetToolMetadataRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpservers.SetToolMetadataPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpServers", "setToolMetadata", "*mcpservers.SetToolMetadataPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewSetToolMetadataRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("mcpServers", "setToolMetadata", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetToolMetadataResponse returns a decoder for responses returned by
+// the mcpServers setToolMetadata endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeSetToolMetadataResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetToolMetadataResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetToolMetadataResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadata", err)
+			}
+			err = ValidateSetToolMetadataResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadata", err)
+			}
+			res := NewSetToolMetadataToolMetadataOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetToolMetadataUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadata", err)
+			}
+			err = ValidateSetToolMetadataUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadata", err)
+			}
+			return nil, NewSetToolMetadataUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetToolMetadataForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadata", err)
+			}
+			err = ValidateSetToolMetadataForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadata", err)
+			}
+			return nil, NewSetToolMetadataForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetToolMetadataBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadata", err)
+			}
+			err = ValidateSetToolMetadataBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadata", err)
+			}
+			return nil, NewSetToolMetadataBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetToolMetadataNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadata", err)
+			}
+			err = ValidateSetToolMetadataNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadata", err)
+			}
+			return nil, NewSetToolMetadataNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetToolMetadataConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadata", err)
+			}
+			err = ValidateSetToolMetadataConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadata", err)
+			}
+			return nil, NewSetToolMetadataConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetToolMetadataUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadata", err)
+			}
+			err = ValidateSetToolMetadataUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadata", err)
+			}
+			return nil, NewSetToolMetadataUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetToolMetadataInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadata", err)
+			}
+			err = ValidateSetToolMetadataInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadata", err)
+			}
+			return nil, NewSetToolMetadataInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetToolMetadataInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadata", err)
+				}
+				err = ValidateSetToolMetadataInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadata", err)
+				}
+				return nil, NewSetToolMetadataInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetToolMetadataUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadata", err)
+				}
+				err = ValidateSetToolMetadataUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadata", err)
+				}
+				return nil, NewSetToolMetadataUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpServers", "setToolMetadata", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetToolMetadataGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadata", err)
+			}
+			err = ValidateSetToolMetadataGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadata", err)
+			}
+			return nil, NewSetToolMetadataGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpServers", "setToolMetadata", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDeleteToolMetadataRequest instantiates a HTTP request object with
+// method and path set to call the "mcpServers" service "deleteToolMetadata"
+// endpoint
+func (c *Client) BuildDeleteToolMetadataRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteToolMetadataMcpServersPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpServers", "deleteToolMetadata", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDeleteToolMetadataRequest returns an encoder for requests sent to the
+// mcpServers deleteToolMetadata server.
+func EncodeDeleteToolMetadataRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpservers.DeleteToolMetadataPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpServers", "deleteToolMetadata", "*mcpservers.DeleteToolMetadataPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("mcp_server_id", p.McpServerID)
+		values.Add("tool_name", p.ToolName)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeDeleteToolMetadataResponse returns a decoder for responses returned by
+// the mcpServers deleteToolMetadata endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeDeleteToolMetadataResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDeleteToolMetadataResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DeleteToolMetadataUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "deleteToolMetadata", err)
+			}
+			err = ValidateDeleteToolMetadataUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "deleteToolMetadata", err)
+			}
+			return nil, NewDeleteToolMetadataUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DeleteToolMetadataForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "deleteToolMetadata", err)
+			}
+			err = ValidateDeleteToolMetadataForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "deleteToolMetadata", err)
+			}
+			return nil, NewDeleteToolMetadataForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DeleteToolMetadataBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "deleteToolMetadata", err)
+			}
+			err = ValidateDeleteToolMetadataBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "deleteToolMetadata", err)
+			}
+			return nil, NewDeleteToolMetadataBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DeleteToolMetadataNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "deleteToolMetadata", err)
+			}
+			err = ValidateDeleteToolMetadataNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "deleteToolMetadata", err)
+			}
+			return nil, NewDeleteToolMetadataNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DeleteToolMetadataConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "deleteToolMetadata", err)
+			}
+			err = ValidateDeleteToolMetadataConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "deleteToolMetadata", err)
+			}
+			return nil, NewDeleteToolMetadataConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DeleteToolMetadataUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "deleteToolMetadata", err)
+			}
+			err = ValidateDeleteToolMetadataUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "deleteToolMetadata", err)
+			}
+			return nil, NewDeleteToolMetadataUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DeleteToolMetadataInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "deleteToolMetadata", err)
+			}
+			err = ValidateDeleteToolMetadataInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "deleteToolMetadata", err)
+			}
+			return nil, NewDeleteToolMetadataInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DeleteToolMetadataInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpServers", "deleteToolMetadata", err)
+				}
+				err = ValidateDeleteToolMetadataInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpServers", "deleteToolMetadata", err)
+				}
+				return nil, NewDeleteToolMetadataInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DeleteToolMetadataUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpServers", "deleteToolMetadata", err)
+				}
+				err = ValidateDeleteToolMetadataUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpServers", "deleteToolMetadata", err)
+				}
+				return nil, NewDeleteToolMetadataUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpServers", "deleteToolMetadata", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DeleteToolMetadataGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "deleteToolMetadata", err)
+			}
+			err = ValidateDeleteToolMetadataGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "deleteToolMetadata", err)
+			}
+			return nil, NewDeleteToolMetadataGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpServers", "deleteToolMetadata", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildDeleteMcpServerRequest instantiates a HTTP request object with method
 // and path set to call the "mcpServers" service "deleteMcpServer" endpoint
 func (c *Client) BuildDeleteMcpServerRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1751,6 +2954,57 @@ func unmarshalToolFilterToolResponseBodyToTypesToolFilterTool(v *ToolFilterToolR
 	res := &types.ToolFilterTool{
 		ToolUrn: *v.ToolUrn,
 		Name:    *v.Name,
+	}
+
+	return res
+}
+
+// marshalMcpserversToolMetadataFormToToolMetadataFormRequestBody builds a
+// value of type *ToolMetadataFormRequestBody from a value of type
+// *mcpservers.ToolMetadataForm.
+func marshalMcpserversToolMetadataFormToToolMetadataFormRequestBody(v *mcpservers.ToolMetadataForm) *ToolMetadataFormRequestBody {
+	res := &ToolMetadataFormRequestBody{
+		ToolName:        v.ToolName,
+		Title:           v.Title,
+		ReadOnlyHint:    v.ReadOnlyHint,
+		DestructiveHint: v.DestructiveHint,
+		IdempotentHint:  v.IdempotentHint,
+		OpenWorldHint:   v.OpenWorldHint,
+	}
+
+	return res
+}
+
+// marshalToolMetadataFormRequestBodyToMcpserversToolMetadataForm builds a
+// value of type *mcpservers.ToolMetadataForm from a value of type
+// *ToolMetadataFormRequestBody.
+func marshalToolMetadataFormRequestBodyToMcpserversToolMetadataForm(v *ToolMetadataFormRequestBody) *mcpservers.ToolMetadataForm {
+	res := &mcpservers.ToolMetadataForm{
+		ToolName:        v.ToolName,
+		Title:           v.Title,
+		ReadOnlyHint:    v.ReadOnlyHint,
+		DestructiveHint: v.DestructiveHint,
+		IdempotentHint:  v.IdempotentHint,
+		OpenWorldHint:   v.OpenWorldHint,
+	}
+
+	return res
+}
+
+// unmarshalToolMetadataResponseBodyToTypesToolMetadata builds a value of type
+// *types.ToolMetadata from a value of type *ToolMetadataResponseBody.
+func unmarshalToolMetadataResponseBodyToTypesToolMetadata(v *ToolMetadataResponseBody) *types.ToolMetadata {
+	res := &types.ToolMetadata{
+		McpServerID:     *v.McpServerID,
+		ToolName:        *v.ToolName,
+		Title:           v.Title,
+		ReadOnlyHint:    v.ReadOnlyHint,
+		DestructiveHint: v.DestructiveHint,
+		IdempotentHint:  v.IdempotentHint,
+		OpenWorldHint:   v.OpenWorldHint,
+		CreatedAt:       *v.CreatedAt,
+		UpdatedAt:       *v.UpdatedAt,
+		DeletedAt:       v.DeletedAt,
 	}
 
 	return res

@@ -409,16 +409,36 @@ func isReservedAssistantAdapter(adapter string) bool {
 
 func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, timestamp time.Time) (string, string) {
 	event := canonicalHookEvent(payload, authCtx, actor, timestamp)
-	switch strings.TrimSpace(payload.Event.Type) {
+	eventType := strings.TrimSpace(payload.Event.Type)
+
+	// Spend gate runs before any risk-policy evaluation. v1 enforcement
+	// surface is Claude only; other adapters pass through untouched.
+	if strings.TrimSpace(payload.Source.Adapter) == "claude" && (eventType == "prompt.submitted" || eventType == "tool.requested") {
+		if block := s.checkSpendGate(ctx, event); block != nil {
+			if eventType == "tool.requested" {
+				auditReason := spendBlockReason("tool call", block)
+				return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, canonicalToolName(payload), "", auditReason)
+			}
+			auditReason := spendBlockReason("prompt", block)
+			return auditReason, auditReason
+		}
+	}
+
+	switch eventType {
 	case "prompt.submitted":
 		ev := hookevents.NewUserPromptSubmit(event, hookevents.UserPromptSubmitParams{
 			Prompt: canonicalPromptText(payload),
 		})
-		// A warn (challenge) is never blocked here: the canonical ingest
-		// transport has no native confirmation primitive, and hard-denying
-		// would clobber the ask a dedicated ask-capable hook (Claude
-		// PreToolUse) surfaces for the same event. Defer to that transport.
-		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
+		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
+			if scanResult.Action == "warn" {
+				if s.warnAcknowledged(ctx, ev.Event, scanResult, "") {
+					return "", ""
+				}
+				if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ""); ok {
+					auditReason := fmt.Sprintf("Speakeasy challenged this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+					return auditReason, userReason
+				}
+			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			return auditReason, renderUserBlockReason(scanResult.UserMessage, auditReason)
 		}
@@ -431,7 +451,19 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				ToolInput:      toolInput,
 				PermissionType: permissionType,
 			})
-			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
+			// An acknowledged permission warn clears only this risk challenge; it
+			// must still fall through to the MCP/shadow-MCP guard below, never
+			// short-circuit the tool call (mirrors the Claude PreToolUse handler).
+			// So exclude acknowledged warns from the block condition rather than
+			// returning early on them.
+			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil &&
+				(scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, toolName)) {
+				if scanResult.Action == "warn" {
+					if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, toolName); ok {
+						auditReason := fmt.Sprintf("Speakeasy challenged this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+						return auditReason, userReason
+					}
+				}
 				auditReason := fmt.Sprintf("Speakeasy blocked this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 				userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 				return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, toolName, scanResult.PolicyID, userReason)
@@ -442,7 +474,16 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				ToolName:  toolName,
 				ToolInput: toolInput,
 			})
-			if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
+			if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil {
+				if scanResult.Action == "warn" {
+					if s.warnAcknowledged(ctx, ev.Event, scanResult, toolName) {
+						return s.evaluateCanonicalShadowMCP(ctx, authCtx, actor, payload, toolName, toolInput)
+					}
+					if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, toolName); ok {
+						auditReason := fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+						return auditReason, userReason
+					}
+				}
 				auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 				userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 				return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, toolName, scanResult.PolicyID, userReason)
@@ -453,8 +494,16 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 			ToolName:  toolName,
 			ToolInput: toolInput,
 		})
-		// warn defers to the ask-capable transport (see prompt.submitted note).
-		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
+		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
+			if scanResult.Action == "warn" {
+				if s.warnAcknowledged(ctx, ev.Event, scanResult, toolName) {
+					return "", ""
+				}
+				if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, toolName); ok {
+					auditReason := fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+					return auditReason, userReason
+				}
+			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, toolName, scanResult.PolicyID, userReason)
@@ -624,6 +673,12 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	// hook row and the chat persistence below stamp the same AI-account
 	// attribution.
 	metadata := s.canonicalSessionMetadata(ctx, payload, authCtx, actor)
+	// Resolve the product surface once per event: the OTEL-cached service.name
+	// wins ("cowork" vs "claude-code"), the SessionStart variant fills in for
+	// sessions whose OTEL stream hasn't arrived, and non-Claude adapters pass
+	// through unchanged. Telemetry hook_source and the chat message source both
+	// stamp this value.
+	hookSource := conv.Default(s.claudeSessionSurface(ctx, &metadata), strings.TrimSpace(payload.Source.Adapter))
 	// Hostname counts as cacheable identity: a session ingested with an
 	// org-scoped key and no self-reported email carries nothing else, and the
 	// OTEL path needs the cached hostname to stamp Claude cost rows so the
@@ -643,8 +698,8 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 			)
 		}
 	}
-	s.writeCanonicalTelemetry(ctx, payload, authCtx, &metadata, timestamp, blockReason)
-	if err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata, timestamp); err != nil {
+	s.writeCanonicalTelemetry(ctx, payload, authCtx, &metadata, hookSource, timestamp, blockReason)
+	if err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata, hookSource, timestamp); err != nil {
 		s.logger.WarnContext(ctx, "failed to persist canonical hook conversation event",
 			attr.SlogEvent("hooks_ingest_chat_persist_failed"),
 			attr.SlogError(err),
@@ -693,6 +748,12 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 
 	if cached, err := s.getSessionMetadata(ctx, metadata.SessionID); err == nil &&
 		cached.GramOrgID == metadata.GramOrgID && cached.ProjectID == metadata.ProjectID {
+		// Surface-specificity merge: the OTEL path caches "cowork" from the
+		// resource service.name, which must survive this event's re-cache —
+		// cowork ships the same "claude-code-desktop" adapter slug as Claude
+		// Code Desktop, so the adapter alone can never downgrade it. The
+		// adapter in turn beats a cached ambiguous "claude-code".
+		metadata.ServiceName = preferClaudeServiceName(metadata.ServiceName, cached.ServiceName)
 		metadata.Provider = cached.Provider
 		metadata.ExternalOrgID = cached.ExternalOrgID
 		metadata.ExternalAccountUUID = cached.ExternalAccountUUID
@@ -719,7 +780,7 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 	return metadata
 }
 
-func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, timestamp time.Time, blockReason string) {
+func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, timestamp time.Time, blockReason string) {
 	if s.telemetryLogger == nil {
 		return
 	}
@@ -730,7 +791,7 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 		toolName = hookEventName
 	}
 
-	attrs := hookTelemetryBaseAttrs(payload, authCtx, hookEventName)
+	attrs := hookTelemetryBaseAttrs(payload, authCtx, hookEventName, hookSource)
 	if blockReason != "" {
 		attrs[attr.HookBlockReasonKey] = blockReason
 	}
@@ -803,7 +864,7 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 	// dashboards see the same skill.activated vocabulary as Claude senders.
 	// A policy-blocked event never ran, so it is not an activation.
 	if skill != "" && !isExplicitSkillActivation(payload) && blockReason == "" {
-		attrs = hookTelemetryBaseAttrs(payload, authCtx, eventTypeSkillActivated)
+		attrs = hookTelemetryBaseAttrs(payload, authCtx, eventTypeSkillActivated, hookSource)
 		// Skill counts aggregate at trace level (trace_summaries), and its MV
 		// resolves tool_name/skill_name with any(): sharing a trace with the
 		// underlying tool or prompt rows lets a non-Skill sibling win the
@@ -822,11 +883,11 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 // hookTelemetryBaseAttrs builds the attributes shared by every telemetry row
 // derived from one ingested hook event. Each row gets its own span id; the
 // trace id is payload-derived so sibling rows stay on one trace.
-func hookTelemetryBaseAttrs(payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, hookEventName string) map[attr.Key]any {
+func hookTelemetryBaseAttrs(payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, hookEventName string, hookSource string) map[attr.Key]any {
 	attrs := map[attr.Key]any{
 		attr.EventSourceKey:    string(telemetry.EventSourceHook),
 		attr.HookEventKey:      hookEventName,
-		attr.HookSourceKey:     strings.TrimSpace(payload.Source.Adapter),
+		attr.HookSourceKey:     hookSource,
 		attr.ProjectIDKey:      authCtx.ProjectID.String(),
 		attr.OrganizationIDKey: authCtx.ActiveOrganizationID,
 		attr.SpanIDKey:         generateSpanID(),
@@ -932,7 +993,7 @@ func telemetryHookEventName(payload *gen.IngestPayload) string {
 // so the chat row, telemetry, and enforcement carry the exact same
 // server-resolved time for one event — a recomputed fallback or clamp would
 // drift by the handler's processing latency.
-func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, occurredAt time.Time) error {
+func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, occurredAt time.Time) error {
 	sessionID := canonicalSessionID(payload)
 	if sessionID == "" || authCtx.ProjectID == nil {
 		return nil
@@ -959,7 +1020,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 			Origin:           conv.ToPGTextEmpty(""),
 			UserAgent:        conv.ToPGTextEmpty(""),
 			IpAddress:        conv.ToPGTextEmpty(""),
-			Source:           conv.ToPGTextEmpty(strings.TrimSpace(payload.Source.Adapter)),
+			Source:           conv.ToPGTextEmpty(hookSource),
 			ContentHash:      nil,
 			Generation:       0,
 			// Downtime backlog redelivered from a device's offline spool:
@@ -1039,14 +1100,40 @@ func canonicalToolCallsJSON(payload *gen.IngestPayload) ([]byte, error) {
 	return toolCallsJSON, nil
 }
 
+// canonicalChatToolCallID falls back to the shared per-(session, tool) key
+// when the sender supplied no per-call id, matching canonicalTraceID's
+// fallback: hashing the recorded id must reproduce the trace id, or the
+// shadow-MCP provenance lookup can never join the recorded call to its hook
+// log (DNO-604).
 func canonicalChatToolCallID(payload *gen.IngestPayload) string {
 	if id := canonicalToolCallID(payload); id != "" {
 		return id
+	}
+	if key := canonicalSyntheticToolCallID(payload); key != "" {
+		return key
 	}
 	if name := canonicalToolName(payload); name != "" {
 		return name
 	}
 	return canonicalTraceID(payload)
+}
+
+// canonicalSyntheticToolCallID returns the shared per-(session, tool) fallback
+// key for tool events only. canonicalTraceID runs for every ingested event
+// (hookTelemetryBaseAttrs), and the schema permits tool_call data on any
+// event, but only tool events have a recorded chat side to join — a
+// skill.activated or prompt row carrying a tool name must keep its
+// session-level trace instead of migrating into the tool's trace.
+func canonicalSyntheticToolCallID(payload *gen.IngestPayload) string {
+	if payload == nil || payload.Event == nil {
+		return ""
+	}
+	switch strings.TrimSpace(payload.Event.Type) {
+	case "tool.requested", "tool.completed", "tool.failed":
+		return syntheticToolCallID(canonicalSessionID(payload), canonicalToolName(payload))
+	default:
+		return ""
+	}
 }
 
 func canonicalToolResultContent(payload *gen.IngestPayload) string {
@@ -1152,6 +1239,11 @@ func canonicalToolCallID(payload *gen.IngestPayload) string {
 func canonicalTraceID(payload *gen.IngestPayload) string {
 	if id := canonicalToolCallID(payload); id != "" {
 		return hashToolCallIDToTraceID(id)
+	}
+	// Tool events without a per-call id trace per (session, tool), keeping the
+	// trace id derivable from the id canonicalChatToolCallID records (DNO-604).
+	if key := canonicalSyntheticToolCallID(payload); key != "" {
+		return hashToolCallIDToTraceID(key)
 	}
 	if sessionID := canonicalSessionID(payload); sessionID != "" {
 		return hashToolCallIDToTraceID(sessionID)

@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
@@ -123,6 +124,10 @@ type Service struct {
 	// the realtime scanner uses. Optional: when nil the eval endpoint returns
 	// un-matched verdicts (judge unavailable).
 	promptJudge promptpolicy.Evaluator
+	// findingsCH reads the ClickHouse risk_findings table for the overview
+	// endpoint when FlagRiskOverviewFromClickHouse is on for the org.
+	// Optional: when nil the overview always serves from Postgres.
+	findingsCH *chrepo.Queries
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -162,6 +167,7 @@ func NewObserver(
 		celEng:                       nil,
 		builtinPresets:               nil,
 		promptJudge:                  nil,
+		findingsCH:                   nil,
 	}
 }
 
@@ -187,6 +193,7 @@ func NewService(
 	promptJudge promptpolicy.Evaluator,
 	reconcileShadowMCPPolicyURLs ShadowMCPPolicyURLReconciler,
 	shadowMCPInventoryURLLookup ShadowMCPInventoryURLLookup,
+	findingsCH *chrepo.Queries,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -214,6 +221,7 @@ func NewService(
 		celEng:                       celEng,
 		builtinPresets:               builtinPresets,
 		promptJudge:                  promptJudge,
+		findingsCH:                   findingsCH,
 	}
 }
 
@@ -512,28 +520,6 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 		return &gen.ListRiskPoliciesResult{Policies: []*types.RiskPolicy{}}, nil
 	}
 
-	// Enrichment is resolved once for the whole set rather than per policy (the
-	// old N+1). totalMessages is project-wide and identical for every policy;
-	// analyzed counts and audience grants are batched into one query each and
-	// looked up per row below.
-	totalMessages, err := s.repo.CountTotalMessages(ctx, uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true})
-	if err != nil {
-		totalMessages = 0
-	}
-
-	// Analyzed counts are optional status enrichment, so a failure degrades to
-	// zero (pending = total) rather than failing the whole list — matching the
-	// tolerance of the single-policy CountAnalyzedMessages path.
-	analyzedByPolicy := map[analyzedMessagesKey]int64{}
-	if analyzedRows, err := s.repo.CountAnalyzedMessagesByProject(ctx, *authCtx.ProjectID); err != nil {
-		s.logger.WarnContext(ctx, "count analyzed messages for risk policy list failed", attr.SlogError(err))
-	} else {
-		analyzedByPolicy = make(map[analyzedMessagesKey]int64, len(analyzedRows))
-		for _, r := range analyzedRows {
-			analyzedByPolicy[analyzedMessagesKey{policyID: r.RiskPolicyID, version: r.RiskPolicyVersion}] = r.AnalyzedMessages
-		}
-	}
-
 	policyIDs := make([]string, 0, len(rows))
 	for _, row := range rows {
 		policyIDs = append(policyIDs, row.ID.String())
@@ -543,20 +529,16 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 		return nil, oops.E(oops.CodeUnexpected, err, "load risk policy audiences").LogError(ctx, s.logger)
 	}
 
+	// Message counts are intentionally omitted here: no list consumer reads
+	// them, and computing them re-aggregates every risk_results row for the
+	// project on each call. Progress lives on the single-policy paths
+	// (riskPoliciesStatus, getRiskPolicy).
 	policies := make([]*types.RiskPolicy, 0, len(rows))
 	for _, row := range rows {
-		analyzedMessages := analyzedByPolicy[analyzedMessagesKey{policyID: row.ID, version: row.Version}]
-		policies = append(policies, buildRiskPolicyType(row, totalMessages, analyzedMessages, audienceByPolicy[row.ID.String()]))
+		policies = append(policies, buildRiskPolicyType(row, nil, nil, audienceByPolicy[row.ID.String()]))
 	}
 
 	return &gen.ListRiskPoliciesResult{Policies: policies}, nil
-}
-
-// analyzedMessagesKey keys the batched analyzed-message counts by the
-// (policy, version) pair they were aggregated on.
-type analyzedMessagesKey struct {
-	policyID uuid.UUID
-	version  int64
 }
 
 // ListBuiltinExclusions returns the built-in exclusion library grouped by
@@ -1139,7 +1121,7 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 // Spans aren't given a redacted counterpart here because nothing on this
 // (non-agent) redacted path renders them.
 func redactResultMatchInPlace(r *types.RiskResult, orgID string) {
-	matchRedacted := redactMatch(r.Source, r.Match, orgID)
+	matchRedacted := redactMatch(r.Source, conv.PtrValOrEmpty(r.RuleID, ""), r.Match, orgID)
 	r.MatchRedacted = &matchRedacted
 	r.Match = nil
 	r.Spans = nil
@@ -1361,7 +1343,8 @@ func (s *Service) UnmaskRiskResult(ctx context.Context, payload *gen.UnmaskRiskR
 // secret across organizations even if some future code path widens the
 // surface beyond org-scoped access.
 func redactRiskResult(r *types.RiskResult, orgID string) *types.RiskResultRedacted {
-	matchRedacted := redactMatch(r.Source, r.Match, orgID)
+	ruleID := conv.PtrValOrEmpty(r.RuleID, "")
+	matchRedacted := redactMatch(r.Source, ruleID, r.Match, orgID)
 
 	var spansRedacted []*types.RiskSpanRedacted
 	if len(r.Spans) > 0 {
@@ -1369,7 +1352,7 @@ func redactRiskResult(r *types.RiskResult, orgID string) *types.RiskResultRedact
 		for _, sp := range r.Spans {
 			match := sp.Match
 			spansRedacted = append(spansRedacted, &types.RiskSpanRedacted{
-				MatchRedacted: redactMatch(r.Source, &match, orgID),
+				MatchRedacted: redactMatch(r.Source, ruleID, &match, orgID),
 				Field:         sp.Field,
 				Path:          sp.Path,
 				PositionKnown: sp.StartPos != nil && sp.EndPos != nil,
@@ -1424,14 +1407,25 @@ func RedactMatchAll(match string, orgID string) string {
 	return fmt.Sprintf("<redacted len=%d sha=%s>", len(match), hex.EncodeToString(sum[:4]))
 }
 
-// redactMatch is the API-facing redaction: like RedactMatchAll, except
-// shadow_mcp and account_identity findings pass through verbatim — an MCP server
-// URL or an account email IS the report, not a secret.
-func redactMatch(source string, match *string, orgID string) string {
+// redactMatch is the API-facing redaction: like RedactMatchAll, except certain
+// findings pass through verbatim because the matched value is an identifier, not
+// a secret:
+//   - shadow_mcp / account_identity: an MCP server URL or account email IS the
+//     report.
+//   - an AWS access key id (the gitleaks aws-access-token rule): an identifier,
+//     non-sensitive (AWS logs it in CloudTrail). Its paired secret access key
+//     and session token still redact like any other secret.
+func redactMatch(source, ruleID string, match *string, orgID string) string {
 	if match == nil || *match == "" {
 		return "<redacted len=0>"
 	}
 	if source == shadowmcp.SourceShadowMCP || source == ra.SourceAccountIdentity {
+		return *match
+	}
+	// Scoped to the gitleaks source so only the built-in aws-access-token rule
+	// gets the carve-out; another source reusing this rule id must not bypass
+	// redaction if its match is a secret.
+	if source == gitleaks.Source && ruleID == gitleaks.AccessKeyIDRuleID {
 		return *match
 	}
 	return RedactMatchAll(*match, orgID)
@@ -1496,6 +1490,10 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 	from, to, err := resolveRiskOverviewWindow(payload.From, payload.To)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid overview window").LogError(ctx, s.logger)
+	}
+
+	if s.overviewFromClickHouse(ctx, authCtx) {
+		return s.getRiskOverviewFromClickHouse(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, from, to)
 	}
 
 	window := riskOverviewWindowParams(from, to)
@@ -1640,13 +1638,19 @@ func riskOverviewWindowParams(from, to time.Time) riskOverviewWindow {
 }
 
 func riskOverviewTopCategories(rows []repo.ListRiskOverviewTimeSeriesFindingsRow, limit int) []*gen.RiskOverviewCategory {
-	if limit <= 0 {
-		return nil
-	}
-
 	counts := make(map[string]int64)
 	for _, row := range rows {
 		counts[row.Category] += row.Findings
+	}
+
+	return topCategoriesFromCounts(counts, limit)
+}
+
+// topCategoriesFromCounts is the shared tail of the Postgres and ClickHouse
+// top-categories derivations: rank per-category totals, drop empty ones.
+func topCategoriesFromCounts(counts map[string]int64, limit int) []*gen.RiskOverviewCategory {
+	if limit <= 0 {
+		return nil
 	}
 
 	categories := make([]*gen.RiskOverviewCategory, 0, len(counts))
@@ -3281,15 +3285,17 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		return nil, fmt.Errorf("load risk policy audience: %w", err)
 	}
 
-	return buildRiskPolicyType(row, totalMessages, analyzedMessages, audiencePrincipalURNs), nil
+	return buildRiskPolicyType(row, &totalMessages, &analyzedMessages, audiencePrincipalURNs), nil
 }
 
 // buildRiskPolicyType assembles the API type from a policy row and its already
-// resolved message counts and audience. The enrichment queries are the caller's
-// responsibility so batched paths (ListRiskPolicies) can resolve them once for
-// the whole set instead of per policy.
-func buildRiskPolicyType(row repo.RiskPolicy, totalMessages, analyzedMessages int64, audiencePrincipalURNs []string) *types.RiskPolicy {
-	pendingMessages := max(totalMessages-analyzedMessages, 0)
+// resolved message counts and audience. Counts are optional enrichment: nil
+// (the list path) omits them from the response rather than reporting zeros.
+func buildRiskPolicyType(row repo.RiskPolicy, totalMessages, analyzedMessages *int64, audiencePrincipalURNs []string) *types.RiskPolicy {
+	var pendingMessages *int64
+	if totalMessages != nil && analyzedMessages != nil {
+		pendingMessages = new(max(*totalMessages-*analyzedMessages, 0))
+	}
 
 	return &types.RiskPolicy{
 		ID:                     row.ID.String(),
@@ -3356,8 +3362,8 @@ func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []
 		Version:                row.Version,
 		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages:        -1,
-		TotalMessages:          -1,
+		PendingMessages:        nil,
+		TotalMessages:          nil,
 	}
 }
 

@@ -60,7 +60,8 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     provider String MATERIALIZED toString(attributes.gram.provider) COMMENT 'AI provider for the session account (e.g. anthropic, openai). Set by ingest (materialized from attributes.gram.provider).',
     external_org_id String MATERIALIZED toString(attributes.gram.external_org_id) COMMENT 'Provider organization id for the account the user was logged into on-device (e.g. Claude organization.id). Distinct from the Gram org. Personal-account tracking discriminator. Normalized by ingest (materialized from attributes.gram.external_org_id).',
     account_type String MATERIALIZED toString(attributes.gram.account_type) COMMENT 'team (company/enterprise account) or personal (individual account). Set by ingest. Empty until classified (materialized from attributes.gram.account_type).',
-    billing_mode String MATERIALIZED toString(attributes.gram.billing_mode) COMMENT 'How the account is billed: metered (pay-per-token, cost is real spend) | flat_rate (subscription seat, cost is an estimate) | unknown | empty. Resolved by ingest from admin-declared config (materialized from attributes.gram.billing_mode).'
+    billing_mode String MATERIALIZED toString(attributes.gram.billing_mode) COMMENT 'How the account is billed: metered (pay-per-token, cost is real spend) | flat_rate (subscription seat, cost is an estimate) | unknown | empty. Resolved by ingest from admin-declared config (materialized from attributes.gram.billing_mode).',
+    event_urn String MATERIALIZED toString(attributes.gram.event.urn) COMMENT 'Canonical event identity in the form urn:telemetry:<origin>:<kind>:<type> where origin is the observation channel (provider_otel | provider_api | agent_hook | gram_service | unknown), kind is the signal shape (log | metric) and type is the producer event type lowercased. Stamped by telemetry.Logger. Empty on rows written before the column existed (materialized from attributes.gram.event.urn).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)
@@ -100,6 +101,10 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_external_org_id ON telemetry_l
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_account_type ON telemetry_logs (account_type) TYPE set(0) GRANULARITY 4;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_provider ON telemetry_logs (provider) TYPE set(0) GRANULARITY 4;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_billing_mode ON telemetry_logs (billing_mode) TYPE set(0) GRANULARITY 4;
+-- set index (not bloom_filter): event_urn is low-cardinality and its primary
+-- access pattern is prefix filtering (startsWith), which set indexes can
+-- evaluate and bloom filters cannot.
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_event_urn ON telemetry_logs (event_urn) TYPE set(0) GRANULARITY 4;
 
 -- telemetry_logs_staging parks Claude OTEL api_request rows whose inline MCP
 -- attribution was redacted (mcp_server.name = 'custom') until the
@@ -543,7 +548,18 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
     -- append), declared last in the table to match the MV's positional SELECT.
     -- Lets the user breakdown fall back to the device when a session carries
     -- no email (company-credential sessions emit no user identity).
-    hook_hostname String
+    hook_hostname String,
+
+    -- Work-units efficiency measures, fed exclusively by the synthetic
+    -- chat_analysis:work_units:score rows the chat analysis publisher emits
+    -- once per scored session. scored_cost and scored_tokens restate the
+    -- scored session's totals on the score row itself so efficiency ratios
+    -- (cost or tokens per unit) divide spend of SCORED sessions only --
+    -- dividing the group's whole spend would overstate cost per unit whenever
+    -- analysis coverage is partial (it is daily-capped).
+    total_work_units AggregateFunction(sumIf, Float64, UInt8),
+    scored_cost AggregateFunction(sumIf, Float64, UInt8),
+    scored_tokens AggregateFunction(sumIf, Int64, UInt8)
 ) ENGINE = AggregatingMergeTree
 -- Primary key stays the original 12 dimensions; account_type, provider,
 -- billing_mode, attribution dimensions, and generation are appended to ORDER BY
@@ -566,10 +582,11 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS attribute_metrics_summaries_mv TO attribu
 -- admitted. Claude Code and Codex data comes exclusively from their raw OTEL
 -- log streams (Claude api_request / Codex response.completed rows for usage,
 -- Claude tool_result rows for tool calls); Cursor comes from its
--- usage-metrics rows; Codex/Cursor tool calls arrive as completed tool-call
--- hook rows; Claude Chat (web/desktop) usage and cost arrive as
--- claude_chat:usage / claude_chat:cost rows polled from the Admin Analytics
--- API. Everything else —
+-- usage-metrics rows; opencode comes from its unified-ingest
+-- assistant.responded rows; Codex/Cursor/opencode tool calls arrive as
+-- completed tool-call hook rows; Claude Chat (web/desktop) usage and cost
+-- arrive as claude_chat:usage / claude_chat:cost rows polled from the Admin
+-- Analytics API. Everything else —
 -- Gram-hosted chat completions, claude-code:usage metric rows (which
 -- duplicate api_request usage), Claude hook rows, MCP hook rows — is
 -- excluded so cost attribution never mixes sources.
@@ -630,16 +647,30 @@ WITH
     -- kept so in-flight rows from pods that predate the Codex raw-stream
     -- cutover still land; no new rows carry it.
     (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
+    -- opencode reports per-turn tokens and cost on its unified-ingest
+    -- assistant.responded rows, under the canonical gen_ai.usage.* keys that
+    -- every fallback branch below already reads. It has no OTEL stream and the
+    -- unified ingest path stamps no gram_urn, so provenance anchors on
+    -- hook_source instead. The AfterAgentResponse event guard scopes this to the
+    -- turn-closing row: a session's other opencode rows (thoughts,
+    -- usage.reported, tool calls, session lifecycle) are excluded even if they
+    -- carry gen_ai.usage.* fields, so usage is counted once per turn. Cost is
+    -- part of the guard so a cost-only turn (no token fields) still counts.
+    (
+        toString(attributes.gram.hook.source) = 'opencode'
+        AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
+        AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
+    ) AS is_opencode_usage_row,
     -- Rows that carry token usage: the sumIf guard for every token/cost sum.
-    (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row) AS is_usage_row,
-    -- Codex/Cursor tool calls arrive as hook rows, one
+    (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row) AS is_usage_row,
+    -- Codex/Cursor/opencode tool calls arrive as hook rows, one
     -- PostToolUse/PostToolUseFailure row per completed call (Codex raw OTEL
     -- tool events are deliberately not counted — hook rows stay the sole
     -- source). The hook.event guard is required: every call also emits a
     -- PreToolUse row with the same gram.tool.name. Provider names (the
     -- usage-metrics rows' tool.name) are excluded — they are not tool calls.
     (
-        toString(attributes.gram.hook.source) IN ('codex', 'cursor')
+        toString(attributes.gram.hook.source) IN ('codex', 'cursor', 'opencode')
         AND toString(attributes.gram.tool.name) != ''
         AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
         AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
@@ -653,7 +684,13 @@ WITH
         toString(attributes.tool_use_id) != '', toString(attributes.tool_use_id),
         toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id),
         toString(id)
-    ) AS tool_call_dedup_id
+    ) AS tool_call_dedup_id,
+    -- Synthetic per-session work-units score rows emitted by the chat
+    -- analysis publisher (one per scored chat, stamped with the session's
+    -- user identity, model, source, and account type). They carry no token
+    -- or cost usage of their own -- every usage guard above excludes them --
+    -- and feed only the work-units measures at the end of the SELECT.
+    (gram_urn = 'chat_analysis:work_units:score') AS is_work_units_score
 SELECT
     gram_project_id,
     toStartOfHour(fromUnixTimestamp64Nano(time_unix_nano)) AS time_bucket,
@@ -732,17 +769,22 @@ SELECT
     toUInt8(1) AS is_active,
 
     -- Device hostname: on hook rows directly and on Claude OTEL rows via
-    -- session-cache propagation. Declared last to match the table column
-    -- order (positional insert).
-    toString(attributes.gram.hook.hostname) AS hook_hostname
+    -- session-cache propagation.
+    toString(attributes.gram.hook.hostname) AS hook_hostname,
+
+    -- Work-units efficiency measures, fed only by the synthetic score rows.
+    -- Declared last to match the table column order (positional insert).
+    sumIfState(toFloat64OrZero(toString(attributes.gram.chat_analysis.work_units)), is_work_units_score) AS total_work_units,
+    sumIfState(toFloat64OrZero(toString(attributes.gram.chat_analysis.scored_cost)), is_work_units_score) AS scored_cost,
+    sumIfState(toInt64OrZero(toString(attributes.gram.chat_analysis.scored_tokens)), is_work_units_score) AS scored_tokens
 FROM telemetry_logs
 -- Admit only the observed agent surfaces: Claude OTEL api_request/tool_result
 -- rows, Codex OTEL response.completed usage rows, Cursor/Claude-Chat usage
--- and cost rows, and Codex/Cursor completed tool-call hook rows. Tool rows
--- carry no token/cost fields, so they only contribute to the tool-call
--- counts.
+-- and cost rows, opencode unified-ingest usage rows, and
+-- Codex/Cursor/opencode completed tool-call hook rows. Tool rows carry no
+-- token/cost fields, so they only contribute to the tool-call counts.
 WHERE time_unix_nano >= attribute_metrics_cutoff_unix_nano
-  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_agent_tool_call)
+  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row OR is_agent_tool_call OR is_work_units_score)
 GROUP BY
     gram_project_id,
     time_bucket,
@@ -765,6 +807,59 @@ GROUP BY
     mcp_server_name,
     mcp_tool_name,
     hook_hostname;
+
+-- spend_rule_usage_summaries is a narrow, enforcement-oriented rollup for
+-- spend controls. It intentionally avoids the analytics dimensions in
+-- attribute_metrics_summaries so rule evaluation can read exact per-actor spend
+-- at minute granularity without coupling to telemetry.query schema changes.
+CREATE TABLE IF NOT EXISTS spend_rule_usage_summaries (
+    gram_project_id UUID,
+    user_email String,
+    time_bucket DateTime('UTC'),
+    total_cost Float64
+) ENGINE = SummingMergeTree
+ORDER BY (gram_project_id, user_email, time_bucket)
+TTL time_bucket + INTERVAL 400 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Minute-grained per-user LLM cost rollup for spend-rule evaluation.';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS spend_rule_usage_summaries_mv TO spend_rule_usage_summaries AS
+WITH
+    -- Keep these predicates aligned with attribute_metrics_summaries_mv's cost
+    -- source rows so spend controls reconcile with the cost dashboard.
+    -- Claude provenance is anchored on the OTEL log stream URN stamped at
+    -- ingest, mirroring is_claude_otel_row in attribute_metrics_summaries_mv:
+    -- service.name, body, and log attributes are writer-controlled, so
+    -- without the URN guard a Claude-formatted row arriving through any other
+    -- path would count toward enforcement but not the dashboard, warning or
+    -- blocking users on inflated spend.
+    (
+        gram_urn = 'claude-code:otel:logs'
+        AND chat_id != ''
+        AND toString(attributes.prompt.id) != ''
+        AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')
+    ) AS is_claude_api_request,
+    -- Only Codex/Cursor usage-metric rows count. Generic gen_ai chat rows
+    -- (Gram-hosted completions and other sources) are deliberately excluded so
+    -- spend-rule enforcement reconciles with the cost dashboard's agent
+    -- surfaces. claude_chat:usage / claude_chat:cost rows (Claude web/desktop
+    -- spend polled from the Anthropic Admin API), which
+    -- attribute_metrics_summaries_mv does count, are also deliberately
+    -- excluded for now: spend rules govern agent/CLI spend until a product
+    -- decision includes Claude Chat in enforcement budgets.
+    (
+        startsWith(gram_urn, 'codex:usage')
+        OR startsWith(gram_urn, 'cursor:usage')
+    ) AS is_generic_usage_row
+SELECT
+    gram_project_id,
+    user_email,
+    toStartOfMinute(fromUnixTimestamp64Nano(time_unix_nano)) AS time_bucket,
+    sum(if(is_claude_api_request, multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), toFloat64OrZero(toString(attributes.gen_ai.usage.cost)))) AS total_cost
+FROM telemetry_logs
+WHERE user_email != ''
+  AND (is_claude_api_request OR is_generic_usage_row)
+GROUP BY gram_project_id, user_email, time_bucket;
 
 CREATE TABLE IF NOT EXISTS chat_token_summaries (
     -- Key columns
@@ -888,7 +983,8 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS chat_session_summaries_mv TO chat_session
 -- Provenance-first ingestion, identical to attribute_metrics_summaries_mv:
 -- Claude OTEL api_request rows and Codex OTEL response.completed rows for
 -- usage, Claude tool_result rows for tool calls, Cursor/Claude-Chat usage
--- rows, and Codex/Cursor completed tool-call hook rows. Keep the predicates
+-- rows, opencode unified-ingest usage rows, and Codex/Cursor/opencode
+-- completed tool-call hook rows. Keep the predicates
 -- in sync with the session* constants in
 -- server/internal/telemetry/repo/sessions.go and with
 -- attribute_metrics_summaries_mv above.
@@ -929,14 +1025,23 @@ WITH
     least(greatest(toInt64OrZero(toString(attributes.cached_token_count)), 0), greatest(toInt64OrZero(toString(attributes.input_token_count)), 0)) AS codex_cache_read_tokens,
     (greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - codex_cache_read_tokens) AS codex_input_tokens,
     (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
+    -- opencode usage rides on its unified-ingest assistant.responded rows,
+    -- anchored on hook_source because that path stamps no gram_urn, and gated on
+    -- the AfterAgentResponse event so thoughts/usage.reported/tool-call rows are
+    -- not double-counted as usage turns; see attribute_metrics_summaries_mv above.
     (
-        hook_source IN ('codex', 'cursor')
+        hook_source = 'opencode'
+        AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
+        AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
+    ) AS is_opencode_usage_row,
+    (
+        hook_source IN ('codex', 'cursor', 'opencode')
         AND toString(attributes.gram.tool.name) != ''
         AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
         AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
     ) AS is_agent_tool_call,
     (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
-    (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row) AS is_usage_row,
+    (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row) AS is_usage_row,
     -- A counted tool call that failed: Claude tool_result rows carry
     -- success="false", Codex/Cursor hook rows report PostToolUseFailure or an
     -- HTTP error status.
@@ -950,10 +1055,11 @@ WITH
         toString(id)
     ) AS tool_call_dedup_id,
     -- One distinct message per Claude api_request turn (prompt.id); Codex
-    -- response.completed rows are one turn each but carry no stable turn id,
-    -- so they fall back to the row id (count-per-row); generic rows key off
-    -- gen_ai.response.id.
-    multiIf(is_claude_api_request, toString(attributes.prompt.id), is_codex_api_request, toString(id), toString(attributes.gen_ai.response.id)) AS session_message_id,
+    -- response.completed and opencode assistant.responded rows are one turn
+    -- each but carry no stable turn id (the unified ingest path sets no
+    -- gen_ai.response.id), so they fall back to the row id (count-per-row);
+    -- generic rows key off gen_ai.response.id.
+    multiIf(is_claude_api_request, toString(attributes.prompt.id), is_codex_api_request OR is_opencode_usage_row, toString(id), toString(attributes.gen_ai.response.id)) AS session_message_id,
     -- Per-row effective model: Claude api_request rows put it on
     -- attributes.model / gen_ai.request.model, everyone else on
     -- gen_ai.response.model.
@@ -1013,7 +1119,7 @@ SELECT
 FROM telemetry_logs
 WHERE time_unix_nano >= chat_session_cutoff_unix_nano
   AND chat_id != ''
-  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_agent_tool_call)
+  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row OR is_agent_tool_call)
 GROUP BY gram_project_id, time_bucket, chat_id;
 
 CREATE TABLE IF NOT EXISTS attribute_keys (
@@ -1124,6 +1230,12 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     request_id String DEFAULT '' COMMENT 'Internal request ID that produced the finding, when set.' CODEC(ZSTD),
     chat_message_id String DEFAULT '' COMMENT 'Chat message the finding was detected in.' CODEC(ZSTD),
 
+    -- Denormalized attribution, resolved from Postgres at ingest so
+    -- session-level and per-user rollups never need a cross-store join.
+    chat_id String DEFAULT '' COMMENT 'Denormalized chats.id of the chat the finding was detected in. Empty when unresolved.' CODEC(ZSTD),
+    user_id String DEFAULT '' COMMENT 'Resolved internal user id: chat_messages.user_id with fallback to chats.user_id. Empty when unresolved.' CODEC(ZSTD),
+    external_user_id String DEFAULT '' COMMENT 'Resolved external user id: chat_messages.external_user_id with fallback to chats.external_user_id. Empty when unresolved.' CODEC(ZSTD),
+
     -- Owning policy
     risk_policy_id String DEFAULT '' COMMENT 'Risk policy the message was scanned against.' CODEC(ZSTD),
     risk_policy_version Int64 DEFAULT 0 COMMENT 'Version of the risk policy at scan time.',
@@ -1133,6 +1245,7 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     description String DEFAULT '' COMMENT 'Human-readable description of the rule that fired.' CODEC(ZSTD),
     source LowCardinality(String) COMMENT 'Detection source: gitleaks | presidio | shadow_mcp | prompt_injection | llm_judge | account_identity.',
     confidence Float64 DEFAULT 0 COMMENT 'Detection confidence in the range 0.0 to 1.0.',
+    category LowCardinality(String) DEFAULT '' COMMENT 'Risk category derived from rule_id and source at ingest, e.g. pii or secrets. Empty when the rule maps to no category.',
     tags Array(LowCardinality(String)) COMMENT 'Category tags for the finding, e.g. [pii].',
     start_pos Int32 DEFAULT 0 COMMENT 'Byte offset of the match start within the scanned field.',
     end_pos Int32 DEFAULT 0 COMMENT 'Byte offset of the match end within the scanned field.',
@@ -1153,7 +1266,8 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     -- it is recorded here rather than dropped, so excluded findings remain
     -- auditable and can be filtered in or out at read time.
     excluded_at Nullable(DateTime64(9)) COMMENT 'Time the finding was suppressed by an exclusion. Null when the finding is not excluded.' CODEC(DoubleDelta, ZSTD),
-    exclusion_id Nullable(UUID) COMMENT 'Id of the risk_exclusions row that suppressed the finding. Null when the finding is not excluded.' CODEC(ZSTD)
+    exclusion_id Nullable(UUID) COMMENT 'Id of the risk_exclusions row that suppressed the finding. Null when the finding is not excluded.' CODEC(ZSTD),
+    false_positive_at Nullable(DateTime64(9)) COMMENT 'Time the finding was marked a false positive, mirrored from Postgres after the fact. Null when the finding is not marked.' CODEC(DoubleDelta, ZSTD)
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(created_at)
 ORDER BY (organization_id, project_id, created_at, id)
@@ -1164,6 +1278,7 @@ COMMENT 'Risk findings event log: one row per detected secret or sensitive-data 
 -- Bloom filter indices for point lookups (organization_id and project_id are
 -- already in the ORDER BY so no bloom filters needed for them).
 CREATE INDEX IF NOT EXISTS idx_risk_findings_chat_message_id ON risk_findings (chat_message_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_risk_findings_chat_id ON risk_findings (chat_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_risk_policy_id ON risk_findings (risk_policy_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_rule_id ON risk_findings (rule_id) TYPE set(0) GRANULARITY 4;
 
@@ -1227,3 +1342,28 @@ ORDER BY (project_id, session_id, skill_version_id, seen_at, id)
 TTL toDateTime(seen_at) + INTERVAL 730 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Resolved skill versions observed in sessions.';
+
+CREATE TABLE IF NOT EXISTS chat_analysis_scores (
+    id UUID COMMENT 'Producer-supplied score identifier, the queue evaluation id.',
+    created_at DateTime64(9) COMMENT 'Time the score was completed.' CODEC(DoubleDelta, ZSTD),
+    inserted_at DateTime64(9) DEFAULT now64(9) COMMENT 'Time the score was inserted.' CODEC(DoubleDelta, ZSTD),
+
+    organization_id String COMMENT 'Organization the score belongs to.' CODEC(ZSTD),
+    project_id String DEFAULT '' COMMENT 'Project the score belongs to when known.' CODEC(ZSTD),
+    chat_id String COMMENT 'Gram chat identifier of the analyzed session.' CODEC(ZSTD),
+
+    judge LowCardinality(String) COMMENT 'Name of the analysis judge that produced the score.',
+    score Float64 COMMENT 'Headline metric of the verdict, meaning defined per judge.',
+    detail String COMMENT 'Full structured verdict as JSON, shape defined per judge.' CODEC(ZSTD),
+    judge_model LowCardinality(String) COMMENT 'Model used to judge the session.',
+    judge_prompt_version LowCardinality(String) COMMENT 'Judge prompt version.',
+
+    CONSTRAINT score_valid CHECK isFinite(score),
+    CONSTRAINT judge_valid CHECK judge != '',
+    CONSTRAINT detail_valid CHECK isValidJSON(detail)
+) ENGINE = MergeTree
+PARTITION BY toYYYYMM(created_at)
+ORDER BY (organization_id, project_id, judge, created_at, id)
+TTL toDateTime(created_at) + INTERVAL 730 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Chat session analysis verdicts produced by the chat analysis judges.';

@@ -109,9 +109,9 @@ export type RiskPolicy = {
    */
   name: string;
   /**
-   * Number of messages not yet analyzed at the current policy version.
+   * Number of messages not yet analyzed at the current policy version. Populated on single-policy reads; omitted from list responses (use riskPoliciesStatus for progress).
    */
-  pendingMessages: number;
+  pendingMessages?: number | undefined;
   /**
    * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge).
    */
@@ -153,9 +153,9 @@ export type RiskPolicy = {
    */
   sources: Array<string>;
   /**
-   * Total number of messages in the project.
+   * Total number of messages in the project. Populated on single-policy reads; omitted from list responses.
    */
-  totalMessages: number;
+  totalMessages?: number | undefined;
   /**
    * When the policy was last updated.
    */
@@ -209,7 +209,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       message_types: z.optional(z.array(z.string())),
       model_config: z.optional(RiskPolicyModelConfig$inboundSchema),
       name: z.string(),
-      pending_messages: z.int(),
+      pending_messages: z.optional(z.int()),
       policy_type: z._default(RiskPolicyPolicyType$inboundSchema, "standard"),
       presidio_entities: z.optional(z.array(z.string())),
       presidio_score_threshold: z.optional(z.number()),
@@ -220,7 +220,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       scope_include: z.optional(z.string()),
       score: z._default(z.number(), 5),
       sources: z.array(z.string()),
-      total_messages: z.int(),
+      total_messages: z.optional(z.int()),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),

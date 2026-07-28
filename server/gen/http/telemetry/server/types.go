@@ -74,6 +74,23 @@ type SearchUsersRequestBody struct {
 	Sort *string `form:"sort,omitempty" json:"sort,omitempty" xml:"sort,omitempty"`
 	// Number of items to return (1-1000)
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
+	// Level of usage metrics to compute per user. 'full' (default) returns the
+	// complete set: chat counts, cost, cache tokens, tool-call totals, and the
+	// per-tool and per-hook-source breakdowns. 'basic' computes only user
+	// identity, first/last activity, and input/output token sums — a much cheaper
+	// aggregation for large orgs (e.g. the employee enrollment list, which renders
+	// only those fields). The remaining fields are zero/empty under 'basic'.
+	// Ignored when source='agent_metrics'.
+	Metrics *string `form:"metrics,omitempty" json:"metrics,omitempty" xml:"metrics,omitempty"`
+	// Where per-user summaries are read from (internal employee grouping only).
+	// 'logs' (default) scans raw telemetry_logs and computes the metrics selected
+	// by 'metrics'. 'agent_metrics' reads the pre-aggregated
+	// attribute_metrics_summaries view — canonical observed agent usage (Claude
+	// Code, Codex, Cursor, Claude Chat), keyed by email — which is far cheaper but
+	// returns only identity, last activity (hourly), and input/output/total token
+	// sums; users without an email in the window are surfaced separately from raw
+	// logs with activity but no token counts.
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
 }
 
 // CaptureEventRequestBody is the type of the "telemetry" service
@@ -6490,6 +6507,15 @@ type QueryMeasuresResponseBody struct {
 	TotalToolCalls int64 `form:"total_tool_calls" json:"total_tool_calls" xml:"total_tool_calls"`
 	// Number of distinct chat sessions
 	TotalChats int64 `form:"total_chats" json:"total_chats" xml:"total_chats"`
+	// Total work units delivered by scored sessions (work-units analysis)
+	TotalWorkUnits float64 `form:"total_work_units" json:"total_work_units" xml:"total_work_units"`
+	// Total cost in USD of the sessions that carry a work-units score. Divide by
+	// total_work_units for cost per unit; using total_cost would overstate it
+	// whenever analysis coverage is partial.
+	ScoredCost float64 `form:"scored_cost" json:"scored_cost" xml:"scored_cost"`
+	// Total tokens of the sessions that carry a work-units score. Divide by
+	// total_work_units for tokens per unit.
+	ScoredTokens int64 `form:"scored_tokens" json:"scored_tokens" xml:"scored_tokens"`
 }
 
 // QuerySeriesResponseBody is used to define fields on response body types.
@@ -12062,6 +12088,12 @@ func NewSearchUsersPayload(body *SearchUsersRequestBody, apikeyToken *string, se
 	if body.Limit != nil {
 		v.Limit = *body.Limit
 	}
+	if body.Metrics != nil {
+		v.Metrics = *body.Metrics
+	}
+	if body.Source != nil {
+		v.Source = *body.Source
+	}
 	v.Filter = unmarshalSearchUsersFilterRequestBodyToTelemetrySearchUsersFilter(body.Filter)
 	if body.GroupBy == nil {
 		v.GroupBy = "employee"
@@ -12071,6 +12103,12 @@ func NewSearchUsersPayload(body *SearchUsersRequestBody, apikeyToken *string, se
 	}
 	if body.Limit == nil {
 		v.Limit = 50
+	}
+	if body.Metrics == nil {
+		v.Metrics = "full"
+	}
+	if body.Source == nil {
+		v.Source = "logs"
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -13022,6 +13060,16 @@ func ValidateSearchUsersRequestBody(body *SearchUsersRequestBody) (err error) {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1000, false))
 		}
 	}
+	if body.Metrics != nil {
+		if !(*body.Metrics == "full" || *body.Metrics == "basic") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.metrics", *body.Metrics, []any{"full", "basic"}))
+		}
+	}
+	if body.Source != nil {
+		if !(*body.Source == "logs" || *body.Source == "agent_metrics") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source", *body.Source, []any{"logs", "agent_metrics"}))
+		}
+	}
 	return
 }
 
@@ -13172,8 +13220,8 @@ func ValidateQueryRequestBody(body *QueryRequestBody) (err error) {
 		}
 	}
 	if body.SortBy != nil {
-		if !(*body.SortBy == "total_cost" || *body.SortBy == "total_tokens" || *body.SortBy == "total_input_tokens" || *body.SortBy == "total_output_tokens" || *body.SortBy == "cache_read_input_tokens" || *body.SortBy == "cache_creation_input_tokens" || *body.SortBy == "total_tool_calls" || *body.SortBy == "total_chats") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort_by", *body.SortBy, []any{"total_cost", "total_tokens", "total_input_tokens", "total_output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "total_tool_calls", "total_chats"}))
+		if !(*body.SortBy == "total_cost" || *body.SortBy == "total_tokens" || *body.SortBy == "total_input_tokens" || *body.SortBy == "total_output_tokens" || *body.SortBy == "cache_read_input_tokens" || *body.SortBy == "cache_creation_input_tokens" || *body.SortBy == "total_tool_calls" || *body.SortBy == "total_chats" || *body.SortBy == "total_work_units" || *body.SortBy == "scored_cost" || *body.SortBy == "scored_tokens") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort_by", *body.SortBy, []any{"total_cost", "total_tokens", "total_input_tokens", "total_output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "total_tool_calls", "total_chats", "total_work_units", "scored_cost", "scored_tokens"}))
 		}
 	}
 	return

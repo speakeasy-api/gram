@@ -167,6 +167,32 @@ pubsub:
           }
         }
       type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-log-record
+    name: gram-telemetry-v1-log-record
+    spec:
+      definition: |
+        edition = "2024";
+        message LogRecord {
+          string id = 1;
+          int64 time_unix_nano = 2;
+          int64 observed_time_unix_nano = 3;
+          string severity_text = 4;
+          string body = 5;
+          string trace_id = 6;
+          string span_id = 7;
+          string attributes_json = 8;
+          string resource_attributes_json = 9;
+          string gram_project_id = 10;
+          string gram_deployment_id = 11;
+          string gram_function_id = 12;
+          string gram_urn = 13;
+          string service_name = 14;
+          string service_version = 15;
+          string gram_chat_id = 16;
+        }
+      type: PROTOCOL_BUFFER
   subscriptions:
   - labels:
       managed_by: proto-pubsub-orchestrator
@@ -288,6 +314,20 @@ pubsub:
         minimumBackoff: 10s
       topicRef:
         name: gram-risk-v1-prompt-policy-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-noop
+      topic_proto_message: gram-telemetry-v1-log-record
+    name: gram-telemetry-v1-noop
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 86400s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-telemetry-v1-log-record
   topics:
   - labels:
       managed_by: proto-pubsub-orchestrator
@@ -371,3 +411,13 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-risk-v1-prompt-policy-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-log-record
+    name: gram-telemetry-v1-log-record
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-telemetry-v1-log-record

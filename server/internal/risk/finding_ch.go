@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -42,7 +43,10 @@ type FindingCHWriter struct {
 	fingerprinter Fingerprinter
 
 	exclusionsCache *expirable.LRU[string, risk_analysis.ExclusionSet]
-	exclusionsDB    repo.DBTX
+
+	// db backs the per-batch Postgres reads: exclusion sets and chat message
+	// attribution. A read replica is fine — both are best-effort enrichment.
+	db repo.DBTX
 }
 
 const (
@@ -50,14 +54,14 @@ const (
 	exclusionsSetCacheTTL  = time.Minute
 )
 
-func NewFindingCHWriter(logger *slog.Logger, exclusionsDB repo.DBTX, meterProvider metric.MeterProvider, inserter RiskFindingInserter, fingerprinter Fingerprinter) *FindingCHWriter {
+func NewFindingCHWriter(logger *slog.Logger, db repo.DBTX, meterProvider metric.MeterProvider, inserter RiskFindingInserter, fingerprinter Fingerprinter) *FindingCHWriter {
 	logger = logger.With(attr.SlogComponent("finding-ch-writer"))
 	return &FindingCHWriter{
 		logger:          logger,
 		metrics:         newMetrics(meterProvider, logger),
 		inserter:        inserter,
 		fingerprinter:   fingerprinter,
-		exclusionsDB:    exclusionsDB,
+		db:              db,
 		exclusionsCache: expirable.NewLRU[string, risk_analysis.ExclusionSet](exclusionsSetCacheSize, nil, exclusionsSetCacheTTL),
 	}
 }
@@ -68,6 +72,11 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 	// Cache per-tenant derived keys for the lifetime of this batch so repeated
 	// findings from the same org don't each re-run HKDF.
 	tenantKeyCache := make(map[string][]byte)
+
+	// Batch-resolve the denormalized attribution (chat id, user ids) for every
+	// finding that carries a well-formed chat_message_id — one Postgres query
+	// per batch, best-effort.
+	attribution := w.chatMessageAttribution(ctx, messages)
 
 	rows := make([]chrepo.RiskFindingRow, 0, len(messages))
 	for _, message := range messages {
@@ -170,6 +179,24 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			tags = []string{}
 		}
 
+		// Attribution is an enrichment: findings whose message id is absent,
+		// malformed, or unresolved keep empty strings rather than being dropped.
+		var chatID, userID, externalUserID string
+		if msgID, err := uuid.Parse(message.GetChatMessageId()); err == nil {
+			if a, ok := attribution[msgID]; ok {
+				chatID = a.ChatID.String()
+				userID = a.UserID
+				externalUserID = a.ExternalUserID
+			}
+		}
+
+		// Dead-letter sentinels carry no meaningful (source, rule_id), so they
+		// get no category instead of the classifier's "custom" fallback.
+		category := ""
+		if !deadLetter {
+			category = string(categories.Classify(message.GetSource(), message.GetRuleId()))
+		}
+
 		rows = append(rows, chrepo.RiskFindingRow{
 			ID:                       id,
 			CreatedAt:                createdAt.UTC(),
@@ -187,6 +214,10 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			StartPos:                 message.GetStartPos(),
 			EndPos:                   message.GetEndPos(),
 			DeadLetterReason:         message.GetDeadLetterReason(),
+			ChatID:                   chatID,
+			UserID:                   userID,
+			ExternalUserID:           externalUserID,
+			Category:                 category,
 			MatchLen:                 matchLen,
 			MatchRedacted:            matchRedacted,
 			FingerprintPepperVersion: pepperVersion,
@@ -211,6 +242,42 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 	w.metrics.RecordFindingCHInserts(ctx, len(rows), o11y.OutcomeFromError(err))
 
 	return nil
+}
+
+// chatMessageAttribution batch-fetches the denormalized attribution stamped
+// onto risk_findings rows, keyed by chat message id. Fail-open like the
+// exclusion lookup: message ids that are empty, malformed, or fail to resolve
+// simply get no attribution; a query error logs and enriches nothing rather
+// than dropping or redriving findings.
+func (w *FindingCHWriter) chatMessageAttribution(ctx context.Context, messages []*riskv1.Finding) map[uuid.UUID]repo.GetChatMessageAttributionRow {
+	ids := make([]uuid.UUID, 0, len(messages))
+	seen := make(map[uuid.UUID]struct{}, len(messages))
+	for _, message := range messages {
+		id, err := uuid.Parse(message.GetChatMessageId())
+		if err != nil {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+
+	rows, err := repo.New(w.db).GetChatMessageAttribution(ctx, ids)
+	if err != nil {
+		w.logger.ErrorContext(ctx, "resolve chat message attribution", attr.SlogError(err))
+		return nil
+	}
+
+	out := make(map[uuid.UUID]repo.GetChatMessageAttributionRow, len(rows))
+	for _, row := range rows {
+		out[row.ID] = row
+	}
+	return out
 }
 
 // matchedExclusion returns the id of the going-forward exclusion that
@@ -269,7 +336,7 @@ func (w *FindingCHWriter) exclusionSetFor(ctx context.Context, projectID, policy
 		return risk_analysis.ExclusionSet{}
 	}
 
-	exclusions, err := repo.New(w.exclusionsDB).ListEnabledExclusionsForPolicy(ctx, repo.ListEnabledExclusionsForPolicyParams{
+	exclusions, err := repo.New(w.db).ListEnabledExclusionsForPolicy(ctx, repo.ListEnabledExclusionsForPolicyParams{
 		ProjectID:    projectUUID,
 		RiskPolicyID: uuid.NullUUID{UUID: policyUUID, Valid: true},
 	})

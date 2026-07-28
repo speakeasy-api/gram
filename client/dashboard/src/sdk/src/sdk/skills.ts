@@ -7,17 +7,21 @@ import { skillsArchive } from "../funcs/skillsArchive.js";
 import { skillsCreate } from "../funcs/skillsCreate.js";
 import { skillsDistribute } from "../funcs/skillsDistribute.js";
 import { skillsGet } from "../funcs/skillsGet.js";
+import { skillsGetShared } from "../funcs/skillsGetShared.js";
 import { skillsList } from "../funcs/skillsList.js";
 import { skillsListDistributions } from "../funcs/skillsListDistributions.js";
 import { skillsListUnknownActivations } from "../funcs/skillsListUnknownActivations.js";
 import { skillsListVersions } from "../funcs/skillsListVersions.js";
+import { skillsShare } from "../funcs/skillsShare.js";
 import { skillsUndistribute } from "../funcs/skillsUndistribute.js";
+import { skillsUnshare } from "../funcs/skillsUnshare.js";
 import { skillsUpdate } from "../funcs/skillsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { GetSkillResult } from "../models/components/getskillresult.js";
 import { RecordSkillResult } from "../models/components/recordskillresult.js";
 import { Skill } from "../models/components/skill.js";
 import { SkillDistribution } from "../models/components/skilldistribution.js";
+import { SkillShareLink } from "../models/components/skillsharelink.js";
 import {
   AddSkillVersionRequest,
   AddSkillVersionSecurity,
@@ -34,6 +38,10 @@ import {
   DistributeSkillRequest,
   DistributeSkillSecurity,
 } from "../models/operations/distributeskill.js";
+import {
+  GetSharedSkillRequest,
+  GetSharedSkillResponse,
+} from "../models/operations/getsharedskill.js";
 import {
   GetSkillRequest,
   GetSkillSecurity,
@@ -59,9 +67,17 @@ import {
   ListUnknownSkillActivationsSecurity,
 } from "../models/operations/listunknownskillactivations.js";
 import {
+  ShareSkillRequest,
+  ShareSkillSecurity,
+} from "../models/operations/shareskill.js";
+import {
   UndistributeSkillRequest,
   UndistributeSkillSecurity,
 } from "../models/operations/undistributeskill.js";
+import {
+  UnshareSkillRequest,
+  UnshareSkillSecurity,
+} from "../models/operations/unshareskill.js";
 import {
   UpdateSkillRequest,
   UpdateSkillSecurity,
@@ -166,6 +182,23 @@ export class Skills extends ClientSDK {
   }
 
   /**
+   * getShared skills
+   *
+   * @remarks
+   * Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, and latest content.
+   */
+  async getShared(
+    request: GetSharedSkillRequest,
+    options?: RequestOptions,
+  ): Promise<GetSharedSkillResponse> {
+    return unwrapAsync(skillsGetShared(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * list skills
    *
    * @remarks
@@ -244,6 +277,25 @@ export class Skills extends ClientSDK {
   }
 
   /**
+   * share skills
+   *
+   * @remarks
+   * Create a public share link for a skill. Repeated requests return the existing active link, so each skill has at most one active share token.
+   */
+  async share(
+    request: ShareSkillRequest,
+    security?: ShareSkillSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SkillShareLink> {
+    return unwrapAsync(skillsShare(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * undistribute skills
    *
    * @remarks
@@ -255,6 +307,25 @@ export class Skills extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(skillsUndistribute(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * unshare skills
+   *
+   * @remarks
+   * Revoke a skill's active public share link. Repeated requests are a no-op.
+   */
+  async unshare(
+    request: UnshareSkillRequest,
+    security?: UnshareSkillSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(skillsUnshare(
       this,
       request,
       security,

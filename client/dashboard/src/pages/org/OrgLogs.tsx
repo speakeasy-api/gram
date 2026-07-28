@@ -12,6 +12,7 @@ import { useState } from "react";
 import { OtelForwardingSection } from "./OtelForwardingSection";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { handleAPIError } from "@/lib/errors";
+import { SkillContentUploadSetting } from "./SkillContentUploadSetting";
 
 export default function OrgLogs(): JSX.Element {
   return (
@@ -37,9 +38,6 @@ function OrgLogsInner() {
   const [sessionCaptureEnabled, setSessionCaptureEnabled] = useState<
     boolean | null
   >(null);
-  const [skillCaptureMetadataOnly, setSkillCaptureMetadataOnly] = useState<
-    boolean | null
-  >(null);
   const [hooksBrowserLoginEnabled, setHooksBrowserLoginEnabled] = useState<
     boolean | null
   >(null);
@@ -53,8 +51,6 @@ function OrgLogsInner() {
     toolIoLogsEnabled ?? featuresData?.toolIoLogsEnabled ?? false;
   const effectiveSessionCaptureEnabled =
     sessionCaptureEnabled ?? featuresData?.sessionCaptureEnabled ?? false;
-  const effectiveSkillCaptureMetadataOnly =
-    skillCaptureMetadataOnly ?? featuresData?.skillCaptureMetadataOnly ?? false;
   const effectiveHooksBrowserLoginEnabled =
     hooksBrowserLoginEnabled ?? featuresData?.hooksBrowserLoginEnabled ?? false;
   const effectiveHooksFailOpenEnabled =
@@ -71,8 +67,6 @@ function OrgLogsInner() {
           setToolIoLogsEnabled(enabled);
         } else if (featureName === FeatureName.SessionCapture) {
           setSessionCaptureEnabled(enabled);
-        } else if (featureName === FeatureName.SkillCaptureMetadataOnly) {
-          setSkillCaptureMetadataOnly(enabled);
         } else if (featureName === FeatureName.HooksBrowserLogin) {
           setHooksBrowserLoginEnabled(enabled);
         } else if (featureName === FeatureName.HooksFailOpen) {
@@ -126,17 +120,6 @@ function OrgLogsInner() {
       request: {
         setProductFeatureRequestBody: {
           featureName: FeatureName.SessionCapture,
-          enabled,
-        },
-      },
-    });
-  };
-
-  const handleSetSkillCaptureMetadataOnly = (enabled: boolean) => {
-    setLogsFeature({
-      request: {
-        setProductFeatureRequestBody: {
-          featureName: FeatureName.SkillCaptureMetadataOnly,
           enabled,
         },
       },
@@ -209,39 +192,7 @@ function OrgLogsInner() {
 
           {featuresData?.skillsEnabled && (
             <>
-              <Stack
-                direction="horizontal"
-                justify="space-between"
-                align="center"
-              >
-                <Stack gap={1}>
-                  <Stack direction="horizontal" align="center" gap={2}>
-                    <FileText className="text-muted-foreground h-4 w-4" />
-                    <Type variant="body" className="font-medium">
-                      Upload Skill Content
-                    </Type>
-                  </Stack>
-                  <Type
-                    variant="body"
-                    className="text-muted-foreground mr-8 ml-6 max-w-4xl text-sm"
-                  >
-                    When enabled, Gram uploads SKILL.md content at activation so
-                    captured skills can be inspected. When disabled, Gram only
-                    receives skill names, source details, hashes, users, and
-                    hostnames at activation.
-                  </Type>
-                </Stack>
-                <RequireScope scope="org:admin" level="component">
-                  <Switch
-                    checked={!effectiveSkillCaptureMetadataOnly}
-                    onCheckedChange={(enabled) =>
-                      handleSetSkillCaptureMetadataOnly(!enabled)
-                    }
-                    disabled={isMutatingLogs}
-                    aria-label="Upload skill content"
-                  />
-                </RequireScope>
-              </Stack>
+              <SkillContentUploadSetting />
               <div className="border-border border-t" />
             </>
           )}

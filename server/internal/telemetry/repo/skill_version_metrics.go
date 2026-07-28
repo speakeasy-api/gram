@@ -60,6 +60,22 @@ var skillVersionMeasureSelects = []string{
 	"countIf(s_has_usage) AS m_total_chats",
 }
 
+// skillVersionSortMeasures is the set of measures the skill-version
+// raw-telemetry query actually computes, derived from
+// skillVersionMeasureSelects so it can never drift from the SQL.
+// attributeMeasureSet entries outside it (the work-units scoring measures,
+// which live in the summary path only) are rejected up front: sorting by them
+// would reference a nonexistent m_ alias at execution time.
+var skillVersionSortMeasures = func() map[string]bool {
+	measures := make(map[string]bool, len(skillVersionMeasureSelects))
+	for _, sel := range skillVersionMeasureSelects {
+		if _, alias, ok := strings.Cut(sel, " AS "+measureAliasPrefix); ok {
+			measures[alias] = true
+		}
+	}
+	return measures
+}()
+
 func skillVersionDimensionKeys() []string {
 	keys := make([]string, 0, len(sessionDimensionRegistry)+1)
 	for key := range sessionDimensionRegistry {
@@ -144,6 +160,9 @@ func skillVersionDimensionValuesExpr(groupBy string) string {
 func buildSkillVersionMetricsQuery(arg AttributeMetricsQueryParams, timeseries bool) (string, []any, error) {
 	if !attributeMeasureSet[arg.SortBy] {
 		return "", nil, fmt.Errorf("unknown sort_by measure %q", arg.SortBy)
+	}
+	if !skillVersionSortMeasures[arg.SortBy] {
+		return "", nil, fmt.Errorf("sort_by measure %q is not supported for skill version grouping", arg.SortBy)
 	}
 
 	sessionBuilder := sq.Select(

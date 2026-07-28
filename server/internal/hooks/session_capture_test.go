@@ -122,6 +122,133 @@ func TestClaudeHookSource_ConsistentAcrossAllWrites(t *testing.T) {
 	}
 }
 
+// The three Claude surfaces must resolve distinctly: cowork self-identifies
+// on the OTEL service.name, Claude Code Desktop on the desktop hook adapter
+// slug, and the CLI on the shared "claude-code" name. Non-Claude values must
+// not resolve at all.
+func TestClaudeSurfaceFromServiceName(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "cowork", claudeSurfaceFromServiceName("cowork"))
+	assert.Equal(t, "cowork", claudeSurfaceFromServiceName("claude-cowork"))
+	assert.Equal(t, "cowork", claudeSurfaceFromServiceName(" Claude Cowork "))
+	assert.Equal(t, "claude-code-desktop", claudeSurfaceFromServiceName("claude-code-desktop"))
+	assert.Equal(t, "claude-code", claudeSurfaceFromServiceName("claude-code"))
+	assert.Equal(t, "claude-code", claudeSurfaceFromServiceName("ClaudeCode"))
+	assert.Empty(t, claudeSurfaceFromServiceName("cursor"))
+	assert.Empty(t, claudeSurfaceFromServiceName("codex_cli_rs"))
+	assert.Empty(t, claudeSurfaceFromServiceName(""))
+}
+
+// Merging a fresh service name with the cached one keeps whichever pins the
+// surface more precisely: "cowork" beats the desktop adapter slug, the
+// desktop adapter slug beats the ambiguous "claude-code" the OTEL stream
+// reports for both desktop and CLI, and ties keep the fresh value. Non-Claude
+// incoming values pass through unchanged so non-Claude senders keep their
+// reported name.
+func TestPreferClaudeServiceName(t *testing.T) {
+	t.Parallel()
+
+	// OTEL "cowork" upgrades a cached desktop adapter slug.
+	assert.Equal(t, "cowork", preferClaudeServiceName("cowork", "claude-code-desktop"))
+	// A cached "cowork" survives both the ambiguous OTEL name and the shared
+	// desktop adapter slug.
+	assert.Equal(t, "cowork", preferClaudeServiceName("claude-code", "cowork"))
+	assert.Equal(t, "cowork", preferClaudeServiceName("claude-code-desktop", "cowork"))
+	// A cached desktop adapter slug survives OTEL batches reporting the
+	// ambiguous "claude-code"; the adapter upgrades a cached ambiguous name.
+	assert.Equal(t, "claude-code-desktop", preferClaudeServiceName("claude-code", "claude-code-desktop"))
+	assert.Equal(t, "claude-code-desktop", preferClaudeServiceName("claude-code-desktop", "claude-code"))
+	// Empty incoming keeps the cache; empty cache takes the incoming value.
+	assert.Equal(t, "cowork", preferClaudeServiceName("", "cowork"))
+	assert.Equal(t, "claude-code", preferClaudeServiceName("claude-code", ""))
+	// A non-Claude incoming value always keeps its reported name — even
+	// against a cached Claude value under the same session id.
+	assert.Equal(t, "cursor", preferClaudeServiceName("cursor", "Cursor"))
+	assert.Equal(t, "cursor", preferClaudeServiceName("cursor", "claude-code"))
+	assert.Equal(t, "cursor", preferClaudeServiceName("cursor", "claude-code-desktop"))
+	assert.Equal(t, "cursor", preferClaudeServiceName("cursor", "cowork"))
+}
+
+// A session whose OTEL stream reports service.name "cowork" must persist its
+// chat messages with source "cowork" — no SessionStart inventory variant
+// needed. This is the current cowork identification path: the canonical
+// ingest transport stamps no variant, so the service name is the only signal.
+func TestClaudeChatSource_CoworkFromServiceName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	prompt := "hello from cowork"
+
+	metadata := &SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "cowork",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	require.NoError(t, ti.service.persistConversationEvent(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+		Prompt:        &prompt,
+	}, metadata))
+
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.True(t, msgs[0].Source.Valid)
+	require.Equal(t, "cowork", msgs[0].Source.String)
+}
+
+// Older cowork builds report service.name "claude-code"; for those the
+// inventory-shape variant stamped at SessionStart must still relabel chat
+// messages as cowork.
+func TestClaudeChatSource_CoworkFromVariantOverridesAmbiguousServiceName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	prompt := "hello from legacy cowork"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(sessionID),
+		agentVariantCowork, sessionMCPListTTL))
+
+	metadata := &SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "claude-code",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	require.NoError(t, ti.service.persistConversationEvent(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+		Prompt:        &prompt,
+	}, metadata))
+
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.True(t, msgs[0].Source.Valid)
+	require.Equal(t, "cowork", msgs[0].Source.String)
+}
+
 func TestClaudeUserPromptSubmitDoesNotPersistPromptIDAsMessageID(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)

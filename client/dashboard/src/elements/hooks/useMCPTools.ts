@@ -107,7 +107,7 @@ export function useMCPTools({
       const settled = await Promise.allSettled(
         serverEntries.map(async ({ server, headers }) => {
           const client = await createMCPClient({
-            name: "gram-elements-mcp-client",
+            clientName: "gram-elements-mcp-client",
             transport: {
               type: "http",
               url: server.url,

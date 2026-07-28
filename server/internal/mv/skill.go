@@ -13,7 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 )
 
-func BuildSkillView(skill repo.Skill, latestVersionID uuid.UUID, versionCount int64, hasValidVersion bool) *types.Skill {
+func BuildSkillView(skill repo.Skill, latestVersionID uuid.UUID, versionCount int64, hasValidVersion bool, shareToken pgtype.Text) *types.Skill {
 	var latestVersionIDValue *string
 	if latestVersionID != uuid.Nil {
 		latestVersionIDValue = conv.PtrEmpty(latestVersionID.String())
@@ -32,6 +32,7 @@ func BuildSkillView(skill repo.Skill, latestVersionID uuid.UUID, versionCount in
 		FirstSeenAt:     conv.PtrEmpty(conv.FromPGTimestamptz(skill.FirstSeenAt)),
 		LastSeenAt:      conv.PtrEmpty(conv.FromPGTimestamptz(skill.LastSeenAt)),
 		SeenCount:       skill.SeenCount,
+		ShareToken:      conv.FromPGText[string](shareToken),
 		CreatedAt:       conv.FromPGTimestamptz(skill.CreatedAt),
 		UpdatedAt:       conv.FromPGTimestamptz(skill.UpdatedAt),
 	}
@@ -40,7 +41,7 @@ func BuildSkillView(skill repo.Skill, latestVersionID uuid.UUID, versionCount in
 func BuildSkillListView(rows []repo.ListSkillsRow) []*types.Skill {
 	result := make([]*types.Skill, len(rows))
 	for i, row := range rows {
-		result[i] = BuildSkillView(row.Skill, row.LatestVersionID, row.VersionCount, row.HasValidVersion)
+		result[i] = BuildSkillView(row.Skill, row.LatestVersionID, row.VersionCount, row.HasValidVersion, row.ShareToken)
 	}
 
 	return result
