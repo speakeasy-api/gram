@@ -284,20 +284,7 @@ jobs:
       - name: Check formatting
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          set -euo pipefail
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            from_ref=$(git merge-base "$BASE_SHA" HEAD)
-            echo "Checking files changed since merge base $from_ref"
-            args=(--from-ref "$from_ref" --to-ref HEAD)
-          else
-            echo "Checking all files"
-            args=(--all)
-          fi
-          if ! hk check "${args[@]}"; then
-            echo "::error::Formatting check failed. Run 'hk fix --all' locally and commit the result."
-            exit 1
-          fi
+        run: hk check --all
 
       - name: Prune PNPM store
         if: success()
