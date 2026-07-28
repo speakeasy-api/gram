@@ -261,3 +261,42 @@ func TestUpdateRiskPolicy_ShadowMCPDispositionRejectedOnNonShadowPolicy(t *testi
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
 }
+
+func TestUpdateRiskPolicy_ShadowMCPExplicitDispositionBlocksSourceChange(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+
+	// A policy with an explicitly stored disposition cannot morph away from
+	// being a blocking shadow MCP policy — that would silently drop the
+	// posture (and orphan any blocked-URL list).
+	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:                 new("Morph Away Disposition"),
+		Sources:              []string{"shadow_mcp"},
+		Action:               "block",
+		ShadowMcpDisposition: new("allow_all"),
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
+		ID:      created.ID,
+		Name:    created.Name,
+		Sources: []string{"gitleaks"},
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+
+	_, err = ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
+		ID:     created.ID,
+		Name:   created.Name,
+		Action: new("flag"),
+	})
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+
+	fetched, err := ti.service.GetRiskPolicy(ctx, &gen.GetRiskPolicyPayload{ID: created.ID})
+	require.NoError(t, err)
+	require.NotNil(t, fetched.ShadowMcpDisposition)
+	require.Equal(t, "allow_all", *fetched.ShadowMcpDisposition)
+}

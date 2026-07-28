@@ -785,25 +785,31 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	}
 	audiencePrincipalURNs = principalStrings(audiencePrincipals)
 
+	// The disposition is immutable: accept only the policy's current effective
+	// value (so form round-trips stay valid); anything else is a posture
+	// switch, which requires delete + recreate. A policy with an explicitly
+	// stored disposition also cannot morph away from being a blocking shadow
+	// MCP policy via a sources/action change — that would silently drop the
+	// posture and orphan the blocked-URL list.
+	effectiveDisposition := effectiveShadowMCPDisposition(current.ShadowMcpDisposition, sources, action)
+	if current.ShadowMcpDisposition.Valid && current.ShadowMcpDisposition.String != "" && effectiveDisposition == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "cannot change the sources or action of a shadow mcp policy with a disposition; delete and recreate the policy instead")
+	}
+	if payload.ShadowMcpDisposition != nil {
+		if effectiveDisposition == "" {
+			return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp disposition requires a blocking shadow mcp policy")
+		}
+		if *payload.ShadowMcpDisposition != effectiveDisposition {
+			return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp disposition is immutable; delete and recreate the policy to switch posture")
+		}
+	}
+
 	var shadowMCPAllowedURLs []string
 	audienceUpdateRequested := payload.AudienceType != nil || payload.AudiencePrincipalUrns != nil
 	if payload.ShadowMcpAllowedUrls != nil {
 		shadowMCPAllowedURLs, err = validateShadowMCPAllowedURLs(ctx, s.shadowMCPInventoryURLLookup, *authCtx.ProjectID, enabled, sources, action, payload.ShadowMcpAllowedUrls)
 		if err != nil {
 			return nil, err
-		}
-	}
-
-	// The disposition is immutable: accept only the policy's current effective
-	// value (so form round-trips stay valid); anything else is a posture
-	// switch, which requires delete + recreate.
-	if payload.ShadowMcpDisposition != nil {
-		effective := effectiveShadowMCPDisposition(current.ShadowMcpDisposition, sources, action)
-		if effective == "" {
-			return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp disposition requires a blocking shadow mcp policy")
-		}
-		if *payload.ShadowMcpDisposition != effective {
-			return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp disposition is immutable; delete and recreate the policy to switch posture")
 		}
 	}
 
