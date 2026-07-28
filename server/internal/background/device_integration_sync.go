@@ -246,13 +246,21 @@ type DeviceIntegrationSyncTrigger struct {
 var _ deviceintegrations.SyncTrigger = (*DeviceIntegrationSyncTrigger)(nil)
 
 func (t *DeviceIntegrationSyncTrigger) TriggerSyncNow(ctx context.Context) error {
+	// Guard the receiver: a typed-nil trigger handed through the interface
+	// passes the caller's interface-nil check, and kickSync runs on a
+	// goroutine where a panic takes down the process, not a request.
+	if t == nil || t.TemporalEnv == nil {
+		return fmt.Errorf("device integration sync trigger is not configured")
+	}
 	handle := t.TemporalEnv.Client().ScheduleClient().GetHandle(ctx, deviceIntegrationSyncCoordinatorScheduleID)
 	if err := handle.Trigger(ctx, client.ScheduleTriggerOptions{
 		Overlap: enums.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
 	}); err != nil {
 		return fmt.Errorf("trigger device integration sync coordinator: %w", err)
 	}
-	t.Logger.DebugContext(ctx, "triggered device integration sync coordinator",
-		attr.SlogTemporalWorkflowID(deviceIntegrationSyncCoordinatorScheduleID))
+	if t.Logger != nil {
+		t.Logger.DebugContext(ctx, "triggered device integration sync coordinator",
+			attr.SlogTemporalWorkflowID(deviceIntegrationSyncCoordinatorScheduleID))
+	}
 	return nil
 }
