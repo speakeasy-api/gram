@@ -273,7 +273,9 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
           onClearAll={clearAll}
         />
         <Page.Toolbar.Count>
-          {filteredDevices.length} devices
+          {/* The "+" keeps the count honest while unloaded pages remain. */}
+          {filteredDevices.length}
+          {hasMore ? "+" : ""} devices
         </Page.Toolbar.Count>
       </Page.Toolbar>
       <Table
