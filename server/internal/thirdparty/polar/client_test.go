@@ -26,6 +26,7 @@ func TestIsPolarMeteredModelUsageExcludesPlatformInference(t *testing.T) {
 	require.False(t, isPolarMeteredModelUsage(billing.ModelUsageSourceGram))
 	require.False(t, isPolarMeteredModelUsage(billing.ModelUsageSourceRiskAnalysis))
 	require.False(t, isPolarMeteredModelUsage(billing.ModelUsageSourceSkillEfficacy))
+	require.False(t, isPolarMeteredModelUsage(billing.ModelUsageSourceSkillSuggestions))
 	require.True(t, isPolarMeteredModelUsage(billing.ModelUsageSourcePlayground))
 }
 

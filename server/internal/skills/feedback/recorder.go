@@ -16,8 +16,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	domainskills "github.com/speakeasy-api/gram/server/internal/skills"
-	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/skills/suggest"
 )
 
 const signalTimeout = time.Second
@@ -38,10 +38,10 @@ type RecordInput struct {
 type Recorder struct {
 	db       *pgxpool.Pool
 	logger   *slog.Logger
-	signaler efficacy.Signaler
+	signaler suggest.Signaler
 }
 
-func NewRecorder(db *pgxpool.Pool, logger *slog.Logger, signaler efficacy.Signaler) *Recorder {
+func NewRecorder(db *pgxpool.Pool, logger *slog.Logger, signaler suggest.Signaler) *Recorder {
 	return &Recorder{db: db, logger: logger, signaler: signaler}
 }
 
@@ -92,14 +92,14 @@ func (r *Recorder) Record(ctx context.Context, input RecordInput) (repo.SkillFee
 		return repo.SkillFeedback{}, fmt.Errorf("create skill feedback: %w", err)
 	}
 
-	if r.signaler != nil {
+	if r.signaler != nil && stored.SkillID.Valid {
 		signalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), signalTimeout)
 		defer cancel()
-		if err := r.signaler.Signal(signalCtx, input.ProjectID); err != nil {
+		if err := r.signaler.Signal(signalCtx, input.ProjectID, stored.SkillID.UUID); err != nil {
 			r.logger.ErrorContext(signalCtx, "signal skill feedback analysis",
 				attr.SlogError(err),
 				attr.SlogProjectID(input.ProjectID.String()),
-				attr.SlogName(input.SkillName),
+				attr.SlogResourceID(stored.SkillID.UUID.String()),
 			)
 		}
 	}

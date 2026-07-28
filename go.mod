@@ -33,6 +33,7 @@ require (
 	github.com/ettle/strcase v0.2.0
 	github.com/exaring/otelpgx v0.10.0
 	github.com/failsafe-go/failsafe-go v0.9.6
+	github.com/gitleaks/go-gitdiff v0.9.1
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/go-logr/logr v1.4.3
 	github.com/go-redis/cache/v9 v9.0.0
@@ -57,6 +58,7 @@ require (
 	github.com/oschwald/maxminddb-golang v1.13.1
 	github.com/pgvector/pgvector-go v0.4.0
 	github.com/pgx-contrib/pgxotel v0.0.0-20250908221444-24ae56d05ec0
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/polarsource/polar-go v0.16.0
 	github.com/posthog/posthog-go v1.11.2
 	github.com/redis/go-redis/extra/redisotel/v9 v9.21.0
@@ -187,7 +189,6 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
-	github.com/gitleaks/go-gitdiff v0.9.1 // indirect
 	github.com/go-faster/city v1.0.1 // indirect
 	github.com/go-faster/errors v0.7.1 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
@@ -268,7 +269,6 @@ require (
 	github.com/pierrec/lz4/v4 v4.1.25 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
-	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/redis/go-redis/extra/rediscmd/v9 v9.21.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
