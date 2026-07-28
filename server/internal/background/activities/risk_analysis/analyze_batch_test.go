@@ -394,7 +394,7 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 		OrganizationID:    td.orgID,
 		RiskPolicyID:      td.policyID,
 		RiskPolicyVersion: td.policyVersion,
-		ChatMessageID:     msgID,
+		ChatMessageID:     uuid.NullUUID{UUID: msgID, Valid: true},
 		Source:            "gitleaks",
 		Found:             true,
 		RuleID:            pgtype.Text{String: "secret.test", Valid: true},
@@ -481,7 +481,7 @@ func TestAnalyzeBatch_DestructiveToolAnnotationFinding(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	require.Equal(t, msgID, rows[0].ChatMessageID)
+	require.Equal(t, msgID, rows[0].ChatMessageID.UUID)
 	require.True(t, rows[0].Found)
 	require.Equal(t, shadowmcp.SourceDestructiveTool, rows[0].Source)
 	require.Equal(t, "destructive.tool", rows[0].RuleID.String)

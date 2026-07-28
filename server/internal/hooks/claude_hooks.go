@@ -1336,7 +1336,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 		OrganizationID:    metadata.GramOrgID,
 		RiskPolicyID:      policyID,
 		RiskPolicyVersion: policy.Version,
-		ChatMessageID:     msgID,
+		ChatMessageID:     uuid.NullUUID{UUID: msgID, Valid: true},
 		Description:       pgtype.Text{String: description, Valid: description != ""},
 		Match:             pgtype.Text{String: match, Valid: match != ""},
 		Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},

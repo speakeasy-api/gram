@@ -1229,6 +1229,7 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     -- Correlation
     request_id String DEFAULT '' COMMENT 'Internal request ID that produced the finding, when set.' CODEC(ZSTD),
     chat_message_id String DEFAULT '' COMMENT 'Chat message the finding was detected in.' CODEC(ZSTD),
+    content_part_id String DEFAULT '' COMMENT 'Chat content part the finding was detected in.' CODEC(ZSTD),
 
     -- Denormalized attribution, resolved from Postgres at ingest so
     -- session-level and per-user rollups never need a cross-store join.
@@ -1278,6 +1279,7 @@ COMMENT 'Risk findings event log: one row per detected secret or sensitive-data 
 -- Bloom filter indices for point lookups (organization_id and project_id are
 -- already in the ORDER BY so no bloom filters needed for them).
 CREATE INDEX IF NOT EXISTS idx_risk_findings_chat_message_id ON risk_findings (chat_message_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_risk_findings_content_part_id ON risk_findings (content_part_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_chat_id ON risk_findings (chat_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_risk_policy_id ON risk_findings (risk_policy_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_rule_id ON risk_findings (rule_id) TYPE set(0) GRANULARITY 4;
