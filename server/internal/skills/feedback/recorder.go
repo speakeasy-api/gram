@@ -54,8 +54,8 @@ func (r *Recorder) Record(ctx context.Context, input RecordInput) (repo.SkillFee
 		return repo.SkillFeedback{}, errors.New("invalid feedback source")
 	case !input.Outcome.Valid():
 		return repo.SkillFeedback{}, errors.New("invalid feedback outcome")
-	case utf8.RuneCountInString(input.Note) > 4000:
-		return repo.SkillFeedback{}, errors.New("feedback note must be at most 4000 Unicode characters")
+	case utf8.RuneCountInString(input.Note) > domainskills.MaxFeedbackNoteRunes:
+		return repo.SkillFeedback{}, fmt.Errorf("feedback note must be at most %d Unicode characters", domainskills.MaxFeedbackNoteRunes)
 	case input.SkillVersionID.Valid && !input.SkillID.Valid:
 		return repo.SkillFeedback{}, errors.New("skill version requires an exact skill")
 	}
