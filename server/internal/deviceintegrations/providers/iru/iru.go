@@ -136,21 +136,30 @@ type deviceRecord struct {
 
 // userEmail extracts the assigned user's email. The API's unassigned
 // representations — an empty-string user (confirmed against the real
-// tenant), null, or an absent field — map to "". Any other undecodable
-// shape is schema drift and fails loudly: silently treating it as
-// unassigned would quietly zero the whole fleet's coverage attribution.
+// tenant), null, or an absent field — map to "". Schema drift fails
+// loudly: an undecodable user, or a user object whose email KEY has
+// vanished (renamed or dropped), must not silently read as unassigned and
+// quietly zero the whole fleet's coverage attribution. A present-but-null
+// email stays unassigned — one odd user record must not block the org's
+// entire pull.
 func (d deviceRecord) userEmail() (string, error) {
 	trimmed := strings.TrimSpace(string(d.User))
 	if trimmed == "" || trimmed == `""` || trimmed == "null" {
 		return "", nil
 	}
-	var user struct {
-		Email string `json:"email"`
-	}
+	var user map[string]json.RawMessage
 	if err := json.Unmarshal(d.User, &user); err != nil {
 		return "", fmt.Errorf("decode user: %w", err)
 	}
-	return strings.TrimSpace(user.Email), nil
+	rawEmail, ok := user["email"]
+	if !ok {
+		return "", fmt.Errorf("user object carried no email field")
+	}
+	var email string
+	if err := json.Unmarshal(rawEmail, &email); err != nil {
+		return "", fmt.Errorf("decode user email: %w", err)
+	}
+	return strings.TrimSpace(email), nil
 }
 
 // fetchDevicesPage requests one page of the Devices API at the given offset.
@@ -218,11 +227,13 @@ func (s *source) TestConnection(ctx context.Context, creds providers.Credentials
 // churn: each device unenrolled between pages shifts later rows one slot
 // down and can drop one boundary device from the pull (N unenrollments can
 // drop up to N). The default listing order was verified stable across
-// back-to-back requests against a real tenant. Skipped devices are marked
-// missing for at most one cycle (see the snapshot-consistency note on
-// providers.InventorySource) — though an evidence-sink push firing inside
-// that window exports the mis-mark until its next push. pageSize is pinned
-// at the API maximum to minimize boundaries per pull.
+// back-to-back requests against a real tenant. A skipped device stays
+// marked missing until a later pull fetches it — one cycle in the common
+// case, longer only while sustained per-pull churn keeps re-skipping it
+// (see the snapshot-consistency note on providers.InventorySource) — and
+// an evidence-sink push firing inside that window exports the mis-mark
+// until its next push. pageSize is pinned at the API maximum to minimize
+// boundaries per pull.
 func (s *source) ListDevices(ctx context.Context, creds providers.Credentials, settings providers.Settings, cursor string) (providers.DevicePage, error) {
 	offset := 0
 	if cursor != "" {

@@ -181,10 +181,13 @@ func TestUnassignedUserRepresentations(t *testing.T) {
 		{"device_id": "uuid-a", "device_name": "a", "serial_number": "SA", "platform": "Mac", "os_version": "15.1", "user": "", "last_check_in": ""},
 		{"device_id": "uuid-b", "device_name": "b", "serial_number": "SB", "platform": "Mac", "os_version": "15.1", "user": nil, "last_check_in": ""},
 		{"device_id": "uuid-c", "device_name": "c", "serial_number": "SC", "platform": "Mac", "os_version": "15.1"},
+		// A present-but-null email is one odd user record, not schema drift:
+		// it must not block the org's entire pull.
+		{"device_id": "uuid-d", "device_name": "d", "serial_number": "SD", "platform": "Mac", "os_version": "15.1", "user": map[string]any{"email": nil}},
 	})
 
 	devices := listAll(t, fake.newSource(), fake.creds(), fake.settings())
-	require.Len(t, devices, 3)
+	require.Len(t, devices, 4)
 	for _, d := range devices {
 		require.Empty(t, d.UserEmail, "device %s must map to no assigned user", d.ExternalID)
 		require.True(t, d.LastCheckInAt.IsZero(), "device %s has no check-in time", d.ExternalID)
@@ -195,14 +198,30 @@ func TestUserSchemaDriftFailsLoudly(t *testing.T) {
 	t.Parallel()
 
 	fake := newFakeIru(t, 0)
+	s := fake.newSource()
+
 	// An assigned-but-undecodable user is schema drift, not "unassigned":
 	// swallowing it would quietly zero the fleet's coverage attribution.
 	fake.setDevices([]map[string]any{
 		{"device_id": "uuid-a", "device_name": "a", "serial_number": "SA", "platform": "Mac", "os_version": "15.1", "user": 123},
 	})
-
-	_, err := fake.newSource().ListDevices(t.Context(), fake.creds(), fake.settings(), "")
+	_, err := s.ListDevices(t.Context(), fake.creds(), fake.settings(), "")
 	require.ErrorContains(t, err, "decode user")
+
+	// A user object whose email key vanished (renamed/dropped) is the same
+	// drift class and must not silently read as unassigned.
+	fake.setDevices([]map[string]any{
+		{"device_id": "uuid-b", "device_name": "b", "serial_number": "SB", "platform": "Mac", "os_version": "15.1", "user": map[string]any{"mail": "user@example.test"}},
+	})
+	_, err = s.ListDevices(t.Context(), fake.creds(), fake.settings(), "")
+	require.ErrorContains(t, err, "no email field")
+
+	// A non-string email is drift too.
+	fake.setDevices([]map[string]any{
+		{"device_id": "uuid-c", "device_name": "c", "serial_number": "SC", "platform": "Mac", "os_version": "15.1", "user": map[string]any{"email": 123}},
+	})
+	_, err = s.ListDevices(t.Context(), fake.creds(), fake.settings(), "")
+	require.ErrorContains(t, err, "decode user email")
 }
 
 func TestUnparseableCheckInFailsLoudly(t *testing.T) {
