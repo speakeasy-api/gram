@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -81,20 +80,6 @@ type source struct {
 }
 
 var _ providers.InventorySource = (*source)(nil)
-
-// readBoundedBody reads at most maxResponseBytes and fails loudly when the
-// cap is hit, so an oversized page surfaces as a size error instead of a
-// baffling JSON decode failure on the silently truncated body.
-func readBoundedBody(r io.Reader) ([]byte, error) {
-	body, err := io.ReadAll(io.LimitReader(r, maxResponseBytes+1))
-	if err != nil {
-		return nil, fmt.Errorf("read response body: %w", err)
-	}
-	if len(body) > maxResponseBytes {
-		return nil, fmt.Errorf("response body exceeded the %d-byte limit", maxResponseBytes)
-	}
-	return body, nil
-}
 
 // instanceBaseURL validates and normalizes the customer-supplied API URL —
 // the value the Iru console shows under Settings → Access, e.g.
@@ -182,7 +167,7 @@ func (s *source) fetchDevicesPage(ctx context.Context, creds providers.Credentia
 		return nil, fmt.Errorf("devices request failed with status %d", resp.StatusCode)
 	}
 
-	body, err := readBoundedBody(resp.Body)
+	body, err := providers.ReadBoundedBody(resp.Body, maxResponseBytes)
 	if err != nil {
 		return nil, fmt.Errorf("read devices response: %w", err)
 	}
