@@ -320,6 +320,11 @@ func (s *sink) PushCoverage(ctx context.Context, creds providers.Credentials, se
 	sessionID := "gram-" + strconv.FormatInt(time.Now().UnixNano(), 36)
 	sessionPath := tgt.base + tgt.connPath + "/resources/" + url.PathEscape(resource) + "/sessions/" + sessionID
 
+	// Transport-level retries (the shared client resends a batch on 429/5xx
+	// whose response was lost) are safe here: Drata matches records by
+	// their "id" field — "if a record with that ID already exists it is
+	// updated" — so a resent batch upserts rather than duplicates, and
+	// completion publishes each id once.
 	records := buildRecords(snapshot)
 	if len(records) == 0 {
 		// An empty fleet still pushes: sessions are created implicitly by
