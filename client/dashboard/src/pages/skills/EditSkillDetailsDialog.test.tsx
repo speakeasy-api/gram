@@ -16,6 +16,9 @@ const testState = vi.hoisted(() => ({
   invalidateSkill: vi.fn().mockResolvedValue(undefined),
   invalidateDistributions: vi.fn().mockResolvedValue(undefined),
   invalidateVersions: vi.fn().mockResolvedValue(undefined),
+  invalidateSuggestions: vi.fn().mockResolvedValue(undefined),
+  invalidateFeedback: vi.fn().mockResolvedValue(undefined),
+  invalidateEfficacy: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@tanstack/react-query", () => ({
@@ -35,6 +38,15 @@ vi.mock("@gram/client/react-query/skillDistributions.js", () => ({
 }));
 vi.mock("@gram/client/react-query/skillVersions.js", () => ({
   invalidateAllSkillVersions: testState.invalidateVersions,
+}));
+vi.mock("@gram/client/react-query/skillSuggestions.js", () => ({
+  invalidateAllSkillSuggestions: testState.invalidateSuggestions,
+}));
+vi.mock("@gram/client/react-query/skillFeedback.js", () => ({
+  invalidateAllSkillFeedback: testState.invalidateFeedback,
+}));
+vi.mock("@gram/client/react-query/skillEfficacyInsights.js", () => ({
+  invalidateAllSkillEfficacyInsights: testState.invalidateEfficacy,
 }));
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -62,6 +74,9 @@ beforeEach(() => {
   testState.invalidateSkill.mockClear();
   testState.invalidateDistributions.mockClear();
   testState.invalidateVersions.mockClear();
+  testState.invalidateSuggestions.mockClear();
+  testState.invalidateFeedback.mockClear();
+  testState.invalidateEfficacy.mockClear();
 });
 
 afterEach(cleanup);
@@ -112,6 +127,15 @@ describe("EditSkillDetailsDialog", () => {
       testState.queryClient,
     );
     expect(testState.invalidateVersions).toHaveBeenCalledWith(
+      testState.queryClient,
+    );
+    expect(testState.invalidateSuggestions).toHaveBeenCalledWith(
+      testState.queryClient,
+    );
+    expect(testState.invalidateFeedback).toHaveBeenCalledWith(
+      testState.queryClient,
+    );
+    expect(testState.invalidateEfficacy).toHaveBeenCalledWith(
       testState.queryClient,
     );
     expect(onOpenChange).toHaveBeenCalledWith(false);

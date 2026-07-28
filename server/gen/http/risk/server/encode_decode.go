@@ -10161,6 +10161,7 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 		Enabled:                v.Enabled,
 		Action:                 v.Action,
 		AudienceType:           v.AudienceType,
+		ShadowMcpDisposition:   v.ShadowMcpDisposition,
 		AutoName:               v.AutoName,
 		UserMessage:            v.UserMessage,
 		Prompt:                 v.Prompt,

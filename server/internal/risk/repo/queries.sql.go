@@ -643,6 +643,7 @@ INSERT INTO risk_policies (
   , enabled
   , action
   , audience_type
+  , shadow_mcp_disposition
   , auto_name
   , user_message
   , prompt
@@ -668,11 +669,12 @@ VALUES (
   , $15
   , $16
   , $17
-  , $18
+  , $18::text
   , $19
-  , $20::text
-  , $21::jsonb
-  , COALESCE($22::double precision, 5.0)
+  , $20
+  , $21::text
+  , $22::jsonb
+  , COALESCE($23::double precision, 5.0)
   , 1
 )
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
@@ -696,6 +698,7 @@ type CreateRiskPolicyParams struct {
 	Enabled              bool
 	Action               string
 	AudienceType         string
+	ShadowMcpDisposition pgtype.Text
 	AutoName             bool
 	UserMessage          pgtype.Text
 	Prompt               pgtype.Text
@@ -722,6 +725,7 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		arg.Enabled,
 		arg.Action,
 		arg.AudienceType,
+		arg.ShadowMcpDisposition,
 		arg.AutoName,
 		arg.UserMessage,
 		arg.Prompt,

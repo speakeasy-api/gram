@@ -41,7 +41,7 @@ export type Skill = {
    */
   lastSeenAt?: Date | undefined;
   /**
-   * The derived latest version ID, selected from immutable version creation order.
+   * The current version ID, selected by effective promotion time.
    */
   latestVersionId?: string | undefined;
   /**

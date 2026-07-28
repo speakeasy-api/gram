@@ -141,6 +141,31 @@ func TestRunSyncMarksMissingOnlyOnCompletedSnapshot(t *testing.T) {
 	require.Equal(t, int32(1), state.ConsecutiveFailures)
 }
 
+func TestRunSyncVendorDataErrorRecordsFailure(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, syncer, orgID := newSyncTestEnv(t)
+
+	// A vendor record whose content the database itself rejects (jsonb
+	// refuses the Unicode NUL escape). Deterministic vendor data, not an
+	// infrastructure blip: RunSync must record a visible, backed-off
+	// failure and return nil rather than hot-looping the Temporal retry.
+	created := mustUpsert(t, ctx, conn, store, orgID, validCreds(), providers.Settings{
+		"instance_url": "https://example.test",
+		"devices":      "dev-1",
+		"raw_json":     `{"name":"\u0000"}`,
+	}, true)
+	syncID := findSyncID(t, ctx, store, orgID, testProviderID)
+
+	require.NoError(t, syncer.RunSync(ctx, syncID), "data rejection is a recorded failure, not an infra error")
+
+	state := scheduleStateFor(t, ctx, store, created.Config.ID, "testmdm_inventory")
+	require.True(t, state.LastPollFailedAt.Valid, "failure recorded")
+	require.Equal(t, int32(1), state.ConsecutiveFailures)
+	require.Contains(t, state.LastPollError.String, "upsert mdm device dev-1", "the error names the offending device")
+	require.False(t, state.AutoPausedAt.Valid, "data errors are not credential rejections")
+}
+
 func TestRunSyncAuthFailuresAutoPause(t *testing.T) {
 	t.Parallel()
 

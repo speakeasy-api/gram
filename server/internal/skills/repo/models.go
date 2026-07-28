@@ -165,6 +165,7 @@ type SkillVersion struct {
 	SpecValid        bool
 	ValidationErrors []byte
 	CreatedAt        pgtype.Timestamptz
+	PromotedAt       pgtype.Timestamptz
 	CreatedByUserID  string
 }
 

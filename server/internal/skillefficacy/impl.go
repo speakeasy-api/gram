@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/skills/suggest"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -149,6 +150,9 @@ func (s *Service) QueryInsights(ctx context.Context, payload *gen.QueryInsightsP
 	result := buildInsightsView(responseSkillIDs, rows, payload.IncludeVersions != nil && *payload.IncludeVersions)
 	result.From = from.Format(time.RFC3339)
 	result.To = to.Format(time.RFC3339)
+	if err := s.attachRegressionSignals(ctx, logger, authCtx, result); err != nil {
+		return nil, err
+	}
 	if includeScoredSessions {
 		scores, err := s.insights.ListSkillEfficacyScoreSessions(ctx, telemetryrepo.ListSkillEfficacyScoreSessionsParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
@@ -164,6 +168,73 @@ func (s *Service) QueryInsights(ctx context.Context, payload *gen.QueryInsightsP
 		result.ScoredSessions = buildScoredSessionViews(scores)
 	}
 	return result, nil
+}
+
+func (s *Service) attachRegressionSignals(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, result *gen.SkillEfficacyInsightsResult) error {
+	config := suggest.DefaultConfig()
+	queries := skillsrepo.New(s.db)
+	bases := make(map[string]suggest.TrendBase, len(result.Insights))
+	versionSet := make(map[string]struct{}, len(result.Insights)*2)
+	skillIDs := make([]uuid.UUID, 0, len(result.Insights))
+	for _, insight := range result.Insights {
+		skillID, err := uuid.Parse(insight.SkillID)
+		if err != nil {
+			continue
+		}
+		skillIDs = append(skillIDs, skillID)
+	}
+	baseRows, err := queries.ResolveSkillRegressionBases(ctx, skillsrepo.ResolveSkillRegressionBasesParams{ProjectID: *authCtx.ProjectID, SkillIds: skillIDs})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "resolve skill efficacy regression bases").LogError(ctx, logger)
+	}
+	regressionSkillIDs := make([]string, 0, len(baseRows))
+	for _, base := range baseRows {
+		skillID := base.SkillID.String()
+		bases[skillID] = suggest.TrendBase{
+			BaseVersionID:        base.BaseVersionID,
+			PredecessorVersionID: base.PredecessorVersionID,
+		}
+		regressionSkillIDs = append(regressionSkillIDs, skillID)
+		versionSet[base.BaseVersionID.String()] = struct{}{}
+		if base.PredecessorVersionID != uuid.Nil {
+			versionSet[base.PredecessorVersionID.String()] = struct{}{}
+		}
+	}
+	if len(bases) == 0 {
+		return nil
+	}
+	versionIDs := make([]string, 0, len(versionSet))
+	for versionID := range versionSet {
+		versionIDs = append(versionIDs, versionID)
+	}
+	windowEnd := time.Now().UTC()
+	rows, err := s.insights.QuerySkillInsights(ctx, telemetryrepo.QuerySkillInsightsParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: authCtx.ProjectID.String(), SkillIDs: regressionSkillIDs,
+		SkillVersionIDs: versionIDs, From: windowEnd.Add(-config.TrendWindow), To: windowEnd,
+		IntervalSeconds: int64(config.TrendWindow.Seconds()),
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "query skill efficacy regression signal").LogError(ctx, logger)
+	}
+	for _, insight := range result.Insights {
+		base, ok := bases[insight.SkillID]
+		if !ok {
+			continue
+		}
+		trend := suggest.EvaluateTrend(config, base, rows)
+		var predecessorVersionID *string
+		if base.PredecessorVersionID != uuid.Nil {
+			predecessorVersionID = conv.PtrEmpty(base.PredecessorVersionID.String())
+		}
+		insight.RegressionSignal = &gen.SkillEfficacyRegressionSignal{
+			Comparable: trend.Comparable, Regression: trend.Regression, CurrentVersionID: base.BaseVersionID.String(),
+			PredecessorVersionID: predecessorVersionID,
+			CurrentAverageScore:  trend.CurrentAverage, CurrentScoredSessions: trend.CurrentCount,
+			PredecessorAverageScore: trend.PreviousAverage, PredecessorScoredSessions: trend.PreviousCount,
+			WindowStart: windowEnd.Add(-config.TrendWindow).Format(time.RFC3339), WindowEnd: windowEnd.Format(time.RFC3339),
+		}
+	}
+	return nil
 }
 
 func (s *Service) requireProjectAccess(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, *slog.Logger, error) {
@@ -257,7 +328,7 @@ func buildInsightsView(skillIDs []string, rows []telemetryrepo.SkillInsightBucke
 				versions = append(versions, &gen.SkillVersionInsight{SkillVersionID: versionID, Metrics: buildMetricsView(total.row), Trend: total.points})
 			}
 		}
-		result.Insights = append(result.Insights, &gen.SkillEfficacyInsight{SkillID: skillID, Metrics: buildMetricsView(aggregate), Versions: versions})
+		result.Insights = append(result.Insights, &gen.SkillEfficacyInsight{SkillID: skillID, Metrics: buildMetricsView(aggregate), Versions: versions, RegressionSignal: nil})
 	}
 	return result
 }
