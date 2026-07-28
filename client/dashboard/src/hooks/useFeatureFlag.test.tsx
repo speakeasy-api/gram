@@ -1,5 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
-import { createElement, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
   nullTelemetry,
@@ -35,13 +35,13 @@ function renderFeatureFlag({
   };
 
   function Wrapper({ children }: { children: ReactNode }) {
-    return createElement(
-      TelemetryStateProvider,
-      {
-        telemetry,
-        featureFlagsInitiallyAvailable: initiallyAvailable,
-        children,
-      },
+    return (
+      <TelemetryStateProvider
+        telemetry={telemetry}
+        featureFlagsInitiallyAvailable={initiallyAvailable}
+      >
+        {children}
+      </TelemetryStateProvider>
     );
   }
 
