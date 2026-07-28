@@ -25,13 +25,14 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 const (
 	// ProviderID is the registry discriminator stored on config rows. It
-	// uses the vendor's current brand: the API domain still says kandji
-	// (the rebrand didn't reach it), but a persisted discriminator should
-	// carry the name that stays right going forward.
+	// uses the vendor's current brand; tenants answer on both the rebranded
+	// API domain (*.api.iru.com) and the legacy one (*.api.kandji.io), and
+	// the instance_url setting accepts either.
 	ProviderID = "iru"
 
 	// ScheduleInventory is the provider's single sync pipeline.
@@ -83,8 +84,9 @@ var _ providers.InventorySource = (*source)(nil)
 
 // instanceBaseURL validates and normalizes the customer-supplied API URL —
 // the value the Iru console shows under Settings → Access, e.g.
-// https://yourtenant.api.kandji.io (or .api.eu.kandji.io for EU tenants).
-// https only, no path/query — the API path is ours to append.
+// https://yourtenant.api.iru.com (legacy *.api.kandji.io and EU-region
+// domains work the same way). https only, no path/query — the API path is
+// ours to append.
 func instanceBaseURL(settings providers.Settings) (string, error) {
 	raw := strings.TrimSpace(settings[fieldInstanceURL])
 	if raw == "" {
@@ -98,7 +100,7 @@ func instanceBaseURL(settings providers.Settings) (string, error) {
 		return "", fmt.Errorf("instance_url must use https")
 	}
 	if parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
-		return "", fmt.Errorf("instance_url must be the tenant API root, e.g. https://yourtenant.api.kandji.io")
+		return "", fmt.Errorf("instance_url must be the tenant API root, e.g. https://yourtenant.api.iru.com")
 	}
 	return "https://" + parsed.Host, nil
 }
@@ -155,7 +157,7 @@ func (s *source) fetchDevicesPage(ctx context.Context, creds providers.Credentia
 	if err != nil {
 		return nil, fmt.Errorf("request devices: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	// Classify by status before touching the body: the error branches never
 	// need it, and an oversized error response must not mask a credential
