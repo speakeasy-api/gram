@@ -98,21 +98,7 @@ func (s *Service) GetUserSessionClient(ctx context.Context, payload *gen.GetUser
 		return nil, oops.E(oops.CodeUnexpected, err, "get user session client").LogError(ctx, s.logger)
 	}
 
-	return mv.BuildUserSessionClientView(repo.UserSessionClient{
-		ID:                    row.ID,
-		ProjectID:             row.ProjectID,
-		UserSessionIssuerID:   row.UserSessionIssuerID,
-		ClientID:              row.ClientID,
-		ClientSecretHash:      row.ClientSecretHash,
-		ClientName:            row.ClientName,
-		RedirectUris:          row.RedirectUris,
-		ClientIDIssuedAt:      row.ClientIDIssuedAt,
-		ClientSecretExpiresAt: row.ClientSecretExpiresAt,
-		CreatedAt:             row.CreatedAt,
-		UpdatedAt:             row.UpdatedAt,
-		DeletedAt:             row.DeletedAt,
-		Deleted:               row.Deleted,
-	}), nil
+	return mv.BuildUserSessionClientView(row), nil
 }
 
 // Soft-deletes a client registration and cascades to every user_session

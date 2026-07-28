@@ -1239,6 +1239,9 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
   session_duration INTERVAL NOT NULL,
   classification TEXT NOT NULL DEFAULT 'custom' CHECK (classification IN ('custom', 'project_default_idp')), -- 'project_default_idp' is the auto-provisioned implicit Gram issuer for private servers; 'custom' is user-configured
 
+  -- Chooses which CIMD clients this issuer permits.
+  client_id_metadata_admission_mode TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -1272,6 +1275,21 @@ CREATE TABLE IF NOT EXISTS user_session_clients (
   client_id_issued_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   client_secret_expires_at timestamptz,
 
+  -- CIMD: when non-null, this row was resolved from an OAuth Client ID
+  -- Metadata Document at the given HTTPS URL rather than via RFC 7591 DCR.
+  -- Per draft-ietf-oauth-client-id-metadata-document the client_id MUST equal
+  -- this URL, so storing it as a discriminator avoids parsing client_id at
+  -- runtime to tell CIMD rows from DCR rows.
+  client_id_metadata_uri TEXT,
+  -- Last successful fetch of the metadata document (observability and ops).
+  client_id_metadata_fetched_at timestamptz,
+  -- Cache TTL hint derived from upstream Cache-Control / Expires headers,
+  -- bounded by application-side min/max. NULL means no cached fetch yet.
+  client_id_metadata_cache_expires_at timestamptz,
+  -- ETag from the last successful fetch, used for If-None-Match conditional
+  -- refresh. Optional, since not all metadata hosts emit one.
+  client_id_metadata_etag TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -1279,12 +1297,70 @@ CREATE TABLE IF NOT EXISTS user_session_clients (
 
   CONSTRAINT user_session_clients_pkey PRIMARY KEY (id),
   CONSTRAINT user_session_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT user_session_clients_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
+  CONSTRAINT user_session_clients_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
+  -- CIMD forbids symmetric client secrets (no client_secret_basic,
+  -- client_secret_post, or client_secret_jwt), so a CIMD-resolved row must
+  -- never carry a stored secret hash.
+  CONSTRAINT user_session_clients_client_id_metadata_uri_secret_check CHECK (
+    client_id_metadata_uri IS NULL OR client_secret_hash IS NULL
+  ),
+  -- CIMD requires the client_id value in the metadata document to equal the
+  -- document URL. We persist them as separate columns so a CIMD row is
+  -- recognisable without parsing client_id, but the two must stay in sync,
+  -- and an empty URL is not a valid document location.
+  CONSTRAINT user_session_clients_client_id_metadata_uri_match_check CHECK (
+    client_id_metadata_uri IS NULL
+    OR (
+      client_id_metadata_uri <> ''
+      AND client_id = client_id_metadata_uri
+    )
+  )
 );
 
+-- Serves lookups for both DCR and CIMD rows. For CIMD the metadata document
+-- URL is what lands in client_id, so no separate index is needed. Note the
+-- btree entry limit of roughly 2704 bytes caps CIMD URL length in practice;
+-- the ~2 KB cap is enforced in app code by the CIMD validator.
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_clients_issuer_client_id_key
 ON user_session_clients (user_session_issuer_id, client_id)
 WHERE deleted IS FALSE;
+
+-- Issuer-specific allowed CIMD document URLs, additive to the issuer's
+-- admission mode.
+CREATE TABLE IF NOT EXISTS user_session_issuer_cimd_clients (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  user_session_issuer_id uuid NOT NULL,
+
+  client_id_metadata_uri TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT user_session_issuer_cimd_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT user_session_issuer_cimd_clients_project_id_fkey
+    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_issuer_cimd_clients_user_session_issuer_id_fkey
+    FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
+);
+
+-- Also serves the issuer-scoped admission lookup (leading column, equality).
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuer_cimd_clients_issuer_uri_key
+ON user_session_issuer_cimd_clients (user_session_issuer_id, client_id_metadata_uri)
+WHERE deleted IS FALSE;
+
+-- Non-partial indexes backing the ON DELETE CASCADE foreign keys. The RI
+-- cascade trigger scans child rows with no `deleted IS FALSE` predicate, so it
+-- cannot use the partial unique index above; without these a parent delete
+-- (project or issuer) degrades to a sequential scan as soft-deleted rows
+-- accumulate.
+CREATE INDEX IF NOT EXISTS user_session_issuer_cimd_clients_project_id_idx
+ON user_session_issuer_cimd_clients (project_id);
+
+CREATE INDEX IF NOT EXISTS user_session_issuer_cimd_clients_user_session_issuer_id_idx
+ON user_session_issuer_cimd_clients (user_session_issuer_id);
 
 -- User Session Consents track records of consent between Clients and Issuers
 -- Consents are scoped to given sets of underlying credentials so they can be reused between login events
