@@ -23,6 +23,10 @@ type Server struct {
 	AddVersion             http.Handler
 	Update                 http.Handler
 	List                   http.Handler
+	ListSuggestions        http.Handler
+	ApproveSuggestion      http.Handler
+	DismissSuggestion      http.Handler
+	ApproveAllSuggestions  http.Handler
 	Get                    http.Handler
 	ListUnknownActivations http.Handler
 	ListVersions           http.Handler
@@ -66,6 +70,10 @@ func New(
 			{"AddVersion", "POST", "/rpc/skills.addVersion"},
 			{"Update", "POST", "/rpc/skills.update"},
 			{"List", "GET", "/rpc/skills.list"},
+			{"ListSuggestions", "GET", "/rpc/skills.listSuggestions"},
+			{"ApproveSuggestion", "POST", "/rpc/skills.approveSuggestion"},
+			{"DismissSuggestion", "POST", "/rpc/skills.dismissSuggestion"},
+			{"ApproveAllSuggestions", "POST", "/rpc/skills.approveAllSuggestions"},
 			{"Get", "GET", "/rpc/skills.get"},
 			{"ListUnknownActivations", "GET", "/rpc/skills.listUnknownActivations"},
 			{"ListVersions", "GET", "/rpc/skills.listVersions"},
@@ -81,6 +89,10 @@ func New(
 		AddVersion:             NewAddVersionHandler(e.AddVersion, mux, decoder, encoder, errhandler, formatter),
 		Update:                 NewUpdateHandler(e.Update, mux, decoder, encoder, errhandler, formatter),
 		List:                   NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
+		ListSuggestions:        NewListSuggestionsHandler(e.ListSuggestions, mux, decoder, encoder, errhandler, formatter),
+		ApproveSuggestion:      NewApproveSuggestionHandler(e.ApproveSuggestion, mux, decoder, encoder, errhandler, formatter),
+		DismissSuggestion:      NewDismissSuggestionHandler(e.DismissSuggestion, mux, decoder, encoder, errhandler, formatter),
+		ApproveAllSuggestions:  NewApproveAllSuggestionsHandler(e.ApproveAllSuggestions, mux, decoder, encoder, errhandler, formatter),
 		Get:                    NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
 		ListUnknownActivations: NewListUnknownActivationsHandler(e.ListUnknownActivations, mux, decoder, encoder, errhandler, formatter),
 		ListVersions:           NewListVersionsHandler(e.ListVersions, mux, decoder, encoder, errhandler, formatter),
@@ -103,6 +115,10 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.AddVersion = m(s.AddVersion)
 	s.Update = m(s.Update)
 	s.List = m(s.List)
+	s.ListSuggestions = m(s.ListSuggestions)
+	s.ApproveSuggestion = m(s.ApproveSuggestion)
+	s.DismissSuggestion = m(s.DismissSuggestion)
+	s.ApproveAllSuggestions = m(s.ApproveAllSuggestions)
 	s.Get = m(s.Get)
 	s.ListUnknownActivations = m(s.ListUnknownActivations)
 	s.ListVersions = m(s.ListVersions)
@@ -124,6 +140,10 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountAddVersionHandler(mux, h.AddVersion)
 	MountUpdateHandler(mux, h.Update)
 	MountListHandler(mux, h.List)
+	MountListSuggestionsHandler(mux, h.ListSuggestions)
+	MountApproveSuggestionHandler(mux, h.ApproveSuggestion)
+	MountDismissSuggestionHandler(mux, h.DismissSuggestion)
+	MountApproveAllSuggestionsHandler(mux, h.ApproveAllSuggestions)
 	MountGetHandler(mux, h.Get)
 	MountListUnknownActivationsHandler(mux, h.ListUnknownActivations)
 	MountListVersionsHandler(mux, h.ListVersions)
@@ -330,6 +350,218 @@ func NewListHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "list")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListSuggestionsHandler configures the mux to serve the "skills" service
+// "listSuggestions" endpoint.
+func MountListSuggestionsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/skills.listSuggestions", f)
+}
+
+// NewListSuggestionsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "skills" service "listSuggestions" endpoint.
+func NewListSuggestionsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListSuggestionsRequest(mux, decoder)
+		encodeResponse = EncodeListSuggestionsResponse(encoder)
+		encodeError    = EncodeListSuggestionsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listSuggestions")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountApproveSuggestionHandler configures the mux to serve the "skills"
+// service "approveSuggestion" endpoint.
+func MountApproveSuggestionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/skills.approveSuggestion", f)
+}
+
+// NewApproveSuggestionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "skills" service "approveSuggestion" endpoint.
+func NewApproveSuggestionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeApproveSuggestionRequest(mux, decoder)
+		encodeResponse = EncodeApproveSuggestionResponse(encoder)
+		encodeError    = EncodeApproveSuggestionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "approveSuggestion")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDismissSuggestionHandler configures the mux to serve the "skills"
+// service "dismissSuggestion" endpoint.
+func MountDismissSuggestionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/skills.dismissSuggestion", f)
+}
+
+// NewDismissSuggestionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "skills" service "dismissSuggestion" endpoint.
+func NewDismissSuggestionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDismissSuggestionRequest(mux, decoder)
+		encodeResponse = EncodeDismissSuggestionResponse(encoder)
+		encodeError    = EncodeDismissSuggestionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "dismissSuggestion")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountApproveAllSuggestionsHandler configures the mux to serve the "skills"
+// service "approveAllSuggestions" endpoint.
+func MountApproveAllSuggestionsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/skills.approveAllSuggestions", f)
+}
+
+// NewApproveAllSuggestionsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "skills" service "approveAllSuggestions" endpoint.
+func NewApproveAllSuggestionsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeApproveAllSuggestionsRequest(mux, decoder)
+		encodeResponse = EncodeApproveAllSuggestionsResponse(encoder)
+		encodeError    = EncodeApproveAllSuggestionsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "approveAllSuggestions")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -397,13 +397,17 @@ trackedFiles:
   src/funcs/skillEfficacyQueryInsights.ts: {}
   src/funcs/skillEfficacyUpsertSettings.ts: {}
   src/funcs/skillsAddVersion.ts: {}
+  src/funcs/skillsApproveAllSuggestions.ts: {}
+  src/funcs/skillsApproveSuggestion.ts: {}
   src/funcs/skillsArchive.ts: {}
   src/funcs/skillsCreate.ts: {}
+  src/funcs/skillsDismissSuggestion.ts: {}
   src/funcs/skillsDistribute.ts: {}
   src/funcs/skillsGet.ts: {}
   src/funcs/skillsGetShared.ts: {}
   src/funcs/skillsList.ts: {}
   src/funcs/skillsListDistributions.ts: {}
+  src/funcs/skillsListSuggestions.ts: {}
   src/funcs/skillsListUnknownActivations.ts: {}
   src/funcs/skillsListVersions.ts: {}
   src/funcs/skillsShare.ts: {}
@@ -550,7 +554,10 @@ trackedFiles:
   src/models/components/aiintegrationconfig.ts: {}
   src/models/components/aiintegrationschedulestate.ts: {}
   src/models/components/allowedorigin.ts: {}
+  src/models/components/approveallskillsuggestionsresult.ts: {}
   src/models/components/approveshadowmcpapprovalrequestform.ts: {}
+  src/models/components/approveskillsuggestionrequestbody.ts: {}
+  src/models/components/approveskillsuggestionresult.ts: {}
   src/models/components/archiveskillrequestbody.ts: {}
   src/models/components/asset.ts: {}
   src/models/components/assistant.ts: {}
@@ -662,6 +669,7 @@ trackedFiles:
   src/models/components/deviceintegrationschedulestate.ts: {}
   src/models/components/deviceintegrationtestconnectionresult.ts: {}
   src/models/components/discoverprotectedresourcemetadatarequestbody.ts: {}
+  src/models/components/dismissskillsuggestionrequestbody.ts: {}
   src/models/components/distributeskillrequestbody.ts: {}
   src/models/components/employeedataflowedge.ts: {}
   src/models/components/employeedataflownode.ts: {}
@@ -832,6 +840,7 @@ trackedFiles:
   src/models/components/listshadowmcpinventoryusersresult.ts: {}
   src/models/components/listskilldistributionsresult.ts: {}
   src/models/components/listskillsresult.ts: {}
+  src/models/components/listskillsuggestionsresult.ts: {}
   src/models/components/listskillversionsresult.ts: {}
   src/models/components/listsourcesresult.ts: {}
   src/models/components/listspendruleeventsresult.ts: {}
@@ -1071,6 +1080,8 @@ trackedFiles:
   src/models/components/skillbreakdownrow.ts: {}
   src/models/components/skilldistribution.ts: {}
   src/models/components/skilldrift.ts: {}
+  src/models/components/skilleditsuggestion.ts: {}
+  src/models/components/skilleditsuggestionchange.ts: {}
   src/models/components/skillefficacyinsight.ts: {}
   src/models/components/skillefficacyinsightsresult.ts: {}
   src/models/components/skillefficacymetrics.ts: {}
@@ -1081,6 +1092,7 @@ trackedFiles:
   src/models/components/skillinsightpoint.ts: {}
   src/models/components/skillsharelink.ts: {}
   src/models/components/skillsightingtimelinepoint.ts: {}
+  src/models/components/skillsuggestionapprovalitem.ts: {}
   src/models/components/skillsummary.ts: {}
   src/models/components/skilltimeseriespoint.ts: {}
   src/models/components/skillvalidationerror.ts: {}
@@ -1247,8 +1259,10 @@ trackedFiles:
   src/models/operations/addoauthproxyserver.ts: {}
   src/models/operations/addpluginserver.ts: {}
   src/models/operations/addskillversion.ts: {}
+  src/models/operations/approveallskillsuggestions.ts: {}
   src/models/operations/approveriskpolicybypassrequest.ts: {}
   src/models/operations/approveshadowmcpapprovalrequest.ts: {}
+  src/models/operations/approveskillsuggestion.ts: {}
   src/models/operations/archiveskill.ts: {}
   src/models/operations/archivespendrule.ts: {}
   src/models/operations/attachservertocollection.ts: {}
@@ -1364,6 +1378,7 @@ trackedFiles:
   src/models/operations/disablerbac.ts: {}
   src/models/operations/disablewebhooks.ts: {}
   src/models/operations/discoverremotemcpprotectedresourcemetadata.ts: {}
+  src/models/operations/dismissskillsuggestion.ts: {}
   src/models/operations/distributeskill.ts: {}
   src/models/operations/downloadcodexinstallscript.ts: {}
   src/models/operations/downloadobservabilityplugin.ts: {}
@@ -1551,6 +1566,7 @@ trackedFiles:
   src/models/operations/listshadowmcpinventoryusers.ts: {}
   src/models/operations/listskilldistributions.ts: {}
   src/models/operations/listskills.ts: {}
+  src/models/operations/listskillsuggestions.ts: {}
   src/models/operations/listskillversions.ts: {}
   src/models/operations/listspendruleactorattributes.ts: {}
   src/models/operations/listspendruleevents.ts: {}
@@ -1736,7 +1752,9 @@ trackedFiles:
   src/react-query/aiIntegrationConfig.ts: {}
   src/react-query/aiIntegrationSchedules.core.ts: {}
   src/react-query/aiIntegrationSchedules.ts: {}
+  src/react-query/approveAllSkillSuggestions.ts: {}
   src/react-query/approveShadowMCPApprovalRequest.ts: {}
+  src/react-query/approveSkillSuggestion.ts: {}
   src/react-query/archiveSkill.ts: {}
   src/react-query/assistantMemoriesDelete.ts: {}
   src/react-query/assistantsCreate.ts: {}
@@ -1876,6 +1894,7 @@ trackedFiles:
   src/react-query/disableRBAC.ts: {}
   src/react-query/disableWebhooks.ts: {}
   src/react-query/discoverRemoteMcpProtectedResourceMetadata.ts: {}
+  src/react-query/dismissSkillSuggestion.ts: {}
   src/react-query/distributeSkill.ts: {}
   src/react-query/enableRBAC.ts: {}
   src/react-query/enableWebhooks.ts: {}
@@ -2299,6 +2318,8 @@ trackedFiles:
   src/react-query/skillEfficacyInsights.ts: {}
   src/react-query/skillEfficacySettings.core.ts: {}
   src/react-query/skillEfficacySettings.ts: {}
+  src/react-query/skillSuggestions.core.ts: {}
+  src/react-query/skillSuggestions.ts: {}
   src/react-query/skillVersions.core.ts: {}
   src/react-query/skillVersions.ts: {}
   src/react-query/skills.core.ts: {}
@@ -2579,6 +2600,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  approveAllSkillSuggestions:
+    speakeasy-default-approve-all-skill-suggestions:
+      responses:
+        "200":
+          application/json: {"items": [{"outcome": "superseded", "skill_display_name": "<value>", "skill_id": "390fa6e3-2459-47d0-b839-602a1176d7f1", "skill_name": "<value>", "suggestion_id": "853f27fb-6322-4957-b9cd-eeb87a1ba632"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   approveRiskPolicyBypassRequest:
     speakeasy-default-approve-risk-policy-bypass-request:
       requestBody:
@@ -2612,6 +2642,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  approveSkillSuggestion:
+    speakeasy-default-approve-skill-suggestion:
+      requestBody:
+        application/json: {"id": "fb35dd50-aefe-40b8-aa2f-6b85fd32acb4"}
+      responses:
+        "200":
+          application/json: {"outcome": "superseded", "suggestion": {"applies_cleanly": false, "base_version_id": "da9d7168-7aa2-4487-8287-04f1f2a4dc4f", "changes": [{"applies_cleanly": false, "created_at": "2024-08-20T08:52:58.994Z", "feedback_count": 328576, "feedback_session_count": 861914, "id": "d50aefe0-b8a2-4f6b-b85f-d32acb488da9", "proposed_diff": "<value>", "rationale": "<value>", "suggestion_id": "71687aa2-4872-4870-b4f1-f2a4dc4f15f2"}], "created_at": "2025-01-25T17:23:34.199Z", "feedback_count": 974292, "feedback_session_count": 743848, "id": "2d8893e0-121c-4820-afa3-6d0436d14ebf", "proposed_content": "<value>", "rationale": "<value>", "scored_session_count": 447043, "skill_display_name": "<value>", "skill_id": "36215faf-6f3d-46a4-b77f-d6687d130d96", "skill_name": "<value>", "status": "superseded", "updated_at": "2026-12-28T18:32:16.805Z"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   archiveSkill:
     speakeasy-default-archive-skill:
       requestBody:
@@ -3858,6 +3899,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  dismissSkillSuggestion:
+    speakeasy-default-dismiss-skill-suggestion:
+      requestBody:
+        application/json: {"id": "7bcc65fb-0b75-481e-9e7b-1c486805ea1f"}
+      responses:
+        "200":
+          application/json: {"applies_cleanly": true, "base_version_id": "e898c584-e5fa-4d65-9aa7-8cf9573af6d6", "changes": [], "created_at": "2024-08-08T02:54:44.724Z", "feedback_count": 625492, "feedback_session_count": 690841, "id": "0f38e644-a0a6-4c21-baa1-06cb6afdbf3b", "proposed_content": "<value>", "rationale": "<value>", "scored_session_count": 650075, "skill_display_name": "<value>", "skill_id": "951dc8a1-ecdb-476e-a3bf-eda4fa2084f4", "skill_name": "<value>", "status": "dismissed", "updated_at": "2025-01-05T22:26:20.944Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   distributeSkill:
     speakeasy-default-distribute-skill:
       requestBody:
@@ -5866,6 +5918,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listSkillSuggestions:
+    speakeasy-default-list-skill-suggestions:
+      parameters:
+        query:
+          limit: 20
+      responses:
+        "200":
+          application/json: {"suggestions": [], "total_open_count": 840393}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listSkillVersions:
     speakeasy-default-list-skill-versions:
       parameters:

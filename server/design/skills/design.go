@@ -136,6 +136,121 @@ var _ = Service("skills", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Skills"}`)
 	})
 
+	Method("listSuggestions", func() {
+		Description("List open skill edit suggestions in the project, newest first. The implementation requires the skills product feature and skill read scope.")
+
+		Payload(func() {
+			Attribute("skill_id", String, "Only return suggestions for this skill.", func() { Format(FormatUUID) })
+			Attribute("cursor", String, "Cursor for the next page of suggestions.")
+			Attribute("limit", Int, "The number of suggestions to return per page.", func() {
+				Default(20)
+				Minimum(1)
+				Maximum(50)
+			})
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListSkillSuggestionsResult)
+
+		HTTP(func() {
+			GET("/rpc/skills.listSuggestions")
+			Param("skill_id")
+			Param("cursor")
+			Param("limit")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		shared.CursorPagination()
+		Meta("openapi:operationId", "listSkillSuggestions")
+		Meta("openapi:extension:x-speakeasy-name-override", "listSuggestions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SkillSuggestions"}`)
+	})
+
+	Method("approveSuggestion", func() {
+		Description("Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only one of its proposed changes. Stale suggestions are superseded instead.")
+
+		Payload(func() {
+			Attribute("id", String, "The suggestion ID.", func() { Format(FormatUUID) })
+			Attribute("content", String, "Optional edited complete SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
+			Attribute("change_id", String, "Optional ID of the single proposed change to take. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.", func() { Format(FormatUUID) })
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ApproveSkillSuggestionResult)
+
+		HTTP(func() {
+			POST("/rpc/skills.approveSuggestion")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Body(ApproveSkillSuggestionRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "approveSkillSuggestion")
+		Meta("openapi:extension:x-speakeasy-name-override", "approveSuggestion")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ApproveSkillSuggestion"}`)
+	})
+
+	Method("dismissSuggestion", func() {
+		Description("Idempotently dismiss an open skill edit suggestion. Approved and superseded suggestions conflict.")
+
+		Payload(func() {
+			Attribute("id", String, "The suggestion ID.", func() { Format(FormatUUID) })
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(SkillEditSuggestion)
+
+		HTTP(func() {
+			POST("/rpc/skills.dismissSuggestion")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Body(DismissSkillSuggestionRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "dismissSkillSuggestion")
+		Meta("openapi:extension:x-speakeasy-name-override", "dismissSuggestion")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DismissSkillSuggestion"}`)
+	})
+
+	Method("approveAllSuggestions", func() {
+		Description("Snapshot and independently process every open skill edit suggestion in the project. One conflict or failure does not stop the remaining approvals.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ApproveAllSkillSuggestionsResult)
+
+		HTTP(func() {
+			POST("/rpc/skills.approveAllSuggestions")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "approveAllSkillSuggestions")
+		Meta("openapi:extension:x-speakeasy-name-override", "approveAllSuggestions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ApproveAllSkillSuggestions"}`)
+	})
+
 	Method("get", func() {
 		Description("Get an active skill and its latest version. The implementation requires the skills product feature and skill read scope.")
 
@@ -461,6 +576,22 @@ var AddSkillVersionRequestBody = Type("AddSkillVersionRequestBody", func() {
 	Required("id", "content")
 })
 
+var ApproveSkillSuggestionRequestBody = Type("ApproveSkillSuggestionRequestBody", func() {
+	Meta("openapi:typename", "ApproveSkillSuggestionRequestBody")
+
+	Attribute("id", String, "The suggestion ID.", func() { Format(FormatUUID) })
+	Attribute("content", String, "Optional edited complete SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
+	Attribute("change_id", String, "Optional ID of the single proposed change to take. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.", func() { Format(FormatUUID) })
+	Required("id")
+})
+
+var DismissSkillSuggestionRequestBody = Type("DismissSkillSuggestionRequestBody", func() {
+	Meta("openapi:typename", "DismissSkillSuggestionRequestBody")
+
+	Attribute("id", String, "The suggestion ID.", func() { Format(FormatUUID) })
+	Required("id")
+})
+
 var UpdateSkillRequestBody = Type("UpdateSkillRequestBody", func() {
 	Meta("openapi:typename", "UpdateSkillRequestBody")
 
@@ -620,6 +751,81 @@ var SkillVersion = Type("SkillVersion", func() {
 	Attribute("seen_count", Int64, "The number of activations attributed to this exact version.")
 
 	Required("id", "skill_id", "content", "canonical_sha256", "raw_sha256", "metadata", "frontmatter", "spec_valid", "validation_errors", "created_at", "created_by_user_id", "seen_count")
+})
+
+var SkillEditSuggestion = Type("SkillEditSuggestion", func() {
+	Meta("struct:pkg:path", "types")
+	Description("A proposed edit to an existing project skill.")
+
+	Attribute("id", String, "The suggestion ID.", func() { Format(FormatUUID) })
+	Attribute("skill_id", String, "The skill targeted by the suggestion.", func() { Format(FormatUUID) })
+	Attribute("skill_name", String, "The canonical skill name.")
+	Attribute("skill_display_name", String, "The user-facing skill name.")
+	Attribute("base_version_id", String, "The version the suggestion was generated from.", func() { Format(FormatUUID) })
+	Attribute("changes", ArrayOf(SkillEditSuggestionChange), "The separate changes proposed, each reviewable on its own.")
+	Attribute("proposed_content", String, "The complete SKILL.md content produced by taking every proposed change.")
+	Attribute("applies_cleanly", Boolean, "Whether every proposed change still applies to the base version.")
+	Attribute("rationale", String, "Why the edit was proposed, covering the suggestion as a whole.")
+	Attribute("status", String, "The suggestion state.", func() { Enum("open", "approved", "dismissed", "superseded") })
+	Attribute("feedback_count", Int64, "Feedback records the suggestion was generated from.")
+	Attribute("feedback_session_count", Int64, "Distinct sessions that reported the feedback behind the suggestion.")
+	Attribute("scored_session_count", Int64, "Scored sessions considered by the suggestion.")
+	Attribute("approved_by_user_id", String, "The user that approved the suggestion, when present.")
+	Attribute("approved_at", String, "When the suggestion was approved, when present.", func() { Format(FormatDateTime) })
+	Attribute("created_at", String, "When the suggestion was created.", func() { Format(FormatDateTime) })
+	Attribute("updated_at", String, "When the suggestion was last updated.", func() { Format(FormatDateTime) })
+
+	Required("id", "skill_id", "skill_name", "skill_display_name", "base_version_id", "changes", "proposed_content", "applies_cleanly", "rationale", "status", "feedback_count", "feedback_session_count", "scored_session_count", "created_at", "updated_at")
+})
+
+var SkillEditSuggestionChange = Type("SkillEditSuggestionChange", func() {
+	Meta("struct:pkg:path", "types")
+	Description("One self-contained edit proposed by a suggestion, applied and reviewed on its own.")
+
+	Attribute("id", String, "The change ID.", func() { Format(FormatUUID) })
+	Attribute("suggestion_id", String, "The suggestion the change belongs to.", func() { Format(FormatUUID) })
+	Attribute("proposed_diff", String, "The change as a unified diff against the content the changes before it produce.")
+	Attribute("rationale", String, "Why this change alone was proposed.")
+	Attribute("applies_cleanly", Boolean, "Whether the change still applies.")
+	Attribute("feedback_count", Int64, "Feedback records cited as the reason for this change.")
+	Attribute("feedback_session_count", Int64, "Distinct sessions that reported the feedback behind this change.")
+	Attribute("created_at", String, "When the change was recorded.", func() { Format(FormatDateTime) })
+
+	Required("id", "suggestion_id", "proposed_diff", "rationale", "applies_cleanly", "feedback_count", "feedback_session_count", "created_at")
+})
+
+var ListSkillSuggestionsResult = Type("ListSkillSuggestionsResult", func() {
+	Description("A page of open skill edit suggestions.")
+	Attribute("suggestions", ArrayOf(SkillEditSuggestion), "The open suggestions in this page.")
+	Attribute("total_open_count", Int64, "The total number of matching open suggestions, independent of pagination.")
+	Attribute("next_cursor", String, "Cursor for the next page; absent when exhausted.")
+	Required("suggestions", "total_open_count")
+})
+
+var ApproveSkillSuggestionResult = Type("ApproveSkillSuggestionResult", func() {
+	Description("The result of approving one suggestion.")
+	Attribute("suggestion", SkillEditSuggestion, "The resulting suggestion state.")
+	Attribute("outcome", String, "Whether the suggestion created a version, created one and stayed open carrying its remaining changes, or was stale.", func() { Enum("applied", "partially_applied", "superseded") })
+	Attribute("version", SkillVersion, "The created version for an applied approval.")
+	Required("suggestion", "outcome")
+})
+
+var SkillSuggestionApprovalItem = Type("SkillSuggestionApprovalItem", func() {
+	Description("The result of one item in a bulk suggestion approval.")
+	Attribute("suggestion_id", String, "The suggestion ID.", func() { Format(FormatUUID) })
+	Attribute("skill_id", String, "The targeted skill ID.", func() { Format(FormatUUID) })
+	Attribute("skill_name", String, "The canonical skill name.")
+	Attribute("skill_display_name", String, "The user-facing skill name.")
+	Attribute("outcome", String, "The item's processing outcome.", func() { Enum("applied", "superseded", "conflict", "failed") })
+	Attribute("resulting_version_id", String, "The created version for an applied item.", func() { Format(FormatUUID) })
+	Attribute("message", String, "A safe explanation for a conflict or failure.")
+	Required("suggestion_id", "skill_id", "skill_name", "skill_display_name", "outcome")
+})
+
+var ApproveAllSkillSuggestionsResult = Type("ApproveAllSkillSuggestionsResult", func() {
+	Description("Per-item outcomes for the snapshotted open suggestions.")
+	Attribute("items", ArrayOf(SkillSuggestionApprovalItem), "The outcomes in snapshot order.")
+	Required("items")
 })
 
 var SkillAdoption = Type("SkillAdoption", func() {

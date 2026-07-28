@@ -139,7 +139,7 @@ func UsageCommands() []string {
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
-		"skills (create|add-version|update|list|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
+		"skills (create|add-version|update|list|list-suggestions|approve-suggestion|dismiss-suggestion|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
 		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|archive-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview|list-actor-attributes)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
@@ -2299,6 +2299,31 @@ func ParseEndpoint(
 		skillsListApikeyTokenFlag      = skillsListFlags.String("apikey-token", "", "")
 		skillsListProjectSlugInputFlag = skillsListFlags.String("project-slug-input", "", "")
 
+		skillsListSuggestionsFlags                = flag.NewFlagSet("list-suggestions", flag.ExitOnError)
+		skillsListSuggestionsSkillIDFlag          = skillsListSuggestionsFlags.String("skill-id", "", "")
+		skillsListSuggestionsCursorFlag           = skillsListSuggestionsFlags.String("cursor", "", "")
+		skillsListSuggestionsLimitFlag            = skillsListSuggestionsFlags.String("limit", "20", "")
+		skillsListSuggestionsSessionTokenFlag     = skillsListSuggestionsFlags.String("session-token", "", "")
+		skillsListSuggestionsApikeyTokenFlag      = skillsListSuggestionsFlags.String("apikey-token", "", "")
+		skillsListSuggestionsProjectSlugInputFlag = skillsListSuggestionsFlags.String("project-slug-input", "", "")
+
+		skillsApproveSuggestionFlags                = flag.NewFlagSet("approve-suggestion", flag.ExitOnError)
+		skillsApproveSuggestionBodyFlag             = skillsApproveSuggestionFlags.String("body", "REQUIRED", "")
+		skillsApproveSuggestionSessionTokenFlag     = skillsApproveSuggestionFlags.String("session-token", "", "")
+		skillsApproveSuggestionApikeyTokenFlag      = skillsApproveSuggestionFlags.String("apikey-token", "", "")
+		skillsApproveSuggestionProjectSlugInputFlag = skillsApproveSuggestionFlags.String("project-slug-input", "", "")
+
+		skillsDismissSuggestionFlags                = flag.NewFlagSet("dismiss-suggestion", flag.ExitOnError)
+		skillsDismissSuggestionBodyFlag             = skillsDismissSuggestionFlags.String("body", "REQUIRED", "")
+		skillsDismissSuggestionSessionTokenFlag     = skillsDismissSuggestionFlags.String("session-token", "", "")
+		skillsDismissSuggestionApikeyTokenFlag      = skillsDismissSuggestionFlags.String("apikey-token", "", "")
+		skillsDismissSuggestionProjectSlugInputFlag = skillsDismissSuggestionFlags.String("project-slug-input", "", "")
+
+		skillsApproveAllSuggestionsFlags                = flag.NewFlagSet("approve-all-suggestions", flag.ExitOnError)
+		skillsApproveAllSuggestionsSessionTokenFlag     = skillsApproveAllSuggestionsFlags.String("session-token", "", "")
+		skillsApproveAllSuggestionsApikeyTokenFlag      = skillsApproveAllSuggestionsFlags.String("apikey-token", "", "")
+		skillsApproveAllSuggestionsProjectSlugInputFlag = skillsApproveAllSuggestionsFlags.String("project-slug-input", "", "")
+
 		skillsGetFlags                = flag.NewFlagSet("get", flag.ExitOnError)
 		skillsGetIDFlag               = skillsGetFlags.String("id", "REQUIRED", "")
 		skillsGetSessionTokenFlag     = skillsGetFlags.String("session-token", "", "")
@@ -3468,6 +3493,10 @@ func ParseEndpoint(
 	skillsAddVersionFlags.Usage = skillsAddVersionUsage
 	skillsUpdateFlags.Usage = skillsUpdateUsage
 	skillsListFlags.Usage = skillsListUsage
+	skillsListSuggestionsFlags.Usage = skillsListSuggestionsUsage
+	skillsApproveSuggestionFlags.Usage = skillsApproveSuggestionUsage
+	skillsDismissSuggestionFlags.Usage = skillsDismissSuggestionUsage
+	skillsApproveAllSuggestionsFlags.Usage = skillsApproveAllSuggestionsUsage
 	skillsGetFlags.Usage = skillsGetUsage
 	skillsListUnknownActivationsFlags.Usage = skillsListUnknownActivationsUsage
 	skillsListVersionsFlags.Usage = skillsListVersionsUsage
@@ -5117,6 +5146,18 @@ func ParseEndpoint(
 
 			case "list":
 				epf = skillsListFlags
+
+			case "list-suggestions":
+				epf = skillsListSuggestionsFlags
+
+			case "approve-suggestion":
+				epf = skillsApproveSuggestionFlags
+
+			case "dismiss-suggestion":
+				epf = skillsDismissSuggestionFlags
+
+			case "approve-all-suggestions":
+				epf = skillsApproveAllSuggestionsFlags
 
 			case "get":
 				epf = skillsGetFlags
@@ -6896,6 +6937,18 @@ func ParseEndpoint(
 			case "list":
 				endpoint = c.List()
 				data, err = skillsc.BuildListPayload(*skillsListCursorFlag, *skillsListLimitFlag, *skillsListSessionTokenFlag, *skillsListApikeyTokenFlag, *skillsListProjectSlugInputFlag)
+			case "list-suggestions":
+				endpoint = c.ListSuggestions()
+				data, err = skillsc.BuildListSuggestionsPayload(*skillsListSuggestionsSkillIDFlag, *skillsListSuggestionsCursorFlag, *skillsListSuggestionsLimitFlag, *skillsListSuggestionsSessionTokenFlag, *skillsListSuggestionsApikeyTokenFlag, *skillsListSuggestionsProjectSlugInputFlag)
+			case "approve-suggestion":
+				endpoint = c.ApproveSuggestion()
+				data, err = skillsc.BuildApproveSuggestionPayload(*skillsApproveSuggestionBodyFlag, *skillsApproveSuggestionSessionTokenFlag, *skillsApproveSuggestionApikeyTokenFlag, *skillsApproveSuggestionProjectSlugInputFlag)
+			case "dismiss-suggestion":
+				endpoint = c.DismissSuggestion()
+				data, err = skillsc.BuildDismissSuggestionPayload(*skillsDismissSuggestionBodyFlag, *skillsDismissSuggestionSessionTokenFlag, *skillsDismissSuggestionApikeyTokenFlag, *skillsDismissSuggestionProjectSlugInputFlag)
+			case "approve-all-suggestions":
+				endpoint = c.ApproveAllSuggestions()
+				data, err = skillsc.BuildApproveAllSuggestionsPayload(*skillsApproveAllSuggestionsSessionTokenFlag, *skillsApproveAllSuggestionsApikeyTokenFlag, *skillsApproveAllSuggestionsProjectSlugInputFlag)
 			case "get":
 				endpoint = c.Get()
 				data, err = skillsc.BuildGetPayload(*skillsGetIDFlag, *skillsGetSessionTokenFlag, *skillsGetApikeyTokenFlag, *skillsGetProjectSlugInputFlag)
@@ -16676,6 +16729,10 @@ func skillsUsage() {
 	fmt.Fprintln(os.Stderr, `    add-version: Record an uploaded SKILL.md as a version of an existing skill. The implementation requires the skills product feature and skill write scope, and returns the existing canonical version as a no-op when appropriate.`)
 	fmt.Fprintln(os.Stderr, `    update: Rename an active skill or update its display name and summary. The implementation requires the skills product feature and skill write scope.`)
 	fmt.Fprintln(os.Stderr, `    list: List active skills in the project. The implementation requires the skills product feature and skill read scope.`)
+	fmt.Fprintln(os.Stderr, `    list-suggestions: List open skill edit suggestions in the project, newest first. The implementation requires the skills product feature and skill read scope.`)
+	fmt.Fprintln(os.Stderr, `    approve-suggestion: Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only one of its proposed changes. Stale suggestions are superseded instead.`)
+	fmt.Fprintln(os.Stderr, `    dismiss-suggestion: Idempotently dismiss an open skill edit suggestion. Approved and superseded suggestions conflict.`)
+	fmt.Fprintln(os.Stderr, `    approve-all-suggestions: Snapshot and independently process every open skill edit suggestion in the project. One conflict or failure does not stop the remaining approvals.`)
 	fmt.Fprintln(os.Stderr, `    get: Get an active skill and its latest version. The implementation requires the skills product feature and skill read scope.`)
 	fmt.Fprintln(os.Stderr, `    list-unknown-activations: List terminal skill activations that could not be attributed to a skill version.`)
 	fmt.Fprintln(os.Stderr, `    list-versions: List immutable versions of an active skill, newest first. The implementation requires the skills product feature and skill read scope.`)
@@ -16786,6 +16843,104 @@ func skillsListUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills list --cursor \"abc123\" --limit 2 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsListSuggestionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills list-suggestions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -skill-id STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List open skill edit suggestions in the project, newest first. The implementation requires the skills product feature and skill read scope.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -skill-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills list-suggestions --skill-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --limit 2 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsApproveSuggestionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills approve-suggestion", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only one of its proposed changes. Stale suggestions are superseded instead.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills approve-suggestion --body '{\n      \"change_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"content\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsDismissSuggestionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills dismiss-suggestion", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Idempotently dismiss an open skill edit suggestion. Approved and superseded suggestions conflict.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills dismiss-suggestion --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsApproveAllSuggestionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills approve-all-suggestions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Snapshot and independently process every open skill edit suggestion in the project. One conflict or failure does not stop the remaining approvals.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills approve-all-suggestions --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func skillsGetUsage() {
