@@ -218,7 +218,9 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
   const deferredSearch = useDeferredValue(search);
   const { values, setValue, clearValue, clearAll } =
     useFilterState(DEVICE_FILTERS);
-  const selectedBuckets = values.coverage ?? [];
+  // Keep the raw (possibly undefined) reference: defaulting to a fresh []
+  // here would change the memo dependency every render.
+  const selectedBuckets = values.coverage;
   const userHref = useEmployeeDetailHref();
 
   const filteredDevices = useMemo(() => {
@@ -233,6 +235,7 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
           device.externalId,
         ].some((value) => value?.toLowerCase().includes(normalizedSearch));
       const matchesBucket =
+        !selectedBuckets ||
         selectedBuckets.length === 0 ||
         selectedBuckets.includes(device.coverageBucket);
       return matchesSearch && matchesBucket;
