@@ -1,0 +1,19 @@
+{
+  "disabled": false,
+  "pathTemplate": "~/.humanlayer/workspaces/{{ TASKSLUG }}/{{ REPOBASENAME }}",
+  "branchTemplate": "{{ TASKSLUG }}",
+  "repos": [
+    {
+      "localPath": ".",
+      "description": "Selected repository",
+      "sourceRef": "HEAD",
+      "setupCommand": "",
+      "copyGlobs": [
+        ".env*",
+        ".claude/settings.local.json",
+        "CLAUDE.local.md",
+        ".humanlayer/workspace.local.json"
+      ]
+    }
+  ]
+}

@@ -679,7 +679,7 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
       "enabled": true,
       "url": "<mcp-server-url>",
       "headers": {
-        "Authorization": "Bearer \${MCP_SERVER_API_KEY}"
+        "Authorization": "Bearer {env:MCP_SERVER_API_KEY}"
       }
     }
   }
@@ -717,12 +717,18 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
       <div>
         <h3 className="mb-2 text-sm font-semibold">Connect an MCP server</h3>
         <p className="text-muted-foreground mb-3 text-sm">
-          Merge an entry into the same file's{" "}
+          Merge an entry into the{" "}
           <code className="bg-muted rounded px-1 py-0.5 text-xs">mcp</code>{" "}
-          block. Replace the placeholders with the name, URL, and auth token
-          from that server's own install page — that token is separate from the
+          block of your project's{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            opencode.json
+          </code>
+          . Replace the placeholders with the name, URL, and auth token from
+          that server's own install page — that token is separate from the
           hooks-scoped{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">GRAM_KEY</code>{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            GRAM_HOOKS_ORG_KEY
+          </code>{" "}
           above.
         </p>
         <CodeBlock language="json" className="bg-background">
