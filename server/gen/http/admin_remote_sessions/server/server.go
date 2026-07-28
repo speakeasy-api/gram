@@ -18,17 +18,19 @@ import (
 
 // Server lists the adminRemoteSessions service endpoint HTTP handlers.
 type Server struct {
-	Mounts             []*MountPoint
-	CreateGlobalIssuer http.Handler
-	ListGlobalIssuers  http.Handler
-	GetGlobalIssuer    http.Handler
-	UpdateGlobalIssuer http.Handler
-	DeleteGlobalIssuer http.Handler
-	CreateGlobalClient http.Handler
-	ListGlobalClients  http.Handler
-	GetGlobalClient    http.Handler
-	UpdateGlobalClient http.Handler
-	DeleteGlobalClient http.Handler
+	Mounts                      []*MountPoint
+	CreateGlobalIssuer          http.Handler
+	ListGlobalIssuers           http.Handler
+	GetGlobalIssuer             http.Handler
+	UpdateGlobalIssuer          http.Handler
+	DeleteGlobalIssuer          http.Handler
+	FetchGlobalIssuerMetadata   http.Handler
+	RefreshGlobalIssuerMetadata http.Handler
+	CreateGlobalClient          http.Handler
+	ListGlobalClients           http.Handler
+	GetGlobalClient             http.Handler
+	UpdateGlobalClient          http.Handler
+	DeleteGlobalClient          http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -63,22 +65,26 @@ func New(
 			{"GetGlobalIssuer", "GET", "/rpc/adminRemoteSessions.getGlobalIssuer"},
 			{"UpdateGlobalIssuer", "POST", "/rpc/adminRemoteSessions.updateGlobalIssuer"},
 			{"DeleteGlobalIssuer", "DELETE", "/rpc/adminRemoteSessions.deleteGlobalIssuer"},
+			{"FetchGlobalIssuerMetadata", "POST", "/rpc/adminRemoteSessions.fetchGlobalIssuerMetadata"},
+			{"RefreshGlobalIssuerMetadata", "POST", "/rpc/adminRemoteSessions.refreshGlobalIssuerMetadata"},
 			{"CreateGlobalClient", "POST", "/rpc/adminRemoteSessions.createGlobalClient"},
 			{"ListGlobalClients", "GET", "/rpc/adminRemoteSessions.listGlobalClients"},
 			{"GetGlobalClient", "GET", "/rpc/adminRemoteSessions.getGlobalClient"},
 			{"UpdateGlobalClient", "POST", "/rpc/adminRemoteSessions.updateGlobalClient"},
 			{"DeleteGlobalClient", "DELETE", "/rpc/adminRemoteSessions.deleteGlobalClient"},
 		},
-		CreateGlobalIssuer: NewCreateGlobalIssuerHandler(e.CreateGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
-		ListGlobalIssuers:  NewListGlobalIssuersHandler(e.ListGlobalIssuers, mux, decoder, encoder, errhandler, formatter),
-		GetGlobalIssuer:    NewGetGlobalIssuerHandler(e.GetGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
-		UpdateGlobalIssuer: NewUpdateGlobalIssuerHandler(e.UpdateGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
-		DeleteGlobalIssuer: NewDeleteGlobalIssuerHandler(e.DeleteGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
-		CreateGlobalClient: NewCreateGlobalClientHandler(e.CreateGlobalClient, mux, decoder, encoder, errhandler, formatter),
-		ListGlobalClients:  NewListGlobalClientsHandler(e.ListGlobalClients, mux, decoder, encoder, errhandler, formatter),
-		GetGlobalClient:    NewGetGlobalClientHandler(e.GetGlobalClient, mux, decoder, encoder, errhandler, formatter),
-		UpdateGlobalClient: NewUpdateGlobalClientHandler(e.UpdateGlobalClient, mux, decoder, encoder, errhandler, formatter),
-		DeleteGlobalClient: NewDeleteGlobalClientHandler(e.DeleteGlobalClient, mux, decoder, encoder, errhandler, formatter),
+		CreateGlobalIssuer:          NewCreateGlobalIssuerHandler(e.CreateGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
+		ListGlobalIssuers:           NewListGlobalIssuersHandler(e.ListGlobalIssuers, mux, decoder, encoder, errhandler, formatter),
+		GetGlobalIssuer:             NewGetGlobalIssuerHandler(e.GetGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
+		UpdateGlobalIssuer:          NewUpdateGlobalIssuerHandler(e.UpdateGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
+		DeleteGlobalIssuer:          NewDeleteGlobalIssuerHandler(e.DeleteGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
+		FetchGlobalIssuerMetadata:   NewFetchGlobalIssuerMetadataHandler(e.FetchGlobalIssuerMetadata, mux, decoder, encoder, errhandler, formatter),
+		RefreshGlobalIssuerMetadata: NewRefreshGlobalIssuerMetadataHandler(e.RefreshGlobalIssuerMetadata, mux, decoder, encoder, errhandler, formatter),
+		CreateGlobalClient:          NewCreateGlobalClientHandler(e.CreateGlobalClient, mux, decoder, encoder, errhandler, formatter),
+		ListGlobalClients:           NewListGlobalClientsHandler(e.ListGlobalClients, mux, decoder, encoder, errhandler, formatter),
+		GetGlobalClient:             NewGetGlobalClientHandler(e.GetGlobalClient, mux, decoder, encoder, errhandler, formatter),
+		UpdateGlobalClient:          NewUpdateGlobalClientHandler(e.UpdateGlobalClient, mux, decoder, encoder, errhandler, formatter),
+		DeleteGlobalClient:          NewDeleteGlobalClientHandler(e.DeleteGlobalClient, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -92,6 +98,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetGlobalIssuer = m(s.GetGlobalIssuer)
 	s.UpdateGlobalIssuer = m(s.UpdateGlobalIssuer)
 	s.DeleteGlobalIssuer = m(s.DeleteGlobalIssuer)
+	s.FetchGlobalIssuerMetadata = m(s.FetchGlobalIssuerMetadata)
+	s.RefreshGlobalIssuerMetadata = m(s.RefreshGlobalIssuerMetadata)
 	s.CreateGlobalClient = m(s.CreateGlobalClient)
 	s.ListGlobalClients = m(s.ListGlobalClients)
 	s.GetGlobalClient = m(s.GetGlobalClient)
@@ -109,6 +117,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetGlobalIssuerHandler(mux, h.GetGlobalIssuer)
 	MountUpdateGlobalIssuerHandler(mux, h.UpdateGlobalIssuer)
 	MountDeleteGlobalIssuerHandler(mux, h.DeleteGlobalIssuer)
+	MountFetchGlobalIssuerMetadataHandler(mux, h.FetchGlobalIssuerMetadata)
+	MountRefreshGlobalIssuerMetadataHandler(mux, h.RefreshGlobalIssuerMetadata)
 	MountCreateGlobalClientHandler(mux, h.CreateGlobalClient)
 	MountListGlobalClientsHandler(mux, h.ListGlobalClients)
 	MountGetGlobalClientHandler(mux, h.GetGlobalClient)
@@ -368,6 +378,114 @@ func NewDeleteGlobalIssuerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deleteGlobalIssuer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "adminRemoteSessions")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountFetchGlobalIssuerMetadataHandler configures the mux to serve the
+// "adminRemoteSessions" service "fetchGlobalIssuerMetadata" endpoint.
+func MountFetchGlobalIssuerMetadataHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/adminRemoteSessions.fetchGlobalIssuerMetadata", f)
+}
+
+// NewFetchGlobalIssuerMetadataHandler creates a HTTP handler which loads the
+// HTTP request and calls the "adminRemoteSessions" service
+// "fetchGlobalIssuerMetadata" endpoint.
+func NewFetchGlobalIssuerMetadataHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeFetchGlobalIssuerMetadataRequest(mux, decoder)
+		encodeResponse = EncodeFetchGlobalIssuerMetadataResponse(encoder)
+		encodeError    = EncodeFetchGlobalIssuerMetadataError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "fetchGlobalIssuerMetadata")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "adminRemoteSessions")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRefreshGlobalIssuerMetadataHandler configures the mux to serve the
+// "adminRemoteSessions" service "refreshGlobalIssuerMetadata" endpoint.
+func MountRefreshGlobalIssuerMetadataHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/adminRemoteSessions.refreshGlobalIssuerMetadata", f)
+}
+
+// NewRefreshGlobalIssuerMetadataHandler creates a HTTP handler which loads the
+// HTTP request and calls the "adminRemoteSessions" service
+// "refreshGlobalIssuerMetadata" endpoint.
+func NewRefreshGlobalIssuerMetadataHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRefreshGlobalIssuerMetadataRequest(mux, decoder)
+		encodeResponse = EncodeRefreshGlobalIssuerMetadataResponse(encoder)
+		encodeError    = EncodeRefreshGlobalIssuerMetadataError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "refreshGlobalIssuerMetadata")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "adminRemoteSessions")
 		payload, err := decodeRequest(r)
 		if err != nil {

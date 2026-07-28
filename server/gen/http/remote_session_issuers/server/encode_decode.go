@@ -21,25 +21,26 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// EncodeDiscoverRemoteSessionIssuerResponse returns an encoder for responses
-// returned by the remoteSessionIssuers discoverRemoteSessionIssuer endpoint.
-func EncodeDiscoverRemoteSessionIssuerResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeFetchRemoteSessionIssuerMetadataResponse returns an encoder for
+// responses returned by the remoteSessionIssuers
+// fetchRemoteSessionIssuerMetadata endpoint.
+func EncodeFetchRemoteSessionIssuerMetadataResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.(*types.RemoteSessionIssuerDraft)
 		enc := encoder(ctx, w)
-		body := NewDiscoverRemoteSessionIssuerResponseBody(res)
+		body := NewFetchRemoteSessionIssuerMetadataResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeDiscoverRemoteSessionIssuerRequest returns a decoder for requests sent
-// to the remoteSessionIssuers discoverRemoteSessionIssuer endpoint.
-func DecodeDiscoverRemoteSessionIssuerRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*remotesessionissuers.DiscoverRemoteSessionIssuerPayload, error) {
-	return func(r *http.Request) (*remotesessionissuers.DiscoverRemoteSessionIssuerPayload, error) {
-		var payload *remotesessionissuers.DiscoverRemoteSessionIssuerPayload
+// DecodeFetchRemoteSessionIssuerMetadataRequest returns a decoder for requests
+// sent to the remoteSessionIssuers fetchRemoteSessionIssuerMetadata endpoint.
+func DecodeFetchRemoteSessionIssuerMetadataRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*remotesessionissuers.FetchRemoteSessionIssuerMetadataPayload, error) {
+	return func(r *http.Request) (*remotesessionissuers.FetchRemoteSessionIssuerMetadataPayload, error) {
+		var payload *remotesessionissuers.FetchRemoteSessionIssuerMetadataPayload
 		var (
-			body DiscoverRemoteSessionIssuerRequestBody
+			body FetchRemoteSessionIssuerMetadataRequestBody
 			err  error
 		)
 		err = decoder(r).Decode(&body)
@@ -53,7 +54,7 @@ func DecodeDiscoverRemoteSessionIssuerRequest(mux goahttp.Muxer, decoder func(*h
 			}
 			return payload, goa.DecodePayloadError(err.Error())
 		}
-		err = ValidateDiscoverRemoteSessionIssuerRequestBody(&body)
+		err = ValidateFetchRemoteSessionIssuerMetadataRequestBody(&body)
 		if err != nil {
 			return payload, err
 		}
@@ -75,7 +76,7 @@ func DecodeDiscoverRemoteSessionIssuerRequest(mux goahttp.Muxer, decoder func(*h
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload = NewDiscoverRemoteSessionIssuerPayload(&body, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewFetchRemoteSessionIssuerMetadataPayload(&body, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -102,9 +103,10 @@ func DecodeDiscoverRemoteSessionIssuerRequest(mux goahttp.Muxer, decoder func(*h
 	}
 }
 
-// EncodeDiscoverRemoteSessionIssuerError returns an encoder for errors
-// returned by the discoverRemoteSessionIssuer remoteSessionIssuers endpoint.
-func EncodeDiscoverRemoteSessionIssuerError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeFetchRemoteSessionIssuerMetadataError returns an encoder for errors
+// returned by the fetchRemoteSessionIssuerMetadata remoteSessionIssuers
+// endpoint.
+func EncodeFetchRemoteSessionIssuerMetadataError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -121,7 +123,7 @@ func EncodeDiscoverRemoteSessionIssuerError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDiscoverRemoteSessionIssuerUnauthorizedResponseBody(res)
+				body = NewFetchRemoteSessionIssuerMetadataUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -135,7 +137,7 @@ func EncodeDiscoverRemoteSessionIssuerError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDiscoverRemoteSessionIssuerForbiddenResponseBody(res)
+				body = NewFetchRemoteSessionIssuerMetadataForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -149,7 +151,7 @@ func EncodeDiscoverRemoteSessionIssuerError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDiscoverRemoteSessionIssuerBadRequestResponseBody(res)
+				body = NewFetchRemoteSessionIssuerMetadataBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -163,7 +165,7 @@ func EncodeDiscoverRemoteSessionIssuerError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDiscoverRemoteSessionIssuerNotFoundResponseBody(res)
+				body = NewFetchRemoteSessionIssuerMetadataNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -177,7 +179,7 @@ func EncodeDiscoverRemoteSessionIssuerError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDiscoverRemoteSessionIssuerConflictResponseBody(res)
+				body = NewFetchRemoteSessionIssuerMetadataConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -191,7 +193,7 @@ func EncodeDiscoverRemoteSessionIssuerError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDiscoverRemoteSessionIssuerUnsupportedMediaResponseBody(res)
+				body = NewFetchRemoteSessionIssuerMetadataUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -205,7 +207,7 @@ func EncodeDiscoverRemoteSessionIssuerError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDiscoverRemoteSessionIssuerInvalidResponseBody(res)
+				body = NewFetchRemoteSessionIssuerMetadataInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -219,7 +221,7 @@ func EncodeDiscoverRemoteSessionIssuerError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDiscoverRemoteSessionIssuerInvariantViolationResponseBody(res)
+				body = NewFetchRemoteSessionIssuerMetadataInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -233,7 +235,7 @@ func EncodeDiscoverRemoteSessionIssuerError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDiscoverRemoteSessionIssuerUnexpectedResponseBody(res)
+				body = NewFetchRemoteSessionIssuerMetadataUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -247,7 +249,247 @@ func EncodeDiscoverRemoteSessionIssuerError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDiscoverRemoteSessionIssuerGatewayErrorResponseBody(res)
+				body = NewFetchRemoteSessionIssuerMetadataGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeRefreshRemoteSessionIssuerMetadataResponse returns an encoder for
+// responses returned by the remoteSessionIssuers
+// refreshRemoteSessionIssuerMetadata endpoint.
+func EncodeRefreshRemoteSessionIssuerMetadataResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*types.RemoteSessionIssuerRefresh)
+		enc := encoder(ctx, w)
+		body := NewRefreshRemoteSessionIssuerMetadataResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeRefreshRemoteSessionIssuerMetadataRequest returns a decoder for
+// requests sent to the remoteSessionIssuers refreshRemoteSessionIssuerMetadata
+// endpoint.
+func DecodeRefreshRemoteSessionIssuerMetadataRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*remotesessionissuers.RefreshRemoteSessionIssuerMetadataPayload, error) {
+	return func(r *http.Request) (*remotesessionissuers.RefreshRemoteSessionIssuerMetadataPayload, error) {
+		var payload *remotesessionissuers.RefreshRemoteSessionIssuerMetadataPayload
+		var (
+			body RefreshRemoteSessionIssuerMetadataRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateRefreshRemoteSessionIssuerMetadataRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken     *string
+			apikeyToken      *string
+			projectSlugInput *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewRefreshRemoteSessionIssuerMetadataPayload(&body, sessionToken, apikeyToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeRefreshRemoteSessionIssuerMetadataError returns an encoder for errors
+// returned by the refreshRemoteSessionIssuerMetadata remoteSessionIssuers
+// endpoint.
+func EncodeRefreshRemoteSessionIssuerMetadataError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRefreshRemoteSessionIssuerMetadataUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRefreshRemoteSessionIssuerMetadataForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRefreshRemoteSessionIssuerMetadataBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRefreshRemoteSessionIssuerMetadataNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRefreshRemoteSessionIssuerMetadataConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRefreshRemoteSessionIssuerMetadataUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRefreshRemoteSessionIssuerMetadataInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRefreshRemoteSessionIssuerMetadataInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRefreshRemoteSessionIssuerMetadataUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRefreshRemoteSessionIssuerMetadataGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)

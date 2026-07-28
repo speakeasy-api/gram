@@ -646,6 +646,78 @@ func (q *Queries) CreateSkillDistribution(ctx context.Context, arg CreateSkillDi
 	return i, err
 }
 
+const createSkillFeedback = `-- name: CreateSkillFeedback :one
+INSERT INTO skill_feedback (
+  project_id,
+  skill_id,
+  skill_version_id,
+  skill_name,
+  source,
+  outcome,
+  note,
+  session_id,
+  user_id,
+  user_email
+) VALUES (
+  $1,
+  $2::uuid,
+  $3::uuid,
+  $4,
+  $5,
+  $6,
+  $7::text,
+  $8::text,
+  $9::text,
+  $10::text
+)
+RETURNING id, project_id, skill_id, skill_version_id, skill_name, source, outcome, note, session_id, user_id, user_email, reviewed_at, created_at
+`
+
+type CreateSkillFeedbackParams struct {
+	ProjectID      uuid.UUID
+	SkillID        uuid.NullUUID
+	SkillVersionID uuid.NullUUID
+	SkillName      string
+	Source         string
+	Outcome        string
+	Note           pgtype.Text
+	SessionID      pgtype.Text
+	UserID         pgtype.Text
+	UserEmail      pgtype.Text
+}
+
+func (q *Queries) CreateSkillFeedback(ctx context.Context, arg CreateSkillFeedbackParams) (SkillFeedback, error) {
+	row := q.db.QueryRow(ctx, createSkillFeedback,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.SkillVersionID,
+		arg.SkillName,
+		arg.Source,
+		arg.Outcome,
+		arg.Note,
+		arg.SessionID,
+		arg.UserID,
+		arg.UserEmail,
+	)
+	var i SkillFeedback
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.SkillID,
+		&i.SkillVersionID,
+		&i.SkillName,
+		&i.Source,
+		&i.Outcome,
+		&i.Note,
+		&i.SessionID,
+		&i.UserID,
+		&i.UserEmail,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createSkillVersion = `-- name: CreateSkillVersion :one
 INSERT INTO skill_versions (
   skill_id,
@@ -923,6 +995,40 @@ func (q *Queries) FailSkillObservationReconciliations(ctx context.Context, arg F
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const getActiveSkillByName = `-- name: GetActiveSkillByName :one
+SELECT id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
+FROM skills
+WHERE project_id = $1
+  AND name = $2
+  AND archived_at IS NULL
+`
+
+type GetActiveSkillByNameParams struct {
+	ProjectID uuid.UUID
+	Name      string
+}
+
+func (q *Queries) GetActiveSkillByName(ctx context.Context, arg GetActiveSkillByNameParams) (Skill, error) {
+	row := q.db.QueryRow(ctx, getActiveSkillByName, arg.ProjectID, arg.Name)
+	var i Skill
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.DisplayName,
+		&i.Summary,
+		&i.SourceKind,
+		&i.Classification,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.SeenCount,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getActiveSkillDistributionRecord = `-- name: GetActiveSkillDistributionRecord :one
@@ -2676,6 +2782,55 @@ func (q *Queries) ListProjectsWithPendingSkillObservations(ctx context.Context, 
 	return items, nil
 }
 
+const listRecentSkillFeedback = `-- name: ListRecentSkillFeedback :many
+SELECT id, project_id, skill_id, skill_version_id, skill_name, source, outcome, note, session_id, user_id, user_email, reviewed_at, created_at
+FROM skill_feedback
+WHERE project_id = $1
+  AND skill_name = $2
+ORDER BY created_at DESC, id DESC
+LIMIT GREATEST($3::int, 0)
+`
+
+type ListRecentSkillFeedbackParams struct {
+	ProjectID uuid.UUID
+	SkillName string
+	PageLimit int32
+}
+
+func (q *Queries) ListRecentSkillFeedback(ctx context.Context, arg ListRecentSkillFeedbackParams) ([]SkillFeedback, error) {
+	rows, err := q.db.Query(ctx, listRecentSkillFeedback, arg.ProjectID, arg.SkillName, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SkillFeedback
+	for rows.Next() {
+		var i SkillFeedback
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.SkillID,
+			&i.SkillVersionID,
+			&i.SkillName,
+			&i.Source,
+			&i.Outcome,
+			&i.Note,
+			&i.SessionID,
+			&i.UserID,
+			&i.UserEmail,
+			&i.ReviewedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSkillDistributionTargetVersions = `-- name: ListSkillDistributionTargetVersions :many
 SELECT DISTINCT resolved.id
 FROM skill_distributions sd
@@ -3140,6 +3295,56 @@ func (q *Queries) ListUnknownSkillActivations(ctx context.Context, arg ListUnkno
 	return items, nil
 }
 
+const listUnreviewedSkillFeedback = `-- name: ListUnreviewedSkillFeedback :many
+SELECT id, project_id, skill_id, skill_version_id, skill_name, source, outcome, note, session_id, user_id, user_email, reviewed_at, created_at
+FROM skill_feedback
+WHERE project_id = $1
+  AND skill_name = $2
+  AND reviewed_at IS NULL
+ORDER BY created_at, id
+LIMIT GREATEST($3::int, 0)
+`
+
+type ListUnreviewedSkillFeedbackParams struct {
+	ProjectID uuid.UUID
+	SkillName string
+	PageLimit int32
+}
+
+func (q *Queries) ListUnreviewedSkillFeedback(ctx context.Context, arg ListUnreviewedSkillFeedbackParams) ([]SkillFeedback, error) {
+	rows, err := q.db.Query(ctx, listUnreviewedSkillFeedback, arg.ProjectID, arg.SkillName, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SkillFeedback
+	for rows.Next() {
+		var i SkillFeedback
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.SkillID,
+			&i.SkillVersionID,
+			&i.SkillName,
+			&i.Source,
+			&i.Outcome,
+			&i.Note,
+			&i.SessionID,
+			&i.UserID,
+			&i.UserEmail,
+			&i.ReviewedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const loadReservedSkillEfficacyEvaluations = `-- name: LoadReservedSkillEfficacyEvaluations :many
 UPDATE skill_efficacy_evaluations e
 SET claim_token = $1::uuid,
@@ -3303,6 +3508,29 @@ type MarkSkillEfficacyEvaluationScoredParams struct {
 
 func (q *Queries) MarkSkillEfficacyEvaluationScored(ctx context.Context, arg MarkSkillEfficacyEvaluationScoredParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markSkillEfficacyEvaluationScored, arg.ProjectID, arg.ID, arg.ClaimToken)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markSkillFeedbackReviewed = `-- name: MarkSkillFeedbackReviewed :execrows
+UPDATE skill_feedback
+SET reviewed_at = clock_timestamp()
+WHERE project_id = $1
+  AND skill_name = $2
+  AND id = ANY($3::uuid[])
+  AND reviewed_at IS NULL
+`
+
+type MarkSkillFeedbackReviewedParams struct {
+	ProjectID uuid.UUID
+	SkillName string
+	Ids       []uuid.UUID
+}
+
+func (q *Queries) MarkSkillFeedbackReviewed(ctx context.Context, arg MarkSkillFeedbackReviewedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markSkillFeedbackReviewed, arg.ProjectID, arg.SkillName, arg.Ids)
 	if err != nil {
 		return 0, err
 	}

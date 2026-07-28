@@ -47,6 +47,10 @@ func TestTransformComputesFingerprintsAndRedaction(t *testing.T) {
 		DeadLetterReason:  nil,
 		ExcludedAt:        nil,
 		ExclusionID:       nil,
+		FalsePositiveAt:   nil,
+		ChatID:            "",
+		UserID:            "",
+		ExternalUserID:    "",
 	}
 
 	out, err := tf.Transform(t.Context(), in)
@@ -69,6 +73,59 @@ func TestTransformComputesFingerprintsAndRedaction(t *testing.T) {
 	require.Equal(t, uint32(len("alice@example.com")), row.MatchLen)
 	require.Contains(t, row.MatchRedacted, "<redacted len=17 sha=")
 	require.NotContains(t, row.MatchRedacted, "alice@example.com")
+}
+
+func TestTransformMapsAttributionCategoryAndFalsePositive(t *testing.T) {
+	t.Parallel()
+
+	tf := NewTransformer(testFingerprinter(t))
+	falsePositiveAt := time.Now().UTC()
+	chatID := uuid.New()
+	in := SourceRow{
+		ID: uuid.New(), CreatedAt: time.Now().UTC(), OrganizationID: "org_123",
+		ProjectID: uuid.New(), RiskPolicyID: uuid.New(), ChatMessageID: uuid.New(),
+		Source: "presidio", Found: true, RuleID: conv.PtrEmpty("pii.email_address"),
+		Match: conv.PtrEmpty("alice@example.com"), Tags: []string{"pii"},
+		FalsePositiveAt: &falsePositiveAt,
+		ChatID:          chatID.String(),
+		UserID:          "user_1",
+		ExternalUserID:  "ext_1",
+	}
+
+	out, err := tf.Transform(t.Context(), in)
+	require.NoError(t, err)
+	require.Len(t, out, 1)
+	row := out[0]
+
+	require.Equal(t, chatID.String(), row.ChatID)
+	require.Equal(t, "user_1", row.UserID)
+	require.Equal(t, "ext_1", row.ExternalUserID)
+	require.Equal(t, "pii", row.Category)
+	require.NotNil(t, row.FalsePositiveAt)
+	require.Equal(t, falsePositiveAt, *row.FalsePositiveAt)
+}
+
+func TestTransformUnresolvedAttributionStaysEmpty(t *testing.T) {
+	t.Parallel()
+
+	// A finding whose chat message no longer resolves (deleted chat, missing
+	// message) carries empty attribution rather than being dropped.
+	tf := NewTransformer(testFingerprinter(t))
+	in := SourceRow{
+		ID: uuid.New(), CreatedAt: time.Now().UTC(), OrganizationID: "org_123",
+		ProjectID: uuid.New(), RiskPolicyID: uuid.New(), ChatMessageID: uuid.New(),
+		Source: "gitleaks", Found: true, RuleID: conv.PtrEmpty("generic-api-key"),
+		Match: conv.PtrEmpty("tok-123"), Tags: []string{},
+	}
+
+	out, err := tf.Transform(t.Context(), in)
+	require.NoError(t, err)
+	require.Len(t, out, 1)
+	require.Empty(t, out[0].ChatID)
+	require.Empty(t, out[0].UserID)
+	require.Empty(t, out[0].ExternalUserID)
+	require.Nil(t, out[0].FalsePositiveAt)
+	require.Equal(t, "secrets", out[0].Category)
 }
 
 func TestTransformIsDeterministic(t *testing.T) {

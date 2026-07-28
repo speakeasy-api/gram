@@ -93,7 +93,7 @@ func attachRiskTo(t *testing.T, ctx context.Context, ti *chatTestInstance, msgID
 			ProjectID:      ti.projectID,
 			OrganizationID: ti.orgID,
 			RiskPolicyID:   policyID,
-			ChatMessageID:  msgID,
+			ChatMessageID:  uuid.NullUUID{UUID: msgID, Valid: true},
 			Found:          true,
 		}))
 	}

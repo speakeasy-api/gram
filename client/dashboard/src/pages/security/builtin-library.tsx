@@ -6,7 +6,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Switch } from "@/components/ui/switch";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useBuiltinExclusions } from "@gram/client/react-query/builtinExclusions.js";
@@ -20,17 +19,12 @@ const LIBRARY_TOOLTIP =
 
 /**
  * Read-only overview of the built-in exclusion preset library: a title (with an
- * explanatory hover tooltip), a single on/off toggle, and a control to inspect
- * the full catalog. Rendered above the user-managed exclusions table on the
- * Exclusions tab. Engine-internal details (detection sources, rule ids, matcher
- * kinds) are deliberately not surfaced.
+ * explanatory hover tooltip) and a control to inspect the full catalog.
+ * Rendered above the user-managed exclusions table on the Exclusions tab.
+ * Engine-internal details (detection sources, rule ids, matcher kinds) are
+ * deliberately not surfaced.
  */
 export function BuiltinLibrary(): JSX.Element {
-  // TODO(track-c): persist builtin_presets.enabled via risk policy update once
-  // the API field lands. The generated risk policy get/update client does not
-  // yet surface `analyzer_config.builtin_presets.enabled`, so this toggle is
-  // wired to local state and defaults to ON to match the intended default.
-  const [enabled, setEnabled] = useState<boolean>(true);
   const [libraryOpen, setLibraryOpen] = useState<boolean>(false);
 
   // Live catalog, fetched from risk.listBuiltinExclusions. Backs the details view.
@@ -46,15 +40,6 @@ export function BuiltinLibrary(): JSX.Element {
             <Info className="text-muted-foreground size-3.5" aria-hidden />
           </span>
         </SimpleTooltip>
-
-        {/* The write is protected by the page-level
-         *  <RequireScope scope="org:admin"> that wraps PolicyCenter (and thus
-         *  ExclusionsTab), the same gate that guards every exclusion mutation. */}
-        <Switch
-          checked={enabled}
-          onCheckedChange={setEnabled}
-          aria-label="Enable built-in exclusion library"
-        />
       </div>
 
       <div className="mt-4">

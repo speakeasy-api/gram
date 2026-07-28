@@ -19,9 +19,17 @@ import (
 // identity records that Gram talks to as an OAuth client.
 type Service interface {
 	// Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server
-	// document and return a draft suitable for createRemoteSessionIssuer. No
-	// persistence.
-	DiscoverRemoteSessionIssuer(context.Context, *DiscoverRemoteSessionIssuerPayload) (res *types.RemoteSessionIssuerDraft, err error)
+	// document and return a draft suitable for createRemoteSessionIssuer. Keyed by
+	// issuer URL; no record need exist and nothing is persisted. Use
+	// refreshMetadata to re-discover and persist against an existing issuer.
+	FetchRemoteSessionIssuerMetadata(context.Context, *FetchRemoteSessionIssuerMetadataPayload) (res *types.RemoteSessionIssuerDraft, err error)
+	// Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and
+	// persist the discovered values. Keyed by issuer id. Only RFC 8414-derived
+	// columns are written — endpoints, the *_supported arrays,
+	// client_id_metadata_document_supported, and the documentation URLs. Gram
+	// behavior and display fields (oidc, passthrough, name, slug, logo, client
+	// setup documentation) are left alone. Requires project:write.
+	RefreshRemoteSessionIssuerMetadata(context.Context, *RefreshRemoteSessionIssuerMetadataPayload) (res *types.RemoteSessionIssuerRefresh, err error)
 	// Create a new remote_session_issuer.
 	CreateRemoteSessionIssuer(context.Context, *CreateRemoteSessionIssuerPayload) (res *types.RemoteSessionIssuer, err error)
 	// Update fields on an existing remote_session_issuer.
@@ -55,7 +63,7 @@ const ServiceName = "remoteSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"discoverRemoteSessionIssuer", "createRemoteSessionIssuer", "updateRemoteSessionIssuer", "listRemoteSessionIssuers", "getRemoteSessionIssuer", "deleteRemoteSessionIssuer"}
+var MethodNames = [7]string{"fetchRemoteSessionIssuerMetadata", "refreshRemoteSessionIssuerMetadata", "createRemoteSessionIssuer", "updateRemoteSessionIssuer", "listRemoteSessionIssuers", "getRemoteSessionIssuer", "deleteRemoteSessionIssuer"}
 
 // CreateRemoteSessionIssuerPayload is the payload type of the
 // remoteSessionIssuers service createRemoteSessionIssuer method.
@@ -122,10 +130,10 @@ type DeleteRemoteSessionIssuerPayload struct {
 	ProjectSlugInput *string
 }
 
-// DiscoverRemoteSessionIssuerPayload is the payload type of the
-// remoteSessionIssuers service discoverRemoteSessionIssuer method.
-type DiscoverRemoteSessionIssuerPayload struct {
-	// Issuer URL to discover (e.g. https://login.linear.com).
+// FetchRemoteSessionIssuerMetadataPayload is the payload type of the
+// remoteSessionIssuers service fetchRemoteSessionIssuerMetadata method.
+type FetchRemoteSessionIssuerMetadataPayload struct {
+	// Issuer URL to fetch metadata for (e.g. https://login.linear.com).
 	Issuer           string
 	SessionToken     *string
 	ApikeyToken      *string
@@ -162,6 +170,16 @@ type ListRemoteSessionIssuersResult struct {
 	Items []*types.RemoteSessionIssuer
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string
+}
+
+// RefreshRemoteSessionIssuerMetadataPayload is the payload type of the
+// remoteSessionIssuers service refreshRemoteSessionIssuerMetadata method.
+type RefreshRemoteSessionIssuerMetadataPayload struct {
+	// The remote_session_issuer id.
+	ID               string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // UpdateRemoteSessionIssuerPayload is the payload type of the
