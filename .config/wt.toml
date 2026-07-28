@@ -1,0 +1,63 @@
+# # Project Configuration
+#
+# Project configuration lets teams share repository-specific settings — hooks, dev server URLs, and other defaults. The file lives in `.config/wt.toml` and is typically checked into version control.
+#
+# To create a starter file with commented-out examples, run `wt config create --project`.
+#
+# ## Hooks
+#
+# Project hooks apply to this repository only. See `wt hook` (https://worktrunk.dev/hook/) for hook types, execution order, and examples.
+#
+# pre-start = "npm cwti"
+# post-start = "npm run dev"
+# pre-merge = "npm test"
+
+# Blocking: copies mise.local.toml/local/ from the main worktree, installs deps,
+# and remaps ports — everything else in the worktree depends on this.
+[[pre-start]]
+workinit = "mise run git:workinit"
+
+# Runs inside the worktree before deletion — nuke needs this worktree's
+# COMPOSE_PROJECT_NAME (mise.local.toml) and local/ dir to tear down the right
+# compose stack. post-remove would run in the primary worktree instead.
+[[pre-remove]]
+nuke = "mise run nuke"
+
+#
+# ## Dev server URL
+#
+# URL column in `wt list` (dimmed when port not listening):
+#
+# [list]
+# url = "http://localhost:{{ branch | hash_port }}"
+#
+# ## Commit-message append [experimental]
+#
+# `template-append` adds project-wide conventions to the LLM commit and squash prompts, shared so every teammate's LLM sees the same style guide:
+#
+# [commit.generation]
+# template-append = """
+# - Use conventional commits (feat:, fix:, docs:, …)
+# - Reference the relevant issue ID in the body
+# """
+#
+# The first time the fragment is used (and whenever it changes), `wt` prompts the user to approve it — the same one-shot gate as project-defined hooks. Only `template-append` is honored from the project file; the LLM command and the main prompt template stay in user config (https://worktrunk.dev/config/), since they describe per-developer environment (which CLI is installed, which agent the developer prefers). How the fragment renders: the LLM commits guide (https://worktrunk.dev/llm-commits/#appending-to-the-prompt).
+#
+# ## Copy-ignored excludes
+#
+# Additional excludes for `wt step copy-ignored`:
+#
+# [step.copy-ignored]
+# exclude = [".cache/", ".turbo/"]
+#
+# Built-in excludes (VCS metadata and tool-state directories) always apply; the `wt step copy-ignored` docs (https://worktrunk.dev/step/#wt-step-copy-ignored) list them. User config and project config exclusions are combined.
+#
+# ## Aliases
+#
+# Command templates that run as `wt <name>`. See the Extending Worktrunk guide (https://worktrunk.dev/extending/#aliases) for usage and flags.
+#
+# [aliases]
+# deploy = "make deploy BRANCH={{ branch }}"
+# url = "echo http://localhost:{{ branch | hash_port }}"
+#
+# Aliases defined here are shared with teammates. For personal aliases, use the user config (https://worktrunk.dev/config/#aliases) `[aliases]` section instead.
