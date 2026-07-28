@@ -28,6 +28,10 @@ type fakeDrata struct {
 	t *testing.T
 
 	apiKey string
+	// resourceIDs is the connection's customResources id list, JSON-encoded
+	// verbatim so tests can exercise numeric ids, string ids, none, or
+	// several.
+	resourceIDs []string
 
 	mu sync.Mutex
 	// sessions accumulates uploaded records per session id.
@@ -47,6 +51,7 @@ func newFakeDrata(t *testing.T) *fakeDrata {
 	f := &fakeDrata{
 		t:              t,
 		apiKey:         "test-api-key",
+		resourceIDs:    []string{testResourceID},
 		mu:             sync.Mutex{},
 		sessions:       map[string][]map[string]any{},
 		records:        nil,
@@ -66,8 +71,14 @@ func newFakeDrata(t *testing.T) *fakeDrata {
 		if !f.authorized(w, r) {
 			return
 		}
+		f.mu.Lock()
+		resources := make([]string, 0, len(f.resourceIDs))
+		for _, id := range f.resourceIDs {
+			resources = append(resources, fmt.Sprintf(`{"id": %s}`, id))
+		}
+		f.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintf(w, `{"id": %s, "name": "Gram Device Agent Coverage", "customResources": [{"id": %s}]}`, testConnectionID, testResourceID)
+		_, _ = fmt.Fprintf(w, `{"id": %s, "name": "Gram Device Agent Coverage", "customResources": [%s]}`, testConnectionID, strings.Join(resources, ","))
 	})
 	mux.HandleFunc(sessionsBase, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(f.t, http.MethodPost, r.Method)
@@ -83,10 +94,19 @@ func newFakeDrata(t *testing.T) *fakeDrata {
 			assert.NoError(f.t, json.NewDecoder(r.Body).Decode(&action))
 			assert.Equal(f.t, "complete", action.Action)
 			f.mu.Lock()
+			defer f.mu.Unlock()
+			// Sessions exist only once an upload created them; completing an
+			// unknown session must fail, or the provider's empty-fleet path
+			// (which relies on an empty upload creating the session) would
+			// pass vacuously here while failing against the real API.
+			uploaded, ok := f.sessions[sessionID]
+			if !ok {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
 			// Completion makes the session the authoritative dataset.
-			f.records = f.sessions[sessionID]
+			f.records = uploaded
 			f.completed = append(f.completed, sessionID)
-			f.mu.Unlock()
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -100,6 +120,8 @@ func newFakeDrata(t *testing.T) *fakeDrata {
 		assert.NoError(f.t, json.NewDecoder(r.Body).Decode(&payload))
 		assert.LessOrEqual(f.t, len(payload.Data), recordBatchSize, "uploads must respect the batch cap")
 		f.mu.Lock()
+		// Assignment (not just append) so an empty first upload still
+		// creates the session, mirroring implicit session creation.
 		f.sessions[rest] = append(f.sessions[rest], payload.Data...)
 		f.uploadRequests++
 		f.mu.Unlock()
@@ -128,11 +150,11 @@ func (f *fakeDrata) settings() providers.Settings {
 }
 
 // newSink returns a sink wired to the fake's TLS client, with the region
-// resolution overridden to reach the fake (unit tests use the httptest
-// client directly; production wiring goes through guardian).
+// allowlist mapping "us" to the fake (unit tests use the httptest client
+// directly; production wiring goes through guardian).
 func (f *fakeDrata) newSink(t *testing.T) *sink {
 	t.Helper()
-	return &sink{client: f.server.Client(), baseOverride: f.server.URL}
+	return &sink{client: f.server.Client(), regions: map[string]string{"us": f.server.URL}}
 }
 
 func snapshotOf(deviceCount int) providers.CoverageSnapshot {
@@ -253,20 +275,35 @@ func TestRegionValidation(t *testing.T) {
 	require.NoError(t, s.TestConnection(t.Context(), fake.creds(), providers.Settings{fieldRegion: " US ", fieldConnectionID: testConnectionID}))
 }
 
-func TestConnectionWithoutResourceFailsLoudly(t *testing.T) {
+func TestConnectionResourceCardinality(t *testing.T) {
 	t.Parallel()
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/public/v2/custom-connections/"+testConnectionID, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintf(w, `{"id": %s, "customResources": []}`, testConnectionID)
-	})
-	server := httptest.NewTLSServer(mux)
-	t.Cleanup(server.Close)
+	fake := newFakeDrata(t)
+	s := fake.newSink(t)
 
-	s := &sink{client: server.Client(), baseOverride: server.URL}
-	err := s.TestConnection(t.Context(), providers.Credentials{fieldAPIKey: "k"}, providers.Settings{fieldRegion: "us", fieldConnectionID: testConnectionID})
+	fake.resourceIDs = nil
+	err := s.TestConnection(t.Context(), fake.creds(), fake.settings())
 	require.ErrorContains(t, err, "no resource")
+
+	// Guessing among several resources risks wholesale-replacing the wrong
+	// one's records, so the sink must refuse instead.
+	fake.resourceIDs = []string{"42", "43"}
+	err = s.TestConnection(t.Context(), fake.creds(), fake.settings())
+	require.ErrorContains(t, err, "dedicated to Gram")
+}
+
+func TestStringResourceIDTolerated(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeDrata(t)
+	s := fake.newSink(t)
+
+	// The reference documents numeric resource ids, but a string-typed id
+	// must not brick the integration.
+	fake.resourceIDs = []string{`"` + testResourceID + `"`}
+	require.NoError(t, s.TestConnection(t.Context(), fake.creds(), fake.settings()))
+	require.NoError(t, s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(1)))
+	require.Len(t, fake.records, 1)
 }
 
 func TestUnassignedDeviceRecord(t *testing.T) {
@@ -293,5 +330,6 @@ func TestUnassignedDeviceRecord(t *testing.T) {
 	record := fake.records[0]
 	require.Empty(t, record["assignedUserEmail"])
 	require.Equal(t, false, record["assignedUserAgentActive"])
-	require.Nil(t, record["assignedUserAgentLastSeenAt"], "a never-seen agent is null, not a zero timestamp masquerading as evidence")
+	_, present := record["assignedUserAgentLastSeenAt"]
+	require.False(t, present, "a never-seen agent omits the field entirely — the schema types it as a plain string, so null or a zero timestamp would overclaim")
 }

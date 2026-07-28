@@ -373,10 +373,17 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, desc providers
 	if err := s.ensureSchedules(ctx, q, desc, row.ID); err != nil {
 		return UpsertResult{}, err
 	}
-	if exists && credentialsSupplied {
-		// A rotated credential is a fresh start: stale failure state must not
-		// keep rendering "failed" after the fix, and last_push_digest must
-		// not short-circuit the first push to a newly pointed-at account.
+	// A rotated credential or a changed setting is a fresh start: stale
+	// failure state must not keep rendering "failed" after the fix, and
+	// last_push_digest must not short-circuit the first push to a newly
+	// pointed-at account. Settings count because a push destination (e.g.
+	// an evidence sink's connection id) is a non-secret setting and the
+	// dashboard's write-only secret flow repoints it without resupplying
+	// credentials; the coverage digest hashes only the fleet, so without
+	// this reset a repointed account would receive nothing until the fleet
+	// itself changed.
+	settingsChanged := before != nil && !maps.Equal(before.Settings, settings)
+	if exists && (credentialsSupplied || settingsChanged) {
 		if err := q.ResetSyncStateForConfig(ctx, row.ID); err != nil {
 			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "reset device integration sync state")
 		}
