@@ -660,7 +660,8 @@ func TestIngest_InferredSkillEmitsDerivedTelemetryRow(t *testing.T) {
 	require.Contains(t, skillRow.Attributes, "repo-review")
 	require.Contains(t, skillRow.Attributes, `"Skill"`)
 	require.NotNil(t, skillRow.GramChatID)
-	require.Equal(t, "codex-skill-session", *skillRow.GramChatID)
+	require.Equal(t, sessionIDToUUID("codex-skill-session").String(), *skillRow.GramChatID,
+		"telemetry carries the resolved chat id, not the raw session id")
 
 	// trace_summaries resolves tool_name with any(): on a shared trace the
 	// Bash sibling could win the summary and hide the activation from
@@ -942,6 +943,64 @@ func TestIngest_ThoughtEventsExcludedFromTranscript(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, msgs, 1, "thought events must not be persisted as chat messages")
 	require.Equal(t, "assistant", msgs[0].Role)
+}
+
+// TestIngest_NonUUIDSessionIDStampsResolvedChatID pins the cross-store identity
+// invariant: telemetry_logs.chat_id (gen_ai.conversation.id) must be the chats
+// row id, not the raw agent session id. Claude/Codex/Cursor session ids are
+// themselves UUIDs so the two coincided by accident; opencode's ("ses_...") are
+// not, and stamping the raw string sent a malformed UUID to every consumer that
+// loads a chat by the telemetry id — the costs page session drill-in among them.
+func TestIngest_NonUUIDSessionIDStampsResolvedChatID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	// The chats row only exists when session capture is on — this test compares
+	// the two stores, so it needs the transcript side written.
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	const sessionID = "ses_05c47a44fffeCPIAOSNROITwrf"
+	_, err := uuid.Parse(sessionID)
+	require.Error(t, err, "the fixture must be a non-UUID session id for this test to mean anything")
+
+	chatID := sessionIDToUUID(sessionID)
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+
+	prompt := "hello from opencode"
+	payload := canonicalIngestPayload("opencode", "prompt.submitted", sessionID)
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+	res, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	// The transcript lands under the mapped UUID.
+	persisted, err := chatRepo.New(ti.conn).GetChat(ctx, chatID)
+	require.NoError(t, err)
+
+	var logs []telemetryrepo.TelemetryLog
+	require.Eventually(t, func() bool {
+		logs, err = chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+			GramProjectID: authCtx.ProjectID.String(),
+			TimeStart:     timestamp.Add(-2 * time.Minute).UnixNano(),
+			TimeEnd:       time.Now().Add(time.Minute).UnixNano(),
+			GramURNs:      nil,
+			SortOrder:     "desc",
+			Cursor:        "",
+			Limit:         10,
+		})
+		return err == nil && len(logs) == 1
+	}, 2*time.Second, 50*time.Millisecond, "expected the ingested prompt row")
+
+	require.NotNil(t, logs[0].GramChatID)
+	require.NotEqual(t, sessionID, *logs[0].GramChatID, "the raw agent session id must not reach telemetry as the chat id")
+	require.Equal(t, persisted.ID.String(), *logs[0].GramChatID,
+		"telemetry chat_id must resolve to the same chats row the transcript was stored under")
+
+	// The costs page hands this value straight to a uuid-typed endpoint.
+	_, err = uuid.Parse(*logs[0].GramChatID)
+	require.NoError(t, err, "telemetry chat_id must be a parseable UUID")
 }
 
 // TestIngest_LinksChatToUserAccount confirms the canonical ingest path adopts

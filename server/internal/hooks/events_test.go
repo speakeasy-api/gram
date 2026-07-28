@@ -77,3 +77,33 @@ func TestParseCursorHookEvent(t *testing.T) {
 		})
 	}
 }
+
+func TestParseOpencodeHookEvent(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		raw      string
+		expected HookEvent
+		ok       bool
+	}{
+		{raw: "session.created", expected: HookEventSessionStart, ok: true},
+		{raw: "session.idle", expected: HookEventAfterAgentResponse, ok: true},
+		{raw: "server.instance.disposed", expected: HookEventSessionEnd, ok: true},
+		{raw: "tool.execute.before", expected: HookEventPreToolUse, ok: true},
+		{raw: "tool.execute.after", expected: HookEventPostToolUse, ok: true},
+		{raw: "message.part.updated", expected: HookEventPostToolUseFailure, ok: true},
+		{raw: "chat.message", expected: HookEventUserPromptSubmit, ok: true},
+		{raw: "permission.asked", expected: HookEventPermissionRequest, ok: true},
+		{raw: "unknown", expected: HookEventUnknown, ok: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.raw, func(t *testing.T) {
+			t.Parallel()
+
+			event, ok := parseOpencodeHookEvent(tt.raw)
+			assert.Equal(t, tt.expected, event)
+			assert.Equal(t, tt.ok, ok)
+		})
+	}
+}

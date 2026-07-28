@@ -92,3 +92,35 @@ func parseCursorHookEvent(raw string) (HookEvent, bool) {
 		return HookEventUnknown, false
 	}
 }
+
+// parseOpencodeHookEvent maps source.raw_event_name values to canonical
+// HookEvent names. The TS plugin is retired; these are agenthooks' native
+// NativeNames (see codec_opencode.go's opencodeKind) — the OpenCode SDK's own
+// hook/event type strings, not synthesized names.
+func parseOpencodeHookEvent(raw string) (HookEvent, bool) {
+	switch raw {
+	case "session.created":
+		return HookEventSessionStart, true
+	case "session.idle":
+		// A finished turn, not a session lifecycle end: agenthooks decodes
+		// session.idle as KindStop and the relay's canonical type is
+		// assistant.responded. server.instance.disposed is the real end.
+		return HookEventAfterAgentResponse, true
+	case "server.instance.disposed":
+		return HookEventSessionEnd, true
+	case "tool.execute.before":
+		return HookEventPreToolUse, true
+	case "tool.execute.after":
+		return HookEventPostToolUse, true
+	case "message.part.updated":
+		// The only native signal for a failed tool call: tool.execute.after
+		// does not fire when a tool errors (decodeOpenCodeToolError).
+		return HookEventPostToolUseFailure, true
+	case "chat.message":
+		return HookEventUserPromptSubmit, true
+	case "permission.asked":
+		return HookEventPermissionRequest, true
+	default:
+		return HookEventUnknown, false
+	}
+}
