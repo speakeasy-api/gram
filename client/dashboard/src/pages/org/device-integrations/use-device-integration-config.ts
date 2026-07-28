@@ -259,8 +259,14 @@ export function useDeviceIntegrationConfigForm(
 
   const resetDraft = () => {
     setCredentials({});
-    setSettings(data?.settings ?? {});
-    setEnabled(Boolean(data?.enabled));
+    // Restore from the locally promoted snapshot, not the query cache: right
+    // after a save the cache is stale until the refetch lands, and the
+    // same-config-id guard means that refetch never re-syncs the draft — a
+    // cache-based reset would leave the form permanently dirty. The enabled
+    // flag is deliberately untouched: the sheet never drafts it (the switch
+    // saves instantly), so "resetting" it could only revert server truth to
+    // a stale cache value.
+    setSettings(savedSettings);
     setTestResult(null);
   };
 
