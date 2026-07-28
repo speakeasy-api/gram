@@ -92,9 +92,9 @@ export async function autoConfigureRemoteMcpAuth({
 
   let draft: RemoteSessionIssuerDraft;
   try {
-    draft = await client.remoteSessionIssuers.discover(
+    draft = await client.remoteSessionIssuers.fetchMetadata(
       {
-        discoverRemoteSessionIssuerRequestBody: {
+        fetchIssuerMetadataRequestBody: {
           issuer: protectedResourceMetadata.authorizationServers[0],
         },
       },

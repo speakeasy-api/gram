@@ -702,13 +702,13 @@ func fakeIssuerServer(t *testing.T, mutate func(doc map[string]any)) *httptest.S
 	return server
 }
 
-func TestDiscoverRemoteSessionIssuer_HappyPath(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_HappyPath(t *testing.T) {
 	t.Parallel()
 
 	idp := devidptest.Launch(t, devidptest.LaunchOpts{})
 	ctx, ti := newTestService(t)
 
-	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           idp.OAuth21URL,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -724,7 +724,7 @@ func TestDiscoverRemoteSessionIssuer_HappyPath(t *testing.T) {
 	require.Empty(t, draft.DiscoveryWarnings)
 }
 
-func TestDiscoverRemoteSessionIssuer_WithWarnings(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_WithWarnings(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -735,7 +735,7 @@ func TestDiscoverRemoteSessionIssuer_WithWarnings(t *testing.T) {
 		delete(doc, "token_endpoint")
 	})
 
-	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -747,12 +747,12 @@ func TestDiscoverRemoteSessionIssuer_WithWarnings(t *testing.T) {
 	require.Nil(t, draft.TokenEndpoint)
 }
 
-func TestDiscoverRemoteSessionIssuer_BadURL(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_BadURL(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
-	_, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	_, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           "ftp://not-http",
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -764,7 +764,7 @@ func TestDiscoverRemoteSessionIssuer_BadURL(t *testing.T) {
 
 // statusOnlyServer returns an httptest.Server that responds to the well-known
 // path with the supplied HTTP status and no body. Use it to exercise the
-// discoveryFailure → UserMessage path in DiscoverRemoteSessionIssuer.
+// discoveryFailure → UserMessage path in FetchRemoteSessionIssuerMetadata.
 func statusOnlyServer(t *testing.T, status int) *httptest.Server {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -778,43 +778,43 @@ func statusOnlyServer(t *testing.T, status int) *httptest.Server {
 	return server
 }
 
-func TestDiscoverRemoteSessionIssuer_NotFoundSurfacesWellKnownURL(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_NotFoundSurfacesWellKnownURL(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	server := statusOnlyServer(t, http.StatusNotFound)
 
-	_, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	_, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
 	require.Error(t, err)
-	requireOopsCode(t, err, oops.CodeGatewayError)
+	requireOopsCode(t, err, oops.CodeBadRequest)
 	require.Contains(t, err.Error(), "OAuth metadata not found at")
 	require.Contains(t, err.Error(), "/.well-known/oauth-authorization-server")
 }
 
-func TestDiscoverRemoteSessionIssuer_UnexpectedStatusSurfacesCode(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_UnexpectedStatusSurfacesCode(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	server := statusOnlyServer(t, http.StatusServiceUnavailable)
 
-	_, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	_, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
 	require.Error(t, err)
-	requireOopsCode(t, err, oops.CodeGatewayError)
+	requireOopsCode(t, err, oops.CodeBadRequest)
 	require.Contains(t, err.Error(), "Unexpected HTTP 503")
 	require.Contains(t, err.Error(), "/.well-known/oauth-authorization-server")
 }
 
-func TestDiscoverRemoteSessionIssuer_OpenIDConfigurationFallback(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_OpenIDConfigurationFallback(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -841,7 +841,7 @@ func TestDiscoverRemoteSessionIssuer_OpenIDConfigurationFallback(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -856,7 +856,7 @@ func TestDiscoverRemoteSessionIssuer_OpenIDConfigurationFallback(t *testing.T) {
 	}, probedPaths, "oauth-authorization-server first, then openid-configuration")
 }
 
-func TestDiscoverRemoteSessionIssuer_OriginStyleFallbackStripsPath(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_OriginStyleFallbackStripsPath(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -884,7 +884,7 @@ func TestDiscoverRemoteSessionIssuer_OriginStyleFallbackStripsPath(t *testing.T)
 	}))
 	t.Cleanup(server.Close)
 
-	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL + "/tenant",
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -900,7 +900,7 @@ func TestDiscoverRemoteSessionIssuer_OriginStyleFallbackStripsPath(t *testing.T)
 	}, probedPaths, "path-aware candidates 404, fall back to origin-style")
 }
 
-func TestDiscoverRemoteSessionIssuer_SkipsCatchAll200WithoutEndpoints(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_SkipsCatchAll200WithoutEndpoints(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -929,7 +929,7 @@ func TestDiscoverRemoteSessionIssuer_SkipsCatchAll200WithoutEndpoints(t *testing
 	}))
 	t.Cleanup(server.Close)
 
-	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL + "/tenant",
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -946,7 +946,7 @@ func TestDiscoverRemoteSessionIssuer_SkipsCatchAll200WithoutEndpoints(t *testing
 	}, probedPaths, "incomplete catch-all 200s skipped until the real document")
 }
 
-func TestDiscoverRemoteSessionIssuer_IncompleteDocReturnedAsLastResort(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_IncompleteDocReturnedAsLastResort(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -963,7 +963,7 @@ func TestDiscoverRemoteSessionIssuer_IncompleteDocReturnedAsLastResort(t *testin
 	}))
 	t.Cleanup(server.Close)
 
-	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL + "/tenant",
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -976,7 +976,7 @@ func TestDiscoverRemoteSessionIssuer_IncompleteDocReturnedAsLastResort(t *testin
 	require.Len(t, probedPaths, 5, "all candidates probed before falling back to the incomplete document")
 }
 
-func TestDiscoverRemoteSessionIssuer_IngestsDocumentationURLs(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_IngestsDocumentationURLs(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -987,7 +987,7 @@ func TestDiscoverRemoteSessionIssuer_IngestsDocumentationURLs(t *testing.T) {
 		doc["op_tos_uri"] = "https://idp.example.com/tos"
 	})
 
-	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -1004,14 +1004,14 @@ func TestDiscoverRemoteSessionIssuer_IngestsDocumentationURLs(t *testing.T) {
 
 // An issuer that advertises no documentation metadata yields nil draft fields
 // rather than empty strings.
-func TestDiscoverRemoteSessionIssuer_AbsentDocumentationURLs(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_AbsentDocumentationURLs(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
 	server := fakeIssuerServer(t, nil)
 
-	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -1026,7 +1026,7 @@ func TestDiscoverRemoteSessionIssuer_AbsentDocumentationURLs(t *testing.T) {
 // An upstream issuer controls these values, and downstream surfaces render them
 // as links. Anything that is not an absolute http(s) URL is dropped at parse
 // time so it never reaches the create form.
-func TestDiscoverRemoteSessionIssuer_DropsNonHTTPDocumentationURLs(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_DropsNonHTTPDocumentationURLs(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -1037,7 +1037,7 @@ func TestDiscoverRemoteSessionIssuer_DropsNonHTTPDocumentationURLs(t *testing.T)
 		doc["op_tos_uri"] = "mailto:legal@idp.example.com"
 	})
 
-	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
