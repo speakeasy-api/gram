@@ -31,8 +31,24 @@ func PublishFindings(ctx context.Context, logger *slog.Logger, pub gcp.Publisher
 	results := make([]gcp.PublishResult, 0, len(findings))
 	ruleIDs := make([]string, 0, len(findings))
 
+	// Occurrence counter per base id: a batch can legitimately carry findings
+	// whose id inputs are identical (e.g. two tool calls in one message hitting
+	// the same cli_destructive rule, or two calls to the same shadow MCP server
+	// — Match is the tool/server name and positions are zero). Without a
+	// discriminator they'd publish under one id and ClickHouse's uniqExact(id)
+	// would collapse distinct persisted findings. Suffixing only repeats keeps
+	// every previously-minted id stable while making re-publishes of the same
+	// finding set deterministic (finding order follows tool-call order, which
+	// is stable for a given message).
+	occurrences := make(map[uuid.UUID]int, len(findings))
+
 	for _, finding := range findings {
-		id := deterministicFindingID(meta, finding)
+		baseID := deterministicFindingID(meta, finding)
+		id := baseID
+		if n := occurrences[baseID]; n > 0 {
+			id = duplicateFindingID(baseID, n)
+		}
+		occurrences[baseID]++
 		startPos := conv.SafeInt32(finding.StartPos)
 		endPos := conv.SafeInt32(finding.EndPos)
 		msg := riskv1.Finding_builder{
@@ -73,6 +89,14 @@ func PublishFindings(ctx context.Context, logger *slog.Logger, pub gcp.Publisher
 	}
 
 	return published, ruleIDs, nil
+}
+
+// duplicateFindingID derives the id for the n-th repeat (n >= 1) of a finding
+// whose deterministic id inputs collide with an earlier finding in the same
+// batch. Derived from the base id rather than re-joining the parts so it can
+// never collide with any base id.
+func duplicateFindingID(base uuid.UUID, n int) uuid.UUID {
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:risk:finding:dup:"+base.String()+":"+strconv.Itoa(n)))
 }
 
 func deterministicFindingID(meta FindingMetadata, finding Finding) uuid.UUID {
