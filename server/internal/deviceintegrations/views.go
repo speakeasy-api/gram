@@ -11,17 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/repo"
 )
 
-// formatPGTime renders a nullable timestamp as RFC3339 in UTC — matching
-// conv.FromPGTimestamptz's normalization so this service never emits offsets
-// the rest of the API doesn't.
-func formatPGTime(ts pgtype.Timestamptz) *string {
-	if !ts.Valid || ts.Time.IsZero() {
-		return nil
-	}
-	formatted := ts.Time.UTC().Format(time.RFC3339)
-	return &formatted
-}
-
 func formatTime(t time.Time) *string {
 	if t.IsZero() {
 		return nil
@@ -162,12 +151,12 @@ func scheduleView(state scheduleState) *gen.DeviceIntegrationScheduleState {
 		Schedule:            state.Schedule,
 		Enabled:             !state.DisabledAt.Valid,
 		Status:              scheduleStatus(state),
-		LastSyncSuccessAt:   formatPGTime(state.LastPollSuccessAt),
-		LastSyncFailedAt:    formatPGTime(state.LastPollFailedAt),
+		LastSyncSuccessAt:   conv.PtrEmpty(conv.FromPGTimestamptz(state.LastPollSuccessAt)),
+		LastSyncFailedAt:    conv.PtrEmpty(conv.FromPGTimestamptz(state.LastPollFailedAt)),
 		LastSyncError:       lastError,
-		NextSyncAfter:       formatPGTime(state.NextPollAfter),
+		NextSyncAfter:       conv.PtrEmpty(conv.FromPGTimestamptz(state.NextPollAfter)),
 		ConsecutiveFailures: int(state.ConsecutiveFailures),
-		AutoPausedAt:        formatPGTime(state.AutoPausedAt),
+		AutoPausedAt:        conv.PtrEmpty(conv.FromPGTimestamptz(state.AutoPausedAt)),
 	}
 }
 
@@ -192,10 +181,10 @@ func deviceView(row repo.ListManagedDevicesRow) *gen.ManagedDevice {
 		OsVersion:        pgTextPtr(row.OsVersion),
 		UserEmail:        pgTextPtr(row.UserEmail),
 		UserID:           pgTextPtr(row.UserID),
-		MdmLastCheckInAt: formatPGTime(row.MdmLastCheckInAt),
-		AgentLastSeenAt:  formatPGTime(row.AgentLastSeenAt),
+		MdmLastCheckInAt: conv.PtrEmpty(conv.FromPGTimestamptz(row.MdmLastCheckInAt)),
+		AgentLastSeenAt:  conv.PtrEmpty(conv.FromPGTimestamptz(row.AgentLastSeenAt)),
 		CoverageBucket:   row.CoverageBucket,
-		MissingSince:     formatPGTime(row.MissingSince),
+		MissingSince:     conv.PtrEmpty(conv.FromPGTimestamptz(row.MissingSince)),
 		FirstSeenAt:      row.FirstSeenAt.Time.UTC().Format(time.RFC3339),
 		LastSeenAt:       row.LastSeenAt.Time.UTC().Format(time.RFC3339),
 	}
