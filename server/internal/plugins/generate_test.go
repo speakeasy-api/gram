@@ -1916,10 +1916,9 @@ func TestGenerateMCPFilesEmitsDistributedSkills(t *testing.T) {
 	files, err := generateMCPFiles(plugins, cfg)
 	require.NoError(t, err)
 
-	distributed := strings.TrimRight(content, "\n") + skillFeedbackFooter + "\n"
-	require.Equal(t, []byte(distributed), files["engineering-tools/skills/release-notes/SKILL.md"])
-	require.Equal(t, []byte(distributed), files[cursorPluginRoot+"/engineering-tools-cursor/skills/release-notes/SKILL.md"])
-	require.Equal(t, []byte(distributed), files["engineering-tools-codex/skills/release-notes/SKILL.md"])
+	require.Equal(t, []byte(content), files["engineering-tools/skills/release-notes/SKILL.md"])
+	require.Equal(t, []byte(content), files[cursorPluginRoot+"/engineering-tools-cursor/skills/release-notes/SKILL.md"])
+	require.Equal(t, []byte(content), files["engineering-tools-codex/skills/release-notes/SKILL.md"])
 	for p := range files {
 		require.NotContains(t, p, "escape", "invalid skill names must be dropped, not emitted as paths")
 	}
@@ -1947,12 +1946,13 @@ func TestGenerateMCPFilesEmitsDistributedSkills(t *testing.T) {
 	require.NoError(t, json.Unmarshal(files["engineering-tools-codex/.mcp.json"], &codex))
 	require.Equal(t, codexMCPServer{
 		Command:           "bash",
-		Args:              skillFeedbackMCPArgs("${PLUGIN_ROOT}"),
+		Args:              codexSkillFeedbackMCPArgs("engineering-tools-codex", cfg),
 		URL:               "",
 		BearerTokenEnvVar: "",
 		HTTPHeaders:       nil,
 		EnvHTTPHeaders:    nil,
 	}, codex.MCPServers[skillFeedbackMCPServerName])
+	require.Contains(t, codex.MCPServers[skillFeedbackMCPServerName].Args[1], "${CODEX_HOME:-$HOME/.codex}/plugins/cache/")
 	feedbackJSON, err := json.Marshal(codex.MCPServers[skillFeedbackMCPServerName])
 	require.NoError(t, err)
 	require.NotContains(t, string(feedbackJSON), "url")

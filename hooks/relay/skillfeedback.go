@@ -61,7 +61,11 @@ func RunSkillFeedbackMCP(ctx context.Context, cfg Config) error {
 		return fmt.Errorf("load plugin config: %s", cfg.ConfigError)
 	}
 
-	server := mcp.NewServer(&mcp.Implementation{Name: "speakeasy-skill-feedback", Version: BinaryVersion}, nil)
+	server := mcp.NewServer(&mcp.Implementation{Name: "speakeasy-skill-feedback", Version: BinaryVersion}, &mcp.ServerOptions{
+		// Initialize-time instructions are the discovery nudge: harnesses
+		// surface them in model context even before the tool schema loads.
+		Instructions: "After materially relying on a distributed skill while completing a task, call skill_feedback with that skill's name and how it affected the task. One call per skill per task.",
+	})
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "skill_feedback",
 		Description: "Record feedback only after materially relying on a skill while completing a task.",

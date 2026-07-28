@@ -937,7 +937,7 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 		if _, exists := mcpServers[skillFeedbackMCPServerName]; !exists {
 			mcpServers[skillFeedbackMCPServerName] = codexMCPServer{
 				Command:           "bash",
-				Args:              skillFeedbackMCPArgs(`${PLUGIN_ROOT}`),
+				Args:              codexSkillFeedbackMCPArgs(name, cfg),
 				URL:               "",
 				BearerTokenEnvVar: "",
 				HTTPHeaders:       nil,
@@ -1729,24 +1729,15 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 // published repo — refuse anything that isn't a plain lowercase slug rather
 // than trust the invariant across the DB boundary.
 func emitPluginSkills(files map[string][]byte, subdir string, p PluginInfo) {
-	footer := ""
-	if bundleSkillFeedbackMCP(p) {
-		footer = skillFeedbackFooter
-	}
 	for _, sk := range p.Skills {
 		if !domainskills.ValidSpecName(sk.Name) {
 			continue
 		}
-		files[path.Join(subdir, "skills", sk.Name, "SKILL.md")] = []byte(strings.TrimRight(sk.Content, "\n") + footer + "\n")
+		files[path.Join(subdir, "skills", sk.Name, "SKILL.md")] = []byte(sk.Content)
 	}
 }
 
 const skillFeedbackMCPServerName = "speakeasy-skill-feedback"
-
-// skillFeedbackFooter is appended to every distributed SKILL.md that ships
-// alongside the bundled feedback MCP server. Discovery otherwise depends on
-// the agent noticing the tool in tools/list on its own.
-const skillFeedbackFooter = "\n\nAfter materially relying on this skill, record the outcome with the `skill_feedback` tool (speakeasy-skill-feedback MCP server)."
 
 // bundleSkillFeedbackMCP uses the same name predicate as emitPluginSkills, so
 // feedback is bundled exactly when this feature package carries a skill. A
@@ -1773,13 +1764,29 @@ func bundleSkillFeedbackMCP(p PluginInfo) bool {
 // skillFeedbackMCPArgs builds the argv for the bundled stdio feedback server:
 // the plugin-root bootstrap script downloads the pinned hooks binary and
 // forwards to its skill-feedback subcommand. root is the harness's plugin-root
-// placeholder (e.g. ${CLAUDE_PLUGIN_ROOT}), which the harness substitutes when
-// it spawns the server, so the entry works wherever the plugin is installed.
+// placeholder (${CLAUDE_PLUGIN_ROOT} or ${CURSOR_PLUGIN_ROOT}), which those
+// harnesses substitute in plugin MCP configs when they spawn the server, so
+// the entry works wherever the plugin is installed.
 func skillFeedbackMCPArgs(root string) []string {
+	// The subcommand must precede the flags: the binary dispatches on its
+	// first argument.
 	return []string{
 		root + "/hooks/bootstrap.sh",
-		"--config=" + root + "/speakeasy.json",
 		"skill-feedback",
+		"--config=" + root + "/speakeasy.json",
+	}
+}
+
+// codexSkillFeedbackMCPArgs is the Codex variant: codex-cli does not
+// substitute ${PLUGIN_ROOT} in plugin MCP server configs (verified against
+// 0.145.0), so the entry addresses the deterministic plugin cache path —
+// <codex home>/plugins/cache/<marketplace>/<plugin>/<version> — and lets bash
+// expand the home from the process environment at spawn.
+func codexSkillFeedbackMCPArgs(pluginName string, cfg GenerateConfig) []string {
+	root := "${CODEX_HOME:-$HOME/.codex}/plugins/cache/" + path.Join(resolveMarketplaceName(cfg), pluginName, pluginManifestVersion(cfg))
+	return []string{
+		"-c",
+		fmt.Sprintf(`exec "%s/hooks/bootstrap.sh" skill-feedback "--config=%s/speakeasy.json"`, root, root),
 	}
 }
 
