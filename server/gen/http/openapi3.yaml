@@ -12473,6 +12473,992 @@ paths:
             x-speakeasy-name-override: redeployDeployment
             x-speakeasy-react-hook:
                 name: RedeployDeployment
+    /rpc/deviceIntegrations.deleteConfig:
+        post:
+            description: Disconnect the org-wide device integration for a provider. Synced inventory becomes invisible to coverage; reconnecting starts fresh.
+            operationId: deleteDeviceIntegrationConfig
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteConfigRequestBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: deleteConfig deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: deleteConfig
+            x-speakeasy-react-hook:
+                name: DeleteDeviceIntegrationConfig
+    /rpc/deviceIntegrations.getConfig:
+        get:
+            description: Get the org-wide device integration config for a provider. Returns an empty config (enabled=false, has_credentials=false) when none is set.
+            operationId: getDeviceIntegrationConfig
+            parameters:
+                - allowEmptyValue: true
+                  description: Provider identifier (e.g. jamf, kandji, drata, vanta).
+                  in: query
+                  name: provider
+                  required: true
+                  schema:
+                    description: Provider identifier (e.g. jamf, kandji, drata, vanta).
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DeviceIntegrationConfig'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: getConfig deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: getConfig
+            x-speakeasy-react-hook:
+                name: DeviceIntegrationConfig
+    /rpc/deviceIntegrations.getCoverage:
+        get:
+            description: Summarize agent coverage across the org's connected MDM inventories, optionally scoped to one provider.
+            operationId: getDeviceIntegrationCoverage
+            parameters:
+                - allowEmptyValue: true
+                  description: Optionally scope coverage to one provider (e.g. jamf).
+                  in: query
+                  name: provider
+                  schema:
+                    description: Optionally scope coverage to one provider (e.g. jamf).
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DeviceIntegrationCoverage'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: getCoverage deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: getCoverage
+            x-speakeasy-react-hook:
+                name: DeviceIntegrationCoverage
+    /rpc/deviceIntegrations.listManagedDevices:
+        get:
+            description: Page through the org's synced MDM device inventory, newest first, with each device's coverage bucket.
+            operationId: listManagedDevices
+            parameters:
+                - allowEmptyValue: true
+                  description: Only devices synced from this provider.
+                  in: query
+                  name: provider
+                  schema:
+                    description: Only devices synced from this provider.
+                    type: string
+                - allowEmptyValue: true
+                  description: Only devices in this coverage bucket.
+                  in: query
+                  name: coverage_bucket
+                  schema:
+                    description: Only devices in this coverage bucket.
+                    enum:
+                        - agent_active
+                        - agent_stale
+                        - no_agent
+                        - no_email
+                        - unresolved_email
+                        - missing
+                    type: string
+                - allowEmptyValue: true
+                  description: Pagination cursor from a previous page.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Pagination cursor from a previous page.
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size. Defaults to 50, maximum 200.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: Page size. Defaults to 50, maximum 200.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListManagedDevicesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: listManagedDevices deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: listManagedDevices
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: ManagedDevices
+    /rpc/deviceIntegrations.listProviders:
+        get:
+            description: List the providers the device integrations framework supports, including the credential fields each needs.
+            operationId: listDeviceIntegrationProviders
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListDeviceIntegrationProvidersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: listProviders deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: listProviders
+            x-speakeasy-react-hook:
+                name: DeviceIntegrationProviders
+    /rpc/deviceIntegrations.listSchedules:
+        get:
+            description: List the sync schedules and their state for a provider's org-wide device integration config. Returns an empty list when no config is set.
+            operationId: listDeviceIntegrationSchedules
+            parameters:
+                - allowEmptyValue: true
+                  description: Provider identifier (e.g. jamf, kandji, drata, vanta).
+                  in: query
+                  name: provider
+                  required: true
+                  schema:
+                    description: Provider identifier (e.g. jamf, kandji, drata, vanta).
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListDeviceIntegrationSchedulesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: listSchedules deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: listSchedules
+            x-speakeasy-react-hook:
+                name: DeviceIntegrationSchedules
+    /rpc/deviceIntegrations.retrySchedule:
+        post:
+            description: Make one sync schedule due immediately, lifting any automatic pause and resetting its failure streak.
+            operationId: retryDeviceIntegrationSchedule
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RetryScheduleRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DeviceIntegrationScheduleState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: retrySchedule deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: retrySchedule
+            x-speakeasy-react-hook:
+                name: RetryDeviceIntegrationSchedule
+    /rpc/deviceIntegrations.setScheduleEnabled:
+        post:
+            description: Enable or disable one sync schedule of a provider's device integration. Disabling records user intent on the schedule; only re-enabling clears it — config saves do not.
+            operationId: setDeviceIntegrationScheduleEnabled
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetScheduleEnabledRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DeviceIntegrationScheduleState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: setScheduleEnabled deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: setScheduleEnabled
+            x-speakeasy-react-hook:
+                name: SetDeviceIntegrationScheduleEnabled
+    /rpc/deviceIntegrations.testConnection:
+        post:
+            description: Probe the provider with the stored credentials to verify they work. Save the config first; this tests what is stored, so secrets never round-trip.
+            operationId: testDeviceIntegrationConnection
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteConfigRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DeviceIntegrationTestConnectionResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: testConnection deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: testConnection
+            x-speakeasy-react-hook:
+                name: TestDeviceIntegrationConnection
+    /rpc/deviceIntegrations.upsertConfig:
+        post:
+            description: 'Create or update the org-wide device integration config for a provider. Omit credentials to keep the stored secrets; supplying credentials rotates them in place and resets the schedules'' sync state. Settings merge per key: an omitted key keeps its stored value, a supplied key overwrites it.'
+            operationId: upsertDeviceIntegrationConfig
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpsertConfigRequestBody2'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DeviceIntegrationConfig'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: upsertConfig deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: upsertConfig
+            x-speakeasy-react-hook:
+                name: UpsertDeviceIntegrationConfig
     /rpc/domain.checkHealth:
         post:
             description: Check the routing and certificate health of the organization's custom domain
@@ -24526,7 +25512,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/UpsertConfigRequestBody2'
+                            $ref: '#/components/schemas/UpsertConfigRequestBody3'
                 required: true
             responses:
                 "200":
@@ -52591,6 +53577,230 @@ components:
             required:
                 - id
                 - user_session_issuer_id
+        DeviceIntegrationConfig:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: ISO 8601 timestamp when the config was created. Omitted when no config is set.
+                    format: date-time
+                enabled:
+                    type: boolean
+                    description: Whether the provider integration is active.
+                has_credentials:
+                    type: boolean
+                    description: Whether secret credentials are currently stored. The values themselves are never returned.
+                id:
+                    type: string
+                    description: Config ID. Omitted when no config is set for the provider.
+                organization_id:
+                    type: string
+                    description: Organization the config belongs to.
+                provider:
+                    type: string
+                    description: Provider identifier (e.g. jamf, kandji, drata, vanta).
+                settings:
+                    type: object
+                    description: Non-secret provider settings (e.g. instance URL), keyed by field key.
+                    additionalProperties:
+                        type: string
+                updated_at:
+                    type: string
+                    description: ISO 8601 timestamp of the most recent change. Omitted when no config is set.
+                    format: date-time
+            description: Per-organization device integration config for one provider. Secret credentials are write-only; reads only expose whether credentials are configured.
+            required:
+                - organization_id
+                - provider
+                - enabled
+                - has_credentials
+                - settings
+        DeviceIntegrationCoverage:
+            type: object
+            properties:
+                active_window_minutes:
+                    type: integer
+                    description: 'Freshness window: an assigned user counts as active when their agent heartbeat is within this many minutes.'
+                    format: int64
+                agent_active:
+                    type: integer
+                    description: Devices whose assigned user has an agent heartbeat within the window.
+                    format: int64
+                agent_stale:
+                    type: integer
+                    description: Devices whose assigned user has an agent that went quiet — the drift/disable case.
+                    format: int64
+                missing:
+                    type: integer
+                    description: Devices absent from the latest completed MDM snapshot.
+                    format: int64
+                no_agent:
+                    type: integer
+                    description: Devices whose assigned email resolves to an org member with no agent at all.
+                    format: int64
+                no_email:
+                    type: integer
+                    description: Devices the MDM reports with no assigned-user email.
+                    format: int64
+                organization_id:
+                    type: string
+                    description: Organization the coverage describes.
+                total_devices:
+                    type: integer
+                    description: All synced devices, including missing ones.
+                    format: int64
+                unmanaged_agent_users:
+                    type: integer
+                    description: Agent users with no matching device in any connected MDM inventory — shadow devices or fleets outside MDM.
+                    format: int64
+                unresolved_email:
+                    type: integer
+                    description: Devices whose assigned email matches neither an agent user nor an org member.
+                    format: int64
+            description: 'Agent-coverage summary across the org''s connected MDM inventories. Buckets attest the assigned user''s agent (the heartbeat is per user), not the device itself: agent_active means the device''s assigned user has a fresh agent heartbeat somewhere.'
+            required:
+                - organization_id
+                - active_window_minutes
+                - agent_active
+                - agent_stale
+                - no_agent
+                - no_email
+                - unresolved_email
+                - missing
+                - total_devices
+                - unmanaged_agent_users
+        DeviceIntegrationProvider:
+            type: object
+            properties:
+                capabilities:
+                    type: array
+                    items:
+                        type: string
+                    description: 'Integration directions the provider supports: inventory_source (pull the managed-device fleet) and/or evidence_sink (push agent-coverage evidence).'
+                display_name:
+                    type: string
+                    description: Human-readable vendor name.
+                fields:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DeviceIntegrationProviderField'
+                    description: Credential and settings inputs the provider needs, in render order.
+                id:
+                    type: string
+                    description: Provider identifier (e.g. jamf, kandji, drata, vanta).
+                schedules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DeviceIntegrationProviderSchedule'
+                    description: Sync pipelines the provider runs.
+            description: A vendor the device integrations framework can connect to.
+            required:
+                - id
+                - display_name
+                - capabilities
+                - fields
+                - schedules
+        DeviceIntegrationProviderField:
+            type: object
+            properties:
+                key:
+                    type: string
+                    description: Field identifier in the credentials or settings document.
+                kind:
+                    type: string
+                    description: Input kind hint.
+                    enum:
+                        - text
+                        - url
+                label:
+                    type: string
+                    description: Human-readable name to render for the field.
+                required:
+                    type: boolean
+                    description: Whether the field must be supplied to connect the provider.
+                secret:
+                    type: boolean
+                    description: 'Whether the value is secret: stored encrypted, write-only, and masked in the UI.'
+            description: One credential or settings input a provider needs to connect. Secret fields are stored encrypted and are write-only; non-secret fields are readable settings.
+            required:
+                - key
+                - label
+                - kind
+                - secret
+                - required
+        DeviceIntegrationProviderSchedule:
+            type: object
+            properties:
+                interval_minutes:
+                    type: integer
+                    description: Target minutes between successful runs. Declared in code by the provider, not configurable per org.
+                    format: int64
+                schedule:
+                    type: string
+                    description: Schedule identifier (e.g. jamf_inventory).
+            description: One sync pipeline a provider runs on a cadence.
+            required:
+                - schedule
+                - interval_minutes
+        DeviceIntegrationScheduleState:
+            type: object
+            properties:
+                auto_paused_at:
+                    type: string
+                    description: ISO 8601 timestamp when the scheduler auto-paused the schedule after repeated provider rejections. Omitted unless auto-paused.
+                    format: date-time
+                consecutive_failures:
+                    type: integer
+                    description: Number of consecutive failed syncs. Resets to zero on success or retry.
+                    format: int64
+                enabled:
+                    type: boolean
+                    description: Whether the user has this schedule enabled. Disabled schedules are skipped by the scheduler until re-enabled.
+                last_sync_error:
+                    type: string
+                    description: Stored error from the schedule's latest failed sync. Omitted unless the latest sync failed.
+                last_sync_failed_at:
+                    type: string
+                    description: ISO 8601 timestamp for the schedule's latest failed sync. Omitted unless a sync has failed.
+                    format: date-time
+                last_sync_success_at:
+                    type: string
+                    description: ISO 8601 timestamp for the schedule's last successful sync. Omitted until a sync succeeds.
+                    format: date-time
+                next_sync_after:
+                    type: string
+                    description: ISO 8601 timestamp for the schedule's next scheduled sync.
+                    format: date-time
+                schedule:
+                    type: string
+                    description: Schedule identifier (e.g. jamf_inventory).
+                status:
+                    type: string
+                    description: Derived status for the schedule's latest sync state.
+                    enum:
+                        - pending
+                        - success
+                        - failed
+                        - auto_paused
+                        - disabled
+            description: 'State of one sync schedule of a provider integration: the user''s intent (enabled) plus the scheduler''s execution state.'
+            required:
+                - schedule
+                - enabled
+                - status
+                - consecutive_failures
+        DeviceIntegrationTestConnectionResult:
+            type: object
+            properties:
+                message:
+                    type: string
+                    description: Human-readable failure detail. Omitted on success.
+                ok:
+                    type: boolean
+                    description: Whether the provider accepted the stored credentials.
+            description: Outcome of probing the provider with the stored credentials.
+            required:
+                - ok
         DiscoverProtectedResourceMetadataRequestBody:
             type: object
             properties:
@@ -55816,6 +57026,35 @@ components:
                     example: 01jp3f054qc02gbcmpp0qmyzed
             required:
                 - items
+        ListDeviceIntegrationProvidersResult:
+            type: object
+            properties:
+                providers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DeviceIntegrationProvider'
+                    description: Every available provider, sorted by id.
+            required:
+                - providers
+        ListDeviceIntegrationSchedulesResult:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                    description: Organization the schedules belong to.
+                provider:
+                    type: string
+                    description: Provider identifier.
+                schedules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DeviceIntegrationScheduleState'
+                    description: State for each of the provider's sync schedules.
+            description: Sync schedules for one provider integration. Empty when no config is set for the provider.
+            required:
+                - organization_id
+                - provider
+                - schedules
         ListEnvironmentsResult:
             type: object
             properties:
@@ -55997,6 +57236,19 @@ components:
                         $ref: '#/components/schemas/Key'
             required:
                 - keys
+        ListManagedDevicesResult:
+            type: object
+            properties:
+                devices:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ManagedDevice'
+                    description: Devices, newest first.
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page. Omitted on the last page.
+            required:
+                - devices
         ListMcpEndpointsResult:
             type: object
             properties:
@@ -57029,6 +58281,72 @@ components:
                 - id
                 - name
                 - url
+        ManagedDevice:
+            type: object
+            properties:
+                agent_last_seen_at:
+                    type: string
+                    description: The assigned user's latest device-agent heartbeat. Omitted when the user has never synced an agent.
+                    format: date-time
+                coverage_bucket:
+                    type: string
+                    description: Coverage classification for the device.
+                    enum:
+                        - agent_active
+                        - agent_stale
+                        - no_agent
+                        - no_email
+                        - unresolved_email
+                        - missing
+                external_id:
+                    type: string
+                    description: The MDM's identifier for the device.
+                first_seen_at:
+                    type: string
+                    format: date-time
+                hostname:
+                    type: string
+                    description: Device hostname.
+                id:
+                    type: string
+                    description: Device row ID.
+                last_seen_at:
+                    type: string
+                    format: date-time
+                mdm_last_check_in_at:
+                    type: string
+                    description: Last device check-in as reported by the MDM.
+                    format: date-time
+                missing_since:
+                    type: string
+                    description: When the device went absent from the MDM inventory. Omitted while present.
+                    format: date-time
+                os_name:
+                    type: string
+                    description: Operating system name.
+                os_version:
+                    type: string
+                    description: Operating system version.
+                provider:
+                    type: string
+                    description: Provider the device was synced from.
+                serial_number:
+                    type: string
+                    description: Hardware serial number as reported by the MDM.
+                user_email:
+                    type: string
+                    description: Assigned user's email exactly as the MDM reported it. Omitted when the MDM has no assignment.
+                user_id:
+                    type: string
+                    description: Resolved Gram user for the assigned email. Omitted when the email is missing or does not resolve to an org member.
+            description: One device from a connected MDM's inventory, annotated with its agent-coverage bucket. Agent presence is attested per assigned user (the agent heartbeat is keyed by user email), not per device.
+            required:
+                - id
+                - provider
+                - external_id
+                - coverage_bucket
+                - first_seen_at
+                - last_seen_at
         MarketplaceSettingsResult:
             type: object
             properties:
@@ -67781,6 +69099,28 @@ components:
         UpsertConfigRequestBody2:
             type: object
             properties:
+                credentials:
+                    type: object
+                    description: Secret credential values keyed by field key. Stored encrypted; never returned on reads. Omit to keep the existing secrets.
+                    additionalProperties:
+                        type: string
+                enabled:
+                    type: boolean
+                    description: Whether the integration should be active.
+                provider:
+                    type: string
+                    description: Provider identifier (e.g. jamf, kandji, drata, vanta).
+                settings:
+                    type: object
+                    description: 'Non-secret settings values keyed by field key. Merged per key with the stored settings: omitted keys keep their stored values.'
+                    additionalProperties:
+                        type: string
+            required:
+                - provider
+                - enabled
+        UpsertConfigRequestBody3:
+            type: object
+            properties:
                 enabled:
                     type: boolean
                     description: Whether forwarding should be active.
@@ -68521,6 +69861,8 @@ tags:
       description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.
     - name: deployments
       description: Manages deployments of tools from upstream sources.
+    - name: deviceIntegrations
+      description: 'Manage organization-level device integrations: MDM inventory sources and compliance evidence sinks.'
     - name: domains
       description: Manage custom domains for gram.
     - name: environments
