@@ -1404,3 +1404,28 @@ func TestCreateRemoteSessionClient_DeduplicatesIssuers(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, u1))
 }
+
+// TestCreateRemoteSessionClient_AttachesToPlatformIssuer proves a project-level
+// client can be created against a platform issuer. The client stays owned by the
+// project; only the issuer is shared.
+func TestCreateRemoteSessionClient_AttachesToPlatformIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	platformID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "attach-platform-proj")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "attach-platform-usi").String()
+
+	clientID := createRemoteClient(t, ctx, ti, platformID.String(), userIssuerID, "attach-platform-client")
+
+	created, err := repo.New(ti.conn).GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
+		ID:        uuid.MustParse(clientID),
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, platformID, created.RemoteSessionClient.RemoteSessionIssuerID)
+	require.Equal(t, *authCtx.ProjectID, created.RemoteSessionClient.ProjectID.UUID)
+}
