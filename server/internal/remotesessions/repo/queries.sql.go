@@ -3778,6 +3778,69 @@ func (q *Queries) UpdateRemoteSessionIssuerDiscoveredMetadata(ctx context.Contex
 	return i, err
 }
 
+const updateRemoteSessionTokensIfUnchanged = `-- name: UpdateRemoteSessionTokensIfUnchanged :one
+UPDATE remote_sessions
+SET
+    access_token_encrypted = $1,
+    access_expires_at = $2,
+    refresh_token_encrypted = $3,
+    refresh_expires_at = $4,
+    scopes = $5,
+    updated_at = clock_timestamp()
+WHERE subject_urn = $6
+  AND user_session_issuer_id = $7
+  AND remote_session_client_id = $8
+  AND deleted IS FALSE
+  AND updated_at = $9
+RETURNING id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, refresh_expires_at, scopes, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateRemoteSessionTokensIfUnchangedParams struct {
+	AccessTokenEncrypted  string
+	AccessExpiresAt       pgtype.Timestamptz
+	RefreshTokenEncrypted pgtype.Text
+	RefreshExpiresAt      pgtype.Timestamptz
+	Scopes                []string
+	SubjectUrn            urn.SessionSubject
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	ExpectedUpdatedAt     pgtype.Timestamptz
+}
+
+// Compare-and-swap write for the refresh path. Update-only on purpose: an
+// INSERT here would undo a revocation that landed mid-refresh. No rows means
+// another writer won or the session was revoked; both end in a re-auth challenge.
+func (q *Queries) UpdateRemoteSessionTokensIfUnchanged(ctx context.Context, arg UpdateRemoteSessionTokensIfUnchangedParams) (RemoteSession, error) {
+	row := q.db.QueryRow(ctx, updateRemoteSessionTokensIfUnchanged,
+		arg.AccessTokenEncrypted,
+		arg.AccessExpiresAt,
+		arg.RefreshTokenEncrypted,
+		arg.RefreshExpiresAt,
+		arg.Scopes,
+		arg.SubjectUrn,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.ExpectedUpdatedAt,
+	)
+	var i RemoteSession
+	err := row.Scan(
+		&i.ID,
+		&i.SubjectUrn,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.AccessTokenEncrypted,
+		&i.AccessExpiresAt,
+		&i.RefreshTokenEncrypted,
+		&i.RefreshExpiresAt,
+		&i.Scopes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const upsertRemoteSession = `-- name: UpsertRemoteSession :one
 INSERT INTO remote_sessions (
     subject_urn,

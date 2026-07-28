@@ -585,6 +585,25 @@ DO UPDATE SET
     updated_at = clock_timestamp()
 RETURNING *;
 
+-- name: UpdateRemoteSessionTokensIfUnchanged :one
+-- Compare-and-swap write for the refresh path. Update-only on purpose: an
+-- INSERT here would undo a revocation that landed mid-refresh. No rows means
+-- another writer won or the session was revoked; both end in a re-auth challenge.
+UPDATE remote_sessions
+SET
+    access_token_encrypted = @access_token_encrypted,
+    access_expires_at = @access_expires_at,
+    refresh_token_encrypted = @refresh_token_encrypted,
+    refresh_expires_at = @refresh_expires_at,
+    scopes = @scopes,
+    updated_at = clock_timestamp()
+WHERE subject_urn = @subject_urn
+  AND user_session_issuer_id = @user_session_issuer_id
+  AND remote_session_client_id = @remote_session_client_id
+  AND deleted IS FALSE
+  AND updated_at = @expected_updated_at
+RETURNING *;
+
 -- name: GetActiveRemoteSession :one
 -- Look up the active remote_session for a (subject, client) binding.
 -- Single-row exact lookup; uniqueness enforced by the partial unique
