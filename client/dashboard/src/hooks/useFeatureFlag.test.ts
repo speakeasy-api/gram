@@ -40,8 +40,8 @@ function renderFeatureFlag({
       {
         telemetry,
         featureFlagsInitiallyAvailable: initiallyAvailable,
+        children,
       },
-      children,
     );
   }
 
@@ -54,13 +54,13 @@ function renderFeatureFlag({
     isFeatureEnabled,
     onFeatureFlags,
     unsubscribe,
-    emitFlagResult(value: boolean | undefined) {
+    emitFlagResult: (value: boolean | undefined) => {
       act(() => {
         flagValue = value;
         featureFlagsCallback?.([], {}, { errorsLoading: false });
       });
     },
-    emitFlagError() {
+    emitFlagError: () => {
       act(() => {
         featureFlagsCallback?.([], {}, { errorsLoading: true });
       });
