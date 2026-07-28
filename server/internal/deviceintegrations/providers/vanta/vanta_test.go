@@ -22,19 +22,22 @@ const testResourceID = "res-abc123"
 // client-credentials token endpoint enforcing Vanta's one-active-token rule,
 // and a full-state resource PUT with accepted/rejected counts.
 type fakeVanta struct {
-	t *testing.T
-
 	mu           sync.Mutex
 	clientID     string
 	clientSecret string
 	// activeToken is the single valid token; minting a new one revokes it,
 	// exactly like the real API.
-	activeToken  string
-	tokenMints   int
-	putRequests  int
-	rejectNext   int
-	resources    []map[string]any
-	lastEnvelope map[string]any
+	activeToken string
+	tokenMints  int
+	// expiresIn is the token lifetime the fake reports.
+	expiresIn   int
+	putRequests int
+	rejectNext  int
+	// respondEmpty makes the next PUT return a bare {} — a drifted response
+	// envelope that must not read as success.
+	respondEmpty   bool
+	resources      []map[string]any
+	lastResourceID string
 
 	server *httptest.Server
 }
@@ -42,17 +45,18 @@ type fakeVanta struct {
 func newFakeVanta(t *testing.T) *fakeVanta {
 	t.Helper()
 	f := &fakeVanta{
-		t:            t,
-		mu:           sync.Mutex{},
-		clientID:     "test-client-id",
-		clientSecret: "test-client-secret",
-		activeToken:  "",
-		tokenMints:   0,
-		putRequests:  0,
-		rejectNext:   0,
-		resources:    nil,
-		lastEnvelope: nil,
-		server:       nil,
+		mu:             sync.Mutex{},
+		clientID:       "test-client-id",
+		clientSecret:   "test-client-secret",
+		activeToken:    "",
+		tokenMints:     0,
+		expiresIn:      3600,
+		putRequests:    0,
+		rejectNext:     0,
+		respondEmpty:   false,
+		resources:      nil,
+		lastResourceID: "",
+		server:         nil,
 	}
 
 	mux := http.NewServeMux()
@@ -81,7 +85,7 @@ func newFakeVanta(t *testing.T) *fakeVanta {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token": f.activeToken,
-			"expires_in":   3600,
+			"expires_in":   f.expiresIn,
 			"token_type":   "Bearer",
 		})
 	})
@@ -102,7 +106,14 @@ func newFakeVanta(t *testing.T) *fakeVanta {
 		}
 		assert.NoError(t, json.NewDecoder(r.Body).Decode(&envelope))
 		f.putRequests++
-		f.lastEnvelope = map[string]any{"resourceId": envelope.ResourceID}
+		f.lastResourceID = envelope.ResourceID
+
+		if f.respondEmpty {
+			f.respondEmpty = false
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte("{}"))
+			return
+		}
 
 		rejected := f.rejectNext
 		f.rejectNext = 0
@@ -140,7 +151,7 @@ func (f *fakeVanta) settings() providers.Settings {
 // newSink returns a sink wired to the fake's TLS client (unit tests use the
 // httptest client directly; production wiring goes through guardian).
 func (f *fakeVanta) newSink() *sink {
-	return &sink{client: f.server.Client(), baseURL: f.server.URL, mu: sync.Mutex{}, token: "", tokenExpiry: time.Time{}}
+	return newSink(f.server.Client(), f.server.URL)
 }
 
 func snapshotOf(deviceCount int) providers.CoverageSnapshot {
@@ -171,7 +182,7 @@ func TestPushCoverageFullStateReplace(t *testing.T) {
 	require.NoError(t, s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(3)))
 	require.Equal(t, 1, fake.putRequests, "the full fleet travels in exactly one PUT")
 	require.Len(t, fake.resources, 3)
-	require.Equal(t, testResourceID, fake.lastEnvelope["resourceId"])
+	require.Equal(t, testResourceID, fake.lastResourceID)
 
 	first := fake.resources[0]
 	require.Equal(t, "dev-0001", first["uniqueId"])
@@ -238,7 +249,7 @@ func TestRejectedRecordsFailLoudly(t *testing.T) {
 	require.ErrorContains(t, err, "rejected 2 of 5")
 }
 
-func TestExternalTokenRevocationClassifiesAsAuthAndRecovers(t *testing.T) {
+func TestExternalTokenRevocationRecoversInRun(t *testing.T) {
 	t.Parallel()
 
 	fake := newFakeVanta(t)
@@ -247,15 +258,80 @@ func TestExternalTokenRevocationClassifiesAsAuthAndRecovers(t *testing.T) {
 	require.NoError(t, s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(1)))
 
 	// Another mint elsewhere revokes our cached token (Vanta allows one
-	// active token per application).
+	// active token per application). The push absorbs exactly one such
+	// revocation by re-minting and retrying within the run — no spurious
+	// auth rejection reaches the scheduler.
 	fake.revokeActiveToken()
-	err := s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(1))
-	require.Error(t, err)
-	require.True(t, providers.IsAuthError(err))
+	require.NoError(t, s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(2)))
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	require.Equal(t, 2, fake.tokenMints, "one initial mint plus one recovery re-mint")
+	require.Len(t, fake.resources, 2, "the retried PUT carried the full snapshot")
+}
 
-	// The cache was dropped, so the next push re-mints and succeeds — the
-	// sync scheduler's retry recovers without operator action.
+func TestShortTokenLifetimeStillCaches(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeVanta(t)
+	fake.mu.Lock()
+	fake.expiresIn = 20 // below 2x the 30s slack: the ttl/2 floor must hold
+	fake.mu.Unlock()
+	s := fake.newSink()
+
 	require.NoError(t, s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(1)))
+	require.NoError(t, s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(1)))
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	require.Equal(t, 1, fake.tokenMints, "the cache serves back-to-back pushes even under a short lifetime — every extra mint revokes someone's token")
+}
+
+func TestResponseAccountingMismatchFailsLoudly(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeVanta(t)
+	s := fake.newSink()
+
+	// A drifted 2xx envelope (bare {}) decodes to zero counts; that must
+	// not read as success while records silently vanish from the set.
+	fake.mu.Lock()
+	fake.respondEmpty = true
+	fake.mu.Unlock()
+	err := s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(3))
+	require.ErrorContains(t, err, "accounted for 0 of 3")
+}
+
+func TestSnapshotIntegrityGuards(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeVanta(t)
+	s := fake.newSink()
+
+	empty := snapshotOf(1)
+	empty.Devices[0].ExternalID = ""
+	err := s.PushCoverage(t.Context(), fake.creds(), fake.settings(), empty)
+	require.ErrorContains(t, err, "no external id")
+
+	dup := snapshotOf(2)
+	dup.Devices[1].ExternalID = dup.Devices[0].ExternalID
+	err = s.PushCoverage(t.Context(), fake.creds(), fake.settings(), dup)
+	require.ErrorContains(t, err, "duplicate device external id")
+}
+
+func TestDescriptorRegistered(t *testing.T) {
+	t.Parallel()
+
+	desc, ok := providers.Lookup(ProviderID)
+	require.True(t, ok)
+	require.True(t, desc.HasCapability(providers.CapabilityEvidenceSink))
+
+	secretKeys := make([]string, 0, 2)
+	for _, f := range desc.SecretFields() {
+		secretKeys = append(secretKeys, f.Key)
+	}
+	require.ElementsMatch(t, []string{fieldClientID, fieldClientSecret}, secretKeys,
+		"the OAuth pair is write-only; flipping a secret flag would echo credentials back through the readable settings document")
+	require.Len(t, desc.Schedules, 1)
+	require.Equal(t, providers.CapabilityEvidenceSink, desc.Schedules[0].Capability)
 }
 
 func TestUnassignedDeviceResource(t *testing.T) {

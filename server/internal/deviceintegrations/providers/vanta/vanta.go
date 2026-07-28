@@ -57,9 +57,11 @@ const (
 	// userAgent identifies this integration on every API request.
 	userAgent = "Speakeasy-Gram/1.0"
 
-	// defaultBaseURL is Vanta's documented API host; no regional variants
-	// are documented. Fixed rather than customer-supplied so a config can
-	// never point the OAuth credentials at an arbitrary host.
+	// defaultBaseURL is Vanta's canonical API host. Regional hosts exist
+	// (api.eu.vanta.com, api.aus.vanta.com) but permanently redirect every
+	// path here — verified empirically — so a region setting would be dead
+	// weight. Fixed rather than customer-supplied so a config can never
+	// point the OAuth credentials at an arbitrary host.
 	defaultBaseURL = "https://api.vanta.com"
 
 	// tokenScope is the least privilege the sync needs: writing the
@@ -86,6 +88,9 @@ func init() {
 		DisplayName:  "Vanta",
 		Capabilities: []providers.Capability{providers.CapabilityEvidenceSink},
 		Fields: []providers.CredentialField{
+			// The client id is technically public, but it rotates together
+			// with the secret as one credential pair (matching Jamf's API
+			// client id), so both live in the write-only blob.
 			{Key: fieldClientID, Label: "OAuth Client ID", Kind: providers.FieldKindText, Secret: true, Required: true},
 			{Key: fieldClientSecret, Label: "OAuth Client Secret", Kind: providers.FieldKindText, Secret: true, Required: true},
 			{Key: fieldResourceID, Label: "Custom Resource ID", Kind: providers.FieldKindText, Secret: false, Required: true},
@@ -95,7 +100,7 @@ func init() {
 		},
 		NewInventorySource: nil,
 		NewEvidenceSink: func(deps providers.Deps) providers.EvidenceSink {
-			return &sink{client: deps.Client, baseURL: defaultBaseURL, mu: sync.Mutex{}, token: "", tokenExpiry: time.Time{}}
+			return newSink(deps.Client, defaultBaseURL)
 		},
 	})
 }
@@ -116,6 +121,13 @@ type sink struct {
 }
 
 var _ providers.EvidenceSink = (*sink)(nil)
+
+// newSink is the one construction site for both production wiring and unit
+// tests, so a future sink field cannot be zero-valued in tests only
+// (test files are exempt from exhaustruct).
+func newSink(client *guardian.HTTPClient, baseURL string) *sink {
+	return &sink{client: client, baseURL: baseURL, mu: sync.Mutex{}, token: "", tokenExpiry: time.Time{}}
+}
 
 // bearerToken returns a cached OAuth token, minting one via the
 // client-credentials grant when absent or near expiry.
@@ -175,6 +187,13 @@ func (s *sink) bearerToken(ctx context.Context, creds providers.Credentials) (st
 	}
 
 	ttl := time.Duration(token.ExpiresIn) * time.Second
+	if ttl <= 0 {
+		// A missing or nonsensical expires_in must not poison the cache
+		// into minting per call — under the one-active-token rule every
+		// extra mint revokes a token someone may be using. Vanta documents
+		// hour-long tokens; ten minutes is a safe floor.
+		ttl = 10 * time.Minute
+	}
 	slack := tokenExpirySlack
 	if ttl <= 2*tokenExpirySlack {
 		slack = ttl / 2
@@ -194,9 +213,11 @@ func resourceID(settings providers.Settings) (string, error) {
 }
 
 // TestConnection proves the stored OAuth credentials by minting a token.
-// The resource id has no cheap read to validate against; a typo there
-// surfaces as a rejected first push. Note that minting revokes any token a
-// concurrently running push holds — harmless, the push re-mints.
+// The resource id has no cheap read to validate against under the
+// write-only scope; a typo there surfaces as a rejected first push. Note
+// that minting revokes any token a concurrently running push holds — the
+// push's single in-run re-mint retry absorbs one such revocation, but the
+// OAuth app should be dedicated to this integration.
 func (s *sink) TestConnection(ctx context.Context, creds providers.Credentials, settings providers.Settings) error {
 	if _, err := resourceID(settings); err != nil {
 		return fmt.Errorf("vanta connection test: %w", err)
@@ -226,9 +247,20 @@ type coverageProperty struct {
 	AssignedUserAgentLastSeenAt *string `json:"assigned_user_agent_last_seen_at,omitempty"`
 }
 
-func buildResources(snapshot providers.CoverageSnapshot) []coverageResource {
+func buildResources(snapshot providers.CoverageSnapshot) ([]coverageResource, error) {
 	resources := make([]coverageResource, 0, len(snapshot.Devices))
+	seen := make(map[string]bool, len(snapshot.Devices))
 	for _, d := range snapshot.Devices {
+		// uniqueId anchors Vanta's idempotent upsert: an empty id cannot be
+		// tracked and a duplicate would silently overwrite a sibling's
+		// evidence with accepted counts still adding up — both fail loudly.
+		if strings.TrimSpace(d.ExternalID) == "" {
+			return nil, fmt.Errorf("coverage device carried no external id")
+		}
+		if seen[d.ExternalID] {
+			return nil, fmt.Errorf("duplicate device external id %q in coverage snapshot", d.ExternalID)
+		}
+		seen[d.ExternalID] = true
 		var lastSeen *string
 		if !d.AssignedUserAgentLastSeenAt.IsZero() {
 			formatted := d.AssignedUserAgentLastSeenAt.UTC().Format(time.RFC3339)
@@ -250,33 +282,13 @@ func buildResources(snapshot providers.CoverageSnapshot) []coverageResource {
 			},
 		})
 	}
-	return resources
+	return resources, nil
 }
 
-// PushCoverage replaces the integration's resource set with the snapshot in
-// one full-state PUT. Vanta marks any previously pushed uniqueId omitted
-// here as gone, so an empty fleet truthfully clears stale evidence — and
-// the whole fleet must travel in this single request (splitting across
-// requests would mark each earlier part gone). The PUT is idempotent on
-// uniqueId, so retries cannot duplicate.
-func (s *sink) PushCoverage(ctx context.Context, creds providers.Credentials, settings providers.Settings, snapshot providers.CoverageSnapshot) error {
-	resource, err := resourceID(settings)
-	if err != nil {
-		return err
-	}
-	token, err := s.bearerToken(ctx, creds)
-	if err != nil {
-		return err
-	}
-
-	payload, err := json.Marshal(map[string]any{
-		"resourceId": resource,
-		"resources":  buildResources(snapshot),
-	})
-	if err != nil {
-		return fmt.Errorf("encode resource sync: %w", err)
-	}
-
+// putResources performs one full-state PUT attempt and classifies the
+// outcome. On 401/403 the token cache is dropped before returning the auth
+// error so the caller can re-mint.
+func (s *sink) putResources(ctx context.Context, token string, resource string, payload []byte, recordCount int) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, s.baseURL+"/v1/resources/custom_resource", bytes.NewReader(payload))
 	if err != nil {
 		return fmt.Errorf("build resource sync request: %w", err)
@@ -293,15 +305,18 @@ func (s *sink) PushCoverage(ctx context.Context, creds providers.Credentials, se
 
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
-		// Drop the cache so a later call on this sink re-mints; Vanta's
-		// single-active-token rule means an external mint (another test,
-		// another worker) can revoke ours mid-run.
+		// Vanta's single-active-token rule means an external mint (a
+		// connection test, another consumer of the same OAuth app) can
+		// revoke ours between mint and PUT. Drop the cache so the caller's
+		// retry re-mints.
 		s.mu.Lock()
 		s.token = ""
 		s.mu.Unlock()
 		return providers.NewAuthError(fmt.Errorf("resource sync rejected with status %d", resp.StatusCode))
 	case resp.StatusCode < 200 || resp.StatusCode > 299:
-		return fmt.Errorf("resource sync failed with status %d", resp.StatusCode)
+		// Include the record count: a 413 on a huge single-request
+		// full-state payload should read as a size ceiling, not a mystery.
+		return fmt.Errorf("resource sync of %d records failed with status %d", recordCount, resp.StatusCode)
 	}
 
 	body, err := providers.ReadBoundedBody(resp.Body, maxResponseBytes)
@@ -318,11 +333,58 @@ func (s *sink) PushCoverage(ctx context.Context, creds providers.Credentials, se
 		return fmt.Errorf("decode resource sync response: %w", err)
 	}
 	// Full-state semantics make rejections dangerous, not cosmetic: a
-	// rejected record is absent from the authoritative set, which reads as
-	// "device gone" to any Custom Test. Fail loudly so the push retries
-	// instead of quietly shrinking the evidence.
+	// rejected record is missing from the set Vanta accepted, which reads
+	// as "device gone" to any Custom Test. The counts must also account for
+	// every record sent — a drifted response envelope decoding to zeros
+	// must not report success while records silently vanish.
 	if result.Results.Rejected > 0 {
-		return fmt.Errorf("resource sync rejected %d of %d records", result.Results.Rejected, result.Results.Rejected+result.Results.Accepted)
+		return fmt.Errorf("resource sync rejected %d of %d records", result.Results.Rejected, recordCount)
+	}
+	if result.Results.Accepted != recordCount {
+		return fmt.Errorf("resource sync response accounted for %d of %d records", result.Results.Accepted, recordCount)
 	}
 	return nil
+}
+
+// PushCoverage replaces the integration's resource set with the snapshot in
+// one full-state PUT. Vanta marks any previously pushed uniqueId omitted
+// here as gone, so an empty fleet truthfully clears stale evidence — and
+// the whole fleet must travel in this single request (splitting across
+// requests would mark each earlier part gone). The PUT is idempotent on
+// uniqueId, so retries cannot duplicate — including the single in-run
+// re-mint retry below, which absorbs one external token revocation (the
+// one-active-token rule means any other mint on the same OAuth app revokes
+// ours) without booking a spurious auth rejection.
+func (s *sink) PushCoverage(ctx context.Context, creds providers.Credentials, settings providers.Settings, snapshot providers.CoverageSnapshot) error {
+	resource, err := resourceID(settings)
+	if err != nil {
+		return err
+	}
+	resources, err := buildResources(snapshot)
+	if err != nil {
+		return err
+	}
+	payload, err := json.Marshal(map[string]any{
+		"resourceId": resource,
+		"resources":  resources,
+	})
+	if err != nil {
+		return fmt.Errorf("encode resource sync: %w", err)
+	}
+
+	token, err := s.bearerToken(ctx, creds)
+	if err != nil {
+		return err
+	}
+	err = s.putResources(ctx, token, resource, payload, len(resources))
+	if !providers.IsAuthError(err) {
+		return err
+	}
+	// One revocation is absorbed; a second rejection is a real credential
+	// problem and surfaces as the auth error it is.
+	token, mintErr := s.bearerToken(ctx, creds)
+	if mintErr != nil {
+		return mintErr
+	}
+	return s.putResources(ctx, token, resource, payload, len(resources))
 }
