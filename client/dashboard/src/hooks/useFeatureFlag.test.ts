@@ -63,10 +63,16 @@ describe("useFeatureFlag", () => {
   );
 
   it("exposes mode-specific return types", () => {
-    const off = () => useFeatureFlag("gram-rbac", "off");
-    const unresolved = () => useFeatureFlag("gram-rbac", "unresolved");
+    function useOffResult() {
+      return useFeatureFlag("gram-rbac", "off");
+    }
+    function useUnresolvedResult() {
+      return useFeatureFlag("gram-rbac", "unresolved");
+    }
 
-    expectTypeOf(off).returns.toEqualTypeOf<boolean>();
-    expectTypeOf(unresolved).returns.toEqualTypeOf<boolean | undefined>();
+    expectTypeOf(useOffResult).returns.toEqualTypeOf<boolean>();
+    expectTypeOf(useUnresolvedResult).returns.toEqualTypeOf<
+      boolean | undefined
+    >();
   });
 });
