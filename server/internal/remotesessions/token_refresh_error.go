@@ -14,6 +14,7 @@ import "fmt"
 type TokenRefreshError struct {
 	Reason string
 	cause  error
+	code   string
 }
 
 // Error returns the full detail (the public-safe Reason plus the private cause)
@@ -30,7 +31,11 @@ func (e *TokenRefreshError) Error() string {
 func (e *TokenRefreshError) Unwrap() error { return e.cause }
 
 func newTokenRefreshError(reason string, cause error) *TokenRefreshError {
-	return &TokenRefreshError{Reason: reason, cause: cause}
+	return &TokenRefreshError{Reason: reason, cause: cause, code: ""}
+}
+
+func (e *TokenRefreshError) invalidGrant() bool {
+	return e.code == "invalid_grant"
 }
 
 // newTokenRefreshErrorFromHTTP builds a TokenRefreshError from a non-2xx response
@@ -38,8 +43,10 @@ func newTokenRefreshError(reason string, cause error) *TokenRefreshError {
 // error body (falling back to the HTTP status); the raw status and body are kept
 // only as the private cause and never surfaced.
 func newTokenRefreshErrorFromHTTP(status string, body []byte) *TokenRefreshError {
-	return newTokenRefreshError(
-		parseTokenErrorResponse(body).summary(status),
-		fmt.Errorf("refresh endpoint %s: %s", status, string(body)),
-	)
+	response := parseTokenErrorResponse(body)
+	return &TokenRefreshError{
+		Reason: response.summary(status),
+		cause:  fmt.Errorf("refresh endpoint %s: %s", status, string(body)),
+		code:   response.Error,
+	}
 }
