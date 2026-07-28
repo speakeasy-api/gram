@@ -4093,6 +4093,14 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   scope_exempt TEXT,
   action TEXT NOT NULL DEFAULT 'flag',
   audience_type TEXT NOT NULL DEFAULT 'everyone',
+  -- Default disposition for shadow MCP blocking policies (action = 'block'
+  -- with the 'shadow_mcp' source): 'block_all' blocks every non-Gram-hosted
+  -- server unless allowed, 'allow_all' permits every server unless blocked.
+  -- Both exception lists live in RBAC grants (allow list = risk_policy:bypass,
+  -- block list = risk_policy:block), not on this row. NULL means 'block_all'
+  -- (the original behavior). Immutable after create; switching posture
+  -- requires delete + recreate. Valid values enforced in application layer.
+  shadow_mcp_disposition TEXT,
   auto_name BOOLEAN NOT NULL DEFAULT TRUE,
   user_message TEXT,
   -- For policy_type = 'prompt_based': the prompt-based guardrail the LLM judge
