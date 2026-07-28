@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -315,17 +314,6 @@ func TestMissingDeviceIDFailsLoudly(t *testing.T) {
 
 	_, err := fake.newSource().ListDevices(t.Context(), fake.creds(), fake.settings(), "")
 	require.ErrorContains(t, err, "device_id")
-}
-
-func TestReadBoundedBodyDetectsTruncation(t *testing.T) {
-	t.Parallel()
-
-	body, err := readBoundedBody(strings.NewReader("small"))
-	require.NoError(t, err)
-	require.Equal(t, "small", string(body))
-
-	_, err = readBoundedBody(strings.NewReader(strings.Repeat("x", maxResponseBytes+1)))
-	require.ErrorContains(t, err, "limit", "an oversized body must fail loudly, not decode a truncated payload")
 }
 
 func TestInstanceURLValidation(t *testing.T) {

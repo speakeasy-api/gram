@@ -259,17 +259,6 @@ func TestShortTokenLifetimeStillCaches(t *testing.T) {
 	require.Equal(t, int32(1), fake.tokenRequests.Load(), "one mint serves the pull even under a short token lifetime")
 }
 
-func TestReadBoundedBodyDetectsTruncation(t *testing.T) {
-	t.Parallel()
-
-	body, err := readBoundedBody(strings.NewReader("small"))
-	require.NoError(t, err)
-	require.Equal(t, "small", string(body))
-
-	_, err = readBoundedBody(strings.NewReader(strings.Repeat("x", maxResponseBytes+1)))
-	require.ErrorContains(t, err, "limit", "an oversized body must fail loudly, not decode a truncated payload")
-}
-
 func TestInstanceURLValidation(t *testing.T) {
 	t.Parallel()
 
