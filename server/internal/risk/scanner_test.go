@@ -622,3 +622,128 @@ func TestScanner_RecommendedScopesToolOnlySourcesNonToolRequest(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, result)
 }
+
+// deadLetterPIIScanner simulates an unavailable Presidio analyzer: every text
+// comes back as a dead-letter sentinel finding (plus optionally one real
+// finding) the way PresidioClient.AnalyzeBatch reports an exhausted retry
+// budget.
+type deadLetterPIIScanner struct {
+	alsoRealFinding bool
+}
+
+func (d *deadLetterPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string, _ float64, _ func()) ([][]scanners.Finding, error) {
+	out := make([][]scanners.Finding, len(texts))
+	for i := range texts {
+		out[i] = []scanners.Finding{{
+			Source:           risk_analysis.SourcePresidio,
+			RuleID:           risk_analysis.DeadLetterRuleID,
+			Description:      "Presidio could not analyze this message after exhausting its retry budget.",
+			DeadLetterReason: "presidio returned status 500",
+		}}
+		if d.alsoRealFinding {
+			out[i] = append(out[i], scanners.Finding{
+				Source:      risk_analysis.SourcePresidio,
+				RuleID:      "pii.email_address",
+				Description: "Identified an email address.",
+				Match:       "user@example.com",
+				Tags:        []string{"pii"},
+				Confidence:  1,
+			})
+		}
+	}
+	return out, nil
+}
+
+// insertPresidioWarnPolicy is insertPresidioBlockPolicy with action=warn.
+func insertPresidioWarnPolicy(t *testing.T, ti *testInstance, ctx context.Context, name string, entities []string) {
+	t.Helper()
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	require.NotNil(t, authCtx.ProjectID)
+	policyID := uuid.New()
+	_, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID:               policyID,
+		ProjectID:        *authCtx.ProjectID,
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		Name:             name,
+		Sources:          []string{"presidio"},
+		PresidioEntities: entities,
+		Enabled:          true,
+		Action:           "warn",
+		AudienceType:     "everyone",
+		AutoName:         false,
+	})
+	require.NoError(t, err)
+	grantRiskPolicyToAllUsers(t, ti, ctx, authCtx.ActiveOrganizationID, policyID)
+}
+
+func newDeadLetterScanner(t *testing.T, ti *testInstance, pii *deadLetterPIIScanner) *risk.Scanner {
+	t.Helper()
+	scanner, err := risk.NewScanner(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
+		pii,
+		nil,
+		nil,
+		nil,
+		testCELEngine(t),
+	)
+	require.NoError(t, err)
+	return scanner
+}
+
+// TestScanner_PresidioDeadLetterSkipsWarnChallenge is a regression test: a
+// Presidio dead-letter sentinel (analysis failed after retries) must not fire
+// a warn challenge. Before the fix, a warn policy would challenge users with
+// rule pii.dead_letter whenever Presidio was down.
+func TestScanner_PresidioDeadLetterSkipsWarnChallenge(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	insertPresidioWarnPolicy(t, ti, ctx, "pii warn policy", []string{"EMAIL_ADDRESS"})
+	scanner := newDeadLetterScanner(t, ti, &deadLetterPIIScanner{})
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	result, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "some text", message.User, "")
+	require.NoError(t, err)
+	require.Nil(t, result, "dead-letter sentinel must not fire a warn challenge")
+}
+
+// TestScanner_PresidioDeadLetterWarnKeepsRealFindings verifies a genuine
+// finding returned alongside the sentinel still challenges under its own rule.
+func TestScanner_PresidioDeadLetterWarnKeepsRealFindings(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	insertPresidioWarnPolicy(t, ti, ctx, "pii warn policy", []string{"EMAIL_ADDRESS"})
+	scanner := newDeadLetterScanner(t, ti, &deadLetterPIIScanner{alsoRealFinding: true})
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	result, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "reach me at user@example.com", message.User, "")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "warn", result.Action)
+	require.Equal(t, "pii.email_address", result.RuleID)
+	require.Empty(t, result.DeadLetterReason)
+}
+
+// TestScanner_PresidioDeadLetterBlockStillDenies pins the fail-closed side:
+// a block policy still denies on a dead-letter sentinel (the message could not
+// be scanned), carrying DeadLetterReason so callers can tell outage from match.
+func TestScanner_PresidioDeadLetterBlockStillDenies(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	insertPresidioBlockPolicy(t, ti, ctx, "pii block policy", []string{"EMAIL_ADDRESS"})
+	scanner := newDeadLetterScanner(t, ti, &deadLetterPIIScanner{})
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	result, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "some text", message.User, "")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "block", result.Action)
+	require.Equal(t, risk_analysis.DeadLetterRuleID, result.RuleID)
+	require.NotEmpty(t, result.DeadLetterReason)
+}
