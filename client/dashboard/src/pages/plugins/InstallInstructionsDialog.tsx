@@ -82,7 +82,7 @@ const providers: {
   },
   { id: "cursor", label: "Cursor", source: "cursor", available: true },
   { id: "codex", label: "Codex", source: "codex", available: true },
-  { id: "opencode", label: "opencode", source: "opencode", available: true },
+  { id: "opencode", label: "OpenCode", source: "opencode", available: true },
   { id: "copilot", label: "Copilot", source: "copilot", available: false },
   { id: "gemini", label: "Gemini", source: "gemini", available: false },
   { id: "glean", label: "Glean", source: "glean", available: false },

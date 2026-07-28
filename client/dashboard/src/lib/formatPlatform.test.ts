@@ -20,7 +20,7 @@ describe("formatPlatform", () => {
   it("uses canonical labels for other known surfaces", () => {
     expect(formatPlatform("cursor")).toBe("Cursor");
     expect(formatPlatform("codex")).toBe("Codex");
-    expect(formatPlatform("opencode")).toBe("opencode");
+    expect(formatPlatform("opencode")).toBe("OpenCode");
     expect(formatPlatform("aws-bedrock")).toBe("AWS Bedrock");
   });
 
