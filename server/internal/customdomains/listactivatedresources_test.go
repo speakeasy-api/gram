@@ -10,6 +10,7 @@ import (
 	cdrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 func TestListActivatedCustomDomainResourcesReportsEligibleRootMapping(t *testing.T) {
@@ -38,6 +39,11 @@ func TestListActivatedCustomDomainResourcesReportsEligibleRootMapping(t *testing
 		{
 			name:     "cleared root",
 			state:    "cleared",
+			expected: false,
+		},
+		{
+			name:     "deleted project",
+			state:    "deleted-project",
 			expected: false,
 		},
 	}
@@ -110,6 +116,9 @@ func TestListActivatedCustomDomainResourcesReportsEligibleRootMapping(t *testing
 				require.NoError(t, err)
 			case "cleared":
 				require.NoError(t, ti.repo.ClearRootMcpEndpoint(ctx, domain.ID))
+			case "deleted-project":
+				_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, *authCtx.ProjectID)
+				require.NoError(t, err)
 			default:
 				require.Failf(t, "unknown eligibility state", "state: %s", tc.state)
 			}
@@ -125,6 +134,47 @@ func TestListActivatedCustomDomainResourcesReportsEligibleRootMapping(t *testing
 			require.Fail(t, "activated custom domain resource not found")
 		})
 	}
+}
+
+func TestGetCustomDomainRouteConfigExcludesDeletedProjectRoot(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	projectID := seedProject(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	domain, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          "route-config-project-" + uuid.NewString() + ".example.com",
+		IngressName:     pgtype.Text{String: "", Valid: false},
+		CertSecretName:  pgtype.Text{String: "", Valid: false},
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+	serverID := seedMcpServer(t, ctx, ti.conn, projectID)
+	endpoint, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:      projectID,
+		CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
+		McpServerID:    serverID,
+		Slug:           "root-" + uuid.NewString(),
+	})
+	require.NoError(t, err)
+	require.NoError(t, ti.repo.SetRootMcpEndpoint(ctx, cdrepo.SetRootMcpEndpointParams{
+		McpEndpointID:  endpoint.ID,
+		CustomDomainID: domain.ID,
+	}))
+
+	route, err := ti.repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	require.NoError(t, err)
+	require.Equal(t, endpoint.ID, route.RootMcpEndpointID)
+
+	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, projectID)
+	require.NoError(t, err)
+
+	route, err = ti.repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	require.NoError(t, err)
+	require.Equal(t, uuid.Nil, route.RootMcpEndpointID)
+	require.Empty(t, route.RootSlug)
 }
 
 func TestListActivatedCustomDomainResourcesIgnoresSoftDeletedDomains(t *testing.T) {

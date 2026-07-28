@@ -149,7 +149,7 @@ func (p *IngressProvisioner) buildIngress(domain string, ipAllowlist []string) (
 	if err != nil {
 		return "", "", nil, err
 	}
-	secretName := strings.ReplaceAll(domain, ".", "-") + "-tls"
+	secretName := TLSSecretNameForDomain(domain)
 
 	annotations := map[string]string{
 		"cert-manager.io/cluster-issuer":              "gram-letsencrypt",

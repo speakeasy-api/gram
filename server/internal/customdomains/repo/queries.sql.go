@@ -117,30 +117,30 @@ func (q *Queries) DeleteCustomDomain(ctx context.Context, organizationID string)
 	return err
 }
 
-const disableCustomDomainForHealth = `-- name: DisableCustomDomainForHealth :one
+const ensureCustomDomainResourceNames = `-- name: EnsureCustomDomainResourceNames :exec
 UPDATE custom_domains
 SET
-    verified = FALSE,
-    activated = FALSE,
+    ingress_name = COALESCE(NULLIF(ingress_name, ''), $1),
+    cert_secret_name = COALESCE(NULLIF(cert_secret_name, ''), $2),
     updated_at = clock_timestamp()
-WHERE id = $1
-  AND organization_id = $2
+WHERE id = $3
   AND deleted IS FALSE
-RETURNING id
 `
 
-type DisableCustomDomainForHealthParams struct {
+type EnsureCustomDomainResourceNamesParams struct {
+	IngressName    pgtype.Text
+	CertSecretName pgtype.Text
 	ID             uuid.UUID
-	OrganizationID string
 }
 
-// Clearing activated drops the domain from health sweeps; clearing verified
-// puts it back into the dashboard reverify flow. Caller tears down k8s.
-func (q *Queries) DisableCustomDomainForHealth(ctx context.Context, arg DisableCustomDomainForHealthParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, disableCustomDomainForHealth, arg.ID, arg.OrganizationID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+// Deletion checkpoint: fill derived resource identity when Apply never
+// persisted one, so the tombstone stays discoverable for cleanup retries.
+// COALESCE keeps identity persisted by a real Apply. Active rows only — a
+// cleaned tombstone must never be repopulated (its derived names may belong
+// to a successor domain reusing the hostname). Caller is org-scoped.
+func (q *Queries) EnsureCustomDomainResourceNames(ctx context.Context, arg EnsureCustomDomainResourceNamesParams) error {
+	_, err := q.db.Exec(ctx, ensureCustomDomainResourceNames, arg.IngressName, arg.CertSecretName, arg.ID)
+	return err
 }
 
 const getCustomDomainByDomain = `-- name: GetCustomDomainByDomain :one
@@ -354,6 +354,9 @@ FROM custom_domains AS d
 LEFT JOIN LATERAL (
     SELECT e.id, e.slug
     FROM mcp_endpoints AS e
+    JOIN projects AS p
+      ON p.id = e.project_id
+     AND p.deleted IS FALSE
     JOIN mcp_servers AS s
       ON s.id = e.mcp_server_id
      AND s.deleted IS FALSE
@@ -505,6 +508,9 @@ SELECT
     EXISTS (
         SELECT 1
         FROM mcp_endpoints AS e
+        JOIN projects AS p
+          ON p.id = e.project_id
+         AND p.deleted IS FALSE
         JOIN mcp_servers AS s
           ON s.id = e.mcp_server_id
          AND s.deleted IS FALSE
@@ -527,6 +533,9 @@ type ListActivatedCustomDomainResourcesRow struct {
 	HasRootMapping  bool
 }
 
+// Internal system-wide orphan sweep. Intentionally spans all organizations;
+// not reachable from user-facing handlers. Keep the root-mapping predicate in
+// sync with GetCustomDomainRouteConfig so sweep and reconciler agree.
 func (q *Queries) ListActivatedCustomDomainResources(ctx context.Context) ([]ListActivatedCustomDomainResourcesRow, error) {
 	rows, err := q.db.Query(ctx, listActivatedCustomDomainResources)
 	if err != nil {

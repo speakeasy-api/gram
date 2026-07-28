@@ -462,6 +462,16 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	// Lock+reload inside tx: stale pre-tx read must not checkpoint or delete a row that changed underneath us (tombstone repopulation / successor deletion).
+	domain, err = repo.New(dbtx).LockCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Concurrent delete won; its reconcile signal owns cleanup.
+		return nil
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock custom domain for deletion").LogError(ctx, s.logger)
+	}
+
 	// The mcp_endpoints.custom_domain_id FK has ON DELETE SET NULL, but that
 	// only fires for hard deletes. Soft-delete the child endpoints explicitly
 	// so they don't outlive the tombstoned custom domain. The cascade spans
@@ -483,6 +493,20 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 			Slug:             endpoint.Slug,
 		}); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "log mcp endpoint deletion").LogError(ctx, s.logger)
+		}
+	}
+
+	// Checkpoint derived identity: tombstone without names invisible to GetPendingDeletedCustomDomainByOrganization, so partial-Apply leak unrecoverable. Unconditional — COALESCE fills only the missing fields (e.g. legacy rows with a name but no secret).
+	if kind := domain.ProvisionerKind; kind == "" || kind == string(k8s.ProvisionerKindIngress) {
+		resourceName, nameErr := k8s.SanitizeDomainForK8sName(domain.Domain)
+		if nameErr != nil {
+			s.logger.WarnContext(ctx, "skipping custom domain resource identity checkpoint", attr.SlogError(nameErr), attr.SlogURLDomain(domain.Domain))
+		} else if err := repo.New(dbtx).EnsureCustomDomainResourceNames(ctx, repo.EnsureCustomDomainResourceNamesParams{
+			IngressName:    conv.ToPGText(resourceName),
+			CertSecretName: conv.ToPGText(k8s.TLSSecretNameForDomain(domain.Domain)),
+			ID:             domain.ID,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "checkpoint custom domain resource identity").LogError(ctx, s.logger)
 		}
 	}
 

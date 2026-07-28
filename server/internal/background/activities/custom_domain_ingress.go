@@ -150,6 +150,7 @@ func (c *CustomDomainIngress) ReconcileCustomDomain(ctx context.Context, args Re
 
 	provisioner := c.provisionerFactory.Provisioner(kind)
 	if desired.Deleted {
+		// No names on tombstone = never applied or already cleaned: DeleteDomain checkpoints derived identity before tombstoning. Never re-derive here — hostname reuse would delete a successor domain's live resources.
 		if !desired.IngressName.Valid || desired.IngressName.String == "" {
 			return nil
 		}

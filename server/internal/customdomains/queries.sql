@@ -81,6 +81,9 @@ FROM custom_domains AS d
 LEFT JOIN LATERAL (
     SELECT e.id, e.slug
     FROM mcp_endpoints AS e
+    JOIN projects AS p
+      ON p.id = e.project_id
+     AND p.deleted IS FALSE
     JOIN mcp_servers AS s
       ON s.id = e.mcp_server_id
      AND s.deleted IS FALSE
@@ -161,6 +164,9 @@ ORDER BY id
 LIMIT @page_limit;
 
 -- name: ListActivatedCustomDomainResources :many
+-- Internal system-wide orphan sweep. Intentionally spans all organizations;
+-- not reachable from user-facing handlers. Keep the root-mapping predicate in
+-- sync with GetCustomDomainRouteConfig so sweep and reconciler agree.
 SELECT
     d.id,
     d.domain,
@@ -169,6 +175,9 @@ SELECT
     EXISTS (
         SELECT 1
         FROM mcp_endpoints AS e
+        JOIN projects AS p
+          ON p.id = e.project_id
+         AND p.deleted IS FALSE
         JOIN mcp_servers AS s
           ON s.id = e.mcp_server_id
          AND s.deleted IS FALSE
@@ -247,6 +256,20 @@ SET
     updated_at = clock_timestamp()
 WHERE id = @id
 RETURNING *;
+
+-- name: EnsureCustomDomainResourceNames :exec
+-- Deletion checkpoint: fill derived resource identity when Apply never
+-- persisted one, so the tombstone stays discoverable for cleanup retries.
+-- COALESCE keeps identity persisted by a real Apply. Active rows only — a
+-- cleaned tombstone must never be repopulated (its derived names may belong
+-- to a successor domain reusing the hostname). Caller is org-scoped.
+UPDATE custom_domains
+SET
+    ingress_name = COALESCE(NULLIF(ingress_name, ''), @ingress_name),
+    cert_secret_name = COALESCE(NULLIF(cert_secret_name, ''), @cert_secret_name),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND deleted IS FALSE;
 
 -- name: ClearDeletedCustomDomainResourceNames :exec
 UPDATE custom_domains

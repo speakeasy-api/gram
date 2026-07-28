@@ -22,6 +22,13 @@ func SanitizeDomainForK8sName(domain string) (string, error) {
 	return strings.ToLower(name), nil
 }
 
+// TLSSecretNameForDomain derives the TLS Secret name for a custom domain.
+// Apply and the DeleteDomain identity checkpoint share it so every tombstone
+// carries a cleanable identity even when Apply never persisted one.
+func TLSSecretNameForDomain(domain string) string {
+	return strings.ReplaceAll(domain, ".", "-") + "-tls"
+}
+
 // RootIngressName derives the secondary root-ingress name from the primary
 // custom-domain resource name. The hash preserves determinism when the primary
 // name is too long to append the role suffix directly.
