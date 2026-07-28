@@ -19,12 +19,20 @@ export type FeatureFlag =
 type WhileLoading = "off" | "on" | "unresolved";
 
 /**
- * Read a typed PostHog feature flag and explicitly choose its loading behavior.
+ * Read a typed PostHog feature flag.
  *
- * The default `"off"` mode is appropriate for opt-in gates. Use `"on"` for
- * kill switches, or `"unresolved"` when the caller needs to handle loading
- * separately. The underlying telemetry hook re-renders when PostHog resolves
- * or reloads flags.
+ * Once PostHog resolves the flag, this hook always returns its actual boolean
+ * value. `whileLoading` controls only the value returned before then:
+ *
+ * - `"off"` (default) returns `false`, hiding an opt-in feature until PostHog
+ *   confirms that it is enabled.
+ * - `"on"` returns `true`, keeping a kill-switched feature visible unless
+ *   PostHog confirms that it is disabled.
+ * - `"unresolved"` returns `undefined`, allowing the caller to distinguish
+ *   loading from an enabled or disabled flag and render its own loading state.
+ *
+ * The underlying telemetry hook re-renders when PostHog resolves or reloads
+ * flags.
  *
  * In local development, the telemetry provider enables every feature flag.
  */
