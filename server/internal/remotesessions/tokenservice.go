@@ -355,13 +355,22 @@ func (m *ChallengeManager) refreshAccessToken(
 		SubjectUrn:            sess.SubjectUrn,
 		RemoteSessionClientID: sess.RemoteSessionClientID,
 	})
-	if currentErr == nil {
-		sess = current
+	switch {
+	case errors.Is(currentErr, pgx.ErrNoRows):
+		// Revoked while we were acquiring. Refreshing anyway would rotate
+		// tokens upstream that nothing will ever hold.
+		return "", nil
+	case currentErr != nil:
+		// Whatever broke this read breaks the write below too, and a refresh we
+		// cannot persist leaves the stored token dead upstream.
+		return "", fmt.Errorf("re-read active remote_session: %w", currentErr)
+	}
 
-		if current.UpdatedAt.Time.After(snapshotAt) {
-			if plain, err := m.enc.Decrypt(current.AccessTokenEncrypted); err == nil {
-				return plain, nil
-			}
+	sess = current
+
+	if current.UpdatedAt.Time.After(snapshotAt) {
+		if plain, err := m.enc.Decrypt(current.AccessTokenEncrypted); err == nil {
+			return plain, nil
 		}
 	}
 
