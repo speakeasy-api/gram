@@ -1326,11 +1326,12 @@ func TestRedactCommandMasksURLQuerySecrets(t *testing.T) {
 }
 
 func TestMCPInventoryRedactionMasksSignedURLCredentials(t *testing.T) {
-	got, ok := redactMCPInventoryURL("https://mcp.example.com/sse?sig=short&X-Amz-Signature=aws-secret&X-Amz-Credential=aws-credential&channel=eng")
+	got, ok := redactMCPInventoryURL("https://mcp.example.com/sse?sig=short&X-Amz-Signature=aws-secret&X-Amz-Credential=aws-credential&oauth_signature=oauth-secret&channel=eng")
 	require.True(t, ok)
 	require.NotContains(t, got, "short")
 	require.NotContains(t, got, "aws-secret")
 	require.NotContains(t, got, "aws-credential")
+	require.NotContains(t, got, "oauth-secret", "prefixed OAuth signature params must redact")
 	require.Contains(t, got, "channel=eng", "non-secret query parameters must survive")
 
 	command := redactCommand("npx -y mcp-remote https://mcp.example.com/sse?X-Goog-Signature=goog-secret&channel=eng")
