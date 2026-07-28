@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -532,6 +533,12 @@ func (s *Service) DeleteToolMetadata(ctx context.Context, payload *gen.DeleteToo
 // only means that cache serves the prior view until it expires, so it is logged
 // rather than surfaced — the write itself has already committed.
 func (s *Service) invalidateDispositionCache(ctx context.Context, serverID uuid.UUID, logger *slog.Logger) {
+	// Detach from the request context: the write has already committed, so a
+	// client disconnect after the response must not cancel the eviction and
+	// strand a stale disposition in cache until the TTL lapses.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+
 	if err := s.dispositionCache.Invalidate(ctx, serverID.String()); err != nil {
 		logger.WarnContext(ctx, "invalidate tool disposition cache", attr.SlogError(err), attr.SlogMcpServerID(serverID.String()))
 	}

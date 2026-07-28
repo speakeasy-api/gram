@@ -83,10 +83,8 @@ func NewToolDispositionCache(logger *slog.Logger, db *pgxpool.Pool, c cache.Cach
 // security dimension, and silently substituting the empty disposition would
 // relax an annotation-scoped policy exactly when the store is unavailable.
 func (c *ToolDispositionCache) Dispositions(ctx context.Context, mcpServerID, projectID string) (map[string]string, error) {
-	if cached, err := c.cache.Get(ctx, serverToolDispositionsCacheKey(mcpServerID)); err == nil {
-		return cached.Dispositions, nil
-	}
-
+	// Validate before the cache read so a warm entry can't bypass the check: a
+	// bad id must fail closed whether or not the server was resolved before.
 	serverUUID, err := uuid.Parse(mcpServerID)
 	if err != nil {
 		return nil, fmt.Errorf("parse mcp server id: %w", err)
@@ -94,6 +92,10 @@ func (c *ToolDispositionCache) Dispositions(ctx context.Context, mcpServerID, pr
 	projectUUID, err := uuid.Parse(projectID)
 	if err != nil {
 		return nil, fmt.Errorf("parse project id: %w", err)
+	}
+
+	if cached, err := c.cache.Get(ctx, serverToolDispositionsCacheKey(mcpServerID)); err == nil {
+		return cached.Dispositions, nil
 	}
 
 	rows, err := repo.New(c.db).ListMCPServerToolMetadata(ctx, repo.ListMCPServerToolMetadataParams{

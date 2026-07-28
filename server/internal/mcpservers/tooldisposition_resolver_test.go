@@ -124,9 +124,16 @@ func TestToolDispositionResolver_InvalidProjectIDFailsClosed(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
 
 	serverID := createRemoteBackedMcpServer(t, ctx, ti)
 
-	_, err := ti.dispositions.Dispositions(ctx, serverID, "not-a-uuid")
+	// Warm the cache for this server first, so the bad-project rejection can't
+	// be skipped by a subsequent cache hit.
+	_, err := ti.dispositions.Dispositions(ctx, serverID, authCtx.ProjectID.String())
+	require.NoError(t, err)
+
+	_, err = ti.dispositions.Dispositions(ctx, serverID, "not-a-uuid")
 	require.Error(t, err)
 }
