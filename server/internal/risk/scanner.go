@@ -570,10 +570,11 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 
 	// failWithHeldSentinel prefers a held dead-letter sentinel over a later
 	// source error: propagating the error would discard the whole policy and
-	// fail a block policy open. Cancellation still propagates so the fan-out
-	// in ScanForEnforcement can discard the scan.
+	// fail a block policy open. Cancellation and deadline expiry still
+	// propagate so the fan-out in ScanForEnforcement discards the scan
+	// instead of enforcing a stale sentinel after the request is gone.
 	failWithHeldSentinel := func(err error) (*ScanResult, error) {
-		if deadLetterResult == nil || errors.Is(err, context.Canceled) {
+		if deadLetterResult == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return nil, err
 		}
 		s.logger.WarnContext(ctx, "source scan failed after presidio dead-letter; enforcing sentinel",
