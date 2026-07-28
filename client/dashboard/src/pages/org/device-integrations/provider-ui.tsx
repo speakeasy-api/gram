@@ -1,5 +1,5 @@
 import type { DeviceIntegrationProvider } from "@gram/client/models/components/deviceintegrationprovider.js";
-import { MonitorSmartphone, ShieldCheck } from "lucide-react";
+import { Apple, MonitorSmartphone, ShieldCheck } from "lucide-react";
 
 // Presentation extras the backend registry doesn't carry: an icon, a richer
 // description, and optional setup guidance for the configure sheet. Provider
@@ -14,7 +14,18 @@ export type ProviderUI = {
   setupSteps?: string[];
 };
 
-const PROVIDER_UI: Record<string, ProviderUI> = {};
+const PROVIDER_UI: Record<string, ProviderUI> = {
+  iru: {
+    icon: Apple,
+    description:
+      "Pulls the device inventory from your Iru (formerly Kandji) tenant so agent coverage can be computed across your Apple fleet.",
+    setupSteps: [
+      "In the Iru console, go to Settings → Access → API Token and create a token with only the “Device list” permission enabled.",
+      "Copy the token and the tenant's API URL shown on the same page (https://yourtenant.api.iru.com; legacy *.api.kandji.io URLs also work).",
+      "Enter the API URL and token, save, then test the connection.",
+    ],
+  },
+};
 
 export function providerUI(provider: DeviceIntegrationProvider): ProviderUI {
   return PROVIDER_UI[provider.id] ?? defaultProviderUI(provider);

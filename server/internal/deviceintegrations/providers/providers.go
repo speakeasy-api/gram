@@ -150,6 +150,18 @@ type Deps struct {
 }
 
 // InventorySource pulls the managed-device fleet from the vendor.
+//
+// Snapshot consistency: a paginated listing need not be a perfectly
+// consistent snapshot — the framework tolerates a device transiently absent
+// from one completed pull. Mark-missing runs only after a pull completes and
+// clears on the next pull that sees the device, so a vendor whose paging can
+// drop a device under mid-pull churn (offset pagination) mis-marks it until
+// a later pull fetches it — one sync interval per churn event in the common
+// case, though sustained churn can keep re-skipping the same device.
+// Providers relying on this tolerance must say so at their pagination
+// logic; anyone strengthening what a completed pull implies (partial-pull
+// marking, same-cycle alerting or evidence export) must revisit those
+// providers first.
 type InventorySource interface {
 	// TestConnection validates the credentials/settings with a minimal read.
 	// Implementations must bound their own request sizes; the caller bounds
