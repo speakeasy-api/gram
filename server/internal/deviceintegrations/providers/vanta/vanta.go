@@ -1,0 +1,328 @@
+// Package vanta implements the Vanta evidence-sink provider: it pushes
+// per-device agent-coverage evidence into a customer's Vanta tenant via a
+// private integration, so agent coverage becomes continuously-tested
+// compliance evidence (a Custom Test over the pushed properties fails when a
+// device's assigned user has no live agent).
+//
+// Customer-side setup, for the docs: create a private integration in the
+// Vanta Developer Console with the connectors.self:write-resource scope,
+// define a Custom Resource whose schema mirrors the customProperties below,
+// copy its resource id from the Resources tab, then define a Custom Test
+// over assigned_user_agent_active mapped to the relevant controls.
+//
+// Evidence precision: agent presence is attested per assigned USER, not per
+// device — the property names say exactly that (assigned_user_agent_active,
+// never "device_monitored"), and assigned_user_agent_last_seen_at is omitted
+// when the assigned user has never synced an agent. The ticket suggested
+// Vanta's built-in Computer resource kind, but built-in kinds carry fixed
+// schemas that cannot express these properties; a Custom Resource is what
+// lets the Custom Test attest exactly what we can prove.
+//
+// Endpoints used (Vanta documents a single global API host):
+//
+//	POST /oauth/token — client-credentials mint; tokens live one hour and
+//	Vanta allows ONE active token per application (a new mint revokes the
+//	previous), so the token is minted once per push run and cached.
+//	PUT /v1/resources/custom_resource — full-state sync of the fleet.
+//
+// Vanta's sync is full-state PUT: each request is the complete resource set
+// and any previously pushed uniqueId omitted from a later PUT is marked
+// gone. That is exactly PushCoverage's snapshot-replace contract — and it
+// also means the whole fleet MUST travel in one request; splitting across
+// requests would mark each earlier batch gone.
+package vanta
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+)
+
+const (
+	// ProviderID is the registry discriminator stored on config rows.
+	ProviderID = "vanta"
+
+	// ScheduleEvidence is the provider's single sync pipeline.
+	ScheduleEvidence = "vanta_evidence"
+
+	// userAgent identifies this integration on every API request.
+	userAgent = "Speakeasy-Gram/1.0"
+
+	// defaultBaseURL is Vanta's documented API host; no regional variants
+	// are documented. Fixed rather than customer-supplied so a config can
+	// never point the OAuth credentials at an arbitrary host.
+	defaultBaseURL = "https://api.vanta.com"
+
+	// tokenScope is the least privilege the sync needs: writing the
+	// integration's own resources.
+	tokenScope = "connectors.self:write-resource"
+
+	// tokenExpirySlack renews the cached token this long before its actual
+	// expiry so in-flight requests never race the cutoff. Vanta tokens live
+	// an hour, far above the slack.
+	tokenExpirySlack = 30 * time.Second
+
+	// maxResponseBytes bounds each response body read. Vanta responses here
+	// are small envelopes (a token, accepted/rejected counts).
+	maxResponseBytes = 1 * 1024 * 1024
+
+	fieldClientID     = "client_id"
+	fieldClientSecret = "client_secret"
+	fieldResourceID   = "resource_id"
+)
+
+func init() {
+	providers.Register(providers.Descriptor{
+		ID:           ProviderID,
+		DisplayName:  "Vanta",
+		Capabilities: []providers.Capability{providers.CapabilityEvidenceSink},
+		Fields: []providers.CredentialField{
+			{Key: fieldClientID, Label: "OAuth Client ID", Kind: providers.FieldKindText, Secret: true, Required: true},
+			{Key: fieldClientSecret, Label: "OAuth Client Secret", Kind: providers.FieldKindText, Secret: true, Required: true},
+			{Key: fieldResourceID, Label: "Custom Resource ID", Kind: providers.FieldKindText, Secret: false, Required: true},
+		},
+		Schedules: []providers.ScheduleSpec{
+			{Schedule: ScheduleEvidence, Capability: providers.CapabilityEvidenceSink, Interval: time.Hour},
+		},
+		NewInventorySource: nil,
+		NewEvidenceSink: func(deps providers.Deps) providers.EvidenceSink {
+			return &sink{client: deps.Client, baseURL: defaultBaseURL, mu: sync.Mutex{}, token: "", tokenExpiry: time.Time{}}
+		},
+	})
+}
+
+// sink is one Vanta API session. The sync runner constructs a fresh sink per
+// run, so the token cache spans one full push — deliberate, because Vanta
+// allows a single active token per application and minting per request would
+// revoke the token out from under concurrent calls.
+type sink struct {
+	client *guardian.HTTPClient
+	// baseURL is defaultBaseURL in production and an httptest server in
+	// unit tests.
+	baseURL string
+
+	mu          sync.Mutex
+	token       string
+	tokenExpiry time.Time
+}
+
+var _ providers.EvidenceSink = (*sink)(nil)
+
+// bearerToken returns a cached OAuth token, minting one via the
+// client-credentials grant when absent or near expiry.
+func (s *sink) bearerToken(ctx context.Context, creds providers.Credentials) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.token != "" && time.Now().Before(s.tokenExpiry) {
+		return s.token, nil
+	}
+
+	payload, err := json.Marshal(map[string]string{
+		"client_id":     creds[fieldClientID],
+		"client_secret": creds[fieldClientSecret],
+		"grant_type":    "client_credentials",
+		"scope":         tokenScope,
+	})
+	if err != nil {
+		return "", fmt.Errorf("encode token request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.baseURL+"/oauth/token", bytes.NewReader(payload))
+	if err != nil {
+		return "", fmt.Errorf("build token request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", userAgent)
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("request token: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	// Classify by status before touching the body: the error branches never
+	// need it, and an oversized error response must not mask a credential
+	// rejection as a generic read failure.
+	switch {
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		return "", providers.NewAuthError(fmt.Errorf("token request rejected with status %d", resp.StatusCode))
+	case resp.StatusCode < 200 || resp.StatusCode > 299:
+		return "", fmt.Errorf("token request failed with status %d", resp.StatusCode)
+	}
+
+	body, err := providers.ReadBoundedBody(resp.Body, maxResponseBytes)
+	if err != nil {
+		return "", fmt.Errorf("read token response: %w", err)
+	}
+	var token struct {
+		AccessToken string `json:"access_token"`
+		ExpiresIn   int    `json:"expires_in"`
+	}
+	if err := json.Unmarshal(body, &token); err != nil {
+		return "", fmt.Errorf("decode token response: %w", err)
+	}
+	if token.AccessToken == "" {
+		return "", fmt.Errorf("token response carried no access token")
+	}
+
+	ttl := time.Duration(token.ExpiresIn) * time.Second
+	slack := tokenExpirySlack
+	if ttl <= 2*tokenExpirySlack {
+		slack = ttl / 2
+	}
+	s.token = token.AccessToken
+	s.tokenExpiry = time.Now().Add(ttl - slack)
+	return s.token, nil
+}
+
+// resourceID validates the configured Custom Resource id.
+func resourceID(settings providers.Settings) (string, error) {
+	id := strings.TrimSpace(settings[fieldResourceID])
+	if id == "" {
+		return "", fmt.Errorf("resource_id is not configured")
+	}
+	return id, nil
+}
+
+// TestConnection proves the stored OAuth credentials by minting a token.
+// The resource id has no cheap read to validate against; a typo there
+// surfaces as a rejected first push. Note that minting revokes any token a
+// concurrently running push holds — harmless, the push re-mints.
+func (s *sink) TestConnection(ctx context.Context, creds providers.Credentials, settings providers.Settings) error {
+	if _, err := resourceID(settings); err != nil {
+		return fmt.Errorf("vanta connection test: %w", err)
+	}
+	if _, err := s.bearerToken(ctx, creds); err != nil {
+		return fmt.Errorf("vanta connection test: %w", err)
+	}
+	return nil
+}
+
+// coverageResource is one device in the pushed full-state set. Base fields
+// (uniqueId, displayName) sit at the top level per Vanta's resource
+// envelope; the evidence properties live in customProperties, named to scope
+// the attestation to the assigned user. A never-seen agent omits the
+// last-seen property entirely rather than sending null or a zero timestamp.
+type coverageResource struct {
+	UniqueID         string           `json:"uniqueId"`
+	DisplayName      string           `json:"displayName"`
+	CustomProperties coverageProperty `json:"customProperties"`
+}
+
+type coverageProperty struct {
+	SerialNumber                string  `json:"serial_number"`
+	Hostname                    string  `json:"hostname"`
+	AssignedUserEmail           string  `json:"assigned_user_email"`
+	AssignedUserAgentActive     bool    `json:"assigned_user_agent_active"`
+	AssignedUserAgentLastSeenAt *string `json:"assigned_user_agent_last_seen_at,omitempty"`
+}
+
+func buildResources(snapshot providers.CoverageSnapshot) []coverageResource {
+	resources := make([]coverageResource, 0, len(snapshot.Devices))
+	for _, d := range snapshot.Devices {
+		var lastSeen *string
+		if !d.AssignedUserAgentLastSeenAt.IsZero() {
+			formatted := d.AssignedUserAgentLastSeenAt.UTC().Format(time.RFC3339)
+			lastSeen = &formatted
+		}
+		displayName := d.Hostname
+		if displayName == "" {
+			displayName = d.ExternalID
+		}
+		resources = append(resources, coverageResource{
+			UniqueID:    d.ExternalID,
+			DisplayName: displayName,
+			CustomProperties: coverageProperty{
+				SerialNumber:                d.SerialNumber,
+				Hostname:                    d.Hostname,
+				AssignedUserEmail:           d.UserEmail,
+				AssignedUserAgentActive:     d.AssignedUserAgentActive,
+				AssignedUserAgentLastSeenAt: lastSeen,
+			},
+		})
+	}
+	return resources
+}
+
+// PushCoverage replaces the integration's resource set with the snapshot in
+// one full-state PUT. Vanta marks any previously pushed uniqueId omitted
+// here as gone, so an empty fleet truthfully clears stale evidence — and
+// the whole fleet must travel in this single request (splitting across
+// requests would mark each earlier part gone). The PUT is idempotent on
+// uniqueId, so retries cannot duplicate.
+func (s *sink) PushCoverage(ctx context.Context, creds providers.Credentials, settings providers.Settings, snapshot providers.CoverageSnapshot) error {
+	resource, err := resourceID(settings)
+	if err != nil {
+		return err
+	}
+	token, err := s.bearerToken(ctx, creds)
+	if err != nil {
+		return err
+	}
+
+	payload, err := json.Marshal(map[string]any{
+		"resourceId": resource,
+		"resources":  buildResources(snapshot),
+	})
+	if err != nil {
+		return fmt.Errorf("encode resource sync: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, s.baseURL+"/v1/resources/custom_resource", bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("build resource sync request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("User-Agent", userAgent)
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("request resource sync: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	switch {
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		// Drop the cache so a later call on this sink re-mints; Vanta's
+		// single-active-token rule means an external mint (another test,
+		// another worker) can revoke ours mid-run.
+		s.mu.Lock()
+		s.token = ""
+		s.mu.Unlock()
+		return providers.NewAuthError(fmt.Errorf("resource sync rejected with status %d", resp.StatusCode))
+	case resp.StatusCode < 200 || resp.StatusCode > 299:
+		return fmt.Errorf("resource sync failed with status %d", resp.StatusCode)
+	}
+
+	body, err := providers.ReadBoundedBody(resp.Body, maxResponseBytes)
+	if err != nil {
+		return fmt.Errorf("read resource sync response: %w", err)
+	}
+	var result struct {
+		Results struct {
+			Accepted int `json:"accepted"`
+			Rejected int `json:"rejected"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return fmt.Errorf("decode resource sync response: %w", err)
+	}
+	// Full-state semantics make rejections dangerous, not cosmetic: a
+	// rejected record is absent from the authoritative set, which reads as
+	// "device gone" to any Custom Test. Fail loudly so the push retries
+	// instead of quietly shrinking the evidence.
+	if result.Results.Rejected > 0 {
+		return fmt.Errorf("resource sync rejected %d of %d records", result.Results.Rejected, result.Results.Rejected+result.Results.Accepted)
+	}
+	return nil
+}

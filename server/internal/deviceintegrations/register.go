@@ -8,4 +8,5 @@ import (
 	_ "github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers/drata"
 	_ "github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers/iru"
 	_ "github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers/jamf"
+	_ "github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers/vanta"
 )
