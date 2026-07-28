@@ -1144,7 +1144,7 @@ WHERE s.project_id = $9
   AND s.archived_at IS NULL
 ON CONFLICT (skill_id, canonical_sha256)
 DO NOTHING
-RETURNING id, skill_id, content, canonical_sha256, raw_sha256, description, metadata, spec_valid, validation_errors, created_at, created_by_user_id
+RETURNING id, skill_id, content, canonical_sha256, raw_sha256, description, metadata, spec_valid, validation_errors, created_at, promoted_at, created_by_user_id
 `
 
 type CreateSkillVersionParams struct {
@@ -1185,6 +1185,7 @@ func (q *Queries) CreateSkillVersion(ctx context.Context, arg CreateSkillVersion
 		&i.SpecValid,
 		&i.ValidationErrors,
 		&i.CreatedAt,
+		&i.PromotedAt,
 		&i.CreatedByUserID,
 	)
 	return i, err
@@ -1757,7 +1758,7 @@ func (q *Queries) GetPluginForDistribution(ctx context.Context, arg GetPluginFor
 }
 
 const getProjectSkillVersion = `-- name: GetProjectSkillVersion :one
-SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id
+SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.promoted_at, sv.created_by_user_id
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
 WHERE s.project_id = $1
@@ -1783,6 +1784,7 @@ func (q *Queries) GetProjectSkillVersion(ctx context.Context, arg GetProjectSkil
 		&i.SpecValid,
 		&i.ValidationErrors,
 		&i.CreatedAt,
+		&i.PromotedAt,
 		&i.CreatedByUserID,
 	)
 	return i, err
@@ -2503,7 +2505,7 @@ func (q *Queries) GetSkillState(ctx context.Context, arg GetSkillStateParams) (G
 }
 
 const getSkillVersionByHash = `-- name: GetSkillVersionByHash :one
-SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id
+SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.promoted_at, sv.created_by_user_id
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
 WHERE s.project_id = $1
@@ -2532,6 +2534,7 @@ func (q *Queries) GetSkillVersionByHash(ctx context.Context, arg GetSkillVersion
 		&i.SpecValid,
 		&i.ValidationErrors,
 		&i.CreatedAt,
+		&i.PromotedAt,
 		&i.CreatedByUserID,
 	)
 	return i, err
@@ -2539,7 +2542,7 @@ func (q *Queries) GetSkillVersionByHash(ctx context.Context, arg GetSkillVersion
 
 const getSkillVersionDetails = `-- name: GetSkillVersionDetails :one
 SELECT
-  sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id,
+  sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.promoted_at, sv.created_by_user_id,
   svl.derived_from_version_id,
   sightings.first_seen_at,
   sightings.last_seen_at,
@@ -2595,6 +2598,7 @@ func (q *Queries) GetSkillVersionDetails(ctx context.Context, arg GetSkillVersio
 		&i.SkillVersion.SpecValid,
 		&i.SkillVersion.ValidationErrors,
 		&i.SkillVersion.CreatedAt,
+		&i.SkillVersion.PromotedAt,
 		&i.SkillVersion.CreatedByUserID,
 		&i.DerivedFromVersionID,
 		&i.FirstSeenAt,
@@ -4257,7 +4261,7 @@ func (q *Queries) ListSkillSuggestionProjects(ctx context.Context, arg ListSkill
 
 const listSkillVersions = `-- name: ListSkillVersions :many
 SELECT
-  sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id,
+  sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.promoted_at, sv.created_by_user_id,
   svl.derived_from_version_id,
   sightings.first_seen_at,
   sightings.last_seen_at,
@@ -4335,6 +4339,7 @@ func (q *Queries) ListSkillVersions(ctx context.Context, arg ListSkillVersionsPa
 			&i.SkillVersion.SpecValid,
 			&i.SkillVersion.ValidationErrors,
 			&i.SkillVersion.CreatedAt,
+			&i.SkillVersion.PromotedAt,
 			&i.SkillVersion.CreatedByUserID,
 			&i.DerivedFromVersionID,
 			&i.FirstSeenAt,
@@ -5112,7 +5117,7 @@ func (q *Queries) ResolveSkillObservationVersions(ctx context.Context, arg Resol
 
 const resolveSkillSuggestionBase = `-- name: ResolveSkillSuggestionBase :one
 WITH base AS (
-  SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id
+  SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.promoted_at, sv.created_by_user_id
   FROM skills s
   JOIN skill_versions sv ON sv.skill_id = s.id
   LEFT JOIN skill_version_origins svo
