@@ -323,25 +323,30 @@ func (s *sink) putResources(ctx context.Context, token string, resource string, 
 	if err != nil {
 		return fmt.Errorf("read resource sync response: %w", err)
 	}
+	// Pointer fields track presence: a drifted 2xx envelope (a bare {} or
+	// renamed fields) must fail even for an empty-fleet push, where zero
+	// records sent would otherwise "match" zero-decoded counts.
 	var result struct {
-		Results struct {
-			Accepted int `json:"accepted"`
-			Rejected int `json:"rejected"`
+		Results *struct {
+			Accepted *int `json:"accepted"`
+			Rejected *int `json:"rejected"`
 		} `json:"results"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
 		return fmt.Errorf("decode resource sync response: %w", err)
 	}
+	if result.Results == nil || result.Results.Accepted == nil || result.Results.Rejected == nil {
+		return fmt.Errorf("resource sync response carried no accepted/rejected accounting")
+	}
 	// Full-state semantics make rejections dangerous, not cosmetic: a
 	// rejected record is missing from the set Vanta accepted, which reads
 	// as "device gone" to any Custom Test. The counts must also account for
-	// every record sent — a drifted response envelope decoding to zeros
-	// must not report success while records silently vanish.
-	if result.Results.Rejected > 0 {
-		return fmt.Errorf("resource sync rejected %d of %d records", result.Results.Rejected, recordCount)
+	// every record sent.
+	if *result.Results.Rejected > 0 {
+		return fmt.Errorf("resource sync rejected %d of %d records", *result.Results.Rejected, recordCount)
 	}
-	if result.Results.Accepted != recordCount {
-		return fmt.Errorf("resource sync response accounted for %d of %d records", result.Results.Accepted, recordCount)
+	if *result.Results.Accepted != recordCount {
+		return fmt.Errorf("resource sync response accounted for %d of %d records", *result.Results.Accepted, recordCount)
 	}
 	return nil
 }
