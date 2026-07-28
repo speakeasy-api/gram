@@ -353,6 +353,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.GetAIIntegrationsCandidates)
+	temporalWorker.RegisterActivity(activities.GetDeviceIntegrationSyncCandidates)
+	temporalWorker.RegisterActivity(activities.RunDeviceIntegrationSync)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.SnapshotBillingCycleUsage)
 	temporalWorker.RegisterActivity(activities.ForwardTokenUsageToPostHog)
@@ -450,6 +452,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(CollectOpenRouterCreditsMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerCoordinatorWorkflow)
+	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncCoordinatorWorkflow)
+	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
@@ -512,6 +516,12 @@ func NewTemporalWorker(
 	if err := AddOpenRouterCreditsMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add openrouter credits metrics schedule", attr.SlogError(err))
+		}
+	}
+
+	if err := AddDeviceIntegrationSyncCoordinatorSchedule(context.Background(), env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(context.Background(), "failed to add device integration sync schedule", attr.SlogError(err))
 		}
 	}
 

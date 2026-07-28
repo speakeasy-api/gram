@@ -83,6 +83,26 @@ func (q *Queries) CountUnmanagedAgentUsers(ctx context.Context, arg CountUnmanag
 	return count, err
 }
 
+const dBNow = `-- name: DBNow :one
+
+
+SELECT clock_timestamp()::timestamptz AS now
+`
+
+// Scheduling: the Temporal coordinator selects due syncs, and the sync runner
+// records outcomes. Workflow payloads carry only sync ids — the runner loads
+// config and decrypts credentials inside the activity, never in Temporal
+// history.
+// DBNow anchors sync-start cutoffs to the database clock: mdm_devices rows
+// are stamped with clock_timestamp(), so comparing them against an
+// app-server timestamp would mis-mark devices whenever the two clocks skew.
+func (q *Queries) DBNow(ctx context.Context) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, dBNow)
+	var now pgtype.Timestamptz
+	err := row.Scan(&now)
+	return now, err
+}
+
 const ensureSchedule = `-- name: EnsureSchedule :one
 WITH inserted AS (
   INSERT INTO device_integration_schedules (
@@ -347,6 +367,72 @@ func (q *Queries) GetScheduleWithSync(ctx context.Context, arg GetScheduleWithSy
 	return i, err
 }
 
+const getSyncTarget = `-- name: GetSyncTarget :one
+SELECT
+    c.id AS config_id
+  , c.organization_id
+  , c.provider
+  , c.credentials_encrypted
+  , c.settings
+  , c.enabled
+  , c.deleted
+  , c.updated_at AS config_updated_at
+  , sch.schedule
+  , sch.disabled_at
+  , s.id AS sync_id
+  , s.poll_watermark_at
+  , s.consecutive_failures
+  , s.auto_paused_at
+  , s.last_push_digest
+FROM device_integration_syncs s
+JOIN device_integration_schedules sch
+  ON sch.id = s.device_integration_schedule_id
+JOIN device_integration_configs c
+  ON c.id = sch.device_integration_config_id
+WHERE s.id = $1
+`
+
+type GetSyncTargetRow struct {
+	ConfigID             uuid.UUID
+	OrganizationID       string
+	Provider             string
+	CredentialsEncrypted string
+	Settings             []byte
+	Enabled              bool
+	Deleted              bool
+	ConfigUpdatedAt      pgtype.Timestamptz
+	Schedule             string
+	DisabledAt           pgtype.Timestamptz
+	SyncID               uuid.UUID
+	PollWatermarkAt      pgtype.Timestamptz
+	ConsecutiveFailures  int32
+	AutoPausedAt         pgtype.Timestamptz
+	LastPushDigest       pgtype.Text
+}
+
+func (q *Queries) GetSyncTarget(ctx context.Context, syncID uuid.UUID) (GetSyncTargetRow, error) {
+	row := q.db.QueryRow(ctx, getSyncTarget, syncID)
+	var i GetSyncTargetRow
+	err := row.Scan(
+		&i.ConfigID,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.CredentialsEncrypted,
+		&i.Settings,
+		&i.Enabled,
+		&i.Deleted,
+		&i.ConfigUpdatedAt,
+		&i.Schedule,
+		&i.DisabledAt,
+		&i.SyncID,
+		&i.PollWatermarkAt,
+		&i.ConsecutiveFailures,
+		&i.AutoPausedAt,
+		&i.LastPushDigest,
+	)
+	return i, err
+}
+
 const insertConfig = `-- name: InsertConfig :one
 INSERT INTO device_integration_configs (
     organization_id
@@ -394,6 +480,63 @@ func (q *Queries) InsertConfig(ctx context.Context, arg InsertConfigParams) (Dev
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const listCoverageSnapshotDevices = `-- name: ListCoverageSnapshotDevices :many
+
+SELECT
+    d.external_id
+  , d.serial_number
+  , d.hostname
+  , d.user_email
+  , das.last_seen_at AS agent_last_seen_at
+FROM mdm_devices d
+JOIN device_integration_configs c
+  ON c.id = d.device_integration_config_id
+ AND c.deleted IS FALSE
+LEFT JOIN device_agent_syncs das
+  ON das.organization_id = d.organization_id
+ AND LOWER(das.email) = LOWER(d.user_email)
+WHERE d.organization_id = $1
+  AND d.missing_since IS NULL
+ORDER BY d.external_id ASC, d.id ASC
+`
+
+type ListCoverageSnapshotDevicesRow struct {
+	ExternalID      string
+	SerialNumber    pgtype.Text
+	Hostname        pgtype.Text
+	UserEmail       pgtype.Text
+	AgentLastSeenAt pgtype.Timestamptz
+}
+
+// ListCoverageSnapshotDevices feeds evidence-sink pushes: every present
+// device across the org's live configs, with the assigned user's agent
+// heartbeat. Ordered by external id so the snapshot digest is deterministic.
+func (q *Queries) ListCoverageSnapshotDevices(ctx context.Context, organizationID string) ([]ListCoverageSnapshotDevicesRow, error) {
+	rows, err := q.db.Query(ctx, listCoverageSnapshotDevices, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCoverageSnapshotDevicesRow
+	for rows.Next() {
+		var i ListCoverageSnapshotDevicesRow
+		if err := rows.Scan(
+			&i.ExternalID,
+			&i.SerialNumber,
+			&i.Hostname,
+			&i.UserEmail,
+			&i.AgentLastSeenAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listManagedDevices = `-- name: ListManagedDevices :many
@@ -578,11 +721,204 @@ func (q *Queries) ListSchedulesWithSync(ctx context.Context, deviceIntegrationCo
 	return items, nil
 }
 
+const listSyncCandidates = `-- name: ListSyncCandidates :many
+SELECT
+    s.id AS sync_id
+  , c.organization_id
+  , om.slug AS organization_slug
+  , c.provider
+  , sch.schedule
+FROM device_integration_syncs s
+JOIN device_integration_schedules sch
+  ON sch.id = s.device_integration_schedule_id
+JOIN device_integration_configs c
+  ON c.id = sch.device_integration_config_id
+JOIN organization_metadata om
+  ON om.id = c.organization_id
+WHERE c.enabled IS TRUE
+  AND c.deleted IS FALSE
+  AND sch.disabled_at IS NULL
+  AND s.auto_paused_at IS NULL
+  AND s.next_poll_after <= clock_timestamp()
+  AND NOT (s.id = ANY ($1::uuid[]))
+ORDER BY s.next_poll_after ASC, c.organization_id ASC, sch.schedule ASC
+LIMIT $2
+`
+
+type ListSyncCandidatesParams struct {
+	ExcludeSyncIds []uuid.UUID
+	LimitCount     int32
+}
+
+type ListSyncCandidatesRow struct {
+	SyncID           uuid.UUID
+	OrganizationID   string
+	OrganizationSlug string
+	Provider         string
+	Schedule         string
+}
+
+func (q *Queries) ListSyncCandidates(ctx context.Context, arg ListSyncCandidatesParams) ([]ListSyncCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listSyncCandidates, arg.ExcludeSyncIds, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSyncCandidatesRow
+	for rows.Next() {
+		var i ListSyncCandidatesRow
+		if err := rows.Scan(
+			&i.SyncID,
+			&i.OrganizationID,
+			&i.OrganizationSlug,
+			&i.Provider,
+			&i.Schedule,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markDevicesMissing = `-- name: MarkDevicesMissing :exec
+
+UPDATE mdm_devices
+SET missing_since = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE device_integration_config_id = $1
+  AND missing_since IS NULL
+  AND last_seen_at < $2
+`
+
+type MarkDevicesMissingParams struct {
+	DeviceIntegrationConfigID uuid.UUID
+	SyncStartedAt             pgtype.Timestamptz
+}
+
+// MarkDevicesMissing stamps devices absent from the snapshot that started at
+// @sync_started_at. INVARIANT: only ever called in the same transaction that
+// records the fully completed snapshot (RecordSyncSuccess) — a partial pull
+// must never mark unvisited devices missing.
+func (q *Queries) MarkDevicesMissing(ctx context.Context, arg MarkDevicesMissingParams) error {
+	_, err := q.db.Exec(ctx, markDevicesMissing, arg.DeviceIntegrationConfigID, arg.SyncStartedAt)
+	return err
+}
+
+const recordSyncFailure = `-- name: RecordSyncFailure :exec
+
+UPDATE device_integration_syncs s
+SET next_poll_after = clock_timestamp() + make_interval(secs => $1::int),
+    last_poll_error = $2,
+    last_poll_failed_at = clock_timestamp(),
+    consecutive_failures = s.consecutive_failures + 1,
+    -- The auth-rejection streak is tracked separately: any non-auth failure
+    -- resets it, so only a PURE run of credential rejections can reach the
+    -- auto-pause threshold.
+    consecutive_auth_rejections = CASE
+      WHEN $3::bool THEN s.consecutive_auth_rejections + 1
+      ELSE 0
+    END,
+    auto_paused_at = CASE
+      WHEN $3::bool AND $4::int > 0 AND s.consecutive_auth_rejections + 1 >= $4::int
+      THEN clock_timestamp()
+      ELSE s.auto_paused_at
+    END,
+    updated_at = clock_timestamp()
+FROM device_integration_schedules sch
+JOIN device_integration_configs c
+  ON c.id = sch.device_integration_config_id
+WHERE s.id = $5
+  AND sch.id = s.device_integration_schedule_id
+  AND c.updated_at = $6
+`
+
+type RecordSyncFailureParams struct {
+	NextInSeconds   int32
+	LastPollError   pgtype.Text
+	AuthRejection   bool
+	PauseAfter      int32
+	SyncID          uuid.UUID
+	ConfigUpdatedAt pgtype.Timestamptz
+}
+
+// RecordSyncFailure reschedules with backoff and, when pause_after is
+// positive and the new streak reaches it, auto-pauses the schedule so
+// candidate selection stops re-enqueueing it. Callers pass zero pause_after
+// for failures that should never pause (e.g. transient network errors).
+func (q *Queries) RecordSyncFailure(ctx context.Context, arg RecordSyncFailureParams) error {
+	_, err := q.db.Exec(ctx, recordSyncFailure,
+		arg.NextInSeconds,
+		arg.LastPollError,
+		arg.AuthRejection,
+		arg.PauseAfter,
+		arg.SyncID,
+		arg.ConfigUpdatedAt,
+	)
+	return err
+}
+
+const recordSyncSuccess = `-- name: RecordSyncSuccess :execrows
+
+UPDATE device_integration_syncs s
+SET next_poll_after = clock_timestamp() + make_interval(secs => $1::int),
+    poll_watermark_at = COALESCE($2::timestamptz, s.poll_watermark_at),
+    last_poll_success_at = clock_timestamp(),
+    last_poll_error = NULL,
+    last_poll_failed_at = NULL,
+    consecutive_failures = 0,
+    consecutive_auth_rejections = 0,
+    auto_paused_at = NULL,
+    last_push_digest = COALESCE($3::text, s.last_push_digest),
+    updated_at = clock_timestamp()
+FROM device_integration_schedules sch
+JOIN device_integration_configs c
+  ON c.id = sch.device_integration_config_id
+WHERE s.id = $4
+  AND sch.id = s.device_integration_schedule_id
+  AND c.updated_at = $5
+`
+
+type RecordSyncSuccessParams struct {
+	NextInSeconds   int32
+	PollWatermarkAt pgtype.Timestamptz
+	LastPushDigest  pgtype.Text
+	SyncID          uuid.UUID
+	ConfigUpdatedAt pgtype.Timestamptz
+}
+
+// RecordSyncSuccess reschedules a sync and clears its failure state — the
+// error fields clear on success by contract, so scheduleStatus's recency
+// derivation renders recovery as success. last_push_digest only moves when
+// the caller supplies one (evidence pushes); inventory syncs leave it alone.
+// The write is guarded on the config's updated_at as observed when the sync
+// started: a config save (rotation, settings change) invalidates in-flight
+// outcomes so a pre-save sync cannot clobber the post-save clean slate.
+// next_poll_after is computed on the database clock so all scheduler time
+// arithmetic lives in one clock domain.
+func (q *Queries) RecordSyncSuccess(ctx context.Context, arg RecordSyncSuccessParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordSyncSuccess,
+		arg.NextInSeconds,
+		arg.PollWatermarkAt,
+		arg.LastPushDigest,
+		arg.SyncID,
+		arg.ConfigUpdatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const resetSyncStateForConfig = `-- name: ResetSyncStateForConfig :exec
 
 UPDATE device_integration_syncs s
 SET auto_paused_at = NULL,
     consecutive_failures = 0,
+    consecutive_auth_rejections = 0,
     last_poll_error = NULL,
     last_poll_failed_at = NULL,
     last_push_digest = NULL,
@@ -605,11 +941,41 @@ func (q *Queries) ResetSyncStateForConfig(ctx context.Context, deviceIntegration
 	return err
 }
 
+const resolveOrgMemberByEmail = `-- name: ResolveOrgMemberByEmail :one
+
+SELECT u.id
+FROM users u
+JOIN organization_user_relationships our
+  ON our.user_id = u.id
+WHERE our.organization_id = $1
+  AND our.deleted IS FALSE
+  AND LOWER(u.email) = LOWER($2)
+  AND u.deleted_at IS NULL
+ORDER BY u.id
+LIMIT 1
+`
+
+type ResolveOrgMemberByEmailParams struct {
+	OrganizationID string
+	Email          string
+}
+
+// ResolveOrgMemberByEmail maps an MDM-reported email to the org member it
+// belongs to, scoped through the org membership so a same-email user in a
+// different org never links.
+func (q *Queries) ResolveOrgMemberByEmail(ctx context.Context, arg ResolveOrgMemberByEmailParams) (string, error) {
+	row := q.db.QueryRow(ctx, resolveOrgMemberByEmail, arg.OrganizationID, arg.Email)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const retrySchedule = `-- name: RetrySchedule :one
 
 UPDATE device_integration_syncs s
 SET auto_paused_at = NULL,
     consecutive_failures = 0,
+    consecutive_auth_rejections = 0,
     last_poll_error = NULL,
     last_poll_failed_at = NULL,
     next_poll_after = clock_timestamp(),
@@ -790,4 +1156,93 @@ func (q *Queries) UpdateConfigSettings(ctx context.Context, arg UpdateConfigSett
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const upsertMdmDevice = `-- name: UpsertMdmDevice :execrows
+
+INSERT INTO mdm_devices (
+    device_integration_config_id
+  , organization_id
+  , external_id
+  , serial_number
+  , hostname
+  , os_name
+  , os_version
+  , user_email
+  , user_id
+  , mdm_last_check_in_at
+  , raw
+)
+SELECT
+    $1
+  , $2
+  , $3
+  , $4::text
+  , $5::text
+  , $6::text
+  , $7::text
+  , $8::text
+  , $9::text
+  , $10::timestamptz
+  , $11
+WHERE EXISTS (
+  SELECT 1
+  FROM device_integration_configs c
+  WHERE c.id = $1
+    AND c.updated_at = $12
+)
+ON CONFLICT (device_integration_config_id, external_id) DO UPDATE SET
+    serial_number = EXCLUDED.serial_number,
+    hostname = EXCLUDED.hostname,
+    os_name = EXCLUDED.os_name,
+    os_version = EXCLUDED.os_version,
+    user_email = EXCLUDED.user_email,
+    user_id = EXCLUDED.user_id,
+    mdm_last_check_in_at = EXCLUDED.mdm_last_check_in_at,
+    raw = EXCLUDED.raw,
+    last_seen_at = clock_timestamp(),
+    missing_since = NULL,
+    updated_at = clock_timestamp()
+`
+
+type UpsertMdmDeviceParams struct {
+	DeviceIntegrationConfigID uuid.UUID
+	OrganizationID            string
+	ExternalID                string
+	SerialNumber              pgtype.Text
+	Hostname                  pgtype.Text
+	OsName                    pgtype.Text
+	OsVersion                 pgtype.Text
+	UserEmail                 pgtype.Text
+	UserID                    pgtype.Text
+	MdmLastCheckInAt          pgtype.Timestamptz
+	Raw                       []byte
+	ConfigUpdatedAt           pgtype.Timestamptz
+}
+
+// UpsertMdmDevice reconciles one inventory row. A reappearing device clears
+// missing_since; last_seen_at stamps this observation for the mark-missing
+// cutoff. The write is guarded on the config's updated_at as observed when
+// the sync started: a config save (rotation, endpoint change) mid-pull makes
+// the insert a zero-row no-op, so stale-credential inventory never merges
+// into the newly saved config.
+func (q *Queries) UpsertMdmDevice(ctx context.Context, arg UpsertMdmDeviceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, upsertMdmDevice,
+		arg.DeviceIntegrationConfigID,
+		arg.OrganizationID,
+		arg.ExternalID,
+		arg.SerialNumber,
+		arg.Hostname,
+		arg.OsName,
+		arg.OsVersion,
+		arg.UserEmail,
+		arg.UserID,
+		arg.MdmLastCheckInAt,
+		arg.Raw,
+		arg.ConfigUpdatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

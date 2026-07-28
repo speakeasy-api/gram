@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
+	"github.com/speakeasy-api/gram/server/internal/deviceintegrations"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
@@ -75,6 +76,8 @@ type Activities struct {
 	collectPlatformUsageMetrics     *activities.CollectPlatformUsageMetrics
 	getAIIntegrationsCandidates     *activities.GetAIIntegrationsCandidates
 	pollAIData                      *activities.PollAIData
+	getDeviceIntegrationCandidates  *activities.GetDeviceIntegrationSyncCandidates
+	runDeviceIntegrationSync        *activities.RunDeviceIntegrationSync
 	customDomainIngress             *activities.CustomDomainIngress
 	customDomainHealth              *activities.CustomDomainHealth
 	fireOpenRouterCreditsMetrics    *activities.FireOpenRouterCreditsMetrics
@@ -232,6 +235,8 @@ func NewActivities(
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
 		getAIIntegrationsCandidates:     activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
 		pollAIData:                      activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
+		getDeviceIntegrationCandidates:  activities.NewGetDeviceIntegrationSyncCandidates(logger, db, encryption, guardianPolicy),
+		runDeviceIntegrationSync:        activities.NewRunDeviceIntegrationSync(logger, db, encryption, guardianPolicy),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
 		customDomainHealth:              activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, emailService, siteURL, guardianPolicy),
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
@@ -417,6 +422,18 @@ func (a *Activities) GetAIIntegrationsCandidates(ctx context.Context, input acti
 
 func (a *Activities) PollAIData(ctx context.Context, input string) error {
 	return a.pollAIData.Do(ctx, input)
+}
+
+func (a *Activities) GetDeviceIntegrationSyncCandidates(ctx context.Context, input activities.GetDeviceIntegrationSyncCandidatesInput) ([]deviceintegrations.SyncCandidate, error) {
+	candidates, err := a.getDeviceIntegrationCandidates.Do(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("get device integration sync candidates: %w", err)
+	}
+	return candidates, nil
+}
+
+func (a *Activities) RunDeviceIntegrationSync(ctx context.Context, input string) error {
+	return a.runDeviceIntegrationSync.Do(ctx, input)
 }
 
 func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) error {
