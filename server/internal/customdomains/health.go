@@ -61,6 +61,30 @@ func HealthIssueMessage(issue HealthIssue) string {
 	}
 }
 
+// Auto-disable thresholds: a domain must be continuously unhealthy for at
+// least this long AND this many consecutive checks before its Kubernetes
+// resources are torn down. Both must hold so a burst of rapid manual rechecks
+// cannot disable a domain in under a week, and a long-forgotten domain that
+// only just resumed daily checks gets a full week of signal first.
+const (
+	AutoDisableConsecutiveFailures int32         = 7
+	AutoDisableUnhealthyFor        time.Duration = 7 * 24 * time.Hour
+)
+
+// ShouldAutoDisable reports whether a just-persisted health state has crossed
+// the auto-disable thresholds. Gram-side probe failures (check_failed) never
+// count toward disabling a customer's domain.
+func ShouldAutoDisable(state HealthState, now time.Time) bool {
+	if state.Status != HealthStatusUnhealthy || state.Issue == HealthIssueCheckFailed {
+		return false
+	}
+	if state.ConsecutiveFailures < AutoDisableConsecutiveFailures {
+		return false
+	}
+	return state.UnhealthySince != nil &&
+		now.UTC().Sub(state.UnhealthySince.UTC()) >= AutoDisableUnhealthyFor
+}
+
 func ShouldNotifyUnhealthyTransition(current, next HealthState) bool {
 	// Probe failures are Gram-side and not customer-actionable.
 	if next.Status != HealthStatusUnhealthy || next.Issue == HealthIssueCheckFailed {

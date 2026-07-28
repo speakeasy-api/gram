@@ -133,3 +133,17 @@ UPDATE custom_domains
 SET deleted_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND deleted IS FALSE;
+
+-- name: DisableCustomDomainForHealth :one
+-- Auto-disable after prolonged unhealthiness: the Kubernetes resources are
+-- torn down by the caller and the domain drops out of health sweeps
+-- (activated) and back into the reverify flow (verified).
+UPDATE custom_domains
+SET
+    verified = FALSE,
+    activated = FALSE,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+RETURNING id;

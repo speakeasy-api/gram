@@ -115,16 +115,32 @@ function customDomainHealthMessage(issue?: string): string {
 // not a customer-actionable problem; only surface it once it has persisted
 // across consecutive checks.
 function showCustomDomainUnhealthy(domain: {
+  verified: boolean;
   healthStatus?: string;
   healthIssue?: string;
   consecutiveFailures?: number;
 }): boolean {
-  if (domain.healthStatus !== "unhealthy") {
+  if (!domain.verified || domain.healthStatus !== "unhealthy") {
     return false;
   }
   return (
     domain.healthIssue !== "check_failed" ||
     (domain.consecutiveFailures ?? 0) >= 2
+  );
+}
+
+// A domain that carries unhealthy state but is no longer verified was
+// auto-disabled by the health sweep: its routing was torn down after a week of
+// continuous failures and it must go back through the reverify flow.
+function showCustomDomainAutoDisabled(domain: {
+  verified: boolean;
+  healthStatus?: string;
+  unhealthySince?: unknown;
+}): boolean {
+  return (
+    !domain.verified &&
+    domain.healthStatus === "unhealthy" &&
+    Boolean(domain.unhealthySince)
   );
 }
 
@@ -411,6 +427,10 @@ function OrgDomainsInner() {
                   <SimpleTooltip tooltip="Your domain is being verified. This may take a few minutes.">
                     <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
                   </SimpleTooltip>
+                ) : showCustomDomainAutoDisabled(domain) ? (
+                  <SimpleTooltip tooltip="This domain was disabled after failing health checks for over a week">
+                    <X className="h-4 w-4 stroke-3 text-red-500" />
+                  </SimpleTooltip>
                 ) : showCustomDomainUnhealthy(domain) ? (
                   <SimpleTooltip tooltip="The latest health check found a problem">
                     <AlertTriangle className="h-4 w-4 text-amber-500" />
@@ -490,6 +510,41 @@ function OrgDomainsInner() {
               </Stack>
             </RequireScope>
           </Stack>
+          {showCustomDomainAutoDisabled(domain) && (
+            <Alert variant="error" dismissible={false} className="mt-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <Type variant="body" className="font-medium">
+                    This custom domain was disabled
+                  </Type>
+                  <Type variant="body" className="text-sm">
+                    It failed health checks continuously for over a week, so its
+                    routing and TLS certificate were removed.{" "}
+                    {customDomainHealthMessage(domain.healthIssue)}
+                  </Type>
+                  {domain.unhealthySince && (
+                    <Type variant="body" className="text-sm opacity-80">
+                      Unhealthy since{" "}
+                      <HumanizeDateTime date={domain.unhealthySince} />
+                    </Type>
+                  )}
+                  <Type variant="body" className="text-sm">
+                    Fix the issue above, then reverify the domain to provision
+                    it again.
+                  </Type>
+                </div>
+                <RequireScope scope="org:admin" level="component">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIsAddDomainDialogOpen(true)}
+                  >
+                    Reverify domain
+                  </Button>
+                </RequireScope>
+              </div>
+            </Alert>
+          )}
           {showCustomDomainUnhealthy(domain) && (
             <Alert variant="warning" dismissible={false} className="mt-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
