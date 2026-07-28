@@ -96,6 +96,7 @@ type Activities struct {
 	reapFlyApps                     *activities.ReapFlyApps
 	refreshBillingUsage             *activities.RefreshBillingUsage
 	snapshotBillingCycleUsage       *activities.SnapshotBillingCycleUsage
+	weeklyUsageSummary              *activities.WeeklyUsageSummary
 	forwardTokenUsageToPostHog      *activities.ForwardTokenUsageToPostHog
 	refreshOpenRouterKey            *activities.RefreshOpenRouterKey
 	transitionDeployment            *activities.TransitionDeployment
@@ -265,6 +266,7 @@ func NewActivities(
 		reapFlyApps:                     activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		refreshBillingUsage:             activities.NewRefreshBillingUsage(logger, db, billingRepo),
 		snapshotBillingCycleUsage:       activities.NewSnapshotBillingCycleUsage(logger, db, chConn, cacheAdapter, emailService),
+		weeklyUsageSummary:              activities.NewWeeklyUsageSummary(logger, db, chConn, emailService, siteURL),
 		forwardTokenUsageToPostHog:      activities.NewForwardTokenUsageToPostHog(logger, db, posthogClient, cacheAdapter),
 		refreshOpenRouterKey:            activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
 		transitionDeployment:            activities.NewTransitionDeployment(logger, db),
@@ -459,6 +461,21 @@ func (a *Activities) SnapshotBillingCycleUsage(ctx context.Context, orgIDs []str
 
 func (a *Activities) ForwardTokenUsageToPostHog(ctx context.Context, orgIDs []string) error {
 	return a.forwardTokenUsageToPostHog.Do(ctx, orgIDs)
+}
+
+func (a *Activities) ListWeeklyUsageSummaryTargets(ctx context.Context) ([]activities.WeeklyUsageSummaryTarget, error) {
+	targets, err := a.weeklyUsageSummary.ListTargets(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list weekly usage summary targets: %w", err)
+	}
+	return targets, nil
+}
+
+func (a *Activities) SendWeeklyUsageSummary(ctx context.Context, args activities.SendWeeklyUsageSummaryArgs) error {
+	if err := a.weeklyUsageSummary.Send(ctx, args); err != nil {
+		return fmt.Errorf("send weekly usage summary: %w", err)
+	}
+	return nil
 }
 
 func (a *Activities) GetAllOrganizations(ctx context.Context) ([]string, error) {

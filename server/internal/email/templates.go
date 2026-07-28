@@ -32,6 +32,10 @@ const (
 	transactionalIDOpenRouterChatCreditsThreshold     TransactionalID = "cmrpjavhw06x10j1dsxivfted" //nolint:gosec // template id, not a credential
 	transactionalIDOpenRouterInternalCreditsThreshold TransactionalID = "cmrpkq1r6014d0jze28webret" //nolint:gosec // template id, not a credential
 	transactionalIDCustomDomainUnhealthy              TransactionalID = "cmrvye9w306z30j1pnuldvunv"
+	// TODO(DNO-656): placeholder — create the "Weekly Usage Summary" template
+	// in the Loops dashboard and replace this with its real transactional ID
+	// before enabling the weekly usage summary schedule in production.
+	transactionalIDWeeklyUsageSummary TransactionalID = "PLACEHOLDER-weekly-usage-summary"
 )
 
 // Template is implemented by every concrete email template. Concrete types
@@ -103,5 +107,17 @@ var RegisteredTemplates = []Template{
 		Domain:       "",
 		IssueMessage: "",
 		DomainLink:   "",
+	},
+	WeeklyUsageSummary{
+		OrganizationName:    "",
+		CycleEndDate:        "",
+		DaysRemaining:       "",
+		CycleElapsedPercent: "",
+		TotalTokens:         "",
+		PreviousTotalTokens: "",
+		TotalChangePercent:  "",
+		UsageRowsHTML:       "",
+		UsageRowsText:       "",
+		ViewUsageURL:        "",
 	},
 }

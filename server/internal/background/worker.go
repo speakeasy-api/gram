@@ -357,6 +357,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RunDeviceIntegrationSync)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.SnapshotBillingCycleUsage)
+	temporalWorker.RegisterActivity(activities.ListWeeklyUsageSummaryTargets)
+	temporalWorker.RegisterActivity(activities.SendWeeklyUsageSummary)
 	temporalWorker.RegisterActivity(activities.ForwardTokenUsageToPostHog)
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
@@ -465,6 +467,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
+	temporalWorker.RegisterWorkflow(WeeklyUsageSummaryWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
 	temporalWorker.RegisterWorkflow(CorrelateClaudePromptsWorkflow)
@@ -537,6 +540,10 @@ func NewTemporalWorker(
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add ai integration usage polling schedule", attr.SlogError(err))
 		}
+	}
+
+	if err := AddWeeklyUsageSummarySchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add weekly usage summary schedule", attr.SlogError(err))
 	}
 
 	if err := AddRefreshBillingUsageSchedule(context.Background(), env); err != nil {

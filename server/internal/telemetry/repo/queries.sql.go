@@ -16,6 +16,7 @@ import (
 	"github.com/Masterminds/squirrel"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
@@ -6249,13 +6250,18 @@ type GetTokensUnderManagementParams struct {
 }
 
 // tumMeasureExpr is the tokens-under-management measure over
-// attribute_metrics_summaries: input + output + cache WRITES. Cache reads
-// are deliberately excluded — a cache read re-observes prompt content that
-// was already counted when it entered the cache (and dwarfs everything else:
-// agent sessions re-read their whole cached prefix on every turn) — while a
-// cache write is new prompt content being observed for the first time, so it
-// counts.
-const tumMeasureExpr = "toInt64(sumIfMerge(total_input_tokens) + sumIfMerge(total_output_tokens) + sumIfMerge(cache_creation_input_tokens))"
+// attribute_metrics_summaries: the sum of every component in the
+// billing.TumComponents registry (input + output + cache writes; see the
+// registry for why cache reads are excluded). Built from the registry so the
+// billed total and every component-level report share one definition.
+var tumMeasureExpr = func() string {
+	components := billing.TumComponents()
+	terms := make([]string, len(components))
+	for i, c := range components {
+		terms[i] = "sumIfMerge(" + c.Column + ")"
+	}
+	return "toInt64(" + strings.Join(terms, " + ") + ")"
+}()
 
 // tumObservedBase applies the shared window and observed-population scoping
 // for tokens-under-management reads over attribute_metrics_summaries. The
@@ -6335,6 +6341,70 @@ func (q *Queries) GetTokensUnderManagementByDay(ctx context.Context, arg GetToke
 	}
 
 	return buckets, nil
+}
+
+// TumComponentTotal is one tokens-under-management component's window total,
+// keyed by the billing.TumComponents registry.
+type TumComponentTotal struct {
+	Key    string
+	Label  string
+	Tokens int64
+}
+
+// GetTumComponentTotals sums each tokens-under-management component over the
+// window, scoped identically to the billed totals — the components sum to
+// the TUM measure by construction (both derive from billing.TumComponents).
+// The result follows the registry's display order, so callers rendering
+// line items automatically track additions to and removals from the TUM
+// definition. Windows with no usage return zero totals, never a short or
+// empty slice.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetTumComponentTotals(ctx context.Context, arg GetTokensUnderManagementParams) ([]TumComponentTotal, error) {
+	components := billing.TumComponents()
+	totals := make([]TumComponentTotal, len(components))
+	for i, c := range components {
+		totals[i] = TumComponentTotal{Key: c.Key, Label: c.Label, Tokens: 0}
+	}
+	if len(arg.ProjectIDs) == 0 {
+		return totals, nil
+	}
+
+	cols := make([]string, len(components))
+	for i, c := range components {
+		cols[i] = fmt.Sprintf("toInt64(sumIfMerge(%s)) AS component_%d", c.Column, i)
+	}
+	sb := tumObservedBase(sq.Select(cols...), arg)
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building tum component totals query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	if rows.Next() {
+		scanned := make([]int64, len(components))
+		ptrs := make([]any, len(components))
+		for i := range scanned {
+			ptrs[i] = &scanned[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return nil, fmt.Errorf("scanning tum component totals row: %w", err)
+		}
+		for i, tokens := range scanned {
+			totals[i].Tokens = tokens
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return totals, nil
 }
 
 // TumBreakdownDayBucket is one UTC day of tokens under management split by
