@@ -20,6 +20,7 @@ import (
 type Server struct {
 	Mounts           []*MountPoint
 	GetDomain        http.Handler
+	ListDomains      http.Handler
 	CreateDomain     http.Handler
 	UpdateDomain     http.Handler
 	CheckHealth      http.Handler
@@ -55,6 +56,7 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"GetDomain", "GET", "/rpc/domain.get"},
+			{"ListDomains", "GET", "/rpc/domain.list"},
 			{"CreateDomain", "POST", "/rpc/domain.register"},
 			{"UpdateDomain", "POST", "/rpc/domain.update"},
 			{"CheckHealth", "POST", "/rpc/domain.checkHealth"},
@@ -62,6 +64,7 @@ func New(
 			{"ListMcpEndpoints", "GET", "/rpc/domain.listMcpEndpoints"},
 		},
 		GetDomain:        NewGetDomainHandler(e.GetDomain, mux, decoder, encoder, errhandler, formatter),
+		ListDomains:      NewListDomainsHandler(e.ListDomains, mux, decoder, encoder, errhandler, formatter),
 		CreateDomain:     NewCreateDomainHandler(e.CreateDomain, mux, decoder, encoder, errhandler, formatter),
 		UpdateDomain:     NewUpdateDomainHandler(e.UpdateDomain, mux, decoder, encoder, errhandler, formatter),
 		CheckHealth:      NewCheckHealthHandler(e.CheckHealth, mux, decoder, encoder, errhandler, formatter),
@@ -76,6 +79,7 @@ func (s *Server) Service() string { return "domains" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetDomain = m(s.GetDomain)
+	s.ListDomains = m(s.ListDomains)
 	s.CreateDomain = m(s.CreateDomain)
 	s.UpdateDomain = m(s.UpdateDomain)
 	s.CheckHealth = m(s.CheckHealth)
@@ -89,6 +93,7 @@ func (s *Server) MethodNames() []string { return domains.MethodNames[:] }
 // Mount configures the mux to serve the domains endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetDomainHandler(mux, h.GetDomain)
+	MountListDomainsHandler(mux, h.ListDomains)
 	MountCreateDomainHandler(mux, h.CreateDomain)
 	MountUpdateDomainHandler(mux, h.UpdateDomain)
 	MountCheckHealthHandler(mux, h.CheckHealth)
@@ -131,6 +136,59 @@ func NewGetDomainHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getDomain")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "domains")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListDomainsHandler configures the mux to serve the "domains" service
+// "listDomains" endpoint.
+func MountListDomainsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/domain.list", f)
+}
+
+// NewListDomainsHandler creates a HTTP handler which loads the HTTP request
+// and calls the "domains" service "listDomains" endpoint.
+func NewListDomainsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListDomainsRequest(mux, decoder)
+		encodeResponse = EncodeListDomainsResponse(encoder)
+		encodeError    = EncodeListDomainsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listDomains")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "domains")
 		payload, err := decodeRequest(r)
 		if err != nil {

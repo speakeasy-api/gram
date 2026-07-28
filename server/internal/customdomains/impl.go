@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	gen "github.com/speakeasy-api/gram/server/gen/domains"
 	srv "github.com/speakeasy-api/gram/server/gen/http/domains/server"
@@ -110,6 +111,33 @@ func (s *Service) GetDomain(ctx context.Context, payload *gen.GetDomainPayload) 
 	}
 
 	return buildCustomDomainView(domain, isUpdating), nil
+}
+
+func (s *Service) ListDomains(ctx context.Context, _ *gen.ListDomainsPayload) (*gen.ListCustomDomainsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	domain, err := repo.New(s.db).GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return &gen.ListCustomDomainsResult{Domains: []*gen.CustomDomain{}}, nil
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get custom domain for organization").LogError(ctx, s.logger)
+	}
+
+	isUpdating := false
+	if workflowInfo, _ := s.temporalClient.GetWorkflowInfo(ctx, authCtx.ActiveOrganizationID, domain.Domain); workflowInfo != nil {
+		isUpdating = workflowInfo.GetWorkflowExecutionInfo().GetStatus() == enums.WORKFLOW_EXECUTION_STATUS_RUNNING
+	}
+
+	return &gen.ListCustomDomainsResult{
+		Domains: []*gen.CustomDomain{buildCustomDomainView(domain, isUpdating)},
+	}, nil
 }
 
 func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPayload) (err error) {

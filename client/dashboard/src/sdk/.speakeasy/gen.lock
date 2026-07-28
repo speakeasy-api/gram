@@ -163,6 +163,7 @@ trackedFiles:
   src/funcs/domainsCheckHealth.ts: {}
   src/funcs/domainsDeleteDomain.ts: {}
   src/funcs/domainsGetDomain.ts: {}
+  src/funcs/domainsListDomains.ts: {}
   src/funcs/domainsListMcpEndpoints.ts: {}
   src/funcs/domainsRegisterDomain.ts: {}
   src/funcs/domainsUpdateDomain.ts: {}
@@ -791,6 +792,7 @@ trackedFiles:
   src/models/components/listchatsresult.ts: {}
   src/models/components/listcustomdetectionrulesresult.ts: {}
   src/models/components/listcustomdomainmcpendpointsresult.ts: {}
+  src/models/components/listcustomdomainsresult.ts: {}
   src/models/components/listdeploymentresult.ts: {}
   src/models/components/listdeviceintegrationprovidersresult.ts: {}
   src/models/components/listdeviceintegrationschedulesresult.ts: {}
@@ -1520,6 +1522,7 @@ trackedFiles:
   src/models/operations/listdeployments.ts: {}
   src/models/operations/listdeviceintegrationproviders.ts: {}
   src/models/operations/listdeviceintegrationschedules.ts: {}
+  src/models/operations/listdomains.ts: {}
   src/models/operations/listenvironments.ts: {}
   src/models/operations/listexternalcredentials.ts: {}
   src/models/operations/listexternalkeys.ts: {}
@@ -2045,6 +2048,8 @@ trackedFiles:
   src/react-query/listCollections.ts: {}
   src/react-query/listDeployments.core.ts: {}
   src/react-query/listDeployments.ts: {}
+  src/react-query/listDomains.core.ts: {}
+  src/react-query/listDomains.ts: {}
   src/react-query/listEnvironments.core.ts: {}
   src/react-query/listEnvironments.ts: {}
   src/react-query/listExternalCredentials.core.ts: {}
@@ -5376,6 +5381,15 @@ examples:
       responses:
         "200":
           application/json: {"organization_id": "<id>", "provider": "<value>", "schedules": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listDomains:
+    speakeasy-default-list-domains:
+      responses:
+        "200":
+          application/json: {"domains": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

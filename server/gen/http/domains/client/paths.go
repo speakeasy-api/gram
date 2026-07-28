@@ -12,6 +12,11 @@ func GetDomainDomainsPath() string {
 	return "/rpc/domain.get"
 }
 
+// ListDomainsDomainsPath returns the URL path to the domains service listDomains HTTP endpoint.
+func ListDomainsDomainsPath() string {
+	return "/rpc/domain.list"
+}
+
 // CreateDomainDomainsPath returns the URL path to the domains service createDomain HTTP endpoint.
 func CreateDomainDomainsPath() string {
 	return "/rpc/domain.register"

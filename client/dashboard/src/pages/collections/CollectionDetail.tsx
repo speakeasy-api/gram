@@ -4,6 +4,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Combobox } from "@/components/ui/combobox";
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
@@ -44,6 +45,7 @@ import { toolStats } from "@/pages/catalog/hooks/serverMetadata";
 import { buildCollectionMcpJson, formatMcpJson } from "@/lib/mcp-json";
 import { toast } from "sonner";
 import { CollectionInstallDialog } from "./CollectionInstallDialog";
+import { collectionInstallDisabledReason } from "./install-availability";
 
 // A selectable server in the edit-servers picker, sourced from either a
 // toolset (Hosted) or an mcp_server (Remote MCP-backed). Selection and
@@ -323,6 +325,32 @@ function CollectionDetailInner() {
     );
   }
 
+  const installDisabledReason = collectionInstallDisabledReason({
+    isLoading,
+    installableServerCount: installableServersWithEndpoint.length,
+    projectCount: projects.length,
+  });
+  let bulkInstallButton = (
+    <Button
+      size="sm"
+      className="w-full sm:w-auto"
+      disabled={installDisabledReason !== null}
+      onClick={openBulkInstallDialog}
+    >
+      <Button.LeftIcon>
+        <Download />
+      </Button.LeftIcon>
+      <Button.Text>Install</Button.Text>
+    </Button>
+  );
+  if (installDisabledReason) {
+    bulkInstallButton = (
+      <SimpleTooltip tooltip={installDisabledReason}>
+        <span className="w-full sm:w-auto">{bulkInstallButton}</span>
+      </SimpleTooltip>
+    );
+  }
+
   return (
     <Page>
       <Page.Header>
@@ -384,21 +412,7 @@ function CollectionDetailInner() {
                 </div>
                 <div className="flex flex-wrap gap-2 2xl:shrink-0 2xl:justify-end">
                   <RequireScope scope="project:write" level="component">
-                    <Button
-                      size="sm"
-                      className="w-full sm:w-auto"
-                      disabled={
-                        isLoading ||
-                        installableServersWithEndpoint.length === 0 ||
-                        projects.length === 0
-                      }
-                      onClick={openBulkInstallDialog}
-                    >
-                      <Button.LeftIcon>
-                        <Download />
-                      </Button.LeftIcon>
-                      <Button.Text>Install</Button.Text>
-                    </Button>
+                    {bulkInstallButton}
                   </RequireScope>
                   <Button
                     size="sm"

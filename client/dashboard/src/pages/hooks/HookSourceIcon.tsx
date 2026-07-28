@@ -182,9 +182,9 @@ export function CopilotIcon({
           gradientUnits="userSpaceOnUse"
           gradientTransform="matrix(-10.96051 -13.38922 12.59013 -10.30637 38.005 20.514)"
         >
-          <stop offset=".096" stop-color="#00AEFF" />
-          <stop offset=".773" stop-color="#2253CE" />
-          <stop offset="1" stop-color="#0736C4" />
+          <stop offset=".096" stopColor="#00AEFF" />
+          <stop offset=".773" stopColor="#2253CE" />
+          <stop offset="1" stopColor="#0736C4" />
         </radialGradient>
         <radialGradient
           id="prefix__paint1_radial_56201_15503"
@@ -194,9 +194,9 @@ export function CopilotIcon({
           gradientUnits="userSpaceOnUse"
           gradientTransform="rotate(51.84 -28.201 27.85) scale(15.9912 15.5119)"
         >
-          <stop stop-color="#FFB657" />
-          <stop offset=".634" stop-color="#FF5F3D" />
-          <stop offset=".923" stop-color="#C02B3C" />
+          <stop stopColor="#FFB657" />
+          <stop offset=".634" stopColor="#FF5F3D" />
+          <stop offset=".923" stopColor="#C02B3C" />
         </radialGradient>
         <radialGradient
           id="prefix__paint4_radial_56201_15503"
@@ -206,9 +206,9 @@ export function CopilotIcon({
           gradientUnits="userSpaceOnUse"
           gradientTransform="rotate(109.274 16.301 20.802) scale(38.3873 45.9867)"
         >
-          <stop offset=".066" stop-color="#8C48FF" />
-          <stop offset=".5" stop-color="#F2598A" />
-          <stop offset=".896" stop-color="#FFB152" />
+          <stop offset=".066" stopColor="#8C48FF" />
+          <stop offset=".5" stopColor="#F2598A" />
+          <stop offset=".896" stopColor="#FFB152" />
         </radialGradient>
         <linearGradient
           id="prefix__paint2_linear_56201_15503"
@@ -218,10 +218,10 @@ export function CopilotIcon({
           y2="33.975"
           gradientUnits="userSpaceOnUse"
         >
-          <stop offset=".156" stop-color="#0D91E1" />
-          <stop offset=".487" stop-color="#52B471" />
-          <stop offset=".652" stop-color="#98BD42" />
-          <stop offset=".937" stop-color="#FFC800" />
+          <stop offset=".156" stopColor="#0D91E1" />
+          <stop offset=".487" stopColor="#52B471" />
+          <stop offset=".652" stopColor="#98BD42" />
+          <stop offset=".937" stopColor="#FFC800" />
         </linearGradient>
         <linearGradient
           id="prefix__paint3_linear_56201_15503"
@@ -231,8 +231,8 @@ export function CopilotIcon({
           y2="32.885"
           gradientUnits="userSpaceOnUse"
         >
-          <stop stop-color="#3DCBFF" />
-          <stop offset=".247" stop-color="#0588F7" stop-opacity="0" />
+          <stop stopColor="#3DCBFF" />
+          <stop offset=".247" stopColor="#0588F7" stopOpacity="0" />
         </linearGradient>
         <linearGradient
           id="prefix__paint5_linear_56201_15503"
@@ -242,8 +242,8 @@ export function CopilotIcon({
           y2="21.215"
           gradientUnits="userSpaceOnUse"
         >
-          <stop offset=".058" stop-color="#F8ADFA" />
-          <stop offset=".708" stop-color="#A86EDD" stop-opacity="0" />
+          <stop offset=".058" stopColor="#F8ADFA" />
+          <stop offset=".708" stopColor="#A86EDD" stopOpacity="0" />
         </linearGradient>
       </defs>
     </svg>

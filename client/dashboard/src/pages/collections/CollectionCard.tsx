@@ -1,4 +1,5 @@
 import { DotCard } from "@/components/ui/dot-card";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { Badge } from "@/components/ui/badge";
 import { useOrganization } from "@/contexts/Auth";
@@ -21,6 +22,7 @@ import { toast } from "sonner";
 import { useCollectionServers } from "./hooks";
 import type { Collection } from "./types";
 import { CollectionInstallDialog } from "./CollectionInstallDialog";
+import { collectionInstallDisabledReason } from "./install-availability";
 
 export function CollectionCard({
   collection,
@@ -67,6 +69,11 @@ export function CollectionCard({
     () => organization.projects ?? [],
     [organization.projects],
   );
+  const installDisabledReason = collectionInstallDisabledReason({
+    isLoading,
+    installableServerCount: installableServersWithEndpoint.length,
+    projectCount: projects.length,
+  });
   const handleInstallClick = (event: React.MouseEvent) => {
     event.stopPropagation();
 
@@ -80,6 +87,28 @@ export function CollectionCard({
 
     setShowInstallDialog(true);
   };
+  let installButton = (
+    <Button
+      variant="secondary"
+      size="sm"
+      disabled={installDisabledReason !== null}
+      onClick={handleInstallClick}
+    >
+      <Button.LeftIcon>
+        <Download />
+      </Button.LeftIcon>
+      <Button.Text>Install</Button.Text>
+    </Button>
+  );
+  if (installDisabledReason) {
+    installButton = (
+      <SimpleTooltip tooltip={installDisabledReason}>
+        <span onClick={(event) => event.stopPropagation()}>
+          {installButton}
+        </span>
+      </SimpleTooltip>
+    );
+  }
 
   return (
     <DotCard
@@ -150,21 +179,7 @@ export function CollectionCard({
             </Button.RightIcon>
           </Button>
         </Link>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={
-            isLoading ||
-            installableServersWithEndpoint.length === 0 ||
-            projects.length === 0
-          }
-          onClick={handleInstallClick}
-        >
-          <Button.LeftIcon>
-            <Download />
-          </Button.LeftIcon>
-          <Button.Text>Install</Button.Text>
-        </Button>
+        {installButton}
       </div>
       <div onClick={(e) => e.stopPropagation()}>
         <CollectionInstallDialog
