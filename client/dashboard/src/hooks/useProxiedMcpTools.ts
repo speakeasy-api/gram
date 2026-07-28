@@ -109,7 +109,7 @@ export function useProxiedMcpTools(
       if (!mcpUrl) throw new Error("No MCP URL configured");
 
       const client = await createMCPClient({
-        name: "gram-dashboard-proxied-mcp-client",
+        clientName: "gram-dashboard-proxied-mcp-client",
         transport: {
           type: "http",
           url: mcpUrl,

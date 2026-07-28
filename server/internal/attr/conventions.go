@@ -202,19 +202,23 @@ const (
 	HTTPStatusCodePatternKey       = attribute.Key("gram.http.status_code_pattern")
 	IngressNameKey                 = attribute.Key("gram.ingress.name")
 	CustomDomainProvisionerKindKey = attribute.Key("gram.custom_domain.provisioner.kind")
-	McpMethodKey                   = attribute.Key("gram.mcp.method")
-	McpRequestedTagsKey            = attribute.Key("gram.mcp.requested_tags")
-	McpToolsReturnedKey            = attribute.Key("gram.mcp.tools_returned")
-	McpToolsFilteredKey            = attribute.Key("gram.mcp.tools_filtered")
-	McpServerIDKey                 = attribute.Key("gram.mcp_server.id")
-	McpURLKey                      = attribute.Key("gram.mcp.url")
-	ToolVariationsGroupIDKey       = attribute.Key("gram.tool_variations_group.id")
-	MetricNameKey                  = attribute.Key("gram.metric.name")
-	MimeTypeKey                    = attribute.Key("mime.type")
-	OAuthAuthorizationEndpointKey  = attribute.Key("gram.oauth.authorization_endpoint")
-	OAuthClientIDKey               = attribute.Key("gram.oauth.client_id")
-	OAuthClientNameKey             = attribute.Key("gram.oauth.client_name")
-	OAuthClientSecretGeneratedKey  = attribute.Key("gram.oauth.client_secret_generated")
+
+	CustomDomainHealthStatusKey         = attribute.Key("gram.custom_domain.health.status")
+	CustomDomainHealthIssueKey          = attribute.Key("gram.custom_domain.health.issue")
+	CustomDomainNotifyRecipientCountKey = attribute.Key("gram.custom_domain.notify.recipient_count")
+	McpMethodKey                        = attribute.Key("gram.mcp.method")
+	McpRequestedTagsKey                 = attribute.Key("gram.mcp.requested_tags")
+	McpToolsReturnedKey                 = attribute.Key("gram.mcp.tools_returned")
+	McpToolsFilteredKey                 = attribute.Key("gram.mcp.tools_filtered")
+	McpServerIDKey                      = attribute.Key("gram.mcp_server.id")
+	McpURLKey                           = attribute.Key("gram.mcp.url")
+	ToolVariationsGroupIDKey            = attribute.Key("gram.tool_variations_group.id")
+	MetricNameKey                       = attribute.Key("gram.metric.name")
+	MimeTypeKey                         = attribute.Key("mime.type")
+	OAuthAuthorizationEndpointKey       = attribute.Key("gram.oauth.authorization_endpoint")
+	OAuthClientIDKey                    = attribute.Key("gram.oauth.client_id")
+	OAuthClientNameKey                  = attribute.Key("gram.oauth.client_name")
+	OAuthClientSecretGeneratedKey       = attribute.Key("gram.oauth.client_secret_generated")
 	// OAuthErrorKey / OAuthErrorDescriptionKey carry the `error` /
 	// `error_description` parameters from RFC 6749 / RFC 7591 error responses
 	// — used across DCR registration, /authorize, /token, and /revoke.
@@ -304,6 +308,7 @@ const (
 	RiskPolicyTypeKey                 = attribute.Key("gram.risk.policy_type")
 	RiskMessageTypeKey                = attribute.Key("gram.risk.message_type")
 	RiskRuleIDKey                     = attribute.Key("gram.risk.rule_id")
+	SpendRuleIDKey                    = attribute.Key("gram.spend.rule_id")
 	RiskSourceKey                     = attribute.Key("gram.risk.source")
 	RiskScanAttemptKey                = attribute.Key("gram.risk.scan.attempt")
 	RiskScanMaxAttemptsKey            = attribute.Key("gram.risk.scan.max_attempts")
@@ -1020,6 +1025,30 @@ func SlogCustomDomainProvisionerKind(v string) slog.Attr {
 	return slog.String(string(CustomDomainProvisionerKindKey), v)
 }
 
+func CustomDomainHealthStatus(v string) attribute.KeyValue {
+	return CustomDomainHealthStatusKey.String(v)
+}
+
+func SlogCustomDomainHealthStatus(v string) slog.Attr {
+	return slog.String(string(CustomDomainHealthStatusKey), v)
+}
+
+func CustomDomainHealthIssue(v string) attribute.KeyValue {
+	return CustomDomainHealthIssueKey.String(v)
+}
+
+func SlogCustomDomainHealthIssue(v string) slog.Attr {
+	return slog.String(string(CustomDomainHealthIssueKey), v)
+}
+
+func CustomDomainNotifyRecipientCount(v int) attribute.KeyValue {
+	return CustomDomainNotifyRecipientCountKey.Int(v)
+}
+
+func SlogCustomDomainNotifyRecipientCount(v int) slog.Attr {
+	return slog.Int(string(CustomDomainNotifyRecipientCountKey), v)
+}
+
 func MetricName(v string) attribute.KeyValue { return MetricNameKey.String(v) }
 func SlogMetricName(v string) slog.Attr      { return slog.String(string(MetricNameKey), v) }
 
@@ -1388,6 +1417,9 @@ func SlogRiskMessageType(v string) slog.Attr      { return slog.String(string(Ri
 
 func RiskRuleID(v string) attribute.KeyValue { return RiskRuleIDKey.String(v) }
 func SlogRiskRuleID(v string) slog.Attr      { return slog.String(string(RiskRuleIDKey), v) }
+
+func SpendRuleID(v string) attribute.KeyValue { return SpendRuleIDKey.String(v) }
+func SlogSpendRuleID(v string) slog.Attr      { return slog.String(string(SpendRuleIDKey), v) }
 
 func RiskSource(v string) attribute.KeyValue { return RiskSourceKey.String(v) }
 func SlogRiskSource(v string) slog.Attr      { return slog.String(string(RiskSourceKey), v) }

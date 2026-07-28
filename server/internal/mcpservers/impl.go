@@ -512,6 +512,19 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeUnexpected, err, "update mcp server").LogError(ctx, logger)
 	}
 
+	oldDisplayName := ServerDisplayName(existing)
+	newDisplayName := ServerDisplayName(updated)
+	if oldDisplayName != newDisplayName {
+		if _, err := pluginsrepo.New(dbtx).SyncMcpServerDisplayName(ctx, pluginsrepo.SyncMcpServerDisplayNameParams{
+			NewDisplayName: newDisplayName,
+			ProjectID:      *authCtx.ProjectID,
+			McpServerID:    uuid.NullUUID{UUID: updated.ID, Valid: true},
+			OldDisplayName: oldDisplayName,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "sync plugin server display name").LogError(ctx, logger)
+		}
+	}
+
 	afterView := mv.BuildMcpServerView(updated)
 
 	if err := s.audit.LogMcpServerUpdate(ctx, dbtx, audit.LogMcpServerUpdateEvent{

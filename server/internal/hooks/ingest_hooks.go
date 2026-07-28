@@ -417,7 +417,22 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 	// Match case-insensitively, mirroring the adapter validation (isReservedAssistantAdapter),
 	// so warn->deny enforcement holds regardless of how the sender cases "opencode".
 	isOpencode := strings.EqualFold(strings.TrimSpace(payload.Source.Adapter), "opencode")
-	switch strings.TrimSpace(payload.Event.Type) {
+	eventType := strings.TrimSpace(payload.Event.Type)
+
+	// Spend gate runs before any risk-policy evaluation. v1 enforcement
+	// surface is Claude only; other adapters pass through untouched.
+	if strings.TrimSpace(payload.Source.Adapter) == "claude" && (eventType == "prompt.submitted" || eventType == "tool.requested") {
+		if block := s.checkSpendGate(ctx, event); block != nil {
+			if eventType == "tool.requested" {
+				auditReason := spendBlockReason("tool call", block)
+				return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, canonicalToolName(payload), "", auditReason)
+			}
+			auditReason := spendBlockReason("prompt", block)
+			return auditReason, auditReason
+		}
+	}
+
+	switch eventType {
 	case "prompt.submitted":
 		ev := hookevents.NewUserPromptSubmit(event, hookevents.UserPromptSubmitParams{
 			Prompt: canonicalPromptText(payload),

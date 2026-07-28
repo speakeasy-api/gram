@@ -98,8 +98,8 @@ func (p *IngressProvisioner) buildIngress(domain string, ipAllowlist []string) (
 			Namespace:   p.namespace,
 			Annotations: annotations,
 			Labels: map[string]string{
-				"app.kubernetes.io/managed-by": "custom-domain-chart",
-				"custom-domain":                domain,
+				managedByLabelKey:    managedByLabelValue,
+				customDomainLabelKey: domain,
 			},
 		},
 		Spec: networkingv1.IngressSpec{

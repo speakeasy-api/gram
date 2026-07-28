@@ -3179,6 +3179,543 @@ paths:
       x-speakeasy-name-override: upsertWorkUnitsSettings
       x-speakeasy-react-hook:
         name: UpsertChatAnalysisSettings
+  /rpc/adminExternalCredentials.createGcpIam:
+    post:
+      description: Create a platform GCP IAM external credential (organization_id NULL, project_id NULL). Requires platform admin.
+      operationId: createGcpIamPlatformCredential
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGcpIamCredentialForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GcpIamCredential'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: createGcpIamPlatformCredential adminExternalCredentials
+      tags:
+        - adminExternalCredentials
+      x-speakeasy-name-override: createGcpIam
+      x-speakeasy-react-hook:
+        name: CreateGcpIamPlatformCredential
+  /rpc/adminExternalCredentials.deleteGcpIam:
+    delete:
+      description: Soft-delete a platform GCP IAM external credential by ID. Requires platform admin.
+      operationId: deleteGcpIamPlatformCredential
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the credential to delete.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the credential to delete.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: deleteGcpIamPlatformCredential adminExternalCredentials
+      tags:
+        - adminExternalCredentials
+      x-speakeasy-name-override: deleteGcpIam
+      x-speakeasy-react-hook:
+        name: DeleteGcpIamPlatformCredential
+  /rpc/adminExternalCredentials.getGcpIam:
+    get:
+      description: Get a platform GCP IAM external credential by ID. Requires platform admin.
+      operationId: getGcpIamPlatformCredential
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the credential to get.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the credential to get.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GcpIamCredential'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getGcpIamPlatformCredential adminExternalCredentials
+      tags:
+        - adminExternalCredentials
+      x-speakeasy-name-override: getGcpIam
+      x-speakeasy-react-hook:
+        name: GetGcpIamPlatformCredential
+  /rpc/adminExternalCredentials.list:
+    get:
+      description: List the platform external credentials (provider-independent summary). Optionally filter by provider. Requires platform admin.
+      operationId: listPlatformExternalCredentials
+      parameters:
+        - allowEmptyValue: true
+          description: Only return credentials for this provider.
+          in: query
+          name: provider
+          schema:
+            description: Only return credentials for this provider.
+            enum:
+              - aws_iam
+              - gcp_iam
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListExternalCredentialsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listPlatformExternalCredentials adminExternalCredentials
+      tags:
+        - adminExternalCredentials
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: ListPlatformExternalCredentials
+  /rpc/adminExternalCredentials.updateGcpIam:
+    post:
+      description: Replace a platform GCP IAM external credential's configuration. Requires platform admin.
+      operationId: updateGcpIamPlatformCredential
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGcpIamCredentialRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GcpIamCredential'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: updateGcpIamPlatformCredential adminExternalCredentials
+      tags:
+        - adminExternalCredentials
+      x-speakeasy-name-override: updateGcpIam
+      x-speakeasy-react-hook:
+        name: UpdateGcpIamPlatformCredential
+  /rpc/adminExternalCredentials.verifyGcpIam:
+    post:
+      description: 'Run a live ''who am I'' probe against a platform GCP IAM credential''s resolved identity and report the effective principal. Ephemeral: nothing is persisted. Requires platform admin.'
+      operationId: verifyGcpIamPlatformCredential
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the credential to verify.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the credential to verify.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyPlatformCredentialResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: verifyGcpIamPlatformCredential adminExternalCredentials
+      tags:
+        - adminExternalCredentials
+      x-speakeasy-name-override: verifyGcpIam
+      x-speakeasy-react-hook:
+        name: VerifyGcpIamPlatformCredential
   /rpc/adminRemoteSessions.createGlobalClient:
     post:
       description: Register a global remote_session_client under an existing global remote_session_issuer. Caller supplies client_id and optional client_secret obtained out-of-band from the upstream issuer. Requires platform admin.
@@ -9155,6 +9692,102 @@ paths:
       tags:
         - chat
       x-speakeasy-name-override: submitFeedback
+  /rpc/chat.summarize:
+    post:
+      description: Generate or return a persisted LLM summary of a chat session transcript. When a summary already exists and regenerate is false, returns the cached summary without calling the model.
+      operationId: summarizeChat
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SummarizeRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SummarizeChatResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: summarize chat
+      tags:
+        - chat
+      x-speakeasy-name-override: summarize
+      x-speakeasy-react-hook:
+        name: SummarizeChat
   /rpc/chatSessions.create:
     post:
       description: Creates a new chat session token
@@ -11021,6 +11654,88 @@ paths:
       x-speakeasy-name-override: redeployDeployment
       x-speakeasy-react-hook:
         name: RedeployDeployment
+  /rpc/domain.checkHealth:
+    post:
+      description: Check the routing and certificate health of the organization's custom domain
+      operationId: checkDomainHealth
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomDomain'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: checkHealth domains
+      tags:
+        - domains
+      x-speakeasy-name-override: checkHealth
+      x-speakeasy-react-hook:
+        name: CheckDomainHealth
   /rpc/domain.delete:
     delete:
       description: Delete a custom domain
@@ -48288,6 +49003,9 @@ components:
           type: integer
           description: The number of messages in the chat
           format: int64
+        pinned:
+          type: boolean
+          description: True when the chat is pinned
         risk_findings_count:
           type: integer
           description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
@@ -48300,6 +49018,13 @@ components:
         source:
           type: string
           description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
+        summary:
+          type: string
+          description: Persisted LLM summary of the session transcript, if one has been generated
+        summary_generated_at:
+          type: string
+          description: When the session summary was last generated.
+          format: date-time
         title:
           type: string
           description: The title of the chat
@@ -48458,6 +49183,9 @@ components:
           type: integer
           description: The number of messages in the chat
           format: int64
+        pinned:
+          type: boolean
+          description: True when the chat is pinned
         risk_findings_count:
           type: integer
           description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
@@ -48465,6 +49193,13 @@ components:
         source:
           type: string
           description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
+        summary:
+          type: string
+          description: Persisted LLM summary of the session transcript, if one has been generated
+        summary_generated_at:
+          type: string
+          description: When the session summary was last generated.
+          format: date-time
         title:
           type: string
           description: The title of the chat
@@ -50562,6 +51297,14 @@ components:
         activated:
           type: boolean
           description: Whether the domain is activated in ingress
+        certificate_expires_at:
+          type: string
+          description: When the currently observed TLS certificate expires.
+          format: date-time
+        consecutive_failures:
+          type: integer
+          description: The number of consecutive failed health checks
+          format: int32
         created_at:
           type: string
           description: When the custom domain was created.
@@ -50569,6 +51312,16 @@ components:
         domain:
           type: string
           description: The custom domain name
+        health_checked_at:
+          type: string
+          description: When the domain health was last checked.
+          format: date-time
+        health_issue:
+          type: string
+          description: 'The reason the domain was last observed as unhealthy. One of: dns_not_found, dns_target_mismatch, resource_missing, certificate_missing, certificate_not_ready, certificate_expired, certificate_invalid, check_failed.'
+        health_status:
+          type: string
+          description: 'The latest observed domain health status. One of: unknown, healthy, unhealthy.'
         id:
           type: string
           description: The ID of the custom domain
@@ -50583,6 +51336,10 @@ components:
         organization_id:
           type: string
           description: The ID of the organization this domain belongs to
+        unhealthy_since:
+          type: string
+          description: When the current unhealthy period began.
+          format: date-time
         updated_at:
           type: string
           description: When the custom domain was last updated.
@@ -62572,6 +63329,36 @@ components:
       required:
         - match_type
         - match_value
+    SummarizeChatResult:
+      type: object
+      properties:
+        cached:
+          type: boolean
+          description: True when an existing summary was returned without regenerating
+        summary:
+          type: string
+          description: The session summary text
+        summary_generated_at:
+          type: string
+          description: When the summary was last generated.
+          format: date-time
+      required:
+        - summary
+        - summary_generated_at
+        - cached
+    SummarizeRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the chat to summarize
+          format: uuid
+        regenerate:
+          type: boolean
+          description: When true, regenerate and overwrite any existing summary. Defaults to false.
+          default: false
+      required:
+        - id
     SyncedAgentUser:
       type: object
       properties:
@@ -66637,6 +67424,28 @@ components:
         - events
         - latest_unix_nano
         - total_count
+    VerifyPlatformCredentialResult:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: Human-readable detail about the probe outcome (e.g. why the principal is unavailable, or the failure reason).
+        identity_source:
+          type: string
+          description: How the identity was resolved. Lets the caller tell an in-cluster attached identity apart from local Application Default Credentials or an impersonated service account.
+          enum:
+            - metadata_server
+            - application_default_credentials
+            - impersonation
+        principal:
+          type: string
+          description: The effective principal the identity resolves to (e.g. a service-account email). May be empty when the resolution source cannot report it.
+        verified:
+          type: boolean
+          description: Whether the credential's identity resolved successfully.
+      description: Result of a live 'who am I' probe against a platform credential's resolved identity.
+      required:
+        - verified
     VerifyURLForm:
       type: object
       properties:
@@ -66842,6 +67651,8 @@ tags:
     description: Manages packages in Gram.
   - name: adminChatAnalysis
     description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
+  - name: adminExternalCredentials
+    description: Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
   - name: plugins
     description: Manage distributable plugin bundles of MCP servers and hooks.
   - name: features

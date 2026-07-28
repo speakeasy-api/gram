@@ -62,6 +62,11 @@ import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
 import OrgSkills from "./pages/org/OrgSkills";
+import ExternalCredentialDetail from "./pages/org/external-services/ExternalCredentialDetail";
+import {
+  ExternalServicesPage,
+  ExternalServicesRoot,
+} from "./pages/org/external-services/ExternalServices";
 import OrgWebhooks from "./pages/org/OrgWebhooks";
 import {
   RemoteIdentityProvidersPage,
@@ -902,6 +907,24 @@ const ORG_ROUTE_STRUCTURE = {
     url: "webhooks",
     icon: "webhook",
     component: OrgWebhooks,
+  },
+  externalServices: {
+    title: "External Services",
+    url: "external-services",
+    icon: "cloud",
+    component: ExternalServicesRoot,
+    indexComponent: ExternalServicesPage,
+    subPages: {
+      credentialDetail: {
+        title: "External Credential",
+        url: ":credentialId",
+        component: ExternalCredentialDetail,
+        subPages: {
+          overview: { title: "Overview", url: "overview" },
+          settings: { title: "Settings", url: "settings" },
+        },
+      },
+    },
   },
   auditLogs: {
     title: "Audit Logs",
