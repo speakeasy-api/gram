@@ -21,18 +21,24 @@ type WhileLoading = "off" | "on" | "unresolved";
 /**
  * Read a typed PostHog feature flag.
  *
- * Once PostHog resolves the flag, this hook always returns its actual boolean
- * value. `whileLoading` controls only the value returned before then:
+ * PostHog returns `undefined` while flags are loading, then `true` or `false`
+ * once the requested flag has resolved. `whileLoading` does not affect the
+ * flag itself; it selects the temporary value this hook returns in place of
+ * that initial `undefined`:
  *
- * - `"off"` (default) returns `false`, hiding an opt-in feature until PostHog
- *   confirms that it is enabled.
- * - `"on"` returns `true`, keeping a kill-switched feature visible unless
- *   PostHog confirms that it is disabled.
- * - `"unresolved"` returns `undefined`, allowing the caller to distinguish
- *   loading from an enabled or disabled flag and render its own loading state.
+ * - `"off"` (default) temporarily returns `false`. Use it for new or opt-in
+ *   features that must remain hidden until PostHog explicitly enables them.
+ *   The feature may briefly appear hidden while the flag loads.
+ * - `"on"` temporarily returns `true`. Use it when the flag is a rollback
+ *   switch for an established feature that should remain visible unless
+ *   PostHog explicitly disables it. The feature may briefly appear visible
+ *   while the flag loads.
+ * - `"unresolved"` preserves `undefined`. Use it when showing either enabled
+ *   or disabled UI before the flag loads would be incorrect. The caller must
+ *   handle `undefined`, typically by rendering a placeholder or nothing.
  *
- * The underlying telemetry hook re-renders when PostHog resolves or reloads
- * flags.
+ * After the flag resolves, all modes return its actual boolean value. The
+ * underlying telemetry hook re-renders when PostHog resolves or reloads flags.
  *
  * In local development, the telemetry provider enables every feature flag.
  */
