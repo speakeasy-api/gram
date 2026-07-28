@@ -1466,7 +1466,7 @@ func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
 		ServerURL:   "https://app.getgram.ai",
 		HooksAPIKey: "gram_local_secret_xyz",
 	}
-	for _, platform := range []string{"claude", "cursor", "codex"} {
+	for _, platform := range []string{"claude", "cursor", "codex", "opencode"} {
 		files, err := GenerateObservabilityPluginPackage(cfg, platform)
 		require.NoError(t, err)
 		for name, content := range files {
@@ -1479,6 +1479,31 @@ func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
 			require.NoError(t, err, "%s %s failed bash -n: %s", platform, name, out)
 		}
 	}
+}
+
+// OpenCode has no hooks.json or plugin manifest — the shim under plugin/ is the
+// whole hook registration — so a regression there is silent. Pin that the
+// package ships the shim wired to serve mode and the sibling speakeasy.json.
+func TestGenerateOpenCodeObservabilityPluginPackage(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "opencode")
+	require.NoError(t, err)
+
+	shim, ok := files["plugin/agenthooks.ts"]
+	require.True(t, ok, "opencode package must ship plugin/agenthooks.ts")
+	require.Contains(t, string(shim), "--provider=opencode")
+	require.Contains(t, string(shim), "speakeasy.json")
+	require.Contains(t, string(shim), "bootstrap.sh")
+
+	_, ok = files["speakeasy.json"]
+	require.True(t, ok, "opencode package must ship speakeasy.json alongside the shim")
+	_, ok = files["hooks/bootstrap.sh"]
+	require.True(t, ok, "opencode package must ship the hooks bootstrapper the shim spawns")
 }
 
 // An upgraded install already carries [hooks.state] entries whose trusted_hash
