@@ -2,8 +2,12 @@ package hooks
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -1007,6 +1012,136 @@ func TestIngest_LinksChatToUserAccount(t *testing.T) {
 	require.Len(t, msgs, 1)
 	require.Equal(t, chat.UserID.String, msgs[0].UserID.String)
 	require.Equal(t, chat.ExternalUserID.String, msgs[0].ExternalUserID.String)
+}
+
+func TestIngest_PersistsPromptAttachmentsAsScannableToolRows(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "prompt-attachment-" + uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	promptID := "prompt-" + uuid.NewString()
+	entryUUID := "attachment-" + uuid.NewString()
+	displayPath := "marker.txt"
+	filePath := "/repo/marker.txt"
+	content := strings.Repeat("safe prefix\n", 500) + "MARKER_abc123\n"
+	timestamp := "2026-07-22T09:38:49.652Z"
+	numLines := 1
+	totalLines := 1
+	startLine := 1
+
+	promptText := "Summarize @marker.txt"
+	promptPayload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	promptPayload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &promptText},
+	}
+	res, err := ti.service.Ingest(ctx, promptPayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	secondPromptText := "Unrelated follow-up prompt"
+	secondPromptPayload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	secondPromptPayload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &secondPromptText},
+	}
+	res, err = ti.service.Ingest(ctx, secondPromptPayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	promptSHA256 := testPromptSHA256(promptText)
+	payload := canonicalIngestPayload("claude", "assistant.responded", sessionID)
+	payload.Data = &gen.HookIngestData{
+		PromptAttachments: []*gen.HookPromptAttachmentEntry{{
+			EntryUUID:      entryUUID,
+			PromptID:       &promptID,
+			PromptSha256:   &promptSHA256,
+			FilePath:       &filePath,
+			DisplayPath:    &displayPath,
+			AttachmentKind: "file",
+			Content:        content,
+			NumLines:       &numLines,
+			TotalLines:     &totalLines,
+			StartLine:      &startLine,
+			Timestamp:      &timestamp,
+		}},
+	}
+
+	res, err = ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 2)
+	var promptRow, secondPromptRow *chatRepo.ChatMessage
+	for i := range msgs {
+		if msgs[i].Role == "user" && msgs[i].Content == promptText {
+			promptRow = &msgs[i]
+		}
+		if msgs[i].Role == "user" && msgs[i].Content == secondPromptText {
+			secondPromptRow = &msgs[i]
+		}
+	}
+	require.NotNil(t, promptRow)
+	require.NotNil(t, secondPromptRow)
+	require.Equal(t, promptText, promptRow.Content)
+	require.False(t, promptRow.MessageID.Valid)
+	require.False(t, secondPromptRow.MessageID.Valid, "hash match must not stamp the newer unrelated prompt")
+
+	parts, err := chatRepo.New(ti.conn).ListChatContentPartsByChatID(ctx, chatRepo.ListChatContentPartsByChatIDParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, parts, 1)
+	attachmentRow := parts[0]
+	require.Equal(t, message.PromptAttachment, attachmentRow.Kind)
+	require.NotEmpty(t, attachmentRow.ContentAssetUrl)
+	assetURL, err := url.Parse(attachmentRow.ContentAssetUrl)
+	require.NoError(t, err)
+	reader, err := ti.assetStorage.Read(ctx, assetURL)
+	require.NoError(t, err)
+	assetContent, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	require.NoError(t, reader.Close())
+	require.Equal(t, content, string(assetContent))
+	require.Equal(t, entryUUID, attachmentRow.ExternalID.String)
+	require.Equal(t, promptRow.ID, attachmentRow.ParentChatMessageID.UUID)
+	require.JSONEq(t, `{"display_path": "marker.txt", "kind": "file"}`, string(attachmentRow.Metadata))
+	require.True(t, attachmentRow.CreatedAt.Valid)
+	require.Equal(t, int64(2026), int64(attachmentRow.CreatedAt.Time.Year()))
+
+	// A redelivered attachment event must not stamp an unrelated prompt row.
+	redelivery := canonicalIngestPayload("claude", "assistant.responded", sessionID)
+	redelivery.Data = payload.Data
+	res, err = ti.service.Ingest(ctx, redelivery)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	msgs, err = chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	for i := range msgs {
+		if msgs[i].Role == "user" && msgs[i].Content == secondPromptText {
+			require.Empty(t, msgs[i].MessageID.String, "redelivered attachments must not stamp unrelated prompt rows")
+		}
+	}
+}
+
+func testPromptSHA256(text string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(text)))
+	return hex.EncodeToString(sum[:])
 }
 
 // TestIngest_StampsAccountAttributionOnTelemetry confirms canonical hook rows

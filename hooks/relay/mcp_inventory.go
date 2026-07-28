@@ -106,15 +106,16 @@ func attachMCPInventory(payload *components.IngestRequestBody, entries []mcpInve
 	}
 	if payload.Data == nil {
 		payload.Data = &components.HookIngestData{
-			Mcp:            nil,
-			McpAttribution: nil,
-			McpInventory:   nil,
-			Message:        nil,
-			Notification:   nil,
-			Prompt:         nil,
-			Skill:          nil,
-			ToolCall:       nil,
-			Usage:          nil,
+			Mcp:               nil,
+			McpAttribution:    nil,
+			McpInventory:      nil,
+			Message:           nil,
+			Notification:      nil,
+			Prompt:            nil,
+			PromptAttachments: nil,
+			Skill:             nil,
+			ToolCall:          nil,
+			Usage:             nil,
 		}
 	}
 	payload.Data.McpInventory = make([]components.HookMCPData, 0, len(entries))
