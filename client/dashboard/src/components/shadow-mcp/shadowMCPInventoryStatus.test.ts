@@ -36,6 +36,7 @@ function server(
   return {
     access: "none",
     allowedPolicyIds: [],
+    blockedPolicyIds: [],
     canonicalServerUrl: "https://example.com/mcp",
     firstSeen: new Date("2026-01-01T00:00:00Z"),
     lastSeen: new Date("2026-01-02T00:00:00Z"),
