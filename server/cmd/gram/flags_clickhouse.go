@@ -1,6 +1,10 @@
 package gram
 
-import "github.com/urfave/cli/v2"
+import (
+	"time"
+
+	"github.com/urfave/cli/v2"
+)
 
 var clickHouseFlags = []cli.Flag{
 	&cli.StringFlag{
@@ -38,5 +42,33 @@ var clickHouseFlags = []cli.Flag{
 		Required: false,
 		EnvVars:  []string{"CLICKHOUSE_INSECURE"},
 		Value:    false,
+	},
+	&cli.IntFlag{
+		Name:     "clickhouse-max-open-conns",
+		Required: false,
+		EnvVars:  []string{"CLICKHOUSE_MAX_OPEN_CONNS"},
+		Value:    10,
+	},
+	&cli.IntFlag{
+		Name:     "clickhouse-max-idle-conns",
+		Required: false,
+		EnvVars:  []string{"CLICKHOUSE_MAX_IDLE_CONNS"},
+		Value:    5,
+	},
+	&cli.DurationFlag{
+		Name:     "clickhouse-conn-max-lifetime",
+		Required: false,
+		EnvVars:  []string{"CLICKHOUSE_CONN_MAX_LIFETIME"},
+		// Recycle pooled connections well before a network middlebox (load
+		// balancer/NAT) silently drops idle ones, which otherwise surfaces as
+		// "connection reset" errors on reuse. Kept below common idle timeouts,
+		// and far below the driver default of 1 hour.
+		Value: 5 * time.Minute,
+	},
+	&cli.DurationFlag{
+		Name:     "clickhouse-dial-timeout",
+		Required: false,
+		EnvVars:  []string{"CLICKHOUSE_DIAL_TIMEOUT"},
+		Value:    10 * time.Second,
 	},
 }
