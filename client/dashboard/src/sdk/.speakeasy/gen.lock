@@ -201,6 +201,7 @@ trackedFiles:
   src/funcs/hooksServerNamesDeleteServerNameOverride.ts: {}
   src/funcs/hooksServerNamesListServerNameOverrides.ts: {}
   src/funcs/hooksServerNamesUpsertServerNameOverride.ts: {}
+  src/funcs/hooksSkillFeedback.ts: {}
   src/funcs/hooksUploadSkillContent.ts: {}
   src/funcs/instancesGetBySlug.ts: {}
   src/funcs/integrationsIntegrationsNumberGet.ts: {}
@@ -1054,6 +1055,7 @@ trackedFiles:
   src/models/components/skillefficacymetrics.ts: {}
   src/models/components/skillefficacyscoredsession.ts: {}
   src/models/components/skillefficacysettings.ts: {}
+  src/models/components/skillfeedbackpayload.ts: {}
   src/models/components/skillinsightmetrics.ts: {}
   src/models/components/skillinsightpoint.ts: {}
   src/models/components/skillsharelink.ts: {}
@@ -1616,6 +1618,7 @@ trackedFiles:
   src/models/operations/settoolsettoolvariationsgroup.ts: {}
   src/models/operations/settoolsetusersessionissuer.ts: {}
   src/models/operations/shareskill.ts: {}
+  src/models/operations/skillfeedback.ts: {}
   src/models/operations/submitfeedback.ts: {}
   src/models/operations/submitriskblockfeedback.ts: {}
   src/models/operations/suggestcustomdetectionrule.ts: {}
@@ -1935,6 +1938,7 @@ trackedFiles:
   src/react-query/hooksServerNamesListServerNameOverrides.core.ts: {}
   src/react-query/hooksServerNamesListServerNameOverrides.ts: {}
   src/react-query/hooksServerNamesUpsertServerNameOverride.ts: {}
+  src/react-query/hooksSkillFeedback.ts: {}
   src/react-query/hooksUploadSkillContent.ts: {}
   src/react-query/index.ts:
     id: 9e975471aa65
@@ -6820,6 +6824,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  skillFeedback:
+    speakeasy-default-skill-feedback:
+      requestBody:
+        application/json: {"outcome": "misleading", "schema_version": "hook.skill-feedback.v1", "skill": "<value>"}
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   submitFeedback:
     speakeasy-default-submit-feedback:
       requestBody:

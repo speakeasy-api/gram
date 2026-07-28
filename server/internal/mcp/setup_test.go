@@ -46,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	feedbackrecorder "github.com/speakeasy-api/gram/server/internal/skills/feedback"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -215,9 +216,11 @@ func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.
 	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, conn, enc, guardianPolicy, cacheAdapter, serverURL)
 	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, guardianPolicy, authzEngine, posthog, telemLogger, billingStub, billingStub)
 	managedLogsTools := platformtoolsruntime.ManagedAssistantLogsTools(telemService)
+	feedbackRecorder := feedbackrecorder.NewRecorder(conn, logger, nil)
+	assistantSkillTools := platformtoolsruntime.AssistantSkillTools(logger, conn, feedbackRecorder)
 	platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
 		AssistantMemoryTools:          nil,
-		AssistantSkillTools:           nil,
+		AssistantSkillTools:           assistantSkillTools,
 		AssistantTriggerTools:         nil,
 		ManagedAssistantInsightsTools: managedLogsTools,
 	})

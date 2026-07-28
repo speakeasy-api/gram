@@ -114,6 +114,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/skillefficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	feedbackrecorder "github.com/speakeasy-api/gram/server/internal/skills/feedback"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	spendcelenv "github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -792,7 +793,8 @@ func newStartCommand() *cli.Command {
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
-			skillTools := platformtoolsruntime.AssistantSkillTools(logger, db, platformskills.WithEfficacySignaler(efficacySignaler))
+			feedbackRecorder := feedbackrecorder.NewRecorder(db, logger, nil)
+			skillTools := platformtoolsruntime.AssistantSkillTools(logger, db, feedbackRecorder, platformskills.WithEfficacySignaler(efficacySignaler))
 			triggerTools := platformtoolsruntime.TriggerExternalTools(db, triggerApp, auditLogger)
 			// mcpService captures this map by reference now; the remaining
 			// insights tools (chat/orgs/risk/deployments/skills) are merged in once
