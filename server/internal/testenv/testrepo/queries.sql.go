@@ -127,6 +127,21 @@ func (q *Queries) CreateOrganizationUserRelationshipFixture(ctx context.Context,
 	return err
 }
 
+const deferDeviceIntegrationSyncsFixture = `-- name: DeferDeviceIntegrationSyncsFixture :exec
+UPDATE device_integration_syncs s
+SET next_poll_after = clock_timestamp() + interval '1 hour'
+FROM device_integration_schedules sch
+WHERE s.device_integration_schedule_id = sch.id
+  AND sch.device_integration_config_id = $1
+`
+
+// Pushes every sync's next poll an hour out, simulating a config whose
+// schedules already ran this interval.
+func (q *Queries) DeferDeviceIntegrationSyncsFixture(ctx context.Context, deviceIntegrationConfigID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deferDeviceIntegrationSyncsFixture, deviceIntegrationConfigID)
+	return err
+}
+
 const disableDeviceIntegrationSchedulesFixture = `-- name: DisableDeviceIntegrationSchedulesFixture :exec
 UPDATE device_integration_schedules
 SET disabled_at = clock_timestamp()

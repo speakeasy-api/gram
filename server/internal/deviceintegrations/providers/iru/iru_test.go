@@ -338,8 +338,39 @@ func TestInstanceURLValidation(t *testing.T) {
 	require.ErrorContains(t, err, "https")
 	_, err = s.ListDevices(t.Context(), fake.creds(), providers.Settings{fieldInstanceURL: "https://tenant.api.kandji.io/some/path"}, "")
 	require.ErrorContains(t, err, "tenant API root")
+	// Vendor-domain hosts that are not a tenant API root are the common
+	// paste mistakes: the console URL, the bare apex, a tenant-less API
+	// host, and a trailing-dot FQDN variant of any of them. All get the
+	// error naming the right value.
+	for _, bad := range []string{
+		"https://tenant.iru.com",
+		"https://tenant.kandji.io",
+		"https://iru.com",
+		"https://kandji.io",
+		"https://api.iru.com",
+		"https://tenant.iru.com.",
+	} {
+		_, err = s.ListDevices(t.Context(), fake.creds(), providers.Settings{fieldInstanceURL: bad}, "")
+		require.ErrorContains(t, err, "tenant API root", "value %q must be rejected", bad)
+	}
 	_, err = s.ListDevices(t.Context(), fake.creds(), providers.Settings{fieldInstanceURL: ""}, "")
 	require.ErrorContains(t, err, "not configured")
+}
+
+func TestVendorAPIHostShapes(t *testing.T) {
+	t.Parallel()
+
+	// Valid tenant API roots, including regional forms, pass the guard.
+	for _, good := range []string{
+		"tenant.api.iru.com",
+		"tenant.api.kandji.io",
+		"tenant.api.eu.kandji.io",
+	} {
+		require.True(t, vendorAPIHost(good), "host %q is a tenant API root", good)
+	}
+	for _, bad := range []string{"tenant.iru.com", "api.iru.com", "iru.com"} {
+		require.False(t, vendorAPIHost(bad), "host %q is not a tenant API root", bad)
+	}
 }
 
 func TestInvalidCursorRejected(t *testing.T) {
