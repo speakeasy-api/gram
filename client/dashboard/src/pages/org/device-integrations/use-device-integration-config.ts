@@ -15,7 +15,7 @@ import { toast } from "sonner";
 
 type FieldValues = Record<string, string>;
 
-export type TestConnectionResult = {
+type TestConnectionResult = {
   ok: boolean;
   message: string | null;
 };
