@@ -148,12 +148,9 @@ func createRemoteMcpEndpoint(
 	return mcpServer, remoteServer
 }
 
-// TestServePublic_McpEndpoint_PublicTunneledBacked_FailsClosed: tunneled MCP
-// servers front customer-private networks and may never serve publicly. The
-// management API rejects public visibility at create/update; this test seeds
-// the forbidden state directly through the repo layer (the shape a manual SQL
-// edit or future write path would produce) and asserts the serve path fails
-// closed rather than proxying unauthenticated traffic into the tunnel.
+// A tunneled MCP server with public visibility but no allow_public consent
+// must fail closed — as a 404, so unauthenticated callers cannot distinguish
+// a gated endpoint from a missing one.
 func TestServePublic_McpEndpoint_PublicTunneledBacked_FailsClosed(t *testing.T) {
 	t.Parallel()
 
@@ -201,10 +198,10 @@ func TestServePublic_McpEndpoint_PublicTunneledBacked_FailsClosed(t *testing.T) 
 	require.NoError(t, err)
 
 	_, err = servePublicHTTP(t, context.Background(), ti, endpointSlug, makeInitializeBody(), "", nil)
-	require.Error(t, err, "public tunneled-backed endpoint must fail closed")
+	require.Error(t, err, "public tunneled-backed endpoint must fail closed without owner consent")
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
 // createUserSessionIssuer inserts a user_session_issuers row in the

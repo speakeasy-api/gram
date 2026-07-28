@@ -331,6 +331,28 @@ func seedOrgLevelRemoteIssuer(t *testing.T, ctx context.Context, conn *pgxpool.P
 	return issuer.ID
 }
 
+// seedGlobalRemoteIssuer creates a platform (global) remote session issuer:
+// project_id IS NULL AND organization_id IS NULL, the shared catalog partition
+// owned by Speakeasy platform admins. Tenants inherit it read-only and may
+// attach their own clients to it.
+func seedGlobalRemoteIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) uuid.UUID {
+	t.Helper()
+	issuer, err := repo.New(conn).CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         uuid.NullUUID{},
+		OrganizationID:                    pgtype.Text{String: "", Valid: false},
+		Slug:                              slug,
+		Issuer:                            "https://" + slug + ".example.com",
+		AuthorizationEndpoint:             conv.ToPGText("https://" + slug + ".example.com/authorize"),
+		TokenEndpoint:                     conv.ToPGText("https://" + slug + ".example.com/token"),
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
+	})
+	require.NoError(t, err)
+	return issuer.ID
+}
+
 // seedOrgLevelRemoteClient creates an organization-level (project_id IS NULL,
 // organization_id set) remote_session_client referencing remoteIssuerID and
 // attaches it to each userSessionIssuerID through the join table. Org-level
@@ -574,4 +596,34 @@ func seedEnvironmentWithEntries(t *testing.T, ctx context.Context, ti *testInsta
 	})
 	require.NoError(t, err)
 	return envRow.Slug
+}
+
+// requirePlatformIssuerUnchanged asserts the platform issuer row still exists in
+// the global partition (NULL project_id, NULL organization_id) and was not
+// renamed, i.e. no tenant-scoped mutation touched it. Reads through the
+// platform-admin global query, which matches only global rows.
+func requirePlatformIssuerUnchanged(t *testing.T, ctx context.Context, conn *pgxpool.Pool, id uuid.UUID) {
+	t.Helper()
+	row, err := repo.New(conn).GetGlobalRemoteSessionIssuerByID(ctx, id)
+	require.NoError(t, err, "platform issuer should still exist in the global partition")
+	require.False(t, row.ProjectID.Valid, "platform issuer project_id must stay NULL")
+	require.False(t, row.OrganizationID.Valid, "platform issuer organization_id must stay NULL")
+	require.False(t, row.Name.Valid, "platform issuer name must be untouched")
+}
+
+// seedProjectRemoteClientNoOrg creates a project-owned remote_session_client
+// with a NULL organization_id, mirroring a legacy row from before the
+// organization_id backfill. Used to prove counts and reachability do not depend
+// on the client's organization_id being populated.
+func seedProjectRemoteClientNoOrg(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, remoteIssuerID uuid.UUID, clientID string) uuid.UUID {
+	t.Helper()
+	created, err := repo.New(conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(projectID),
+		OrganizationID:        pgtype.Text{String: "", Valid: false},
+		RemoteSessionIssuerID: remoteIssuerID,
+		ClientID:              clientID,
+		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
+	})
+	require.NoError(t, err)
+	return created.ID
 }

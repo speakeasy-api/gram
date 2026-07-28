@@ -1,7 +1,7 @@
 {
   "name": "dashboard",
   "private": true,
-  "version": "0.94.0",
+  "version": "0.95.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port ${GRAM_SITE_PORT:-5173}",
@@ -54,7 +54,7 @@
     "@speakeasy-api/moonshine": "1.44.0",
     "@tailwindcss/vite": "catalog:",
     "@tanstack/react-query": "catalog:",
-    "@tanstack/react-virtual": "^3.14.5",
+    "@tanstack/react-virtual": "^3.14.6",
     "@xstate/react": "^6.1.0",
     "@xyflow/react": "^12.11.1",
     "ai": "catalog:",

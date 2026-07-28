@@ -41,9 +41,10 @@ export function SkillContentUploadSetting(): JSX.Element | null {
           variant="body"
           className="text-muted-foreground mr-8 ml-6 max-w-4xl text-sm"
         >
-          When enabled, Gram uploads SKILL.md content at activation so captured
-          skills can be inspected. When disabled, Gram only receives skill
-          names, source details, hashes, users, and hostnames at activation.
+          When enabled, Speakeasy uploads SKILL.md content at activation so
+          captured skills can be inspected. When disabled, Speakeasy only
+          receives skill names, source details, hashes, users, and hostnames at
+          activation.
         </Type>
       </Stack>
       <RequireScope scope="org:admin" level="component">

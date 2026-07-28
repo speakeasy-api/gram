@@ -23,7 +23,9 @@ type batchMessage struct {
 	RawToolCalls []byte
 	ToolCalls    []recordedToolCall
 	// UserID is the scanned chat's owner (empty for unattributed sessions),
-	// carried onto judge completions for scanning-volume attribution.
+	// carried onto judge completions for scanning-volume attribution and into
+	// Shadow MCP bypass checks. GetMessageContentBatch must return the same
+	// WorkOS user-id space that authz.ResolveUserPrincipals expects.
 	UserID string
 	// CreatedAt is when the message was recorded. The shadow-MCP scanner uses
 	// the batch's oldest value to bound its ClickHouse provenance lookup.

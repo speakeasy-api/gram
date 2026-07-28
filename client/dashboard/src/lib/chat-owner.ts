@@ -67,10 +67,10 @@ export function chatOwnerLabel(
 
 export function unresolvedChatOwnerTooltip(chat: ChatIdentity): string {
   if (chat.externalUserId) {
-    return "This session's user couldn't be matched to a member of your organization, so the user ID reported by the AI provider is shown instead. The user may not be provisioned in Gram or may have been removed from the organization.";
+    return "This session's user couldn't be matched to a member of your organization, so the user ID reported by the AI provider is shown instead. The user may not be provisioned in Speakeasy or may have been removed from the organization.";
   }
   if (chat.userId) {
-    return "This session's user couldn't be matched to a member of your organization. The user may have been removed from the organization or may not be provisioned in Gram.";
+    return "This session's user couldn't be matched to a member of your organization. The user may have been removed from the organization or may not be provisioned in Speakeasy.";
   }
   return "The AI provider didn't report a user identity for this session.";
 }

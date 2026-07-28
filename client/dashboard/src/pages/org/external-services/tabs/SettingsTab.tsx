@@ -114,7 +114,7 @@ export function SettingsTab({
 
       <SettingsSection
         title="GCP identity"
-        description="Leave blank to use Gram's ambient attached identity, or set a service account for Gram to impersonate."
+        description="Leave blank to use the platform's ambient attached identity, or set a service account for the platform to impersonate."
       >
         <Field
           label="Impersonate service account"

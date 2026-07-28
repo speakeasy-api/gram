@@ -12,6 +12,7 @@ import { useCallback, useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { AppSidebar } from "./app-sidebar.tsx";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
+import { ChatLaunchOverlay } from "./chat-launch-overlay.tsx";
 import { InsightsProvider } from "./insights-dock.tsx";
 import { OrgSidebar } from "./org-sidebar.tsx";
 import { SidebarInset, SidebarProvider } from "./ui/sidebar.tsx";
@@ -115,6 +116,9 @@ const AppLayoutContent = ({
           </GlobalInsightsWrapper>
         </SidebarInset>
       </div>
+      {/* Above the outlet so the suggestion → chat bubble morph survives the
+          navigation into the chat route. */}
+      <ChatLaunchOverlay />
     </div>
   );
 };

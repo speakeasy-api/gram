@@ -71,6 +71,22 @@ type SkillEfficacySetting struct {
 	UpdatedAt        pgtype.Timestamptz
 }
 
+type SkillFeedback struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	SkillID        uuid.NullUUID
+	SkillVersionID uuid.NullUUID
+	SkillName      string
+	Source         string
+	Outcome        string
+	Note           pgtype.Text
+	SessionID      pgtype.Text
+	UserID         pgtype.Text
+	UserEmail      pgtype.Text
+	ReviewedAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+}
+
 type SkillObservation struct {
 	ID                 uuid.UUID
 	ProjectID          uuid.UUID
