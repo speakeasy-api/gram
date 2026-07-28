@@ -348,7 +348,7 @@ func storedHooksConfigHash(stored []byte) string {
 // MCP plugins on the next run, even when a project's generated MCP output is
 // byte-identical — for generator changes that alter MCP behaviour in ways the
 // placeholder fingerprint pass can't observe.
-const mcpGeneratorVersion = "9"
+const mcpGeneratorVersion = "10"
 
 // hooksGeneratorVersion is the sole rollout signal for the observability (hooks)
 // plugin. It is stamped into the hooks plugin.json version (see
@@ -361,7 +361,7 @@ const mcpGeneratorVersion = "9"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "22"
+const hooksGeneratorVersion = "23"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -505,6 +505,13 @@ var CursorObservabilityHookEvents = []string{
 // so plugin sources can be referenced by bare name relative to this root.
 const cursorPluginRoot = "cursor-plugins"
 
+// opencodePluginRoot groups the OpenCode feature-plugin packages in a
+// published repo. OpenCode has no marketplace manifest that could point at
+// per-plugin sources, so the root exists purely to keep each package's
+// extract-into-config-dir file set (plugin/<slug>.ts + <slug>/) in one
+// syncable directory per plugin.
+const opencodePluginRoot = "opencode-plugins"
+
 // GeneratePluginPackages produces the complete file map for a plugin
 // distribution repository containing Claude Code, Cursor, and Codex plugins.
 // Used for GitHub push. It is the union of the three independently-generatable
@@ -553,6 +560,9 @@ func generateHooksFiles(cfg GenerateConfig) (map[string][]byte, error) {
 	if err := generateCodexObservabilityPlugin(files, cfg); err != nil {
 		return nil, fmt.Errorf("generate codex observability plugin: %w", err)
 	}
+	if err := generateOpenCodeObservabilityPlugin(files, cfg); err != nil {
+		return nil, fmt.Errorf("generate opencode observability plugin: %w", err)
+	}
 	return files, nil
 }
 
@@ -596,6 +606,9 @@ func generateMCPFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]by
 		}
 		if err := generateCodexPlugin(files, p, cfg); err != nil {
 			return nil, fmt.Errorf("generate codex plugin %s: %w", p.Slug, err)
+		}
+		if err := generateOpenCodePlugin(files, p, cfg); err != nil {
+			return nil, fmt.Errorf("generate opencode plugin %s: %w", p.Slug, err)
 		}
 	}
 	return files, nil
@@ -780,6 +793,16 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	b.WriteString("Then list available plugins with `codex /plugins` and install the ones you want.\n")
 	b.WriteString("Plugins that need authentication will prompt for any required environment variables on install.\n")
 
+	b.WriteString("\n### OpenCode\n\n")
+	b.WriteString("OpenCode has no plugin marketplace. Each plugin is a self-contained package: ")
+	fmt.Fprintf(&b, "copy the contents of a plugin's directory under `%s/` ", opencodePluginRoot)
+	if cfg.HooksAPIKey != "" {
+		fmt.Fprintf(&b, "(or `%s/` for observability) ", OpenCodeObservabilitySlug(cfg))
+	}
+	b.WriteString("into `~/.config/opencode/` (all projects) or a repository's `.opencode/` (that project only). ")
+	b.WriteString("OpenCode picks the package up on next start; remove the copied files to uninstall.\n")
+	b.WriteString("Plugins that need authentication read the environment variables named in their `mcp.json`.\n")
+
 	return []byte(b.String())
 }
 
@@ -801,6 +824,10 @@ func GenerateSinglePluginPackage(plugin PluginInfo, cfg GenerateConfig, platform
 	case "codex":
 		if err := generateCodexPluginFlat(files, plugin, cfg); err != nil {
 			return nil, fmt.Errorf("generate codex plugin: %w", err)
+		}
+	case "opencode":
+		if err := generateOpenCodePluginFlat(files, plugin, cfg); err != nil {
+			return nil, fmt.Errorf("generate opencode plugin: %w", err)
 		}
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
@@ -833,6 +860,14 @@ func generateCursorPlugin(files map[string][]byte, p PluginInfo, cfg GenerateCon
 func generateCodexPlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
 	name := p.Slug + "-codex"
 	return generateCodexPluginInDir(files, name, name, p, cfg)
+}
+
+func generateOpenCodePluginFlat(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
+	return generateOpenCodePluginInDir(files, "", p, cfg)
+}
+
+func generateOpenCodePlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
+	return generateOpenCodePluginInDir(files, path.Join(opencodePluginRoot, p.Slug), p, cfg)
 }
 
 // codexAuthPolicy picks ON_INSTALL when the user will be prompted for a
@@ -1006,6 +1041,7 @@ func hooksSubtreePrefixes(orgName string) []string {
 		naming.ObservabilitySlug(orgName) + "/",
 		cursorPluginRoot + "/" + conv.ToSlug(orgName) + "-observability-cursor/",
 		conv.ToSlug(orgName) + "-observability-codex/",
+		conv.ToSlug(orgName) + "-observability-opencode/",
 	}
 }
 
@@ -1261,6 +1297,10 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 // (agenthooks serve).
 func generateOpenCodeObservabilityPluginFlat(files map[string][]byte, cfg GenerateConfig) error {
 	return generateOpenCodeObservabilityPluginInDir(files, "", cfg)
+}
+
+func generateOpenCodeObservabilityPlugin(files map[string][]byte, cfg GenerateConfig) error {
+	return generateOpenCodeObservabilityPluginInDir(files, OpenCodeObservabilitySlug(cfg), cfg)
 }
 
 func generateOpenCodeObservabilityPluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig) error {
@@ -1941,6 +1981,109 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 	return nil
 }
 
+// generateOpenCodePluginInDir emits the OpenCode package for a feature
+// plugin. OpenCode has no plugin manifest or marketplace: it auto-loads every
+// module under <config-dir>/plugin/ and merges whatever the module's config
+// hook writes into the resolved config. The package is therefore a loader
+// module plus a slug-named data directory, both extracted into an OpenCode
+// config dir (~/.config/opencode/ or a repo's .opencode/):
+//
+//	plugin/<slug>.ts          — registers the servers and skills at startup
+//	<slug>/mcp.json           — the servers, in OpenCode's own mcp config shape
+//	<slug>/skills/<n>/SKILL.md — skills, referenced via the skills.paths config
+//
+// Slug-prefixing both files keeps any number of plugins (and the
+// observability package) coexisting in the one shared config dir, which is
+// what directory isolation gives the other platforms for free.
+func generateOpenCodePluginInDir(files map[string][]byte, subdir string, p PluginInfo, cfg GenerateConfig) error {
+	mcpServers := make(map[string]opencodeMCPServer)
+	for _, s := range p.Servers {
+		var headers map[string]string
+
+		if s.IsOAuth {
+			// OpenCode auto-detects OAuth on remote servers and runs the
+			// authorization flow itself — no headers needed.
+		} else if s.IsPublic {
+			headers = make(map[string]string)
+			for _, ec := range s.EnvConfigs {
+				headers[ec.DisplayName] = "${env:" + ec.VariableName + "}"
+			}
+		} else if cfg.APIKey != "" {
+			headers = map[string]string{"Authorization": "Bearer " + cfg.APIKey}
+		} else {
+			headers = map[string]string{"Authorization": "Bearer ${env:GRAM_API_KEY}"}
+		}
+
+		mcpServers[s.DisplayName] = opencodeMCPServer{
+			Type:    "remote",
+			URL:     s.MCPURL,
+			Enabled: true,
+			Headers: headers,
+		}
+	}
+	mcpJSON, err := marshalJSON(opencodeMCPConfig{MCP: mcpServers})
+	if err != nil {
+		return fmt.Errorf("marshal opencode mcp.json: %w", err)
+	}
+	files[path.Join(subdir, p.Slug, "mcp.json")] = mcpJSON
+
+	loader := strings.ReplaceAll(opencodeFeatureLoader, "__SLUG__", p.Slug)
+	files[path.Join(subdir, "plugin", p.Slug+".ts")] = []byte(loader)
+
+	emitPluginSkills(files, path.Join(subdir, p.Slug), p)
+
+	return nil
+}
+
+// opencodeFeatureLoader is the OpenCode module emitted as plugin/<slug>.ts.
+// It carries no server data — the servers ride in the sibling <slug>/mcp.json
+// so the loader stays a stable template — and resolves paths relative to its
+// own location so the same file works from a global config dir or a repo
+// .opencode/.
+//
+// The config hook is the only supported way for a plugin to register MCP
+// servers and extra skill folders: OpenCode merges mutations to the resolved
+// config before MCP clients start and before skill discovery runs. User
+// config entries win on name collisions. ${env:VAR} header values are
+// resolved from the loader's environment; headers left empty by an unset
+// variable are dropped so unauthenticated requests fail at the server rather
+// than send malformed credentials.
+const opencodeFeatureLoader = `// Generated by Speakeasy. Registers this package's MCP servers and skills
+// with OpenCode via the plugin config hook.
+import { readFileSync, existsSync } from "node:fs"
+import { fileURLToPath } from "node:url"
+import { dirname, join } from "node:path"
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "__SLUG__")
+
+export const SpeakeasyPlugin = async (_ctx: any) => ({
+  config: async (cfg: any) => {
+    let mcp: Record<string, any> = {}
+    try {
+      mcp = JSON.parse(readFileSync(join(ROOT, "mcp.json"), "utf8")).mcp ?? {}
+    } catch {
+      // A missing or unreadable manifest disables the servers but must not
+      // break OpenCode startup.
+    }
+    for (const server of Object.values(mcp) as any[]) {
+      if (!server.headers) continue
+      for (const [name, value] of Object.entries(server.headers) as [string, string][]) {
+        const resolved = value.replace(/\$\{env:([A-Za-z0-9_]+)\}/g, (_m: string, v: string) => process.env[v] ?? "")
+        if (resolved.trim() === "" || resolved.trim() === "Bearer") delete server.headers[name]
+        else server.headers[name] = resolved
+      }
+    }
+    cfg.mcp = { ...mcp, ...cfg.mcp }
+    const skills = join(ROOT, "skills")
+    if (existsSync(skills)) {
+      cfg.skills = { ...cfg.skills, paths: [...(cfg.skills?.paths ?? []), skills] }
+    }
+  },
+})
+
+export default SpeakeasyPlugin
+`
+
 // --- JSON types ---
 
 type marketplaceManifest struct {
@@ -2022,6 +2165,20 @@ type cursorMCPConfig struct {
 
 type cursorMCPServer struct {
 	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers,omitempty"`
+}
+
+// opencodeMCPConfig is the <slug>/mcp.json sidecar the OpenCode loader module
+// reads. The mcp map uses OpenCode's own remote-server config shape verbatim
+// so the loader can merge entries into the resolved config unchanged.
+type opencodeMCPConfig struct {
+	MCP map[string]opencodeMCPServer `json:"mcp"`
+}
+
+type opencodeMCPServer struct {
+	Type    string            `json:"type"`
+	URL     string            `json:"url"`
+	Enabled bool              `json:"enabled"`
 	Headers map[string]string `json:"headers,omitempty"`
 }
 

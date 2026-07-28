@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { HookSourceIcon } from "../hooks/HookSourceIcon";
+import { downloadPluginPackage } from "./downloadPluginPackage";
 
 const COWORK_DOCS_URL =
   "https://support.claude.com/en/articles/13837433-manage-claude-cowork-plugins-for-your-organization";
@@ -53,6 +54,7 @@ type Provider =
   | "claude-cowork"
   | "cursor"
   | "codex"
+  | "opencode"
   | "copilot"
   | "gemini"
   | "glean"
@@ -78,6 +80,7 @@ const providers: {
   },
   { id: "cursor", label: "Cursor", source: "cursor", available: true },
   { id: "codex", label: "Codex", source: "codex", available: true },
+  { id: "opencode", label: "opencode", source: "opencode", available: true },
   { id: "copilot", label: "Copilot", source: "copilot", available: false },
   { id: "gemini", label: "Gemini", source: "gemini", available: false },
   { id: "glean", label: "Glean", source: "glean", available: false },
@@ -653,6 +656,110 @@ function CodexInstallContent({
   );
 }
 
+/**
+ * OpenCode install. OpenCode has no plugin marketplace: a plugin is a
+ * self-contained file set (a loader module under plugin/ plus a slug-named
+ * data directory) extracted into an OpenCode config dir. The ZIP download is
+ * the whole flow — global installs land in ~/.config/opencode/, per-repo
+ * installs in that repo's .opencode/.
+ */
+function OpenCodeInstallContent({
+  pluginId,
+  pluginSlug,
+}: {
+  pluginId: string | undefined;
+  pluginSlug: string | undefined;
+}) {
+  const { fetch: authFetch } = useFetcher();
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const zipName = `${pluginSlug ?? "plugin"}.zip`;
+
+  const handleDownloadZip = async () => {
+    if (!pluginId) return;
+    setIsDownloading(true);
+    try {
+      await downloadPluginPackage(authFetch, pluginId, "opencode");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  return (
+    <div className="min-w-0 space-y-6">
+      <p className="text-muted-foreground text-sm">
+        OpenCode has no plugin marketplace. The plugin ships as a self-contained
+        package that OpenCode picks up from its config directory — extracting
+        the ZIP is the whole install.
+      </p>
+
+      <InstallSteps
+        steps={[
+          {
+            title: "Download the plugin package",
+            description: (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isDownloading || !pluginId}
+                onClick={() => void handleDownloadZip()}
+                className="inline-flex items-center gap-2"
+              >
+                <Download className="size-4" />
+                {isDownloading ? "Downloading…" : "Download ZIP"}
+              </Button>
+            ),
+          },
+          {
+            title: "Extract it into an OpenCode config directory",
+            description: (
+              <>
+                Use{" "}
+                <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                  ~/.config/opencode
+                </code>{" "}
+                to enable the plugin everywhere, or a repository's{" "}
+                <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                  .opencode
+                </code>{" "}
+                directory to enable it for that project only:
+              </>
+            ),
+            code: `unzip ~/Downloads/${zipName} -d ~/.config/opencode`,
+            language: "bash",
+          },
+          {
+            title: "Restart OpenCode",
+            description: (
+              <>
+                The next start registers the plugin's MCP servers and skills.
+                Verify with{" "}
+                <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                  opencode mcp list
+                </code>
+                . To uninstall, delete the extracted files.
+              </>
+            ),
+          },
+        ]}
+      />
+
+      <RelatedLinks
+        links={[
+          {
+            href: "https://opencode.ai/docs/plugins/",
+            label: "Plugin Docs",
+          },
+          {
+            href: "https://opencode.ai/docs/mcp-servers/",
+            label: "MCP Docs",
+          },
+        ]}
+      />
+    </div>
+  );
+}
+
 type DialogProps = ContentProps & {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -699,6 +806,11 @@ export function InstallInstructionsDialog({
   const effectivePluginSlug = needsPluginPicker
     ? (matchedPlugin?.slug ?? selectedPluginSlug ?? undefined)
     : (singleCandidate?.slug ?? content.pluginSlug);
+  // The ZIP download endpoint addresses plugins by id; candidate lists carry
+  // only slugs, so resolve through the org's plugin list.
+  const effectivePluginId = (pluginsData?.plugins ?? []).find(
+    (p) => p.slug === effectivePluginSlug,
+  )?.id;
 
   const totalSteps = needsPluginPicker ? 3 : 2;
   const stepIndex = needsPluginPicker
@@ -911,6 +1023,12 @@ export function InstallInstructionsDialog({
                   repoOwner={content.repoOwner}
                   repoName={content.repoName}
                   marketplaceName={marketplaceName}
+                  pluginSlug={effectivePluginSlug}
+                />
+              )}
+              {selected === "opencode" && (
+                <OpenCodeInstallContent
+                  pluginId={effectivePluginId}
                   pluginSlug={effectivePluginSlug}
                 />
               )}

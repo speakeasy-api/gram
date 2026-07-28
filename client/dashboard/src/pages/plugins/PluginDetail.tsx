@@ -62,11 +62,14 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useProject } from "@/contexts/Auth";
-import { useSdkClient } from "@/contexts/Sdk";
+import { useFetcher } from "@/contexts/Fetcher";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { toast } from "sonner";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
-import { downloadPluginPackage } from "./downloadPluginPackage";
+import {
+  downloadPluginPackage,
+  type PluginDownloadPlatform,
+} from "./downloadPluginPackage";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
 import { PluginInstallButton } from "./PluginInstallButton";
 import { PluginAssignmentsSheet } from "./PluginAssignmentsSheet";
@@ -117,7 +120,7 @@ export default function PluginDetail(): JSX.Element | null {
     refetchInterval: 5_000,
   });
 
-  const client = useSdkClient();
+  const { fetch: authFetch } = useFetcher();
 
   const { data: toolsetsData, isLoading: isLoadingToolsets } =
     useListToolsets();
@@ -339,10 +342,10 @@ export default function PluginDetail(): JSX.Element | null {
     });
   };
 
-  const handleDownload = async (platform: "claude" | "cursor" | "codex") => {
+  const handleDownload = async (platform: PluginDownloadPlatform) => {
     setIsDownloadMenuOpen(false);
     try {
-      await downloadPluginPackage(client, pluginId!, platform);
+      await downloadPluginPackage(authFetch, pluginId!, platform);
     } catch (_err) {
       toast.error("Failed to download plugin package");
     }
@@ -605,6 +608,13 @@ export default function PluginDetail(): JSX.Element | null {
                     }}
                   >
                     Download as zip — Codex
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      void handleDownload("opencode");
+                    }}
+                  >
+                    Download as zip — opencode
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

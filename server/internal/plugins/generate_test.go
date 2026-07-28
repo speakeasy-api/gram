@@ -98,11 +98,66 @@ func TestGeneratePluginPackagesProducesExpectedFiles(t *testing.T) {
 		"cursor-plugins/engineering-tools-cursor/mcp.json",
 		"engineering-tools-codex/.codex-plugin/plugin.json",
 		"engineering-tools-codex/.mcp.json",
+		"opencode-plugins/engineering-tools/plugin/engineering-tools.ts",
+		"opencode-plugins/engineering-tools/engineering-tools/mcp.json",
 	}
 	for _, p := range expectedPaths {
 		_, ok := files[p]
 		require.True(t, ok, "missing file: %s", p)
 	}
+}
+
+// TestGenerateOpenCodePluginPackage pins the OpenCode package contract: the
+// loader module lands in the shared plugin/ dir under the plugin's slug, the
+// sidecar carries OpenCode-shaped remote entries per auth category, skills
+// ride under the slug dir the loader injects via skills.paths, and the
+// loader resolves its data dir from the baked slug.
+func TestGenerateOpenCodePluginPackage(t *testing.T) {
+	t.Parallel()
+	plugin := PluginInfo{
+		Name:        "Engineering Tools",
+		Slug:        "engineering-tools",
+		Description: "MCP servers for the engineering team",
+		Servers: []PluginServerInfo{
+			{DisplayName: "private-tools", MCPURL: "https://app.getgram.ai/mcp/acme-abc12"},
+			{DisplayName: "oauth-tools", MCPURL: "https://app.getgram.ai/mcp/acme-oauth", IsOAuth: true},
+			{
+				DisplayName: "public-tools",
+				MCPURL:      "https://app.getgram.ai/mcp/acme-pub",
+				IsPublic:    true,
+				EnvConfigs:  []ServerEnvConfig{{DisplayName: "X-Api-Key", VariableName: "ACME_API_KEY"}},
+			},
+		},
+		Skills: []PluginSkillInfo{{Name: "deploy-runbook", Content: "---\nname: deploy-runbook\n---\nbody\n"}},
+	}
+
+	files, err := GenerateSinglePluginPackage(plugin, GenerateConfig{
+		OrgName:   "Acme",
+		ServerURL: "https://app.getgram.ai",
+		APIKey:    "gram_test_key",
+	}, "opencode")
+	require.NoError(t, err)
+
+	loader := string(files["plugin/engineering-tools.ts"])
+	require.Contains(t, loader, `"..", "engineering-tools"`)
+	require.NotContains(t, loader, "__SLUG__")
+
+	var mcpConfig opencodeMCPConfig
+	require.NoError(t, json.Unmarshal(files["engineering-tools/mcp.json"], &mcpConfig))
+
+	private := mcpConfig.MCP["private-tools"]
+	require.Equal(t, "remote", private.Type)
+	require.Equal(t, "https://app.getgram.ai/mcp/acme-abc12", private.URL)
+	require.True(t, private.Enabled)
+	require.Equal(t, map[string]string{"Authorization": "Bearer gram_test_key"}, private.Headers)
+
+	oauth := mcpConfig.MCP["oauth-tools"]
+	require.Empty(t, oauth.Headers, "OAuth servers must carry no headers so OpenCode's own OAuth flow engages")
+
+	public := mcpConfig.MCP["public-tools"]
+	require.Equal(t, map[string]string{"X-Api-Key": "${env:ACME_API_KEY}"}, public.Headers)
+
+	require.Equal(t, "---\nname: deploy-runbook\n---\nbody\n", string(files["engineering-tools/skills/deploy-runbook/SKILL.md"]))
 }
 
 func TestGenerateClaudePluginEmitsHumanDisplayName(t *testing.T) {
@@ -1316,6 +1371,7 @@ func TestCarryHooksSubtreeIsLayoutIndependent(t *testing.T) {
 		prefixes[0] + ".claude-plugin/plugin.json":   []byte("{}"),
 		prefixes[1] + "hooks/hook.sh":                []byte("v14 cursor"),
 		prefixes[2] + "hooks/hook.sh":                []byte("v14 codex"),
+		prefixes[3] + "plugin/agenthooks.ts":         []byte("v14 opencode"),
 		"some-mcp-plugin/.claude-plugin/plugin.json": []byte("{}"),
 	}
 
@@ -1323,7 +1379,7 @@ func TestCarryHooksSubtreeIsLayoutIndependent(t *testing.T) {
 	carriedOrg, carried := carryHooksSubtree(dst, published, []byte(`{"org_name":"Acme"}`), "Renamed Since Publish")
 	require.True(t, carried)
 	require.Equal(t, "Acme", carriedOrg)
-	require.Len(t, dst, 4)
+	require.Len(t, dst, 5)
 	require.Equal(t, []byte("v14 claude"), dst[prefixes[0]+"hooks/hook.sh"])
 	require.NotContains(t, dst, "some-mcp-plugin/.claude-plugin/plugin.json")
 

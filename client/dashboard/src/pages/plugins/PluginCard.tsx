@@ -4,7 +4,7 @@ import type { Action } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
-import { useSdkClient } from "@/contexts/Sdk";
+import { useFetcher } from "@/contexts/Fetcher";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import {
@@ -22,7 +22,10 @@ import { Fragment, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
-import { downloadPluginPackage } from "./downloadPluginPackage";
+import {
+  downloadPluginPackage,
+  type PluginDownloadPlatform,
+} from "./downloadPluginPackage";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
 import { PluginInstallButton } from "./PluginInstallButton";
 
@@ -35,7 +38,7 @@ export function PluginCard({
 }): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
-  const client = useSdkClient();
+  const { fetch: authFetch } = useFetcher();
   const detailHref = routes.plugins.detail.href(plugin.id);
   const serverCount = plugin.serverCount ?? 0;
   const skillCount = plugin.skillCount ?? 0;
@@ -55,10 +58,10 @@ export function PluginCard({
         }
       : undefined;
 
-  const handleDownload = async (platform: "claude" | "cursor" | "codex") => {
+  const handleDownload = async (platform: PluginDownloadPlatform) => {
     setIsDownloadMenuOpen(false);
     try {
-      await downloadPluginPackage(client, plugin.id, platform);
+      await downloadPluginPackage(authFetch, plugin.id, platform);
     } catch (_err) {
       toast.error("Failed to download plugin package");
     }
@@ -96,6 +99,12 @@ export function PluginCard({
       label: "Download as zip — Codex",
       onClick: () => {
         void handleDownload("codex");
+      },
+    },
+    {
+      label: "Download as zip — opencode",
+      onClick: () => {
+        void handleDownload("opencode");
       },
     },
   ];
