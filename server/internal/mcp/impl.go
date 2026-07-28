@@ -1001,6 +1001,11 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 // strictPlatform=true to assert that the original challenge was minted
 // on the platform domain — the value is an explicit assertion rather
 // than a route inference.
+//
+// Disabled toolsets (mcp_enabled false) surface as errToolsetNotFound so
+// every legacy-routed surface (serving, well-known metadata, OAuth
+// challenges) treats them as nonexistent — mirroring how the
+// mcp_endpoints → mcp_servers path handles visibility 'disabled'.
 func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainID uuid.NullUUID, strictPlatform bool) (*toolsets_repo.Toolset, error) {
 	var toolset toolsets_repo.Toolset
 	var err error
@@ -1020,6 +1025,9 @@ func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainI
 		return nil, errToolsetNotFound
 	case err != nil:
 		return nil, fmt.Errorf("lookup toolset: %w", err)
+	}
+	if !toolset.McpEnabled {
+		return nil, errToolsetNotFound
 	}
 	return &toolset, nil
 }
