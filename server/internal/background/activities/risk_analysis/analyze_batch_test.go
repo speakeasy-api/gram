@@ -147,9 +147,31 @@ func newCustomRulesPub() *gcp.MockPublisher[*riskv1.CustomRulesAnalysis] {
 	return pub
 }
 
+func newFindingsPub() *gcp.MockPublisher[*riskv1.Finding] {
+	pub := gcp.NewMockPublisher[*riskv1.Finding]()
+	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
+	return pub
+}
+
+// capturingFindingsPub records every Finding the batch path mirrors onto the
+// shared findings topic, so tests can assert exactly which sources publish.
+func capturingFindingsPub(t *testing.T) (*gcp.MockPublisher[*riskv1.Finding], *[]*riskv1.Finding) {
+	t.Helper()
+	pub := gcp.NewMockPublisher[*riskv1.Finding]()
+	var published []*riskv1.Finding
+	pub.On("Publish", mock.Anything, mock.Anything).
+		Return(gcp.NewSuccessPublishResult()).
+		Run(func(args mock.Arguments) {
+			msg, ok := args.Get(1).(*riskv1.Finding)
+			require.True(t, ok)
+			published = append(published, msg)
+		})
+	return pub, &published
+}
+
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newPromptInjectionPub(), newPromptPolicyPub(), newCustomRulesPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil)
+	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newPromptInjectionPub(), newPromptPolicyPub(), newCustomRulesPub(), newFindingsPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil)
 	require.NoError(t, err)
 	require.NotNil(t, ab)
 
@@ -209,6 +231,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
 		newCustomRulesPub(),
+		newFindingsPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
@@ -257,6 +280,70 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 	assert.True(t, sawDeadLetter, "expected a presidio dead-letter row with dead_letter_reason set")
 }
 
+func TestAnalyzeBatch_ContentSourcesNotRepublishedToFindingsTopic(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	// Same synthetic AWS-style pair the presidio-degradation test seeds,
+	// assembled at runtime so no contiguous fake credential sits in source.
+	secret := "AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey " + "wJalrXUtnFEMIbKp7MDoRZ" + "fiCYqTvHgNsQ8xLcWd"
+	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+		ChatID:    td.chatID,
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Role:      "user",
+		Content:   secret,
+	})
+	require.NoError(t, err)
+
+	findingsPub, published := capturingFindingsPub(t)
+	ab, err := risk_analysis.NewAnalyzeBatch(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		conn,
+		&risk_analysis.StubPIIScanner{},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		newPresidioPub(),
+		newGitleaksPub(),
+		newPromptInjectionPub(),
+		newPromptPolicyPub(),
+		newCustomRulesPub(),
+		findingsPub,
+		mustCustomRuleScanner(t, conn),
+		mustCELEngine(t),
+		nil,
+	)
+	require.NoError(t, err)
+
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
+
+	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		RiskPolicyID:   td.policyID,
+		PolicyVersion:  td.policyVersion,
+		MessageIDs:     []uuid.UUID{msgID},
+		Sources:        []string{"gitleaks"},
+	})
+	require.NoError(t, err)
+
+	var result risk_analysis.AnalyzeBatchResult
+	require.NoError(t, val.Get(&result))
+	require.Positive(t, result.Findings, "gitleaks should flag the seeded secret")
+
+	// Content sources already publish from their stream handlers with their
+	// own ids; the batch path re-publishing them would double-write ClickHouse
+	// rows that uniqExact(id) cannot dedupe.
+	require.Empty(t, *published, "content-source findings must not be mirrored onto the findings topic by the batch path")
+}
+
 func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *testing.T) {
 	t.Parallel()
 
@@ -281,6 +368,7 @@ func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *te
 		promptInjectionPub,
 		newPromptPolicyPub(),
 		newCustomRulesPub(),
+		newFindingsPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
@@ -349,6 +437,7 @@ func TestAnalyzeBatch_PromptPolicyPublishesAsyncRequestsForEveryEligibleMessage(
 		newPromptInjectionPub(),
 		promptPolicyPub,
 		newCustomRulesPub(),
+		newFindingsPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
@@ -424,6 +513,7 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
 		newCustomRulesPub(),
+		newFindingsPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
@@ -533,6 +623,7 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
 		newCustomRulesPub(),
+		newFindingsPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
@@ -637,6 +728,7 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
 		newCustomRulesPub(),
+		newFindingsPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
@@ -724,6 +816,26 @@ func TestAnalyzeBatch_CLIDestructive_BashRmRf(t *testing.T) {
 	assert.Equal(t, "Bash", rows[0].Match.String)
 }
 
+func TestAnalyzeBatch_CLIDestructivePublishesFindingsToTopic(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	msgID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{"command": "rm -rf *"})
+
+	// cli_destructive runs only in the batch path (no stream handler), so the
+	// batch must mirror its findings onto the findings topic itself.
+	pub, published := capturingFindingsPub(t)
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{risk_analysis.SourceCLIDestructive}, pub)
+	require.Equal(t, 1, result.Findings)
+
+	require.Len(t, *published, 1)
+	finding := (*published)[0]
+	assert.Equal(t, risk_analysis.SourceCLIDestructive, finding.GetSource())
+	assert.Equal(t, "destructive.shell.rm_rf", finding.GetRuleId())
+	assert.Equal(t, msgID.String(), finding.GetChatMessageId())
+}
+
 // TestAnalyzeBatch_Gitleaks_SecretInToolCallArgsOnly plants a secret solely in
 // tool-call arguments (content empty) and asserts the batch gitleaks scan
 // composes the argument surface and reports it - the POC-314 scenario where
@@ -795,6 +907,7 @@ func TestAnalyzeBatch_Presidio_PIIInToolCallArgsOnly(t *testing.T) {
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
 		newCustomRulesPub(),
+		newFindingsPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
@@ -1256,9 +1369,13 @@ func (stubProvenanceLookup) LookupMCPProvenanceByToolCallID(_ context.Context, _
 	return map[string]telemetryrepo.MCPProvenance{}, nil
 }
 
-func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageIDs []uuid.UUID, sources []string) risk_analysis.AnalyzeBatchResult {
+func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageIDs []uuid.UUID, sources []string, findingsPub ...gcp.Publisher[*riskv1.Finding]) risk_analysis.AnalyzeBatchResult {
 	t.Helper()
 
+	var fp gcp.Publisher[*riskv1.Finding] = newFindingsPub()
+	if len(findingsPub) > 0 {
+		fp = findingsPub[0]
+	}
 	accessStore := accesscontrol.NewRedisStore(cache.NoopCache, accesscontrol.AlphaTTL)
 	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(t), conn, cache.NoopCache, accessStore, nil)
 	ab, err := risk_analysis.NewAnalyzeBatch(
@@ -1277,6 +1394,7 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
 		newCustomRulesPub(),
+		fp,
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,

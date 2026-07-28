@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/testsuite"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -126,8 +128,12 @@ func seedChatMessage(t *testing.T, conn *pgxpool.Pool, td testData, chatID uuid.
 	return msgID
 }
 
-func newAccountIdentityAnalyzeBatch(t *testing.T, conn *pgxpool.Pool) *risk_analysis.AnalyzeBatch {
+func newAccountIdentityAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, findingsPub ...gcp.Publisher[*riskv1.Finding]) *risk_analysis.AnalyzeBatch {
 	t.Helper()
+	var fp gcp.Publisher[*riskv1.Finding] = newFindingsPub()
+	if len(findingsPub) > 0 {
+		fp = findingsPub[0]
+	}
 	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
@@ -144,6 +150,7 @@ func newAccountIdentityAnalyzeBatch(t *testing.T, conn *pgxpool.Pool) *risk_anal
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
 		newCustomRulesPub(),
+		fp,
 		mustCustomRuleScanner(t, nil),
 		mustCELEngine(t),
 		nil,
@@ -204,6 +211,43 @@ func TestAnalyzeBatch_AccountIdentityPersonalAccountOnePerChat(t *testing.T) {
 	assert.Equal(t, "identity.personal_account", findings[0].RuleID.String)
 	assert.Equal(t, "jane@gmail.com", findings[0].Match.String)
 	assert.Contains(t, []uuid.UUID{msg1, msg2}, findings[0].ChatMessageID)
+}
+
+func TestAnalyzeBatch_AccountIdentityPublishesFindingsToTopic(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	policyID, policyVersion := seedAccountIdentityPolicy(t, conn, td, nil, nil)
+
+	chatID := seedAccountChat(t, conn, td, "personal", "jane@gmail.com")
+	msg1 := seedChatMessage(t, conn, td, chatID)
+
+	pub, published := capturingFindingsPub(t)
+	ab := newAccountIdentityAnalyzeBatch(t, conn, pub)
+	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg1})
+
+	// The batch path has no stream publisher for account_identity, so it must
+	// mirror the finding onto the findings topic itself (the ClickHouse
+	// risk_findings writer consumes it).
+	require.Len(t, *published, 1)
+	finding := (*published)[0]
+	assert.Equal(t, "account_identity", finding.GetSource())
+	assert.Equal(t, "identity.personal_account", finding.GetRuleId())
+	assert.Equal(t, "jane@gmail.com", finding.GetMatch())
+	assert.Equal(t, td.orgID, finding.GetOrganizationId())
+	assert.Equal(t, td.projectID.String(), finding.GetProjectId())
+	assert.Equal(t, policyID.String(), finding.GetRiskPolicyId())
+	assert.Equal(t, policyVersion, finding.GetRiskPolicyVersion())
+	assert.Equal(t, msg1.String(), finding.GetChatMessageId())
+	firstID, err := uuid.Parse(finding.GetId())
+	require.NoError(t, err)
+
+	// Re-analyzing the same message replaces the Postgres row and republishes;
+	// the deterministic finding id must not change, so ClickHouse's
+	// uniqExact(id) reads dedupe the redundant append.
+	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg1})
+	require.Len(t, *published, 2)
+	assert.Equal(t, firstID.String(), (*published)[1].GetId())
 }
 
 func TestAnalyzeBatch_AccountIdentityDedupesAcrossBatches(t *testing.T) {
