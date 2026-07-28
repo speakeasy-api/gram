@@ -543,9 +543,13 @@ export function MCPStatusDropdown({
       : "private";
 
   const applyStatus = (status: ServerStatus) => {
+    // Disabling also clears mcpIsPublic: serving surfaces gate on both
+    // flags, so leaving a stale public flag behind would keep the server
+    // anonymously reachable on any surface that misses the enabled check.
+    // Re-enabling always sets mcpIsPublic explicitly.
     const updates =
       status === "disabled"
-        ? { mcpEnabled: false }
+        ? { mcpEnabled: false, mcpIsPublic: false }
         : { mcpEnabled: true, mcpIsPublic: status === "public" };
 
     updateToolsetMutation.mutate(
