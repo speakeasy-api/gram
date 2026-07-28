@@ -1217,6 +1217,231 @@ func DecodeUploadSkillContentResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildSkillFeedbackRequest instantiates a HTTP request object with method and
+// path set to call the "hooks" service "skillFeedback" endpoint
+func (c *Client) BuildSkillFeedbackRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SkillFeedbackHooksPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("hooks", "skillFeedback", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSkillFeedbackRequest returns an encoder for requests sent to the hooks
+// skillFeedback server.
+func EncodeSkillFeedbackRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*hooks.SkillFeedbackPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("hooks", "skillFeedback", "*hooks.SkillFeedbackPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewSkillFeedbackRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("hooks", "skillFeedback", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSkillFeedbackResponse returns a decoder for responses returned by the
+// hooks skillFeedback endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeSkillFeedbackResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSkillFeedbackResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body SkillFeedbackUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "skillFeedback", err)
+			}
+			err = ValidateSkillFeedbackUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "skillFeedback", err)
+			}
+			return nil, NewSkillFeedbackUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SkillFeedbackForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "skillFeedback", err)
+			}
+			err = ValidateSkillFeedbackForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "skillFeedback", err)
+			}
+			return nil, NewSkillFeedbackForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SkillFeedbackBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "skillFeedback", err)
+			}
+			err = ValidateSkillFeedbackBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "skillFeedback", err)
+			}
+			return nil, NewSkillFeedbackBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SkillFeedbackNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "skillFeedback", err)
+			}
+			err = ValidateSkillFeedbackNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "skillFeedback", err)
+			}
+			return nil, NewSkillFeedbackNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SkillFeedbackConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "skillFeedback", err)
+			}
+			err = ValidateSkillFeedbackConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "skillFeedback", err)
+			}
+			return nil, NewSkillFeedbackConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SkillFeedbackUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "skillFeedback", err)
+			}
+			err = ValidateSkillFeedbackUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "skillFeedback", err)
+			}
+			return nil, NewSkillFeedbackUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SkillFeedbackInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "skillFeedback", err)
+			}
+			err = ValidateSkillFeedbackInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "skillFeedback", err)
+			}
+			return nil, NewSkillFeedbackInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SkillFeedbackInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("hooks", "skillFeedback", err)
+				}
+				err = ValidateSkillFeedbackInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("hooks", "skillFeedback", err)
+				}
+				return nil, NewSkillFeedbackInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SkillFeedbackUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("hooks", "skillFeedback", err)
+				}
+				err = ValidateSkillFeedbackUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("hooks", "skillFeedback", err)
+				}
+				return nil, NewSkillFeedbackUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("hooks", "skillFeedback", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SkillFeedbackGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "skillFeedback", err)
+			}
+			err = ValidateSkillFeedbackGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "skillFeedback", err)
+			}
+			return nil, NewSkillFeedbackGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("hooks", "skillFeedback", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildLogsRequest instantiates a HTTP request object with method and path set
 // to call the "hooks" service "logs" endpoint
 func (c *Client) BuildLogsRequest(ctx context.Context, v any) (*http.Request, error) {

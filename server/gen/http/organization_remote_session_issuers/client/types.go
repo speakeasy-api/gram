@@ -136,6 +136,22 @@ type MigrateIssuerRequestBody struct {
 	TargetID string `form:"target_id" json:"target_id" xml:"target_id"`
 }
 
+// FetchIssuerMetadataRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "fetchIssuerMetadata" endpoint
+// HTTP request body.
+type FetchIssuerMetadataRequestBody struct {
+	// Issuer URL to fetch metadata for (e.g. https://login.linear.com).
+	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
+}
+
+// RefreshIssuerMetadataRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshIssuerMetadata" endpoint
+// HTTP request body.
+type RefreshIssuerMetadataRequestBody struct {
+	// The remote_session_issuer id.
+	ID string `form:"id" json:"id" xml:"id"`
+}
+
 // CreateIssuerResponseBody is the type of the
 // "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
 // response body.
@@ -397,6 +413,58 @@ type MigrateIssuerResponseBody struct {
 	ClientsMigrated *int `form:"clients_migrated,omitempty" json:"clients_migrated,omitempty" xml:"clients_migrated,omitempty"`
 	// TRUE when the source issuer was soft-deleted.
 	SourceDeleted *bool `form:"source_deleted,omitempty" json:"source_deleted,omitempty" xml:"source_deleted,omitempty"`
+}
+
+// FetchIssuerMetadataResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "fetchIssuerMetadata" endpoint
+// HTTP response body.
+type FetchIssuerMetadataResponseBody struct {
+	// Issuer URL; matches the iss claim.
+	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Upstream authorization endpoint.
+	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
+	// Upstream token endpoint.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
+	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
+	// Upstream JWKS URI; null when not advertised.
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// RFC 8414 service_documentation; developer documentation for the issuer. Null
+	// when not advertised or when the advertised value is not an absolute http(s)
+	// URL.
+	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
+	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not
+	// advertised or when the advertised value is not an absolute http(s) URL.
+	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
+	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised
+	// or when the advertised value is not an absolute http(s) URL.
+	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
+	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	// When true, may unlock OIDC-aware behaviour.
+	Oidc *bool `form:"oidc,omitempty" json:"oidc,omitempty" xml:"oidc,omitempty"`
+	// When true, the MCP client registers and transacts directly with this issuer.
+	Passthrough *bool `form:"passthrough,omitempty" json:"passthrough,omitempty" xml:"passthrough,omitempty"`
+	// Whether the issuer advertises support for a Client ID Metadata Document URL
+	// as client_id (OAuth CIMD draft), parsed from the discovery document.
+	ClientIDMetadataDocumentSupported *bool `form:"client_id_metadata_document_supported,omitempty" json:"client_id_metadata_document_supported,omitempty" xml:"client_id_metadata_document_supported,omitempty"`
+	// Warnings describing any RFC 8414 deviations encountered during discovery.
+	DiscoveryWarnings []string `form:"discovery_warnings,omitempty" json:"discovery_warnings,omitempty" xml:"discovery_warnings,omitempty"`
+}
+
+// RefreshIssuerMetadataResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshIssuerMetadata" endpoint
+// HTTP response body.
+type RefreshIssuerMetadataResponseBody struct {
+	// The remote_session_issuer after the refreshed metadata was persisted.
+	Issuer *RemoteSessionIssuerResponseBody `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Warnings describing any RFC 8414 deviations encountered while re-reading the
+	// issuer's metadata document. A refresh that returns warnings still persisted
+	// its result; deviations severe enough to distrust the document abort the
+	// refresh with an error instead.
+	DiscoveryWarnings []string `form:"discovery_warnings,omitempty" json:"discovery_warnings,omitempty" xml:"discovery_warnings,omitempty"`
 }
 
 // CreateIssuerUnauthorizedResponseBody is the type of the
@@ -2109,6 +2177,386 @@ type MigrateIssuerGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// FetchIssuerMetadataUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "fetchIssuerMetadata" endpoint
+// HTTP response body for the "unauthorized" error.
+type FetchIssuerMetadataUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// FetchIssuerMetadataForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "fetchIssuerMetadata" endpoint
+// HTTP response body for the "forbidden" error.
+type FetchIssuerMetadataForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// FetchIssuerMetadataBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "fetchIssuerMetadata" endpoint
+// HTTP response body for the "bad_request" error.
+type FetchIssuerMetadataBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// FetchIssuerMetadataNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "fetchIssuerMetadata" endpoint
+// HTTP response body for the "not_found" error.
+type FetchIssuerMetadataNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// FetchIssuerMetadataConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "fetchIssuerMetadata" endpoint
+// HTTP response body for the "conflict" error.
+type FetchIssuerMetadataConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// FetchIssuerMetadataUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "fetchIssuerMetadata" endpoint
+// HTTP response body for the "unsupported_media" error.
+type FetchIssuerMetadataUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// FetchIssuerMetadataInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "fetchIssuerMetadata" endpoint
+// HTTP response body for the "invalid" error.
+type FetchIssuerMetadataInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// FetchIssuerMetadataInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "fetchIssuerMetadata" endpoint
+// HTTP response body for the "invariant_violation" error.
+type FetchIssuerMetadataInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// FetchIssuerMetadataUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "fetchIssuerMetadata" endpoint
+// HTTP response body for the "unexpected" error.
+type FetchIssuerMetadataUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// FetchIssuerMetadataGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "fetchIssuerMetadata" endpoint
+// HTTP response body for the "gateway_error" error.
+type FetchIssuerMetadataGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshIssuerMetadataUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshIssuerMetadata" endpoint
+// HTTP response body for the "unauthorized" error.
+type RefreshIssuerMetadataUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshIssuerMetadataForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshIssuerMetadata" endpoint
+// HTTP response body for the "forbidden" error.
+type RefreshIssuerMetadataForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshIssuerMetadataBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshIssuerMetadata" endpoint
+// HTTP response body for the "bad_request" error.
+type RefreshIssuerMetadataBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshIssuerMetadataNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshIssuerMetadata" endpoint
+// HTTP response body for the "not_found" error.
+type RefreshIssuerMetadataNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshIssuerMetadataConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshIssuerMetadata" endpoint
+// HTTP response body for the "conflict" error.
+type RefreshIssuerMetadataConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshIssuerMetadataUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshIssuerMetadata" endpoint
+// HTTP response body for the "unsupported_media" error.
+type RefreshIssuerMetadataUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshIssuerMetadataInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshIssuerMetadata" endpoint
+// HTTP response body for the "invalid" error.
+type RefreshIssuerMetadataInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshIssuerMetadataInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshIssuerMetadata" endpoint
+// HTTP response body for the "invariant_violation" error.
+type RefreshIssuerMetadataInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshIssuerMetadataUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshIssuerMetadata" endpoint
+// HTTP response body for the "unexpected" error.
+type RefreshIssuerMetadataUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshIssuerMetadataGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshIssuerMetadata" endpoint
+// HTTP response body for the "gateway_error" error.
+type RefreshIssuerMetadataGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // OrganizationRemoteSessionIssuerResponseBody is used to define fields on
 // response body types.
 type OrganizationRemoteSessionIssuerResponseBody struct {
@@ -2287,6 +2735,26 @@ func NewMigrateIssuerRequestBody(p *organizationremotesessionissuers.MigrateIssu
 	body := &MigrateIssuerRequestBody{
 		SourceID: p.SourceID,
 		TargetID: p.TargetID,
+	}
+	return body
+}
+
+// NewFetchIssuerMetadataRequestBody builds the HTTP request body from the
+// payload of the "fetchIssuerMetadata" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewFetchIssuerMetadataRequestBody(p *organizationremotesessionissuers.FetchIssuerMetadataPayload) *FetchIssuerMetadataRequestBody {
+	body := &FetchIssuerMetadataRequestBody{
+		Issuer: p.Issuer,
+	}
+	return body
+}
+
+// NewRefreshIssuerMetadataRequestBody builds the HTTP request body from the
+// payload of the "refreshIssuerMetadata" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRefreshIssuerMetadataRequestBody(p *organizationremotesessionissuers.RefreshIssuerMetadataPayload) *RefreshIssuerMetadataRequestBody {
+	body := &RefreshIssuerMetadataRequestBody{
+		ID: p.ID,
 	}
 	return body
 }
@@ -3951,6 +4419,375 @@ func NewMigrateIssuerGatewayError(body *MigrateIssuerGatewayErrorResponseBody) *
 	return v
 }
 
+// NewFetchIssuerMetadataRemoteSessionIssuerDraftOK builds a
+// "organizationRemoteSessionIssuers" service "fetchIssuerMetadata" endpoint
+// result from a HTTP "OK" response.
+func NewFetchIssuerMetadataRemoteSessionIssuerDraftOK(body *FetchIssuerMetadataResponseBody) *types.RemoteSessionIssuerDraft {
+	v := &types.RemoteSessionIssuerDraft{
+		Issuer:                            *body.Issuer,
+		AuthorizationEndpoint:             body.AuthorizationEndpoint,
+		TokenEndpoint:                     body.TokenEndpoint,
+		RegistrationEndpoint:              body.RegistrationEndpoint,
+		JwksURI:                           body.JwksURI,
+		ServiceDocumentation:              body.ServiceDocumentation,
+		OpPolicyURI:                       body.OpPolicyURI,
+		OpTosURI:                          body.OpTosURI,
+		Oidc:                              *body.Oidc,
+		Passthrough:                       *body.Passthrough,
+		ClientIDMetadataDocumentSupported: *body.ClientIDMetadataDocumentSupported,
+	}
+	if body.ScopesSupported != nil {
+		v.ScopesSupported = make([]string, len(body.ScopesSupported))
+		for i, val := range body.ScopesSupported {
+			v.ScopesSupported[i] = val
+		}
+	}
+	if body.GrantTypesSupported != nil {
+		v.GrantTypesSupported = make([]string, len(body.GrantTypesSupported))
+		for i, val := range body.GrantTypesSupported {
+			v.GrantTypesSupported[i] = val
+		}
+	}
+	if body.ResponseTypesSupported != nil {
+		v.ResponseTypesSupported = make([]string, len(body.ResponseTypesSupported))
+		for i, val := range body.ResponseTypesSupported {
+			v.ResponseTypesSupported[i] = val
+		}
+	}
+	if body.TokenEndpointAuthMethodsSupported != nil {
+		v.TokenEndpointAuthMethodsSupported = make([]string, len(body.TokenEndpointAuthMethodsSupported))
+		for i, val := range body.TokenEndpointAuthMethodsSupported {
+			v.TokenEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	v.DiscoveryWarnings = make([]string, len(body.DiscoveryWarnings))
+	for i, val := range body.DiscoveryWarnings {
+		v.DiscoveryWarnings[i] = val
+	}
+
+	return v
+}
+
+// NewFetchIssuerMetadataUnauthorized builds a organizationRemoteSessionIssuers
+// service fetchIssuerMetadata endpoint unauthorized error.
+func NewFetchIssuerMetadataUnauthorized(body *FetchIssuerMetadataUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewFetchIssuerMetadataForbidden builds a organizationRemoteSessionIssuers
+// service fetchIssuerMetadata endpoint forbidden error.
+func NewFetchIssuerMetadataForbidden(body *FetchIssuerMetadataForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewFetchIssuerMetadataBadRequest builds a organizationRemoteSessionIssuers
+// service fetchIssuerMetadata endpoint bad_request error.
+func NewFetchIssuerMetadataBadRequest(body *FetchIssuerMetadataBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewFetchIssuerMetadataNotFound builds a organizationRemoteSessionIssuers
+// service fetchIssuerMetadata endpoint not_found error.
+func NewFetchIssuerMetadataNotFound(body *FetchIssuerMetadataNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewFetchIssuerMetadataConflict builds a organizationRemoteSessionIssuers
+// service fetchIssuerMetadata endpoint conflict error.
+func NewFetchIssuerMetadataConflict(body *FetchIssuerMetadataConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewFetchIssuerMetadataUnsupportedMedia builds a
+// organizationRemoteSessionIssuers service fetchIssuerMetadata endpoint
+// unsupported_media error.
+func NewFetchIssuerMetadataUnsupportedMedia(body *FetchIssuerMetadataUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewFetchIssuerMetadataInvalid builds a organizationRemoteSessionIssuers
+// service fetchIssuerMetadata endpoint invalid error.
+func NewFetchIssuerMetadataInvalid(body *FetchIssuerMetadataInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewFetchIssuerMetadataInvariantViolation builds a
+// organizationRemoteSessionIssuers service fetchIssuerMetadata endpoint
+// invariant_violation error.
+func NewFetchIssuerMetadataInvariantViolation(body *FetchIssuerMetadataInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewFetchIssuerMetadataUnexpected builds a organizationRemoteSessionIssuers
+// service fetchIssuerMetadata endpoint unexpected error.
+func NewFetchIssuerMetadataUnexpected(body *FetchIssuerMetadataUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewFetchIssuerMetadataGatewayError builds a organizationRemoteSessionIssuers
+// service fetchIssuerMetadata endpoint gateway_error error.
+func NewFetchIssuerMetadataGatewayError(body *FetchIssuerMetadataGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshIssuerMetadataRemoteSessionIssuerRefreshOK builds a
+// "organizationRemoteSessionIssuers" service "refreshIssuerMetadata" endpoint
+// result from a HTTP "OK" response.
+func NewRefreshIssuerMetadataRemoteSessionIssuerRefreshOK(body *RefreshIssuerMetadataResponseBody) *types.RemoteSessionIssuerRefresh {
+	v := &types.RemoteSessionIssuerRefresh{}
+	v.Issuer = unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(body.Issuer)
+	v.DiscoveryWarnings = make([]string, len(body.DiscoveryWarnings))
+	for i, val := range body.DiscoveryWarnings {
+		v.DiscoveryWarnings[i] = val
+	}
+
+	return v
+}
+
+// NewRefreshIssuerMetadataUnauthorized builds a
+// organizationRemoteSessionIssuers service refreshIssuerMetadata endpoint
+// unauthorized error.
+func NewRefreshIssuerMetadataUnauthorized(body *RefreshIssuerMetadataUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshIssuerMetadataForbidden builds a organizationRemoteSessionIssuers
+// service refreshIssuerMetadata endpoint forbidden error.
+func NewRefreshIssuerMetadataForbidden(body *RefreshIssuerMetadataForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshIssuerMetadataBadRequest builds a organizationRemoteSessionIssuers
+// service refreshIssuerMetadata endpoint bad_request error.
+func NewRefreshIssuerMetadataBadRequest(body *RefreshIssuerMetadataBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshIssuerMetadataNotFound builds a organizationRemoteSessionIssuers
+// service refreshIssuerMetadata endpoint not_found error.
+func NewRefreshIssuerMetadataNotFound(body *RefreshIssuerMetadataNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshIssuerMetadataConflict builds a organizationRemoteSessionIssuers
+// service refreshIssuerMetadata endpoint conflict error.
+func NewRefreshIssuerMetadataConflict(body *RefreshIssuerMetadataConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshIssuerMetadataUnsupportedMedia builds a
+// organizationRemoteSessionIssuers service refreshIssuerMetadata endpoint
+// unsupported_media error.
+func NewRefreshIssuerMetadataUnsupportedMedia(body *RefreshIssuerMetadataUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshIssuerMetadataInvalid builds a organizationRemoteSessionIssuers
+// service refreshIssuerMetadata endpoint invalid error.
+func NewRefreshIssuerMetadataInvalid(body *RefreshIssuerMetadataInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshIssuerMetadataInvariantViolation builds a
+// organizationRemoteSessionIssuers service refreshIssuerMetadata endpoint
+// invariant_violation error.
+func NewRefreshIssuerMetadataInvariantViolation(body *RefreshIssuerMetadataInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshIssuerMetadataUnexpected builds a organizationRemoteSessionIssuers
+// service refreshIssuerMetadata endpoint unexpected error.
+func NewRefreshIssuerMetadataUnexpected(body *RefreshIssuerMetadataUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshIssuerMetadataGatewayError builds a
+// organizationRemoteSessionIssuers service refreshIssuerMetadata endpoint
+// gateway_error error.
+func NewRefreshIssuerMetadataGatewayError(body *RefreshIssuerMetadataGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateCreateIssuerResponseBody runs the validations defined on
 // CreateIssuerResponseBody
 func ValidateCreateIssuerResponseBody(body *CreateIssuerResponseBody) (err error) {
@@ -4206,6 +5043,44 @@ func ValidateMigrateIssuerResponseBody(body *MigrateIssuerResponseBody) (err err
 	}
 	if body.SourceDeleted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("source_deleted", "body"))
+	}
+	if body.Issuer != nil {
+		if err2 := ValidateRemoteSessionIssuerResponseBody(body.Issuer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateFetchIssuerMetadataResponseBody runs the validations defined on
+// FetchIssuerMetadataResponseBody
+func ValidateFetchIssuerMetadataResponseBody(body *FetchIssuerMetadataResponseBody) (err error) {
+	if body.Issuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
+	}
+	if body.Oidc == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("oidc", "body"))
+	}
+	if body.Passthrough == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("passthrough", "body"))
+	}
+	if body.ClientIDMetadataDocumentSupported == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_document_supported", "body"))
+	}
+	if body.DiscoveryWarnings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("discovery_warnings", "body"))
+	}
+	return
+}
+
+// ValidateRefreshIssuerMetadataResponseBody runs the validations defined on
+// RefreshIssuerMetadataResponseBody
+func ValidateRefreshIssuerMetadataResponseBody(body *RefreshIssuerMetadataResponseBody) (err error) {
+	if body.Issuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
+	}
+	if body.DiscoveryWarnings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("discovery_warnings", "body"))
 	}
 	if body.Issuer != nil {
 		if err2 := ValidateRemoteSessionIssuerResponseBody(body.Issuer); err2 != nil {
@@ -6358,6 +7233,487 @@ func ValidateMigrateIssuerUnexpectedResponseBody(body *MigrateIssuerUnexpectedRe
 // ValidateMigrateIssuerGatewayErrorResponseBody runs the validations defined
 // on migrateIssuer_gateway_error_response_body
 func ValidateMigrateIssuerGatewayErrorResponseBody(body *MigrateIssuerGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchIssuerMetadataUnauthorizedResponseBody runs the validations
+// defined on fetchIssuerMetadata_unauthorized_response_body
+func ValidateFetchIssuerMetadataUnauthorizedResponseBody(body *FetchIssuerMetadataUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchIssuerMetadataForbiddenResponseBody runs the validations
+// defined on fetchIssuerMetadata_forbidden_response_body
+func ValidateFetchIssuerMetadataForbiddenResponseBody(body *FetchIssuerMetadataForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchIssuerMetadataBadRequestResponseBody runs the validations
+// defined on fetchIssuerMetadata_bad_request_response_body
+func ValidateFetchIssuerMetadataBadRequestResponseBody(body *FetchIssuerMetadataBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchIssuerMetadataNotFoundResponseBody runs the validations defined
+// on fetchIssuerMetadata_not_found_response_body
+func ValidateFetchIssuerMetadataNotFoundResponseBody(body *FetchIssuerMetadataNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchIssuerMetadataConflictResponseBody runs the validations defined
+// on fetchIssuerMetadata_conflict_response_body
+func ValidateFetchIssuerMetadataConflictResponseBody(body *FetchIssuerMetadataConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchIssuerMetadataUnsupportedMediaResponseBody runs the validations
+// defined on fetchIssuerMetadata_unsupported_media_response_body
+func ValidateFetchIssuerMetadataUnsupportedMediaResponseBody(body *FetchIssuerMetadataUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchIssuerMetadataInvalidResponseBody runs the validations defined
+// on fetchIssuerMetadata_invalid_response_body
+func ValidateFetchIssuerMetadataInvalidResponseBody(body *FetchIssuerMetadataInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchIssuerMetadataInvariantViolationResponseBody runs the
+// validations defined on fetchIssuerMetadata_invariant_violation_response_body
+func ValidateFetchIssuerMetadataInvariantViolationResponseBody(body *FetchIssuerMetadataInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchIssuerMetadataUnexpectedResponseBody runs the validations
+// defined on fetchIssuerMetadata_unexpected_response_body
+func ValidateFetchIssuerMetadataUnexpectedResponseBody(body *FetchIssuerMetadataUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchIssuerMetadataGatewayErrorResponseBody runs the validations
+// defined on fetchIssuerMetadata_gateway_error_response_body
+func ValidateFetchIssuerMetadataGatewayErrorResponseBody(body *FetchIssuerMetadataGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshIssuerMetadataUnauthorizedResponseBody runs the validations
+// defined on refreshIssuerMetadata_unauthorized_response_body
+func ValidateRefreshIssuerMetadataUnauthorizedResponseBody(body *RefreshIssuerMetadataUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshIssuerMetadataForbiddenResponseBody runs the validations
+// defined on refreshIssuerMetadata_forbidden_response_body
+func ValidateRefreshIssuerMetadataForbiddenResponseBody(body *RefreshIssuerMetadataForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshIssuerMetadataBadRequestResponseBody runs the validations
+// defined on refreshIssuerMetadata_bad_request_response_body
+func ValidateRefreshIssuerMetadataBadRequestResponseBody(body *RefreshIssuerMetadataBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshIssuerMetadataNotFoundResponseBody runs the validations
+// defined on refreshIssuerMetadata_not_found_response_body
+func ValidateRefreshIssuerMetadataNotFoundResponseBody(body *RefreshIssuerMetadataNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshIssuerMetadataConflictResponseBody runs the validations
+// defined on refreshIssuerMetadata_conflict_response_body
+func ValidateRefreshIssuerMetadataConflictResponseBody(body *RefreshIssuerMetadataConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshIssuerMetadataUnsupportedMediaResponseBody runs the
+// validations defined on refreshIssuerMetadata_unsupported_media_response_body
+func ValidateRefreshIssuerMetadataUnsupportedMediaResponseBody(body *RefreshIssuerMetadataUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshIssuerMetadataInvalidResponseBody runs the validations
+// defined on refreshIssuerMetadata_invalid_response_body
+func ValidateRefreshIssuerMetadataInvalidResponseBody(body *RefreshIssuerMetadataInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshIssuerMetadataInvariantViolationResponseBody runs the
+// validations defined on
+// refreshIssuerMetadata_invariant_violation_response_body
+func ValidateRefreshIssuerMetadataInvariantViolationResponseBody(body *RefreshIssuerMetadataInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshIssuerMetadataUnexpectedResponseBody runs the validations
+// defined on refreshIssuerMetadata_unexpected_response_body
+func ValidateRefreshIssuerMetadataUnexpectedResponseBody(body *RefreshIssuerMetadataUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshIssuerMetadataGatewayErrorResponseBody runs the validations
+// defined on refreshIssuerMetadata_gateway_error_response_body
+func ValidateRefreshIssuerMetadataGatewayErrorResponseBody(body *RefreshIssuerMetadataGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

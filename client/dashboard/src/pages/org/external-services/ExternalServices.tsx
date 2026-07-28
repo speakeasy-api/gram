@@ -114,9 +114,9 @@ function ExternalServicesOverview(): JSX.Element {
           </Button>
         </Page.Section.CTA>
         <Page.Section.Description className="max-w-2xl">
-          Gram's platform-level credentials for authenticating into external
-          services. Shared across every organization and visible to platform
-          admins only.
+          Speakeasy's platform-level credentials for authenticating into
+          external services. Shared across every organization and visible to
+          platform admins only.
         </Page.Section.Description>
         <Page.Section.Body>
           <CredentialTable

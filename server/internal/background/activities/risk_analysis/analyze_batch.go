@@ -80,6 +80,7 @@ func NewAnalyzeBatch(
 	customRuleScanner *customruleanalyzer.Scanner,
 	celEng *celenv.Engine,
 	builtinPresets *presetlib.Library,
+	shadowMCPBypass shadowmcpscan.BypassChecker,
 ) (*AnalyzeBatch, error) {
 	logger = logger.With(attr.SlogComponent("risk-analysis-dispatcher"))
 
@@ -104,7 +105,14 @@ func NewAnalyzeBatch(
 		gitleaksScanner:        gitleaks.NewScanner(),
 		piiScanner:             piiScanner,
 		promptInjectionScanner: promptInjectionScanner,
-		shadowMCPScanner:       shadowmcpscan.NewScanner(logger, shadowMCPClient, shadowMCPClient, mcpProvenanceLookup, metrics),
+		shadowMCPScanner: shadowmcpscan.NewScanner(
+			logger,
+			shadowMCPClient,
+			shadowMCPClient,
+			mcpProvenanceLookup,
+			metrics,
+			shadowmcpscan.WithShadowMCPBypass(shadowMCPBypass),
+		),
 		judge:                  judge,
 		flags:                  flags,
 		presidioPub:            presidioPub,

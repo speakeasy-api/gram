@@ -222,7 +222,7 @@ INSERT INTO skill_observations (
 )
 SELECT
     s.project_id
-  , 'assistant:' || @session_id::text || ':' || sv.id::text
+  , 'assistant:' || sqlc.arg(assistant_id)::uuid || ':' || @session_id::text || ':' || sv.id::text
   , 'assistant'
   , @session_id::text
   , s.name
@@ -239,7 +239,29 @@ CROSS JOIN observed
 WHERE s.project_id = @project_id
   AND s.id = @skill_id
 ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL
-DO NOTHING;
+DO UPDATE SET seen_at = EXCLUDED.seen_at;
+
+-- name: GetAssistantSkillFeedbackObservation :one
+SELECT
+  so.skill_id::uuid AS skill_id,
+  so.skill_version_id::uuid AS skill_version_id,
+  so.skill_name,
+  t.chat_id
+FROM assistant_threads t
+JOIN skill_observations so
+  ON so.project_id = t.project_id
+  AND so.provider = 'assistant'
+  AND so.session_id = t.chat_id::text
+WHERE t.project_id = @project_id
+  AND t.assistant_id = @assistant_id
+  AND t.id = @thread_id
+  AND t.deleted IS FALSE
+  AND so.idempotency_key LIKE 'assistant:' || @assistant_id::text || ':' || t.chat_id::text || ':%'
+  AND so.skill_name = @skill_name
+  AND so.reconciled_at IS NOT NULL
+  AND so.reconcile_error_code IS NULL
+ORDER BY so.seen_at DESC, so.id DESC
+LIMIT 1;
 
 -- name: ClearAssistantToolsets :exec
 DELETE FROM assistant_toolsets

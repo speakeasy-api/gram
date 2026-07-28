@@ -87,7 +87,7 @@ func seedRiskOnChat(t *testing.T, ctx context.Context, ti *chatTestInstance, cha
 		ProjectID:      ti.projectID,
 		OrganizationID: ti.orgID,
 		RiskPolicyID:   policyID,
-		ChatMessageID:  msgID,
+		ChatMessageID:  uuid.NullUUID{UUID: msgID, Valid: true},
 		Found:          found,
 	})
 	require.NoError(t, err)
@@ -128,7 +128,7 @@ func seedRiskOnChatDisabledPolicy(t *testing.T, ctx context.Context, ti *chatTes
 		ProjectID:      ti.projectID,
 		OrganizationID: ti.orgID,
 		RiskPolicyID:   policyID,
-		ChatMessageID:  msgID,
+		ChatMessageID:  uuid.NullUUID{UUID: msgID, Valid: true},
 		Found:          true,
 	})
 	require.NoError(t, err)
