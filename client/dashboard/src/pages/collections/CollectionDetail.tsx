@@ -333,7 +333,10 @@ function CollectionDetailInner() {
   let bulkInstallButton = (
     <Button
       size="sm"
-      className="w-full sm:w-auto"
+      className={cn(
+        "w-full sm:w-auto",
+        installDisabledReason && "pointer-events-none",
+      )}
       disabled={installDisabledReason !== null}
       onClick={openBulkInstallDialog}
     >
@@ -346,7 +349,9 @@ function CollectionDetailInner() {
   if (installDisabledReason) {
     bulkInstallButton = (
       <SimpleTooltip tooltip={installDisabledReason}>
-        <span className="w-full sm:w-auto">{bulkInstallButton}</span>
+        <span className="inline-flex w-full sm:w-auto">
+          {bulkInstallButton}
+        </span>
       </SimpleTooltip>
     );
   }

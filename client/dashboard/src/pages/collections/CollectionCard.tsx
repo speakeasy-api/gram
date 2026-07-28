@@ -91,6 +91,7 @@ export function CollectionCard({
     <Button
       variant="secondary"
       size="sm"
+      className={installDisabledReason ? "pointer-events-none" : undefined}
       disabled={installDisabledReason !== null}
       onClick={handleInstallClick}
     >
@@ -103,7 +104,10 @@ export function CollectionCard({
   if (installDisabledReason) {
     installButton = (
       <SimpleTooltip tooltip={installDisabledReason}>
-        <span onClick={(event) => event.stopPropagation()}>
+        <span
+          className="inline-flex"
+          onClick={(event) => event.stopPropagation()}
+        >
           {installButton}
         </span>
       </SimpleTooltip>
