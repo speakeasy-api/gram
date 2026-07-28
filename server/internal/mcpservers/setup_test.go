@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -152,4 +153,22 @@ func seedTunneledMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	require.NoError(t, err)
 
 	return server.ID
+}
+
+func enableTunneledPublicConsent(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, tunneledServerID uuid.UUID) {
+	t.Helper()
+
+	server, err := tunneledmcprepo.New(conn).GetServerByID(ctx, tunneledmcprepo.GetServerByIDParams{
+		ID:        tunneledServerID,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+
+	_, err = tunneledmcprepo.New(conn).UpdateServer(ctx, tunneledmcprepo.UpdateServerParams{
+		Name:        server.Name,
+		AllowPublic: pgtype.Bool{Bool: true, Valid: true},
+		ID:          tunneledServerID,
+		ProjectID:   projectID,
+	})
+	require.NoError(t, err)
 }

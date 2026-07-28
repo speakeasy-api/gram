@@ -207,6 +207,12 @@ func (s *Service) ServeWellKnownProtectedResourceForServer(
 ) error {
 	ctx := r.Context()
 
+	// Public tunneled servers are anonymous: no OAuth metadata exists for
+	// them despite the populated issuer column.
+	if isTunneledPublic(mcpServer) {
+		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
+	}
+
 	if mcpServer.UserSessionIssuerID.Valid {
 		endpoint, err := s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, routeBase)
 		if err != nil {
@@ -248,6 +254,10 @@ func (s *Service) ServeWellKnownAuthorizationServerForServer(
 	routeBase string,
 ) error {
 	ctx := r.Context()
+
+	if isTunneledPublic(mcpServer) {
+		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
+	}
 
 	if mcpServer.UserSessionIssuerID.Valid {
 		endpoint, err := s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, routeBase)

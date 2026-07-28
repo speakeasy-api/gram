@@ -97,3 +97,6 @@ __pycache__/
 
 # Riptide artifacts (cloud-synced)
 .humanlayer/tasks/
+
+# Local kubernetes manifests (developer scratch)
+.local-k8s/
