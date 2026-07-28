@@ -451,11 +451,14 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				ToolInput:      toolInput,
 				PermissionType: permissionType,
 			})
-			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil {
+			// An acknowledged permission warn clears only this risk challenge; it
+			// must still fall through to the MCP/shadow-MCP guard below, never
+			// short-circuit the tool call (mirrors the Claude PreToolUse handler).
+			// So exclude acknowledged warns from the block condition rather than
+			// returning early on them.
+			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil &&
+				(scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, toolName)) {
 				if scanResult.Action == "warn" {
-					if s.warnAcknowledged(ctx, ev.Event, scanResult, toolName) {
-						return "", ""
-					}
 					if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, toolName); ok {
 						auditReason := fmt.Sprintf("Speakeasy challenged this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 						return auditReason, userReason
