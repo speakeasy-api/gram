@@ -1,11 +1,5 @@
 # hooks
 
-## 0.4.0
-
-### Minor Changes
-
-- 1fbbd7f: OpenCode observability now ships through the speakeasy-hooks relay instead of a standalone npm plugin. `speakeasy-hooks install --provider=opencode` renders the OpenCode plugin shim directly into a repo, driven by the same event-mapping, redaction, and policy-enforcement code that already serves Claude Code, Cursor, and Codex. The standalone `@gram-ai/opencode-observability` npm package (never published) is removed.
-
 ## 0.3.0
 
 ### Minor Changes
