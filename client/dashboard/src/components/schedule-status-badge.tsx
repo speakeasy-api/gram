@@ -7,16 +7,25 @@ import {
   Loader2,
   PauseCircle,
 } from "lucide-react";
-import type { ScheduleRuntime } from "./use-ai-integration-schedules";
 
-// Status badge for one stream, keyed off the real per-schedule scheduler
-// state from aiIntegrations.listSchedules.
+// The subset of a per-schedule scheduler state the badge needs. Both the AI
+// integrations and device integrations schedule endpoints produce this shape.
+export type ScheduleBadgeRuntime = {
+  enabled: boolean;
+  status: "pending" | "success" | "failed" | "auto_paused" | "disabled";
+  lastSyncedAt: Date | null;
+  error: string | null;
+  isMutating: boolean;
+};
+
+// Status badge for one polled schedule, keyed off the real per-schedule
+// scheduler state.
 export function ScheduleStatusBadge({
   runtime,
   configured,
   connectionEnabled,
 }: {
-  runtime: ScheduleRuntime;
+  runtime: ScheduleBadgeRuntime;
   configured: boolean;
   connectionEnabled: boolean;
 }): JSX.Element {
@@ -48,7 +57,7 @@ function getScheduleStatus({
   configured,
   connectionEnabled,
 }: {
-  runtime: ScheduleRuntime;
+  runtime: ScheduleBadgeRuntime;
   configured: boolean;
   connectionEnabled: boolean;
 }): ScheduleStatus {
@@ -57,7 +66,7 @@ function getScheduleStatus({
       label: "Not connected",
       variant: "neutral",
       icon: "paused",
-      detail: "Connect the provider before this stream can run.",
+      detail: "Connect the provider before this schedule can run.",
     };
   }
   if (runtime.isMutating) {
@@ -73,7 +82,7 @@ function getScheduleStatus({
       label: "Disabled",
       variant: "neutral",
       icon: "paused",
-      detail: "The provider connection is off, so this stream will not poll.",
+      detail: "The provider connection is off, so this schedule will not poll.",
     };
   }
   if (!runtime.enabled) {
@@ -81,7 +90,7 @@ function getScheduleStatus({
       label: "Paused",
       variant: "neutral",
       icon: "paused",
-      detail: "This stream is paused. Turn it on to resume polling.",
+      detail: "This schedule is paused. Turn it on to resume polling.",
     };
   }
   if (runtime.status === "auto_paused") {
