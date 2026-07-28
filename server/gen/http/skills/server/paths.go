@@ -17,6 +17,11 @@ func AddVersionSkillsPath() string {
 	return "/rpc/skills.addVersion"
 }
 
+// RestoreVersionSkillsPath returns the URL path to the skills service restoreVersion HTTP endpoint.
+func RestoreVersionSkillsPath() string {
+	return "/rpc/skills.restoreVersion"
+}
+
 // UpdateSkillsPath returns the URL path to the skills service update HTTP endpoint.
 func UpdateSkillsPath() string {
 	return "/rpc/skills.update"
@@ -32,6 +37,11 @@ func ListSuggestionsSkillsPath() string {
 	return "/rpc/skills.listSuggestions"
 }
 
+// ListFeedbackSkillsPath returns the URL path to the skills service listFeedback HTTP endpoint.
+func ListFeedbackSkillsPath() string {
+	return "/rpc/skills.listFeedback"
+}
+
 // ApproveSuggestionSkillsPath returns the URL path to the skills service approveSuggestion HTTP endpoint.
 func ApproveSuggestionSkillsPath() string {
 	return "/rpc/skills.approveSuggestion"
@@ -40,6 +50,11 @@ func ApproveSuggestionSkillsPath() string {
 // DismissSuggestionSkillsPath returns the URL path to the skills service dismissSuggestion HTTP endpoint.
 func DismissSuggestionSkillsPath() string {
 	return "/rpc/skills.dismissSuggestion"
+}
+
+// ListSuggestionFeedbackSkillsPath returns the URL path to the skills service listSuggestionFeedback HTTP endpoint.
+func ListSuggestionFeedbackSkillsPath() string {
+	return "/rpc/skills.listSuggestionFeedback"
 }
 
 // ApproveAllSuggestionsSkillsPath returns the URL path to the skills service approveAllSuggestions HTTP endpoint.

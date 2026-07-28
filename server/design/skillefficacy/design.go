@@ -59,11 +59,27 @@ var VersionInsight = Type("SkillVersionInsight", func() {
 	Attribute("trend", ArrayOf(InsightPoint))
 })
 
+var RegressionSignal = Type("SkillEfficacyRegressionSignal", func() {
+	Description("The current skill version's efficacy comparison using the server suggestion policy.")
+	Required("comparable", "regression", "current_version_id", "current_average_score", "current_scored_sessions", "predecessor_average_score", "predecessor_scored_sessions", "window_start", "window_end")
+	Attribute("comparable", Boolean)
+	Attribute("regression", Boolean)
+	Attribute("current_version_id", String, func() { Format(FormatUUID) })
+	Attribute("predecessor_version_id", String, func() { Format(FormatUUID) })
+	Attribute("current_average_score", Float64)
+	Attribute("current_scored_sessions", UInt64)
+	Attribute("predecessor_average_score", Float64)
+	Attribute("predecessor_scored_sessions", UInt64)
+	Attribute("window_start", String, func() { Format(FormatDateTime) })
+	Attribute("window_end", String, func() { Format(FormatDateTime) })
+})
+
 var SkillInsight = Type("SkillEfficacyInsight", func() {
 	Required("skill_id", "metrics", "versions")
 	Attribute("skill_id", String, func() { Format(FormatUUID) })
 	Attribute("metrics", InsightMetrics)
 	Attribute("versions", ArrayOf(VersionInsight))
+	Attribute("regression_signal", RegressionSignal, "Absent when the skill has no valid current version.")
 })
 
 var ScoredSession = Type("SkillEfficacyScoredSession", func() {

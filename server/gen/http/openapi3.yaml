@@ -36992,7 +36992,7 @@ paths:
                 name: AddSkillVersion
     /rpc/skills.approveAllSuggestions:
         post:
-            description: Snapshot and independently process every open skill edit suggestion in the project. One conflict or failure does not stop the remaining approvals.
+            description: Snapshot and independently process selected skill edit suggestions, or every open suggestion when no IDs are supplied. One conflict or failure does not stop the remaining approvals.
             operationId: approveAllSkillSuggestions
             parameters:
                 - allowEmptyValue: true
@@ -37016,6 +37016,12 @@ paths:
                   schema:
                     description: project header
                     type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ApproveAllSkillSuggestionsRequestBody'
+                required: true
             responses:
                 "200":
                     content:
@@ -38076,6 +38082,257 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: SkillDistributions
+    /rpc/skills.listFeedback:
+        get:
+            description: List all-time outcome counts and recent resolved feedback for a skill. Name-only feedback is excluded.
+            operationId: listSkillFeedback
+            parameters:
+                - allowEmptyValue: true
+                  description: The skill ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The skill ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Cursor for the next page of feedback.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor for the next page of feedback.
+                    type: string
+                - allowEmptyValue: true
+                  description: The number of feedback rows to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 20
+                    description: The number of feedback rows to return per page.
+                    format: int64
+                    maximum: 50
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSkillFeedbackResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listFeedback skills
+            tags:
+                - skills
+            x-speakeasy-name-override: listFeedback
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: SkillFeedback
+    /rpc/skills.listSuggestionFeedback:
+        get:
+            description: List the agent feedback cited as the reason for one proposed change, newest first.
+            operationId: listSkillSuggestionFeedback
+            parameters:
+                - allowEmptyValue: true
+                  description: The proposed change ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The proposed change ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: The number of feedback records to return.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: The number of feedback records to return.
+                    format: int64
+                    maximum: 50
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSkillSuggestionFeedbackResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listSuggestionFeedback skills
+            tags:
+                - skills
+            x-speakeasy-name-override: listSuggestionFeedback
+            x-speakeasy-react-hook:
+                name: SkillSuggestionFeedback
     /rpc/skills.listSuggestions:
         get:
             description: List open skill edit suggestions in the project, newest first. The implementation requires the skills product feature and skill read scope.
@@ -38465,6 +38722,110 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: SkillVersions
+    /rpc/skills.restoreVersion:
+        post:
+            description: Restore a historical valid version as the skill's current version without changing the immutable version record or explicit distribution pins.
+            operationId: restoreSkillVersion
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RestoreSkillVersionRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RecordSkillResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: restoreVersion skills
+            tags:
+                - skills
+            x-speakeasy-name-override: restoreVersion
+            x-speakeasy-react-hook:
+                name: RestoreSkillVersion
     /rpc/skills.share:
         post:
             description: Create a public share link for a skill. Repeated requests return the existing active link, so each skill has at most one active share token.
@@ -50261,6 +50622,15 @@ components:
                 - status
                 - created_at
                 - updated_at
+        ApproveAllSkillSuggestionsRequestBody:
+            type: object
+            properties:
+                suggestion_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    description: Optional suggestion IDs to approve. Omitted or empty approves every currently open suggestion.
         ApproveAllSkillSuggestionsResult:
             type: object
             properties:
@@ -56179,7 +56549,7 @@ components:
                     description: Daily activations in the adoption window.
                 skill:
                     $ref: '#/components/schemas/Skill'
-            description: An active skill and its derived latest version.
+            description: An active skill and its current version.
             required:
                 - skill
                 - adoption
@@ -58279,6 +58649,33 @@ components:
             description: A page of active plugin skill distributions for the current project.
             required:
                 - distributions
+        ListSkillFeedbackResult:
+            type: object
+            properties:
+                counts:
+                    $ref: '#/components/schemas/SkillFeedbackCounts'
+                feedback:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillFeedback'
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; absent when exhausted.
+            description: All-time outcome counts and a newest-first page of feedback for a skill.
+            required:
+                - counts
+                - feedback
+        ListSkillSuggestionFeedbackResult:
+            type: object
+            properties:
+                feedback:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillFeedback'
+                    description: The feedback records linked to the suggestion.
+            description: The agent feedback a suggestion was generated from, newest first.
+            required:
+                - feedback
         ListSkillSuggestionsResult:
             type: object
             properties:
@@ -62172,6 +62569,20 @@ components:
                 - type
                 - status_codes
                 - content_types
+        RestoreSkillVersionRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The skill ID.
+                    format: uuid
+                version_id:
+                    type: string
+                    description: The historical version to restore.
+                    format: uuid
+            required:
+                - id
+                - version_id
         RetryScheduleRequestBody:
             type: object
             properties:
@@ -64992,7 +65403,7 @@ components:
                     format: date-time
                 latest_version_id:
                     type: string
-                    description: The derived latest version ID, selected from immutable version creation order.
+                    description: The current version ID, selected by effective promotion time.
                     format: uuid
                 name:
                     type: string
@@ -65334,6 +65745,8 @@ components:
             properties:
                 metrics:
                     $ref: '#/components/schemas/SkillInsightMetrics'
+                regression_signal:
+                    $ref: '#/components/schemas/SkillEfficacyRegressionSignal'
                 skill_id:
                     type: string
                     format: uuid
@@ -65420,6 +65833,48 @@ components:
                 - estimated_minutes_saved_samples
                 - roi_confidence_counts
                 - flag_counts
+        SkillEfficacyRegressionSignal:
+            type: object
+            properties:
+                comparable:
+                    type: boolean
+                current_average_score:
+                    type: number
+                    format: double
+                current_scored_sessions:
+                    type: integer
+                    format: int64
+                current_version_id:
+                    type: string
+                    format: uuid
+                predecessor_average_score:
+                    type: number
+                    format: double
+                predecessor_scored_sessions:
+                    type: integer
+                    format: int64
+                predecessor_version_id:
+                    type: string
+                    format: uuid
+                regression:
+                    type: boolean
+                window_end:
+                    type: string
+                    format: date-time
+                window_start:
+                    type: string
+                    format: date-time
+            description: The current skill version's efficacy comparison using the server suggestion policy.
+            required:
+                - comparable
+                - regression
+                - current_version_id
+                - current_average_score
+                - current_scored_sessions
+                - predecessor_average_score
+                - predecessor_scored_sessions
+                - window_start
+                - window_end
         SkillEfficacyScoredSession:
             type: object
             properties:
@@ -65515,6 +65970,75 @@ components:
                 - org_daily_cap
                 - new_version_burst
                 - is_default
+        SkillFeedback:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the feedback was recorded.
+                    format: date-time
+                id:
+                    type: string
+                    description: The feedback ID.
+                    format: uuid
+                note:
+                    type: string
+                    description: An optional feedback note.
+                outcome:
+                    type: string
+                    description: The reported skill feedback outcome.
+                    enum:
+                        - helped
+                        - partially_helped
+                        - did_not_help
+                        - misleading
+                        - harmful
+                reviewed_at:
+                    type: string
+                    description: When automated suggestion analysis reviewed this feedback.
+                    format: date-time
+                skill_version_id:
+                    type: string
+                    description: The attributed skill version, when known.
+                    format: uuid
+                source:
+                    type: string
+                    description: Where skill feedback was recorded.
+            description: A privacy-minimized feedback row for a skill.
+            required:
+                - id
+                - source
+                - outcome
+                - created_at
+        SkillFeedbackCounts:
+            type: object
+            properties:
+                did_not_help:
+                    type: integer
+                    format: int64
+                harmful:
+                    type: integer
+                    format: int64
+                helped:
+                    type: integer
+                    format: int64
+                misleading:
+                    type: integer
+                    format: int64
+                partially_helped:
+                    type: integer
+                    format: int64
+                total:
+                    type: integer
+                    format: int64
+            description: All-time outcome counts for resolved feedback on a skill.
+            required:
+                - total
+                - helped
+                - partially_helped
+                - did_not_help
+                - misleading
+                - harmful
         SkillFeedbackPayload:
             type: object
             properties:

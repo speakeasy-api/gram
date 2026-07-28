@@ -18,11 +18,14 @@ import (
 type Client struct {
 	CreateEndpoint                 goa.Endpoint
 	AddVersionEndpoint             goa.Endpoint
+	RestoreVersionEndpoint         goa.Endpoint
 	UpdateEndpoint                 goa.Endpoint
 	ListEndpoint                   goa.Endpoint
 	ListSuggestionsEndpoint        goa.Endpoint
+	ListFeedbackEndpoint           goa.Endpoint
 	ApproveSuggestionEndpoint      goa.Endpoint
 	DismissSuggestionEndpoint      goa.Endpoint
+	ListSuggestionFeedbackEndpoint goa.Endpoint
 	ApproveAllSuggestionsEndpoint  goa.Endpoint
 	GetEndpoint                    goa.Endpoint
 	ListUnknownActivationsEndpoint goa.Endpoint
@@ -37,15 +40,18 @@ type Client struct {
 }
 
 // NewClient initializes a "skills" service client given the endpoints.
-func NewClient(create, addVersion, update, list, listSuggestions, approveSuggestion, dismissSuggestion, approveAllSuggestions, get, listUnknownActivations, listVersions, archive, distribute, undistribute, share, unshare, getShared, listDistributions goa.Endpoint) *Client {
+func NewClient(create, addVersion, restoreVersion, update, list, listSuggestions, listFeedback, approveSuggestion, dismissSuggestion, listSuggestionFeedback, approveAllSuggestions, get, listUnknownActivations, listVersions, archive, distribute, undistribute, share, unshare, getShared, listDistributions goa.Endpoint) *Client {
 	return &Client{
 		CreateEndpoint:                 create,
 		AddVersionEndpoint:             addVersion,
+		RestoreVersionEndpoint:         restoreVersion,
 		UpdateEndpoint:                 update,
 		ListEndpoint:                   list,
 		ListSuggestionsEndpoint:        listSuggestions,
+		ListFeedbackEndpoint:           listFeedback,
 		ApproveSuggestionEndpoint:      approveSuggestion,
 		DismissSuggestionEndpoint:      dismissSuggestion,
+		ListSuggestionFeedbackEndpoint: listSuggestionFeedback,
 		ApproveAllSuggestionsEndpoint:  approveAllSuggestions,
 		GetEndpoint:                    get,
 		ListUnknownActivationsEndpoint: listUnknownActivations,
@@ -98,6 +104,28 @@ func (c *Client) Create(ctx context.Context, p *CreatePayload) (res *RecordSkill
 func (c *Client) AddVersion(ctx context.Context, p *AddVersionPayload) (res *RecordSkillResult, err error) {
 	var ires any
 	ires, err = c.AddVersionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RecordSkillResult), nil
+}
+
+// RestoreVersion calls the "restoreVersion" endpoint of the "skills" service.
+// RestoreVersion may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RestoreVersion(ctx context.Context, p *RestoreVersionPayload) (res *RecordSkillResult, err error) {
+	var ires any
+	ires, err = c.RestoreVersionEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
@@ -170,6 +198,28 @@ func (c *Client) ListSuggestions(ctx context.Context, p *ListSuggestionsPayload)
 	return ires.(*ListSkillSuggestionsResult), nil
 }
 
+// ListFeedback calls the "listFeedback" endpoint of the "skills" service.
+// ListFeedback may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListFeedback(ctx context.Context, p *ListFeedbackPayload) (res *ListSkillFeedbackResult, err error) {
+	var ires any
+	ires, err = c.ListFeedbackEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListSkillFeedbackResult), nil
+}
+
 // ApproveSuggestion calls the "approveSuggestion" endpoint of the "skills"
 // service.
 // ApproveSuggestion may return the following errors:
@@ -214,6 +264,29 @@ func (c *Client) DismissSuggestion(ctx context.Context, p *DismissSuggestionPayl
 		return
 	}
 	return ires.(*types.SkillEditSuggestion), nil
+}
+
+// ListSuggestionFeedback calls the "listSuggestionFeedback" endpoint of the
+// "skills" service.
+// ListSuggestionFeedback may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListSuggestionFeedback(ctx context.Context, p *ListSuggestionFeedbackPayload) (res *ListSkillSuggestionFeedbackResult, err error) {
+	var ires any
+	ires, err = c.ListSuggestionFeedbackEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListSkillSuggestionFeedbackResult), nil
 }
 
 // ApproveAllSuggestions calls the "approveAllSuggestions" endpoint of the

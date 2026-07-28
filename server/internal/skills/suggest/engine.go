@@ -77,7 +77,7 @@ type Result struct {
 	SuggestionID     uuid.NullUUID
 }
 
-type trend struct {
+type Trend struct {
 	CurrentCount    uint64  `json:"current_scored_sessions"`
 	CurrentAverage  float64 `json:"current_average_score"`
 	PreviousCount   uint64  `json:"predecessor_scored_sessions"`
@@ -86,6 +86,8 @@ type trend struct {
 	Comparable      bool    `json:"comparable"`
 	Regression      bool    `json:"regression"`
 }
+
+type trend = Trend
 
 type wakeEvidence struct {
 	now               time.Time
@@ -170,7 +172,7 @@ func (e *Engine) Run(ctx context.Context, in RunInput) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("query suggestion skill insights: %w", err)
 	}
-	computedTrend := summarizeTrend(e.config, base, buckets)
+	computedTrend := EvaluateTrend(e.config, TrendBase{BaseVersionID: base.BaseVersionID, PredecessorVersionID: base.PredecessorVersionID}, buckets)
 
 	var latest *repo.SkillEditSuggestion
 	latestRow, err := queries.GetLatestSkillEditSuggestion(ctx, repo.GetLatestSkillEditSuggestionParams{ProjectID: in.ProjectID, SkillID: in.SkillID})
@@ -288,7 +290,12 @@ func (e *Engine) Run(ctx context.Context, in RunInput) (Result, error) {
 	return e.persist(ctx, in, base.BaseVersionID, snapshotSuggestion(latest), skill.Name, generation, resolved, rationale, computedTrend.CurrentCount, unreviewedCount, feedback)
 }
 
-func summarizeTrend(config Config, base repo.ResolveSkillSuggestionBaseRow, buckets []telemetryrepo.SkillInsightBucket) trend {
+type TrendBase struct {
+	BaseVersionID        uuid.UUID
+	PredecessorVersionID uuid.UUID
+}
+
+func EvaluateTrend(config Config, base TrendBase, buckets []telemetryrepo.SkillInsightBucket) Trend {
 	var currentScore, previousScore float64
 	result := trend{
 		CurrentCount:    0,

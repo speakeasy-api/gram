@@ -4,6 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import {
+  ApproveAllSkillSuggestionsRequestBody,
+  ApproveAllSkillSuggestionsRequestBody$Outbound,
+  ApproveAllSkillSuggestionsRequestBody$outboundSchema,
+} from "../components/approveallskillsuggestionsrequestbody.js";
 
 export type ApproveAllSkillSuggestionsSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -33,6 +38,9 @@ export type ApproveAllSkillSuggestionsRequest = {
    * project header
    */
   gramProject?: string | undefined;
+  approveAllSkillSuggestionsRequestBody?:
+    | ApproveAllSkillSuggestionsRequestBody
+    | undefined;
 };
 
 /** @internal */
@@ -147,6 +155,9 @@ export type ApproveAllSkillSuggestionsRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
+  ApproveAllSkillSuggestionsRequestBody?:
+    | ApproveAllSkillSuggestionsRequestBody$Outbound
+    | undefined;
 };
 
 /** @internal */
@@ -158,12 +169,17 @@ export const ApproveAllSkillSuggestionsRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
+    approveAllSkillSuggestionsRequestBody: z.optional(
+      ApproveAllSkillSuggestionsRequestBody$outboundSchema,
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",
+      approveAllSkillSuggestionsRequestBody:
+        "ApproveAllSkillSuggestionsRequestBody",
     });
   }),
 );

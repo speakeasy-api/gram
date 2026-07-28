@@ -45,6 +45,33 @@ WHERE project_id = @project_id
 ORDER BY created_at DESC, id DESC
 LIMIT GREATEST(@page_limit::int, 0);
 
+-- name: CountSkillFeedbackOutcomes :one
+SELECT
+  COUNT(*)::bigint AS total,
+  COUNT(*) FILTER (WHERE outcome = 'helped')::bigint AS helped,
+  COUNT(*) FILTER (WHERE outcome = 'partially_helped')::bigint AS partially_helped,
+  COUNT(*) FILTER (WHERE outcome = 'did_not_help')::bigint AS did_not_help,
+  COUNT(*) FILTER (WHERE outcome = 'misleading')::bigint AS misleading,
+  COUNT(*) FILTER (WHERE outcome = 'harmful')::bigint AS harmful
+FROM skill_feedback
+WHERE project_id = @project_id
+  AND skill_id = @skill_id;
+
+-- name: ListSkillFeedbackByID :many
+SELECT *
+FROM skill_feedback
+WHERE project_id = @project_id
+  AND skill_id = @skill_id
+  AND (
+    sqlc.narg(cursor_created_at)::timestamptz IS NULL
+    OR (created_at, id) < (
+      sqlc.narg(cursor_created_at)::timestamptz,
+      sqlc.narg(cursor_id)::uuid
+    )
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT @page_limit;
+
 -- name: ListUnreviewedSkillFeedback :many
 SELECT *
 FROM skill_feedback
@@ -82,12 +109,12 @@ WITH base AS (
     AND s.id = @skill_id
     AND s.archived_at IS NULL
     AND sv.spec_valid IS TRUE
-  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 )
 SELECT
   base.id AS base_version_id,
-  base.created_at AS base_floor_reference_at,
+  COALESCE(base.promoted_at, base.created_at) AS base_floor_reference_at,
   base.content AS base_content,
   base.canonical_sha256 AS base_canonical_sha256,
   COALESCE(predecessor.id, '00000000-0000-0000-0000-000000000000'::uuid) AS predecessor_version_id,
@@ -100,18 +127,70 @@ LEFT JOIN skill_version_lineages lineage
 LEFT JOIN LATERAL (
   SELECT previous.id, previous.content, previous.canonical_sha256
   FROM skill_versions previous
+  LEFT JOIN skill_version_origins previous_origin
+    ON previous_origin.project_id = @project_id
+    AND previous_origin.skill_id = previous.skill_id
+    AND previous_origin.skill_version_id = previous.id
   WHERE previous.skill_id = base.skill_id
     AND (
-      previous.id = lineage.derived_from_version_id
+      (base.promoted_at IS NULL AND previous.id = lineage.derived_from_version_id)
       OR (
-        lineage.derived_from_version_id IS NULL
+        (base.promoted_at IS NOT NULL OR lineage.derived_from_version_id IS NULL)
         AND previous.spec_valid IS TRUE
-        AND (previous.created_at, previous.id) < (base.created_at, base.id)
+        AND (COALESCE(previous.promoted_at, previous.created_at), previous.id) < (COALESCE(base.promoted_at, base.created_at), base.id)
       )
     )
-  ORDER BY previous.created_at DESC, previous.id DESC
+  ORDER BY (previous_origin.origin IS DISTINCT FROM 'captured') DESC, COALESCE(previous.promoted_at, previous.created_at) DESC, previous.id DESC
   LIMIT 1
 ) predecessor ON TRUE;
+
+-- name: ResolveSkillRegressionBases :many
+WITH bases AS (
+  SELECT DISTINCT ON (s.id)
+    s.id AS skill_id,
+    sv.id,
+    sv.promoted_at,
+    sv.created_at
+  FROM skills s
+  JOIN skill_versions sv ON sv.skill_id = s.id
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = s.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
+  WHERE s.project_id = @project_id
+    AND s.id = ANY(@skill_ids::uuid[])
+    AND s.archived_at IS NULL
+    AND sv.spec_valid IS TRUE
+  ORDER BY s.id, (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
+)
+SELECT
+  base.skill_id,
+  base.id AS base_version_id,
+  COALESCE(predecessor.id, '00000000-0000-0000-0000-000000000000'::uuid) AS predecessor_version_id
+FROM bases base
+LEFT JOIN skill_version_lineages lineage
+  ON lineage.skill_id = base.skill_id
+  AND lineage.skill_version_id = base.id
+LEFT JOIN LATERAL (
+  SELECT previous.id
+  FROM skill_versions previous
+  LEFT JOIN skill_version_origins previous_origin
+    ON previous_origin.project_id = @project_id
+    AND previous_origin.skill_id = previous.skill_id
+    AND previous_origin.skill_version_id = previous.id
+  WHERE previous.skill_id = base.skill_id
+    AND (
+      (base.promoted_at IS NULL AND previous.id = lineage.derived_from_version_id)
+      OR (
+        (base.promoted_at IS NOT NULL OR lineage.derived_from_version_id IS NULL)
+        AND previous.spec_valid IS TRUE
+        AND (COALESCE(previous.promoted_at, previous.created_at), previous.id) < (COALESCE(base.promoted_at, base.created_at), base.id)
+      )
+    )
+  ORDER BY (previous_origin.origin IS DISTINCT FROM 'captured') DESC, COALESCE(previous.promoted_at, previous.created_at) DESC, previous.id DESC
+  LIMIT 1
+) predecessor ON TRUE
+ORDER BY base.skill_id;
 
 -- name: GetOpenSkillEditSuggestion :one
 SELECT suggestion.*
@@ -195,8 +274,14 @@ JOIN skills s
   ON s.project_id = suggestion.project_id
   AND s.id = suggestion.skill_id
 WHERE suggestion.project_id = @project_id
-  AND suggestion.status = 'open'
   AND s.archived_at IS NULL
+  AND (
+    (
+      COALESCE(cardinality(@suggestion_ids::uuid[]), 0) = 0
+      AND suggestion.status = 'open'
+    )
+    OR suggestion.id = ANY(@suggestion_ids::uuid[])
+  )
 ORDER BY suggestion.created_at DESC, suggestion.id DESC;
 
 -- name: GetSkillEditSuggestionDetails :one
@@ -1012,6 +1097,18 @@ WHERE project_id = @project_id
   AND skill_id = @skill_id
   AND skill_version_id = @skill_version_id;
 
+-- name: PromoteSkillVersion :one
+UPDATE skill_versions sv
+SET promoted_at = clock_timestamp()
+FROM skills s
+WHERE s.project_id = @project_id
+  AND s.id = @skill_id
+  AND s.archived_at IS NULL
+  AND sv.skill_id = s.id
+  AND sv.id = @skill_version_id
+  AND sv.spec_valid IS TRUE
+RETURNING sv.*;
+
 -- name: StoreSkillRawHashAlias :one
 WITH inserted AS (
   INSERT INTO skill_raw_hashes (project_id, raw_sha256, canonical_sha256)
@@ -1116,7 +1213,7 @@ LEFT JOIN LATERAL (
     COUNT(*) OVER()::bigint AS version_count
   FROM skill_versions sv
   WHERE sv.skill_id = s.id
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) state ON TRUE
 LEFT JOIN skill_share_links l
@@ -1141,7 +1238,7 @@ LEFT JOIN LATERAL (
     COUNT(*) OVER()::bigint AS version_count
   FROM skill_versions sv
   WHERE sv.skill_id = s.id
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) state ON TRUE
 WHERE s.project_id = @project_id
@@ -1165,7 +1262,7 @@ LEFT JOIN LATERAL (
     COUNT(*) OVER()::bigint AS version_count
   FROM skill_versions sv
   WHERE sv.skill_id = s.id
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) latest ON TRUE
 LEFT JOIN skill_share_links l
@@ -1304,7 +1401,7 @@ JOIN LATERAL (
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
     AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
-  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE sd.project_id = @project_id
@@ -1368,7 +1465,7 @@ WHERE s.project_id = @project_id
   AND s.id = @skill_id
   AND s.archived_at IS NULL
   AND sv.spec_valid IS TRUE
-ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
 LIMIT 1;
 
 -- name: GetPluginForDistribution :one
@@ -1405,7 +1502,7 @@ JOIN LATERAL (
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
     AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
-  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE sd.project_id = @project_id
@@ -1446,7 +1543,7 @@ JOIN LATERAL (
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
     AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
-  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE sd.project_id = @project_id
@@ -1542,7 +1639,7 @@ JOIN LATERAL (
   WHERE sv.skill_id = prev.skill_id
     AND sv.spec_valid IS TRUE
     AND (prev.pinned_version_id IS NULL OR sv.id = prev.pinned_version_id)
-  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE prev.id = sd.id
@@ -2366,7 +2463,7 @@ RETURNING *;
 -- name: GetSharedSkillByToken :one
 -- Public read for the unauthenticated share-link endpoint. The join pins the
 -- share link to its owning project's skill and the lateral picks the latest
--- version by creation order.
+-- version by effective promotion time.
 SELECT
   s.name,
   s.display_name,
@@ -2379,10 +2476,10 @@ JOIN skills s
   AND s.id = l.skill_id
   AND s.archived_at IS NULL
 JOIN LATERAL (
-  SELECT sv.content, sv.created_at
+  SELECT sv.content, COALESCE(sv.promoted_at, sv.created_at) AS created_at
   FROM skill_versions sv
   WHERE sv.skill_id = l.skill_id
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) latest ON TRUE
 WHERE l.token = @token

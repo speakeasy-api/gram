@@ -77,6 +77,8 @@ type SkillEfficacyInsight struct {
 	SkillID  string
 	Metrics  *SkillInsightMetrics
 	Versions []*SkillVersionInsight
+	// Absent when the skill has no valid current version.
+	RegressionSignal *SkillEfficacyRegressionSignal
 }
 
 // SkillEfficacyInsightsResult is the result type of the skillEfficacy service
@@ -101,6 +103,21 @@ type SkillEfficacyMetrics struct {
 	EstimatedMinutesSavedSamples uint64
 	RoiConfidenceCounts          map[string]uint64
 	FlagCounts                   map[string]uint64
+}
+
+// The current skill version's efficacy comparison using the server suggestion
+// policy.
+type SkillEfficacyRegressionSignal struct {
+	Comparable                bool
+	Regression                bool
+	CurrentVersionID          string
+	PredecessorVersionID      *string
+	CurrentAverageScore       float64
+	CurrentScoredSessions     uint64
+	PredecessorAverageScore   float64
+	PredecessorScoredSessions uint64
+	WindowStart               string
+	WindowEnd                 string
 }
 
 type SkillEfficacyScoredSession struct {
