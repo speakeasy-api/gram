@@ -1346,8 +1346,21 @@ export const SpeakeasyObservability = async (ctx: any) => {
     stdio: ["pipe", "pipe", "inherit"],
   })
   let seq = 0
+  let dead = false
   const pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>()
   const failedCalls = new Set<string>()
+
+  // Observability is fail-open: a bootstrap that cannot spawn (or a pipe
+  // that breaks mid-session) must degrade to no-op hooks, never surface an
+  // unhandled 'error' event into OpenCode's process.
+  const settle = () => {
+    dead = true
+    for (const [, p] of pending) p.resolve({})
+    pending.clear()
+  }
+  child.on("error", settle)
+  child.on("exit", settle)
+  child.stdin?.on("error", settle)
 
   createInterface({ input: child.stdout! }).on("line", (line) => {
     if (!line.trim()) return
@@ -1362,15 +1375,16 @@ export const SpeakeasyObservability = async (ctx: any) => {
     pending.delete(reply.seq)
     p.resolve(reply)
   })
-  child.on("exit", () => {
-    for (const [, p] of pending) p.resolve({})
-    pending.clear()
-  })
 
   const call = (hook: string, input: unknown, output: unknown): Promise<any> => {
-    if (child.exitCode !== null || !child.stdin?.writable) return Promise.resolve({})
+    if (dead || child.exitCode !== null || !child.stdin?.writable) return Promise.resolve({})
     const id = ++seq
-    child.stdin.write(JSON.stringify({ seq: id, hook, input, output }) + "\n")
+    try {
+      child.stdin.write(JSON.stringify({ seq: id, hook, input, output }) + "\n")
+    } catch {
+      settle()
+      return Promise.resolve({})
+    }
     return new Promise((resolve) => {
       pending.set(id, { resolve, reject: resolve as any })
       // The shim adds the timeout policy OpenCode lacks.
@@ -1412,6 +1426,10 @@ export const SpeakeasyObservability = async (ctx: any) => {
         // fire when a tool errors, and streaming deltas would flood the pipe.
         if (part?.type !== "tool" || part?.state?.status !== "error") return
         if (failedCalls.has(part.callID)) return
+        // Bounded dedup: a long-running OpenCode process must not accumulate
+        // call IDs forever. A reset only risks re-reporting an already-failed
+        // call, which the server tolerates.
+        if (failedCalls.size >= 1024) failedCalls.clear()
         failedCalls.add(part.callID)
       }
       // No native hook or bus event carries the completed assistant text, so

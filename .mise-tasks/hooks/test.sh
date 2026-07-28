@@ -90,6 +90,10 @@ EOF
     export GRAM_DEVICE_AGENT_COMMANDS="$device_agent_shim"
     echo "Hook sessions will be attributed to: ${user_email}"
 
+    # OpenCode authenticates via the hook's own browser sign-in, so it never
+    # uses the provisioned dev key — and revoking/reminting it here would
+    # invalidate the key a concurrently running Claude test is using.
+    if [ "${usage_agent:-claude}" != "opencode" ]; then
     # API key names are unique per organization, so clear any prior local
     # fixture for this org before stashing a new plaintext we know.
     db_query -v org_id="$org_id" >/dev/null <<<"UPDATE api_keys SET deleted_at = NOW() WHERE organization_id = :'org_id' AND name = 'dev-hooks-test' AND deleted IS FALSE"
@@ -117,6 +121,7 @@ EOF
     export GRAM_HOOKS_API_KEY="${api_key}"
     export GRAM_HOOKS_PROJECT_SLUG="${project_slug}"
     echo "OTEL configured (key: ${api_key:0:20}...)"
+    fi
   fi
 fi
 echo ""

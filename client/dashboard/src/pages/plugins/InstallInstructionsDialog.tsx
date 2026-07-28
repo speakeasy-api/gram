@@ -27,6 +27,7 @@ import {
   Info,
 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { HookSourceIcon } from "../hooks/HookSourceIcon";
 import { downloadPluginPackage } from "./downloadPluginPackage";
 
@@ -681,6 +682,8 @@ function OpenCodeInstallContent({
     setIsDownloading(true);
     try {
       await downloadPluginPackage(client, pluginId, "opencode");
+    } catch (_err) {
+      toast.error("Failed to download plugin package");
     } finally {
       setIsDownloading(false);
     }

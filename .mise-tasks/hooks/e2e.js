@@ -14,6 +14,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { pathToFileURL } from "node:url";
 import { intro, log, outro } from "@clack/prompts";
 import { GramCore } from "#gram/client/core.js";
 import { authInfo } from "#gram/client/funcs/authInfo.js";
@@ -484,7 +485,7 @@ async function prepareOpenCodeEnv(rootDir, pluginDir) {
       {
         $schema: "https://opencode.ai/config.json",
         model: "openai/gpt-5.4-mini",
-        plugin: [`file://${shim}`],
+        plugin: [pathToFileURL(shim).href],
         // Headless runs auto-reject permission prompts; the temp workspace
         // counts as an external directory. The bypass-permissions analogue
         // of the other providers' trust flags.
@@ -1306,8 +1307,13 @@ async function prepareCursorProjectHooks(pluginDir, workdir) {
           escapedPluginDir,
         );
         // Per-event relay diagnostics land in the workdir so failed runs
-        // show which events reached the relay and with what result.
-        entry.command += ` --debug-log=${path.join(workdir, "relay-debug.log")}`;
+        // show which events reached the relay and with what result. The
+        // command is a shell string, so the path is quoted with the same
+        // escaping as the plugin dir above.
+        const debugLog = path
+          .join(workdir, "relay-debug.log")
+          .replace(/(["\\$`])/g, "\\$1");
+        entry.command += ` --debug-log="${debugLog}"`;
       }
     }
   }
