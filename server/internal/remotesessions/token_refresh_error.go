@@ -35,7 +35,7 @@ func newTokenRefreshError(reason string, cause error) *TokenRefreshError {
 }
 
 func (e *TokenRefreshError) invalidGrant() bool {
-	return e.code == "invalid_grant"
+	return e.code == oauthErrInvalidGrant
 }
 
 // newTokenRefreshErrorFromHTTP builds a TokenRefreshError from a non-2xx response

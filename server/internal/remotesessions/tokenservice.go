@@ -468,6 +468,11 @@ func (m *ChallengeManager) awaitRefreshedToken(
 // endpoint and persists the new token pair on success, returning the updated
 // remote_session row and the new plaintext access token.
 //
+// It is shared by the lazy MCP resolution path (ChallengeManager) and the
+// explicit org-admin refresh handler. The upstream token POST is an external
+// call, so q must be a pool-bound querier, never a transaction-bound one — the
+// POST must not run inside an open database transaction.
+//
 // Operator-actionable failures (unreadable stored token, missing token
 // endpoint, an upstream rejection, no access token returned) come back as a
 // *TokenRefreshError carrying a public-safe Reason, so callers can distinguish
