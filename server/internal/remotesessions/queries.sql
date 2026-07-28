@@ -614,6 +614,20 @@ WHERE subject_urn = @subject_urn
   AND remote_session_client_id = @remote_session_client_id
   AND deleted IS FALSE;
 
+-- name: RevokeRemoteSessionAfterInvalidGrant :one
+-- A definitive upstream invalid_grant means this session can no longer renew.
+-- Compare-and-swap against the snapshot used for the refresh so a delayed
+-- failure cannot evict tokens that a concurrent refresh already rotated.
+UPDATE remote_sessions
+SET deleted_at = clock_timestamp()
+WHERE id = @id
+  AND subject_urn = @subject_urn
+  AND user_session_issuer_id = @user_session_issuer_id
+  AND remote_session_client_id = @remote_session_client_id
+  AND deleted IS FALSE
+  AND updated_at = @expected_updated_at
+RETURNING *;
+
 -- name: ListRemoteSessionStatusesForSubject :many
 -- Bulk lookup for the consent renderer: returns each non-deleted
 -- remote_session for the given subject under a single user_session_issuer,
