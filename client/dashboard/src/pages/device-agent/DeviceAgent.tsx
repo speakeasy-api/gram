@@ -53,20 +53,29 @@ function DeviceAgentTabs() {
   const location = useLocation();
   const navigate = useNavigate();
   const telemetry = useTelemetry();
-  const mdmEnabled =
-    telemetry.isFeatureEnabled("gram-device-integrations") ?? false;
+  const mdmFlag = telemetry.isFeatureEnabled("gram-device-integrations");
+  const mdmEnabled = mdmFlag ?? false;
 
-  const segments = location.pathname.split("/");
+  // filter(Boolean) normalizes trailing slashes so a bookmarked
+  // /device-agent/mdm-integrations/ still lands on the MDM tab and tab
+  // switches never build double-slash URLs.
+  const segments = location.pathname.split("/").filter(Boolean);
   const lastSegment = segments[segments.length - 1] ?? "";
   const onMdmTab = lastSegment === "mdm-integrations";
   const currentTab = onMdmTab && mdmEnabled ? "mdm-integrations" : "setup";
-  const basePath = onMdmTab
-    ? segments.slice(0, -1).join("/")
-    : location.pathname;
+  const basePath =
+    "/" + (onMdmTab ? segments.slice(0, -1) : segments).join("/");
 
   const handleTabChange = (value: string) => {
     void navigate(value === "setup" ? basePath : `${basePath}/${value}`);
   };
+
+  // A deep link to the MDM tab while the rollout flag is off must not strand
+  // the browser on an MDM URL rendering the Setup tab. Only redirect once the
+  // flag has actually resolved to false.
+  if (onMdmTab && mdmFlag === false) {
+    return <Navigate to={basePath} replace />;
+  }
 
   return (
     <Tabs value={currentTab} onValueChange={handleTabChange}>
