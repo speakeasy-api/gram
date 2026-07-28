@@ -303,8 +303,9 @@ func refreshLockKey(subject urn.SessionSubject, clientID uuid.UUID) string {
 // refreshAccessToken refreshes the upstream access token, single-flighted per
 // binding so concurrent callers do not all present the same refresh token to a
 // provider that rotates them. Losers wait for the winner's write instead. The
-// re-read after a failed refresh covers what the lock cannot: Redis down, the
-// lease expiring, or a holder that never writes.
+// re-reads either side of the refresh cover what the lock cannot: Redis down,
+// the lease expiring, a holder that never writes, or one that finished while
+// this caller was still acquiring.
 func (m *ChallengeManager) refreshAccessToken(
 	ctx context.Context,
 	sess remotesessions_repo.RemoteSession,
@@ -342,6 +343,26 @@ func (m *ChallengeManager) refreshAccessToken(
 
 			return m.locks.Delete(releaseCtx, lockKey)
 		})
+	}
+
+	// sess predates the lock, so a holder that finished while we were acquiring
+	// has already consumed its refresh token. Replaying one makes providers with
+	// reuse detection (OAuth 2.0 Security BCP 4.13.2) revoke the whole family,
+	// the winner's fresh pair included, which nothing below can detect.
+	snapshotAt := sess.UpdatedAt.Time
+
+	current, currentErr := q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            sess.SubjectUrn,
+		RemoteSessionClientID: sess.RemoteSessionClientID,
+	})
+	if currentErr == nil {
+		sess = current
+
+		if current.UpdatedAt.Time.After(snapshotAt) {
+			if plain, err := m.enc.Decrypt(current.AccessTokenEncrypted); err == nil {
+				return plain, nil
+			}
+		}
 	}
 
 	_, accessToken, refreshErr := refreshSessionTokens(ctx, q, m.enc, m.policy, sess, resource)

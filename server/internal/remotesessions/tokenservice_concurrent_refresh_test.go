@@ -39,6 +39,7 @@ type rotatingUpstream struct {
 	live      map[string]bool
 	rotations int
 	attempts  int
+	replays   int
 	arrived   int
 	gate      chan struct{}
 }
@@ -49,6 +50,7 @@ func newRotatingUpstream() *rotatingUpstream {
 		live:      map[string]bool{initialRefreshToken: true},
 		rotations: 0,
 		attempts:  0,
+		replays:   0,
 		arrived:   0,
 		gate:      make(chan struct{}),
 	}
@@ -60,6 +62,17 @@ func (u *rotatingUpstream) refreshAttempts() int {
 	defer u.mu.Unlock()
 
 	return u.attempts
+}
+
+// consumedReplays reports how many grants presented an already-rotated refresh
+// token. This mock answers one with a 401, which Gram recovers from, but a
+// provider implementing reuse detection revokes the whole token family instead,
+// killing the winner's fresh pair with no local symptom.
+func (u *rotatingUpstream) consumedReplays() int {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	return u.replays
 }
 
 func (u *rotatingUpstream) handler(w http.ResponseWriter, r *http.Request) {
@@ -93,6 +106,7 @@ func (u *rotatingUpstream) handler(w http.ResponseWriter, r *http.Request) {
 	defer u.mu.Unlock()
 
 	if !u.live[presented] {
+		u.replays++
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"error":{"code":"unauthorized","message":"Refresh token not found.","doc_url":"https://example.test/docs/errors#unauthorized"}}`))
 
@@ -152,7 +166,8 @@ func resolveConcurrently(t *testing.T, slugSuffix string, upstream *rotatingUpst
 func TestResolveAccessToken_ConcurrentRefresh_AllCallersGetUsableToken(t *testing.T) {
 	t.Parallel()
 
-	ctx, env, tokens := resolveConcurrently(t, "concurrent-refresh", newRotatingUpstream())
+	upstream := newRotatingUpstream()
+	ctx, env, tokens := resolveConcurrently(t, "concurrent-refresh", upstream)
 
 	// An empty token becomes ErrNoValidToken, then a 401 at the MCP gate, then
 	// one user being told to reconnect.
@@ -173,6 +188,12 @@ func TestResolveAccessToken_ConcurrentRefresh_AllCallersGetUsableToken(t *testin
 	require.Zero(t, stranded,
 		"%d of %d concurrent callers resolved no token; each one is a user-visible reconnect prompt",
 		stranded, concurrentRefreshCallers)
+
+	// Recovering from a replay is not the same as avoiding one: against a
+	// reuse-detecting provider the replay is what breaks the session.
+	require.Zero(t, upstream.consumedReplays(),
+		"a consumed refresh token was presented upstream %d time(s)",
+		upstream.consumedReplays())
 }
 
 // The efficiency guard: without it a broken session drives a sustained request
