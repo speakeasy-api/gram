@@ -1,78 +1,154 @@
-import { renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
+import { act, renderHook } from "@testing-library/react";
+import { createElement, type ReactNode } from "react";
+import { describe, expect, it, vi } from "vitest";
+import {
+  nullTelemetry,
+  TelemetryStateProvider,
+  type Telemetry,
+} from "@/contexts/Telemetry";
 import { useFeatureFlag } from "./useFeatureFlag";
 
-const testState = vi.hoisted(() => ({
-  flagValue: undefined as boolean | undefined,
-  lastFlag: undefined as string | undefined,
-}));
+type FeatureFlagsCallback = Parameters<Telemetry["onFeatureFlags"]>[0];
+type FeatureFlagOptions = Parameters<Telemetry["isFeatureEnabled"]>[1];
 
-vi.mock("@/contexts/Telemetry", () => ({
-  useTelemetry: () => ({
-    isFeatureEnabled: (flag: string) => {
-      testState.lastFlag = flag;
-      return testState.flagValue;
+function renderFeatureFlag({
+  initiallyAvailable = false,
+  initialValue,
+}: {
+  initiallyAvailable?: boolean;
+  initialValue?: boolean;
+} = {}) {
+  let flagValue = initialValue;
+  let featureFlagsCallback: FeatureFlagsCallback | undefined;
+  const unsubscribe = vi.fn();
+  const isFeatureEnabled = vi.fn(
+    (_flag: string, _options?: FeatureFlagOptions) => flagValue,
+  );
+  const onFeatureFlags = vi.fn((callback: FeatureFlagsCallback) => {
+    featureFlagsCallback = callback;
+    return unsubscribe;
+  });
+  const telemetry: Telemetry = {
+    ...nullTelemetry,
+    isFeatureEnabled,
+    onFeatureFlags,
+  };
+
+  function Wrapper({ children }: { children: ReactNode }) {
+    return createElement(
+      TelemetryStateProvider,
+      {
+        telemetry,
+        featureFlagsInitiallyAvailable: initiallyAvailable,
+      },
+      children,
+    );
+  }
+
+  const hook = renderHook(() => useFeatureFlag("gram-rbac"), {
+    wrapper: Wrapper,
+  });
+
+  return {
+    ...hook,
+    isFeatureEnabled,
+    onFeatureFlags,
+    unsubscribe,
+    emitFlagResult(value: boolean | undefined) {
+      act(() => {
+        flagValue = value;
+        featureFlagsCallback?.([], {}, { errorsLoading: false });
+      });
     },
-  }),
-}));
-
-afterEach(() => {
-  testState.flagValue = undefined;
-  testState.lastFlag = undefined;
-});
+    emitFlagError() {
+      act(() => {
+        featureFlagsCallback?.([], {}, { errorsLoading: true });
+      });
+    },
+  };
+}
 
 describe("useFeatureFlag", () => {
-  it("treats an unresolved flag as off in off mode", () => {
-    const { result } = renderHook(() => useFeatureFlag("gram-rbac", "off"));
+  it("reports loading before PostHog provides flags", () => {
+    const { result, isFeatureEnabled, onFeatureFlags } = renderFeatureFlag();
 
-    expect(result.current).toBe(false);
-    expect(testState.lastFlag).toBe("gram-rbac");
+    expect(result.current).toEqual({
+      status: "loading",
+      enabled: undefined,
+    });
+    expect(isFeatureEnabled).not.toHaveBeenCalled();
+    expect(onFeatureFlags).toHaveBeenCalledOnce();
   });
 
-  it("defaults to off mode", () => {
-    const { result } = renderHook(() => useFeatureFlag("gram-rbac"));
+  it("reports a fresh enabled value after flags load", () => {
+    const { result, emitFlagResult, isFeatureEnabled } = renderFeatureFlag();
 
-    expect(result.current).toBe(false);
+    emitFlagResult(true);
+
+    expect(result.current).toEqual({ status: "ready", enabled: true });
+    expect(isFeatureEnabled).toHaveBeenCalledWith("gram-rbac", {
+      fresh: true,
+    });
   });
 
-  it("treats an unresolved flag as on in on mode", () => {
-    const { result } = renderHook(() => useFeatureFlag("gram-rbac", "on"));
+  it("reports a fresh disabled value after flags load", () => {
+    const { result, emitFlagResult } = renderFeatureFlag();
 
-    expect(result.current).toBe(true);
+    emitFlagResult(false);
+
+    expect(result.current).toEqual({ status: "ready", enabled: false });
   });
 
-  it("preserves an unresolved flag in unresolved mode", () => {
-    const { result } = renderHook(() =>
-      useFeatureFlag("gram-rbac", "unresolved"),
-    );
+  it("distinguishes a missing flag from loading", () => {
+    const { result, emitFlagResult } = renderFeatureFlag();
 
-    expect(result.current).toBeUndefined();
+    emitFlagResult(undefined);
+
+    expect(result.current).toEqual({
+      status: "missing",
+      enabled: undefined,
+    });
   });
 
-  it.each([true, false])(
-    "returns the resolved value %s regardless of loading mode",
-    (flagValue) => {
-      testState.flagValue = flagValue;
+  it("reports flag loading errors without using a cached value", () => {
+    const { result, emitFlagError, isFeatureEnabled } = renderFeatureFlag({
+      initialValue: true,
+    });
 
-      const { result } = renderHook(() =>
-        useFeatureFlag("gram-rbac", "unresolved"),
-      );
+    emitFlagError();
 
-      expect(result.current).toBe(flagValue);
-    },
-  );
+    expect(result.current).toEqual({
+      status: "error",
+      enabled: undefined,
+    });
+    expect(isFeatureEnabled).not.toHaveBeenCalled();
+  });
 
-  it("exposes mode-specific return types", () => {
-    function useOffResult() {
-      return useFeatureFlag("gram-rbac", "off");
-    }
-    function useUnresolvedResult() {
-      return useFeatureFlag("gram-rbac", "unresolved");
-    }
+  it("reacts when PostHog reloads a flag", () => {
+    const { result, emitFlagResult } = renderFeatureFlag();
 
-    expectTypeOf(useOffResult).returns.toEqualTypeOf<boolean>();
-    expectTypeOf(useUnresolvedResult).returns.toEqualTypeOf<
-      boolean | undefined
-    >();
+    emitFlagResult(true);
+    expect(result.current).toEqual({ status: "ready", enabled: true });
+
+    emitFlagResult(false);
+    expect(result.current).toEqual({ status: "ready", enabled: false });
+  });
+
+  it("uses deterministic telemetry providers without subscribing", () => {
+    const { result, onFeatureFlags } = renderFeatureFlag({
+      initiallyAvailable: true,
+      initialValue: true,
+    });
+
+    expect(result.current).toEqual({ status: "ready", enabled: true });
+    expect(onFeatureFlags).not.toHaveBeenCalled();
+  });
+
+  it("unsubscribes the shared listener when the provider unmounts", () => {
+    const { unmount, unsubscribe } = renderFeatureFlag();
+
+    unmount();
+
+    expect(unsubscribe).toHaveBeenCalledOnce();
   });
 });

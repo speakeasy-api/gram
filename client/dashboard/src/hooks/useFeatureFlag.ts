@@ -1,75 +1,60 @@
-import { useTelemetry } from "@/contexts/Telemetry";
+import { useTelemetryContext } from "@/contexts/Telemetry";
+import type { FeatureFlag } from "@/lib/featureFlags";
 
-export type FeatureFlag =
-  | "gram-rbac"
-  | "gram-device-agent"
-  | "gram-device-integrations"
-  | "org-memory"
-  | "assistants"
-  | "gram-functions"
-  | "gram-tunneled-mcp"
-  | "user-sessions-dashboard"
-  | "gram-deployments-page"
-  | "gram-budgets"
-  | "gram-new-costs-page"
-  | "gram-prompt-policies"
-  | "gram-experimental-chat"
-  | "onboard-external-mcp-to-user-sessions";
+export type { FeatureFlag } from "@/lib/featureFlags";
 
-type WhileLoading = "off" | "on" | "unresolved";
+export type FeatureFlagResult =
+  | {
+      status: "loading" | "missing" | "error";
+      enabled: undefined;
+    }
+  | {
+      status: "ready";
+      enabled: boolean;
+    };
+
+const LOADING_RESULT = { status: "loading", enabled: undefined } as const;
+const MISSING_RESULT = { status: "missing", enabled: undefined } as const;
+const ERROR_RESULT = { status: "error", enabled: undefined } as const;
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled feature flag status: ${String(value)}`);
+}
 
 /**
- * Read a typed PostHog feature flag.
+ * Read a typed PostHog feature flag without guessing when its value is
+ * unavailable.
  *
- * PostHog returns `undefined` while flags are loading, then `true` or `false`
- * once the requested flag has resolved. `whileLoading` does not affect the
- * flag itself; it selects the temporary value this hook returns in place of
- * that initial `undefined`:
+ * The result makes each state explicit:
  *
- * - `"off"` (default) temporarily returns `false`. Use it for new or opt-in
- *   features that must remain hidden until PostHog explicitly enables them.
- *   The feature may briefly appear hidden while the flag loads.
- * - `"on"` temporarily returns `true`. Use it when the flag is a rollback
- *   switch for an established feature that should remain visible unless
- *   PostHog explicitly disables it. The feature may briefly appear visible
- *   while the flag loads.
- * - `"unresolved"` preserves `undefined`. Use it when showing either enabled
- *   or disabled UI before the flag loads would be incorrect. The caller must
- *   handle `undefined`, typically by rendering a placeholder or nothing.
+ * - `"loading"`: PostHog has not completed its first flag request.
+ * - `"ready"`: `enabled` contains the fresh boolean value from PostHog.
+ * - `"missing"`: flags loaded successfully, but PostHog has no value for this
+ *   registered key. Treat this as a configuration error rather than as off.
+ * - `"error"`: PostHog reported that its flag request failed.
  *
- * After the flag resolves, all modes return its actual boolean value. The
- * underlying telemetry hook re-renders when PostHog resolves or reloads flags.
- *
- * In local development, the telemetry provider enables every feature flag.
+ * Local development uses a deterministic provider where every flag is ready
+ * and enabled. PostHog flags are rollout controls only; never use them as
+ * authorization checks or entitlement enforcement.
  */
-export function useFeatureFlag(
-  flag: FeatureFlag,
-  whileLoading: "unresolved",
-): boolean | undefined;
-export function useFeatureFlag(
-  flag: FeatureFlag,
-  whileLoading?: "off" | "on",
-): boolean;
-export function useFeatureFlag(
-  flag: FeatureFlag,
-  whileLoading: WhileLoading,
-): boolean | undefined;
-export function useFeatureFlag(
-  flag: FeatureFlag,
-  whileLoading: WhileLoading = "off",
-): boolean | undefined {
-  const enabled = useTelemetry().isFeatureEnabled(flag);
+export function useFeatureFlag(flag: FeatureFlag): FeatureFlagResult {
+  const { telemetry, featureFlags } = useTelemetryContext();
+  const status = featureFlags.status;
 
-  if (enabled !== undefined) {
-    return enabled;
-  }
+  switch (status) {
+    case "loading":
+      return LOADING_RESULT;
+    case "error":
+      return ERROR_RESULT;
+    case "ready": {
+      const enabled = telemetry.isFeatureEnabled(flag, { fresh: true });
+      if (enabled === undefined) {
+        return MISSING_RESULT;
+      }
 
-  switch (whileLoading) {
-    case "off":
-      return false;
-    case "on":
-      return true;
-    case "unresolved":
-      return undefined;
+      return { status: "ready", enabled };
+    }
+    default:
+      return assertNever(status);
   }
 }

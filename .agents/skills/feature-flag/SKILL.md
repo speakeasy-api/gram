@@ -135,14 +135,24 @@ New frontend code should use the typed `useFeatureFlag()` hook from
 `client/dashboard/src/hooks/useFeatureFlag.ts`:
 
 ```tsx
-const rbacEnabled = useFeatureFlag("gram-rbac"); // defaults off while loading
-const deploymentsEnabled = useFeatureFlag("gram-deployments-page", "on");
-const tunneledMcpEnabled = useFeatureFlag("gram-tunneled-mcp", "unresolved"); // boolean | undefined
+const assistants = useFeatureFlag(FEATURE_FLAGS.assistants);
+
+if (assistants.status === "loading") return null;
+if (assistants.status === "missing" || assistants.status === "error") {
+  return <FeatureUnavailable />;
+}
+
+const assistantsEnabled = assistants.enabled; // status is "ready"; boolean
 ```
 
-Add new keys to the hook's `FeatureFlag` union. The hook stays reactive as
-PostHog flags load; on localhost, the development telemetry provider enables
-every flag. Never import PostHog hooks directly.
+Add new frontend keys to the `FEATURE_FLAGS` registry in
+`client/dashboard/src/lib/featureFlags.ts`; its values generate the hook's
+`FeatureFlag` type. The hook distinguishes loading, ready, missing, and error
+states and stays reactive as PostHog reloads flags. On localhost, the
+development telemetry provider reports every flag ready and enabled.
+
+PostHog flags control rollout UI only. Never use them for authorization or
+entitlement enforcement, and never import PostHog hooks directly.
 
 ---
 
