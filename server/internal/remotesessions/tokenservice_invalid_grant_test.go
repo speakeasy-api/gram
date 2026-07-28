@@ -2,6 +2,7 @@ package remotesessions_test
 
 import (
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -87,6 +88,13 @@ func TestResolveAccessToken_InvalidGrantAdoptsConcurrentRelink(t *testing.T) {
 	refreshArrived := make(chan struct{})
 	releaseRefresh := make(chan struct{})
 
+	// Close releaseRefresh exactly once, and register a cleanup so an assertion
+	// failure between <-refreshArrived and the happy-path close still unblocks
+	// the blocked handler goroutine instead of leaking it forever.
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseRefresh) }) }
+	t.Cleanup(release)
+
 	ctx, env := newSyntheticExpiryEnv(t, "invalid-grant-adopt", func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -147,7 +155,7 @@ func TestResolveAccessToken_InvalidGrantAdoptsConcurrentRelink(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, env.session.ID, winner.ID, "re-link updates the row in place")
 
-	close(releaseRefresh)
+	release()
 
 	got := <-resolved
 	require.NoError(t, got.err)
