@@ -297,7 +297,15 @@ func TestResponseAccountingMismatchFailsLoudly(t *testing.T) {
 	fake.respondEmpty = true
 	fake.mu.Unlock()
 	err := s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(3))
-	require.ErrorContains(t, err, "accounted for 0 of 3")
+	require.ErrorContains(t, err, "accounting")
+
+	// The empty-fleet edge: zero records sent must not "match" the zero
+	// counts a drifted envelope decodes to.
+	fake.mu.Lock()
+	fake.respondEmpty = true
+	fake.mu.Unlock()
+	err = s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(0))
+	require.ErrorContains(t, err, "accounting")
 }
 
 func TestSnapshotIntegrityGuards(t *testing.T) {
