@@ -210,9 +210,10 @@ type feedbackDurabilitySignaler struct {
 	skillName string
 	sawWrite  bool
 	err       error
+	skillID   uuid.UUID
 }
 
-func (s *feedbackDurabilitySignaler) Signal(ctx context.Context, projectID uuid.UUID) error {
+func (s *feedbackDurabilitySignaler) Signal(ctx context.Context, projectID, skillID uuid.UUID) error {
 	rows, err := s.repo.ListRecentSkillFeedback(ctx, repo.ListRecentSkillFeedbackParams{
 		ProjectID: projectID,
 		SkillName: s.skillName,
@@ -222,15 +223,42 @@ func (s *feedbackDurabilitySignaler) Signal(ctx context.Context, projectID uuid.
 		return fmt.Errorf("read feedback during signal: %w", err)
 	}
 	s.sawWrite = len(rows) == 1
+	s.skillID = skillID
 	return s.err
 }
 
 func TestFeedbackRecorderSignalsAfterInsertAndSwallowsSignalError(t *testing.T) {
 	t.Parallel()
 
-	_, ti := newTestService(t)
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "signaled-feedback", "Signaled")
 	signalErr := errors.New("coordinator unavailable")
-	signaler := &feedbackDurabilitySignaler{repo: ti.repo, skillName: "signaled-feedback", sawWrite: false, err: signalErr}
+	signaler := &feedbackDurabilitySignaler{repo: ti.repo, skillName: "signaled-feedback", sawWrite: false, err: signalErr, skillID: uuid.Nil}
+	recorder := feedbackrecorder.NewRecorder(ti.conn, testenv.NewLogger(t), signaler)
+
+	feedback, err := recorder.Record(t.Context(), feedbackrecorder.RecordInput{
+		ProjectID:      ti.projectID,
+		SkillID:        uuid.NullUUID{UUID: uuid.MustParse(created.Skill.ID), Valid: true},
+		SkillVersionID: uuid.NullUUID{},
+		SkillName:      signaler.skillName,
+		Source:         skills.FeedbackSourceDev,
+		Outcome:        skills.FeedbackOutcomeHelped,
+		Note:           "",
+		SessionID:      "",
+		UserID:         "",
+		UserEmail:      "",
+	})
+	require.NoError(t, err)
+	require.NotEqual(t, uuid.Nil, feedback.ID)
+	require.True(t, signaler.sawWrite)
+	require.Equal(t, uuid.MustParse(created.Skill.ID), signaler.skillID)
+}
+
+func TestFeedbackRecorderDoesNotSignalUnresolvedFeedback(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestService(t)
+	signaler := &feedbackDurabilitySignaler{repo: ti.repo, skillName: "unresolved-signal", sawWrite: false, err: nil, skillID: uuid.Nil}
 	recorder := feedbackrecorder.NewRecorder(ti.conn, testenv.NewLogger(t), signaler)
 
 	feedback, err := recorder.Record(t.Context(), feedbackrecorder.RecordInput{
@@ -246,8 +274,8 @@ func TestFeedbackRecorderSignalsAfterInsertAndSwallowsSignalError(t *testing.T) 
 		UserEmail:      "",
 	})
 	require.NoError(t, err)
-	require.NotEqual(t, uuid.Nil, feedback.ID)
-	require.True(t, signaler.sawWrite)
+	require.False(t, feedback.SkillID.Valid)
+	require.False(t, signaler.sawWrite)
 }
 
 func TestCreateSkillFeedbackUnresolvedNameRoundTrip(t *testing.T) {

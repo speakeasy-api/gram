@@ -315,6 +315,7 @@ func (m *ChallengeManager) refreshAccessToken(
 
 	lockKey := refreshLockKey(sess.SubjectUrn, sess.RemoteSessionClientID)
 	held, lockErr := m.locks.Add(ctx, lockKey, refreshLockTTL)
+	ownsRefreshLock := lockErr == nil && held
 
 	switch {
 	case lockErr != nil:
@@ -377,6 +378,25 @@ func (m *ChallengeManager) refreshAccessToken(
 	_, accessToken, refreshErr := refreshSessionTokens(ctx, q, m.enc, m.policy, sess, resource)
 	if refreshErr == nil {
 		return accessToken, nil
+	}
+
+	var tokenRefreshErr *TokenRefreshError
+	if ownsRefreshLock && errors.As(refreshErr, &tokenRefreshErr) && tokenRefreshErr.invalidGrant() {
+		_, err := q.RevokeRemoteSessionAfterInvalidGrant(ctx, remotesessions_repo.RevokeRemoteSessionAfterInvalidGrantParams{
+			ID:                    sess.ID,
+			SubjectUrn:            sess.SubjectUrn,
+			UserSessionIssuerID:   sess.UserSessionIssuerID,
+			RemoteSessionClientID: sess.RemoteSessionClientID,
+			ExpectedUpdatedAt:     sess.UpdatedAt,
+		})
+		switch {
+		case err == nil:
+			return "", refreshErr
+		case !errors.Is(err, pgx.ErrNoRows):
+			return "", fmt.Errorf("revoke remote session after invalid_grant: %w", err)
+		}
+		// A row that moved after our refresh attempt belongs to a concurrent
+		// winner. Re-read it below and adopt that token instead of deleting it.
 	}
 
 	latest, err := q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
@@ -445,7 +465,7 @@ func (m *ChallengeManager) awaitRefreshedToken(
 }
 
 // refreshSessionTokens POSTs grant_type=refresh_token to the upstream token
-// endpoint and persists the new token pair on success, returning the upserted
+// endpoint and persists the new token pair on success, returning the updated
 // remote_session row and the new plaintext access token.
 //
 // It is shared by the lazy MCP resolution path (ChallengeManager) and the

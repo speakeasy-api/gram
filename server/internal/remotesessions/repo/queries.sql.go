@@ -2933,6 +2933,56 @@ func (q *Queries) RevokeRemoteSession(ctx context.Context, arg RevokeRemoteSessi
 	return i, err
 }
 
+const revokeRemoteSessionAfterInvalidGrant = `-- name: RevokeRemoteSessionAfterInvalidGrant :one
+UPDATE remote_sessions
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+  AND subject_urn = $2
+  AND user_session_issuer_id = $3
+  AND remote_session_client_id = $4
+  AND deleted IS FALSE
+  AND updated_at = $5
+RETURNING id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, refresh_expires_at, scopes, created_at, updated_at, deleted_at, deleted
+`
+
+type RevokeRemoteSessionAfterInvalidGrantParams struct {
+	ID                    uuid.UUID
+	SubjectUrn            urn.SessionSubject
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	ExpectedUpdatedAt     pgtype.Timestamptz
+}
+
+// A definitive upstream invalid_grant means this session can no longer renew.
+// Compare-and-swap against the snapshot used for the refresh so a delayed
+// failure cannot evict tokens that a concurrent refresh already rotated.
+func (q *Queries) RevokeRemoteSessionAfterInvalidGrant(ctx context.Context, arg RevokeRemoteSessionAfterInvalidGrantParams) (RemoteSession, error) {
+	row := q.db.QueryRow(ctx, revokeRemoteSessionAfterInvalidGrant,
+		arg.ID,
+		arg.SubjectUrn,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.ExpectedUpdatedAt,
+	)
+	var i RemoteSession
+	err := row.Scan(
+		&i.ID,
+		&i.SubjectUrn,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.AccessTokenEncrypted,
+		&i.AccessExpiresAt,
+		&i.RefreshTokenEncrypted,
+		&i.RefreshExpiresAt,
+		&i.Scopes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const setOrganizationRemoteSessionIssuerProject = `-- name: SetOrganizationRemoteSessionIssuerProject :one
 UPDATE remote_session_issuers
 SET project_id = $1::uuid,

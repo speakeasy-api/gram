@@ -30,6 +30,7 @@ import (
 	projectrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilldiff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -171,6 +172,34 @@ func skillManifest(name, description, body string) string {
 	return fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n\n%s\n", name, description, body)
 }
 
+func diffTo(t *testing.T, base, proposed string) string {
+	t.Helper()
+
+	diff, err := skilldiff.Unified(base, proposed)
+	require.NoError(t, err)
+	require.NotEmpty(t, diff)
+	return diff
+}
+
+func applyDiff(t *testing.T, base, diff string) string {
+	t.Helper()
+
+	applied, err := skilldiff.Apply(base, diff)
+	require.NoError(t, err)
+	return applied
+}
+
+func suggestionFeedbackCount(t *testing.T, ctx context.Context, ti *testInstance, suggestionID uuid.UUID) int64 {
+	t.Helper()
+
+	count, err := ti.repo.CountSkillEditSuggestionFeedback(ctx, repo.CountSkillEditSuggestionFeedbackParams{
+		ProjectID:    ti.projectID,
+		SuggestionID: suggestionID,
+	})
+	require.NoError(t, err)
+	return count
+}
+
 func createSkill(t *testing.T, ctx context.Context, ti *testInstance, name, description string) *gen.RecordSkillResult {
 	t.Helper()
 
@@ -232,4 +261,68 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, code, oopsErr.Code)
+}
+
+// seedSuggestionParams mirrors the fields a test cares about when standing up a
+// suggestion, including the single proposed change most tests need.
+type seedSuggestionParams struct {
+	ProposedDiff       string
+	Rationale          string
+	ScoredSessionCount int64
+	BaseVersionID      uuid.UUID
+	ProjectID          uuid.UUID
+	SkillID            uuid.UUID
+}
+
+// seedSuggestion writes a suggestion carrying one proposed change, which is the
+// shape the analysis engine produces. It keeps the repository error so callers
+// can assert on it the same way they do for a direct query.
+func seedSuggestion(t *testing.T, ctx context.Context, ti *testInstance, params seedSuggestionParams) (repo.SkillEditSuggestion, error) {
+	t.Helper()
+
+	suggestion, err := ti.repo.CreateSkillEditSuggestion(ctx, repo.CreateSkillEditSuggestionParams{
+		Rationale:          params.Rationale,
+		ScoredSessionCount: params.ScoredSessionCount,
+		BaseVersionID:      params.BaseVersionID,
+		ProjectID:          params.ProjectID,
+		SkillID:            params.SkillID,
+	})
+	if err != nil {
+		return suggestion, fmt.Errorf("create skill suggestion: %w", err)
+	}
+	_, err = ti.repo.CreateSkillEditSuggestionChange(ctx, repo.CreateSkillEditSuggestionChangeParams{
+		ProposedDiff: params.ProposedDiff,
+		Rationale:    params.Rationale,
+		Position:     0,
+		ProjectID:    params.ProjectID,
+		SuggestionID: suggestion.ID,
+	})
+	require.NoError(t, err)
+
+	return suggestion, nil
+}
+
+// suggestionChanges returns the proposed changes attached to a suggestion, in
+// the order a reviewer sees them.
+func suggestionChanges(t *testing.T, ctx context.Context, ti *testInstance, suggestionID uuid.UUID) []repo.ListSkillEditSuggestionChangesRow {
+	t.Helper()
+
+	changes, err := ti.repo.ListSkillEditSuggestionChanges(ctx, repo.ListSkillEditSuggestionChangesParams{
+		ProjectID:     ti.projectID,
+		SuggestionIds: []uuid.UUID{suggestionID},
+	})
+	require.NoError(t, err)
+	return changes
+}
+
+// suggestionContent applies every proposed change to base, which is the
+// manifest a reviewer sees when taking the whole suggestion.
+func suggestionContent(t *testing.T, ctx context.Context, ti *testInstance, suggestionID uuid.UUID, base string) string {
+	t.Helper()
+
+	content := base
+	for _, change := range suggestionChanges(t, ctx, ti, suggestionID) {
+		content = applyDiff(t, content, change.ProposedDiff)
+	}
+	return content
 }
