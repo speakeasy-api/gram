@@ -12,6 +12,7 @@ import (
 
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidiotest"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -28,7 +29,7 @@ func newClient(t *testing.T) (*presidiotest.MockServer, *risk_analysis.PresidioC
 	return server, client
 }
 
-func ruleIDs(findings []risk_analysis.Finding) []string {
+func ruleIDs(findings []scanners.Finding) []string {
 	out := make([]string, len(findings))
 	for i, f := range findings {
 		out[i] = f.RuleID

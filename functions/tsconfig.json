@@ -9,6 +9,9 @@
 
     "module": "nodenext",
     "moduleResolution": "nodenext",
+    // TypeScript 7 (tsgo) does not auto-include node_modules/@types here the
+    // way TS 5.x did, leaving node builtins untyped in checked .mjs files.
+    "types": ["node"],
     "allowImportingTsExtensions": true /* Allow imports to include TypeScript file extensions. Requires '--moduleResolution bundler' and either '--noEmit' or '--emitDeclarationOnly' to be set. */,
 
     "allowJs": true,

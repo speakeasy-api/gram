@@ -7,11 +7,9 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { Toolset } from "@/lib/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useProductTier } from "@/hooks/useProductTier";
-import {
-  invalidateAllGetMcpMetadata,
-  invalidateAllListEnvironments,
-  invalidateAllToolset,
-} from "@gram/client/react-query";
+import { invalidateAllGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
+import { invalidateAllListEnvironments } from "@gram/client/react-query/listEnvironments.js";
+import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";

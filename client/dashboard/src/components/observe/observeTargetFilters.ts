@@ -1,14 +1,14 @@
 import type {
   FilterChip,
+  ObserveStatusFilterValue,
   ObserveTypeFilterValue,
 } from "@/components/observe/ObserveFilterBar";
 import type { MultiSelectGroup } from "@/components/ui/multi-select";
 import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
-import type {
-  ToolUsageHostedServerFilterOption,
-  ToolUsageShadowServerFilterOption,
-} from "@gram/client/models/components";
+import type { ToolUsageHostedServerFilterOption } from "@gram/client/models/components/toolusagehostedserverfilteroption.js";
+import type { ToolUsageShadowServerFilterOption } from "@gram/client/models/components/toolusageshadowserverfilteroption.js";
 import type { TargetTypes } from "@gram/client/models/components/gettoolusagesummarypayload";
+import type { Statuses } from "@gram/client/models/components/listtoolusagetracespayload";
 import { normalizeUserEmailFilter } from "./observeUserFilters";
 
 export const SERVER_FILTER_PATH = "gram.tool_call.source";
@@ -18,9 +18,18 @@ const HOOK_SOURCE_FILTER_PATH = "gram.hook.source";
 const HOSTED_SERVER_PREFIX = "hosted:";
 const SHADOW_SERVER_PREFIX = "shadow:";
 
-export const TOOL_USAGE_DEFAULT_TYPES: ObserveTypeFilterValue[] = [];
+// Local tools are excluded by default: they dominate event volume and drown
+// out the MCP server and skill usage these pages are meant to surface. Users
+// can opt back in via the type filter.
+export const TOOL_USAGE_DEFAULT_TYPES: ObserveTypeFilterValue[] = [
+  "hosted_mcp_server",
+  "tunneled_mcp_server",
+  "shadow_mcp_server",
+  "skill",
+];
 export const TOOL_USAGE_VALID_TYPES: ObserveTypeFilterValue[] = [
   "hosted_mcp_server",
+  "tunneled_mcp_server",
   "shadow_mcp_server",
   "local_tool",
   "skill",
@@ -30,10 +39,36 @@ export const TOOL_USAGE_TYPE_OPTIONS: Array<{
   value: ObserveTypeFilterValue;
 }> = [
   { label: "Hosted MCP Servers", value: "hosted_mcp_server" },
+  { label: "Tunneled MCP Servers", value: "tunneled_mcp_server" },
   { label: "Shadow MCP Servers", value: "shadow_mcp_server" },
   { label: "Local Tools", value: "local_tool" },
   { label: "Skills", value: "skill" },
 ];
+
+export const TOOL_USAGE_VALID_STATUSES: ObserveStatusFilterValue[] = [
+  "error",
+  "success",
+  "blocked",
+  "pending",
+];
+export const TOOL_USAGE_STATUS_OPTIONS: Array<{
+  label: string;
+  value: ObserveStatusFilterValue;
+}> = [
+  { label: "Error", value: "error" },
+  { label: "Success", value: "success" },
+  { label: "Blocked", value: "blocked" },
+  { label: "Pending", value: "pending" },
+];
+
+export function toStatuses(
+  selectedStatuses: ObserveStatusFilterValue[],
+): Statuses[] | undefined {
+  const mapped = selectedStatuses.filter((status): status is Statuses =>
+    TOOL_USAGE_VALID_STATUSES.includes(status),
+  );
+  return mapped.length > 0 ? mapped : undefined;
+}
 
 export type ParsedTargetFilter =
   | { type: "hosted"; id: string }
@@ -77,6 +112,15 @@ export function selectedHookSources(activeFilters: FilterChip[]): string[] {
     .filter((f) => f.path === HOOK_SOURCE_FILTER_PATH)
     .flatMap((f) => f.filters)
     .filter(Boolean);
+}
+
+export function isDefaultToolUsageTypeSelection(
+  selectedTypes: ObserveTypeFilterValue[],
+): boolean {
+  return (
+    selectedTypes.length === TOOL_USAGE_DEFAULT_TYPES.length &&
+    TOOL_USAGE_DEFAULT_TYPES.every((type) => selectedTypes.includes(type))
+  );
 }
 
 export function toTargetTypes(

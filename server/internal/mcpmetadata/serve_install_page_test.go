@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -1344,12 +1345,14 @@ func TestServeInstallPage_McpServer_RemoteBacked_PublicRenders(t *testing.T) {
 		Url:           "https://upstream.example.com/mcp",
 	})
 
+	issuer := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
 	endpointSlug := "remote-mcp-public-" + uuid.NewString()[:8]
 	server, _ := createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
-		name:              "Remote MCP Public",
-		visibility:        mcpservers.VisibilityPublic,
-		endpointSlug:      endpointSlug,
-		remoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		name:                "Remote MCP Public",
+		visibility:          mcpservers.VisibilityPublic,
+		endpointSlug:        endpointSlug,
+		remoteMcpServerID:   uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		userSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
 	})
 
 	docURL := "https://docs.example.com/remote-mcp"
@@ -1395,12 +1398,14 @@ func TestServeInstallPage_McpServer_RemoteBacked_PrivateRedirectsToLogin(t *test
 		Url:           "https://upstream.example.com/mcp",
 	})
 
+	issuer := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
 	endpointSlug := "remote-mcp-private-" + uuid.NewString()[:8]
 	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
-		name:              "Remote MCP Private",
-		visibility:        mcpservers.VisibilityPrivate,
-		endpointSlug:      endpointSlug,
-		remoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		name:                "Remote MCP Private",
+		visibility:          mcpservers.VisibilityPrivate,
+		endpointSlug:        endpointSlug,
+		remoteMcpServerID:   uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		userSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
 	})
 
 	req := httptest.NewRequest("GET", "/mcp/"+endpointSlug+"/install", nil)
@@ -1596,8 +1601,8 @@ func TestServeInstallPage_McpServer_FallsBackToToolsetMetadata(t *testing.T) {
 }
 
 // TestServeInstallPage_McpServer_InstallationOverrideURL ensures the override
-// redirect honors mcp_server-keyed metadata, matching the existing toolset
-// behaviour so customer-hosted install pages keep working across backends.
+// redirect honors mcp_server-keyed metadata and preserves request query
+// parameters, including explicit referrer attribution.
 func TestServeInstallPage_McpServer_InstallationOverrideURL(t *testing.T) {
 	t.Parallel()
 
@@ -1612,14 +1617,16 @@ func TestServeInstallPage_McpServer_InstallationOverrideURL(t *testing.T) {
 		Url:           "https://upstream.example.com/mcp",
 	})
 
+	issuer := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
 	endpointSlug := "override-" + uuid.NewString()[:8]
 	server, _ := createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
-		visibility:        mcpservers.VisibilityPublic,
-		endpointSlug:      endpointSlug,
-		remoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		visibility:          mcpservers.VisibilityPublic,
+		endpointSlug:        endpointSlug,
+		remoteMcpServerID:   uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		userSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
 	})
 
-	override := "https://custom-install-page.example.com/install"
+	override := "https://custom-install-page.example.com/install?configured=1#setup"
 	serverID := server.ID.String()
 	_, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
 		McpServerID:             &serverID,
@@ -1627,7 +1634,12 @@ func TestServeInstallPage_McpServer_InstallationOverrideURL(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	req := httptest.NewRequest("GET", "/mcp/"+endpointSlug+"/install", nil)
+	req := httptest.NewRequest(
+		"GET",
+		"/mcp/"+endpointSlug+"/install?configured=caller&utm_source=directory&campaign=spring&campaign=summer&referrer=https%3A%2F%2Fdirectory.example.com%2Fcatalog%3Fcategory%3Dai",
+		nil,
+	)
+	req.Header.Set("Referer", "https://different-referrer.example.com/page")
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("mcpSlug", endpointSlug)
 	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
@@ -1635,5 +1647,15 @@ func TestServeInstallPage_McpServer_InstallationOverrideURL(t *testing.T) {
 	rr := httptest.NewRecorder()
 	require.NoError(t, ti.service.ServeInstallPage(rr, req))
 	require.Equal(t, http.StatusFound, rr.Code)
-	require.Equal(t, override, rr.Header().Get("Location"))
+
+	location, err := url.Parse(rr.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "https", location.Scheme)
+	require.Equal(t, "custom-install-page.example.com", location.Host)
+	require.Equal(t, "/install", location.Path)
+	require.Equal(t, "setup", location.Fragment)
+	require.Equal(t, []string{"1", "caller"}, location.Query()["configured"])
+	require.Equal(t, "directory", location.Query().Get("utm_source"))
+	require.Equal(t, []string{"spring", "summer"}, location.Query()["campaign"])
+	require.Equal(t, "https://directory.example.com/catalog?category=ai", location.Query().Get("referrer"))
 }

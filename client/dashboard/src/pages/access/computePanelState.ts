@@ -1,10 +1,9 @@
-import type {
-  AnnotationHint,
-  CustomTab,
-  ResourceType,
-  Selector,
+import type { Selector } from "@gram/client/models/components/selector.js";
+import type { AnnotationHint, CustomTab, ResourceType } from "./types";
+import {
+  DISPOSITION_TO_ANNOTATION,
+  isProjectSelectableResourceType,
 } from "./types";
-import { DISPOSITION_TO_ANNOTATION } from "./types";
 
 // --- Collection group shape (minimal interface for computation) ---
 
@@ -69,8 +68,9 @@ export function computePanelState(
   resourceType: ResourceType,
   customTab?: CustomTab,
 ): PanelState {
-  const noun = resourceType === "project" ? "project" : "server";
-  const allLabel = resourceType === "project" ? "All projects" : "All servers";
+  const projectSelectable = isProjectSelectableResourceType(resourceType);
+  const noun = projectSelectable ? "project" : "server";
+  const allLabel = projectSelectable ? "All projects" : "All servers";
 
   // Unrestricted
   if (selectors === null) {

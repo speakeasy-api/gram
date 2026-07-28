@@ -1,4 +1,4 @@
-import type { ExternalMCPServer } from "@gram/client/models/components";
+import type { ExternalMCPServer } from "@gram/client/models/components/externalmcpserver.js";
 import { describe, expect, it } from "vitest";
 import { buildCollectionMcpJson, formatMcpJson } from "./mcp-json";
 

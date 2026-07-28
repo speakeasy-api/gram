@@ -1,8 +1,8 @@
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Tool } from "@/lib/toolTypes";
-import { Confirm } from "@gram/client/models/components";
-import { invalidateTemplate } from "@gram/client/react-query";
+import { Confirm } from "@gram/client/models/components/upsertglobaltoolvariationform.js";
+import { invalidateTemplate } from "@gram/client/react-query/template.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { toast } from "sonner";

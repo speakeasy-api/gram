@@ -13,12 +13,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { UserSessionIssuer } from "@gram/client/models/components";
-import {
-  invalidateAllUserSessionIssuer,
-  invalidateAllUserSessionIssuers,
-  useUpdateUserSessionIssuerMutation,
-} from "@gram/client/react-query/index.js";
+import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
+import { useUpdateUserSessionIssuerMutation } from "@gram/client/react-query/updateUserSessionIssuer.js";
+import { invalidateAllUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
+import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";

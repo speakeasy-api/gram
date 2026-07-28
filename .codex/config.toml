@@ -1,2 +1,26 @@
-[mcp_servers.madprocs]
-url = "https://localhost:35294/mcp"
+#:schema https://developers.openai.com/codex/config-schema.json
+
+[mcp_servers.assistants-dev]
+command = "mise"
+args = ["x", "--", "go", "run", "./server/cmd/dev-mcp"]
+
+[mcp_servers.pitchfork]
+command = "pitchfork"
+args = ["mcp"]
+
+[mcp_servers.mise]
+command = "mise"
+args = ["mcp"]
+env = { MISE_EXPERIMENTAL = "1" }
+
+[mcp_servers.playwright]
+command = "npx"
+args = [
+  "-y",
+  "@playwright/mcp@latest",
+  "--browser=chromium",
+  "--viewport-size",
+  "1920x1080",
+  "--config",
+  ".playwright-mcp.config.json",
+]

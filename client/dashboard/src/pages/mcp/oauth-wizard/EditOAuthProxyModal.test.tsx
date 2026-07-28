@@ -16,8 +16,11 @@ const mocks = vi.hoisted(() => ({
   invalidateAllToolset: vi.fn(),
 }));
 
-vi.mock("@gram/client/react-query", () => ({
+vi.mock("@gram/client/react-query/toolset.js", () => ({
   invalidateAllToolset: mocks.invalidateAllToolset,
+}));
+
+vi.mock("@gram/client/react-query/updateOAuthProxyServer.js", () => ({
   useUpdateOAuthProxyServerMutation: (options: {
     onSuccess?: () => void;
     onError?: (e: Error) => void;

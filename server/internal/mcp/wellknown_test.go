@@ -27,8 +27,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // runMCPWellKnown invokes a /mcp well-known handler with the chi `mcpSlug`
@@ -88,31 +88,13 @@ func TestHandleGetAuthorizationServer_DisabledServer(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	slug := "disabled-" + uuid.NewString()
-	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, "https://upstream.invalid/mcp", slug, "disabled", uuid.Nil)
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, "https://upstream.invalid/mcp", slug, "disabled", issuerID)
 
 	// Disabled mcp_server resolves as not-found; with no legacy toolset for
 	// the slug the fallback also misses → 404.
 	w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetAuthorizationServer, slug)
 	require.Error(t, err)
-	require.Empty(t, w.Body.String())
-}
-
-func TestHandleGetAuthorizationServer_RemoteBackend(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	// Remote-backed mcp_servers without issuer gating have no Gram-hosted
-	// authorization server — the upstream publishes its own .well-known.
-	slug := "remote-" + uuid.NewString()
-	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, "https://upstream.invalid/mcp", slug, "public", uuid.Nil)
-
-	w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetAuthorizationServer, slug)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "no OAuth configuration found")
 	require.Empty(t, w.Body.String())
 }
 
@@ -193,10 +175,16 @@ func TestHandleGetAuthorizationServer_ToolsetBackendWithExternalOAuth(t *testing
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Header().Get("Content-Type"), "application/json")
 
-	// External OAuth toolsets surface the upstream provider's metadata verbatim.
+	// External OAuth toolsets re-serve the upstream provider's captured
+	// metadata, but the issuer is rewritten to the Gram resource URL so the
+	// document satisfies RFC 8414 §3.3 (served issuer must equal the URL the
+	// client fetched it under, i.e. the /mcp/{slug} surface). The upstream's
+	// own authorization/token endpoints are preserved verbatim.
 	var metadata map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
-	require.Equal(t, "https://test-oauth-server.example.com", metadata["issuer"])
+	require.Equal(t, "http://0.0.0.0/mcp/"+slug, metadata["issuer"])
+	require.Equal(t, "https://test-oauth-server.example.com/authorize", metadata["authorization_endpoint"])
+	require.Equal(t, "https://test-oauth-server.example.com/token", metadata["token_endpoint"])
 }
 
 // TestHandleGetAuthorizationServer_IssuerGatedRemoteBackend is the primary
@@ -219,6 +207,8 @@ func TestHandleGetAuthorizationServer_IssuerGatedRemoteBackend(t *testing.T) {
 	w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetAuthorizationServer, slug)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, "public, max-age=60", w.Header().Get("Cache-Control"))
+	require.NotEmpty(t, w.Header().Get("ETag"))
 
 	var metadata map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
@@ -280,7 +270,7 @@ func TestHandleGetAuthorizationServer_IssuerGatedRemoteBackend_DanglingIssuerFK(
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 
-	_, err = usersessionsrepo.New(ti.conn).DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
+	err = testrepo.New(ti.conn).ForceSoftDeleteUserSessionIssuer(ctx, testrepo.ForceSoftDeleteUserSessionIssuerParams{
 		ID:        issuerID,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -344,23 +334,6 @@ func TestHandleGetProtectedResource_NotFound(t *testing.T) {
 	w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetProtectedResource, "definitely-missing-"+uuid.NewString()[:8])
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "mcp server not found")
-	require.Empty(t, w.Body.String())
-}
-
-func TestHandleGetProtectedResource_RemoteBackend(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	slug := "remote-pr-" + uuid.NewString()
-	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, "https://upstream.invalid/mcp", slug, "public", uuid.Nil)
-
-	w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetProtectedResource, slug)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "no OAuth configuration found")
 	require.Empty(t, w.Body.String())
 }
 

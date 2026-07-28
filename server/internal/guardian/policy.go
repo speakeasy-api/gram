@@ -1,7 +1,8 @@
 // Package guardian provides HTTP client construction with network security
-// policy enforcement, OpenTelemetry instrumentation, and optional retry logic.
+// policy enforcement, OpenTelemetry instrumentation, resilience (rate
+// limiting and circuit breaking), and optional retry logic.
 //
-// It addresses three concerns:
+// It addresses these concerns:
 //
 //   - SSRF prevention: outbound connections are checked at the dialer level
 //     against a configurable blocklist of CIDR ranges (all RFC-defined private
@@ -18,11 +19,17 @@
 //   - Observability: every returned [http.Client] has its transport wrapped
 //     with [go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp] so
 //     all outbound HTTP calls are traced without per-call-site boilerplate.
+//
+//   - Resilience: clients built with [WithResilience] rate limit and circuit
+//     break requests per partition (upstream host by default) at the
+//     transport layer, so every call — including those made inside
+//     third-party SDKs holding a *http.Client — is guarded uniformly.
 package guardian
 
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"syscall"
@@ -30,9 +37,11 @@ import (
 
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/hashicorp/go-retryablehttp"
-	"github.com/speakeasy-api/gram/server/internal/dns"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/speakeasy-api/gram/server/internal/dns"
 )
 
 type HTTPClient = http.Client
@@ -112,26 +121,33 @@ func DefaultRetryConfig() *RetryConfig {
 	}
 }
 
-type htttpClientOptions struct {
+type httpClientOptions struct {
 	otelHTTPOptions   []otelhttp.Option
 	retryConfig       *RetryConfig
 	resolver          *net.Resolver
 	allowedCIDRBlocks []*net.IPNet
+	resilience        *resilienceOptions
 }
+
+// ClientOption configures a single [Policy.Client] / [Policy.PooledClient]
+// call. Values are produced by the With* helpers in this package (e.g.
+// [WithAllowedCIDRBlocks]); callers outside the package hold and pass them
+// but cannot construct new ones.
+type ClientOption = func(*httpClientOptions)
 
 // WithOTelHTTPOptions appends additional [otelhttp.Option] values to the
 // OpenTelemetry transport instrumentation. Use this to configure trace
 // propagation, filters, or span name formatters on a per-client basis.
-func WithOTelHTTPOptions(options ...otelhttp.Option) func(*htttpClientOptions) {
-	return func(o *htttpClientOptions) {
+func WithOTelHTTPOptions(options ...otelhttp.Option) func(*httpClientOptions) {
+	return func(o *httpClientOptions) {
 		o.otelHTTPOptions = options
 	}
 }
 
 // WithDefaultRetryConfig enables retry behaviour using the defaults from
 // [DefaultRetryConfig].
-func WithDefaultRetryConfig() func(*htttpClientOptions) {
-	return func(o *htttpClientOptions) {
+func WithDefaultRetryConfig() func(*httpClientOptions) {
+	return func(o *httpClientOptions) {
 		o.retryConfig = DefaultRetryConfig()
 	}
 }
@@ -143,8 +159,8 @@ func WithDefaultRetryConfig() func(*htttpClientOptions) {
 // pod IP it resolved from the Kubernetes API. The relaxation is scoped to this
 // client; the policy's global enforcement is unchanged. Invalid CIDRs are
 // ignored, so validate them at the configuration boundary.
-func WithAllowedCIDRBlocks(cidrs ...string) func(*htttpClientOptions) {
-	return func(o *htttpClientOptions) {
+func WithAllowedCIDRBlocks(cidrs ...string) func(*httpClientOptions) {
+	return func(o *httpClientOptions) {
 		for _, cidr := range cidrs {
 			if cidr == "" {
 				continue
@@ -157,8 +173,8 @@ func WithAllowedCIDRBlocks(cidrs ...string) func(*htttpClientOptions) {
 }
 
 // WithRetryConfig enables retry behaviour using the provided [RetryConfig].
-func WithRetryConfig(config *RetryConfig) func(*htttpClientOptions) {
-	return func(o *htttpClientOptions) {
+func WithRetryConfig(config *RetryConfig) func(*httpClientOptions) {
+	return func(o *httpClientOptions) {
 		o.retryConfig = config
 	}
 }
@@ -167,6 +183,8 @@ type Policy struct {
 	tracerProvider    trace.TracerProvider
 	blockedCIDRBlocks []*net.IPNet
 	resolver          dns.Resolver
+	limiter           Limiter
+	breaker           Breaker
 }
 
 // WithResolver is a functional option that sets the Policy's resolver.
@@ -178,17 +196,66 @@ func WithResolver(resolver dns.Resolver) func(*Policy) {
 	}
 }
 
+// WithLimiter sets the rate limiter backing clients built with
+// [WithResilience]. Defaults to a [NoopLimiter] that admits everything: pass
+// an [InProcLimiter] for per-process limits or a [RedisRateLimiter] when
+// limits must hold across replicas. A [NewNoopLimiter]-built NoopLimiter
+// still admits everything but reports the bucket-count gauge, previewing
+// partition cardinality before enforcement is switched on.
+func WithLimiter(limiter Limiter) func(*Policy) {
+	return func(p *Policy) {
+		p.limiter = limiter
+	}
+}
+
+// WithBreaker sets the circuit breaker backing clients built with
+// [WithResilience]. Defaults to a [NoopBreaker] that admits everything: pass
+// an [InProcBreaker] to enforce breaker policies. A [NewNoopBreaker]-built
+// NoopBreaker still admits everything but reports the instance-count gauge,
+// previewing partition cardinality before enforcement is switched on.
+func WithBreaker(breaker Breaker) func(*Policy) {
+	return func(p *Policy) {
+		p.breaker = breaker
+	}
+}
+
 // NewDefaultPolicy creates a new Policy that blocks common private and reserved
 // IP ranges.
 func NewDefaultPolicy(tracerProvider trace.TracerProvider, options ...func(*Policy)) *Policy {
+	return newPolicy(tracerProvider, defaultBlockedCIDRBlocks, options...)
+}
+
+func newPolicy(tracerProvider trace.TracerProvider, blockedCIDRBlocks []*net.IPNet, options ...func(*Policy)) *Policy {
+	// Limiter and breaker state deliberately lives on the Policy: clients are
+	// often constructed per call site or per request, and resilience state
+	// must outlive them. Resilience names are the partition key namespace,
+	// so one shared pair serves every named configuration. The
+	// no-op defaults make resilience enforcement strictly opt-in via
+	// WithLimiter/WithBreaker.
 	policy := &Policy{
 		tracerProvider:    tracerProvider,
-		blockedCIDRBlocks: defaultBlockedCIDRBlocks,
+		blockedCIDRBlocks: blockedCIDRBlocks,
 		resolver:          dns.NewNetResolver(),
+		limiter:           nil,
+		breaker:           nil,
 	}
 
 	for _, option := range options {
 		option(policy)
+	}
+
+	if policy.limiter == nil {
+		policy.limiter = NewNoopLimiter(
+			slog.New(slog.DiscardHandler),
+			metricnoop.NewMeterProvider(),
+		)
+	}
+
+	if policy.breaker == nil {
+		policy.breaker = NewNoopBreaker(
+			slog.New(slog.DiscardHandler),
+			metricnoop.NewMeterProvider(),
+		)
 	}
 
 	return policy
@@ -208,17 +275,7 @@ func NewUnsafePolicy(tracerProvider trace.TracerProvider, disallowedCIDRBlocks [
 		disallowedBlocks = append(disallowedBlocks, block)
 	}
 
-	policy := &Policy{
-		tracerProvider:    tracerProvider,
-		blockedCIDRBlocks: disallowedBlocks,
-		resolver:          dns.NewNetResolver(),
-	}
-
-	for _, option := range options {
-		option(policy)
-	}
-
-	return policy, nil
+	return newPolicy(tracerProvider, disallowedBlocks, options...), nil
 }
 
 // PooledClient returns an [http.Client] backed by a pooled transport that
@@ -226,7 +283,7 @@ func NewUnsafePolicy(tracerProvider trace.TracerProvider, disallowedCIDRBlocks [
 // clients that make repeated requests to the same host(s). Do not use it for
 // short-lived or one-off requests as idle connections hold open file
 // descriptors until they time out.
-func (p *Policy) PooledClient(options ...func(*htttpClientOptions)) *HTTPClient {
+func (p *Policy) PooledClient(options ...func(*httpClientOptions)) *HTTPClient {
 	return p.clientWithBaseTransport(cleanhttp.DefaultPooledTransport(), options...)
 }
 
@@ -234,12 +291,12 @@ func (p *Policy) PooledClient(options ...func(*htttpClientOptions)) *HTTPClient 
 // request (keepalives disabled). Because connections are never held idle,
 // the client cannot leak file descriptors, making it safe for short-lived
 // or one-off requests where connection reuse is unnecessary.
-func (p *Policy) Client(options ...func(*htttpClientOptions)) *HTTPClient {
+func (p *Policy) Client(options ...func(*httpClientOptions)) *HTTPClient {
 	return p.clientWithBaseTransport(cleanhttp.DefaultTransport(), options...)
 }
 
-func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...func(*htttpClientOptions)) *HTTPClient {
-	var opts htttpClientOptions
+func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...func(*httpClientOptions)) *HTTPClient {
+	var opts httpClientOptions
 	for _, option := range options {
 		option(&opts)
 	}
@@ -255,25 +312,58 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 
 	otelOpts := []otelhttp.Option{otelhttp.WithTracerProvider(p.tracerProvider)}
 	otelOpts = append(otelOpts, opts.otelHTTPOptions...)
-	otelTransport := otelhttp.NewTransport(transport, otelOpts...)
+
+	// The annotator sits inside otelhttp, where the request context carries
+	// the outbound HTTP span, and stamps the gram.resilience.* dimensions
+	// derived per request by the resilience transport.
+	var base http.RoundTripper = transport
+	if opts.resilience != nil {
+		base = &resilienceSpanAnnotator{next: transport}
+	}
+
+	// Retries sit outside the resilience layer so every attempt is admitted
+	// and counted individually, and resilience sits outside otelhttp so only
+	// requests that actually go out produce HTTP spans.
+	var roundTripper http.RoundTripper = otelhttp.NewTransport(base, otelOpts...)
+	if opts.resilience != nil {
+		roundTripper = &resilienceTransport{
+			next:    roundTripper,
+			name:    opts.resilience.name,
+			config:  opts.resilience.config,
+			limiter: p.limiter,
+			breaker: p.breaker,
+		}
+	}
 
 	if opts.retryConfig == nil {
-		return &http.Client{Transport: otelTransport}
+		return &http.Client{Transport: roundTripper}
 	}
 
 	retryClient := retryablehttp.NewClient()
 	retryClient.Logger = nil // avoid noisy logs from retryablehttp
 	retryClient.HTTPClient = &http.Client{
-		Transport: otelTransport,
+		Transport: roundTripper,
+	}
+
+	checkRetry := opts.retryConfig.CheckRetry
+	if opts.resilience != nil {
+		checkRetry = noRetryOnResilienceDenial(checkRetry)
 	}
 
 	retryClient.RetryWaitMin = opts.retryConfig.WaitMin
 	retryClient.RetryWaitMax = opts.retryConfig.WaitMax
 	retryClient.RetryMax = opts.retryConfig.MaxAttempts
-	retryClient.CheckRetry = opts.retryConfig.CheckRetry
-	retryClient.Backoff = opts.retryConfig.Backoff
 	retryClient.ErrorHandler = opts.retryConfig.ErrorHandler
 	retryClient.PrepareRetry = opts.retryConfig.PrepareRetry
+
+	// Nil CheckRetry/Backoff must keep retryablehttp's defaults: the client
+	// invokes Backoff unconditionally and would panic on a nil value.
+	if checkRetry != nil {
+		retryClient.CheckRetry = checkRetry
+	}
+	if opts.retryConfig.Backoff != nil {
+		retryClient.Backoff = opts.retryConfig.Backoff
+	}
 
 	return retryClient.StandardClient()
 }

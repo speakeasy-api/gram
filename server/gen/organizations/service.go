@@ -48,7 +48,7 @@ type Service interface {
 	VerifyOnboardingHooksSetup(context.Context, *VerifyOnboardingHooksSetupPayload) (res *VerifyOnboardingHooksSetupResult, err error)
 	// Send the enterprise admin onboarding email to one or more recipients. The
 	// email links each recipient to the wizard for the active organization. Used
-	// by the super-admin Onboarding tab.
+	// by the Platform Admin onboarding tools.
 	SendEnterpriseAdminOnboardingEmail(context.Context, *SendEnterpriseAdminOnboardingEmailPayload) (res *SendEnterpriseAdminOnboardingEmailResult, err error)
 	// Generate a WorkOS Admin Portal link for the given intent (e.g. dsync, sso).
 	GenerateWorkOSAdminPortalLink(context.Context, *GenerateWorkOSAdminPortalLinkPayload) (res *GenerateWorkOSAdminPortalLinkResult, err error)

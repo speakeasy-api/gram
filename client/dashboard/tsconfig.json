@@ -6,9 +6,10 @@
     { "path": "./tsconfig.node.json" }
   ],
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@gram/client": ["./src/sdk/src/index.ts"],
+      "@gram/client/*": ["./src/sdk/src/*"]
     }
   }
 }

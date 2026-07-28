@@ -26,7 +26,7 @@ func TestEnvironmentsService_DeleteEnvironment(t *testing.T) {
 			Name:             "to-delete",
 			Description:      nil,
 			Entries: []*gen.EnvironmentEntryInput{
-				{Name: "KEY1", Value: "value1"},
+				{Name: "KEY1", Value: new("value1"), IsSecret: new(true)},
 			},
 		})
 		require.NoError(t, err)
@@ -88,7 +88,7 @@ func TestEnvironmentsService_DeleteEnvironment_AuditLog(t *testing.T) {
 		Name:             "audit-delete-env",
 		Description:      nil,
 		Entries: []*gen.EnvironmentEntryInput{
-			{Name: "API_KEY", Value: "super-secret-delete-value"},
+			{Name: "API_KEY", Value: new("super-secret-delete-value"), IsSecret: new(true)},
 		},
 	})
 	require.NoError(t, err)

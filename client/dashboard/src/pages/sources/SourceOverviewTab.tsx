@@ -9,13 +9,11 @@ import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { dateTimeFormatters } from "@/lib/dates";
 import { useRoutes } from "@/routes";
-import type {
-  Asset,
-  DeploymentFunctions,
-  DeploymentSummary,
-  OpenAPIv3DeploymentAsset,
-  ToolMetric,
-} from "@gram/client/models/components";
+import type { Asset } from "@gram/client/models/components/asset.js";
+import type { DeploymentFunctions } from "@gram/client/models/components/deploymentfunctions.js";
+import type { DeploymentSummary } from "@gram/client/models/components/deploymentsummary.js";
+import type { OpenAPIv3DeploymentAsset } from "@gram/client/models/components/openapiv3deploymentasset.js";
+import type { ToolMetric } from "@gram/client/models/components/toolmetric.js";
 import { formatDistanceToNow } from "date-fns";
 
 type Source = OpenAPIv3DeploymentAsset | DeploymentFunctions;

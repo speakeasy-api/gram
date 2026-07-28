@@ -8,6 +8,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
 func celRules(t *testing.T, rules ...customrules.Rule) []CompiledCELRule {
@@ -19,7 +20,7 @@ func celRules(t *testing.T, rules ...customrules.Rule) []CompiledCELRule {
 	return compiled
 }
 
-func scanCEL(t *testing.T, view MessageView, rules []CompiledCELRule) []Finding {
+func scanCEL(t *testing.T, view MessageView, rules []CompiledCELRule) []scanners.Finding {
 	t.Helper()
 	eng, err := celenv.New()
 	require.NoError(t, err)
@@ -47,12 +48,12 @@ func TestScanCELRules_CorrelatedToolRule(t *testing.T) {
 	findings := scanCEL(t, view, rules)
 	require.Len(t, findings, 2)
 
-	byMatch := map[string]Finding{}
+	byMatch := map[string]scanners.Finding{}
 	for _, f := range findings {
 		byMatch[f.Match] = f
 		require.Equal(t, SourceCustom, f.Source)
 		require.Equal(t, "custom.bash_drop", f.RuleID)
-		require.Equal(t, "shell:run_bash_command", f.spanGroupKey)
+		require.Equal(t, "shell:run_bash_command", f.SpanGroupKey)
 	}
 	require.Contains(t, byMatch, "bash")
 	require.Contains(t, byMatch, "DROP TABLE")

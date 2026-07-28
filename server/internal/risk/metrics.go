@@ -10,35 +10,79 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
-const meterFindingRowsInserted = "gram.risk_findings.bq_rows_inserted"
+const (
+	meterFindingCHMessagesInserted = "gram.risk_findings.ch_messages_inserted"
+	meterFindingCHMessagesSkipped  = "gram.risk_findings.ch_messages_skipped"
+	meterFindingCHMessagesExcluded = "gram.risk_findings.ch_messages_excluded"
+)
 
 type metrics struct {
-	rowsInserted metric.Int64Counter
+	chMessagesInserted metric.Int64Counter
+	chMessagesSkipped  metric.Int64Counter
+	chMessagesExcluded metric.Int64Counter
 }
 
 func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metrics {
 	ctx := context.Background()
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/risk")
 
-	rowsInserted, err := meter.Int64Counter(
-		meterFindingRowsInserted,
-		metric.WithDescription("Number of risk finding rows submitted to BigQuery"),
-		metric.WithUnit("{row}"),
+	chMessagesInserted, err := meter.Int64Counter(
+		meterFindingCHMessagesInserted,
+		metric.WithDescription("Number of risk finding messages submitted to ClickHouse"),
+		metric.WithUnit("{message}"),
 	)
 	if err != nil {
-		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterFindingRowsInserted), attr.SlogError(err))
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterFindingCHMessagesInserted), attr.SlogError(err))
+	}
+
+	chMessagesSkipped, err := meter.Int64Counter(
+		meterFindingCHMessagesSkipped,
+		metric.WithDescription("Number of risk finding messages skipped before being submitted to ClickHouse"),
+		metric.WithUnit("{message}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterFindingCHMessagesSkipped), attr.SlogError(err))
+	}
+
+	chMessagesExcluded, err := meter.Int64Counter(
+		meterFindingCHMessagesExcluded,
+		metric.WithDescription("Number of risk finding messages annotated as excluded before being submitted to ClickHouse"),
+		metric.WithUnit("{message}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterFindingCHMessagesExcluded), attr.SlogError(err))
 	}
 
 	return &metrics{
-		rowsInserted: rowsInserted,
+		chMessagesInserted: chMessagesInserted,
+		chMessagesSkipped:  chMessagesSkipped,
+		chMessagesExcluded: chMessagesExcluded,
 	}
 }
 
-// RecordFindingBQInserts records the number of finding rows submitted to
-// BigQuery in a single batch insert along with the outcome of the insert call.
-func (m *metrics) RecordFindingBQInserts(ctx context.Context, count int, outcome o11y.Outcome) {
-	if m.rowsInserted == nil {
+// RecordFindingCHInserts records the number of finding messages submitted to
+// ClickHouse in a single batch insert along with the outcome of the insert call.
+func (m *metrics) RecordFindingCHInserts(ctx context.Context, count int, outcome o11y.Outcome) {
+	if m.chMessagesInserted == nil {
 		return
 	}
-	m.rowsInserted.Add(ctx, int64(count), metric.WithAttributes(attr.Outcome(outcome)))
+	m.chMessagesInserted.Add(ctx, int64(count), metric.WithAttributes(attr.Outcome(outcome)))
+}
+
+// RecordFindingCHSkipped records a risk finding message that was dropped before
+// reaching ClickHouse, tagged with the reason it was skipped.
+func (m *metrics) RecordFindingCHSkipped(ctx context.Context, reason string) {
+	if m.chMessagesSkipped == nil {
+		return
+	}
+	m.chMessagesSkipped.Add(ctx, 1, metric.WithAttributes(attr.Reason(reason)))
+}
+
+// RecordFindingCHExcluded records a risk finding message that was annotated as
+// excluded (excluded_at/exclusion_id set) rather than dropped before insert.
+func (m *metrics) RecordFindingCHExcluded(ctx context.Context) {
+	if m.chMessagesExcluded == nil {
+		return
+	}
+	m.chMessagesExcluded.Add(ctx, 1)
 }

@@ -217,6 +217,7 @@ var CreateAssistantForm = Type("CreateAssistantForm", func() {
 	Attribute("model", String, "The model identifier used by the assistant.")
 	Attribute("instructions", String, "The system instructions for the assistant.")
 	Attribute("toolsets", ArrayOf(shared.AssistantToolsetRef), "Toolsets available to the assistant.")
+	Attribute("mcp_servers", ArrayOf(shared.AssistantMCPServerRef), "MCP servers attached directly to the assistant (remote- or tunnelled-backed).")
 	Attribute("warm_ttl_seconds", Int, "Optional warm runtime TTL in seconds.")
 	Attribute("max_concurrency", Int, "Optional maximum active warm runtimes.")
 	Attribute("status", String, "Optional initial status.", func() {
@@ -234,6 +235,7 @@ var UpdateAssistantForm = Type("UpdateAssistantForm", func() {
 	Attribute("model", String, "The model identifier used by the assistant.")
 	Attribute("instructions", String, "The system instructions for the assistant.")
 	Attribute("toolsets", ArrayOf(shared.AssistantToolsetRef), "Toolsets available to the assistant.")
+	Attribute("mcp_servers", ArrayOf(shared.AssistantMCPServerRef), "MCP servers attached directly to the assistant (remote- or tunnelled-backed).")
 	Attribute("warm_ttl_seconds", Int, "Warm runtime TTL in seconds.")
 	Attribute("max_concurrency", Int, "Maximum active warm runtimes.")
 	Attribute("status", String, "The assistant status.", func() {

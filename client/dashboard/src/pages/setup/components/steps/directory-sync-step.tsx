@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Users, ExternalLink, Loader2 } from "lucide-react";
-import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query";
+import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
 import { StepContainer } from "../step-container";

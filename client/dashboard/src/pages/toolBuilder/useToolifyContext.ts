@@ -1,4 +1,4 @@
-import { ToolsetEntry } from "@gram/client/models/components";
+import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { createContext, useContext } from "react";
 import { z } from "zod";
 

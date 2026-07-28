@@ -186,8 +186,11 @@ There are %d messages total (indices 0-%d).%s`, conversationText, numMessages, n
 			Temperature:    nil,
 			JSONSchema:     &jsonSchemaConfig,
 			UsageSource:    billing.ModelUsageSourceGram,
+			KeyType:        openrouter.KeyTypeInternal,
+			KeySlot:        "",
 			UserID:         "",
 			ExternalUserID: "",
+			UserEmail:      "",
 			HTTPMetadata:   nil,
 		},
 	)

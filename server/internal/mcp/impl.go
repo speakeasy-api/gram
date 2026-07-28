@@ -28,7 +28,6 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
-	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -46,12 +45,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
+	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -71,6 +72,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 // IdentityResolver abstracts the identity operations the authn-challenge OAuth
@@ -134,6 +136,7 @@ type Service struct {
 	// Temporal worker, which constructs *Service for its programmatic
 	// helpers but never serves a runtime request).
 	remoteProxyManager *remotemcp.ProxyManager
+	tunnelManager      *tunnelManager
 }
 
 // oauthTokenInputs is one upstream OAuth access token collected during MCP
@@ -256,6 +259,9 @@ func NewService(
 	userSessionSigner *usersessions.Signer,
 	remoteChallengeMgr *remotesessions.ChallengeManager,
 	remoteProxyManager *remotemcp.ProxyManager,
+	tunnelRoutes route.Store,
+	tunnelForwardToken string,
+	tunnelGatewayCIDRs []string,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -331,6 +337,7 @@ func NewService(
 		userSessionSigner:  userSessionSigner,
 		remoteChallengeMgr: remoteChallengeMgr,
 		remoteProxyManager: remoteProxyManager,
+		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
 	}
 }
 
@@ -359,6 +366,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/connect/first-party", oops.ErrHandle(service.logger, service.HandleFirstPartyConnect).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/consent-page-{hash}.js", oops.ErrHandle(service.logger, service.ServeConsentScript).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/token", oops.ErrHandle(service.logger, service.HandleToken).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/revoke", oops.ErrHandle(service.logger, service.HandleRevoke).ServeHTTP)
@@ -408,7 +416,7 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 // if marshaling fails or the result kind is unrecognized, the caller's error
 // handler middleware needs an unwritten ResponseWriter so it can emit the real
 // error status — Go's net/http silently drops a second WriteHeader call.
-func writeOAuthServerMetadataResponse(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, result *wellknown.OAuthServerMetadataResult) error {
+func writeOAuthServerMetadataResponse(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, r *http.Request, result *wellknown.OAuthServerMetadataResult) error {
 	var body []byte
 	switch result.Kind {
 	case wellknown.OAuthServerMetadataResultKindRaw:
@@ -423,32 +431,20 @@ func writeOAuthServerMetadataResponse(ctx context.Context, logger *slog.Logger, 
 		return oops.E(oops.CodeUnexpected, nil, "unexpected OAuth server metadata result kind").LogError(ctx, logger)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(body); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write response body").LogError(ctx, logger)
-	}
-
-	return nil
+	return httpcache.WriteCacheableJSON(ctx, w, r, logger, "application/json", metadataCacheMaxAgeSeconds, body)
 }
 
 // writeOAuthProtectedResourceMetadataResponse builds the OAuth protected
 // resource metadata body and only commits the 200 OK status once the body is
 // ready. See writeOAuthServerMetadataResponse for the rationale behind the
 // ordering.
-func writeOAuthProtectedResourceMetadataResponse(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, metadata *wellknown.OAuthProtectedResourceMetadata) error {
+func writeOAuthProtectedResourceMetadataResponse(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, r *http.Request, metadata *wellknown.OAuthProtectedResourceMetadata) error {
 	body, err := json.Marshal(metadata)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to marshal OAuth protected resource metadata").LogError(ctx, logger)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(body); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write response body").LogError(ctx, logger)
-	}
-
-	return nil
+	return httpcache.WriteCacheableJSON(ctx, w, r, logger, "application/json", metadataCacheMaxAgeSeconds, body)
 }
 
 // ServePublic serves /mcp/{mcpSlug}. Resolution tries mcp_endpoints
@@ -594,7 +590,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// Extract tokens from headers separately:
 	// - authToken: from Authorization header (for OAuth flows)
 	// - sessionToken: from Gram-Chat-Session header (for chat session fallback on non-OAuth endpoints)
-	authToken := AuthorizationBearerToken(r)
+	authToken := httpheaders.AuthorizationBearerToken(r)
 
 	var tokenInputs []oauthTokenInputs
 	tokenInputs, err = appendRemoteSessionTokenInputs(tokenInputs, extraUpstreamTokens)
@@ -773,7 +769,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 				return oops.E(oops.CodeUnexpected, err, "failed to load access grants").LogError(ctx, s.logger)
 			}
 			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())); err != nil {
-				return err
+				return fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err))
 			}
 		}
 
@@ -1177,7 +1173,7 @@ func parseTagsFilter(raw string) []string {
 // the supplied resource_metadata URL so MCP clients can initiate OAuth, and
 // returns 401.
 func (s *Service) RequirePrivateIdentityAuth(ctx context.Context, w http.ResponseWriter, r *http.Request, isOAuthCapable bool, oauthResourceID uuid.UUID, wwwAuthResourceMetadataURL string) (context.Context, error) {
-	token := AuthorizationOrChatSessionToken(r)
+	token := httpheaders.AuthorizationOrChatSessionToken(r)
 
 	authedCtx, err := s.authenticateToken(ctx, token, oauthResourceID, isOAuthCapable)
 	if err == nil {
@@ -1198,7 +1194,7 @@ func (s *Service) RequirePrivateIdentityAuth(ctx context.Context, w http.Respons
 // the caller supplies an Authorization or Gram-Chat-Session token. Missing
 // tokens are not an error; an invalid supplied token is.
 func (s *Service) TryPublicIdentityAuth(ctx context.Context, r *http.Request, isOAuthCapable bool, oauthResourceID uuid.UUID) (context.Context, error) {
-	token := AuthorizationOrChatSessionToken(r)
+	token := httpheaders.AuthorizationOrChatSessionToken(r)
 	if token == "" {
 		return ctx, nil
 	}
@@ -1288,49 +1284,6 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 	}
 
 	return ctx, oops.E(oops.CodeUnauthorized, errors.New("failed to authorize token using any strategy"), "failed to authorize").LogWarn(ctx, s.logger, attr.SlogToolsetID(oauthResourceID.String()))
-}
-
-//nolint:unused // kept for follow-up: restore stored-credential resolution for session-authenticated users
-func (s *Service) resolveExternalMcpOAuthToken(ctx context.Context, toolset *types.Toolset) (string, error) {
-	sessionCtx, err := s.sessions.AuthenticateWithCookie(ctx)
-	if err != nil {
-		return "", oops.E(oops.CodeUnauthorized, err, "failed to authenticate session for OAuth token lookup")
-	}
-
-	authCtx, ok := contextvalues.GetAuthContext(sessionCtx)
-	if !ok || authCtx == nil {
-		return "", oops.C(oops.CodeUnauthorized)
-	}
-
-	oauthConfig := externalmcp.ResolveOAuthConfig(toolset)
-	if oauthConfig == nil {
-		return "", oops.C(oops.CodeUnauthorized)
-	}
-
-	toolsetID, err := uuid.Parse(toolset.ID)
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "invalid toolset ID")
-	}
-
-	token, err := s.oauthRepo.GetUserOAuthToken(ctx, oauth_repo.GetUserOAuthTokenParams{
-		UserID:         authCtx.UserID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ToolsetID:      toolsetID,
-	})
-	if err != nil {
-		return "", oops.E(oops.CodeUnauthorized, err, "failed to get user OAuth token")
-	}
-
-	if token.ExpiresAt.Valid && token.ExpiresAt.Time.Before(time.Now()) {
-		return "", oops.E(oops.CodeUnauthorized, err, "OAuth token has expired")
-	}
-
-	accessToken, err := s.enc.Decrypt(token.AccessTokenEncrypted)
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "unable to access oauth token")
-	}
-
-	return accessToken, nil
 }
 
 // HandleToolsList executes tools/list RPC for internal clients (e.g., agent workflows).

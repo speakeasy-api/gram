@@ -24,6 +24,13 @@ func (q *Queries) AcquireAssistantAdvisoryLock(ctx context.Context, assistantID 
 	return err
 }
 
+type AddAssistantMcpServersParams struct {
+	AssistantID   uuid.UUID
+	McpServerID   uuid.UUID
+	EnvironmentID uuid.NullUUID
+	ProjectID     uuid.UUID
+}
+
 type AddAssistantToolsetsParams struct {
 	AssistantID   uuid.UUID
 	ToolsetID     uuid.UUID
@@ -162,15 +169,19 @@ func (q *Queries) CallerOwnsDashboardChat(ctx context.Context, arg CallerOwnsDas
 
 const claimNextPendingEvent = `-- name: ClaimNextPendingEvent :one
 WITH next_event AS (
-  SELECT e.id
+  SELECT e.id, t.skill_set_snapshot
   FROM assistant_thread_events e
+  JOIN assistant_threads t
+    ON t.id = e.assistant_thread_id
+    AND t.project_id = e.project_id
   WHERE e.project_id = $2
     AND e.assistant_thread_id = $3
     AND e.deleted IS FALSE
     AND e.status = $4
+    AND t.deleted IS FALSE
   ORDER BY e.created_at ASC
   LIMIT 1
-  FOR UPDATE SKIP LOCKED
+  FOR UPDATE OF e SKIP LOCKED
 )
 UPDATE assistant_thread_events e
 SET
@@ -179,7 +190,8 @@ SET
   updated_at = clock_timestamp()
 FROM next_event
 WHERE e.id = next_event.id
-RETURNING e.id, e.assistant_thread_id, e.assistant_id, e.project_id, e.trigger_instance_id, e.event_id, e.correlation_id, e.status, e.normalized_payload_json, e.source_payload_json, e.attempts, e.last_error, e.created_at
+  AND e.project_id = $2
+RETURNING e.id, e.assistant_thread_id, e.assistant_id, e.project_id, e.trigger_instance_id, e.event_id, e.correlation_id, e.status, e.normalized_payload_json, e.source_payload_json, e.attempts, e.last_error, e.created_at, next_event.skill_set_snapshot
 `
 
 type ClaimNextPendingEventParams struct {
@@ -203,6 +215,7 @@ type ClaimNextPendingEventRow struct {
 	Attempts              int64
 	LastError             pgtype.Text
 	CreatedAt             pgtype.Timestamptz
+	SkillSetSnapshot      []byte
 }
 
 func (q *Queries) ClaimNextPendingEvent(ctx context.Context, arg ClaimNextPendingEventParams) (ClaimNextPendingEventRow, error) {
@@ -227,8 +240,25 @@ func (q *Queries) ClaimNextPendingEvent(ctx context.Context, arg ClaimNextPendin
 		&i.Attempts,
 		&i.LastError,
 		&i.CreatedAt,
+		&i.SkillSetSnapshot,
 	)
 	return i, err
+}
+
+const clearAssistantMcpServers = `-- name: ClearAssistantMcpServers :exec
+DELETE FROM assistant_mcp_servers
+WHERE assistant_id = $1
+  AND project_id = $2
+`
+
+type ClearAssistantMcpServersParams struct {
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) ClearAssistantMcpServers(ctx context.Context, arg ClearAssistantMcpServersParams) error {
+	_, err := q.db.Exec(ctx, clearAssistantMcpServers, arg.AssistantID, arg.ProjectID)
+	return err
 }
 
 const clearAssistantToolsets = `-- name: ClearAssistantToolsets :exec
@@ -247,26 +277,62 @@ func (q *Queries) ClearAssistantToolsets(ctx context.Context, arg ClearAssistant
 	return err
 }
 
-const completeAssistantThreadEvent = `-- name: CompleteAssistantThreadEvent :exec
-UPDATE assistant_thread_events
-SET
-  status = $1,
-  processed_at = clock_timestamp(),
-  last_error = NULL,
-  updated_at = clock_timestamp()
-WHERE id = $2
-  AND project_id = $3
+const completeAssistantThreadEventAndAdvanceSkillSnapshot = `-- name: CompleteAssistantThreadEventAndAdvanceSkillSnapshot :one
+WITH completed_event AS (
+  UPDATE assistant_thread_events event
+  SET
+    status = $1,
+    processed_at = clock_timestamp(),
+    last_error = NULL,
+    updated_at = clock_timestamp()
+  WHERE event.id = $2
+    AND event.project_id = $3
+    AND event.status = $4
+    AND event.attempts = $5
+  RETURNING event.assistant_thread_id
+), advanced_snapshot AS (
+  UPDATE assistant_threads t
+  SET skill_set_snapshot = $6::jsonb
+  FROM completed_event e
+  WHERE t.id = e.assistant_thread_id
+    AND t.project_id = $3
+    AND t.deleted IS FALSE
+    AND t.skill_set_snapshot IS NOT DISTINCT FROM $7::jsonb
+    AND (t.skill_set_snapshot IS NULL OR $8::boolean)
+    AND (
+      $7::jsonb IS NULL
+      OR $6::jsonb IS DISTINCT FROM $7::jsonb
+    )
+  RETURNING t.id
+)
+SELECT EXISTS(SELECT 1 FROM completed_event) AS completed
 `
 
-type CompleteAssistantThreadEventParams struct {
-	CompletedStatus string
-	EventID         uuid.UUID
-	ProjectID       uuid.UUID
+type CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams struct {
+	CompletedStatus  string
+	EventID          uuid.UUID
+	ProjectID        uuid.UUID
+	ProcessingStatus string
+	ClaimedAttempt   int64
+	CurrentSnapshot  []byte
+	ClaimedSnapshot  []byte
+	AllowAdvance     bool
 }
 
-func (q *Queries) CompleteAssistantThreadEvent(ctx context.Context, arg CompleteAssistantThreadEventParams) error {
-	_, err := q.db.Exec(ctx, completeAssistantThreadEvent, arg.CompletedStatus, arg.EventID, arg.ProjectID)
-	return err
+func (q *Queries) CompleteAssistantThreadEventAndAdvanceSkillSnapshot(ctx context.Context, arg CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams) (bool, error) {
+	row := q.db.QueryRow(ctx, completeAssistantThreadEventAndAdvanceSkillSnapshot,
+		arg.CompletedStatus,
+		arg.EventID,
+		arg.ProjectID,
+		arg.ProcessingStatus,
+		arg.ClaimedAttempt,
+		arg.CurrentSnapshot,
+		arg.ClaimedSnapshot,
+		arg.AllowAdvance,
+	)
+	var completed bool
+	err := row.Scan(&completed)
+	return completed, err
 }
 
 const countActiveAssistantRuntimes = `-- name: CountActiveAssistantRuntimes :one
@@ -308,14 +374,15 @@ WHERE t.project_id = $1
   AND t.assistant_id = $2
   AND t.deleted IS FALSE
   AND t.source_kind <> $3
-  AND t.last_event_at > $4
+  AND t.source_kind <> $4
+  AND t.last_event_at > $5
   AND NOT EXISTS (
     SELECT 1
     FROM assistant_thread_events e
     WHERE e.project_id = t.project_id
       AND e.assistant_thread_id = t.id
       AND e.deleted IS FALSE
-      AND e.status = $5
+      AND e.status = $6
   )
 `
 
@@ -323,6 +390,7 @@ type CountActiveAssistantThreadsParams struct {
 	ProjectID        uuid.UUID
 	AssistantID      uuid.UUID
 	WarmupSourceKind string
+	SetupSourceKind  string
 	ActiveSince      pgtype.Timestamptz
 	PendingStatus    string
 }
@@ -333,11 +401,16 @@ type CountActiveAssistantThreadsParams struct {
 // thread is excluded too: it holds the VM warm but never occupies a
 // runner slot, and counting it would block max_concurrency=1 assistants
 // from admitting their first real turn until the window lapses.
+// Client-driven setup/onboarding threads are excluded for the same reason:
+// they carry no runtime events and never occupy a runner slot, so counting
+// them would wrongly consume max_concurrency / warm headroom against real
+// turns even though the setup chat runs entirely client-side.
 func (q *Queries) CountActiveAssistantThreads(ctx context.Context, arg CountActiveAssistantThreadsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countActiveAssistantThreads,
 		arg.ProjectID,
 		arg.AssistantID,
 		arg.WarmupSourceKind,
+		arg.SetupSourceKind,
 		arg.ActiveSince,
 		arg.PendingStatus,
 	)
@@ -1063,6 +1136,28 @@ func (q *Queries) GetProjectName(ctx context.Context, projectID uuid.UUID) (stri
 	return name, err
 }
 
+const initThreadSkillSnapshot = `-- name: InitThreadSkillSnapshot :one
+UPDATE assistant_threads
+SET skill_set_snapshot = COALESCE(skill_set_snapshot, $1::jsonb)
+WHERE id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+RETURNING skill_set_snapshot
+`
+
+type InitThreadSkillSnapshotParams struct {
+	Candidate []byte
+	ThreadID  uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) InitThreadSkillSnapshot(ctx context.Context, arg InitThreadSkillSnapshotParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, initThreadSkillSnapshot, arg.Candidate, arg.ThreadID, arg.ProjectID)
+	var skill_set_snapshot []byte
+	err := row.Scan(&skill_set_snapshot)
+	return skill_set_snapshot, err
+}
+
 const insertAssistantThreadEvent = `-- name: InsertAssistantThreadEvent :one
 INSERT INTO assistant_thread_events (
   assistant_thread_id,
@@ -1118,7 +1213,7 @@ func (q *Queries) InsertAssistantThreadEvent(ctx context.Context, arg InsertAssi
 	return id, err
 }
 
-const listActiveAssistantRuntimesForImageRecycle = `-- name: ListActiveAssistantRuntimesForImageRecycle :many
+const listActiveAssistantRuntimes = `-- name: ListActiveAssistantRuntimes :many
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.state = $1
@@ -1136,7 +1231,7 @@ WHERE r.state = $1
 ORDER BY r.updated_at ASC
 `
 
-type ListActiveAssistantRuntimesForImageRecycleRow struct {
+type ListActiveAssistantRuntimesRow struct {
 	ID                  uuid.UUID
 	AssistantThreadID   uuid.UUID
 	AssistantID         uuid.UUID
@@ -1147,22 +1242,20 @@ type ListActiveAssistantRuntimesForImageRecycleRow struct {
 	WarmUntil           pgtype.Timestamptz
 }
 
-// Returns live v2 runtime rows that carry backend metadata so a deploy-time
-// sweep can roll their machines onto the current runtime image. Only `active`
-// rows qualify: `starting` rows are mid-boot and already pull the current
-// image, while expiring/stopped rows are torn down or recycled lazily on the
-// next admission. Rows orphaned by a deleted assistant are excluded: they
-// belong to the deleted-assistant janitor, and recycling them would bump
-// updated_at and postpone the inactivity-based reap.
-func (q *Queries) ListActiveAssistantRuntimesForImageRecycle(ctx context.Context, activeState string) ([]ListActiveAssistantRuntimesForImageRecycleRow, error) {
-	rows, err := q.db.Query(ctx, listActiveAssistantRuntimesForImageRecycle, activeState)
+// Returns live v2 runtime rows that carry backend metadata for runtime
+// reconciliation sweeps. Only `active` rows qualify: `starting` rows are
+// mid-boot, while expiring/stopped rows are already being torn down or await
+// re-admission. Rows orphaned by a deleted assistant belong to the
+// deleted-assistant janitor and are excluded here.
+func (q *Queries) ListActiveAssistantRuntimes(ctx context.Context, activeState string) ([]ListActiveAssistantRuntimesRow, error) {
+	rows, err := q.db.Query(ctx, listActiveAssistantRuntimes, activeState)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListActiveAssistantRuntimesForImageRecycleRow
+	var items []ListActiveAssistantRuntimesRow
 	for rows.Next() {
-		var i ListActiveAssistantRuntimesForImageRecycleRow
+		var i ListActiveAssistantRuntimesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.AssistantThreadID,
@@ -1690,6 +1783,160 @@ func (q *Queries) ListWarmPendingThreads(ctx context.Context, arg ListWarmPendin
 	return items, nil
 }
 
+const loadAssistantMcpServers = `-- name: LoadAssistantMcpServers :many
+SELECT
+  ams.assistant_id,
+  ams.mcp_server_id,
+  ms.slug AS server_slug,
+  ms.visibility,
+  COALESCE((
+    SELECT me.slug
+    FROM mcp_endpoints me
+    WHERE me.mcp_server_id = ms.id
+      AND me.custom_domain_id IS NULL
+      AND me.deleted IS FALSE
+    ORDER BY me.created_at
+    LIMIT 1
+  ), '')::text AS endpoint_slug,
+  ams.environment_id,
+  e.slug AS environment_slug
+FROM assistant_mcp_servers ams
+JOIN mcp_servers ms ON ms.id = ams.mcp_server_id AND ms.deleted IS FALSE
+LEFT JOIN environments e ON e.id = ams.environment_id
+WHERE ams.assistant_id = ANY($1::UUID[])
+  AND ams.project_id = $2
+ORDER BY ams.created_at
+`
+
+type LoadAssistantMcpServersParams struct {
+	AssistantIds []uuid.UUID
+	ProjectID    uuid.UUID
+}
+
+type LoadAssistantMcpServersRow struct {
+	AssistantID     uuid.UUID
+	McpServerID     uuid.UUID
+	ServerSlug      pgtype.Text
+	Visibility      string
+	EndpointSlug    string
+	EnvironmentID   uuid.NullUUID
+	EnvironmentSlug pgtype.Text
+}
+
+// Hydrates assistant_mcp_servers with the fronting mcp_servers row, its
+// Gram-hosted endpoint slug (custom_domain_id IS NULL), and the bound
+// environment. Soft-deleted servers are skipped so the runtime never targets a
+// dead endpoint; a row whose server has no Gram-hosted endpoint yields a NULL
+// endpoint_slug and is filtered out in Go. Visibility is returned rather than
+// filtered here so API reads still show disabled attachments while the runtime
+// resolver skips them. Mirrors LoadAssistantToolsets: one read supplies
+// everything dispatch needs to build the MCP URL.
+func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistantMcpServersParams) ([]LoadAssistantMcpServersRow, error) {
+	rows, err := q.db.Query(ctx, loadAssistantMcpServers, arg.AssistantIds, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LoadAssistantMcpServersRow
+	for rows.Next() {
+		var i LoadAssistantMcpServersRow
+		if err := rows.Scan(
+			&i.AssistantID,
+			&i.McpServerID,
+			&i.ServerSlug,
+			&i.Visibility,
+			&i.EndpointSlug,
+			&i.EnvironmentID,
+			&i.EnvironmentSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const loadAssistantSkills = `-- name: LoadAssistantSkills :many
+SELECT
+  sd.assistant_id,
+  sd.skill_id,
+  sd.pinned_version_id,
+  s.name,
+  resolved.id AS resolved_version_id,
+  resolved.description
+FROM skill_distributions sd
+JOIN assistants a
+  ON a.id = sd.assistant_id
+  AND a.project_id = sd.project_id
+  AND a.deleted IS FALSE
+JOIN skills s
+  ON s.id = sd.skill_id
+  AND s.project_id = sd.project_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.id, sv.description
+  FROM skill_versions sv
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE sd.assistant_id = ANY($1::uuid[])
+  AND sd.project_id = $2
+  AND sd.channel = 'assistant'
+  AND sd.plugin_id IS NULL
+  AND sd.assistant_id IS NOT NULL
+  AND sd.revoked_at IS NULL
+ORDER BY s.name ASC, s.id ASC
+`
+
+type LoadAssistantSkillsParams struct {
+	AssistantIds []uuid.UUID
+	ProjectID    uuid.UUID
+}
+
+type LoadAssistantSkillsRow struct {
+	AssistantID       uuid.NullUUID
+	SkillID           uuid.UUID
+	PinnedVersionID   uuid.NullUUID
+	Name              string
+	ResolvedVersionID uuid.UUID
+	Description       pgtype.Text
+}
+
+// The active/resolvable predicates in LoadAssistantSkills and
+// LoadAttachedAssistantSkill must stay identical.
+func (q *Queries) LoadAssistantSkills(ctx context.Context, arg LoadAssistantSkillsParams) ([]LoadAssistantSkillsRow, error) {
+	rows, err := q.db.Query(ctx, loadAssistantSkills, arg.AssistantIds, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LoadAssistantSkillsRow
+	for rows.Next() {
+		var i LoadAssistantSkillsRow
+		if err := rows.Scan(
+			&i.AssistantID,
+			&i.SkillID,
+			&i.PinnedVersionID,
+			&i.Name,
+			&i.ResolvedVersionID,
+			&i.Description,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const loadAssistantThreadForBootstrap = `-- name: LoadAssistantThreadForBootstrap :one
 SELECT
   t.id,
@@ -1831,6 +2078,70 @@ func (q *Queries) LoadAssistantToolsets(ctx context.Context, arg LoadAssistantTo
 		return nil, err
 	}
 	return items, nil
+}
+
+const loadAttachedAssistantSkill = `-- name: LoadAttachedAssistantSkill :one
+SELECT
+  s.id AS skill_id,
+  s.name,
+  resolved.id AS skill_version_id,
+  resolved.content,
+  resolved.canonical_sha256,
+  resolved.raw_sha256
+FROM skill_distributions sd
+JOIN assistants a
+  ON a.id = sd.assistant_id
+  AND a.project_id = sd.project_id
+  AND a.deleted IS FALSE
+JOIN skills s
+  ON s.id = sd.skill_id
+  AND s.project_id = sd.project_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.id, sv.content, sv.canonical_sha256, sv.raw_sha256
+  FROM skill_versions sv
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE sd.assistant_id = $1
+  AND sd.project_id = $2
+  AND sd.channel = 'assistant'
+  AND sd.plugin_id IS NULL
+  AND sd.assistant_id IS NOT NULL
+  AND sd.revoked_at IS NULL
+  AND s.name = $3
+`
+
+type LoadAttachedAssistantSkillParams struct {
+	AssistantID uuid.NullUUID
+	ProjectID   uuid.UUID
+	Name        string
+}
+
+type LoadAttachedAssistantSkillRow struct {
+	SkillID         uuid.UUID
+	Name            string
+	SkillVersionID  uuid.UUID
+	Content         string
+	CanonicalSha256 string
+	RawSha256       string
+}
+
+func (q *Queries) LoadAttachedAssistantSkill(ctx context.Context, arg LoadAttachedAssistantSkillParams) (LoadAttachedAssistantSkillRow, error) {
+	row := q.db.QueryRow(ctx, loadAttachedAssistantSkill, arg.AssistantID, arg.ProjectID, arg.Name)
+	var i LoadAttachedAssistantSkillRow
+	err := row.Scan(
+		&i.SkillID,
+		&i.Name,
+		&i.SkillVersionID,
+		&i.Content,
+		&i.CanonicalSha256,
+		&i.RawSha256,
+	)
+	return i, err
 }
 
 const loadThreadContext = `-- name: LoadThreadContext :one
@@ -2243,6 +2554,64 @@ func (q *Queries) ReapStuckAssistantRuntimes(ctx context.Context, arg ReapStuckA
 	return items, nil
 }
 
+const recordAssistantSkillObservation = `-- name: RecordAssistantSkillObservation :execrows
+WITH observed AS (
+  SELECT clock_timestamp() AS seen_at
+)
+INSERT INTO skill_observations (
+    project_id
+  , idempotency_key
+  , provider
+  , session_id
+  , skill_name
+  , raw_sha256
+  , seen_at
+  , skill_id
+  , skill_version_id
+  , reconciled_at
+)
+SELECT
+    s.project_id
+  , 'assistant:' || $1::text || ':' || sv.id::text
+  , 'assistant'
+  , $1::text
+  , s.name
+  , sv.raw_sha256
+  , observed.seen_at
+  , s.id
+  , sv.id
+  , observed.seen_at
+FROM skills s
+JOIN skill_versions sv
+  ON sv.skill_id = s.id
+  AND sv.id = $2
+CROSS JOIN observed
+WHERE s.project_id = $3
+  AND s.id = $4
+ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL
+DO NOTHING
+`
+
+type RecordAssistantSkillObservationParams struct {
+	SessionID      string
+	SkillVersionID uuid.UUID
+	ProjectID      uuid.UUID
+	SkillID        uuid.UUID
+}
+
+func (q *Queries) RecordAssistantSkillObservation(ctx context.Context, arg RecordAssistantSkillObservationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordAssistantSkillObservation,
+		arg.SessionID,
+		arg.SkillVersionID,
+		arg.ProjectID,
+		arg.SkillID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const requeueStaleAssistantEvents = `-- name: RequeueStaleAssistantEvents :many
 UPDATE assistant_thread_events
 SET
@@ -2451,6 +2820,68 @@ func (q *Queries) ResolveEnvironmentsForWrite(ctx context.Context, arg ResolveEn
 	return items, nil
 }
 
+const resolveMcpServersForWrite = `-- name: ResolveMcpServersForWrite :many
+SELECT
+  ms.id,
+  ms.slug,
+  ms.visibility,
+  (ms.tunneled_mcp_server_id IS NOT NULL)::bool AS tunneled,
+  EXISTS (
+    SELECT 1
+    FROM mcp_endpoints me
+    WHERE me.mcp_server_id = ms.id
+      AND me.custom_domain_id IS NULL
+      AND me.deleted IS FALSE
+  ) AS has_gram_endpoint
+FROM mcp_servers ms
+WHERE ms.project_id = $1
+  AND ms.slug = ANY($2::TEXT[])
+  AND ms.deleted IS FALSE
+`
+
+type ResolveMcpServersForWriteParams struct {
+	ProjectID uuid.UUID
+	Slugs     []string
+}
+
+type ResolveMcpServersForWriteRow struct {
+	ID              uuid.UUID
+	Slug            pgtype.Text
+	Visibility      string
+	Tunneled        bool
+	HasGramEndpoint bool
+}
+
+// Besides resolving slugs to ids, this returns everything attach-time
+// validation needs to reject servers the assistant runtime cannot reach:
+// the backend kind (tunnelled servers have no serving path), visibility,
+// and whether a Gram-hosted endpoint exists to build the /mcp/{slug} URL.
+func (q *Queries) ResolveMcpServersForWrite(ctx context.Context, arg ResolveMcpServersForWriteParams) ([]ResolveMcpServersForWriteRow, error) {
+	rows, err := q.db.Query(ctx, resolveMcpServersForWrite, arg.ProjectID, arg.Slugs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ResolveMcpServersForWriteRow
+	for rows.Next() {
+		var i ResolveMcpServersForWriteRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Visibility,
+			&i.Tunneled,
+			&i.HasGramEndpoint,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const resolveThreadCorrelation = `-- name: ResolveThreadCorrelation :one
 SELECT id, project_id, assistant_id, correlation_id
 FROM assistant_threads
@@ -2565,6 +2996,94 @@ func (q *Queries) RevertExpireAssistantRuntimeToActive(ctx context.Context, arg 
 		arg.ExpiringState,
 	)
 	return err
+}
+
+const revokeSkillDistributionsByAssistant = `-- name: RevokeSkillDistributionsByAssistant :many
+UPDATE skill_distributions sd
+SET revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM skill_distributions prev
+JOIN skills s ON s.id = prev.skill_id AND s.project_id = prev.project_id
+JOIN assistants a ON a.id = prev.assistant_id AND a.project_id = prev.project_id
+JOIN LATERAL (
+  SELECT sv.id
+  FROM skill_versions sv
+  WHERE sv.skill_id = prev.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (prev.pinned_version_id IS NULL OR sv.id = prev.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE prev.id = sd.id
+  AND sd.project_id = $1
+  AND sd.assistant_id = $2
+  AND sd.channel = 'assistant'
+  AND sd.plugin_id IS NULL
+  AND sd.revoked_at IS NULL
+RETURNING sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.assistant_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at, prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id,
+  s.name AS skill_name, s.display_name AS skill_display_name, a.organization_id
+`
+
+type RevokeSkillDistributionsByAssistantParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.NullUUID
+}
+
+type RevokeSkillDistributionsByAssistantRow struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	SkillID           uuid.UUID
+	PinnedVersionID   uuid.NullUUID
+	PluginID          uuid.NullUUID
+	AssistantID       uuid.NullUUID
+	Channel           string
+	CreatedByUserID   string
+	RevokedAt         pgtype.Timestamptz
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	PreviousUpdatedAt pgtype.Timestamptz
+	ResolvedVersionID uuid.UUID
+	SkillName         string
+	SkillDisplayName  string
+	OrganizationID    string
+}
+
+// Returns pre-revocation state and skill identity for per-edge audit events.
+func (q *Queries) RevokeSkillDistributionsByAssistant(ctx context.Context, arg RevokeSkillDistributionsByAssistantParams) ([]RevokeSkillDistributionsByAssistantRow, error) {
+	rows, err := q.db.Query(ctx, revokeSkillDistributionsByAssistant, arg.ProjectID, arg.AssistantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RevokeSkillDistributionsByAssistantRow
+	for rows.Next() {
+		var i RevokeSkillDistributionsByAssistantRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.SkillID,
+			&i.PinnedVersionID,
+			&i.PluginID,
+			&i.AssistantID,
+			&i.Channel,
+			&i.CreatedByUserID,
+			&i.RevokedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.PreviousUpdatedAt,
+			&i.ResolvedVersionID,
+			&i.SkillName,
+			&i.SkillDisplayName,
+			&i.OrganizationID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const setAssistantRuntimeActive = `-- name: SetAssistantRuntimeActive :exec

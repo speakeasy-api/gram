@@ -23,14 +23,10 @@ import { useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn, getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import {
-  Chat,
-  GramElementsProvider,
-  type ElementsConfig,
-} from "@gram-ai/elements";
+import { Chat, GramElementsProvider, type ElementsConfig } from "@/elements";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
-import { useListToolsets } from "@gram/client/react-query/index.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import {
   ArrowRight,
@@ -1481,7 +1477,7 @@ export default function GramChat() {
               description="Learn about all configuration options"
             >
               <a
-                href="https://github.com/speakeasy-api/gram/blob/main/elements/docs/_media/ElementsConfig.md"
+                href="https://github.com/speakeasy-api/gram/blob/@gram-ai/elements@1.42.1/elements/docs/_media/ElementsConfig.md"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="bg-card hover:bg-muted/50 group flex items-center gap-3 rounded-lg border p-4 transition-colors"

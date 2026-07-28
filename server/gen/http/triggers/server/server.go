@@ -56,7 +56,7 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
-			{"ListTriggerDefinitions", "GET", "/rpc/triggers.definitions.list"},
+			{"ListTriggerDefinitions", "GET", "/rpc/triggers.listDefinitions"},
 			{"ListTriggerInstances", "GET", "/rpc/triggers.list"},
 			{"GetTriggerInstance", "GET", "/rpc/triggers.get"},
 			{"CreateTriggerInstance", "POST", "/rpc/triggers.create"},
@@ -120,7 +120,7 @@ func MountListTriggerDefinitionsHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/triggers.definitions.list", f)
+	mux.Handle("GET", "/rpc/triggers.listDefinitions", f)
 }
 
 // NewListTriggerDefinitionsHandler creates a HTTP handler which loads the HTTP

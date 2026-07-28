@@ -56,17 +56,28 @@ func withHavingPagination(sb squirrel.SelectBuilder, cursor, sortOrder, projectI
 // withHavingTuplePagination adds cursor-based HAVING conditions with tuple comparison for tie-breaking.
 // Used for queries like ListChats where multiple records might have the same start time.
 // The tuple comparison includes both the time expression and the group column for stable ordering.
-func withHavingTuplePagination(sb squirrel.SelectBuilder, cursor, sortOrder, projectID, groupColumn, timeExpr string) squirrel.SelectBuilder {
+// leftJoin/joinArgs, when non-empty, add a LEFT JOIN to the cursor-lookup subquery so
+// group expressions that reference a join alias (e.g. SearchUsers' known_emails)
+// stay valid inside it; pass "" and nil when the group column is a plain column.
+func withHavingTuplePagination(sb squirrel.SelectBuilder, cursor, sortOrder, projectID, groupColumn, timeExpr, leftJoin string, joinArgs []any) squirrel.SelectBuilder {
 	if cursor == "" {
 		return sb
 	}
 
-	subquery := "(SELECT " + timeExpr + " FROM telemetry_logs WHERE gram_project_id = ? AND " + groupColumn + " = ? GROUP BY " + groupColumn + " LIMIT 1)"
+	join := ""
+	if leftJoin != "" {
+		join = " LEFT JOIN " + leftJoin
+	}
+	subquery := "(SELECT " + timeExpr + " FROM telemetry_logs" + join + " WHERE gram_project_id = ? AND " + groupColumn + " = ? GROUP BY " + groupColumn + " LIMIT 1)"
+
+	args := make([]any, 0, len(joinArgs)+3)
+	args = append(args, joinArgs...)
+	args = append(args, projectID, cursor, cursor)
 
 	if sortOrder == "asc" {
-		return sb.Having("("+timeExpr+", "+groupColumn+") > ("+subquery+", ?)", projectID, cursor, cursor)
+		return sb.Having("("+timeExpr+", "+groupColumn+") > ("+subquery+", ?)", args...)
 	}
-	return sb.Having("("+timeExpr+", "+groupColumn+") < ("+subquery+", ?)", projectID, cursor, cursor)
+	return sb.Having("("+timeExpr+", "+groupColumn+") < ("+subquery+", ?)", args...)
 }
 
 // withOrdering adds ORDER BY clauses based on sort direction.

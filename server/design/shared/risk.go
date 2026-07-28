@@ -12,6 +12,13 @@ import (
 // semantics; on update payloads (where the field is optional) they leave the
 // default off so the generated Go type stays *string.
 //
+// "warn" (a.k.a. "challenge") is the middle ground between flag and block: on
+// match, enforcement denies the current call and returns a warning plus a
+// short-lived out-of-band acknowledgement link. The user opens it, the ack is
+// recorded (per org+project+user+policy, TTL), and the agent retries the same
+// call — which now passes. Transports that cannot complete that round-trip fall
+// back to block (fail-safe).
+//
 // "redact" is intentionally absent. Genuine in-transit redaction would need
 // to rewrite both user prompts and tool inputs before they reach the model.
 // Tool-input rewriting is supported by every coding-agent hook protocol we
@@ -25,7 +32,7 @@ import (
 //   - https://docs.claude.com/en/docs/claude-code/hooks
 //   - https://cursor.com/docs/agent/hooks
 func RiskPolicyActionEnum() {
-	Enum("flag", "block")
+	Enum("flag", "warn", "block")
 }
 
 // RiskPolicyTypeEnum applies the allowed-values constraint to a policy_type
@@ -55,6 +62,56 @@ func RiskPolicyAudienceTypeEnum() {
 	Enum("everyone", "targeted")
 }
 
+// RiskPolicyEvalVerdictEnum constrains a policy-eval review verdict. It is the
+// reviewer's ground-truth judgment of a chat session under a prompt-based
+// policy: `correct` (guardrail agreed), `false_positive` (guardrail flagged a
+// session it should not — tighten), `missed` (guardrail missed one it should
+// flag — broaden).
+func RiskPolicyEvalVerdictEnum() {
+	Enum("correct", "false_positive", "missed")
+}
+
+// RiskPolicyEvalReview is one reviewer's saved ground-truth verdict on a chat
+// session under a prompt-based policy — a row in the policy's durable regression
+// set. Kept physically separate from live findings: eval review activity never
+// touches risk_results, the outbox, or enforcement.
+var RiskPolicyEvalReview = Type("RiskPolicyEvalReview", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("id", String, "The review ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("policy_id", String, "The prompt-based policy the verdict belongs to.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("policy_version", Int64, "The policy version in effect when the verdict was recorded (provenance).")
+	Attribute("chat_id", String, "The chat session being judged.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("verdict", String, "The reviewer's ground-truth verdict.", func() {
+		RiskPolicyEvalVerdictEnum()
+	})
+	Attribute("reviewed_by", String, "User id of the reviewer who recorded the verdict.")
+	Attribute("created_at", String, "When the verdict was first recorded.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, "When the verdict was last updated.", func() {
+		Format(FormatDateTime)
+	})
+
+	Required("id", "policy_id", "policy_version", "chat_id", "verdict", "reviewed_by", "created_at", "updated_at")
+})
+
+var RiskDetectionScope = Type("RiskDetectionScope", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("category", String, "Risk category key this detection scope applies to.")
+	Attribute("scope_include", String, "CEL scope predicate: the category detects on a message only when this boolean expression is true. Empty means every message surface is included.")
+	Attribute("scope_exempt", String, "CEL exemption predicate: the category skips a message when this boolean expression is true. Empty means no exemption.")
+
+	Required("category")
+})
+
 var RiskPolicy = Type("RiskPolicy", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -77,13 +134,15 @@ var RiskPolicy = Type("RiskPolicy", func() {
 		Example(0.75)
 	})
 	Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.")
+	Attribute("approved_email_domains", ArrayOf(String), "For the account_identity source: corporate email domains considered approved. Sessions whose AI-account email domain is not listed are flagged. Empty means the domain rule is inert.")
+	Attribute("detection_scopes", ArrayOf(RiskDetectionScope), "Per-category detection scopes specified for this policy. The scan surface merges these with the recommended scopes, the specified scope winning on category conflict. Empty means every recommendation applies unchanged.")
 	Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.")
 	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.")
 	Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.")
 	Attribute("scope_include", String, "CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Null/empty means all messages are in scope.")
 	Attribute("scope_exempt", String, "CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Null/empty means no inline exemption.")
 	Attribute("enabled", Boolean, "Whether the policy is active.")
-	Attribute("action", String, "Policy action: flag (log only) or block (deny in real-time).", func() {
+	Attribute("action", String, "Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), or block (deny in real-time).", func() {
 		RiskPolicyActionEnum()
 		Default("flag")
 	})
@@ -96,6 +155,12 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("user_message", String, "Optional message shown to the end user when this policy blocks an action or surfaces a flagged finding. When unset, a default message is rendered.")
 	Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Null for standard policies.")
 	Attribute("model_config", RiskPolicyModelConfig, "For prompt_based policies: per-policy LLM-judge model configuration. Null for standard policies.")
+	Attribute("score", Float64, "CVSS-style severity (0.1-10) the author assigns to findings this policy produces. Descriptive only; changing it does not re-scan messages. Defaults to 5.", func() {
+		Minimum(0.1)
+		Maximum(10)
+		Default(5)
+		Example(5)
+	})
 	Attribute("version", Int64, "Policy version, incremented on each update.")
 	Attribute("created_at", String, "When the policy was created.", func() {
 		Format(FormatDateTime)
@@ -103,10 +168,10 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("updated_at", String, "When the policy was last updated.", func() {
 		Format(FormatDateTime)
 	})
-	Attribute("pending_messages", Int64, "Number of messages not yet analyzed at the current policy version.")
-	Attribute("total_messages", Int64, "Total number of messages in the project.")
+	Attribute("pending_messages", Int64, "Number of messages not yet analyzed at the current policy version. Populated on single-policy reads; omitted from list responses (use riskPoliciesStatus for progress).")
+	Attribute("total_messages", Int64, "Total number of messages in the project. Populated on single-policy reads; omitted from list responses.")
 
-	Required("id", "project_id", "name", "policy_type", "sources", "enabled", "action", "audience_type", "audience_principal_urns", "auto_name", "version", "created_at", "updated_at", "pending_messages", "total_messages")
+	Required("id", "project_id", "name", "policy_type", "sources", "enabled", "action", "audience_type", "audience_principal_urns", "auto_name", "score", "version", "created_at", "updated_at")
 })
 
 var RiskCustomDetectionRule = Type("RiskCustomDetectionRule", func() {
@@ -192,17 +257,19 @@ var RiskResult = Type("RiskResult", func() {
 	Attribute("source", String, "Detection source (e.g. gitleaks).")
 	Attribute("rule_id", String, "The matched rule identifier.")
 	Attribute("description", String, "Human-readable description of the finding.")
-	Attribute("match", String, "The matched secret or sensitive data.")
+	Attribute("match", String, "The matched secret or sensitive data. Null when the caller isn't authorized to see raw match content for this result's chat (see match_redacted).")
 	Attribute("start_pos", Int, "Start byte position within the message content.")
 	Attribute("end_pos", Int, "End byte position within the message content.")
 	Attribute("confidence", Float64, "Confidence score for this finding.")
 	Attribute("tags", ArrayOf(String), "Tags from the detection rule.")
-	Attribute("spans", ArrayOf(RiskSpan), "All matched spans attributed to this finding. A finding may carry several correlated spans (e.g. a custom rule matching a tool's function name and its arguments on the same call). The top-level match/start_pos/end_pos mirror the primary (first) span.")
+	Attribute("spans", ArrayOf(RiskSpan), "All matched spans attributed to this finding. A finding may carry several correlated spans (e.g. a custom rule matching a tool's function name and its arguments on the same call). The top-level match/start_pos/end_pos mirror the primary (first) span. Null alongside match when the result is redacted.")
+	Attribute("match_redacted", String, "Opaque fingerprint of match, in the same `<redacted len=N sha=XXXXXXXX>` form as RiskResultRedacted.match_redacted. Populated whenever match is null so callers without raw access still get a stable, non-reversible correlation token. For shadow_mcp findings this is the original match value passed through verbatim (a non-sensitive server URL or command identifier).")
 	Attribute("created_at", String, "When this result was created.", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("replayed", Boolean, "True when the scanned message arrived as a replay from a device's offline spool after control-plane downtime — the finding was produced retroactively rather than from live traffic.")
 
-	Required("id", "policy_id", "policy_version", "chat_message_id", "source", "created_at")
+	Required("id", "policy_id", "policy_version", "chat_message_id", "source", "created_at", "replayed")
 })
 
 // RiskSpan is one matched span attributed to a finding.

@@ -11,7 +11,7 @@ and dead-letter topic on demand against the local Pub/Sub emulator — no GCP
 resources or Config Connector required.
 
 1. Start the local Pub/Sub emulator (runs as part of the local stack via
-   `madprocs` / `compose.yml`, on the `PUBSUB_EMULATOR_HOST` port — by default
+   `mise infra:start`, on the `PUBSUB_EMULATOR_HOST` port — by default
    `localhost:8088`, see `mise.toml`).
 
 2. From the `infra/` directory, run a demo. Two are provided — they differ only

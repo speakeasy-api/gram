@@ -1,23 +1,20 @@
 import { useLatestDeployment } from "@/hooks/toolTypes";
+import { ExternalMCPToolDefinition } from "@gram/client/models/components/externalmcptooldefinition.js";
+import { FunctionResourceDefinition } from "@gram/client/models/components/functionresourcedefinition.js";
+import { FunctionToolDefinition } from "@gram/client/models/components/functiontooldefinition.js";
+import { HTTPToolDefinition } from "@gram/client/models/components/httptooldefinition.js";
+import { PlatformToolDefinition } from "@gram/client/models/components/platformtooldefinition.js";
 import {
-  ExternalMCPToolDefinition,
-  FunctionResourceDefinition,
-  FunctionToolDefinition,
-  PlatformToolDefinition,
-  Resource as GeneratedResource,
-  Tool as GeneratedTool,
-  Toolset as GeneratedToolset,
-  HTTPToolDefinition,
   PromptTemplate,
-  PromptTemplateEntry,
   PromptTemplateKind,
-} from "@gram/client/models/components";
+} from "@gram/client/models/components/prompttemplate.js";
+import { PromptTemplateEntry } from "@gram/client/models/components/prompttemplateentry.js";
+import { Resource as GeneratedResource } from "@gram/client/models/components/resource.js";
+import { Tool as GeneratedTool } from "@gram/client/models/components/tool.js";
+import { Toolset as GeneratedToolset } from "@gram/client/models/components/toolset.js";
 import { useMemo } from "react";
 
 type ToolWithDisplayName = Tool & { displayName: string };
-type HttpToolWithDisplayName = Tool & { type: "http" } & {
-  displayName: string;
-};
 
 export type Toolset = Omit<GeneratedToolset, "tools" | "resources"> & {
   tools: Tool[];
@@ -41,11 +38,6 @@ export type ToolWithAnnotations = Extract<
 export type ToolGroup = {
   key: string;
   tools: ToolWithDisplayName[];
-};
-
-export type HttpToolGroup = {
-  key: string;
-  tools: HttpToolWithDisplayName[];
 };
 
 type ToolDisplayContext = {
@@ -97,18 +89,6 @@ export const asResource = (resource: GeneratedResource): Resource => {
   } else {
     throw new Error("Unexpected resource type");
   }
-};
-
-export const useGroupedHttpTools = (
-  tools: HTTPToolDefinition[],
-): HttpToolGroup[] => {
-  return useGroupedTools(
-    asTools(
-      tools.map((t) => ({
-        httpToolDefinition: t,
-      })),
-    ),
-  ) as HttpToolGroup[];
 };
 
 export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {

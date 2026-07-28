@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
@@ -158,6 +159,7 @@ func (s *Service) CreateAssistant(ctx context.Context, payload *gen.CreateAssist
 		payload.Model,
 		payload.Instructions,
 		payload.Toolsets,
+		payload.McpServers,
 		normalizeWarmTTLSeconds(payload.WarmTTLSeconds),
 		normalizeMaxConcurrency(payload.MaxConcurrency),
 		conv.PtrValOrEmpty(payload.Status, StatusActive),
@@ -194,6 +196,7 @@ func (s *Service) UpdateAssistant(ctx context.Context, payload *gen.UpdateAssist
 		payload.Model,
 		payload.Instructions,
 		payload.Toolsets,
+		payload.McpServers,
 		payload.WarmTTLSeconds,
 		payload.MaxConcurrency,
 		payload.Status,
@@ -220,7 +223,10 @@ func (s *Service) DeleteAssistant(ctx context.Context, payload *gen.DeleteAssist
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
 	}
-	if err := s.core.DeleteAssistant(ctx, *authCtx.ProjectID, assistantID); err != nil {
+	if authCtx.UserID == "" {
+		return oops.E(oops.CodeUnauthorized, nil, "deleting an assistant requires a user identity")
+	}
+	if err := s.core.DeleteAssistant(ctx, *authCtx.ProjectID, assistantID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authCtx.Email); err != nil {
 		return mapAssistantStoreError(ctx, s.logger, err, "delete assistant")
 	}
 	return nil

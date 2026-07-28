@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -54,14 +55,22 @@ type testInstance struct {
 	service            *telemetry.Service
 	logger             *slog.Logger
 	conn               *pgxpool.Pool
+	chConn             clickhouse.Conn
 	chClient           *repo.Queries
 	sessionManager     *sessions.Manager
 	orgID              string
+	projectID          string
 	disabledLogsOrgID  string
 	enabledToolIOOrgID string
 }
 
 func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+
+	return newTestLogsServiceWithSessionCapture(t, true)
+}
+
+func newTestLogsServiceWithSessionCapture(t *testing.T, sessionCapture bool) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -107,13 +116,13 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 		return false, nil
 	}
 
-	sessionCaptureEnabled := func(_ context.Context, orgID string) (bool, error) {
-		return true, nil
+	sessionCaptureEnabled := func(_ context.Context, _ string) (bool, error) {
+		return sessionCapture, nil
 	}
 
 	posthogClient := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
-	telemLogger := telemetry.NewLogger(ctx, logger, chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient)))
+	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient)), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := telemetry.NewService(logger, tracerProvider, conn, chConn, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
 
@@ -122,9 +131,11 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 		telemLogger:        telemLogger,
 		logger:             logger,
 		conn:               conn,
+		chConn:             chConn,
 		chClient:           chClient,
 		sessionManager:     sessionManager,
 		orgID:              authCtx.ActiveOrganizationID,
+		projectID:          authCtx.ProjectID.String(),
 		disabledLogsOrgID:  disabledLogsOrgID,
 		enabledToolIOOrgID: enabledToolIOOrgID,
 	}

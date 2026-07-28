@@ -15,21 +15,19 @@ import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
-import {
-  useLatestDeployment,
-  useListAssets,
-  useListDeployments,
-  useListToolsets,
-} from "@gram/client/react-query/index.js";
+import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
+import { useListAssets } from "@gram/client/react-query/listAssets.js";
+import { useListDeployments } from "@gram/client/react-query/listDeployments.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { useGramContext } from "@gram/client/react-query/_context";
 import { unwrapAsync } from "@gram/client/types/fp";
-import type { GetObservabilityOverviewResult } from "@gram/client/models/components";
+import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useListTools } from "@/hooks/toolTypes";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useToolUpdate } from "@/hooks/useToolUpdate";
-import { invalidateAllListTools } from "@gram/client/react-query";
+import { invalidateAllListTools } from "@gram/client/react-query/listTools.js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge, Button } from "@speakeasy-api/moonshine";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
@@ -37,6 +35,7 @@ import { Navigate, useParams } from "react-router";
 import { SourceDeploymentsPanel } from "./SourceDeploymentsPanel";
 import ExternalMCPDetails from "./external-mcp/ExternalMCPDetails";
 import RemoteMCPDetails from "./remote-mcp/RemoteMCPDetails";
+import TunneledMCPDetails from "./tunneled-mcp/TunneledMCPDetails";
 import { SourceOverviewTab } from "./SourceOverviewTab";
 import { SourceToolsTab } from "./SourceToolsTab";
 import { SourceMCPServersTab } from "./SourceMCPServersTab";
@@ -50,6 +49,7 @@ function attachmentTypeForSourceKind(sourceKind: string | undefined): string {
       return "functions";
     case "externalmcp":
     case "remotemcp":
+    case "tunneledmcp":
       return "external_mcp";
     case undefined:
     default:
@@ -236,6 +236,10 @@ export default function SourceDetails(): JSX.Element {
 
   if (sourceKind === "remotemcp") {
     return <RemoteMCPDetails />;
+  }
+
+  if (sourceKind === "tunneledmcp") {
+    return <TunneledMCPDetails />;
   }
 
   if (!isLoadingDeployment && !source) {

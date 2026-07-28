@@ -7,6 +7,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -16,35 +17,38 @@ import (
 type OpenRouterKeyRefreshParams struct {
 	OrgID string
 	Limit *int // Allows for setting custom limits by kicking off this temporal workflow directly
+	// KeyType names which of the org's OpenRouter keys to refresh ("chat" or
+	// "internal"). Empty resolves to the chat key, keeping in-flight payloads
+	// from before the field existed valid.
+	KeyType string
 }
 
 type OpenRouterKeyRefresher struct {
 	TemporalEnv *tenv.Environment
 }
 
-func (w *OpenRouterKeyRefresher) ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string) error {
+func (w *OpenRouterKeyRefresher) ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string, keyType openrouter.KeyType) error {
 	_, err := ExecuteOpenrouterKeyRefreshWorkflow(ctx, w.TemporalEnv, OpenRouterKeyRefreshParams{
-		OrgID: orgID,
-		Limit: nil,
+		OrgID:   orgID,
+		Limit:   nil,
+		KeyType: string(keyType),
 	})
 	return err
 }
 
-// CancelOpenRouterKeyRefreshWorkflow cancels an existing openrouter key refresh workflow for the given orgID
-func (w *OpenRouterKeyRefresher) CancelOpenRouterKeyRefreshWorkflow(ctx context.Context, orgID string) error {
-	id := fmt.Sprintf("v1:openrouter-key-refresh:%s", orgID)
-	err := w.TemporalEnv.Client().CancelWorkflow(ctx, id, "")
-	if err != nil {
-		// If workflow doesn't exist, that's fine - it may have already completed or never started
-		return nil
-	}
-
-	return nil
-}
-
 // Called by your service to start (or restart) the workflow
 func ExecuteOpenrouterKeyRefreshWorkflow(ctx context.Context, temporalEnv *tenv.Environment, params OpenRouterKeyRefreshParams) (client.WorkflowRun, error) {
+	// A typoed key type must fail here, before the terminate-if-running id
+	// below can clobber the real chat refresh workflow.
+	if err := openrouter.KeyType(params.KeyType).Validate(); err != nil {
+		return nil, fmt.Errorf("refresh openrouter key workflow: %w", err)
+	}
+	// The chat key keeps the historical id format: cancel semantics and the
+	// manual-trigger docs reference it. Only internal keys get a suffix.
 	id := fmt.Sprintf("v1:openrouter-key-refresh:%s", params.OrgID)
+	if openrouter.KeyType(params.KeyType) == openrouter.KeyTypeInternal {
+		id += ":internal"
+	}
 	return temporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    id,
 		TaskQueue:             string(temporalEnv.Queue()),
@@ -67,7 +71,7 @@ func OpenrouterKeyRefreshWorkflow(ctx workflow.Context, params OpenRouterKeyRefr
 	err := workflow.ExecuteActivity(
 		ctx,
 		a.RefreshOpenRouterKey,
-		activities.RefreshOpenRouterKeyArgs{OrgID: params.OrgID, Limit: params.Limit},
+		activities.RefreshOpenRouterKeyArgs{OrgID: params.OrgID, Limit: params.Limit, KeyType: params.KeyType},
 	).Get(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to refresh openrouter key: %w", err)

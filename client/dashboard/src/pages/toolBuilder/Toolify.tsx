@@ -5,9 +5,9 @@ import { Spinner } from "@/components/ui/spinner";
 import { TextArea } from "@/components/ui/textarea";
 import { useToolset } from "@/hooks/toolTypes";
 import { useRoutes } from "@/routes";
-import { ToolsetEntry } from "@gram/client/models/components";
+import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { useState } from "react";
 import { z } from "zod";
 import { useMiniModel } from "../playground/Openrouter";
@@ -60,7 +60,7 @@ export const ToolifyDialog = ({
 
     setInProgress(true);
 
-    const res = await generateObject({
+    const res = await generateText({
       model,
       prompt: `
       You are a composite tool builder. You are given a purpose for a tool and a list of available tools.
@@ -106,10 +106,10 @@ export const ToolifyDialog = ({
         }),
       )}
                   `,
-      schema: SuggestionSchema,
+      output: Output.object({ schema: SuggestionSchema }),
     });
 
-    const suggestion = res.object as z.infer<typeof SuggestionSchema>;
+    const suggestion = res.output as z.infer<typeof SuggestionSchema>;
     const uniqueInputs = suggestion.inputs.filter(
       (input, index, self) =>
         index === self.findIndex((i) => i.name === input.name),
@@ -187,8 +187,14 @@ export const ToolifyDialog = ({
               onClick={() => void onSubmit()}
               disabled={!purpose || inProgress}
             >
-              {inProgress && <Spinner />}
-              {inProgress ? "Generating..." : "Toolify"}
+              {inProgress && (
+                <Button.LeftIcon>
+                  <Spinner />
+                </Button.LeftIcon>
+              )}
+              <Button.Text>
+                {inProgress ? "Generating..." : "Toolify"}
+              </Button.Text>
             </Button>
           </div>
         </Dialog.Footer>

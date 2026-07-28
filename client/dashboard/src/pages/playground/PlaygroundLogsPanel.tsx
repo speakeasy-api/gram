@@ -2,9 +2,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Type } from "@/components/ui/type";
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
-import { TelemetryLogRecord } from "@gram/client/models/components";
+import { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import { ServiceError } from "@gram/client/models/errors/serviceerror";
-import { useGramContext, useToolset } from "@gram/client/react-query";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useToolset } from "@gram/client/react-query/toolset.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
 import {

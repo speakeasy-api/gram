@@ -96,6 +96,14 @@ type IDPUserInfo struct {
 	OrganizationID  string  `json:"-"` // WorkOS org ID selected during auth
 }
 
+// RBACEnabler enables RBAC for an organization (seed system-role grants + turn
+// on the feature flag). Implemented by *productfeatures.Client; declared here so
+// identity does not import productfeatures (which would form an import cycle via
+// productfeatures -> auth -> identity).
+type RBACEnabler interface {
+	EnableRBAC(ctx context.Context, organizationID string) error
+}
+
 // Resolver handles identity concerns: IDP code exchange, user upsert, org
 // membership sync, user-info caching, and authorization URL construction.
 type Resolver struct {
@@ -110,6 +118,7 @@ type Resolver struct {
 	userRepo      *userRepo.Queries
 	pylon         *pylon.Pylon
 	posthog       *posthog.Posthog
+	rbac          RBACEnabler
 }
 
 func NewResolver(
@@ -124,6 +133,7 @@ func NewResolver(
 	userRepo *userRepo.Queries,
 	pylon *pylon.Pylon,
 	posthog *posthog.Posthog,
+	rbac RBACEnabler,
 	suffix cache.Suffix,
 ) *Resolver {
 	logger = logger.With(attr.SlogComponent("identity"))
@@ -139,6 +149,7 @@ func NewResolver(
 		userRepo:      userRepo,
 		pylon:         pylon,
 		posthog:       posthog,
+		rbac:          rbac,
 	}
 }
 
@@ -515,6 +526,19 @@ func (r *Resolver) upsertOrgFromMembership(ctx context.Context, m workos.Member)
 			Whitelisted: pgtype.Bool{Bool: false, Valid: false},
 		}); err != nil {
 			return fmt.Errorf("upsert org metadata from workos %q: %w", m.OrganizationID, err)
+		}
+		// Newly provisioned org: enable RBAC so access control is on from the
+		// start. Best-effort — a failure here must not block login; the WorkOS
+		// webhook reconcile path is a backstop and the super-admin tool a manual
+		// fallback. Idempotent if it later runs again.
+		if r.rbac != nil {
+			if err := r.rbac.EnableRBAC(ctx, gramOrgID); err != nil {
+				r.logger.ErrorContext(ctx, "failed to enable RBAC for org provisioned from workos",
+					attr.SlogError(err),
+					attr.SlogWorkOSOrganizationID(m.OrganizationID),
+					attr.SlogOrganizationID(gramOrgID),
+				)
+			}
 		}
 	default:
 		return fmt.Errorf("get org metadata for workos organization %q: %w", m.OrganizationID, err)

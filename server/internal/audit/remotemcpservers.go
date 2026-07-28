@@ -27,7 +27,7 @@ type LogRemoteMcpServerCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RemoteMcpServerID  uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RemoteMcpServer and migrate to RemoteMcpServerURN; pending team discussion
+	RemoteMcpServerURN urn.RemoteMcpServer
 	RemoteMcpServerURL string
 }
 
@@ -44,7 +44,7 @@ func (l *Logger) LogRemoteMcpServerCreate(ctx context.Context, dbtx repo.DBTX, e
 
 		Action: string(action),
 
-		SubjectID:          event.RemoteMcpServerID.String(),
+		SubjectID:          event.RemoteMcpServerURN.ID.String(),
 		SubjectType:        string(subjectTypeRemoteMcpServer),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.RemoteMcpServerURL),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
@@ -65,7 +65,7 @@ type LogRemoteMcpServerUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RemoteMcpServerID  uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RemoteMcpServer and migrate to RemoteMcpServerURN; pending team discussion
+	RemoteMcpServerURN urn.RemoteMcpServer
 	RemoteMcpServerURL string
 	SnapshotBefore     *types.RemoteMcpServer
 	SnapshotAfter      *types.RemoteMcpServer
@@ -95,7 +95,7 @@ func (l *Logger) LogRemoteMcpServerUpdate(ctx context.Context, dbtx repo.DBTX, e
 
 		Action: string(action),
 
-		SubjectID:          event.RemoteMcpServerID.String(),
+		SubjectID:          event.RemoteMcpServerURN.ID.String(),
 		SubjectType:        string(subjectTypeRemoteMcpServer),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.RemoteMcpServerURL),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
@@ -116,7 +116,7 @@ type LogRemoteMcpServerDeleteEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RemoteMcpServerID  uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RemoteMcpServer and migrate to RemoteMcpServerURN; pending team discussion
+	RemoteMcpServerURN urn.RemoteMcpServer
 	RemoteMcpServerURL string
 }
 
@@ -133,7 +133,7 @@ func (l *Logger) LogRemoteMcpServerDelete(ctx context.Context, dbtx repo.DBTX, e
 
 		Action: string(action),
 
-		SubjectID:          event.RemoteMcpServerID.String(),
+		SubjectID:          event.RemoteMcpServerURN.ID.String(),
 		SubjectType:        string(subjectTypeRemoteMcpServer),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.RemoteMcpServerURL),
 		SubjectSlug:        conv.ToPGTextEmpty(""),

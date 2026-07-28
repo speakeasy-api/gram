@@ -12,6 +12,79 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addMCPServerToolMetadata = `-- name: AddMCPServerToolMetadata :many
+INSERT INTO mcp_server_tool_metadata (
+    project_id,
+    mcp_server_id,
+    tool_name,
+    title,
+    read_only_hint,
+    destructive_hint,
+    idempotent_hint,
+    open_world_hint
+)
+SELECT
+    $1,
+    $2,
+    elem->>'tool_name',
+    elem->>'title',
+    (elem->>'read_only_hint')::boolean,
+    (elem->>'destructive_hint')::boolean,
+    (elem->>'idempotent_hint')::boolean,
+    (elem->>'open_world_hint')::boolean
+FROM jsonb_array_elements($3::jsonb) AS elem
+RETURNING id, project_id, mcp_server_id, tool_name, title, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
+`
+
+type AddMCPServerToolMetadataParams struct {
+	ProjectID   uuid.UUID
+	McpServerID uuid.UUID
+	Tools       []byte
+}
+
+// Strictly additive counterpart to SetMCPServerToolMetadata. There is
+// deliberately no ON CONFLICT clause: a tool that already holds a live stored
+// entry must abort the whole statement with a unique violation (SQLSTATE 23505)
+// rather than being silently updated or skipped, so a caller working from a
+// stale view of stored state is told so. The partial unique index covers only
+// live rows, so a tool whose sole prior row is a tombstone inserts fresh.
+//
+// See SetMCPServerToolMetadata above for why the payload is unpacked with ->>
+// rather than jsonb_to_recordset.
+func (q *Queries) AddMCPServerToolMetadata(ctx context.Context, arg AddMCPServerToolMetadataParams) ([]McpServerToolMetadatum, error) {
+	rows, err := q.db.Query(ctx, addMCPServerToolMetadata, arg.ProjectID, arg.McpServerID, arg.Tools)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpServerToolMetadatum
+	for rows.Next() {
+		var i McpServerToolMetadatum
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.McpServerID,
+			&i.ToolName,
+			&i.Title,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createMCPServer = `-- name: CreateMCPServer :one
 INSERT INTO mcp_servers (
     id,
@@ -21,6 +94,7 @@ INSERT INTO mcp_servers (
     environment_id,
     user_session_issuer_id,
     remote_mcp_server_id,
+    tunneled_mcp_server_id,
     toolset_id,
     tool_variations_group_id,
     visibility
@@ -35,9 +109,10 @@ VALUES (
     $7,
     $8,
     $9,
-    $10
+    $10,
+    $11
 )
-RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunnelled_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateMCPServerParams struct {
@@ -48,6 +123,7 @@ type CreateMCPServerParams struct {
 	EnvironmentID         uuid.NullUUID
 	UserSessionIssuerID   uuid.NullUUID
 	RemoteMcpServerID     uuid.NullUUID
+	TunneledMcpServerID   uuid.NullUUID
 	ToolsetID             uuid.NullUUID
 	ToolVariationsGroupID uuid.NullUUID
 	Visibility            string
@@ -62,6 +138,7 @@ func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams
 		arg.EnvironmentID,
 		arg.UserSessionIssuerID,
 		arg.RemoteMcpServerID,
+		arg.TunneledMcpServerID,
 		arg.ToolsetID,
 		arg.ToolVariationsGroupID,
 		arg.Visibility,
@@ -75,7 +152,7 @@ func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams
 		&i.EnvironmentID,
 		&i.UserSessionIssuerID,
 		&i.RemoteMcpServerID,
-		&i.TunnelledMcpServerID,
+		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
@@ -91,7 +168,7 @@ const deleteMCPServer = `-- name: DeleteMCPServer :one
 UPDATE mcp_servers
 SET deleted_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
-RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunnelled_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteMCPServerParams struct {
@@ -110,7 +187,7 @@ func (q *Queries) DeleteMCPServer(ctx context.Context, arg DeleteMCPServerParams
 		&i.EnvironmentID,
 		&i.UserSessionIssuerID,
 		&i.RemoteMcpServerID,
-		&i.TunnelledMcpServerID,
+		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
@@ -122,8 +199,45 @@ func (q *Queries) DeleteMCPServer(ctx context.Context, arg DeleteMCPServerParams
 	return i, err
 }
 
+const deleteMCPServerToolMetadata = `-- name: DeleteMCPServerToolMetadata :one
+UPDATE mcp_server_tool_metadata
+SET deleted_at = clock_timestamp()
+WHERE mcp_server_id = $1
+  AND project_id = $2
+  AND tool_name = $3
+  AND deleted IS FALSE
+RETURNING id, project_id, mcp_server_id, tool_name, title, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
+`
+
+type DeleteMCPServerToolMetadataParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+	ToolName    string
+}
+
+func (q *Queries) DeleteMCPServerToolMetadata(ctx context.Context, arg DeleteMCPServerToolMetadataParams) (McpServerToolMetadatum, error) {
+	row := q.db.QueryRow(ctx, deleteMCPServerToolMetadata, arg.McpServerID, arg.ProjectID, arg.ToolName)
+	var i McpServerToolMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.McpServerID,
+		&i.ToolName,
+		&i.Title,
+		&i.ReadOnlyHint,
+		&i.DestructiveHint,
+		&i.IdempotentHint,
+		&i.OpenWorldHint,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getMCPServerByIDAndOrganizationID = `-- name: GetMCPServerByIDAndOrganizationID :one
-SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_mcp_server_id, m.tunnelled_mcp_server_id, m.toolset_id, m.tool_variations_group_id, m.visibility, m.created_at, m.updated_at, m.deleted_at, m.deleted
+SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_mcp_server_id, m.tunneled_mcp_server_id, m.toolset_id, m.tool_variations_group_id, m.visibility, m.created_at, m.updated_at, m.deleted_at, m.deleted
 FROM mcp_servers AS m
 JOIN projects AS p ON p.id = m.project_id
 WHERE m.id = $1
@@ -150,7 +264,7 @@ func (q *Queries) GetMCPServerByIDAndOrganizationID(ctx context.Context, arg Get
 		&i.EnvironmentID,
 		&i.UserSessionIssuerID,
 		&i.RemoteMcpServerID,
-		&i.TunnelledMcpServerID,
+		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
@@ -163,7 +277,7 @@ func (q *Queries) GetMCPServerByIDAndOrganizationID(ctx context.Context, arg Get
 }
 
 const getMCPServerByIDAndProjectID = `-- name: GetMCPServerByIDAndProjectID :one
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunnelled_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -184,7 +298,7 @@ func (q *Queries) GetMCPServerByIDAndProjectID(ctx context.Context, arg GetMCPSe
 		&i.EnvironmentID,
 		&i.UserSessionIssuerID,
 		&i.RemoteMcpServerID,
-		&i.TunnelledMcpServerID,
+		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
@@ -197,7 +311,7 @@ func (q *Queries) GetMCPServerByIDAndProjectID(ctx context.Context, arg GetMCPSe
 }
 
 const getMCPServerBySlug = `-- name: GetMCPServerBySlug :one
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunnelled_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -218,7 +332,7 @@ func (q *Queries) GetMCPServerBySlug(ctx context.Context, arg GetMCPServerBySlug
 		&i.EnvironmentID,
 		&i.UserSessionIssuerID,
 		&i.RemoteMcpServerID,
-		&i.TunnelledMcpServerID,
+		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
@@ -230,24 +344,70 @@ func (q *Queries) GetMCPServerBySlug(ctx context.Context, arg GetMCPServerBySlug
 	return i, err
 }
 
-const listMCPServersByProjectID = `-- name: ListMCPServersByProjectID :many
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunnelled_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
-FROM mcp_servers
-WHERE project_id = $1
-  AND deleted IS FALSE
-  AND ($2::uuid IS NULL OR remote_mcp_server_id = $2::uuid)
-  AND ($3::uuid IS NULL OR toolset_id = $3::uuid)
-ORDER BY created_at DESC
+const listMCPServerToolMetadata = `-- name: ListMCPServerToolMetadata :many
+SELECT id, project_id, mcp_server_id, tool_name, title, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
+FROM mcp_server_tool_metadata
+WHERE mcp_server_id = $1
+  AND project_id = $2
+  AND ($3::boolean OR deleted IS FALSE)
+ORDER BY tool_name, created_at
 `
 
-type ListMCPServersByProjectIDParams struct {
-	ProjectID         uuid.UUID
-	RemoteMcpServerID uuid.NullUUID
-	ToolsetID         uuid.NullUUID
+type ListMCPServerToolMetadataParams struct {
+	McpServerID    uuid.UUID
+	ProjectID      uuid.UUID
+	IncludeDeleted bool
 }
 
-func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServersByProjectIDParams) ([]McpServer, error) {
-	rows, err := q.db.Query(ctx, listMCPServersByProjectID, arg.ProjectID, arg.RemoteMcpServerID, arg.ToolsetID)
+func (q *Queries) ListMCPServerToolMetadata(ctx context.Context, arg ListMCPServerToolMetadataParams) ([]McpServerToolMetadatum, error) {
+	rows, err := q.db.Query(ctx, listMCPServerToolMetadata, arg.McpServerID, arg.ProjectID, arg.IncludeDeleted)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpServerToolMetadatum
+	for rows.Next() {
+		var i McpServerToolMetadatum
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.McpServerID,
+			&i.ToolName,
+			&i.Title,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMCPServersByOrganizationID = `-- name: ListMCPServersByOrganizationID :many
+SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_mcp_server_id, m.tunneled_mcp_server_id, m.toolset_id, m.tool_variations_group_id, m.visibility, m.created_at, m.updated_at, m.deleted_at, m.deleted
+FROM mcp_servers AS m
+JOIN projects AS p ON p.id = m.project_id
+WHERE p.organization_id = $1
+  AND m.deleted IS FALSE
+  AND p.deleted IS FALSE
+ORDER BY m.created_at DESC
+`
+
+// List every MCP server in an organization via each project's organization_id.
+// For organization-administrator flows that span projects (e.g. the RBAC
+// connection-policy picker), which carry no project scope.
+func (q *Queries) ListMCPServersByOrganizationID(ctx context.Context, organizationID string) ([]McpServer, error) {
+	rows, err := q.db.Query(ctx, listMCPServersByOrganizationID, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +423,7 @@ func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServ
 			&i.EnvironmentID,
 			&i.UserSessionIssuerID,
 			&i.RemoteMcpServerID,
-			&i.TunnelledMcpServerID,
+			&i.TunneledMcpServerID,
 			&i.ToolsetID,
 			&i.ToolVariationsGroupID,
 			&i.Visibility,
@@ -282,20 +442,292 @@ func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServ
 	return items, nil
 }
 
+const listMCPServersByProjectID = `-- name: ListMCPServersByProjectID :many
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
+FROM mcp_servers
+WHERE project_id = $1
+  AND deleted IS FALSE
+  AND ($2::uuid IS NULL OR remote_mcp_server_id = $2::uuid)
+  AND ($3::uuid IS NULL OR tunneled_mcp_server_id = $3::uuid)
+  AND ($4::uuid IS NULL OR toolset_id = $4::uuid)
+ORDER BY created_at DESC
+`
+
+type ListMCPServersByProjectIDParams struct {
+	ProjectID           uuid.UUID
+	RemoteMcpServerID   uuid.NullUUID
+	TunneledMcpServerID uuid.NullUUID
+	ToolsetID           uuid.NullUUID
+}
+
+func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServersByProjectIDParams) ([]McpServer, error) {
+	rows, err := q.db.Query(ctx, listMCPServersByProjectID,
+		arg.ProjectID,
+		arg.RemoteMcpServerID,
+		arg.TunneledMcpServerID,
+		arg.ToolsetID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpServer
+	for rows.Next() {
+		var i McpServer
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Slug,
+			&i.EnvironmentID,
+			&i.UserSessionIssuerID,
+			&i.RemoteMcpServerID,
+			&i.TunneledMcpServerID,
+			&i.ToolsetID,
+			&i.ToolVariationsGroupID,
+			&i.Visibility,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMCPServersForTelemetryByProjectID = `-- name: ListMCPServersForTelemetryByProjectID :many
+SELECT id, name, slug, remote_mcp_server_id, tunneled_mcp_server_id
+FROM mcp_servers
+WHERE project_id = $1
+ORDER BY deleted ASC, created_at DESC
+`
+
+type ListMCPServersForTelemetryByProjectIDRow struct {
+	ID                  uuid.UUID
+	Name                pgtype.Text
+	Slug                pgtype.Text
+	RemoteMcpServerID   uuid.NullUUID
+	TunneledMcpServerID uuid.NullUUID
+}
+
+// Includes soft-deleted servers so tool-usage telemetry can classify historical
+// rows whose backing MCP server has since been deleted (or recreated). The
+// backend source ids (remote_mcp_server_id / tunneled_mcp_server_id) recorded on
+// telemetry rows outlive the mcp_servers row, so matching against deleted rows
+// keeps a call's target_type stable instead of falling through to
+// shadow_mcp_server. Live servers are ordered first so a source id shared by a
+// live and a deleted server resolves to the live one.
+func (q *Queries) ListMCPServersForTelemetryByProjectID(ctx context.Context, projectID uuid.UUID) ([]ListMCPServersForTelemetryByProjectIDRow, error) {
+	rows, err := q.db.Query(ctx, listMCPServersForTelemetryByProjectID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMCPServersForTelemetryByProjectIDRow
+	for rows.Next() {
+		var i ListMCPServersForTelemetryByProjectIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.RemoteMcpServerID,
+			&i.TunneledMcpServerID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockMCPServerToolMetadataWrite = `-- name: LockMCPServerToolMetadataWrite :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
+`
+
+// Acquire a transaction-scoped advisory lock keyed on the MCP server ID so
+// tool metadata mutations on the same server serialize across processes.
+//
+// Two things depend on this. The authoritative write touches an unbounded set
+// of rows in two branches, so competing full syncs with different tool sets can
+// take row locks in opposing orders and deadlock. And every mutation reads the
+// collection before and after itself to build its audit snapshots, which under
+// READ COMMITTED would otherwise straddle another transaction's commit and
+// record a transition that never happened.
+func (q *Queries) LockMCPServerToolMetadataWrite(ctx context.Context, mcpServerID string) error {
+	_, err := q.db.Exec(ctx, lockMCPServerToolMetadataWrite, mcpServerID)
+	return err
+}
+
+const setMCPServerToolMetadata = `-- name: SetMCPServerToolMetadata :many
+WITH input AS (
+    SELECT
+        elem->>'tool_name' AS tool_name,
+        elem->>'title' AS title,
+        (elem->>'read_only_hint')::boolean AS read_only_hint,
+        (elem->>'destructive_hint')::boolean AS destructive_hint,
+        (elem->>'idempotent_hint')::boolean AS idempotent_hint,
+        (elem->>'open_world_hint')::boolean AS open_world_hint
+    FROM jsonb_array_elements($1::jsonb) AS elem
+),
+upserted AS (
+    INSERT INTO mcp_server_tool_metadata (
+        project_id,
+        mcp_server_id,
+        tool_name,
+        title,
+        read_only_hint,
+        destructive_hint,
+        idempotent_hint,
+        open_world_hint
+    )
+    SELECT
+        $2,
+        $3,
+        input.tool_name,
+        input.title,
+        input.read_only_hint,
+        input.destructive_hint,
+        input.idempotent_hint,
+        input.open_world_hint
+    FROM input
+    ON CONFLICT (mcp_server_id, tool_name) WHERE deleted IS FALSE
+    DO UPDATE SET
+        title = EXCLUDED.title,
+        read_only_hint = EXCLUDED.read_only_hint,
+        destructive_hint = EXCLUDED.destructive_hint,
+        idempotent_hint = EXCLUDED.idempotent_hint,
+        open_world_hint = EXCLUDED.open_world_hint,
+        updated_at = clock_timestamp()
+    WHERE mcp_server_tool_metadata.project_id = $2
+    RETURNING id, project_id, mcp_server_id, tool_name, title, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
+),
+removed AS (
+    UPDATE mcp_server_tool_metadata
+    SET deleted_at = clock_timestamp()
+    WHERE mcp_server_id = $3
+      AND project_id = $2
+      AND deleted IS FALSE
+      AND NOT EXISTS (
+          SELECT 1 FROM input WHERE input.tool_name = mcp_server_tool_metadata.tool_name
+      )
+    RETURNING id, project_id, mcp_server_id, tool_name, title, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
+)
+SELECT
+    id, project_id, mcp_server_id, tool_name, title,
+    read_only_hint, destructive_hint, idempotent_hint, open_world_hint,
+    created_at, updated_at, deleted_at, deleted,
+    false AS was_deleted
+FROM upserted
+UNION ALL
+SELECT
+    id, project_id, mcp_server_id, tool_name, title,
+    read_only_hint, destructive_hint, idempotent_hint, open_world_hint,
+    created_at, updated_at, deleted_at, deleted,
+    true AS was_deleted
+FROM removed
+ORDER BY tool_name
+`
+
+type SetMCPServerToolMetadataParams struct {
+	Tools       []byte
+	ProjectID   uuid.UUID
+	McpServerID uuid.UUID
+}
+
+type SetMCPServerToolMetadataRow struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	McpServerID     uuid.UUID
+	ToolName        string
+	Title           pgtype.Text
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+	WasDeleted      bool
+}
+
+// Authoritative write of an MCP server's tool metadata collection: every tool in
+// @tools is upserted and every stored tool absent from @tools is soft-deleted, in a
+// single statement. The two branches touch disjoint rows (partitioned by
+// tool_name), so neither observes the other's writes.
+//
+// The conflict target is the partial unique index on (mcp_server_id, tool_name)
+// WHERE deleted IS FALSE, so re-adding a soft-deleted tool inserts a fresh row
+// rather than resurrecting the tombstoned one. A tool_name repeated within
+// @tools trips the ON CONFLICT cardinality check (SQLSTATE 21000), aborting the
+// statement rather than silently applying one of the duplicates.
+// The input CTE unpacks each element with ->> rather than jsonb_to_recordset:
+// sqlc's static analyzer never learns a column-definition list, so a
+// recordset alias leaves every input.<column> reference unresolvable (and
+// crashes sqlc outright under the managed analyzer). Selecting from
+// jsonb_array_elements references only the element itself, and the per-column
+// names below are ordinary select-list aliases, which sqlc does understand.
+// ->> yields NULL for both an absent key and a JSON null, which is exactly the
+// "hint unset" case these nullable columns encode.
+func (q *Queries) SetMCPServerToolMetadata(ctx context.Context, arg SetMCPServerToolMetadataParams) ([]SetMCPServerToolMetadataRow, error) {
+	rows, err := q.db.Query(ctx, setMCPServerToolMetadata, arg.Tools, arg.ProjectID, arg.McpServerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SetMCPServerToolMetadataRow
+	for rows.Next() {
+		var i SetMCPServerToolMetadataRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.McpServerID,
+			&i.ToolName,
+			&i.Title,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.WasDeleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateMCPServer = `-- name: UpdateMCPServer :one
 UPDATE mcp_servers
 SET
     name = $1,
     slug = $2,
     environment_id = $3,
-    user_session_issuer_id = $4,
+    user_session_issuer_id = COALESCE($4, user_session_issuer_id),
     remote_mcp_server_id = $5,
-    toolset_id = $6,
-    tool_variations_group_id = $7,
-    visibility = $8,
+    tunneled_mcp_server_id = $6,
+    toolset_id = $7,
+    tool_variations_group_id = $8,
+    visibility = $9,
     updated_at = clock_timestamp()
-WHERE id = $9 AND project_id = $10 AND deleted IS FALSE
-RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunnelled_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
+WHERE id = $10 AND project_id = $11 AND deleted IS FALSE
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateMCPServerParams struct {
@@ -304,6 +736,7 @@ type UpdateMCPServerParams struct {
 	EnvironmentID         uuid.NullUUID
 	UserSessionIssuerID   uuid.NullUUID
 	RemoteMcpServerID     uuid.NullUUID
+	TunneledMcpServerID   uuid.NullUUID
 	ToolsetID             uuid.NullUUID
 	ToolVariationsGroupID uuid.NullUUID
 	Visibility            string
@@ -318,6 +751,7 @@ func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams
 		arg.EnvironmentID,
 		arg.UserSessionIssuerID,
 		arg.RemoteMcpServerID,
+		arg.TunneledMcpServerID,
 		arg.ToolsetID,
 		arg.ToolVariationsGroupID,
 		arg.Visibility,
@@ -333,10 +767,66 @@ func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams
 		&i.EnvironmentID,
 		&i.UserSessionIssuerID,
 		&i.RemoteMcpServerID,
-		&i.TunnelledMcpServerID,
+		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateMCPServerToolMetadata = `-- name: UpdateMCPServerToolMetadata :one
+UPDATE mcp_server_tool_metadata
+SET title = $1,
+    read_only_hint = $2,
+    destructive_hint = $3,
+    idempotent_hint = $4,
+    open_world_hint = $5,
+    updated_at = clock_timestamp()
+WHERE mcp_server_id = $6
+  AND project_id = $7
+  AND tool_name = $8
+  AND deleted IS FALSE
+RETURNING id, project_id, mcp_server_id, tool_name, title, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateMCPServerToolMetadataParams struct {
+	Title           pgtype.Text
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
+	McpServerID     uuid.UUID
+	ProjectID       uuid.UUID
+	ToolName        string
+}
+
+func (q *Queries) UpdateMCPServerToolMetadata(ctx context.Context, arg UpdateMCPServerToolMetadataParams) (McpServerToolMetadatum, error) {
+	row := q.db.QueryRow(ctx, updateMCPServerToolMetadata,
+		arg.Title,
+		arg.ReadOnlyHint,
+		arg.DestructiveHint,
+		arg.IdempotentHint,
+		arg.OpenWorldHint,
+		arg.McpServerID,
+		arg.ProjectID,
+		arg.ToolName,
+	)
+	var i McpServerToolMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.McpServerID,
+		&i.ToolName,
+		&i.Title,
+		&i.ReadOnlyHint,
+		&i.DestructiveHint,
+		&i.IdempotentHint,
+		&i.OpenWorldHint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

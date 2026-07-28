@@ -3,6 +3,7 @@ import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantSessionsList } from "@/components/assistants/sessions-list";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
 import { EditInstructionsDialog } from "@/components/assistants/edit-instructions-dialog";
+import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,17 +13,18 @@ import {
   TabsList,
 } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
+import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
-import {
-  invalidateAllAssistantsList,
-  useAssistantsDeleteMutation,
-  useTriggers,
-} from "@gram/client/react-query/index.js";
+import { useAssistantsDeleteMutation } from "@gram/client/react-query/assistantsDelete.js";
+import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { useTriggers } from "@gram/client/react-query/triggers.js";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useState } from "react";
+import { AssistantSkillsSection } from "./AssistantSkillsSection";
 import { useAssistantDraft } from "./useAssistantDraft";
 
 const DETAIL_TABS = ["overview", "sessions", "triggers"] as const;
@@ -37,7 +39,9 @@ function toDetailTab(value: string): DetailTab {
 export function AssistantDraftPanel(): JSX.Element {
   const draft = useAssistantDraft();
   const routes = useRoutes();
+  const project = useProject();
   const queryClient = useQueryClient();
+  const { data: productFeatures } = useProductFeatures();
   const [activeTab, setActiveTab] = useQueryState(
     "tab",
     parseAsStringLiteral(DETAIL_TABS).withDefault("overview"),
@@ -194,10 +198,24 @@ export function AssistantDraftPanel(): JSX.Element {
                 )}
               </Section>
 
+              {productFeatures?.skillsEnabled === true && (
+                <RequireScope
+                  scope="skill:read"
+                  resourceId={project.id}
+                  level="section"
+                >
+                  <AssistantSkillsSection />
+                </RequireScope>
+              )}
+
               <Section
-                title={`MCP Servers (${a.toolsets.length})`}
+                title={`MCP Servers (${
+                  a.toolsets.length + (a.mcpServers ?? []).length
+                })`}
                 empty="No MCP servers attached."
-                isEmpty={a.toolsets.length === 0}
+                isEmpty={
+                  a.toolsets.length === 0 && (a.mcpServers ?? []).length === 0
+                }
               >
                 <Stack gap={2}>
                   {a.toolsets.map((t) => (
@@ -221,6 +239,28 @@ export function AssistantDraftPanel(): JSX.Element {
                         className="text-muted-foreground h-4 w-4 shrink-0"
                       />
                     </routes.mcp.details.Link>
+                  ))}
+                  {(a.mcpServers ?? []).map((m) => (
+                    <routes.mcp.x.Link
+                      key={m.mcpServerSlug}
+                      params={[m.mcpServerSlug]}
+                      className="border-border hover:bg-surface-secondary flex items-center justify-between rounded-md border px-3 py-2 transition-colors hover:no-underline"
+                    >
+                      <Stack gap={0} className="min-w-0">
+                        <code className="truncate text-xs">
+                          {m.mcpServerSlug}
+                        </code>
+                        {m.environmentSlug && (
+                          <Type small muted className="text-[11px]">
+                            env: {m.environmentSlug}
+                          </Type>
+                        )}
+                      </Stack>
+                      <Icon
+                        name="chevron-right"
+                        className="text-muted-foreground h-4 w-4 shrink-0"
+                      />
+                    </routes.mcp.x.Link>
                   ))}
                 </Stack>
               </Section>

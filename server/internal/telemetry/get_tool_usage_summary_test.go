@@ -13,8 +13,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	tunneledmcpRepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -125,7 +129,7 @@ func TestGetToolUsageSummary_AggregatesHostedShadowLocalAndSkills(t *testing.T) 
 			From: now.Add(-1 * time.Hour).Format(time.RFC3339),
 			To:   now.Add(1 * time.Hour).Format(time.RFC3339),
 		})
-		if !assert.NoError(c, err) {
+		if !assert.NoError(c, err, "cause: %v", errors.Unwrap(err)) {
 			return
 		}
 		if !assert.NotNil(c, res) {
@@ -212,7 +216,7 @@ func TestGetToolUsageSummary_ClassifiesHookObservedHostedMCP(t *testing.T) {
 			From: now.Add(-1 * time.Hour).Format(time.RFC3339),
 			To:   now.Add(1 * time.Hour).Format(time.RFC3339),
 		})
-		if !assert.NoError(c, err) {
+		if !assert.NoError(c, err, "cause: %v", errors.Unwrap(err)) {
 			return
 		}
 		if !assert.NotNil(c, res) {
@@ -225,6 +229,56 @@ func TestGetToolUsageSummary_ClassifiesHookObservedHostedMCP(t *testing.T) {
 		targets := toolUsageTargetsByKey(res.Targets)
 		assert.NotNil(c, targets["hosted_mcp_server:server:hosted-payments"])
 		assert.Nil(c, targets["shadow_mcp_server:server:hosted.example.com"])
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
+func TestGetToolUsageSummary_ClassifiesDirectTunneledMCP(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	fixture := createTunneledMCPServerFixture(t, ctx, ti, tunneledMCPServerFixtureParams{
+		name: "Tunneled Postgres MCP",
+		slug: "postgres-tunnel",
+	})
+	now := time.Now().UTC()
+	insertDirectMCPToolEvent(t, ctx, ti, directMCPToolEventParams{
+		projectID:   projectID,
+		timestamp:   now.Add(-5 * time.Minute),
+		sourceID:    fixture.sourceID.String(),
+		mcpServerID: fixture.mcpServerID.String(),
+		toolName:    "query",
+		userEmail:   "alice@example.com",
+		statusCode:  200,
+	})
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{
+			From:        now.Add(-1 * time.Hour).Format(time.RFC3339),
+			To:          now.Add(1 * time.Hour).Format(time.RFC3339),
+			TargetTypes: []gen.ToolUsageTargetType{"tunneled_mcp_server"},
+		})
+		if !assert.NoError(c, err, "cause: %v", errors.Unwrap(err)) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		if !assert.Equal(c, int64(1), res.Totals.EventCount) {
+			return
+		}
+
+		targets := toolUsageTargetsByKey(res.Targets)
+		tunneled := targets["tunneled_mcp_server:server:postgres-tunnel"]
+		if assert.NotNil(c, tunneled) {
+			assert.Equal(c, "Tunneled Postgres MCP", tunneled.TargetLabel)
+			assert.Equal(c, int64(1), tunneled.EventCount)
+			assert.Equal(c, int64(1), tunneled.SuccessCount)
+			assert.Equal(c, int64(0), tunneled.FailureCount)
+		}
+		assert.Nil(c, targets["shadow_mcp_server:server:"+fixture.sourceID.String()])
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
@@ -286,7 +340,7 @@ func TestGetToolUsageSummary_FiltersByHookSource(t *testing.T) {
 		var err error
 		result, err = ti.service.GetToolUsageSummary(ctx, payload)
 		return err == nil && result != nil && result.Totals.EventCount == 1
-	}, 2*time.Second, 50*time.Millisecond, "expected only the cowork hook event in the filtered summary")
+	}, 10*time.Second, 200*time.Millisecond, "expected only the cowork hook event in the filtered summary")
 
 	targets := toolUsageTargetsByKey(result.Targets)
 	require.NotNil(t, targets["shadow_mcp_server:server:shadow-db"])
@@ -479,10 +533,313 @@ func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, 
 	require.NoError(t, err)
 }
 
+type tunneledMCPServerFixtureParams struct {
+	name string
+	slug string
+}
+
+type tunneledMCPServerFixture struct {
+	sourceID    uuid.UUID
+	mcpServerID uuid.UUID
+}
+
+func createTunneledMCPServerFixture(t *testing.T, ctx context.Context, ti *testInstance, p tunneledMCPServerFixtureParams) tunneledMCPServerFixture {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sourceID := uuid.New()
+	source, err := tunneledmcpRepo.New(ti.conn).CreateServer(ctx, tunneledmcpRepo.CreateServerParams{
+		ID:        sourceID,
+		ProjectID: *authCtx.ProjectID,
+		Name:      p.name,
+		KeyHash:   "test-key-hash-" + sourceID.String(),
+		KeyPrefix: "gram_tunnel_test",
+	})
+	require.NoError(t, err)
+
+	issuer, err := usersessionsrepo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          *authCtx.ProjectID,
+		Slug:               "usi-" + uuid.NewString()[:8],
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+
+	mcpServerID := uuid.New()
+	server, err := mcpserversRepo.New(ti.conn).CreateMCPServer(ctx, mcpserversRepo.CreateMCPServerParams{
+		ID:                    mcpServerID,
+		ProjectID:             *authCtx.ProjectID,
+		Name:                  pgtype.Text{String: p.name, Valid: true},
+		Slug:                  pgtype.Text{String: p.slug, Valid: true},
+		EnvironmentID:         uuid.NullUUID{},
+		UserSessionIssuerID:   uuid.NullUUID{UUID: issuer.ID, Valid: true},
+		RemoteMcpServerID:     uuid.NullUUID{},
+		TunneledMcpServerID:   uuid.NullUUID{UUID: source.ID, Valid: true},
+		ToolsetID:             uuid.NullUUID{},
+		ToolVariationsGroupID: uuid.NullUUID{},
+		Visibility:            "private",
+	})
+	require.NoError(t, err)
+
+	return tunneledMCPServerFixture{
+		sourceID:    source.ID,
+		mcpServerID: server.ID,
+	}
+}
+
+type directMCPToolEventParams struct {
+	projectID   string
+	timestamp   time.Time
+	sourceID    string
+	mcpServerID string
+	toolName    string
+	userEmail   string
+	statusCode  int
+}
+
+func insertDirectMCPToolEvent(t *testing.T, ctx context.Context, ti *testInstance, p directMCPToolEventParams) {
+	t.Helper()
+
+	attrs := map[string]any{
+		"gram.event.source":              "mcp",
+		"gram.tool.name":                 p.toolName,
+		"gram.tool_call.source":          p.sourceID,
+		"gram.remote_mcp_server.id":      p.sourceID,
+		"gram.mcp_server.id":             p.mcpServerID,
+		"http.response.status_code":      p.statusCode,
+		"http.server.request.duration":   0.05,
+		"user.email":                     p.userEmail,
+		"gen_ai.tool.call.result":        `"ok"`,
+		"gen_ai.tool.call.id":            uuid.New().String(),
+		"gen_ai.conversation.id":         uuid.New().String(),
+		"gen_ai.response.finish_reasons": []string{"tool_calls"},
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	require.NoError(t, err)
+
+	spanID := uuid.New().String()[:16]
+	traceID := strings.ReplaceAll(uuid.New().String(), "-", "")
+	err = ti.chClient.InsertTelemetryLog(ctx, telemetryRepo.InsertTelemetryLogParams{
+		ID:                   uuid.New().String(),
+		TimeUnixNano:         p.timestamp.UnixNano(),
+		ObservedTimeUnixNano: p.timestamp.UnixNano(),
+		SeverityText:         nil,
+		Body:                 "direct MCP tool event",
+		TraceID:              &traceID,
+		SpanID:               &spanID,
+		Attributes:           string(attrsJSON),
+		ResourceAttributes:   "{}",
+		GramProjectID:        p.projectID,
+		GramDeploymentID:     nil,
+		GramFunctionID:       nil,
+		GramURN:              "tools:externalmcp:" + p.sourceID + ":" + p.toolName,
+		ServiceName:          "gram-remote-mcp",
+		ServiceVersion:       nil,
+		GramChatID:           nil,
+	})
+	require.NoError(t, err)
+}
+
 func toolUsageTargetsByKey(rows []*gen.ToolUsageTargetSummary) map[string]*gen.ToolUsageTargetSummary {
 	result := make(map[string]*gen.ToolUsageTargetSummary, len(rows))
 	for _, row := range rows {
 		result[string(row.TargetType)+":"+string(row.TargetKind)+":"+row.TargetID] = row
 	}
 	return result
+}
+
+// insertHostedToolEventRow mirrors insertHostedToolEvent but takes an explicit
+// trace id (and allows an empty user email), so tests can build multi-row
+// traces that straddle a query window boundary.
+func insertHostedToolEventRow(t *testing.T, ctx context.Context, ti *testInstance, traceID string, timestamp time.Time, toolsetSlug, toolName, externalUserID string) {
+	t.Helper()
+
+	attrs := map[string]any{
+		"gram.event.source":              "hosted",
+		"gram.tool.name":                 toolName,
+		"gram.toolset.slug":              toolsetSlug,
+		"http.response.status_code":      200,
+		"http.server.request.duration":   0.05,
+		"gen_ai.tool.call.result":        `"ok"`,
+		"gen_ai.tool.call.id":            uuid.New().String(),
+		"gen_ai.conversation.id":         uuid.New().String(),
+		"gen_ai.response.finish_reasons": []string{"tool_calls"},
+	}
+	if externalUserID != "" {
+		// external_user_id is max()-merged in trace_summaries, so a value on
+		// any one row of the trace deterministically survives aggregation
+		// (unlike the any()-merged user_email).
+		attrs["gram.external_user.id"] = externalUserID
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	require.NoError(t, err)
+
+	spanID := uuid.New().String()[:16]
+	err = ti.chClient.InsertTelemetryLog(ctx, telemetryRepo.InsertTelemetryLogParams{
+		ID:                   uuid.New().String(),
+		TimeUnixNano:         timestamp.UnixNano(),
+		ObservedTimeUnixNano: timestamp.UnixNano(),
+		SeverityText:         nil,
+		Body:                 "hosted tool event",
+		TraceID:              &traceID,
+		SpanID:               &spanID,
+		Attributes:           string(attrsJSON),
+		ResourceAttributes:   "{}",
+		GramProjectID:        ti.projectID,
+		GramDeploymentID:     nil,
+		GramFunctionID:       nil,
+		GramURN:              "tools:http:gram:" + toolName,
+		ServiceName:          "gram-http-gateway",
+		ServiceVersion:       nil,
+		GramChatID:           nil,
+	})
+	require.NoError(t, err)
+}
+
+// TestGetToolUsageSummary_WindowBoundaryTraces pins the trace-window scan
+// semantics on trace_summaries (INC-417): the WHERE pre-filter added for
+// granule pruning carries slop on both bounds so the exact HAVING window
+// predicate still sees every row of boundary-straddling traces. A trace whose
+// first row precedes the window must stay excluded even though its later rows
+// land inside it, and a trace starting inside the window must keep aggregating
+// rows that land shortly after the window end.
+func TestGetToolUsageSummary_WindowBoundaryTraces(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	now := time.Now().UTC()
+	from := now.Add(-1 * time.Hour)
+
+	// Straddler: starts 10 minutes before the window, second row inside it.
+	// Without the pre-filter slop the early row would be cut by WHERE and the
+	// HAVING min() would wrongly see an in-window start.
+	straddlerTraceID := strings.ReplaceAll(uuid.New().String(), "-", "")
+	insertHostedToolEventRow(t, ctx, ti, straddlerTraceID, from.Add(-10*time.Minute), "straddle-set", "charge", "early-user")
+	insertHostedToolEventRow(t, ctx, ti, straddlerTraceID, from.Add(30*time.Minute), "straddle-set", "charge", "early-user")
+
+	// In-window trace whose second row lands after the window end (within the
+	// slop): the trace must be included AND the late row's user identity must
+	// still be aggregated.
+	inWindowTraceID := strings.ReplaceAll(uuid.New().String(), "-", "")
+	insertHostedToolEventRow(t, ctx, ti, inWindowTraceID, now.Add(-10*time.Minute), "inwindow-set", "refund", "")
+	insertHostedToolEventRow(t, ctx, ti, inWindowTraceID, now.Add(5*time.Minute), "inwindow-set", "refund", "late-user")
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	res, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{
+		From: from.Format(time.RFC3339),
+		To:   now.Format(time.RFC3339),
+	})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.NotNil(t, res)
+
+	require.Equal(t, int64(1), res.Totals.EventCount, "only the in-window trace counts")
+
+	targets := toolUsageTargetsByKey(res.Targets)
+	require.Nil(t, targets["hosted_mcp_server:server:straddle-set"], "trace starting before the window must be excluded")
+	require.NotNil(t, targets["hosted_mcp_server:server:inwindow-set"])
+
+	userKeys := make([]string, 0, len(res.Users))
+	for _, u := range res.Users {
+		userKeys = append(userKeys, u.UserKey)
+	}
+	require.Contains(t, userKeys, "late-user", "rows landing after the window end (within slop) must still aggregate")
+}
+
+// TestGetToolUsageGranularEndpoints_MatchSummary verifies each per-panel endpoint
+// returns exactly the section the aggregate summary carries, so the split-out
+// dashboard queries stay consistent with the one-shot summary.
+func TestGetToolUsageGranularEndpoints_MatchSummary(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID:   projectID,
+		timestamp:   now.Add(-20 * time.Minute),
+		toolsetSlug: "payments",
+		toolName:    "charge",
+		userEmail:   "alice@example.com",
+		statusCode:  200,
+	})
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID:   projectID,
+		timestamp:   now.Add(-18 * time.Minute),
+		toolsetSlug: "payments",
+		toolName:    "refund",
+		userEmail:   "bob@example.com",
+		statusCode:  500,
+	})
+	// A skill event so the equality checks cover the skill target type that feeds
+	// the "Users per Skill" and "Skill Usage Over Time" dashboard panels.
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-15 * time.Minute),
+		traceID:        uuid.New().String(),
+		userEmail:      "carol@example.com",
+		hookSource:     "local",
+		toolName:       "Skill",
+		skillName:      "golang",
+		result:         `"ok"`,
+		conversationID: "conv-skill",
+	})
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	summary, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{From: from, To: to})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+
+	// Sanity: the fixtures produced rows so the equality checks below are meaningful.
+	require.Equal(t, int64(3), summary.Totals.EventCount)
+	hasSkillUsersByTarget := false
+	for _, row := range summary.UsersByTarget {
+		if row.TargetType == "skill" {
+			hasSkillUsersByTarget = true
+			break
+		}
+	}
+	require.True(t, hasSkillUsersByTarget,
+		"skill rows must reach users-by-target so the granular endpoint's equality check covers them")
+	require.NotEmpty(t, summary.Targets)
+	require.NotEmpty(t, summary.Users)
+
+	totals, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{From: from, To: to})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, summary.Totals, totals.Totals)
+
+	targets, err := ti.service.GetToolUsageTargets(ctx, &gen.GetToolUsageTargetsPayload{From: from, To: to})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, summary.Targets, targets.Targets)
+
+	users, err := ti.service.GetToolUsageUsers(ctx, &gen.GetToolUsageUsersPayload{From: from, To: to})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, summary.Users, users.Users)
+
+	targetSeries, err := ti.service.GetToolUsageTargetTimeSeries(ctx, &gen.GetToolUsageTargetTimeSeriesPayload{From: from, To: to})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, summary.TargetTimeSeries, targetSeries.TargetTimeSeries)
+
+	userSeries, err := ti.service.GetToolUsageUserTimeSeries(ctx, &gen.GetToolUsageUserTimeSeriesPayload{From: from, To: to})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, summary.UserTimeSeries, userSeries.UserTimeSeries)
+
+	usersByTarget, err := ti.service.GetToolUsageUsersByTarget(ctx, &gen.GetToolUsageUsersByTargetPayload{From: from, To: to})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, summary.UsersByTarget, usersByTarget.UsersByTarget)
+
+	breakdown, err := ti.service.GetToolUsageTargetToolBreakdown(ctx, &gen.GetToolUsageTargetToolBreakdownPayload{From: from, To: to})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, summary.TargetToolBreakdown, breakdown.TargetToolBreakdown)
 }

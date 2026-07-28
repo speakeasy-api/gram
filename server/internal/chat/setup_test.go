@@ -22,6 +22,7 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -73,6 +74,18 @@ func newTestChatServiceRBACDisabled(t *testing.T) *chatTestInstance {
 
 func newTestChatServiceWithRBAC(t *testing.T, isRBACEnabled authz.IsRBACEnabled) *chatTestInstance {
 	t.Helper()
+	return newTestChatServiceWithOptions(t, isRBACEnabled, nil)
+}
+
+// newTestChatServiceWithCompletion builds a chat service with a custom
+// OpenRouter completion client (e.g. a mock for summarize tests).
+func newTestChatServiceWithCompletion(t *testing.T, completionClient openrouter.CompletionClient) *chatTestInstance {
+	t.Helper()
+	return newTestChatServiceWithOptions(t, authztest.RBACAlwaysEnabled, completionClient)
+}
+
+func newTestChatServiceWithOptions(t *testing.T, isRBACEnabled authz.IsRBACEnabled, completionClient openrouter.CompletionClient) *chatTestInstance {
+	t.Helper()
 
 	ctx := t.Context()
 
@@ -113,7 +126,7 @@ func newTestChatServiceWithRBAC(t *testing.T, isRBACEnabled authz.IsRBACEnabled)
 	mgr := testenv.NewTestManager(t, logger, tp, conn, redisClient, suffix, billingClient)
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, isRBACEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := chat.NewService(logger, tp, conn, mgr, nil, nil, nil, nil, nil, nil, nil, authzEngine, nil, billingClient, audit.NewLogger())
+	svc := chat.NewService(logger, tp, conn, mgr, nil, nil, completionClient, nil, nil, nil, nil, authzEngine, nil, billingClient, audit.NewLogger())
 
 	return &chatTestInstance{
 		service:   svc,

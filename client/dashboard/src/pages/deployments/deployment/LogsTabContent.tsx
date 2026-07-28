@@ -9,10 +9,8 @@ import {
 import { Type } from "@/components/ui/type";
 import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import {
-  useDeploymentLogsSuspense,
-  useDeploymentSuspense,
-} from "@gram/client/react-query";
+import { useDeploymentSuspense } from "@gram/client/react-query/deployment.js";
+import { useDeploymentLogsSuspense } from "@gram/client/react-query/deploymentLogs.js";
 import { Icon, Input } from "@speakeasy-api/moonshine";
 import React, {
   useCallback,

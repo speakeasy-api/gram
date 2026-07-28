@@ -58,6 +58,172 @@ func TestBuildTelemetryAttributesWithMetadata_SetsMCPMatchFromCachedList(t *test
 	assert.Equal(t, "mise mcp", attrs[attr.MCPMatchKey])
 }
 
+// Cowork runs the same claude-code binary and reports the same OTEL
+// service.name, so the agent variant cached by SessionStart is the only
+// signal that distinguishes it. Tool-call telemetry must stamp hook_source
+// = "cowork" so cowork sessions stay filterable in tool logs.
+func TestBuildTelemetryAttributesWithMetadata_HookSourceFromCoworkVariant(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(sessionID),
+		agentVariantCowork, sessionMCPListTTL))
+
+	// ServiceName is "claude-code" (what cowork reports) — the variant must
+	// still win so the row is labelled "cowork", not "claude-code".
+	metadata := &SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "claude-code",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		SessionID:     &sessionID,
+	}, metadata)
+
+	assert.Equal(t, agentVariantCowork, attrs[attr.HookSourceKey])
+}
+
+// End-to-end across the cache: a SessionStart carrying a cowork MCP
+// inventory (what hook.sh sends from inside cowork) must be enough for a
+// later tool call to be labelled "cowork" — no hand-seeded cache. This
+// pins the writer (cacheMCPListSnapshot) and reader (sessionAgentVariant)
+// to the same key and value.
+func TestBuildTelemetryAttributesWithMetadata_HookSourceCoworkFromSessionStart(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	userEmail := "cowork-hook-source@example.com"
+	_, err := ti.service.Claude(ctx, &hooks.ClaudePayload{
+		HookEventName: "SessionStart",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		AdditionalData: map[string]any{
+			"mcp_inventory_cowork": []any{
+				map[string]any{
+					"name":           "Linear",
+					"url":            "https://mcp.linear.app/mcp",
+					"transport":      "HTTP",
+					"status":         "connected",
+					"connector_uuid": "linear-connector",
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	metadata := &SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "claude-code",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		SessionID:     &sessionID,
+	}, metadata)
+
+	assert.Equal(t, agentVariantCowork, attrs[attr.HookSourceKey])
+}
+
+// Current cowork builds self-identify with OTEL service.name "cowork" — the
+// source of truth. Tool rows must be labelled cowork from it alone, with no
+// SessionStart inventory variant on file (the canonical ingest transport
+// stamps none).
+func TestBuildTelemetryAttributesWithMetadata_HookSourceFromCoworkServiceName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	metadata := &SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "cowork",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		SessionID:     &sessionID,
+	}, metadata)
+
+	assert.Equal(t, agentVariantCowork, attrs[attr.HookSourceKey])
+}
+
+// Claude Code Desktop is its own surface: the desktop hook adapter slug must
+// pass through as hook_source, not collapse into claude-code (CLI) — and not
+// into cowork, which shares the same adapter but is distinguished by the OTEL
+// service.name or the SessionStart variant.
+func TestBuildTelemetryAttributesWithMetadata_HookSourceClaudeCodeDesktop(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	metadata := &SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "claude-code-desktop",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		SessionID:     &sessionID,
+	}, metadata)
+
+	assert.Equal(t, surfaceClaudeCodeDesktop, attrs[attr.HookSourceKey])
+}
+
+// A claude-code variant (or no cached variant) must not be rewritten to
+// "cowork"; hook_source keeps the ServiceName / "claude" default.
+func TestBuildTelemetryAttributesWithMetadata_HookSourceDefaultsWithoutCoworkVariant(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(sessionID),
+		agentVariantClaudeCode, sessionMCPListTTL))
+
+	metadata := &SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "claude-code",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		SessionID:     &sessionID,
+	}, metadata)
+
+	assert.Equal(t, "claude-code", attrs[attr.HookSourceKey])
+}
+
 // Native (non-MCP) tools must NOT get a gram.mcp.match attribute — the
 // hook never routes them through an MCP server, and an empty value on the
 // log row would pollute the CH index.
@@ -250,13 +416,13 @@ func TestBuildTelemetryAttributesWithMetadata_ResolvesUserIDFromEmail(t *testing
 	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
 
 	metadata := &SessionMetadata{
-		SessionID:   uuid.NewString(),
-		ServiceName: "",
-		UserEmail:   userEmail,
-		UserID:      "",
-		ClaudeOrgID: "",
-		GramOrgID:   authCtx.ActiveOrganizationID,
-		ProjectID:   authCtx.ProjectID.String(),
+		SessionID:     uuid.NewString(),
+		ServiceName:   "",
+		UserEmail:     userEmail,
+		UserID:        "",
+		ExternalOrgID: "",
+		GramOrgID:     authCtx.ActiveOrganizationID,
+		ProjectID:     authCtx.ProjectID.String(),
 	}
 	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
 		HookEventName: "PreToolUse",
@@ -459,13 +625,13 @@ func TestFlushPendingHooks_DirectCall(t *testing.T) {
 
 	// Create session metadata
 	metadata := SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: "test-service",
-		UserEmail:   "test@example.com",
-		UserID:      "",
-		ClaudeOrgID: "claude-org-123",
-		GramOrgID:   uuid.NewString(),
-		ProjectID:   uuid.NewString(),
+		SessionID:     sessionID,
+		ServiceName:   "test-service",
+		UserEmail:     "test@example.com",
+		UserID:        "",
+		ExternalOrgID: "claude-org-123",
+		GramOrgID:     uuid.NewString(),
+		ProjectID:     uuid.NewString(),
 	}
 
 	// Call flushPendingHooks directly
@@ -486,13 +652,13 @@ func TestFlushPendingHooks_EmptyList(t *testing.T) {
 
 	// Create session metadata
 	metadata := SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: "test-service",
-		UserEmail:   "test@example.com",
-		UserID:      "",
-		ClaudeOrgID: "claude-org-123",
-		GramOrgID:   uuid.NewString(),
-		ProjectID:   uuid.NewString(),
+		SessionID:     sessionID,
+		ServiceName:   "test-service",
+		UserEmail:     "test@example.com",
+		UserID:        "",
+		ExternalOrgID: "claude-org-123",
+		GramOrgID:     uuid.NewString(),
+		ProjectID:     uuid.NewString(),
 	}
 
 	// Call flushPendingHooks with no buffered hooks (should not error)
@@ -558,13 +724,13 @@ func TestSessionMetadata_CacheSetGet(t *testing.T) {
 
 	sessionID := uuid.NewString()
 	metadata := SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: "test-service",
-		UserEmail:   "user@example.com",
-		UserID:      "",
-		ClaudeOrgID: "claude-org-456",
-		GramOrgID:   uuid.NewString(),
-		ProjectID:   uuid.NewString(),
+		SessionID:     sessionID,
+		ServiceName:   "test-service",
+		UserEmail:     "user@example.com",
+		UserID:        "",
+		ExternalOrgID: "claude-org-456",
+		GramOrgID:     uuid.NewString(),
+		ProjectID:     uuid.NewString(),
 	}
 
 	cacheAdapter := cache.NewRedisCacheAdapter(ti.redisClient)
@@ -585,7 +751,7 @@ func TestSessionMetadata_CacheSetGet(t *testing.T) {
 	assert.Equal(t, metadata.GramOrgID, retrieved.GramOrgID)
 	assert.Equal(t, metadata.ProjectID, retrieved.ProjectID)
 	assert.Equal(t, metadata.ServiceName, retrieved.ServiceName)
-	assert.Equal(t, metadata.ClaudeOrgID, retrieved.ClaudeOrgID)
+	assert.Equal(t, metadata.ExternalOrgID, retrieved.ExternalOrgID)
 }
 
 // TestListAppend_TTLBehavior tests that TTL is only set once for new keys
@@ -660,4 +826,44 @@ func TestListRange_CorrectDeserialization(t *testing.T) {
 	assert.Equal(t, "PostToolUse", retrieved[1].HookEventName)
 	assert.Equal(t, "tool1", *retrieved[0].ToolName)
 	assert.Equal(t, "tool2", *retrieved[1].ToolName)
+}
+
+// TestMetrics_StampsAnthropicProviderOnUsage drives the Claude usage-metrics
+// path end-to-end (Metrics -> writeMetricsToClickHouse) and asserts the
+// persisted usage row carries provider=anthropic.
+func TestMetrics_StampsAnthropicProviderOnUsage(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+	now := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+
+	name := "claude_code.token.usage"
+	payload := &hooks.MetricsPayload{
+		ResourceMetrics: []*hooks.OTELResourceMetrics{{
+			ScopeMetrics: []*hooks.OTELScopeMetrics{{
+				Metrics: []*hooks.OTELMetric{{
+					Name: &name,
+					Sum: &hooks.OTELSum{
+						AggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+						DataPoints: []*hooks.OTELNumberDataPoint{{
+							TimeUnixNano: new(nanoString(now)),
+							AsInt:        "100",
+							Attributes: []*hooks.OTELAttribute{
+								strAttr("session.id", "claude-metrics-session"),
+								strAttr("model", "claude-opus-4-8"),
+								strAttr("type", "input"),
+								strAttr("user.email", "metrics-user@example.com"),
+							},
+						}},
+					},
+				}},
+			}},
+		}},
+	}
+
+	require.NoError(t, ti.service.Metrics(ctx, payload))
+
+	logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), "claude-code:usage:metrics", now, 1)
+	require.Contains(t, logs[0].Attributes, providerAnthropic)
 }

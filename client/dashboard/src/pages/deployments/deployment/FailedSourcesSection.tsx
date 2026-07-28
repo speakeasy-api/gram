@@ -3,10 +3,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import type { FailedSource } from "@/components/sources/useFailedDeploymentSources";
 import { cn } from "@/lib/utils";
 import { useSdkClient } from "@/contexts/Sdk";
-import type {
-  Deployment,
-  DeploymentLogEvent,
-} from "@gram/client/models/components";
+import type { Deployment } from "@gram/client/models/components/deployment.js";
+import type { DeploymentLogEvent } from "@gram/client/models/components/deploymentlogevent.js";
 import { Alert, Badge, Button, Dialog } from "@speakeasy-api/moonshine";
 import {
   ChevronDown,
@@ -38,6 +36,7 @@ const SOURCE_ICONS = {
   // appear in failed deployment sources — but the icon map must cover the full
   // SourceType union for the indexed lookup at the call site to typecheck.
   remotemcp: Network,
+  tunneledmcp: Network,
 } as const;
 
 export function FailedSourcesSection({
@@ -134,6 +133,8 @@ export function FailedSourcesSection({
             excludeExternalMcps.push(source.slug);
             break;
           case "remotemcp":
+            break;
+          case "tunneledmcp":
             break;
         }
       }
@@ -292,18 +293,16 @@ export function FailedSourcesSection({
                 onClick={handleRemoveClick}
                 disabled={pending || selected.size === 0}
               >
-                {pending ? (
-                  <>
-                    <Button.LeftIcon>
-                      <Loader2 className="size-4 animate-spin" />
-                    </Button.LeftIcon>
-                    <Button.Text>Removing...</Button.Text>
-                  </>
-                ) : (
-                  <Button.Text>
-                    {`Remove ${selected.size > 0 ? selected.size : ""} source${selected.size !== 1 ? "s" : ""}`}
-                  </Button.Text>
+                {pending && (
+                  <Button.LeftIcon>
+                    <Loader2 className="size-4 animate-spin" />
+                  </Button.LeftIcon>
                 )}
+                <Button.Text>
+                  {pending
+                    ? "Removing..."
+                    : `Remove ${selected.size > 0 ? selected.size : ""} source${selected.size !== 1 ? "s" : ""}`}
+                </Button.Text>
               </Button>
             </RequireScope>
           </div>

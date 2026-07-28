@@ -1,6 +1,6 @@
 #!/usr/bin/env -S node
 
-//MISE description="Stream assistant runtime logs from Fly.io runtimes"
+//MISE description="Stream assistant runtime logs from local Docker and Fly.io runtimes"
 //MISE hide=true
 //USAGE flag "--poll-seconds <seconds>" default="3" help="How often to poll for active assistant runtimes."
 
@@ -15,6 +15,7 @@ type RuntimeRow = {
   state: string;
   app_name: string;
   machine_id: string;
+  container_name: string;
 };
 
 type LogStreamProcess = ChildProcessByStdio<null, Readable, Readable>;
@@ -70,7 +71,11 @@ function psqlConnection() {
 }
 
 function linePrefix(runtime: RuntimeRow): string {
-  return runtime.app_name || `assistant-${runtime.thread_id.split("-")[0]}`;
+  return (
+    runtime.container_name ||
+    runtime.app_name ||
+    `assistant-${runtime.thread_id.split("-")[0]}`
+  );
 }
 
 function flyAppName(runtime: RuntimeRow): string {
@@ -122,7 +127,8 @@ function sameTarget(left: RuntimeRow, right: RuntimeRow): boolean {
     left.backend === right.backend &&
     left.thread_id === right.thread_id &&
     left.app_name === right.app_name &&
-    left.machine_id === right.machine_id
+    left.machine_id === right.machine_id &&
+    left.container_name === right.container_name
   );
 }
 
@@ -141,10 +147,23 @@ function spawnFlySubscriber(runtime: RuntimeRow): LogStreamProcess {
   });
 }
 
+function spawnDockerSubscriber(runtime: RuntimeRow): LogStreamProcess {
+  return spawn(
+    "docker",
+    ["logs", "--follow", "--tail", "25", runtime.container_name],
+    {
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+}
+
 function spawnSubscriber(runtime: RuntimeRow): LogStreamProcess {
   switch (runtime.backend) {
     case "flyio":
       return spawnFlySubscriber(runtime);
+    case "local":
+      return spawnDockerSubscriber(runtime);
     default:
       return spawn(
         "bash",
@@ -184,10 +203,12 @@ function startSubscriber(runtime: RuntimeRow) {
 
   writeLine(
     linePrefix(runtime),
-    `attached fly logs for ${flyAppName(runtime)}`,
+    runtime.backend === "local"
+      ? `attached docker logs for ${runtime.container_name}`
+      : `attached fly logs for ${flyAppName(runtime)}`,
   );
 
-  proc.on("close", (code, signal) => {
+  const scheduleRetry = (reason: string) => {
     const current = subscribers.get(runtime.runtime_id);
     if (current !== sub) {
       return;
@@ -196,10 +217,7 @@ function startSubscriber(runtime: RuntimeRow) {
       subscribers.delete(runtime.runtime_id);
       return;
     }
-    writeLine(
-      linePrefix(runtime),
-      `log stream exited (${signal ?? code ?? "unknown"}), retrying...`,
-    );
+    writeLine(linePrefix(runtime), reason);
     subscribers.delete(runtime.runtime_id);
     setTimeout(() => {
       if (shuttingDown) {
@@ -211,6 +229,18 @@ function startSubscriber(runtime: RuntimeRow) {
       }
       startSubscriber(desired);
     }, 2000);
+  };
+
+  // A missing/broken CLI (docker, flyctl) surfaces as a spawn "error" with no
+  // "close"; without a handler it would crash the whole watcher.
+  proc.on("error", (err) => {
+    scheduleRetry(`log stream failed to start (${err.message}), retrying...`);
+  });
+
+  proc.on("close", (code, signal) => {
+    scheduleRetry(
+      `log stream exited (${signal ?? code ?? "unknown"}), retrying...`,
+    );
   });
 }
 
@@ -225,7 +255,8 @@ WITH runtimes AS (
     r.backend,
     r.state,
     COALESCE(r.backend_metadata_json->>'app_name', '') AS app_name,
-    COALESCE(r.backend_metadata_json->>'machine_id', '') AS machine_id
+    COALESCE(r.backend_metadata_json->>'machine_id', '') AS machine_id,
+    COALESCE(r.backend_metadata_json->>'container_name', '') AS container_name
   FROM assistant_runtimes r
   WHERE r.deleted IS FALSE
     AND r.state IN ('starting', 'active')
@@ -280,7 +311,7 @@ FROM runtimes;
 
 async function reconcileOnce() {
   const runtimes = (await loadRuntimes()).filter(
-    (runtime) => runtime.backend === "flyio",
+    (runtime) => runtime.backend === "flyio" || runtime.backend === "local",
   );
   desiredRuntimes.clear();
   for (const runtime of runtimes) {
@@ -297,11 +328,15 @@ async function reconcileOnce() {
   }
 
   for (const [runtimeID, runtime] of desiredRuntimes) {
-    // Flyio rows start with empty backend metadata and get populated after
-    // Ensure. Wait for app_name so we spawn a single `flyctl logs -a <app>`
-    // instead of the generic fallback, then reattach — avoids the duplicate
-    // log stream we were getting while the old fallback subscriber dies.
+    // Runtime rows start with empty backend metadata and get populated after
+    // Ensure. Wait for the backend's identity field so we attach a single
+    // targeted stream instead of the generic fallback, then reattach — avoids
+    // the duplicate log stream we were getting while the old fallback
+    // subscriber dies.
     if (runtime.backend === "flyio" && !runtime.app_name) {
+      continue;
+    }
+    if (runtime.backend === "local" && !runtime.container_name) {
       continue;
     }
     const existing = subscribers.get(runtimeID);

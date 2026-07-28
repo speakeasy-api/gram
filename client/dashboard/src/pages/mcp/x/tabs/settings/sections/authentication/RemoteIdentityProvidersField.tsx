@@ -3,7 +3,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Type } from "@/components/ui/type";
 import { formatRemoteSessionIssuerDisplay } from "@/lib/sources";
-import type { RemoteSessionIssuer } from "@gram/client/models/components";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -33,7 +33,7 @@ export function RemoteIdentityProvidersField({
     providerControls = (
       <SettingsInlineEmptyState
         title="No remote identity providers"
-        description="Attach an identity provider so users can sign in to the upstream service and access their own data."
+        description="Attach a provider if the upstream service requires users to sign in to access their data."
         action={
           <RequireScope scope="mcp:write" level="component">
             <Button variant="secondary" onClick={onAdd}>
@@ -66,8 +66,8 @@ export function RemoteIdentityProvidersField({
       <FieldLabel>Remote Identity Providers</FieldLabel>
       {providerControls}
       <FieldDescription>
-        Upstream identity providers users authenticate against to access MCP
-        server functionality.
+        Upstream identity providers for services that require per-user
+        authorization.
       </FieldDescription>
     </Field>
   );

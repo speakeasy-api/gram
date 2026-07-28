@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
@@ -72,17 +73,68 @@ const (
 	DefaultMaxBufferedBodyBytes int64 = 50 * 1024 * 1024
 )
 
-// ServerIdentity bundles the two correlation ids the proxy stamps onto its
-// telemetry: RemoteMCPServerID is the remote_mcp_servers row id (the upstream
-// the proxy forwards to) and McpServerID is the fronting mcp_servers row id
-// (the server users manage). Bundling them keeps the pair from being
-// transposed across the constructors and record calls that thread them, and
-// both are omitted from emitted telemetry when empty rather than recorded as
-// empty-string labels.
+// ServerIdentity bundles the correlation ids the proxy stamps onto its
+// telemetry. RemoteMCPServerID is populated for remote_mcp_servers-backed
+// proxies, TunneledMCPServerID is populated for tunneled_mcp_servers-backed
+// proxies, and McpServerID is the fronting mcp_servers row id users manage.
+// Keeping these distinct prevents tunneled IDs from being recorded as remote
+// MCP server IDs, while still threading the fronting server id alongside either
+// backend id.
 type ServerIdentity struct {
-	RemoteMCPServerID string
-	McpServerID       string
+	RemoteMCPServerID   string
+	TunneledMCPServerID string
+	McpServerID         string
 }
+
+func (i ServerIdentity) SourceID() string {
+	if i.RemoteMCPServerID != "" {
+		return i.RemoteMCPServerID
+	}
+	return i.TunneledMCPServerID
+}
+
+func (i ServerIdentity) ToolURNKind() string {
+	// Remote MCP servers share the canonical externalmcp URN kind; only a
+	// tunnel-only identity maps to the tunneledmcp kind.
+	if i.TunneledMCPServerID != "" && i.RemoteMCPServerID == "" {
+		return string(urn.ToolKindTunneledMCP)
+	}
+	return string(urn.ToolKindExternalMCP)
+}
+
+func (i ServerIdentity) SlogAttrs() []slog.Attr {
+	attrs := make([]slog.Attr, 0, 3)
+	if i.RemoteMCPServerID != "" {
+		attrs = append(attrs, attr.SlogRemoteMCPServerID(i.RemoteMCPServerID))
+	}
+	if i.TunneledMCPServerID != "" {
+		attrs = append(attrs, attr.SlogTunneledMCPServerID(i.TunneledMCPServerID))
+	}
+	if i.McpServerID != "" {
+		attrs = append(attrs, attr.SlogMcpServerID(i.McpServerID))
+	}
+	return attrs
+}
+
+func (i ServerIdentity) AppendAttributes(attrs []attribute.KeyValue) []attribute.KeyValue {
+	if i.RemoteMCPServerID != "" {
+		attrs = append(attrs, attr.RemoteMCPServerID(i.RemoteMCPServerID))
+	}
+	if i.TunneledMCPServerID != "" {
+		attrs = append(attrs, attr.TunneledMCPServerID(i.TunneledMCPServerID))
+	}
+	if i.McpServerID != "" {
+		attrs = append(attrs, attr.McpServerID(i.McpServerID))
+	}
+	return attrs
+}
+
+type UpstreamResponseRetry struct {
+	RemoteURL string
+	Headers   []ConfiguredHeader
+}
+
+type UpstreamResponseRetryer func(ctx context.Context, resp *http.Response) (*UpstreamResponseRetry, error)
 
 // Proxy is a one-request handler that forwards inbound MCP client requests
 // to a configured Remote MCP Server. A fresh value is expected per inbound
@@ -96,8 +148,18 @@ type Proxy struct {
 	// connections across distinct Remote MCP Servers without ever reusing
 	// them.
 	GuardianPolicy *guardian.Policy
-	Logger         *slog.Logger
-	Tracer         trace.Tracer
+
+	// GuardianClientOptions are applied to every HTTP client built from
+	// GuardianPolicy for this target. Remote MCP targets leave this nil so
+	// user-controlled upstream URLs get the policy's full SSRF enforcement.
+	// Tunnel-backed targets use guardian.WithAllowedCIDRBlocks to permit
+	// dialing the tunnel gateway's cluster-internal (RFC1918) advertise
+	// address — those addresses come from the trusted route store, not from
+	// user input.
+	GuardianClientOptions []guardian.ClientOption
+
+	Logger *slog.Logger
+	Tracer trace.Tracer
 
 	// NonStreamingTimeout bounds the connect+headers phase for every
 	// upstream request, plus the body read for non-streaming responses.
@@ -157,6 +219,20 @@ type Proxy struct {
 	//
 	// Leave empty (default) to send no Authorization upstream.
 	AuthorizationOverride string
+
+	// UpstreamResponseRetryer may replace the upstream target once after
+	// response headers arrive but before any response is relayed to the user.
+	// It is used by tunneled MCP to fail over stale gateway owners.
+	UpstreamResponseRetryer UpstreamResponseRetryer
+
+	// WWWAuthenticate is the challenge relayed to the client when the
+	// upstream rejects a request (401/403), replacing the upstream's own
+	// WWW-Authenticate — the upstream challenge names the upstream's
+	// protected-resource metadata, which misdirects a client that
+	// authenticated with this server. Empty when the endpoint has no
+	// authorization server of its own (nothing to substitute); the
+	// upstream challenge then relays verbatim.
+	WWWAuthenticate string
 
 	UserRequestInterceptors []UserRequestInterceptor
 
@@ -252,7 +328,7 @@ func (p *Proxy) Delete(w http.ResponseWriter, r *http.Request) (err error) {
 	}()
 
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
-	_, upstreamResp, err := p.forwardRequest(ctx, r, http.NoBody)
+	_, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, func() io.Reader { return http.NoBody })
 	if err != nil {
 		return err
 	}
@@ -261,7 +337,7 @@ func (p *Proxy) Delete(w http.ResponseWriter, r *http.Request) (err error) {
 	upstreamStatus = upstreamResp.StatusCode
 	span.SetAttributes(attr.RemoteMCPProxyRemoteStatusCode(upstreamStatus))
 
-	n, err := writeResponse(w, upstreamResp, upstreamResp.Body)
+	n, err := writeResponse(w, upstreamResp, upstreamResp.Body, p.WWWAuthenticate)
 	responseBytes = n
 	if err != nil {
 		return err
@@ -302,7 +378,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 	}()
 
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
-	upstreamReq, upstreamResp, err := p.forwardRequest(ctx, r, http.NoBody)
+	upstreamReq, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, func() io.Reader { return http.NoBody })
 	if err != nil {
 		return err
 	}
@@ -327,7 +403,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 		return nil
 	}
 
-	n, err := writeResponse(w, upstreamResp, upstreamResp.Body)
+	n, err := writeResponse(w, upstreamResp, upstreamResp.Body, p.WWWAuthenticate)
 	responseBytes = n
 	if err != nil {
 		return err
@@ -452,14 +528,12 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	if mutated, err := userReq.refreshBody(); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "refresh mutated request body").LogError(ctx, p.Logger)
 	} else if mutated {
-		p.Logger.InfoContext(ctx, "forwarding mutated request body upstream",
-			attr.SlogComponent("remotemcp.proxy"),
-			attr.SlogRemoteMCPServerID(p.Identity.RemoteMCPServerID),
-			attr.SlogMcpServerID(p.Identity.McpServerID))
+		p.infoContextWithIdentity(ctx, "forwarding mutated request body upstream",
+			attr.SlogComponent("remotemcp.proxy"))
 	}
 
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
-	upstreamReq, upstreamResp, err := p.forwardRequest(ctx, r, userReq.BodyReader())
+	upstreamReq, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, userReq.BodyReader)
 	if err != nil {
 		return err
 	}
@@ -488,12 +562,38 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	switch {
 	case errors.Is(err, ErrUndecodableJSONRPCBody):
 		// The remote returned a non-SSE body that isn't a single JSON-RPC
-		// message (observed in prod as a bare heartbeat scalar from a
-		// non-spec-compliant upstream). Mirror the SSE relay path, which skips
-		// interception for undecodable events and forwards them verbatim:
-		// relay the upstream bytes and status to the client unchanged rather
-		// than manufacturing a 5xx. msg is nil, so interceptors are skipped and
-		// bodyBytes is written through below.
+		// message. Two sub-cases, split by whether the client's request
+		// expects a reply:
+		//
+		//   - The client sent a request (valid id) and upstream answered 2xx
+		//     with a non-JSON-RPC body. Observed with upstreams that reply to
+		//     an authenticated request with their backing API's raw envelope
+		//     (e.g. {"Output":…,"Version":…}) instead of a JSON-RPC result
+		//     (AIS-267). Relaying that verbatim hands the client a payload its
+		//     JSON-RPC layer can neither parse nor correlate to its outstanding
+		//     call, so the connection fails opaquely. Synthesize a JSON-RPC
+		//     error carrying the originating id so the client surfaces a clean,
+		//     correlatable failure with the upstream's actual body for
+		//     debugging.
+		//
+		//   - Everything else (no id — a notification with no reply slot; or a
+		//     non-2xx status that already signals the error) keeps the verbatim
+		//     relay, mirroring the SSE relay path's treatment of undecodable
+		//     events. This preserves the bare-heartbeat-scalar behavior. msg is
+		//     nil, so interceptors are skipped and bodyBytes is written through
+		//     below.
+		if userReqID.IsValid() && upstreamStatus >= 200 && upstreamStatus < 300 {
+			p.Logger.WarnContext(ctx, "remote mcp server returned non-json-rpc 2xx body; synthesizing json-rpc error for client",
+				attr.SlogError(err),
+				attr.SlogComponent("remotemcp.proxy"),
+				attr.SlogHTTPResponseStatusCode(upstreamStatus))
+			responseBytes = p.writeRejection(ctx, w, span, userReqID, &RejectError{
+				Code:    RejectCodeInternalError,
+				Message: "remote MCP server returned a non-JSON-RPC response",
+				Data:    nonJSONRPCUpstreamData(upstreamResp, bodyBytes),
+			})
+			return nil
+		}
 		p.Logger.WarnContext(ctx, "relaying undecodable remote mcp response to client verbatim", attr.SlogError(err))
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "invalid jsonrpc response from remote mcp server").LogError(ctx, p.Logger)
@@ -558,14 +658,12 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			return oops.E(oops.CodeUnexpected, err, "encode mutated response body").LogError(ctx, p.Logger)
 		} else if ok {
 			bodyBytes = mutated
-			p.Logger.InfoContext(ctx, "relaying mutated response body to client",
-				attr.SlogComponent("remotemcp.proxy"),
-				attr.SlogRemoteMCPServerID(p.Identity.RemoteMCPServerID),
-				attr.SlogMcpServerID(p.Identity.McpServerID))
+			p.infoContextWithIdentity(ctx, "relaying mutated response body to client",
+				attr.SlogComponent("remotemcp.proxy"))
 		}
 	}
 
-	n, err := writeResponse(w, upstreamResp, bytes.NewReader(bodyBytes))
+	n, err := writeResponse(w, upstreamResp, bytes.NewReader(bodyBytes), p.WWWAuthenticate)
 	responseBytes = n
 	if err != nil {
 		return err
@@ -617,7 +715,7 @@ func (p *Proxy) forwardRequest(ctx context.Context, r *http.Request, body io.Rea
 		return nil, nil, err
 	}
 
-	resp, err := p.GuardianPolicy.Client().Do(upstreamReq)
+	resp, err := p.GuardianPolicy.Client(p.GuardianClientOptions...).Do(upstreamReq)
 	if err != nil {
 		// timer.Stop() returns false if the timer has already fired;
 		// that's how we distinguish a phase-1 timeout from a parent
@@ -651,7 +749,46 @@ func (p *Proxy) forwardRequest(ctx context.Context, r *http.Request, body io.Rea
 		resp.Body = &cancellingBody{ReadCloser: resp.Body, cancel: forwardCancel, timer: phaseTimer}
 	}
 
+	// Upstream auth rejections are the primary diagnostic when a stored or
+	// forwarded token is refused (e.g. audience mismatch, upstream-side
+	// revocation). The upstream's RFC 6750 challenge carries the
+	// machine-readable reason and — for issuer-gated endpoints — is
+	// replaced before relay, so this log line is its only surface.
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		p.Logger.WarnContext(ctx, "remote mcp server rejected upstream credentials",
+			attr.SlogComponent("remotemcp.proxy"),
+			attr.SlogHTTPResponseStatusCode(resp.StatusCode),
+			attr.SlogHTTPResponseHeaderWWWAuthenticate(resp.Header.Get("WWW-Authenticate")),
+			attr.SlogRemoteMCPServerID(p.Identity.RemoteMCPServerID),
+			attr.SlogMcpServerID(p.Identity.McpServerID))
+	}
+
 	return upstreamReq, resp, nil
+}
+
+func (p *Proxy) forwardRequestWithRetry(ctx context.Context, r *http.Request, body func() io.Reader) (*http.Request, *http.Response, error) {
+	upstreamReq, upstreamResp, err := p.forwardRequest(ctx, r, body())
+	if err != nil || p.UpstreamResponseRetryer == nil {
+		return upstreamReq, upstreamResp, err
+	}
+
+	retry, err := p.UpstreamResponseRetryer(ctx, upstreamResp)
+	if err != nil {
+		// Callers bail on err before they register their Body.Close defer,
+		// so an open response returned alongside an error is leaked — it
+		// would pin the upstream connection until the phase timer fires.
+		// Close it here and return no response.
+		o11y.NoLogDefer(upstreamResp.Body.Close)
+		return upstreamReq, nil, err
+	}
+	if retry == nil {
+		return upstreamReq, upstreamResp, nil
+	}
+	o11y.NoLogDefer(upstreamResp.Body.Close)
+
+	p.RemoteURL = retry.RemoteURL
+	p.Headers = retry.Headers
+	return p.forwardRequest(ctx, r, body())
 }
 
 // relaySSEStream parses Server-Sent Events from the upstream body, relays
@@ -684,7 +821,7 @@ func (p *Proxy) relaySSEStream(
 	resourcesReadReq *ResourcesReadRequest,
 	resourcesListReq *ResourcesListRequest,
 ) (int64, error) {
-	applyResponseHeaders(w, upstreamResp)
+	applyResponseHeaders(w, upstreamResp, p.WWWAuthenticate)
 	w.WriteHeader(upstreamResp.StatusCode)
 
 	if upstreamResp.Body == nil {
@@ -840,10 +977,8 @@ func (p *Proxy) relaySSEStream(
 				return fmt.Errorf("encode mutated sse event: %w", err)
 			} else if ok {
 				emit = formatSSEEventWithData(nonData, mutated)
-				p.Logger.InfoContext(ctx, "relaying mutated SSE event to client",
-					attr.SlogComponent("remotemcp.proxy"),
-					attr.SlogRemoteMCPServerID(p.Identity.RemoteMCPServerID),
-					attr.SlogMcpServerID(p.Identity.McpServerID))
+				p.infoContextWithIdentity(ctx, "relaying mutated SSE event to client",
+					attr.SlogComponent("remotemcp.proxy"))
 			}
 		}
 		if _, writeErr := w.Write(emit); writeErr != nil {
@@ -871,13 +1006,12 @@ func (p *Proxy) requestSpanAttributes(method string) []attribute.KeyValue {
 		attr.HTTPRequestMethod(method),
 		attr.RemoteMCPServerURL(p.RemoteURL),
 	}
-	if p.Identity.RemoteMCPServerID != "" {
-		attrs = append(attrs, attr.RemoteMCPServerID(p.Identity.RemoteMCPServerID))
-	}
-	if p.Identity.McpServerID != "" {
-		attrs = append(attrs, attr.McpServerID(p.Identity.McpServerID))
-	}
-	return attrs
+	return p.Identity.AppendAttributes(attrs)
+}
+
+func (p *Proxy) infoContextWithIdentity(ctx context.Context, msg string, attrs ...slog.Attr) {
+	attrs = append(attrs, p.Identity.SlogAttrs()...)
+	p.Logger.LogAttrs(ctx, slog.LevelInfo, msg, attrs...)
 }
 
 // wrapInterceptorRejection logs the rejection at error level and returns an
@@ -1183,6 +1317,39 @@ func (p *Proxy) dispatchInterceptorError(
 	return nil
 }
 
+// maxNonJSONRPCEchoBytes bounds how much of a non-JSON-RPC upstream body is
+// echoed back in the synthesized error's "data" field. Enough to show the
+// upstream's actual response shape for debugging without relaying an
+// unbounded payload into a JSON-RPC error envelope.
+const maxNonJSONRPCEchoBytes = 2048
+
+// nonJSONRPCUpstreamData builds the JSON-RPC error "data" payload for a
+// synthesized rejection when the upstream answered a client request with a
+// non-JSON-RPC body. It echoes the upstream status, content type, and a
+// bounded snippet of the raw body — the same bytes the client would have
+// received verbatim before this synthesis, so nothing new is exposed — so
+// operators and clients can diagnose the non-conformant upstream.
+func nonJSONRPCUpstreamData(resp *http.Response, body []byte) map[string]any {
+	snippet := body
+	truncated := false
+	if len(snippet) > maxNonJSONRPCEchoBytes {
+		snippet = snippet[:maxNonJSONRPCEchoBytes]
+		truncated = true
+	}
+
+	data := map[string]any{
+		"upstream_status": resp.StatusCode,
+		"upstream_body":   string(snippet),
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "" {
+		data["upstream_content_type"] = ct
+	}
+	if truncated {
+		data["upstream_body_truncated"] = true
+	}
+	return data
+}
+
 // writeResponse relays status, headers, and body from the upstream response
 // back to the user. body may differ from upstreamResp.Body (POST replaces it
 // with a buffered reader after parsing JSON-RPC). Returns the number of bytes
@@ -1192,8 +1359,8 @@ func (p *Proxy) dispatchInterceptorError(
 // bounded by its internal buffer, and the body coming from a parsed POST
 // flow was already capped during [readJSONRPCBody] (upstream response) or
 // [UserRequest.ParseJSONRPCMessages] (inbound user request).
-func writeResponse(w http.ResponseWriter, upstreamResp *http.Response, body io.Reader) (int64, error) {
-	applyResponseHeaders(w, upstreamResp)
+func writeResponse(w http.ResponseWriter, upstreamResp *http.Response, body io.Reader, wwwAuthenticate string) (int64, error) {
+	applyResponseHeaders(w, upstreamResp, wwwAuthenticate)
 	w.WriteHeader(upstreamResp.StatusCode)
 
 	if body == nil {

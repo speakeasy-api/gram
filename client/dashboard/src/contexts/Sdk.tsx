@@ -5,15 +5,17 @@ import { QueryClient } from "@tanstack/react-query";
 import { createContext, useContext } from "react";
 import { useLocation, useParams } from "react-router";
 
-// SdkProvider cannot call useIsAdmin() directly because it wraps AuthProvider
+// SdkProvider cannot call useIsPlatformAdmin() directly because it wraps AuthProvider
 // (AuthProvider needs QueryClientProvider which SdkProvider supplies). Instead,
-// SdkProvider owns a ref and exposes it via context so AuthHandler can write isAdmin
+// SdkProvider owns a ref and exposes it via context so AuthHandler can write isPlatformAdmin
 // into it, making the current value available to the fetcher on every request.
-export const IsAdminContext = createContext<React.MutableRefObject<boolean>>({
+export const IsPlatformAdminContext = createContext<
+  React.MutableRefObject<boolean>
+>({
   current: false,
 });
-export const useIsAdminRef = (): React.MutableRefObject<boolean> =>
-  useContext(IsAdminContext);
+export const useIsPlatformAdminRef = (): React.MutableRefObject<boolean> =>
+  useContext(IsPlatformAdminContext);
 
 export const SdkContext = createContext<Gram>({} as Gram);
 

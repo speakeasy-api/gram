@@ -10,9 +10,8 @@
     "/client/dashboard/src/App.css",
     "/client/dashboard/src/components/tools-badge.tsx",
     "/client/dashboard/src/lib/constants.ts",
-    "/client/sdk/**",
-    "/elements/docs/**",
-    "/elements/examples/tanstack-start/src/routeTree.gen.ts",
+    "/client/dashboard/src/sdk/**",
+    "/hooks/sdk/**",
     "/infra/gen/**",
     "/infra/gen/**/*",
     "/pnpm-lock.yaml",
@@ -27,16 +26,6 @@
       "options": {
         "sortTailwindcss": {
           "stylesheet": "./client/dashboard/src/styles/globals.css",
-          "functions": ["clsx", "cn"],
-          "preserveWhitespace": true
-        }
-      }
-    },
-    {
-      "files": ["elements/**"],
-      "options": {
-        "sortTailwindcss": {
-          "stylesheet": "elements/src/global.css",
           "functions": ["clsx", "cn"],
           "preserveWhitespace": true
         }

@@ -31,7 +31,7 @@ func newInternalTestService(t *testing.T) (context.Context, *Service, *pgxpool.P
 	conn, err := res.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 
-	return ctx, &Service{tracer: nil, logger: logger, db: conn, chConn: nil, auth: nil, authz: nil, roleMgr: nil, featureCache: nil}, conn
+	return ctx, &Service{tracer: nil, logger: logger, db: conn, chConn: nil, auth: nil, authz: nil, roleMgr: nil, productFeatures: nil}, conn
 }
 
 func seedInternalOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) {

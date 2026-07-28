@@ -90,3 +90,13 @@ updates:
       - "/pystreams"
     schedule:
       interval: "weekly"
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    groups:
+      opentelemetry:
+        patterns:
+          - "opentelemetry-*"

@@ -1,0 +1,29 @@
+#!/usr/bin/env -S mise tool-stub
+
+version = "8.1.2"
+tool = "ffmpeg"
+bin = "ffmpeg"
+
+[lock]
+
+[lock.platforms]
+
+[lock.platforms.linux-arm64]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/ffmpeg-8.1.2-gpl_h3e9a107_902.conda"
+checksum = "sha256:236dc9b9b5415f925e0f2072ed4c7d1ae557df6e9b395d4496086a5d58630fb3"
+
+[lock.platforms.linux-arm64-musl]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/ffmpeg-8.1.2-gpl_h3e9a107_902.conda"
+checksum = "sha256:236dc9b9b5415f925e0f2072ed4c7d1ae557df6e9b395d4496086a5d58630fb3"
+
+[lock.platforms.linux-x64]
+url = "https://conda.anaconda.org/conda-forge/linux-64/ffmpeg-8.1.2-gpl_h6237aff_902.conda"
+checksum = "sha256:be08b871acad2035f02eff5561d2f0c0bbfc4e12da44ed9074699a8e81e82281"
+
+[lock.platforms.linux-x64-musl]
+url = "https://conda.anaconda.org/conda-forge/linux-64/ffmpeg-8.1.2-gpl_h6237aff_902.conda"
+checksum = "sha256:be08b871acad2035f02eff5561d2f0c0bbfc4e12da44ed9074699a8e81e82281"
+
+[lock.platforms.windows-x64]
+url = "https://conda.anaconda.org/conda-forge/win-64/ffmpeg-8.1.2-gpl_hdd6294f_902.conda"
+checksum = "sha256:136bb34782ed1dfa0cdc594c0ce61a120057c394efa3c64008c9404785d1b4da"

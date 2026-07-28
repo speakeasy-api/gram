@@ -1,0 +1,209 @@
+# Preset false-positive library — cross-source, git-versioned.
+#
+# This file is DATA. It is embedded (go:embed) into the server binary and the
+# offline sweep tool. Editing it changes suppression behavior for ALL detection
+# sources, so every change is reviewed and gated by the integrity + data tests in
+# this package (a bad regex, unknown matcher type, or duplicate id fails CI).
+#
+# Matching: a finding is suppressed when the FIRST rule (top-to-bottom) matches
+# on all of `sources`, `rule_ids`/`rule_id_globs`, and `match`. Omit an axis to
+# leave it unconstrained ("any"). Precision over recall — never suppress a value
+# that could be a real secret/PII. When in doubt, an entry is LEFT OUT: a missed
+# suppression is cheap, an over-suppression hides a real finding.
+#
+# Matcher types: exact | prefix | regex | digits | email. See catalog.go.
+# NOTE: regex matching is SUBSTRING (unanchored) — anchor whole-value patterns
+# with ^...$ (as every regex entry below does).
+#
+# Rule-id provenance (verified against the live detectors, not guessed):
+#   * Presidio PII ids: risk_analysis.CanonicalPresidioRuleID = "pii." + lower(entity)
+#     -> pii.credit_card, pii.email_address
+#     (rules_test.go, presidio_test.go in risk_analysis).
+#   * gitleaks ids: gitleaks.CanonicalRuleID = "secret." + snake_case(rawID) over
+#     the gitleaks v8 DEFAULT config (detect.NewDetectorDefaultConfig). Verified
+#     raw ids in the shipped config/gitleaks.toml:
+#       stripe-access-token       -> secret.stripe_access_token
+#       aws-access-token          -> secret.aws_access_token
+#       github-pat / -oauth / ... -> secret.github_pat, secret.github_oauth, ...
+#       sourcegraph-access-token  -> secret.sourcegraph_access_token
+#       generic-api-key           -> secret.generic_api_key
+
+version: 1
+rules:
+  # --- Payment card numbers -------------------------------------------------
+  # ~100% FP on pii.credit_card in the 100k prod sample: the noise is dominated
+  # by the published vendor test PANs below. The explicit `values` guarantee the
+  # documented test cards match; the luhn+length fallback covers card-shaped
+  # digit runs (this rule was singled out in the PRD as ~100% FP, so a real card
+  # here is vanishingly rare — the length bound + Luhn keep the fallback tight).
+  - id: test-credit-cards
+    category: "Test credit cards"
+    description: >-
+      Documented payment-processor test PANs (Stripe / PayPal / Visa / Amex /
+      Discover / Mastercard / Diners / JCB docs) plus any Luhn-valid 13-19 digit
+      run flagged by the credit_card rule. These are published, non-chargeable
+      sandbox card numbers — never a real account.
+    reason: known test / example credit card number
+    sources: [presidio, gitleaks]
+    rule_ids: [pii.credit_card]
+    match:
+      type: digits
+      # Non-digits are stripped before comparison, so spaced/dashed forms match.
+      values:
+        - "4111111111111111" # Visa (universal test PAN)
+        - "4242424242424242" # Visa (Stripe canonical)
+        - "4012888888881881" # Visa (Stripe / Braintree)
+        - "4000056655665556" # Visa debit (Stripe)
+        - "4000002500003155" # Visa (Stripe 3DS test)
+        - "5555555555554444" # Mastercard (Stripe canonical)
+        - "5105105105105100" # Mastercard (test)
+        - "2223003122003222" # Mastercard 2-series (Stripe)
+        - "378282246310005" # American Express
+        - "371449635398431" # American Express
+        - "6011111111111117" # Discover
+        - "6011000990139424" # Discover
+        - "30569309025904" # Diners Club
+        - "38520000023237" # Diners Club
+        - "3530111333300000" # JCB
+        - "3566002020360505" # JCB
+      luhn: true
+      min_len: 13
+      max_len: 19
+
+  # --- Stripe test-mode keys ------------------------------------------------
+  # sk_test_ / rk_test_ are test-mode secret & restricted keys; pk_test_ is a
+  # test publishable key. By Stripe's design a *_test_* key only touches the
+  # sandbox and can never move real money, so it is not a live secret. The
+  # gitleaks stripe-access-token regex matches (sk|rk)_(test|live|prod)_...,
+  # so scoping to secret.stripe_* keeps this to the Stripe detector.
+  - id: stripe-test-mode-keys
+    category: "Example API keys & tokens"
+    description: >-
+      Stripe test-mode secret (sk_test_), restricted (rk_test_) and publishable
+      (pk_test_) keys operate only against the Stripe sandbox and cannot access
+      live data or money. Not a live secret.
+    reason: Stripe test-mode key (sandbox only)
+    sources: [gitleaks]
+    rule_id_globs: ["secret.stripe_*"]
+    match:
+      type: prefix
+      values: ["sk_test_", "rk_test_", "pk_test_"]
+
+  # --- AWS documentation example access keys --------------------------------
+  # AWS docs universally use access key ids ending in the literal "EXAMPLE"
+  # (AKIAIOSFODNN7EXAMPLE, AKIAI44QH8DHBEXAMPLE, ASIAIOSFODNN7EXAMPLE). The
+  # gitleaks aws-access-token regex is (AKIA|ASIA|ABIA|ACCA)[A-Z2-7]{16}, i.e.
+  # a 4-char prefix + 16 chars = 20 total; "EXAMPLE" is the trailing 7, leaving 9
+  # middle chars — hence {9} below (NOT {12}).
+  - id: aws-example-access-key-id
+    category: "Example API keys & tokens"
+    description: >-
+      AWS documentation's canonical example access key ids — an AKIA/ASIA/ABIA/
+      ACCA prefix, 9 body chars, then the literal "EXAMPLE" (20 chars total).
+      Published dummies in AWS docs, never real credentials.
+    reason: AWS documentation example access key id
+    sources: [gitleaks]
+    rule_id_globs: ["secret.aws_*"]
+    match:
+      type: regex
+      patterns: ["^(AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{9}EXAMPLE$"]
+
+  # The matching secret access key from AWS docs. It is flagged by the generic /
+  # high-entropy detector (not the AKIA rule), so this is scoped by value only —
+  # an exact full-string match cannot collide with a real secret.
+  - id: aws-example-secret-access-key
+    category: "Example API keys & tokens"
+    description: >-
+      AWS documentation's canonical example secret access key
+      (wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY). Exact-match only; a published
+      dummy in AWS docs, never a real secret.
+    reason: AWS documentation example secret access key
+    sources: [gitleaks]
+    match:
+      type: exact
+      values: ["wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"]
+
+  # --- GitHub documentation example tokens ----------------------------------
+  # GitHub's docs reuse a small set of dummy Personal Access Tokens. Matched as
+  # an EXACT value (case-insensitive) so real ghp_ tokens are never suppressed.
+  # Scoped to the GitHub secret detectors (raw ids github-pat/github-oauth/... ->
+  # secret.github_*).
+  - id: github-example-tokens
+    category: "Example API keys & tokens"
+    description: >-
+      GitHub documentation's canonical example Personal Access Token. Matched as
+      an exact value so real GitHub tokens are never suppressed.
+    reason: GitHub documentation example token
+    sources: [gitleaks]
+    rule_id_globs: ["secret.github_*"]
+    match:
+      type: exact
+      case_insensitive: true
+      values:
+        - "ghp_16C7e42F292c6912E7710c838347Ae178B4a"
+
+  # --- PostHog public project API keys --------------------------------------
+  # PostHog `phc_` keys are the CLIENT-SIDE project API keys — designed to be
+  # shipped in browser/mobile bundles and publicly exposed; they cannot read
+  # data or mutate a project. Not a secret. (No dedicated gitleaks rule; caught
+  # by the generic/high-entropy detector, so scoped by source + prefix only.)
+  - id: posthog-public-project-key
+    category: "Example API keys & tokens"
+    description: >-
+      PostHog `phc_` keys are public, client-side project API keys intended to
+      be embedded in front-end code. Safe to expose by design.
+    reason: PostHog public (client-side) project API key
+    sources: [gitleaks]
+    match:
+      type: prefix
+      values: ["phc_"]
+
+  # --- Sourcegraph rule misfire on bare git SHAs ----------------------------
+  # The gitleaks sourcegraph-access-token regex also matches a BARE 40-char hex
+  # string, so every 40-hex git commit SHA-1 / content digest is flagged as a
+  # Sourcegraph token. Real Sourcegraph tokens in practice carry the `sgp_`
+  # prefix (not matched by ^[0-9a-fA-F]{40}$), so restricting to bare 40-hex on
+  # THIS rule drops the SHA noise without touching prefixed tokens.
+  - id: sourcegraph-bare-git-sha
+    category: "Module & content hashes"
+    description: >-
+      A bare 40-character hex string flagged by the Sourcegraph token rule is a
+      git commit SHA-1 or content digest, not a credential. Real Sourcegraph
+      tokens use the sgp_ prefix and are left untouched.
+    reason: git commit SHA / content digest
+    sources: [gitleaks]
+    rule_id_globs: ["secret.sourcegraph_*"]
+    match:
+      type: regex
+      patterns: ["^[0-9a-fA-F]{40}$"]
+
+  # --- Go module hashes (go.sum) --------------------------------------------
+  # `h1:` values in go.sum are base64-encoded SHA-256 tree hashes of module
+  # content — public, deterministic checksums, never secrets. The `h1:` prefix is
+  # unmistakable, so this is safe across whichever entropy/generic rule flags it.
+  - id: go-module-hashes
+    category: "Module & content hashes"
+    description: >-
+      `h1:` prefixed values are go.sum module checksums (base64 SHA-256 of module
+      contents) — public, reproducible digests, not secrets.
+    reason: "Go module checksum (go.sum h1: hash)"
+    sources: [gitleaks]
+    match:
+      type: prefix
+      values: ["h1:"]
+
+  # --- Placeholder / role emails --------------------------------------------
+  # The `email` matcher carries no data of its own: it delegates to the
+  # presidiofp placeholder catalog (reserved/fixture domains, noreply/no-reply
+  # and template local-parts). Single source of truth — do NOT copy the
+  # local-part list here. Scoped to the Presidio email rule.
+  - id: placeholder-emails
+    category: "Placeholder emails"
+    description: >-
+      Reserved/fixture-domain and role/placeholder emails (noreply@, no-reply@,
+      first.last@, example.com / acme.com fixtures) classified as non-PII by the
+      presidiofp placeholder catalog.
+    reason: placeholder / role email address
+    rule_ids: [pii.email_address]
+    match:
+      type: email

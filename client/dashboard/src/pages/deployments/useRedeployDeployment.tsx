@@ -1,5 +1,5 @@
 import { useRoutes } from "@/routes.js";
-import { MutationHookOptions } from "@gram/client/react-query";
+import { MutationHookOptions } from "@gram/client/react-query/_types.js";
 import {
   RedeployDeploymentMutationData,
   RedeployDeploymentMutationVariables,

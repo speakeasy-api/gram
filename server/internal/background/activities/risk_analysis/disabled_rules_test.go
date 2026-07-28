@@ -3,6 +3,7 @@ package risk_analysis
 import (
 	"testing"
 
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,7 +23,7 @@ func TestDisabledRuleSet_Empty(t *testing.T) {
 func TestDisabledRuleSet_FilterFindings(t *testing.T) {
 	t.Parallel()
 
-	in := []Finding{
+	in := []scanners.Finding{
 		{RuleID: "secret.aws_access_token", Source: "gitleaks"},
 		{RuleID: "secret.github_pat", Source: "gitleaks"},
 		{RuleID: "pii.email_address", Source: "presidio"},

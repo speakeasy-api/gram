@@ -20,15 +20,9 @@ Example: `chore: fix typo in code comment`.
 
 1. Commit some changes to a local branch.
 2. Run `pnpm changeset`.
-3. Select packages to update with `<SPACE>`. **Never select @gram/client**.
+3. Select packages to update with `<SPACE>`.
 4. The changeset file will be auto-committed.
 5. Open a pull request.
-
-> [!IMPORTANT]
->
-> Do not bump the version of the SDK, `@gram/client`, with the changesets CLI.
-> The SDK version is managed by the `speakeasy` CLI and unfortunately there
-> isn't a way to hide it from the package selection step of the changeset CLI.
 
 _You can include multiple changesets in a single pull request if each affected
 package contains distinct changes._

@@ -47,61 +47,22 @@ type Service interface {
 	// project-specific, or omit it to make it organization-level (project_id NULL,
 	// inherited by every project). Requires org:admin.
 	MoveIssuer(context.Context, *MoveIssuerPayload) (res *types.RemoteSessionIssuer, err error)
-	// List the remote_session_clients registered with a given issuer in the
-	// caller's organization, each with its MCP server attachment count. Requires
-	// org:read.
-	ListClients(context.Context, *ListClientsPayload) (res *ListOrganizationRemoteSessionClientsResult, err error)
-	// Get a remote_session_client in the caller's organization by id. Requires
-	// org:read.
-	GetClient(context.Context, *GetClientPayload) (res *types.RemoteSessionClient, err error)
-	// Authoritative impact summary for deleting a remote_session_client:
-	// associated session count and affected MCP server names. Requires org:read.
-	GetClientDeletePreflight(context.Context, *GetClientDeletePreflightPayload) (res *OrganizationClientDeletePreflight, err error)
-	// List the MCP servers a remote_session_client is attached to (resolved
-	// through user_session_issuers) in the caller's organization. Requires
-	// org:read.
-	ListClientMcpServers(context.Context, *ListClientMcpServersPayload) (res *ListOrganizationMcpServersResult, err error)
-	// List the remote_sessions minted against a remote_session_client in the
-	// caller's organization. access_token_encrypted and refresh_token_encrypted
-	// are never returned. Requires org:read.
-	ListClientSessions(context.Context, *ListClientSessionsPayload) (res *ListOrganizationRemoteSessionsResult, err error)
-	// Register a standalone remote_session_client under an existing
-	// remote_session_issuer in the caller's organization, with no
-	// user_session_issuer attachments. The client is project-scoped: it inherits a
-	// project-specific issuer's project, or the caller names a project (which must
-	// belong to the organization) when the issuer is organization-level. Requires
+	// Authoritative impact summary for migrating a remote_session_issuer's clients
+	// onto another issuer: the clients that would move, the affected MCP servers,
+	// and every blocker (endpoint mismatches, conflicting MCP-server bindings).
+	// Requires org:read.
+	GetIssuerMigratePreflight(context.Context, *GetIssuerMigratePreflightPayload) (res *OrganizationIssuerMigratePreflight, err error)
+	// Consolidate two remote_session_issuers that point at the same upstream
+	// authorization server: re-point every client from the source issuer onto the
+	// target issuer, then soft-delete the source. Existing remote sessions are
+	// preserved, so no user re-authenticates. Both issuers must belong to the
+	// caller's organization and agree on issuer, token_endpoint, and
+	// authorization_endpoint. The target may not be narrower in scope than the
+	// source: a project-specific issuer may migrate onto an issuer in the same
+	// project or onto an organization-level issuer, and an organization-level
+	// issuer may migrate onto another organization-level issuer. Requires
 	// org:admin.
-	CreateClient(context.Context, *CreateClientPayload) (res *types.RemoteSessionClient, err error)
-	// Register a standalone remote_session_client in Client ID Metadata Document
-	// (CIMD) mode under an existing remote_session_issuer in the caller's
-	// organization, with no user_session_issuer attachments. Gram generates the
-	// client_id and hosts the metadata document; the issuer must advertise
-	// client_id_metadata_document_supported. The client is project-scoped: it
-	// inherits a project-specific issuer's project, or the caller names a project
-	// (which must belong to the organization) when the issuer is
-	// organization-level. Requires org:admin.
-	CreateCimdClient(context.Context, *CreateCimdClientPayload) (res *types.RemoteSessionClient, err error)
-	// Update a remote_session_client's non-secret fields in the caller's
-	// organization. Requires org:admin.
-	UpdateClient(context.Context, *UpdateClientPayload) (res *types.RemoteSessionClient, err error)
-	// Soft-delete a remote_session_client in the caller's organization. Cascades
-	// to the remote_sessions minted against it. Requires org:admin.
-	DeleteClient(context.Context, *DeleteClientPayload) (err error)
-	// Detach a remote_session_client from an MCP server (clears the MCP server's
-	// user_session_issuer link) in the caller's organization. Requires org:admin.
-	RemoveClientFromMcpServer(context.Context, *RemoveClientFromMcpServerPayload) (err error)
-	// Revoke (soft-delete) a single remote_session in the caller's organization.
-	// Requires org:admin.
-	RevokeSession(context.Context, *RevokeSessionPayload) (err error)
-	// Force an upstream token refresh on a single remote_session in the caller's
-	// organization, regardless of current access-token expiry. Returns the updated
-	// remote_session so callers can reflect the new expiry without a refetch.
-	// Fails with a bad-request error when the session holds no refresh token.
-	// Requires org:admin.
-	RefreshSession(context.Context, *RefreshSessionPayload) (res *types.RemoteSession, err error)
-	// Revoke (soft-delete) all remote_sessions minted against a
-	// remote_session_client in the caller's organization. Requires org:admin.
-	RevokeAllClientSessions(context.Context, *RevokeAllClientSessionsPayload) (res *RevokeAllRemoteSessionsResult, err error)
+	MigrateIssuer(context.Context, *MigrateIssuerPayload) (res *MigrateOrganizationRemoteSessionIssuerResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -124,55 +85,7 @@ const ServiceName = "organizationRemoteSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [20]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "updateIssuer", "deleteIssuer", "moveIssuer", "listClients", "getClient", "getClientDeletePreflight", "listClientMcpServers", "listClientSessions", "createClient", "createCimdClient", "updateClient", "deleteClient", "removeClientFromMcpServer", "revokeSession", "refreshSession", "revokeAllClientSessions"}
-
-// CreateCimdClientPayload is the payload type of the
-// organizationRemoteSessionIssuers service createCimdClient method.
-type CreateCimdClientPayload struct {
-	SessionToken *string
-	ApikeyToken  *string
-	// The owning remote_session_issuer id; must belong to the caller's
-	// organization and advertise client_id_metadata_document_supported.
-	RemoteSessionIssuerID string
-	// Owning project id for the new client; the project must belong to the
-	// caller's organization. Omit to inherit a project-specific issuer's project;
-	// required when the issuer is organization-level.
-	ProjectID *string
-	// Explicit upstream OAuth scopes the dance should request for this client.
-	// Omit to fall back to the issuer's scopes_supported.
-	Scope []string
-	// Optional upstream OAuth audience to send on the authorize redirect and token
-	// exchange.
-	Audience *string
-}
-
-// CreateClientPayload is the payload type of the
-// organizationRemoteSessionIssuers service createClient method.
-type CreateClientPayload struct {
-	SessionToken *string
-	ApikeyToken  *string
-	// The owning remote_session_issuer id; must belong to the caller's
-	// organization.
-	RemoteSessionIssuerID string
-	// Owning project id for the new client; the project must belong to the
-	// caller's organization. Omit to inherit a project-specific issuer's project;
-	// required when the issuer is organization-level.
-	ProjectID *string
-	// client_id supplied by the caller, e.g. from Dynamic Client Registration.
-	ClientID string
-	// Optional client_secret supplied by the caller. Gram encrypts before
-	// persisting; the plaintext is never returned.
-	ClientSecret *string
-	// How the client authenticates at the issuer's token endpoint. Omit to default
-	// to client_secret_basic.
-	TokenEndpointAuthMethod *string
-	// Explicit upstream OAuth scopes the dance should request for this client.
-	// Omit to fall back to the issuer's scopes_supported.
-	Scope []string
-	// Optional upstream OAuth audience to send on the authorize redirect and token
-	// exchange.
-	Audience *string
-}
+var MethodNames = [9]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "updateIssuer", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer"}
 
 // CreateIssuerPayload is the payload type of the
 // organizationRemoteSessionIssuers service createIssuer method.
@@ -191,6 +104,9 @@ type CreateIssuerPayload struct {
 	Name *string
 	// Optional logo asset id.
 	LogoAssetID *string
+	// URL of OAuth client setup documentation shown when creating clients.
+	// Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
+	ClientSetupDocumentationURL *string
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.
@@ -199,6 +115,16 @@ type CreateIssuerPayload struct {
 	RegistrationEndpoint *string
 	// Upstream JWKS URI.
 	JwksURI *string
+	// RFC 8414 service_documentation; developer documentation for the issuer.
+	// Discovered from the issuer metadata document; rejected unless an absolute
+	// http(s) URL.
+	ServiceDocumentation *string
+	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Discovered
+	// from the issuer metadata document; rejected unless an absolute http(s) URL.
+	OpPolicyURI *string
+	// RFC 8414 op_tos_uri; the issuer's terms of service. Discovered from the
+	// issuer metadata document; rejected unless an absolute http(s) URL.
+	OpTosURI *string
 	// Scopes advertised by the issuer.
 	ScopesSupported []string
 	// Grant types advertised by the issuer.
@@ -218,37 +144,10 @@ type CreateIssuerPayload struct {
 	ClientIDMetadataDocumentSupported *bool
 }
 
-// DeleteClientPayload is the payload type of the
-// organizationRemoteSessionIssuers service deleteClient method.
-type DeleteClientPayload struct {
-	// The remote_session_client id.
-	ID           string
-	SessionToken *string
-	ApikeyToken  *string
-}
-
 // DeleteIssuerPayload is the payload type of the
 // organizationRemoteSessionIssuers service deleteIssuer method.
 type DeleteIssuerPayload struct {
 	// The remote_session_issuer id.
-	ID           string
-	SessionToken *string
-	ApikeyToken  *string
-}
-
-// GetClientDeletePreflightPayload is the payload type of the
-// organizationRemoteSessionIssuers service getClientDeletePreflight method.
-type GetClientDeletePreflightPayload struct {
-	// The remote_session_client id.
-	ID           string
-	SessionToken *string
-	ApikeyToken  *string
-}
-
-// GetClientPayload is the payload type of the organizationRemoteSessionIssuers
-// service getClient method.
-type GetClientPayload struct {
-	// The remote_session_client id.
 	ID           string
 	SessionToken *string
 	ApikeyToken  *string
@@ -263,46 +162,22 @@ type GetIssuerDeletePreflightPayload struct {
 	ApikeyToken  *string
 }
 
+// GetIssuerMigratePreflightPayload is the payload type of the
+// organizationRemoteSessionIssuers service getIssuerMigratePreflight method.
+type GetIssuerMigratePreflightPayload struct {
+	// The remote_session_issuer to migrate away from.
+	SourceID string
+	// The remote_session_issuer to migrate onto.
+	TargetID     string
+	SessionToken *string
+	ApikeyToken  *string
+}
+
 // GetIssuerPayload is the payload type of the organizationRemoteSessionIssuers
 // service getIssuer method.
 type GetIssuerPayload struct {
 	// The remote_session_issuer id.
 	ID           string
-	SessionToken *string
-	ApikeyToken  *string
-}
-
-// ListClientMcpServersPayload is the payload type of the
-// organizationRemoteSessionIssuers service listClientMcpServers method.
-type ListClientMcpServersPayload struct {
-	// The remote_session_client id.
-	ClientID     string
-	SessionToken *string
-	ApikeyToken  *string
-}
-
-// ListClientSessionsPayload is the payload type of the
-// organizationRemoteSessionIssuers service listClientSessions method.
-type ListClientSessionsPayload struct {
-	// The remote_session_client id.
-	ClientID string
-	// Pagination cursor.
-	Cursor *string
-	// Page size (default 50, max 100).
-	Limit        *int
-	SessionToken *string
-	ApikeyToken  *string
-}
-
-// ListClientsPayload is the payload type of the
-// organizationRemoteSessionIssuers service listClients method.
-type ListClientsPayload struct {
-	// The remote_session_issuer id to list clients for.
-	IssuerID string
-	// Pagination cursor.
-	Cursor *string
-	// Page size (default 50, max 100).
-	Limit        *int
 	SessionToken *string
 	ApikeyToken  *string
 }
@@ -318,20 +193,6 @@ type ListIssuersPayload struct {
 	ApikeyToken  *string
 }
 
-// ListOrganizationMcpServersResult is the result type of the
-// organizationRemoteSessionIssuers service listClientMcpServers method.
-type ListOrganizationMcpServersResult struct {
-	Items []*OrganizationMcpServer
-}
-
-// ListOrganizationRemoteSessionClientsResult is the result type of the
-// organizationRemoteSessionIssuers service listClients method.
-type ListOrganizationRemoteSessionClientsResult struct {
-	Items []*OrganizationRemoteSessionClient
-	// Cursor for the next page; empty when exhausted.
-	NextCursor *string
-}
-
 // ListOrganizationRemoteSessionIssuersResult is the result type of the
 // organizationRemoteSessionIssuers service listIssuers method.
 type ListOrganizationRemoteSessionIssuersResult struct {
@@ -340,12 +201,28 @@ type ListOrganizationRemoteSessionIssuersResult struct {
 	NextCursor *string
 }
 
-// ListOrganizationRemoteSessionsResult is the result type of the
-// organizationRemoteSessionIssuers service listClientSessions method.
-type ListOrganizationRemoteSessionsResult struct {
-	Items []*types.RemoteSession
-	// Cursor for the next page; empty when exhausted.
-	NextCursor *string
+// MigrateIssuerPayload is the payload type of the
+// organizationRemoteSessionIssuers service migrateIssuer method.
+type MigrateIssuerPayload struct {
+	// The remote_session_issuer to migrate away from; soft-deleted on success.
+	SourceID string
+	// The remote_session_issuer to migrate onto; survives and adopts the source's
+	// clients.
+	TargetID     string
+	SessionToken *string
+	ApikeyToken  *string
+}
+
+// MigrateOrganizationRemoteSessionIssuerResult is the result type of the
+// organizationRemoteSessionIssuers service migrateIssuer method.
+type MigrateOrganizationRemoteSessionIssuerResult struct {
+	// The surviving target remote_session_issuer.
+	Issuer *types.RemoteSessionIssuer
+	// Number of remote_session_clients re-pointed from the source issuer to the
+	// target issuer. Zero when the source had no active clients.
+	ClientsMigrated int
+	// TRUE when the source issuer was soft-deleted.
+	SourceDeleted bool
 }
 
 // MoveIssuerPayload is the payload type of the
@@ -360,15 +237,6 @@ type MoveIssuerPayload struct {
 	ApikeyToken  *string
 }
 
-// OrganizationClientDeletePreflight is the result type of the
-// organizationRemoteSessionIssuers service getClientDeletePreflight method.
-type OrganizationClientDeletePreflight struct {
-	// Number of non-deleted remote_sessions minted against this client.
-	SessionCount int
-	// Display names of MCP servers this client is attached to.
-	McpServerNames []string
-}
-
 // OrganizationIssuerDeletePreflight is the result type of the
 // organizationRemoteSessionIssuers service getIssuerDeletePreflight method.
 type OrganizationIssuerDeletePreflight struct {
@@ -378,34 +246,28 @@ type OrganizationIssuerDeletePreflight struct {
 	McpServerNames []string
 }
 
-// An MCP server attached to a remote_session_client, with the fields the
-// org-admin UI needs to display and link to it.
-type OrganizationMcpServer struct {
-	// The mcp_server id.
-	ID string
-	// The owning project id.
-	ProjectID string
-	// The owning project's slug, for linking to the MCP server in its project.
-	ProjectSlug *string
-	// The MCP server name; empty when unset (display falls back to the URL).
-	Name *string
-	// The MCP server slug.
-	Slug *string
-	// The remote MCP server URL; empty for non-remote (toolset-backed) servers.
-	URL *string
-}
-
-// An organization-administrator view of a remote_session_client: the client
-// plus the number of MCP servers it is attached to and the number of active
-// sessions minted against it.
-type OrganizationRemoteSessionClient struct {
-	// The remote_session_client record.
-	Client *types.RemoteSessionClient
-	// Number of non-deleted MCP servers attached to this client (via
-	// user_session_issuers).
-	McpServerCount int
-	// Number of non-deleted (active) remote_sessions minted against this client.
-	ActiveSessionCount int
+// OrganizationIssuerMigratePreflight is the result type of the
+// organizationRemoteSessionIssuers service getIssuerMigratePreflight method.
+type OrganizationIssuerMigratePreflight struct {
+	// Number of non-deleted remote_session_clients that would be re-pointed from
+	// the source issuer to the target issuer.
+	ClientCount int
+	// Display names of MCP servers attached to the source issuer's clients.
+	McpServerNames []string
+	// Names of the authorization-server metadata fields (issuer, token_endpoint,
+	// authorization_endpoint) that differ between source and target. Non-empty
+	// blocks the migration.
+	EndpointMismatches []string
+	// Display names of MCP servers where both the source and the target issuer
+	// already have a client bound. Non-empty blocks the migration; detach one
+	// client per listed server and retry.
+	ConflictingMcpServerNames []string
+	// Non-blocking divergences (oidc, passthrough, scopes_supported). The target
+	// issuer's values become authoritative for the migrated clients.
+	Warnings []string
+	// TRUE when the migration would succeed: no endpoint mismatches and no
+	// conflicting MCP-server bindings.
+	CanMigrate bool
 }
 
 // An organization-administrator view of a remote_session_issuer: the issuer
@@ -419,69 +281,6 @@ type OrganizationRemoteSessionIssuer struct {
 	// The owning project's name. Empty for organizational (project_id NULL)
 	// issuers.
 	ProjectName *string
-}
-
-// RefreshSessionPayload is the payload type of the
-// organizationRemoteSessionIssuers service refreshSession method.
-type RefreshSessionPayload struct {
-	// The remote_session id.
-	ID           string
-	SessionToken *string
-	ApikeyToken  *string
-}
-
-// RemoveClientFromMcpServerPayload is the payload type of the
-// organizationRemoteSessionIssuers service removeClientFromMcpServer method.
-type RemoveClientFromMcpServerPayload struct {
-	// The remote_session_client id.
-	ClientID string
-	// The mcp_server id to detach from.
-	McpServerID  string
-	SessionToken *string
-	ApikeyToken  *string
-}
-
-// RevokeAllClientSessionsPayload is the payload type of the
-// organizationRemoteSessionIssuers service revokeAllClientSessions method.
-type RevokeAllClientSessionsPayload struct {
-	// The remote_session_client id.
-	ClientID     string
-	SessionToken *string
-	ApikeyToken  *string
-}
-
-// RevokeAllRemoteSessionsResult is the result type of the
-// organizationRemoteSessionIssuers service revokeAllClientSessions method.
-type RevokeAllRemoteSessionsResult struct {
-	// Number of remote_sessions revoked.
-	RevokedCount int
-}
-
-// RevokeSessionPayload is the payload type of the
-// organizationRemoteSessionIssuers service revokeSession method.
-type RevokeSessionPayload struct {
-	// The remote_session id.
-	ID           string
-	SessionToken *string
-	ApikeyToken  *string
-}
-
-// UpdateClientPayload is the payload type of the
-// organizationRemoteSessionIssuers service updateClient method.
-type UpdateClientPayload struct {
-	SessionToken *string
-	ApikeyToken  *string
-	// The remote_session_client id.
-	ID string
-	// Rotate the client secret. Gram re-encrypts before persisting; the plaintext
-	// is never returned.
-	ClientSecret *string
-	// Change how the client authenticates at the issuer's token endpoint.
-	TokenEndpointAuthMethod *string
-	// Replace the explicit upstream OAuth scopes for this client.
-	Scope []string
-	// Replace the upstream OAuth audience sent for this client.
-	Audience *string
 }
 
 // UpdateIssuerPayload is the payload type of the
@@ -499,6 +298,10 @@ type UpdateIssuerPayload struct {
 	Name *string
 	// Set the logo asset id.
 	LogoAssetID *string
+	// Set or clear the URL of OAuth client setup documentation shown when creating
+	// clients. An empty string clears it to NULL; any other value must be an
+	// absolute http(s) URL.
+	ClientSetupDocumentationURL *string
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.
@@ -506,7 +309,16 @@ type UpdateIssuerPayload struct {
 	// Upstream RFC 7591 registration endpoint.
 	RegistrationEndpoint *string
 	// Upstream JWKS URI.
-	JwksURI                           *string
+	JwksURI *string
+	// Set or clear RFC 8414 service_documentation. An empty string clears it to
+	// NULL; any other value must be an absolute http(s) URL.
+	ServiceDocumentation *string
+	// Set or clear RFC 8414 op_policy_uri. An empty string clears it to NULL; any
+	// other value must be an absolute http(s) URL.
+	OpPolicyURI *string
+	// Set or clear RFC 8414 op_tos_uri. An empty string clears it to NULL; any
+	// other value must be an absolute http(s) URL.
+	OpTosURI                          *string
 	ScopesSupported                   []string
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string

@@ -13,8 +13,11 @@ import CatalogDetail, {
   CatalogDetailRoot,
 } from "./pages/catalog/CatalogDetail";
 import ChatSessions from "./pages/chatLogs/ChatLogs";
+import OrgMemory from "./components/observe/OrgMemory";
 import { ChatConversation, ChatHome, ChatRoot } from "./pages/chat/Chat";
-import CLIs from "./pages/CLIs";
+import Skills from "./pages/Skills";
+import SkillsList from "./pages/skills/SkillsList";
+import SkillDetail from "./pages/skills/SkillDetail";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import UserSessions from "./pages/org/UserSessions";
@@ -30,7 +33,7 @@ import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
 import { LogsRoot } from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
-import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
+import { MCPDetailPage } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import {
@@ -44,12 +47,11 @@ import Costs from "./pages/costs/Costs";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
-import { OnboardingWizard } from "./pages/onboarding/Wizard";
+import CreateTunneledMcp from "./pages/sources/tunneled-mcp/CreateTunneledMcp";
 import { SetupWizard } from "./pages/setup/components/onboarding-wizard";
 import Collections, { CollectionsRoot } from "./pages/collections/Collections";
 import CollectionDetail from "./pages/collections/CollectionDetail";
 import CreateCollection from "./pages/collections/CreateCollection";
-import OrgAdminSettings from "./pages/org/OrgAdminSettings";
 import OrgApiKeys from "./pages/org/OrgApiKeys";
 import Plugins, { PluginsRoot } from "./pages/plugins/Plugins";
 import PluginDetail from "./pages/plugins/PluginDetail";
@@ -57,7 +59,14 @@ import OrgAuditLogs from "./pages/org/OrgAuditLogs";
 import OrgDomains from "./pages/org/OrgDomains";
 import OrgHome from "./pages/org/OrgHome";
 import OrgIdentity from "./pages/org/OrgIdentity";
+import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
+import OrgSkills from "./pages/org/OrgSkills";
+import ExternalCredentialDetail from "./pages/org/external-services/ExternalCredentialDetail";
+import {
+  ExternalServicesPage,
+  ExternalServicesRoot,
+} from "./pages/org/external-services/ExternalServices";
 import OrgWebhooks from "./pages/org/OrgWebhooks";
 import {
   RemoteIdentityProvidersPage,
@@ -78,12 +87,15 @@ import SecurityOverview, {
 } from "./pages/security/SecurityOverview";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
 import ApprovalRequests from "./pages/security/ApprovalRequests";
+import ShadowMCP, { ShadowMCPRoot } from "./pages/shadow-mcp/ShadowMCP";
+import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
 import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
 import RiskOverviewCategoryDetail from "./pages/security/RiskOverviewCategoryDetail";
 import RiskOverviewRulesIndex from "./pages/security/RiskOverviewRulesIndex";
 import RiskOverviewUserDetail from "./pages/security/RiskOverviewUserDetail";
 import RiskOverviewUsersIndex from "./pages/security/RiskOverviewUsersIndex";
-import PolicyCenter from "./pages/security/PolicyCenter";
+import PolicyCenter, { PolicyCenterRoot } from "./pages/security/PolicyCenter";
+import PolicyDetail, { PolicyNew } from "./pages/security/PolicyDetail";
 import DetectionRules from "./pages/security/DetectionRules";
 import Team from "./pages/team/Team";
 import SourceDetails from "./pages/sources/SourceDetails";
@@ -174,12 +186,6 @@ const ROUTE_STRUCTURE = {
     url: "/register",
     component: Register,
     unauthenticated: true,
-  },
-  onboarding: {
-    title: "Onboarding",
-    url: "onboarding",
-    component: OnboardingWizard,
-    outsideMainLayout: true, // Break out of normal page structure
   },
   home: {
     title: "Home",
@@ -292,6 +298,11 @@ const ROUTE_STRUCTURE = {
         url: "add-remote-mcp",
         component: CreateRemoteMcp,
       },
+      addTunneledMcp: {
+        title: "Add Tunneled MCP Server",
+        url: "add-tunneled-mcp",
+        component: CreateTunneledMcp,
+      },
     },
   },
   catalog: {
@@ -329,11 +340,19 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  clis: {
+  skills: {
     title: "Skills",
-    url: "clis",
+    url: "skills",
     icon: "terminal",
-    component: CLIs,
+    component: Skills,
+    indexComponent: SkillsList,
+    subPages: {
+      detail: {
+        title: "Skill",
+        url: ":skillId",
+        component: SkillDetail,
+      },
+    },
   },
   mcp: {
     title: "MCP",
@@ -346,6 +365,16 @@ const ROUTE_STRUCTURE = {
         title: "Built-in MCP",
         url: "built-in/:builtInSlug",
         component: BuiltInMCPDetailPage,
+        subPages: {
+          overview: {
+            title: "Built-in MCP Overview",
+            url: "overview",
+          },
+          tools: {
+            title: "Built-in MCP Tools",
+            url: "tools",
+          },
+        },
       },
       // TODO(AGE-1902): collapse with :toolsetSlug once Hosted (toolset-backed)
       // MCP data moves to mcp_servers/mcp_endpoints. Until then this route is
@@ -365,10 +394,6 @@ const ROUTE_STRUCTURE = {
           tools: {
             title: "MCP Server Tools",
             url: "tools",
-          },
-          analytics: {
-            title: "MCP Server Analytics",
-            url: "analytics",
           },
           // Legacy route. MCPServerDetails redirects this to
           // settings#authentication now that authentication lives under
@@ -390,8 +415,41 @@ const ROUTE_STRUCTURE = {
       details: {
         title: "MCP Details",
         url: ":toolsetSlug",
-        component: MCPDetailsRoot,
-        indexComponent: MCPDetailPage,
+        component: MCPDetailPage,
+        subPages: {
+          overview: {
+            title: "MCP Overview",
+            url: "overview",
+          },
+          tools: {
+            title: "MCP Tools",
+            url: "tools",
+          },
+          resources: {
+            title: "MCP Resources",
+            url: "resources",
+          },
+          prompts: {
+            title: "MCP Prompts",
+            url: "prompts",
+          },
+          authentication: {
+            title: "MCP Authentication",
+            url: "authentication",
+          },
+          performance: {
+            title: "MCP Performance",
+            url: "performance",
+          },
+          teamAccess: {
+            title: "MCP Team Access",
+            url: "team-access",
+          },
+          settings: {
+            title: "MCP Settings",
+            url: "settings",
+          },
+        },
       },
     },
   },
@@ -465,6 +523,13 @@ const ROUTE_STRUCTURE = {
     icon: "message-square",
     component: ChatSessions,
   },
+  orgMemory: {
+    title: "Org Memory",
+    url: "org-memory",
+    icon: "brain",
+    stage: "preview",
+    component: OrgMemory,
+  },
   riskOverview: {
     title: "Risk Overview",
     url: "risk-overview",
@@ -515,13 +580,41 @@ const ROUTE_STRUCTURE = {
     title: "Risk Policies",
     url: "risk-policies",
     icon: "shield-check",
-    component: PolicyCenter,
+    // Layout route: renders the policy list (index) or a policy detail subpage.
+    component: PolicyCenterRoot,
+    indexComponent: PolicyCenter,
+    subPages: {
+      new: {
+        title: "New policy",
+        url: "new",
+        component: PolicyNew,
+      },
+      detail: {
+        title: "Policy",
+        url: ":policyId",
+        component: PolicyDetail,
+      },
+    },
   },
   riskEvents: {
     title: "Risk Events",
     url: "risk-events",
     icon: "flag",
     component: RiskEventsPage,
+  },
+  shadowMCP: {
+    title: "Shadow MCP",
+    url: "shadow-mcp",
+    icon: "shield",
+    component: ShadowMCPRoot,
+    indexComponent: ShadowMCP,
+    subPages: {
+      detail: {
+        title: "Shadow MCP Server",
+        url: ":serverSlug",
+        component: ShadowMCPServerDetail,
+      },
+    },
   },
   sdks: {
     title: "SDKs",
@@ -797,11 +890,41 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "file-text",
     component: OrgLogs,
   },
+  skills: {
+    title: "Skills",
+    url: "skills",
+    icon: "terminal",
+    component: OrgSkills,
+  },
+  aiIntegrations: {
+    title: "AI Integrations",
+    url: "ai-integrations",
+    icon: "bot",
+    component: OrgAIIntegrations,
+  },
   webhooks: {
     title: "Webhooks",
     url: "webhooks",
     icon: "webhook",
     component: OrgWebhooks,
+  },
+  externalServices: {
+    title: "External Services",
+    url: "external-services",
+    icon: "cloud",
+    component: ExternalServicesRoot,
+    indexComponent: ExternalServicesPage,
+    subPages: {
+      credentialDetail: {
+        title: "External Credential",
+        url: ":credentialId",
+        component: ExternalCredentialDetail,
+        subPages: {
+          overview: { title: "Overview", url: "overview" },
+          settings: { title: "Settings", url: "settings" },
+        },
+      },
+    },
   },
   auditLogs: {
     title: "Audit Logs",
@@ -855,7 +978,6 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Device Agent",
     url: "device-agent",
     icon: "laptop",
-    stage: "preview",
     component: DeviceAgent,
   },
   access: {
@@ -906,12 +1028,6 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "settings",
     component: SetupWizard,
     outsideMainLayout: true,
-  },
-  adminSettings: {
-    title: "Super Admin",
-    url: "admin-settings",
-    icon: "shield-alert",
-    component: OrgAdminSettings,
   },
 } satisfies Record<string, RouteEntry>;
 

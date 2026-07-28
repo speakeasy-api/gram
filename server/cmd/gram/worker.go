@@ -29,8 +29,10 @@ import (
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -40,22 +42,31 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpclient"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/memory"
+	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/pijudge"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
+	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
@@ -63,6 +74,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 func newWorkerCommand() *cli.Command {
@@ -80,12 +92,6 @@ func newWorkerCommand() *cli.Command {
 			Usage:    "The current server environment", // local, dev, prod
 			Required: true,
 			EnvVars:  []string{"GRAM_ENVIRONMENT"},
-		},
-		&cli.BoolFlag{
-			Name:    "enable-gateway-ip-allowlist",
-			Usage:   "Enable Envoy Gateway SecurityPolicy reconcile for custom domain IP allow listing. Requires the SecurityPolicy CRD to be installed.",
-			EnvVars: []string{"GRAM_ENABLE_GATEWAY_IP_ALLOWLIST"},
-			Value:   false,
 		},
 		&cli.StringFlag{
 			Name:    "temporal-address",
@@ -243,10 +249,9 @@ func newWorkerCommand() *cli.Command {
 			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_CNAME"},
 		},
 		&cli.StringFlag{
-			Name:    "custom-domain-provisioner",
-			Usage:   "Kubernetes provisioner kind for custom domains: ingress or gateway (default: ingress)",
-			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_PROVISIONER"},
-			Value:   "ingress",
+			Name:    "site-url",
+			Usage:   "The URL of the dashboard site, used to link from notification emails",
+			EnvVars: []string{"GRAM_SITE_URL"},
 		},
 		&cli.StringFlag{
 			Name:     "pylon-verification-secret",
@@ -294,6 +299,12 @@ func newWorkerCommand() *cli.Command {
 			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",
 			EnvVars: []string{"PRESIDIO_ANALYZER_URL"},
 		},
+		&cli.StringFlag{
+			Name:     "loops-api-key",
+			Usage:    "Loops API key for transactional emails (billing usage alerts). Empty or 'unset' disables email sending.",
+			EnvVars:  []string{"LOOPS_API_KEY"},
+			Required: false,
+		},
 	}
 
 	flags = append(flags, redisFlags...)
@@ -321,18 +332,31 @@ func newWorkerCommand() *cli.Command {
 				attr.SlogServiceVersion(shortGitSHA()),
 				attr.SlogServiceEnv(serviceEnv),
 			)
-			tracerProvider := otel.GetTracerProvider()
-			meterProvider := otel.GetMeterProvider()
 			slog.SetDefault(logger)
 
 			if serviceEnv == "local" {
-				risk_analysis.EnableRuleIDFormatEnforcement()
+				scanners.EnableRuleIDFormatEnforcement()
 			}
 
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
 
-			temporalEnv, shutdown, err := newTemporalClient(logger, temporalClientOptions{
+			shutdown, err := o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
+				ServiceName:    serviceName,
+				ServiceVersion: shortGitSHA(),
+				GitSHA:         GitSHA,
+				EnableTracing:  c.Bool("with-otel-tracing"),
+				EnableMetrics:  c.Bool("with-otel-metrics"),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to setup opentelemetry sdk: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			tracerProvider := otel.GetTracerProvider()
+			meterProvider := otel.GetMeterProvider()
+
+			temporalEnv, shutdown, err := newTemporalClient(logger, meterProvider, temporalClientOptions{
 				address:      c.String("temporal-address"),
 				namespace:    c.String("temporal-namespace"),
 				taskQueue:    c.String("temporal-task-queue"),
@@ -347,33 +371,11 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			shutdown, err = o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
-				ServiceName:    serviceName,
-				ServiceVersion: shortGitSHA(),
-				GitSHA:         GitSHA,
-				EnableTracing:  c.Bool("with-otel-tracing"),
-				EnableMetrics:  c.Bool("with-otel-metrics"),
-			})
-			if err != nil {
-				return fmt.Errorf("failed to setup opentelemetry sdk: %w", err)
-			}
-			shutdownFuncs = append(shutdownFuncs, shutdown)
-
-			guardianPolicy, err := newGuardianPolicy(c, tracerProvider)
-			if err != nil {
-				return err
-			}
-
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
 			if err != nil {
 				return err
-			}
-			// Ping the database to ensure connectivity
-			if err := db.Ping(ctx); err != nil {
-				logger.ErrorContext(ctx, "failed to ping database", attr.SlogError(err))
-				return fmt.Errorf("database ping failed: %w", err)
 			}
 			defer db.Close()
 
@@ -384,6 +386,11 @@ func newWorkerCommand() *cli.Command {
 			})
 			if err != nil {
 				return fmt.Errorf("failed to connect to redis: %w", err)
+			}
+
+			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider, redisClient)
+			if err != nil {
+				return err
 			}
 
 			encryptionClient, err := encryption.New(c.String("encryption-key"))
@@ -408,10 +415,16 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("plugins github config: %w", err)
 			}
+			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
+			var featureFlags feature.Provider = posthogClient
+			if c.String("environment") == "local" {
+				featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
+			}
+
 			var pluginPublisher *plugins.Service
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
-				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"))
+				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags)
 			} else {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
 			}
@@ -419,7 +432,7 @@ func newWorkerCommand() *cli.Command {
 			mcpMetadataRepo := mcpmetadata_repo.New(db)
 			env := environments.NewEnvironmentEntries(logger, db, encryptionClient, mcpMetadataRepo)
 
-			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"), c.Bool("enable-gateway-ip-allowlist"))
+			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"))
 			if err != nil {
 				return fmt.Errorf("failed to create k8s client: %w", err)
 			}
@@ -433,11 +446,8 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
-			var featureFlags feature.Provider = posthogClient
-			if c.String("environment") == "local" {
-				featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
-			}
+			loopsClient := loops.New(ctx, logger, guardianPolicy, c.String("loops-api-key"))
+			emailService := email.NewService(logger, loopsClient)
 
 			_, psbroker, pubsubShutdown, err := newPubSubClient(ctx, c, logger)
 			if err != nil {
@@ -544,7 +554,9 @@ func newWorkerCommand() *cli.Command {
 				backgroundWorkOSClient = workos.NewStubClient()
 			}
 
-			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled)
+			telemetryLogPublisher := telemetry.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs)
+
+			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled, telemetryLogPublisher)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			telemetryService := telemetry.NewService(logger, tracerProvider, db, chDB, nil, nil, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
@@ -568,10 +580,44 @@ func newWorkerCommand() *cli.Command {
 			// temporalClient.Close() over the same gRPC connection.
 			chatWriter.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler, auditLogger))
 
+			// Throttled for the same reason riskSignaler is: the writer emits one
+			// wake per durable message write and a wake carries no payload, so a
+			// burst of them coalesces into the single pass they all ask for. Its
+			// flush shares the deferred drain below.
+			efficacySignaler := background.NewThrottledSignaler(
+				&background.TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
+				background.SkillEfficacySignalCooldown,
+				logger.With(attr.SlogComponent("skill-efficacy")),
+			)
+			chatWriter.AddObserver(efficacy.NewObserver(logger, efficacySignaler))
+
+			// Chat analysis rides the same durable-write event as efficacy, with
+			// its own coordinator and the same throttle/flush rationale.
+			chatAnalysisSignaler := background.NewThrottledSignaler(
+				&background.TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
+				background.ChatAnalysisSignalCooldown,
+				logger.With(attr.SlogComponent("chat-analysis")),
+			)
+			chatWriter.AddObserver(analysis.NewObserver(logger, chatAnalysisSignaler))
+
+			// Spend-relevant telemetry written by worker-side pollers
+			// (Cursor usage polling, Codex cost import) triggers a throttled
+			// per-org spend rule evaluation, mirroring the server-side
+			// trigger on the hooks ingest path. Its flush shares the
+			// deferred drain below.
+			spendUsageTrigger := spendrules.NewUsageTrigger(
+				logger,
+				cache.NewRedisCacheAdapter(redisClient),
+				&background.TemporalSpendRuleEvaluator{TemporalEnv: temporalEnv},
+				spendrules.UsageSignalCooldown,
+			)
+			telemetryLogger.AddObserver(spendUsageTrigger)
+
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
 				guardianPolicy,
 				openRouter,
+				modelkeys.NewResolver(db, encryptionClient, openRouter),
 				captureStrategy,
 				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
@@ -619,6 +665,7 @@ func newWorkerCommand() *cli.Command {
 				userRepo.New(db),
 				pylonClient,
 				posthogClient,
+				productFeatures,
 				cache.SuffixNone,
 			)
 
@@ -627,12 +674,15 @@ func newWorkerCommand() *cli.Command {
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String(usersessions.JWTSigningKeyFlag))
 
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, identityResolver, guardianPolicy)
-			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL, slackClient)
+			// The worker never serves webhook ingress (ProcessWebhook lives in
+			// the HTTP server), so the dashboard site URL used for Slack link
+			// unfurls is not needed here.
+			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL, nil, slackClient)
 
 			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
 
 			accessStore := accesscontrol.NewRedisStore(cache.NewRedisCacheAdapter(redisClient), accesscontrol.AlphaTTL)
-			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), accessStore)
+			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), accessStore, serverURL)
 
 			memorySvc := memory.NewMemoryService(
 				logger,
@@ -643,8 +693,10 @@ func newWorkerCommand() *cli.Command {
 				auditLogger,
 			)
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
+			skillTools := platformtoolsruntime.AssistantSkillTools(logger, db, platformskills.WithEfficacySignaler(efficacySignaler))
 			// Runner-callable platform tools the runtime must be able to execute.
 			assistantPlatformExtras := append([]platformtools.ExternalTool{}, memoryTools...)
+			assistantPlatformExtras = append(assistantPlatformExtras, skillTools...)
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
 			remoteChallengeManager := remotesessions.NewChallengeManager(
@@ -692,6 +744,9 @@ func newWorkerCommand() *cli.Command {
 				// runtime request through mcp.Service, so the factory is
 				// intentionally nil here.
 				nil,
+				route.NewRouteTable(),
+				"",
+				nil,
 			)
 
 			chatClient := chat.NewAgenticChatClient(
@@ -708,7 +763,7 @@ func newWorkerCommand() *cli.Command {
 				return err
 			}
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
-			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger, contextWindowResolver)
+			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger, contextWindowResolver, auditLogger)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
@@ -725,45 +780,66 @@ func newWorkerCommand() *cli.Command {
 				logger.InfoContext(ctx, "presidio PII scanner enabled", attr.SlogURL(presidioURL))
 			}
 
-			piScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
+			piScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
+
+			customRuleScanner, err := customruleanalyzer.NewScanner(db)
+			if err != nil {
+				return fmt.Errorf("create custom rules scanner: %w", err)
+			}
+
+			builtinPresets, err := presetlib.New()
+			if err != nil {
+				return fmt.Errorf("load built-in exclusion library: %w", err)
+			}
+
+			var siteURL *url.URL
+			if raw := c.String("site-url"); raw != "" {
+				siteURL, err = url.Parse(raw)
+				if err != nil {
+					return fmt.Errorf("failed to parse site url: %w", err)
+				}
+			}
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-				GuardianPolicy:                 guardianPolicy,
-				DB:                             db,
-				EncryptionClient:               encryptionClient,
-				FeatureProvider:                featureFlags,
-				AssetStorage:                   assetStorage,
-				SlackClient:                    slackClient,
-				ChatMessageWriter:              chatWriter,
-				ChatClient:                     chatClient,
-				OpenRouter:                     openRouter,
-				K8sClient:                      k8sClient,
-				DefaultCustomDomainProvisioner: k8s.ProvisionerKind(c.String("custom-domain-provisioner")),
-				ExpectedTargetCNAME:            c.String("custom-domain-cname"),
-				BillingTracker:                 billingTracker,
-				BillingRepository:              billingRepo,
-				RedisClient:                    redisClient,
-				PosthogClient:                  posthogClient,
-				FunctionsDeployer:              functionsOrchestrator,
-				FunctionsVersion:               runnerVersion,
-				RagService:                     ragService,
-				MCPRegistryClient:              mcpRegistryClient,
-				TelemetryLogger:                telemetryLogger,
-				ClickhouseConn:                 chDB,
-				TelemetryRepo:                  telemetryrepo.New(chDB),
-				TriggersApp:                    triggerApp,
-				CacheAdapter:                   cache.NewRedisCacheAdapter(redisClient),
-				AssistantsCore:                 assistantsCore,
-				TemporalEnv:                    temporalEnv,
-				PIIScanner:                     piiScanner,
-				PIScanner:                      piScanner,
-				ShadowMCPClient:                shadowMCPClient,
-				AuditLogger:                    auditLogger,
-				WorkOSClient:                   backgroundWorkOSClient,
-				SvixClient:                     svixClient,
-				ProductFeatures:                productFeatures,
-				PluginPublisher:                pluginPublisher,
-				Publishers:                     publishers,
+				GuardianPolicy:      guardianPolicy,
+				DB:                  db,
+				EncryptionClient:    encryptionClient,
+				FeatureProvider:     featureFlags,
+				AssetStorage:        assetStorage,
+				SlackClient:         slackClient,
+				ChatMessageWriter:   chatWriter,
+				ChatClient:          chatClient,
+				OpenRouter:          openRouter,
+				K8sClient:           k8sClient,
+				ExpectedTargetCNAME: c.String("custom-domain-cname"),
+				SiteURL:             siteURL,
+				BillingTracker:      billingTracker,
+				BillingRepository:   billingRepo,
+				RedisClient:         redisClient,
+				PosthogClient:       posthogClient,
+				EmailService:        emailService,
+				FunctionsDeployer:   functionsOrchestrator,
+				FunctionsVersion:    runnerVersion,
+				RagService:          ragService,
+				MCPRegistryClient:   mcpRegistryClient,
+				TelemetryLogger:     telemetryLogger,
+				ClickhouseConn:      chDB,
+				TelemetryRepo:       telemetryrepo.New(chDB),
+				TriggersApp:         triggerApp,
+				CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
+				AssistantsCore:      assistantsCore,
+				TemporalEnv:         temporalEnv,
+				PIIScanner:          piiScanner,
+				PIScanner:           piScanner,
+				CustomRuleScanner:   customRuleScanner,
+				BuiltinPresets:      builtinPresets,
+				ShadowMCPClient:     shadowMCPClient,
+				AuditLogger:         auditLogger,
+				WorkOSClient:        backgroundWorkOSClient,
+				SvixClient:          svixClient,
+				ProductFeatures:     productFeatures,
+				PluginPublisher:     pluginPublisher,
+				Publishers:          publishers,
 			})
 
 			// Flush the throttle's queued trailing risk signals before this Action
@@ -774,6 +850,15 @@ func newWorkerCommand() *cli.Command {
 			defer func() {
 				if ferr := riskSignaler.Shutdown(ctx); ferr != nil {
 					logger.ErrorContext(ctx, "flush pending risk signals", attr.SlogError(ferr))
+				}
+				if ferr := efficacySignaler.Shutdown(ctx); ferr != nil {
+					logger.ErrorContext(ctx, "flush pending skill efficacy signals", attr.SlogError(ferr))
+				}
+				if ferr := chatAnalysisSignaler.Shutdown(ctx); ferr != nil {
+					logger.ErrorContext(ctx, "flush pending chat analysis signals", attr.SlogError(ferr))
+				}
+				if ferr := spendUsageTrigger.Shutdown(ctx); ferr != nil {
+					logger.ErrorContext(ctx, "flush pending spend rule usage signals", attr.SlogError(ferr))
 				}
 			}()
 

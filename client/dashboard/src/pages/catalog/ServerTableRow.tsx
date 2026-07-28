@@ -2,7 +2,6 @@ import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { DotRow } from "@/components/ui/dot-row";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
-import type { DeploymentExternalMCP } from "@gram/client/models/components";
 import { Badge, Button } from "@speakeasy-api/moonshine";
 import { ArrowRight, Check } from "lucide-react";
 import { useMemo } from "react";
@@ -14,7 +13,8 @@ import { ManualSetupBadge } from "./ManualSetupBadge";
 interface ServerTableRowProps {
   server: PulseMCPServer;
   detailHref: string;
-  externalMcps: DeploymentExternalMCP[];
+  /** Whether this catalog server is already installed in the project. */
+  isAdded: boolean;
   isSelected?: boolean;
   onToggleSelect?: () => void;
 }
@@ -22,17 +22,12 @@ interface ServerTableRowProps {
 export function ServerTableRow({
   server,
   detailHref,
-  externalMcps,
+  isAdded,
   isSelected,
   onToggleSelect,
 }: ServerTableRowProps): JSX.Element {
   const metadata = useMemo(() => parseServerMetadata(server), [server]);
   const displayName = server.title ?? server.registrySpecifier;
-
-  const existingMcp = externalMcps.find(
-    (mcp) => mcp.registryServerSpecifier === server.registrySpecifier,
-  );
-  const isAdded = !!existingMcp;
 
   // The catalog list carries a precomputed tool count, not the tool defs.
   const toolCount = server.toolCount;

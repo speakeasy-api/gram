@@ -1,5 +1,5 @@
 import { useLocation, useParams } from "react-router";
-import { useAssistantsGet } from "@gram/client/react-query/index.js";
+import { useAssistantsGet } from "@gram/client/react-query/assistantsGet.js";
 import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
 import { EditAssistantOnboarding } from "./onboarding/AssistantOnboarding";
 

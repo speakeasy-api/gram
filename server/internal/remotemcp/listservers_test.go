@@ -20,13 +20,6 @@ func TestListServers(t *testing.T) {
 			ProjectSlugInput: nil,
 			URL:              url,
 			TransportType:    "streamable-http",
-			Headers: []*gen.HeaderInput{
-				{
-					Name:     "X-API-Key",
-					IsSecret: new(true),
-					Value:    new("secret-value"),
-				},
-			},
 		})
 		require.NoError(t, err)
 	}
@@ -37,15 +30,6 @@ func TestListServers(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(result.RemoteMcpServers), 2)
-
-	// Verify secrets are redacted
-	for _, server := range result.RemoteMcpServers {
-		for _, h := range server.Headers {
-			if h.IsSecret && h.Value != nil {
-				require.Contains(t, *h.Value, "*")
-			}
-		}
-	}
 }
 
 func TestListServers_Empty(t *testing.T) {

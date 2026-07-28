@@ -1,0 +1,37 @@
+# ExternalMCPServerEntry
+
+A summary of an MCP server from an external registry, returned by catalog listings
+
+## Example Usage
+
+```typescript
+import { ExternalMCPServerEntry } from "@gram/client/models/components/externalmcpserverentry.js";
+
+let value: ExternalMCPServerEntry = {
+  description: "pale browse instantly minus futon nicely",
+  isReadOnly: false,
+  registrySpecifier: "io.modelcontextprotocol.anonymous/exa",
+  supportsDcr: false,
+  toolCount: 186886,
+  version: "1.0.0",
+};
+```
+
+## Fields
+
+| Field                                 | Type                                                                           | Required           | Description                                                                                                                                                                                               | Example                               |
+| ------------------------------------- | ------------------------------------------------------------------------------ | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| `description`                         | _string_                                                                       | :heavy_check_mark: | Description of what the server does                                                                                                                                                                       |                                       |
+| `iconUrl`                             | _string_                                                                       | :heavy_minus_sign: | URL to the server's icon                                                                                                                                                                                  |                                       |
+| `isReadOnly`                          | _boolean_                                                                      | :heavy_check_mark: | Whether every tool on the server is read-only                                                                                                                                                             |                                       |
+| `mcpServerId`                         | _string_                                                                       | :heavy_minus_sign: | ID of the attached MCP server when this server is listed from a Collection (mcp_server-backed attachment)                                                                                                 |                                       |
+| `meta`                                | _any_                                                                          | :heavy_minus_sign: | Opaque metadata from the registry                                                                                                                                                                         |                                       |
+| `organizationMcpCollectionRegistryId` | _string_                                                                       | :heavy_minus_sign: | ID of the internal collection registry this server came from                                                                                                                                              |                                       |
+| `registryId`                          | _string_                                                                       | :heavy_minus_sign: | ID of the external MCP registry this server came from                                                                                                                                                     |                                       |
+| `registrySpecifier`                   | _string_                                                                       | :heavy_check_mark: | Server specifier used to look up in the registry (e.g., 'io.github.user/server')                                                                                                                          | io.modelcontextprotocol.anonymous/exa |
+| `remotes`                             | [components.ExternalMCPRemote](../../models/components/externalmcpremote.md)[] | :heavy_minus_sign: | Available remote endpoints for the server                                                                                                                                                                 |                                       |
+| `supportsDcr`                         | _boolean_                                                                      | :heavy_check_mark: | Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). When false, connecting requires manual setup (static OAuth client credentials or API keys). |                                       |
+| `title`                               | _string_                                                                       | :heavy_minus_sign: | Display name for the server                                                                                                                                                                               |                                       |
+| `toolCount`                           | _number_                                                                       | :heavy_check_mark: | Number of tools the server exposes                                                                                                                                                                        |                                       |
+| `toolsetId`                           | _string_                                                                       | :heavy_minus_sign: | ID of the attached toolset when this server is listed from a Collection (toolset-backed attachment)                                                                                                       |                                       |
+| `version`                             | _string_                                                                       | :heavy_check_mark: | Semantic version of the server                                                                                                                                                                            | 1.0.0                                 |

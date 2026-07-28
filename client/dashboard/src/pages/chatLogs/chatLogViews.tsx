@@ -1,6 +1,6 @@
 import type { JSX } from "react";
 import { Badge, Icon } from "@speakeasy-api/moonshine";
-import type { TelemetryLogRecord } from "@gram/client/models/components";
+import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import { cn } from "@/lib/utils";
 import { formatLogTimestamp } from "./chatLogFilters";
 

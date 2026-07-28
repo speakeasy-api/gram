@@ -26,6 +26,7 @@ func disabledAllRulesPlugin() *plugin {
 				NoSqlErrNoRows:             noSqlErrNoRowsSettings{Disabled: true},
 				NoTestingRawSql:            noTestingRawSqlSettings{Disabled: true},
 				NoClientErrorLogError:      noClientErrorLogErrorSettings{Disabled: true},
+				RpcEndpointFormat:          rpcEndpointFormatSettings{Disabled: true},
 			},
 		},
 	}
@@ -46,5 +47,5 @@ func TestBuildAnalyzersAllEnabled(t *testing.T) {
 	p := &plugin{}
 	analyzers, err := p.BuildAnalyzers()
 	require.NoError(t, err)
-	require.Len(t, analyzers, 14)
+	require.Len(t, analyzers, 15)
 }

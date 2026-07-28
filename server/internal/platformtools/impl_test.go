@@ -32,6 +32,10 @@ func (f *fakeTelemetryService) SearchUsers(_ context.Context, _ *telemetry.Searc
 	return &telemetry.SearchUsersResult{}, nil
 }
 
+func (f *fakeTelemetryService) GetToolUsageSummary(_ context.Context, _ *telemetry.GetToolUsageSummaryPayload) (*telemetry.GetToolUsageSummaryResult, error) {
+	return &telemetry.GetToolUsageSummaryResult{}, nil
+}
+
 func (f *fakeTelemetryService) GetProjectMetricsSummary(_ context.Context, _ *telemetry.GetProjectMetricsSummaryPayload) (*telemetry.GetMetricsSummaryResult, error) {
 	return &telemetry.GetMetricsSummaryResult{}, nil
 }
@@ -61,6 +65,7 @@ func TestExecuteSearchLogs_IgnoresInjectedAuthFields(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{
 		"apikeyToken":"api-key",
 		"sessionToken":"session",

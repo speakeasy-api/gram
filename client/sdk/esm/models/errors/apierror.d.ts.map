@@ -1,0 +1,1 @@
+{"version":3,"file":"apierror.d.ts","sourceRoot":"","sources":["../../../src/models/errors/apierror.ts"],"names":[],"mappings":"AAIA,OAAO,EAAE,SAAS,EAAE,MAAM,gBAAgB,CAAC;AAE3C,0EAA0E;AAC1E,qBAAa,QAAS,SAAQ,SAAS;gBAEnC,OAAO,EAAE,MAAM,EACf,QAAQ,EAAE;QACR,QAAQ,EAAE,QAAQ,CAAC;QACnB,OAAO,EAAE,OAAO,CAAC;QACjB,IAAI,EAAE,MAAM,CAAC;KACd;CAyBJ"}

@@ -3,11 +3,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
 import { useOrgRoutes } from "@/routes";
-import type { RemoteSessionIssuer } from "@gram/client/models/components";
-import {
-  invalidateAllOrganizationRemoteSessionIssuer,
-  useUpdateOrganizationRemoteSessionIssuerMutation,
-} from "@gram/client/react-query/index.js";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import { invalidateAllOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
+import { useUpdateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionIssuer.js";
 import { Alert, Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
@@ -70,6 +68,8 @@ export function SettingsTab({
   const queryClient = useQueryClient();
   const [name, setName] = useState(issuer.name ?? "");
   const [slug, setSlug] = useState(issuer.slug);
+  const [clientSetupDocumentationUrl, setClientSetupDocumentationUrl] =
+    useState(issuer.clientSetupDocumentationUrl ?? "");
   const [showDelete, setShowDelete] = useState(false);
 
   // Issuer URL + endpoints + RFC 8414 discovery live in the shared hook, seeded
@@ -108,6 +108,9 @@ export function SettingsTab({
         issuer.tokenEndpointAuthMethodsSupported ?? [],
       clientIdMetadataDocumentSupported:
         issuer.clientIdMetadataDocumentSupported,
+      serviceDocumentation: issuer.serviceDocumentation ?? "",
+      opPolicyUri: issuer.opPolicyUri ?? "",
+      opTosUri: issuer.opTosUri ?? "",
     },
     // Seed the saved values into the fields but not a discovery snapshot, so the
     // Discover control is available against the existing issuer URL.
@@ -144,6 +147,8 @@ export function SettingsTab({
           id: issuer.id,
           name: name.trim(),
           slug: slug.trim(),
+          // An empty string clears the stored URL to NULL.
+          clientSetupDocumentationUrl: clientSetupDocumentationUrl.trim(),
           issuer: issuerUrl.trim(),
           authorizationEndpoint: authorizationEndpoint.trim(),
           tokenEndpoint: tokenEndpoint.trim(),
@@ -163,6 +168,15 @@ export function SettingsTab({
             : undefined,
           clientIdMetadataDocumentSupported: arraysFromDiscovery
             ? discoveredSnapshot.clientIdMetadataDocumentSupported
+            : undefined,
+          serviceDocumentation: arraysFromDiscovery
+            ? discoveredSnapshot.serviceDocumentation
+            : undefined,
+          opPolicyUri: arraysFromDiscovery
+            ? discoveredSnapshot.opPolicyUri
+            : undefined,
+          opTosUri: arraysFromDiscovery
+            ? discoveredSnapshot.opTosUri
             : undefined,
         },
       },
@@ -209,6 +223,17 @@ export function SettingsTab({
             runDiscover(issuerUrl);
           }}
           onResetEndpoints={handleResetEndpoints}
+        />
+      </SettingsSection>
+
+      <SettingsSection
+        title="Client setup"
+        description="Documentation linked from the New Client sheet so operators can set up an OAuth client with this provider themselves."
+      >
+        <Field
+          label="Client setup documentation URL"
+          value={clientSetupDocumentationUrl}
+          onChange={setClientSetupDocumentationUrl}
         />
       </SettingsSection>
 

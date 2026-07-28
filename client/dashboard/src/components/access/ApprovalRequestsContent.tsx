@@ -1109,16 +1109,14 @@ export function ApprovalRequestsContent({
               }}
               disabled={revokeRequest.isPending}
             >
-              {revokeRequest.isPending ? (
-                <>
-                  <Button.LeftIcon>
-                    <Loader2 className="size-4 animate-spin" />
-                  </Button.LeftIcon>
-                  <Button.Text>Revoking</Button.Text>
-                </>
-              ) : (
-                <Button.Text>Revoke</Button.Text>
+              {revokeRequest.isPending && (
+                <Button.LeftIcon>
+                  <Loader2 className="size-4 animate-spin" />
+                </Button.LeftIcon>
               )}
+              <Button.Text>
+                {revokeRequest.isPending ? "Revoking" : "Revoke"}
+              </Button.Text>
             </Button>
           </Dialog.Footer>
         </Dialog.Content>

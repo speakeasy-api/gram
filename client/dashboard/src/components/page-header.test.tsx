@@ -7,6 +7,9 @@ vi.mock("@/components/ui/sidebar", () => ({
 vi.mock("@/components/ui/separator", () => ({
   Separator: () => <hr data-testid="separator" />,
 }));
+vi.mock("./onboarding-banner.tsx", () => ({
+  OnboardingBanner: () => null,
+}));
 // Stub context/hook modules imported at the top of page-header.tsx (used only
 // in PageHeaderBreadcrumbs, not PageHeaderComponent, but they execute on import)
 vi.mock("@/contexts/Sdk.tsx", () => ({ useSlugs: () => ({}) }));

@@ -11,7 +11,7 @@ import {
 } from "@gram/client/react-query/otelForwardingConfig";
 import { useUpsertOtelForwardingConfigMutation } from "@gram/client/react-query/upsertOtelForwardingConfig";
 import { useDeleteOtelForwardingConfigMutation } from "@gram/client/react-query/deleteOtelForwardingConfig";
-import type { OtelForwardingHeader } from "@gram/client/models/components";
+import type { OtelForwardingHeader } from "@gram/client/models/components/otelforwardingheader.js";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Send, Trash2 } from "lucide-react";
@@ -108,7 +108,7 @@ export function OtelForwardingSection(): JSX.Element {
   const handleSave = () => {
     upsert({
       request: {
-        upsertConfigRequestBody: {
+        upsertConfigRequestBody2: {
           endpointUrl: trimmedUrl,
           enabled,
           headers: headers

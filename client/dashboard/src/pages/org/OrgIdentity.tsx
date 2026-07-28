@@ -6,10 +6,8 @@ import { Type } from "@/components/ui/type";
 import { useOrganization, useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useOrgRoutes } from "@/routes";
-import {
-  useGenerateWorkOSAdminPortalLinkMutation,
-  useProductFeatures,
-} from "@gram/client/react-query";
+import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { Badge, Button } from "@speakeasy-api/moonshine";
 import { FolderSync, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";

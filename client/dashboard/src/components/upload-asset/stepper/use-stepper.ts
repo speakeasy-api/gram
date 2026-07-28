@@ -1,8 +1,6 @@
-import type {
-  Deployment,
-  Toolset,
-  UploadOpenAPIv3Result,
-} from "@gram/client/models/components";
+import type { Deployment } from "@gram/client/models/components/deployment.js";
+import type { Toolset } from "@gram/client/models/components/toolset.js";
+import type { UploadOpenAPIv3Result } from "@gram/client/models/components/uploadopenapiv3result.js";
 import React from "react";
 
 type StepperSubscriber = (cb: (step: number) => void) => () => void;

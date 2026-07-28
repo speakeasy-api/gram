@@ -26,6 +26,11 @@ type Server struct {
 	DiscoverProtectedResourceMetadata http.Handler
 	VerifyURL                         http.Handler
 	DeleteServer                      http.Handler
+	ListServerHeaders                 http.Handler
+	GetServerHeader                   http.Handler
+	CreateServerHeader                http.Handler
+	UpdateServerHeader                http.Handler
+	DeleteServerHeader                http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -62,6 +67,11 @@ func New(
 			{"DiscoverProtectedResourceMetadata", "POST", "/rpc/remoteMcp.discoverProtectedResourceMetadata"},
 			{"VerifyURL", "POST", "/rpc/remoteMcp.verifyURL"},
 			{"DeleteServer", "DELETE", "/rpc/remoteMcp.deleteServer"},
+			{"ListServerHeaders", "GET", "/rpc/remoteMcp.listServerHeaders"},
+			{"GetServerHeader", "GET", "/rpc/remoteMcp.getServerHeader"},
+			{"CreateServerHeader", "POST", "/rpc/remoteMcp.createServerHeader"},
+			{"UpdateServerHeader", "POST", "/rpc/remoteMcp.updateServerHeader"},
+			{"DeleteServerHeader", "DELETE", "/rpc/remoteMcp.deleteServerHeader"},
 		},
 		CreateServer:                      NewCreateServerHandler(e.CreateServer, mux, decoder, encoder, errhandler, formatter),
 		ListServers:                       NewListServersHandler(e.ListServers, mux, decoder, encoder, errhandler, formatter),
@@ -70,6 +80,11 @@ func New(
 		DiscoverProtectedResourceMetadata: NewDiscoverProtectedResourceMetadataHandler(e.DiscoverProtectedResourceMetadata, mux, decoder, encoder, errhandler, formatter),
 		VerifyURL:                         NewVerifyURLHandler(e.VerifyURL, mux, decoder, encoder, errhandler, formatter),
 		DeleteServer:                      NewDeleteServerHandler(e.DeleteServer, mux, decoder, encoder, errhandler, formatter),
+		ListServerHeaders:                 NewListServerHeadersHandler(e.ListServerHeaders, mux, decoder, encoder, errhandler, formatter),
+		GetServerHeader:                   NewGetServerHeaderHandler(e.GetServerHeader, mux, decoder, encoder, errhandler, formatter),
+		CreateServerHeader:                NewCreateServerHeaderHandler(e.CreateServerHeader, mux, decoder, encoder, errhandler, formatter),
+		UpdateServerHeader:                NewUpdateServerHeaderHandler(e.UpdateServerHeader, mux, decoder, encoder, errhandler, formatter),
+		DeleteServerHeader:                NewDeleteServerHeaderHandler(e.DeleteServerHeader, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -85,6 +100,11 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.DiscoverProtectedResourceMetadata = m(s.DiscoverProtectedResourceMetadata)
 	s.VerifyURL = m(s.VerifyURL)
 	s.DeleteServer = m(s.DeleteServer)
+	s.ListServerHeaders = m(s.ListServerHeaders)
+	s.GetServerHeader = m(s.GetServerHeader)
+	s.CreateServerHeader = m(s.CreateServerHeader)
+	s.UpdateServerHeader = m(s.UpdateServerHeader)
+	s.DeleteServerHeader = m(s.DeleteServerHeader)
 }
 
 // MethodNames returns the methods served.
@@ -99,6 +119,11 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountDiscoverProtectedResourceMetadataHandler(mux, h.DiscoverProtectedResourceMetadata)
 	MountVerifyURLHandler(mux, h.VerifyURL)
 	MountDeleteServerHandler(mux, h.DeleteServer)
+	MountListServerHeadersHandler(mux, h.ListServerHeaders)
+	MountGetServerHeaderHandler(mux, h.GetServerHeader)
+	MountCreateServerHeaderHandler(mux, h.CreateServerHeader)
+	MountUpdateServerHeaderHandler(mux, h.UpdateServerHeader)
+	MountDeleteServerHeaderHandler(mux, h.DeleteServerHeader)
 }
 
 // Mount configures the mux to serve the remoteMcp endpoints.
@@ -455,6 +480,271 @@ func NewDeleteServerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deleteServer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteMcp")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListServerHeadersHandler configures the mux to serve the "remoteMcp"
+// service "listServerHeaders" endpoint.
+func MountListServerHeadersHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/remoteMcp.listServerHeaders", f)
+}
+
+// NewListServerHeadersHandler creates a HTTP handler which loads the HTTP
+// request and calls the "remoteMcp" service "listServerHeaders" endpoint.
+func NewListServerHeadersHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListServerHeadersRequest(mux, decoder)
+		encodeResponse = EncodeListServerHeadersResponse(encoder)
+		encodeError    = EncodeListServerHeadersError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listServerHeaders")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteMcp")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetServerHeaderHandler configures the mux to serve the "remoteMcp"
+// service "getServerHeader" endpoint.
+func MountGetServerHeaderHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/remoteMcp.getServerHeader", f)
+}
+
+// NewGetServerHeaderHandler creates a HTTP handler which loads the HTTP
+// request and calls the "remoteMcp" service "getServerHeader" endpoint.
+func NewGetServerHeaderHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetServerHeaderRequest(mux, decoder)
+		encodeResponse = EncodeGetServerHeaderResponse(encoder)
+		encodeError    = EncodeGetServerHeaderError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getServerHeader")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteMcp")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateServerHeaderHandler configures the mux to serve the "remoteMcp"
+// service "createServerHeader" endpoint.
+func MountCreateServerHeaderHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/remoteMcp.createServerHeader", f)
+}
+
+// NewCreateServerHeaderHandler creates a HTTP handler which loads the HTTP
+// request and calls the "remoteMcp" service "createServerHeader" endpoint.
+func NewCreateServerHeaderHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateServerHeaderRequest(mux, decoder)
+		encodeResponse = EncodeCreateServerHeaderResponse(encoder)
+		encodeError    = EncodeCreateServerHeaderError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createServerHeader")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteMcp")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateServerHeaderHandler configures the mux to serve the "remoteMcp"
+// service "updateServerHeader" endpoint.
+func MountUpdateServerHeaderHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/remoteMcp.updateServerHeader", f)
+}
+
+// NewUpdateServerHeaderHandler creates a HTTP handler which loads the HTTP
+// request and calls the "remoteMcp" service "updateServerHeader" endpoint.
+func NewUpdateServerHeaderHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateServerHeaderRequest(mux, decoder)
+		encodeResponse = EncodeUpdateServerHeaderResponse(encoder)
+		encodeError    = EncodeUpdateServerHeaderError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateServerHeader")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteMcp")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteServerHeaderHandler configures the mux to serve the "remoteMcp"
+// service "deleteServerHeader" endpoint.
+func MountDeleteServerHeaderHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/remoteMcp.deleteServerHeader", f)
+}
+
+// NewDeleteServerHeaderHandler creates a HTTP handler which loads the HTTP
+// request and calls the "remoteMcp" service "deleteServerHeader" endpoint.
+func NewDeleteServerHeaderHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteServerHeaderRequest(mux, decoder)
+		encodeResponse = EncodeDeleteServerHeaderResponse(encoder)
+		encodeError    = EncodeDeleteServerHeaderError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteServerHeader")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteMcp")
 		payload, err := decodeRequest(r)
 		if err != nil {

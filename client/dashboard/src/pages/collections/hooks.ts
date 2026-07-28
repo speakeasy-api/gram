@@ -1,15 +1,17 @@
-import type { ExternalMCPServer } from "@gram/client/models/components";
+import type { ExternalMCPServer } from "@gram/client/models/components/externalmcpserver.js";
+import { useCollectionsAttachServerMutation } from "@gram/client/react-query/collectionsAttachServer.js";
+import { useCollectionsCreateMutation } from "@gram/client/react-query/collectionsCreate.js";
+import { useCollectionsDeleteMutation } from "@gram/client/react-query/collectionsDelete.js";
+import { useCollectionsDetachServerMutation } from "@gram/client/react-query/collectionsDetachServer.js";
 import {
   invalidateAllCollectionsListServers,
-  invalidateAllListCollections,
-  useCollectionsAttachServerMutation,
-  useCollectionsCreateMutation,
-  useCollectionsDeleteMutation,
-  useCollectionsDetachServerMutation,
   useCollectionsListServers,
-  useCollectionsUpdateMutation,
+} from "@gram/client/react-query/collectionsListServers.js";
+import { useCollectionsUpdateMutation } from "@gram/client/react-query/collectionsUpdate.js";
+import {
+  invalidateAllListCollections,
   useListCollections,
-} from "@gram/client/react-query";
+} from "@gram/client/react-query/listCollections.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Collection, CollectionServer } from "./types";

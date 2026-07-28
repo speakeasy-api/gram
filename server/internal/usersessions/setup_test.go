@@ -213,14 +213,23 @@ func seedUserSession(t *testing.T, ctx context.Context, conn *pgxpool.Pool, issu
 	t.Helper()
 
 	now := time.Now()
+	return seedUserSessionWithExpiry(t, ctx, conn, issuerID, principalURN, now.Add(24*time.Hour), now.Add(time.Hour))
+}
+
+// seedUserSessionWithExpiry inserts a user_sessions row with explicit access-
+// token (expires_at) and refresh-token (refresh_expires_at) expiry times so
+// tests can exercise the status filter's reliance on refresh_expires_at.
+func seedUserSessionWithExpiry(t *testing.T, ctx context.Context, conn *pgxpool.Pool, issuerID uuid.UUID, principalURN urn.SessionSubject, expiresAt, refreshExpiresAt time.Time) (repo.UserSession, error) {
+	t.Helper()
+
 	r := repo.New(conn)
 	row, err := r.CreateUserSession(ctx, repo.CreateUserSessionParams{
 		UserSessionIssuerID: issuerID,
 		SubjectUrn:          principalURN,
 		Jti:                 "jti-" + uuid.NewString(),
 		RefreshTokenHash:    "hash-" + uuid.NewString(),
-		RefreshExpiresAt:    pgtype.Timestamptz{Time: now.Add(time.Hour), InfinityModifier: 0, Valid: true},
-		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(24 * time.Hour), InfinityModifier: 0, Valid: true},
+		RefreshExpiresAt:    pgtype.Timestamptz{Time: refreshExpiresAt, InfinityModifier: 0, Valid: true},
+		ExpiresAt:           pgtype.Timestamptz{Time: expiresAt, InfinityModifier: 0, Valid: true},
 	})
 	if err != nil {
 		return repo.UserSession{}, fmt.Errorf("seed user session: %w", err)

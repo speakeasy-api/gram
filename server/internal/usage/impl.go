@@ -173,8 +173,18 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 	}
 
 	if previousAccountType != updatedAccountType {
-		if _, err := s.openRouter.RefreshAPIKeyLimit(ctx, refreshedOrg.ID, nil); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to refresh openrouter key limit").LogError(ctx, logger)
+		for _, keyType := range openrouter.AllKeyTypes {
+			if _, err := s.openRouter.RefreshAPIKeyLimit(ctx, refreshedOrg.ID, keyType, nil); err != nil {
+				// Keys are provisioned lazily on first use (chat on the first
+				// completion, internal on the first judge call), so an org
+				// that changes account type before ever running a completion
+				// has no row yet — skip, don't fail, or Polar retries the
+				// webhook forever.
+				if errors.Is(err, pgx.ErrNoRows) {
+					continue
+				}
+				return oops.E(oops.CodeUnexpected, err, "failed to refresh openrouter key limit").LogError(ctx, logger)
+			}
 		}
 	}
 

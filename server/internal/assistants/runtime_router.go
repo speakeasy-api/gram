@@ -107,6 +107,22 @@ func (r *runtimeRouter) Status(ctx context.Context, runtime assistantRuntimeReco
 	return status, nil
 }
 
+func (r *runtimeRouter) RuntimeExists(ctx context.Context, runtime assistantRuntimeRecord) (bool, error) {
+	b, err := r.route(runtime.Backend)
+	if err != nil {
+		return false, err
+	}
+	checker, ok := b.(runtimeLivenessChecker)
+	if !ok {
+		return true, nil
+	}
+	exists, err := checker.RuntimeExists(ctx, runtime)
+	if err != nil {
+		return false, fmt.Errorf("check %s runtime existence: %w", runtime.Backend, err)
+	}
+	return exists, nil
+}
+
 func (r *runtimeRouter) Stop(ctx context.Context, runtime assistantRuntimeRecord) error {
 	b, err := r.route(runtime.Backend)
 	if err != nil {
@@ -141,3 +157,4 @@ func (r *runtimeRouter) ReapStoppedMachine(ctx context.Context, runtime assistan
 }
 
 var _ RuntimeBackend = (*runtimeRouter)(nil)
+var _ runtimeLivenessChecker = (*runtimeRouter)(nil)

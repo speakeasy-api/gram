@@ -34,8 +34,19 @@ var attributeMeasureSelects = []string{
 	"sumIfMerge(total_tokens) AS m_total_tokens",
 	"sumIfMerge(cache_read_input_tokens) AS m_cache_read_input_tokens",
 	"sumIfMerge(cache_creation_input_tokens) AS m_cache_creation_input_tokens",
-	"countIfMerge(total_tool_calls) AS m_total_tool_calls",
+	// Transitional fallback (expand-contract): rows written before the
+	// unique_tool_calls column existed carry only the default empty state, so
+	// uniqExactIfMerge resolves to 0 on them even when total_tool_calls has
+	// counted calls. Fall back to the legacy row count for such groups until
+	// the backfiller has rebuilt history; then this collapses to a plain
+	// uniqExactIfMerge and total_tool_calls can be contracted. Groups mixing
+	// pre- and post-migration buckets undercount (only new rows contribute
+	// unique states) — accepted as transitional, resolved by the backfill.
+	"if(uniqExactIfMerge(unique_tool_calls) = 0, countIfMerge(total_tool_calls), uniqExactIfMerge(unique_tool_calls)) AS m_total_tool_calls",
 	"uniqExactIfMerge(total_chats) AS m_total_chats",
+	"sumIfMerge(total_work_units) AS m_total_work_units",
+	"sumIfMerge(scored_cost) AS m_scored_cost",
+	"sumIfMerge(scored_tokens) AS m_scored_tokens",
 }
 
 // attributeMeasureSet is the allowlist of measures available for ranking
@@ -49,6 +60,9 @@ var attributeMeasureSet = map[string]bool{
 	"cache_creation_input_tokens": true,
 	"total_tool_calls":            true,
 	"total_chats":                 true,
+	"total_work_units":            true,
+	"scored_cost":                 true,
+	"scored_tokens":               true,
 }
 
 // AttributeMetricsMeasures holds the aggregated measure values for a group or a
@@ -64,6 +78,9 @@ type AttributeMetricsMeasures struct {
 	CacheCreationInputTokens int64
 	TotalToolCalls           uint64
 	TotalChats               uint64
+	TotalWorkUnits           float64
+	ScoredCost               float64
+	ScoredTokens             int64
 }
 
 // Add accumulates another set of measures into the receiver (for "Other"
@@ -77,6 +94,9 @@ func (m *AttributeMetricsMeasures) Add(o AttributeMetricsMeasures) {
 	m.CacheCreationInputTokens += o.CacheCreationInputTokens
 	m.TotalToolCalls += o.TotalToolCalls
 	m.TotalChats += o.TotalChats
+	m.TotalWorkUnits += o.TotalWorkUnits
+	m.ScoredCost += o.ScoredCost
+	m.ScoredTokens += o.ScoredTokens
 }
 
 // AttributeMetricsRow is one grouped table row: measures aggregated over the
@@ -91,6 +111,9 @@ type AttributeMetricsRow struct {
 	CacheCreationInputTokens int64   `ch:"m_cache_creation_input_tokens"`
 	TotalToolCalls           uint64  `ch:"m_total_tool_calls"`
 	TotalChats               uint64  `ch:"m_total_chats"`
+	TotalWorkUnits           float64 `ch:"m_total_work_units"`
+	ScoredCost               float64 `ch:"m_scored_cost"`
+	ScoredTokens             int64   `ch:"m_scored_tokens"`
 
 	// DimensionValues holds, for every allowlisted dimension other than the
 	// grouped one, the distinct values observed within this group, keyed by the
@@ -109,6 +132,9 @@ func (r AttributeMetricsRow) Measures() AttributeMetricsMeasures {
 		CacheCreationInputTokens: r.CacheCreationInputTokens,
 		TotalToolCalls:           r.TotalToolCalls,
 		TotalChats:               r.TotalChats,
+		TotalWorkUnits:           r.TotalWorkUnits,
+		ScoredCost:               r.ScoredCost,
+		ScoredTokens:             r.ScoredTokens,
 	}
 }
 
@@ -127,6 +153,9 @@ type AttributeMetricsTimePoint struct {
 	CacheCreationInputTokens int64   `ch:"m_cache_creation_input_tokens"`
 	TotalToolCalls           uint64  `ch:"m_total_tool_calls"`
 	TotalChats               uint64  `ch:"m_total_chats"`
+	TotalWorkUnits           float64 `ch:"m_total_work_units"`
+	ScoredCost               float64 `ch:"m_scored_cost"`
+	ScoredTokens             int64   `ch:"m_scored_tokens"`
 }
 
 // Measures returns the point's measure values as an accumulation struct.
@@ -140,6 +169,9 @@ func (p AttributeMetricsTimePoint) Measures() AttributeMetricsMeasures {
 		CacheCreationInputTokens: p.CacheCreationInputTokens,
 		TotalToolCalls:           p.TotalToolCalls,
 		TotalChats:               p.TotalChats,
+		TotalWorkUnits:           p.TotalWorkUnits,
+		ScoredCost:               p.ScoredCost,
+		ScoredTokens:             p.ScoredTokens,
 	}
 }
 
@@ -215,15 +247,32 @@ func attributeDimensionValuesExpr(groupBy string) string {
 		var collected string
 		switch dim.kind {
 		case attributeDimArray:
-			// Flatten the per-row arrays and dedup across the group.
-			collected = "groupUniqArrayArray(" + capStr + ")(" + dim.column + ")"
+			// Flatten the per-row arrays and dedup across the group. An empty
+			// array contributes no elements, so the "(unset)" bucket the group-by
+			// path renders for it (empty → [''], see attributeGroupValueExpr) is
+			// re-added explicitly when any row in the group carries one —
+			// otherwise the collected list under-reports the groups a breakdown
+			// by this dimension would produce.
+			collected = "arrayDistinct(arrayConcat(groupUniqArrayArray(" + capStr + ")(" + dim.column + "), if(countIf(empty(" + dim.column + ")) > 0, [''], [])))"
 		case attributeDimProject:
 			collected = "groupUniqArray(" + capStr + ")(toString(" + dim.column + "))"
 		case attributeDimScalar:
 			collected = "groupUniqArray(" + capStr + ")(" + dim.column + ")"
 		}
-		// Drop empty strings so absent attributes don't surface as a blank value.
-		valExpr := "arrayFilter(x -> x != '', " + collected + ")"
+		// '' is kept by default: for org/account dimensions an empty value is
+		// the real, drillable "(unset)" bucket the breakdown table renders, and
+		// consumers must be able to count it — billing_mode so a scope mixing
+		// metered and unclassified spend is never presented as confidently
+		// metered (DNO-384), and every groupable dimension so the cost
+		// explorer's axis pruning sees the same group count the table would
+		// show (DNO-425). Dimensions flagged emptyIsNotApplicable (the Claude
+		// attribution cuts and query_source) are the exception: there '' just
+		// marks rows the attribute doesn't apply to (a turn with no skill/MCP
+		// call), so it is dropped rather than surfacing as a blank value.
+		valExpr := collected
+		if dim.emptyIsNotApplicable {
+			valExpr = "arrayFilter(x -> x != '', " + collected + ")"
+		}
 		parts = append(parts, "'"+k+"', "+valExpr)
 	}
 	return "map(" + strings.Join(parts, ", ") + ") AS dimension_values"
@@ -304,6 +353,9 @@ func (q *Queries) QueryAttributeMetricsTable(ctx context.Context, arg AttributeM
 		Columns(attributeMeasureSelects...).
 		Column(squirrel.Expr(attributeDimensionValuesExpr(arg.GroupBy))).
 		From("attribute_metrics_summaries").
+		// Exclude tombstoned rows (soft-deleted backfill data; see the
+		// is_active column comment in server/clickhouse/schema.sql).
+		Where("is_active = 1").
 		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
 		Where("time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeStart).
 		Where("time_bucket <= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd)
@@ -368,6 +420,9 @@ func (q *Queries) QueryAttributeMetricsTimeseries(ctx context.Context, arg Attri
 		Column(groupExpr+" AS group_value").
 		Columns(attributeMeasureSelects...).
 		From("attribute_metrics_summaries").
+		// Exclude tombstoned rows (soft-deleted backfill data; see the
+		// is_active column comment in server/clickhouse/schema.sql).
+		Where("is_active = 1").
 		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
 		Where("time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeStart).
 		Where("time_bucket <= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd)

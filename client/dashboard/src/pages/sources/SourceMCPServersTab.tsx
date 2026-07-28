@@ -1,7 +1,7 @@
 import { DotCard } from "@/components/ui/dot-card";
 import { Type } from "@/components/ui/type";
 import { useRoutes } from "@/routes";
-import { ToolsetEntry } from "@gram/client/models/components";
+import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { Badge, Button } from "@speakeasy-api/moonshine";
 import { ArrowRight, Network, Server } from "lucide-react";
 

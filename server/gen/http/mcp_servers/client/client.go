@@ -29,6 +29,10 @@ type Client struct {
 	// listMcpServers endpoint.
 	ListMcpServersDoer goahttp.Doer
 
+	// ListMcpServersForOrg Doer is the HTTP client used to make requests to the
+	// listMcpServersForOrg endpoint.
+	ListMcpServersForOrgDoer goahttp.Doer
+
 	// UpdateMcpServer Doer is the HTTP client used to make requests to the
 	// updateMcpServer endpoint.
 	UpdateMcpServerDoer goahttp.Doer
@@ -36,6 +40,26 @@ type Client struct {
 	// ListToolFilters Doer is the HTTP client used to make requests to the
 	// listToolFilters endpoint.
 	ListToolFiltersDoer goahttp.Doer
+
+	// SetToolMetadataBatch Doer is the HTTP client used to make requests to the
+	// setToolMetadataBatch endpoint.
+	SetToolMetadataBatchDoer goahttp.Doer
+
+	// AddToolMetadataBatch Doer is the HTTP client used to make requests to the
+	// addToolMetadataBatch endpoint.
+	AddToolMetadataBatchDoer goahttp.Doer
+
+	// ListToolMetadata Doer is the HTTP client used to make requests to the
+	// listToolMetadata endpoint.
+	ListToolMetadataDoer goahttp.Doer
+
+	// SetToolMetadata Doer is the HTTP client used to make requests to the
+	// setToolMetadata endpoint.
+	SetToolMetadataDoer goahttp.Doer
+
+	// DeleteToolMetadata Doer is the HTTP client used to make requests to the
+	// deleteToolMetadata endpoint.
+	DeleteToolMetadataDoer goahttp.Doer
 
 	// DeleteMcpServer Doer is the HTTP client used to make requests to the
 	// deleteMcpServer endpoint.
@@ -61,17 +85,23 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateMcpServerDoer: doer,
-		GetMcpServerDoer:    doer,
-		ListMcpServersDoer:  doer,
-		UpdateMcpServerDoer: doer,
-		ListToolFiltersDoer: doer,
-		DeleteMcpServerDoer: doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		CreateMcpServerDoer:      doer,
+		GetMcpServerDoer:         doer,
+		ListMcpServersDoer:       doer,
+		ListMcpServersForOrgDoer: doer,
+		UpdateMcpServerDoer:      doer,
+		ListToolFiltersDoer:      doer,
+		SetToolMetadataBatchDoer: doer,
+		AddToolMetadataBatchDoer: doer,
+		ListToolMetadataDoer:     doer,
+		SetToolMetadataDoer:      doer,
+		DeleteToolMetadataDoer:   doer,
+		DeleteMcpServerDoer:      doer,
+		RestoreResponseBody:      restoreBody,
+		scheme:                   scheme,
+		host:                     host,
+		decoder:                  dec,
+		encoder:                  enc,
 	}
 }
 
@@ -147,6 +177,30 @@ func (c *Client) ListMcpServers() goa.Endpoint {
 	}
 }
 
+// ListMcpServersForOrg returns an endpoint that makes HTTP requests to the
+// mcpServers service listMcpServersForOrg server.
+func (c *Client) ListMcpServersForOrg() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListMcpServersForOrgRequest(c.encoder)
+		decodeResponse = DecodeListMcpServersForOrgResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListMcpServersForOrgRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListMcpServersForOrgDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpServers", "listMcpServersForOrg", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // UpdateMcpServer returns an endpoint that makes HTTP requests to the
 // mcpServers service updateMcpServer server.
 func (c *Client) UpdateMcpServer() goa.Endpoint {
@@ -190,6 +244,126 @@ func (c *Client) ListToolFilters() goa.Endpoint {
 		resp, err := c.ListToolFiltersDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("mcpServers", "listToolFilters", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetToolMetadataBatch returns an endpoint that makes HTTP requests to the
+// mcpServers service setToolMetadataBatch server.
+func (c *Client) SetToolMetadataBatch() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetToolMetadataBatchRequest(c.encoder)
+		decodeResponse = DecodeSetToolMetadataBatchResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetToolMetadataBatchRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetToolMetadataBatchDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpServers", "setToolMetadataBatch", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// AddToolMetadataBatch returns an endpoint that makes HTTP requests to the
+// mcpServers service addToolMetadataBatch server.
+func (c *Client) AddToolMetadataBatch() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeAddToolMetadataBatchRequest(c.encoder)
+		decodeResponse = DecodeAddToolMetadataBatchResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildAddToolMetadataBatchRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.AddToolMetadataBatchDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpServers", "addToolMetadataBatch", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListToolMetadata returns an endpoint that makes HTTP requests to the
+// mcpServers service listToolMetadata server.
+func (c *Client) ListToolMetadata() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListToolMetadataRequest(c.encoder)
+		decodeResponse = DecodeListToolMetadataResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListToolMetadataRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListToolMetadataDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpServers", "listToolMetadata", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetToolMetadata returns an endpoint that makes HTTP requests to the
+// mcpServers service setToolMetadata server.
+func (c *Client) SetToolMetadata() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetToolMetadataRequest(c.encoder)
+		decodeResponse = DecodeSetToolMetadataResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetToolMetadataRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetToolMetadataDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpServers", "setToolMetadata", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteToolMetadata returns an endpoint that makes HTTP requests to the
+// mcpServers service deleteToolMetadata server.
+func (c *Client) DeleteToolMetadata() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteToolMetadataRequest(c.encoder)
+		decodeResponse = DecodeDeleteToolMetadataResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteToolMetadataRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteToolMetadataDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpServers", "deleteToolMetadata", err)
 		}
 		return decodeResponse(resp)
 	}

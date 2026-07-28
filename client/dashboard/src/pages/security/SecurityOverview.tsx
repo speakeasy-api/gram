@@ -12,9 +12,9 @@ import { RequireScope } from "@/components/require-scope";
 import { DashboardCard } from "@/components/ui/dashboard-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button, Icon } from "@speakeasy-api/moonshine";
-import { type DateRangePreset } from "@gram-ai/elements";
+import { type DateRangePreset } from "@/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
-import { useRiskOverview } from "@gram/client/react-query/index.js";
+import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { keepPreviousData } from "@tanstack/react-query";
 import { Shield } from "lucide-react";
 import { useCallback, useEffect, useMemo, type ReactNode } from "react";
@@ -25,6 +25,7 @@ import {
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
+import { riskRuleKey } from "./riskRuleKey";
 import { getRuleTitleFallback } from "./risk-utils";
 import {
   CategoryScale,
@@ -254,7 +255,7 @@ function SecurityOverviewContent() {
           : "";
       const href = r.ruleId ? `${riskEventsHref}${search}` : undefined;
       return {
-        key: r.ruleId || "__none",
+        key: riskRuleKey(r.source, r.ruleId),
         label,
         value: Number(r.findings),
         href,

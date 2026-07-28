@@ -6,11 +6,9 @@ import { Card, Cards } from "@/components/ui/card";
 import { Action, MoreActions } from "@/components/ui/more-actions";
 import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
-import { PromptTemplate } from "@gram/client/models/components";
-import {
-  invalidateAllTemplates,
-  useDeleteTemplateMutation,
-} from "@gram/client/react-query";
+import { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";
+import { useDeleteTemplateMutation } from "@gram/client/react-query/deleteTemplate.js";
+import { invalidateAllTemplates } from "@gram/client/react-query/templates.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";

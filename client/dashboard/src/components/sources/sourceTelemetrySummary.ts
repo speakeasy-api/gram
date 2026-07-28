@@ -1,4 +1,4 @@
-import type { ToolMetric } from "@gram/client/models/components";
+import type { ToolMetric } from "@gram/client/models/components/toolmetric.js";
 
 export interface SourceTelemetrySummary {
   totalCalls: number;

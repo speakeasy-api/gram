@@ -30,11 +30,12 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 	}
 	orgSlug := ""
 	outcome := hookMetricOutcomeAccepted
+	ctx, riskScanned := withRiskScanTracker(ctx)
 	defer func() {
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
-		s.metrics.RecordHookEventDuration(ctx, "codex", hookEventName, outcome, orgSlug, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, "codex", hookEventName, outcome, codexHookDecision(res), orgSlug, *riskScanned, time.Since(start))
 	}()
 
 	logger := s.logger.With(
@@ -76,7 +77,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 	// re-sends the same token: the decision still re-runs so the user stays
 	// blocked, but tagging the context as a duplicate suppresses the duplicate
 	// writes in recordCodexHook.
-	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, "")) {
+	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, ""), false) {
 		ctx = withHookDuplicate(ctx)
 	}
 
@@ -101,7 +102,22 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 	if hookEvent != nil {
 		switch ev := hookEvent.(type) {
 		case *hookevents.BeforeToolUse:
-			if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
+			// Acknowledged warn is excluded from the enforcement block so it
+			// falls through to the shadow-MCP guard below: an ack clears the
+			// risk challenge but must never bypass unapproved-toolset validation.
+			if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil && (scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
+				// Unacknowledged warn → warning + ack link (challenge, not a
+				// durable block page). No ack link buildable → fall through to block.
+				if scanResult.Action == "warn" {
+					// Codex surfaces a single reason (the CLI user reads it), so use
+					// the human-facing framing that carries the ack link.
+					if _, warnUserReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
+						blockReason = fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+						userReason = warnUserReason
+						blockPolicyID = scanResult.PolicyID
+						break
+					}
+				}
 				blockReason = fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 				userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
 				isToolCallBlock = true
@@ -180,12 +196,26 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 				}
 			}
 		case *hookevents.PermissionRequest:
-			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil {
+			// Acknowledged warn is excluded so it clears without a block; an
+			// unacknowledged warn is challenged (deny + ack link), not
+			// hard-blocked with the raw user_message — consistent with tool calls.
+			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil &&
+				(scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
+				if scanResult.Action == "warn" {
+					if _, warnUserReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
+						blockReason = fmt.Sprintf("Speakeasy challenged this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+						userReason = warnUserReason
+						blockPolicyID = scanResult.PolicyID
+						break
+					}
+				}
 				blockReason = fmt.Sprintf("Speakeasy blocked this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 				userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
 			}
 		case *hookevents.UserPromptSubmit:
-			if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
+			// warn never hard-blocks at prompt submit (no confirmation primitive
+			// here); it defers to the follow-on tool call. Matches Claude/Cursor.
+			if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
 				blockReason = fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 				userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
 			}
@@ -239,8 +269,11 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 	}
 
 	if payload.HookEventName == "SessionStart" {
-		s.captureCodexMCPListSnapshot(ctx, payload)
-		if metadata.SessionID != "" && metadata.UserEmail != "" {
+		s.captureCodexMCPListSnapshot(ctx, payload, metadata.GramOrgID, metadata.ProjectID)
+		// Hostname counts as cacheable identity alongside the email: an
+		// identity-less session carries nothing else, and later events may
+		// omit the hostname the fallback attribution needs.
+		if metadata.SessionID != "" && (metadata.UserEmail != "" || metadata.Hostname != "") {
 			if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), *metadata, 24*time.Hour); err != nil {
 				s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
 					attr.SlogError(err),
@@ -280,7 +313,7 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 // sessionMCPListCacheKey, sharing the snapshot shape and cache key with the
 // Claude flows so downstream matching and telemetry enrichment work
 // unchanged.
-func (s *Service) captureCodexMCPListSnapshot(ctx context.Context, payload *gen.CodexPayload) {
+func (s *Service) captureCodexMCPListSnapshot(ctx context.Context, payload *gen.CodexPayload, orgID string, projectID string) {
 	if payload.SessionID == nil || *payload.SessionID == "" || payload.AdditionalData == nil {
 		return
 	}
@@ -296,7 +329,9 @@ func (s *Service) captureCodexMCPListSnapshot(ctx context.Context, payload *gen.
 			attr.SlogError(err),
 			attr.SlogGenAIConversationID(*payload.SessionID),
 		)
+		return
 	}
+	s.upsertShadowMCPInventoryURLs(ctx, orgID, projectID, *payload.SessionID, entries)
 }
 
 func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPayload, orgID, projectID string) *SessionMetadata {
@@ -305,9 +340,24 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 		ServiceName: "Codex",
 		UserEmail:   strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")),
 		UserID:      "",
-		ClaudeOrgID: "",
-		GramOrgID:   orgID,
-		ProjectID:   projectID,
+		Provider:    providerOpenAI,
+		// Account-scope attribution (external org/account identity, account
+		// type, billing mode) is wired only for Anthropic sessions today. The
+		// Codex payload carries no account identity for attributeSession to
+		// key on, and ai_integration_configs has no "openai" provider to
+		// declare an org-level billing mode, so these fields stay empty and
+		// cost surfaces treat Codex spend as unclassified (an estimate).
+		ExternalOrgID:       "",
+		ExternalAccountUUID: "",
+		ExternalAccountID:   "",
+		DeviceID:            "",
+		Hostname:            strings.TrimSpace(conv.PtrValOr(payload.HookHostname, "")),
+		AccountType:         "",
+		BillingMode:         "",
+		UserAccountID:       "",
+		ObservedUserEmail:   "",
+		GramOrgID:           orgID,
+		ProjectID:           projectID,
 	}
 
 	if metadata.SessionID != "" {
@@ -315,6 +365,9 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 		if err == nil && cached.ServiceName == "Codex" && cached.GramOrgID == orgID && cached.ProjectID == projectID {
 			if metadata.UserEmail == "" {
 				metadata.UserEmail = cached.UserEmail
+			}
+			if metadata.Hostname == "" {
+				metadata.Hostname = cached.Hostname
 			}
 		}
 	}
@@ -378,6 +431,7 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 		attr.ProjectIDKey:      metadata.ProjectID,
 		attr.OrganizationIDKey: metadata.GramOrgID,
 		attr.HookSourceKey:     "codex",
+		attr.ProviderKey:       providerOpenAI,
 	}
 
 	if payload.Model != nil && *payload.Model != "" {
@@ -387,6 +441,14 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 	if payload.SessionID != nil && *payload.SessionID != "" {
 		attrs[attr.GenAIConversationIDKey] = *payload.SessionID
 		attrs[attr.TraceIDKey] = hashToolCallIDToTraceID(*payload.SessionID)
+		// Tool events trace per (session, tool) rather than per session so the
+		// trace id stays derivable from the recorded chat tool-call id — the
+		// provenance join requires trace_id = hash(recorded id), and
+		// writeCodexToolCallRequestToPG records this same key (DNO-604). The
+		// full tool name is used, not the server/function split applied below.
+		if key := syntheticToolCallID(*payload.SessionID, toolName); key != "" {
+			attrs[attr.TraceIDKey] = hashToolCallIDToTraceID(key)
+		}
 	}
 
 	if payload.HookEventName == "UserPromptSubmit" && payload.Prompt != nil && *payload.Prompt != "" {
@@ -464,11 +526,15 @@ func (s *Service) writeCodexToolCallRequestToPG(ctx context.Context, payload *ge
 
 	chatID := sessionIDToUUID(metadata.SessionID)
 
+	// The recorded id must hash to the telemetry trace id written by
+	// buildCodexTelemetryAttributes or the shadow-MCP provenance lookup can
+	// never join this call back to its hook log (DNO-604).
+	toolName := conv.PtrValOr(payload.ToolName, "")
 	toolCalls := []map[string]any{{
-		"id":   conv.PtrValOr(payload.ToolName, ""),
+		"id":   syntheticToolCallID(metadata.SessionID, toolName),
 		"type": "function",
 		"function": map[string]any{
-			"name":      conv.PtrValOr(payload.ToolName, ""),
+			"name":      toolName,
 			"arguments": marshalToJSON(payload.ToolInput),
 		},
 	}}
@@ -479,6 +545,8 @@ func (s *Service) writeCodexToolCallRequestToPG(ctx context.Context, payload *ge
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "assistant",
@@ -524,13 +592,15 @@ func (s *Service) writeCodexToolCallResultToPG(ctx context.Context, payload *gen
 	chatID := sessionIDToUUID(metadata.SessionID)
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "tool",
 		Content:          marshalToJSON(payload.ToolOutput),
 		UserID:           conv.ToPGTextEmpty(metadata.UserID),
 		Source:           conv.ToPGText("Codex"),
-		ToolCallID:       conv.ToPGTextEmpty(conv.PtrValOr(payload.ToolName, "")),
+		ToolCallID:       conv.ToPGTextEmpty(syntheticToolCallID(metadata.SessionID, conv.PtrValOr(payload.ToolName, ""))),
 		PromptTokens:     0,
 		CompletionTokens: 0,
 		TotalTokens:      0,
@@ -570,6 +640,8 @@ func (s *Service) writeCodexUserPromptToPG(ctx context.Context, payload *gen.Cod
 	chatID := sessionIDToUUID(metadata.SessionID)
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "user",
@@ -616,6 +688,8 @@ func (s *Service) writeCodexAssistantResponseToPG(ctx context.Context, payload *
 	chatID := sessionIDToUUID(metadata.SessionID)
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "assistant",

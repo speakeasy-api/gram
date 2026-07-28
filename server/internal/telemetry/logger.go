@@ -12,9 +12,12 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -50,6 +53,16 @@ func WithOTELMetadata(params LogParams, observedTimestamp time.Time, resourceAtt
 	return params
 }
 
+// LogObserver is notified after a batch of telemetry log rows is written to
+// telemetry_logs. Observers receive the caller's batch before per-org
+// feature-flag filtering, so a row is not a guarantee that it was persisted.
+// Implementations must be cheap; heavy work should be throttled or dispatched
+// asynchronously. Staged rows (LogBulkStaging) are not observed — they only
+// reach telemetry_logs later, via promotion.
+type LogObserver interface {
+	OnTelemetryLogsWritten(ctx context.Context, params []LogParams)
+}
+
 type Logger struct {
 	shutdownCtx       func() context.Context
 	logger            *slog.Logger
@@ -57,28 +70,51 @@ type Logger struct {
 	logsEnabled       FeatureChecker
 	toolIOLogsEnabled FeatureChecker
 	users             *UserInfoResolver
+	logPublisher      *LogPublisher
+	observers         []LogObserver
 }
 
 func NewLogger(
 	shutdownCtx context.Context,
 	logger *slog.Logger,
+	// Both providers are unused and kept only for signature stability:
+	// ClickHouse client calls are not individually instrumented (DNO-602
+	// simplified o11y.TraceClickhouseConn to span-context forwarding only).
+	_ trace.TracerProvider,
+	_ metric.MeterProvider,
 	chConn clickhouse.Conn,
 	logsEnabled FeatureChecker,
 	toolIOLogsEnabled FeatureChecker,
 	users *UserInfoResolver,
+	logPublisher *LogPublisher,
 ) *Logger {
+	inv.Require(
+		"telemetry logger",
+		"log publisher set", logPublisher != nil,
+	)
+
+	logger = logger.With(attr.SlogComponent("telemetry_logger"))
 	return &Logger{
 		shutdownCtx:       func() context.Context { return shutdownCtx },
-		logger:            logger.With(attr.SlogComponent("telemetry_logger")),
+		logger:            logger,
 		chConn:            chConn,
 		logsEnabled:       logsEnabled,
 		toolIOLogsEnabled: toolIOLogsEnabled,
 		users:             users,
+		logPublisher:      logPublisher,
+		observers:         nil,
 	}
 }
 
+// AddObserver registers a LogObserver. Not safe to call concurrently with
+// logging — register observers during wiring, before traffic flows.
+func (l *Logger) AddObserver(obs LogObserver) {
+	l.observers = append(l.observers, obs)
+}
+
 // NewStub returns a Logger with feature checks hard-wired to disabled. Log
-// is a no-op and the ClickHouse connection is never dialed.
+// is a no-op and the ClickHouse connection is never dialed; the shadow log
+// publisher is an inert noop with all flags off.
 func NewStub(logger *slog.Logger) *Logger {
 	disabled := func(context.Context, string) (bool, error) { return false, nil }
 	return &Logger{
@@ -88,6 +124,8 @@ func NewStub(logger *slog.Logger) *Logger {
 		logsEnabled:       disabled,
 		toolIOLogsEnabled: disabled,
 		users:             nil,
+		logPublisher:      NewNoopLogPublisher(logger),
+		observers:         nil,
 	}
 }
 
@@ -102,6 +140,39 @@ func (l *Logger) checkToolIOLogsEnabled(ctx context.Context, organizationID stri
 	return enabled
 }
 
+// maxScrubbedSkillNameLen bounds the skill name a scrubbed row may retain:
+// real skill names are short identifiers, and the carve-out must not become a
+// channel for bulky payloads past the tool IO scrub.
+const maxScrubbedSkillNameLen = 128
+
+// scrubbedSkillArguments returns the minimal arguments JSON a scrubbed Skill
+// row may keep ({"skill": <name>}), or "" for non-skill rows, unparsable
+// arguments, and implausibly long names.
+func scrubbedSkillArguments(attrs map[attr.Key]any) string {
+	if name, _ := attrs[attr.ToolNameKey].(string); name != "Skill" {
+		return ""
+	}
+	raw, _ := attrs[attr.GenAIToolCallArgumentsKey].(string)
+	if raw == "" {
+		return ""
+	}
+	var parsed struct {
+		Skill string `json:"skill"`
+	}
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return ""
+	}
+	skill := strings.TrimSpace(parsed.Skill)
+	if skill == "" || len(skill) > maxScrubbedSkillNameLen {
+		return ""
+	}
+	minimal, err := json.Marshal(map[string]string{"skill": skill})
+	if err != nil {
+		return ""
+	}
+	return string(minimal)
+}
+
 func (l *Logger) Log(ctx context.Context, params LogParams) {
 	if err := l.LogBulk(ctx, []LogParams{params}); err != nil {
 		l.logger.ErrorContext(ctx, "failed to insert telemetry log", attr.SlogError(err))
@@ -109,13 +180,57 @@ func (l *Logger) Log(ctx context.Context, params LogParams) {
 }
 
 func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
+	logParams := l.buildBulkParams(ctx, params)
+	if len(logParams) == 0 {
+		return nil
+	}
+	err := repo.New(l.chConn).InsertTelemetryLogs(l.detachedWriteContext(ctx), logParams)
+	if err != nil {
+		return fmt.Errorf("insert telemetry logs: %w", err)
+	}
+
+	// Shadow dual-write: mirror the rows onto Pub/Sub only after ClickHouse
+	// accepted them, so the shadow stream never contains rows the ledger
+	// rejected. Best-effort and non-blocking.
+	l.logPublisher.PublishLogs(ctx, logParams)
+
+	for _, obs := range l.observers {
+		obs.OnTelemetryLogsWritten(ctx, params)
+	}
+	return nil
+}
+
+// LogBulkStaging writes rows to telemetry_logs_staging instead of
+// telemetry_logs — the holding pen for Claude api_request rows with redacted
+// (custom) MCP attribution. Rows go through the exact same feature checks,
+// scrubbing, and hydration as LogBulk, so a promoted row is byte-identical to
+// what a direct insert would have produced apart from the patched attribution.
+func (l *Logger) LogBulkStaging(ctx context.Context, params []LogParams) error {
+	logParams := l.buildBulkParams(ctx, params)
+	if len(logParams) == 0 {
+		return nil
+	}
+	err := repo.New(l.chConn).InsertTelemetryLogsStaging(l.detachedWriteContext(ctx), logParams)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "insert staged telemetry logs")
+	}
+	return nil
+}
+
+// detachedWriteContext returns the shutdown-scoped context synchronous
+// ClickHouse writes run on (they must survive request cancellation), carrying
+// the caller's span so the connection layer (o11y.TraceClickhouseConn) can
+// forward the request's trace context to ClickHouse's server-side span log.
+func (l *Logger) detachedWriteContext(ctx context.Context) context.Context {
+	return trace.ContextWithSpan(l.shutdownCtx(), trace.SpanFromContext(ctx))
+}
+
+func (l *Logger) buildBulkParams(ctx context.Context, params []LogParams) []repo.InsertTelemetryLogParams {
 	if len(params) == 0 {
 		return nil
 	}
 
 	shutdownCtx := l.shutdownCtx()
-
-	chRepo := repo.New(l.chConn)
 
 	logParams := make([]repo.InsertTelemetryLogParams, 0, len(params))
 	logsEnabledByOrg := make(map[string]bool)
@@ -143,9 +258,17 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 		}
 
 		// Scrub tool IO content if the feature is disabled for this organization.
+		// Skill rows keep only the skill name: ClickHouse materializes
+		// skill_name from the arguments JSON, so a full delete would erase the
+		// activation from skill analytics — while any extra invocation args
+		// are still tool IO and get dropped.
 		if !toolIOEnabled {
+			skillArgs := scrubbedSkillArguments(param.Attributes)
 			delete(param.Attributes, attr.GenAIToolCallArgumentsKey)
 			delete(param.Attributes, attr.GenAIToolCallResultKey)
+			if skillArgs != "" {
+				param.Attributes[attr.GenAIToolCallArgumentsKey] = skillArgs
+			}
 		}
 
 		param = l.hydrateUserInfo(shutdownCtx, param)
@@ -158,13 +281,7 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 		logParams = append(logParams, *logParam)
 	}
 
-	if len(logParams) == 0 {
-		return nil
-	}
-	if err := chRepo.InsertTelemetryLogs(shutdownCtx, logParams); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "insert telemetry logs")
-	}
-	return nil
+	return logParams
 }
 
 // hydrateUserInfo fills the directory-derived parts of the row's UserInfo
@@ -207,6 +324,16 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 	allAttrs[attr.ObservedTimeUnixNanoKey] = observedTimeUnixNano
 	allAttrs[attr.TimeUnixNanoKey] = params.Timestamp.UnixNano()
 	allAttrs[attr.ServiceNameKey] = serviceName
+
+	// Stamp the canonical event identity (urn:telemetry:...) on every
+	// row so consumers can classify by one column (the event_urn
+	// materialized column) instead of re-deriving meaning from gram_urn
+	// prefixes, hook names, and attribute presence. Callers that already set
+	// gram.event.urn win; everything else is derived from the signals the
+	// writer stamped.
+	if getString(allAttrs, attr.EventURNKey) == "" {
+		allAttrs[attr.EventURNKey] = deriveEventURN(params.ToolInfo.URN, allAttrs)
+	}
 
 	spanAttrs, resourceAttrs, err := parseAttributesWithExplicitResources(allAttrs, params.resourceAttributes)
 	if err != nil {

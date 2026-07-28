@@ -1,0 +1,38 @@
+# RemoteSession
+
+A remote_session record — Gram's upstream OAuth session for a (principal, remote_session_client) pair. access_token_encrypted and refresh_token_encrypted are never returned.
+
+## Example Usage
+
+```typescript
+import { RemoteSession } from "@gram/client/models/components/remotesession.js";
+
+let value: RemoteSession = {
+  accessExpiresAt: new Date("2026-06-24T05:35:28.543Z"),
+  createdAt: new Date("2024-12-17T07:09:40.059Z"),
+  hasRefreshToken: false,
+  id: "f5183bef-d345-49d7-9450-c3eb50746f73",
+  remoteSessionClientId: "0831037f-2b74-4a2f-a71a-8b7b9637d7dc",
+  scopes: ["<value 1>", "<value 2>", "<value 3>"],
+  subjectUrn: "<value>",
+  updatedAt: new Date("2024-05-19T07:34:56.948Z"),
+  userSessionIssuerId: "435c81cd-3f0b-4c08-a82b-49ed6d1eb8c6",
+};
+```
+
+## Fields
+
+| Field                   | Type                                                                                          | Required           | Description                                                                                                                                                                                                             |
+| ----------------------- | --------------------------------------------------------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `accessExpiresAt`       | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark: | Upstream access-token expiry. Independent of refresh_expires_at.                                                                                                                                                        |
+| `createdAt`             | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark: | N/A                                                                                                                                                                                                                     |
+| `hasRefreshToken`       | _boolean_                                                                                     | :heavy_check_mark: | Whether the session holds an upstream refresh token. Gates the 'Refresh now' action; refresh_expires_at is insufficient because an upstream may issue a non-expiring refresh token. The token itself is never returned. |
+| `id`                    | _string_                                                                                      | :heavy_check_mark: | The remote_session id.                                                                                                                                                                                                  |
+| `refreshExpiresAt`      | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_minus_sign: | Upstream refresh-token expiry. Null when the session has no refresh token.                                                                                                                                              |
+| `remoteSessionClientId` | _string_                                                                                      | :heavy_check_mark: | The remote_session_client this session was minted against.                                                                                                                                                              |
+| `scopes`                | _string_[]                                                                                    | :heavy_check_mark: | Scopes held by this session.                                                                                                                                                                                            |
+| `subjectDisplayName`    | _string_                                                                                      | :heavy_minus_sign: | Resolved display name when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.                                                                                                        |
+| `subjectEmail`          | _string_                                                                                      | :heavy_minus_sign: | Resolved email when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.                                                                                                               |
+| `subjectUrn`            | _string_                                                                                      | :heavy_check_mark: | The session's subject URN (user:<id> \| apikey:<uuid> \| anonymous:<mcp-session-id>).                                                                                                                                   |
+| `updatedAt`             | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark: | N/A                                                                                                                                                                                                                     |
+| `userSessionIssuerId`   | _string_                                                                                      | :heavy_check_mark: | The user_session_issuer this session is bound to.                                                                                                                                                                       |

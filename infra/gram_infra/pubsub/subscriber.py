@@ -46,6 +46,7 @@ import asyncer
 import structlog
 from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 from google.cloud.pubsub_v1.subscriber.scheduler import Scheduler
+from google.cloud.pubsub_v1.types import FlowControl
 from google.protobuf.message import Message
 
 from .broker import SubscriberBroker, SubscriberHandle
@@ -77,12 +78,14 @@ def _unwrap_single(eg: BaseExceptionGroup) -> BaseException:
     return exc
 
 
-# Default ceiling on concurrently-executing handler tasks. The library's own
-# flow control admits up to ~1000 outstanding messages by default; without an
-# app-level cap a backlog of slow handlers would spawn that many concurrent
-# tasks. A modest default keeps fan-out bounded while leaving plenty of
-# parallelism for typical I/O-bound handlers. A value <= 0 disables the bound
-# entirely (handlers limited only by the library's flow control).
+# Default ceiling on concurrently-executing handler tasks. ``receive`` also
+# sizes the client's flow-control window from this bound (2x, one executing
+# generation plus one ready) so it limits in-process *retention*, not just
+# execution: without that coupling the library would still lease up to its own
+# default (~1000) messages into the process, where they'd wait invisible to the
+# broker instead of staying undelivered and redeliverable. A value <= 0
+# disables the bound entirely (handlers and prefetch limited only by the
+# library's default flow control).
 _DEFAULT_MAX_CONCURRENCY = 50
 
 
@@ -323,8 +326,14 @@ class Subscriber[M: Message]:
     @asynccontextmanager
     async def _session(
         self,
+        *,
+        max_outstanding: int | None = None,
     ) -> AsyncGenerator[tuple[_PortalScheduler, Any, MemoryObjectReceiveStream]]:
         """Portal + scheduler + streaming-pull plumbing shared by receive/stream.
+
+        ``max_outstanding`` caps the client's flow-control window — how many
+        leased, un-acked messages the streaming pull holds in this process at
+        once. ``None`` keeps the library default (~1000).
 
         Teardown is fully synchronous (checkpoint-free), so it runs to completion
         even when the surrounding task is being cancelled — the Ctrl-C path needs
@@ -344,6 +353,13 @@ class Subscriber[M: Message]:
                 # The stub types this as ThreadScheduler, but subscribe accepts
                 # any Scheduler subclass (per its own docstring).
                 scheduler=scheduler,  # pyrefly: ignore[bad-argument-type]
+                # Only max_messages is overridden; () is subscribe's own default
+                # sentinel and yields the stock FlowControl.
+                flow_control=(
+                    FlowControl(max_messages=max_outstanding)
+                    if max_outstanding is not None
+                    else ()
+                ),
                 await_callbacks_on_shutdown=True,
             )
             try:
@@ -372,6 +388,15 @@ class Subscriber[M: Message]:
         handlers run at once; ``max_concurrency`` overrides the subscriber's
         default for this call, and a value <= 0 disables the bound.
 
+        The bound governs admission, not just execution: the client's
+        flow-control window is sized to 2x the bound (one executing generation
+        plus one ready), so a backlog past that stays *undelivered at the
+        broker* — visible and immediately redeliverable — rather than leased
+        into this process. The limiter alone couldn't do that: this loop drains
+        the stream and spawns a task per message, so without the window every
+        prefetched message (library default ~1000) would sit here leased and
+        invisible, waiting on the limiter.
+
         A terminal subscription failure (subscription deleted, permission
         revoked, ...) is raised out of this call, mirroring how the Go library's
         ``Receive`` returns the error.
@@ -387,7 +412,9 @@ class Subscriber[M: Message]:
         limiter = anyio.CapacityLimiter(limit) if limit > 0 else None
 
         try:
-            async with self._session() as (scheduler, future, receive_stream):
+            async with self._session(
+                max_outstanding=2 * limit if limit > 0 else None
+            ) as (scheduler, future, receive_stream):
                 with anyio.move_on_after(timeout):  # None => no deadline
                     async with anyio.create_task_group() as tg:
 

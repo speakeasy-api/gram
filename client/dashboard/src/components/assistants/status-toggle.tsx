@@ -5,10 +5,8 @@ import {
   Assistant,
   AssistantStatus,
 } from "@gram/client/models/components/assistant.js";
-import {
-  invalidateAllAssistantsList,
-  useAssistantsUpdateMutation,
-} from "@gram/client/react-query/index.js";
+import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
+import { useAssistantsUpdateMutation } from "@gram/client/react-query/assistantsUpdate.js";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { MouseEvent } from "react";

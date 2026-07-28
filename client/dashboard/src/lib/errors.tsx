@@ -12,6 +12,20 @@ interface ErrorHandlerOptions {
   silent?: boolean;
 }
 
+export function toError(error: unknown): Error {
+  if (error instanceof Error) return error;
+  if (typeof error === "string") return new Error(error);
+  if (error == null) return new Error("Unknown error");
+  if (typeof error === "symbol" || typeof error === "bigint") {
+    return new Error(String(error));
+  }
+  try {
+    return new Error(JSON.stringify(error));
+  } catch {
+    return new Error("Unknown error");
+  }
+}
+
 export function handleError(
   error: unknown,
   options: ErrorHandlerOptions = {},
@@ -24,11 +38,7 @@ export function handleError(
   } = options;
 
   const errorMessage =
-    typeof error === "string"
-      ? error
-      : error instanceof Error
-        ? error.message
-        : "An unexpected error occurred";
+    typeof error === "string" ? error : toError(error).message;
 
   // Log error for debugging
   console.error("Error handled:", error);

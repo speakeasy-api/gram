@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
-import type { ProjectEntry } from "@gram/client/models/components";
+import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
 import { Button, Icon, Input } from "@speakeasy-api/moonshine";
 import {
   ArrowRight,
@@ -27,8 +27,7 @@ type InstallResult = {
   status: "succeeded" | "failed";
   succeededCount: number;
   failedCount: number;
-  firstCompletedToolsetSlug?: string;
-  firstCompletedMcpSlug?: string;
+  firstCompletedMcpServerParam?: string;
   error?: string;
 };
 
@@ -117,7 +116,7 @@ export function CollectionInstallDialog({
           projectSlug={currentProject.slug}
           open={open}
           bulk
-          autoStartDeployment
+          autoStartInstall
           headless
           onOpenChange={(nextOpen) => {
             if (!nextOpen) {
@@ -132,8 +131,7 @@ export function CollectionInstallDialog({
               status: result.status,
               succeededCount: result.succeededCount,
               failedCount: result.failedCount,
-              firstCompletedToolsetSlug: result.firstCompletedToolsetSlug,
-              firstCompletedMcpSlug: result.firstCompletedMcpSlug,
+              firstCompletedMcpServerParam: result.firstCompletedMcpServerParam,
               error: result.error,
             };
 
@@ -384,10 +382,10 @@ function ProjectProgressList({
                     `${result.succeededCount} succeeded, ${result.failedCount} failed.`}
                 </Type>
               )}
-              {result?.firstCompletedToolsetSlug && (
+              {result?.firstCompletedMcpServerParam && (
                 <ProjectConfigureLink
                   projectSlug={project.slug}
-                  toolsetSlug={result.firstCompletedToolsetSlug}
+                  mcpServerParam={result.firstCompletedMcpServerParam}
                 />
               )}
             </div>
@@ -489,16 +487,16 @@ function StatusCircleIcon({
 
 function ProjectConfigureLink({
   projectSlug,
-  toolsetSlug,
+  mcpServerParam,
 }: {
   projectSlug: string;
-  toolsetSlug: string;
+  mcpServerParam: string;
 }) {
   const routes = useRoutes({ projectSlug });
 
   return (
-    <routes.mcp.details.Link
-      params={[toolsetSlug]}
+    <routes.mcp.x.Link
+      params={[mcpServerParam]}
       className="mt-3 inline-flex no-underline hover:no-underline"
     >
       <Button variant="secondary" size="sm">
@@ -507,6 +505,6 @@ function ProjectConfigureLink({
           <ArrowRight className="h-4 w-4" />
         </Button.RightIcon>
       </Button>
-    </routes.mcp.details.Link>
+    </routes.mcp.x.Link>
   );
 }

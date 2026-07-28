@@ -1,7 +1,5 @@
-import type {
-  ExternalMCPServer,
-  ExternalMCPTool,
-} from "@gram/client/models/components";
+import type { ExternalMCPServer } from "@gram/client/models/components/externalmcpserver.js";
+import type { ExternalMCPTool } from "@gram/client/models/components/externalmcptool.js";
 import type { PulseMCPServer } from "../hooks";
 import type { FilterState } from "./useFilterState";
 

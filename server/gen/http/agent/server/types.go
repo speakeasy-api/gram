@@ -26,6 +26,13 @@ type GetPluginsResponseBody struct {
 	Plugins []*AgentPluginResponseBody `form:"plugins" json:"plugins" xml:"plugins"`
 }
 
+// ListSyncedUsersResponseBody is the type of the "agent" service
+// "listSyncedUsers" endpoint HTTP response body.
+type ListSyncedUsersResponseBody struct {
+	// Emails seen syncing the device agent, most recently active first.
+	Users []*SyncedAgentUserResponseBody `form:"users" json:"users" xml:"users"`
+}
+
 // GetPluginsUnauthorizedResponseBody is the type of the "agent" service
 // "getPlugins" endpoint HTTP response body for the "unauthorized" error.
 type GetPluginsUnauthorizedResponseBody struct {
@@ -206,6 +213,188 @@ type GetPluginsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListSyncedUsersUnauthorizedResponseBody is the type of the "agent" service
+// "listSyncedUsers" endpoint HTTP response body for the "unauthorized" error.
+type ListSyncedUsersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSyncedUsersForbiddenResponseBody is the type of the "agent" service
+// "listSyncedUsers" endpoint HTTP response body for the "forbidden" error.
+type ListSyncedUsersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSyncedUsersBadRequestResponseBody is the type of the "agent" service
+// "listSyncedUsers" endpoint HTTP response body for the "bad_request" error.
+type ListSyncedUsersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSyncedUsersNotFoundResponseBody is the type of the "agent" service
+// "listSyncedUsers" endpoint HTTP response body for the "not_found" error.
+type ListSyncedUsersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSyncedUsersConflictResponseBody is the type of the "agent" service
+// "listSyncedUsers" endpoint HTTP response body for the "conflict" error.
+type ListSyncedUsersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSyncedUsersUnsupportedMediaResponseBody is the type of the "agent"
+// service "listSyncedUsers" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListSyncedUsersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSyncedUsersInvalidResponseBody is the type of the "agent" service
+// "listSyncedUsers" endpoint HTTP response body for the "invalid" error.
+type ListSyncedUsersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSyncedUsersInvariantViolationResponseBody is the type of the "agent"
+// service "listSyncedUsers" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListSyncedUsersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSyncedUsersUnexpectedResponseBody is the type of the "agent" service
+// "listSyncedUsers" endpoint HTTP response body for the "unexpected" error.
+type ListSyncedUsersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSyncedUsersGatewayErrorResponseBody is the type of the "agent" service
+// "listSyncedUsers" endpoint HTTP response body for the "gateway_error" error.
+type ListSyncedUsersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AgentMarketplaceResponseBody is used to define fields on response body types.
 type AgentMarketplaceResponseBody struct {
 	// Stable identifier for the marketplace, used as its key when the agent
@@ -226,6 +415,17 @@ type AgentPluginResponseBody struct {
 	// Name of the marketplace this plugin lives in. Always equals the `name` of
 	// one of the marketplaces in the same response.
 	MarketplaceName string `form:"marketplace_name" json:"marketplace_name" xml:"marketplace_name"`
+}
+
+// SyncedAgentUserResponseBody is used to define fields on response body types.
+type SyncedAgentUserResponseBody struct {
+	// Email the device agent reported on sync. Resolve against org members for
+	// display.
+	Email string `form:"email" json:"email" xml:"email"`
+	// First time this email was seen syncing the device agent.
+	FirstSeenAt string `form:"first_seen_at" json:"first_seen_at" xml:"first_seen_at"`
+	// Most recent time this email was seen syncing the device agent.
+	LastSeenAt string `form:"last_seen_at" json:"last_seen_at" xml:"last_seen_at"`
 }
 
 // NewGetPluginsResponseBody builds the HTTP response body from the result of
@@ -257,6 +457,25 @@ func NewGetPluginsResponseBody(res *agent.GetPluginsResult) *GetPluginsResponseB
 		}
 	} else {
 		body.Plugins = []*AgentPluginResponseBody{}
+	}
+	return body
+}
+
+// NewListSyncedUsersResponseBody builds the HTTP response body from the result
+// of the "listSyncedUsers" endpoint of the "agent" service.
+func NewListSyncedUsersResponseBody(res *agent.ListSyncedUsersResult) *ListSyncedUsersResponseBody {
+	body := &ListSyncedUsersResponseBody{}
+	if res.Users != nil {
+		body.Users = make([]*SyncedAgentUserResponseBody, len(res.Users))
+		for i, val := range res.Users {
+			if val == nil {
+				body.Users[i] = nil
+				continue
+			}
+			body.Users[i] = marshalAgentSyncedAgentUserToSyncedAgentUserResponseBody(val)
+		}
+	} else {
+		body.Users = []*SyncedAgentUserResponseBody{}
 	}
 	return body
 }
@@ -401,11 +620,161 @@ func NewGetPluginsGatewayErrorResponseBody(res *goa.ServiceError) *GetPluginsGat
 	return body
 }
 
+// NewListSyncedUsersUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listSyncedUsers" endpoint of the "agent" service.
+func NewListSyncedUsersUnauthorizedResponseBody(res *goa.ServiceError) *ListSyncedUsersUnauthorizedResponseBody {
+	body := &ListSyncedUsersUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSyncedUsersForbiddenResponseBody builds the HTTP response body from
+// the result of the "listSyncedUsers" endpoint of the "agent" service.
+func NewListSyncedUsersForbiddenResponseBody(res *goa.ServiceError) *ListSyncedUsersForbiddenResponseBody {
+	body := &ListSyncedUsersForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSyncedUsersBadRequestResponseBody builds the HTTP response body from
+// the result of the "listSyncedUsers" endpoint of the "agent" service.
+func NewListSyncedUsersBadRequestResponseBody(res *goa.ServiceError) *ListSyncedUsersBadRequestResponseBody {
+	body := &ListSyncedUsersBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSyncedUsersNotFoundResponseBody builds the HTTP response body from
+// the result of the "listSyncedUsers" endpoint of the "agent" service.
+func NewListSyncedUsersNotFoundResponseBody(res *goa.ServiceError) *ListSyncedUsersNotFoundResponseBody {
+	body := &ListSyncedUsersNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSyncedUsersConflictResponseBody builds the HTTP response body from
+// the result of the "listSyncedUsers" endpoint of the "agent" service.
+func NewListSyncedUsersConflictResponseBody(res *goa.ServiceError) *ListSyncedUsersConflictResponseBody {
+	body := &ListSyncedUsersConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSyncedUsersUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listSyncedUsers" endpoint of the "agent" service.
+func NewListSyncedUsersUnsupportedMediaResponseBody(res *goa.ServiceError) *ListSyncedUsersUnsupportedMediaResponseBody {
+	body := &ListSyncedUsersUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSyncedUsersInvalidResponseBody builds the HTTP response body from the
+// result of the "listSyncedUsers" endpoint of the "agent" service.
+func NewListSyncedUsersInvalidResponseBody(res *goa.ServiceError) *ListSyncedUsersInvalidResponseBody {
+	body := &ListSyncedUsersInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSyncedUsersInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listSyncedUsers" endpoint of the "agent"
+// service.
+func NewListSyncedUsersInvariantViolationResponseBody(res *goa.ServiceError) *ListSyncedUsersInvariantViolationResponseBody {
+	body := &ListSyncedUsersInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSyncedUsersUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listSyncedUsers" endpoint of the "agent" service.
+func NewListSyncedUsersUnexpectedResponseBody(res *goa.ServiceError) *ListSyncedUsersUnexpectedResponseBody {
+	body := &ListSyncedUsersUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSyncedUsersGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listSyncedUsers" endpoint of the "agent" service.
+func NewListSyncedUsersGatewayErrorResponseBody(res *goa.ServiceError) *ListSyncedUsersGatewayErrorResponseBody {
+	body := &ListSyncedUsersGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetPluginsPayload builds a agent service getPlugins endpoint payload.
 func NewGetPluginsPayload(email string, apikeyToken *string) *agent.GetPluginsPayload {
 	v := &agent.GetPluginsPayload{}
 	v.Email = email
 	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewListSyncedUsersPayload builds a agent service listSyncedUsers endpoint
+// payload.
+func NewListSyncedUsersPayload(sessionToken *string) *agent.ListSyncedUsersPayload {
+	v := &agent.ListSyncedUsersPayload{}
+	v.SessionToken = sessionToken
 
 	return v
 }

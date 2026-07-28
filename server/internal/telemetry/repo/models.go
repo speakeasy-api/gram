@@ -231,6 +231,14 @@ type UserSummary struct {
 
 	// Hook source breakdowns (maps of hook source -> count)
 	HookSourceCounts map[string]uint64 `ch:"hook_source_counts"`
+
+	// Distinct AI account types observed for this user ('team', 'personal').
+	AccountTypes []string `ch:"account_types"`
+
+	// Raw user_id values folded into this summary. The internal group key is
+	// email-first, so these are needed to join the summary back to user_id-keyed
+	// stores (user_accounts, role assignments).
+	RawUserIDs []string `ch:"raw_user_ids"`
 }
 
 // EmployeeDataFlowRow represents an aggregated call-path tuple for an employee.

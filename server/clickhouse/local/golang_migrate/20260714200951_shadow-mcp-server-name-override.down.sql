@@ -1,0 +1,1 @@
+ALTER TABLE `shadow_mcp_inventory_urls` DROP COLUMN `server_name_override`;

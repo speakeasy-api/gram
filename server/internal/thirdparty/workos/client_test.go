@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -430,9 +429,8 @@ func newTestClient(t *testing.T, fake *fakeWorkOS) (*workos.Client, *fakeWorkOS)
 	require.NoError(t, err)
 
 	client := workos.NewClient(guardianPolicy, "test-api-key", workos.ClientOpts{
-		Endpoint:   srv.URL,
-		HTTPClient: &http.Client{Timeout: 10 * time.Second},
-		ClientID:   "test-client-id",
+		Endpoint: srv.URL,
+		ClientID: "test-client-id",
 	})
 	return client, fake
 }

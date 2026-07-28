@@ -18,13 +18,15 @@ type remoteSessionClientWithIssuers struct {
 	UserSessionIssuerIDs []uuid.UUID
 }
 
-// listRemoteSessionClientsByProjectID reads project-scoped clients. When
-// filtering by user_session_issuer_id it resolves the client / user session
-// issuer relationship solely through the
+// listRemoteSessionClientsByProjectID reads the project's own clients plus
+// organization-level clients (project_id NULL) belonging to organizationID.
+// When filtering by user_session_issuer_id it resolves the client / user
+// session issuer relationship solely through the
 // remote_session_client_user_session_issuers join table.
 func (s *Service) listRemoteSessionClientsByProjectID(
 	ctx context.Context,
 	projectID uuid.UUID,
+	organizationID string,
 	remoteSessionIssuerID uuid.NullUUID,
 	userSessionIssuerID uuid.NullUUID,
 	cursor uuid.NullUUID,
@@ -33,7 +35,8 @@ func (s *Service) listRemoteSessionClientsByProjectID(
 	q := repo.New(s.db)
 	if !userSessionIssuerID.Valid {
 		rows, err := q.ListRemoteSessionClientsByProjectID(ctx, repo.ListRemoteSessionClientsByProjectIDParams{
-			ProjectID:             conv.ToNullUUID(projectID),
+			ProjectID:             projectID,
+			OrganizationID:        conv.ToPGText(organizationID),
 			RemoteSessionIssuerID: remoteSessionIssuerID,
 			Cursor:                cursor,
 			LimitValue:            limit,
@@ -51,6 +54,7 @@ func (s *Service) listRemoteSessionClientsByProjectID(
 	rows, err := q.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, repo.ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams{
 		UserSessionIssuerID:   userSessionIssuerID.UUID,
 		ProjectID:             projectID,
+		OrganizationID:        conv.ToPGText(organizationID),
 		RemoteSessionIssuerID: remoteSessionIssuerID,
 		Cursor:                cursor,
 		LimitValue:            limit,
@@ -67,16 +71,19 @@ func (s *Service) listRemoteSessionClientsByProjectID(
 
 // listRemoteSessionClientRowsForUserSessionIssuer is the runtime counterpart to
 // listRemoteSessionClientsByProjectID: it resolves the clients linked to a user
-// session issuer solely through the join table. Used by consent rendering and
-// token resolution.
+// session issuer solely through the join table, including organization-level
+// clients (project_id NULL) belonging to organizationID. Used by consent
+// rendering and token resolution.
 func (m *ChallengeManager) listRemoteSessionClientRowsForUserSessionIssuer(
 	ctx context.Context,
 	projectID uuid.UUID,
+	organizationID string,
 	userSessionIssuerID uuid.UUID,
 ) ([]repo.ListRemoteSessionClientsForUserSessionIssuerRow, error) {
 	rows, err := repo.New(m.db).ListRemoteSessionClientsForUserSessionIssuer(ctx, repo.ListRemoteSessionClientsForUserSessionIssuerParams{
 		UserSessionIssuerID: userSessionIssuerID,
 		ProjectID:           conv.ToNullUUID(projectID),
+		OrganizationID:      conv.ToPGText(organizationID),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients for user_session_issuer: %w", err)

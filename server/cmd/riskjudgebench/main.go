@@ -1,9 +1,8 @@
 // Command riskjudgebench benchmarks OpenRouter models for prompt-based
-// ("LLM-judge") risk policy evaluation — the call implemented in
-// server/internal/riskjudge/judge.go.
+// ("LLM-judge") risk policy evaluation in the promptpolicy OpenRouter evaluator.
 //
 // Unlike a hand-rolled HTTP client, this drives the REAL production
-// openrouter.ChatClient (NewUnifiedClient → GetObjectCompletion), so every
+// openrouter.ChatClient (NewUnifiedClient to GetObjectCompletion), so every
 // model runs under prod-equivalent conditions:
 //   - reasoning disabled (Effort:"none"), as the object-completion path forces,
 //   - the production model allowlist + ResolveModel fallback,
@@ -45,17 +44,17 @@ import (
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
-	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
-	"github.com/speakeasy-api/gram/server/internal/riskjudge"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
+	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 // The judge system prompt, verdict schema, and user-prompt construction come
-// straight from server/internal/riskjudge (riskjudge.SystemPrompt,
-// riskjudge.VerdictSchema, riskjudge.BuildJudgePrompt) — the bench drives the
+// straight from the promptpolicy OpenRouter evaluator. The bench drives the
 // exact production request, with no copy to keep in sync.
 
 // defaultModels are fast/cheap-tier candidates drawn from the production
@@ -81,7 +80,7 @@ type testCase struct {
 	Note     string `json:"note"`
 	// MessageType and ToolName are optional. When set, the case exercises the
 	// structured judge payload (actor + tool attribution) instead of the
-	// content-only fallback — used by the adversarial cases. MessageType is a
+	// content-only fallback - used by the adversarial cases. MessageType is a
 	// message.Type value ("user_message", "tool_request", "tool_response",
 	// "assistant_message"); an empty value renders as opaque content.
 	MessageType string `json:"message_type"`
@@ -135,16 +134,18 @@ func main() {
 	// Build the real production client with stubbed org-scoped concerns.
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	policy := guardian.NewDefaultPolicy(tracenoop.NewTracerProvider())
+	prov := &devProvisioner{apiKey: apiKey} // returns the dev key for any org
 	client := openrouter.NewUnifiedClient(
 		logger,
 		policy,
-		&devProvisioner{apiKey: apiKey}, // returns the dev key for any org
-		nil,                             // message capture  (nil-guarded)
-		nil,                             // usage tracking   (nil-guarded)
-		nil,                             // chat title gen   (nil-guarded)
-		nil,                             // telemetry logger (nil-guarded)
+		prov,
+		&openrouter.PlatformKeyResolver{Provisioner: prov},
+		nil, // message capture  (nil-guarded)
+		nil, // usage tracking   (nil-guarded)
+		nil, // chat title gen   (nil-guarded)
+		nil, // telemetry logger (nil-guarded)
 	)
-	_ = metricnoop.NewMeterProvider() // (riskjudge.New would need this; we call the client directly)
+	_ = metricnoop.NewMeterProvider() // (ppopenrouter.New would need this; we call the client directly)
 
 	projectID := "00000000-0000-0000-0000-000000000001" // must parse as UUID
 	fmt.Printf("models=%d  cases=%d  runs=%d  -> %d calls (real openrouter client, temp=%.1f, concurrency=%d)\n\n",
@@ -200,23 +201,23 @@ func main() {
 }
 
 // evaluate issues one GetObjectCompletion call shaped exactly like
-// riskjudge.Judge.call() and records the outcome.
+// ppopenrouter.Judge.call() and records the outcome.
 func evaluate(client openrouter.CompletionClient, model, orgID, projectID string, tc testCase, temp float64, timeout time.Duration) result {
 	res := result{Model: model, CaseID: tc.ID, Expected: tc.Expected}
 
 	strict := true
 	jsonSchema := or.ChatJSONSchemaConfig{
 		Name:        "risk_policy_judge_verdict",
-		Schema:      riskjudge.VerdictSchema(),
+		Schema:      ppopenrouter.VerdictSchema(),
 		Description: nil,
 		Strict:      optionalnullable.From(&strict),
 	}
-	userMessage := riskjudge.BuildJudgePrompt(ra.JudgeInput{
+	userMessage := ppopenrouter.BuildJudgePrompt(promptpolicy.Input{
 		OrgID:     orgID,
 		ProjectID: projectID,
 		Prompt:    tc.Policy,
-		Message:   ra.NewJudgeMessage(tc.MessageType, tc.ToolName, tc.Text),
-		Config:    ra.JudgeConfig{Model: "", Temperature: nil, FailOpen: true},
+		Message:   judgemessage.New(tc.MessageType, tc.ToolName, tc.Text),
+		Config:    promptpolicy.Config{Model: "", Temperature: nil, FailOpen: true},
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -227,7 +228,7 @@ func evaluate(client openrouter.CompletionClient, model, orgID, projectID string
 		OrgID:          orgID,
 		ProjectID:      projectID,
 		Model:          model,
-		SystemPrompt:   riskjudge.SystemPrompt,
+		SystemPrompt:   ppopenrouter.SystemPrompt,
 		Prompt:         userMessage,
 		Temperature:    &temp,
 		UsageSource:    billing.ModelUsageSourceGram,
@@ -268,22 +269,22 @@ func evaluate(client openrouter.CompletionClient, model, orgID, projectID string
 // the GetObjectCompletion path; the rest are unreachable here.
 type devProvisioner struct{ apiKey string }
 
-func (d *devProvisioner) ProvisionAPIKey(_ context.Context, _ string) (string, error) {
+func (d *devProvisioner) ProvisionAPIKey(_ context.Context, _ string, _ openrouter.KeyType) (string, error) {
 	return d.apiKey, nil
 }
-func (d *devProvisioner) RefreshAPIKeyLimit(_ context.Context, _ string, _ *int) (int, error) {
+func (d *devProvisioner) RefreshAPIKeyLimit(_ context.Context, _ string, _ openrouter.KeyType, _ *int) (int, error) {
 	return 0, fmt.Errorf("not implemented in bench")
 }
-func (d *devProvisioner) GetCreditsUsed(_ context.Context, _ string) (float64, int, error) {
+func (d *devProvisioner) GetCreditsUsed(_ context.Context, _ string, _ openrouter.KeyType) (float64, int, error) {
 	return 0, 0, fmt.Errorf("not implemented in bench")
 }
 func (d *devProvisioner) GetKeyUsage(_ context.Context, _ string) (float64, *int64, error) {
 	return 0, nil, fmt.Errorf("not implemented in bench")
 }
-func (d *devProvisioner) ReconcileMonthlyCredits(_ context.Context, _ string, currentLimit int64, _ *int64) (int64, error) {
+func (d *devProvisioner) ReconcileMonthlyCredits(_ context.Context, _ string, _ openrouter.KeyType, currentLimit int64, _ *int64) (int64, error) {
 	return currentLimit, nil
 }
-func (d *devProvisioner) GetModelUsage(_ context.Context, _ string, _ string) (*openrouter.ModelUsage, error) {
+func (d *devProvisioner) GetModelUsage(_ context.Context, _ string, _ string, _ openrouter.KeyType) (*openrouter.ModelUsage, error) {
 	return nil, fmt.Errorf("not implemented in bench")
 }
 
@@ -395,8 +396,8 @@ func report(models []string, results []result) {
 }
 
 // confidenceSweep shows what precision/recall/F1 would be if the judge gated a
-// flag on the model's self-reported confidence — positive = matched && conf>=tau
-// — instead of on `matched` alone. tau=0 reproduces the main table (and current
+// flag on the model's self-reported confidence - positive = matched && conf>=tau
+// - instead of on `matched` alone. tau=0 reproduces the main table (and current
 // prod behavior, judge.go:187). Reuses the already-collected per-call results,
 // so it costs no extra API calls. Useful because some models are confidently
 // wrong (FPs at conf=1.0, where no threshold helps) while others put their
@@ -418,7 +419,7 @@ func confidenceSweep(models []string, results []result) {
 			}
 		}
 		if len(mr) == 0 || errs == len(mr) {
-			fmt.Printf("\n  %s  (no scorable calls — skipped)\n", m)
+			fmt.Printf("\n  %s  (no scorable calls - skipped)\n", m)
 			continue
 		}
 		fmt.Printf("\n  %s\n", m)

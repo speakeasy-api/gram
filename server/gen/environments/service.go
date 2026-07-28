@@ -128,8 +128,15 @@ type DeleteToolsetEnvironmentLinkPayload struct {
 type EnvironmentEntryInput struct {
 	// The name of the environment variable
 	Name string
-	// The value of the environment variable
-	Value string
+	// The value of the environment variable. Omit on an existing secret entry to
+	// preserve its stored value. Required when creating an entry or when changing
+	// is_secret from true to false.
+	Value *string
+	// Whether the value is a secret. Secret values are encrypted at rest and
+	// redacted in reads; non-secret values are readable after save. When omitted,
+	// new entries default to secret and existing entries keep their current
+	// secrecy.
+	IsSecret *bool
 }
 
 // GetSourceEnvironmentPayload is the payload type of the environments service

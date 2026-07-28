@@ -121,8 +121,11 @@ type DetachUserSessionIssuerRequestBody struct {
 type CreateRemoteSessionClientResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level and global clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
 	// The user_session_issuers this client is attached to via the join table.
@@ -156,8 +159,11 @@ type CreateRemoteSessionClientResponseBody struct {
 type CreateCimdResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level and global clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
 	// The user_session_issuers this client is attached to via the join table.
@@ -192,8 +198,11 @@ type CreateCimdResponseBody struct {
 type CloneClientFromOAuthProxyProviderResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level and global clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
 	// The user_session_issuers this client is attached to via the join table.
@@ -228,8 +237,11 @@ type CloneClientFromOAuthProxyProviderResponseBody struct {
 type UpdateRemoteSessionClientResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level and global clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
 	// The user_session_issuers this client is attached to via the join table.
@@ -264,8 +276,11 @@ type UpdateRemoteSessionClientResponseBody struct {
 type AttachUserSessionIssuerResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level and global clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
 	// The user_session_issuers this client is attached to via the join table.
@@ -300,8 +315,11 @@ type AttachUserSessionIssuerResponseBody struct {
 type DetachUserSessionIssuerResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level and global clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
 	// The user_session_issuers this client is attached to via the join table.
@@ -344,8 +362,11 @@ type ListRemoteSessionClientsResponseBody struct {
 type GetRemoteSessionClientResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level and global clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
 	// The user_session_issuers this client is attached to via the join table.
@@ -2083,8 +2104,11 @@ type DeleteRemoteSessionClientGatewayErrorResponseBody struct {
 type RemoteSessionClientResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level and global clients.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
 	// The user_session_issuers this client is attached to via the join table.
@@ -2120,6 +2144,7 @@ func NewCreateRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *C
 	body := &CreateRemoteSessionClientResponseBody{
 		ID:                      res.ID,
 		ProjectID:               res.ProjectID,
+		OrganizationID:          res.OrganizationID,
 		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
 		ClientID:                res.ClientID,
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
@@ -2153,6 +2178,7 @@ func NewCreateCimdResponseBody(res *types.RemoteSessionClient) *CreateCimdRespon
 	body := &CreateCimdResponseBody{
 		ID:                      res.ID,
 		ProjectID:               res.ProjectID,
+		OrganizationID:          res.OrganizationID,
 		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
 		ClientID:                res.ClientID,
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
@@ -2187,6 +2213,7 @@ func NewCloneClientFromOAuthProxyProviderResponseBody(res *types.RemoteSessionCl
 	body := &CloneClientFromOAuthProxyProviderResponseBody{
 		ID:                      res.ID,
 		ProjectID:               res.ProjectID,
+		OrganizationID:          res.OrganizationID,
 		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
 		ClientID:                res.ClientID,
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
@@ -2221,6 +2248,7 @@ func NewUpdateRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *U
 	body := &UpdateRemoteSessionClientResponseBody{
 		ID:                      res.ID,
 		ProjectID:               res.ProjectID,
+		OrganizationID:          res.OrganizationID,
 		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
 		ClientID:                res.ClientID,
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
@@ -2255,6 +2283,7 @@ func NewAttachUserSessionIssuerResponseBody(res *types.RemoteSessionClient) *Att
 	body := &AttachUserSessionIssuerResponseBody{
 		ID:                      res.ID,
 		ProjectID:               res.ProjectID,
+		OrganizationID:          res.OrganizationID,
 		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
 		ClientID:                res.ClientID,
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
@@ -2289,6 +2318,7 @@ func NewDetachUserSessionIssuerResponseBody(res *types.RemoteSessionClient) *Det
 	body := &DetachUserSessionIssuerResponseBody{
 		ID:                      res.ID,
 		ProjectID:               res.ProjectID,
+		OrganizationID:          res.OrganizationID,
 		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
 		ClientID:                res.ClientID,
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
@@ -2345,6 +2375,7 @@ func NewGetRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *GetR
 	body := &GetRemoteSessionClientResponseBody{
 		ID:                      res.ID,
 		ProjectID:               res.ProjectID,
+		OrganizationID:          res.OrganizationID,
 		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
 		ClientID:                res.ClientID,
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,

@@ -1,12 +1,21 @@
 package chat
 
 import (
+	"context"
+
 	"github.com/google/uuid"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
+
+// TestingLinkSetupAssistantThread exposes the unexported linkSetupAssistantThread
+// helper so tests in the chat_test package can exercise the project-scoped
+// assistant ownership gate end-to-end.
+func (s *Service) TestingLinkSetupAssistantThread(ctx context.Context, projectID *uuid.UUID, chatID uuid.UUID, source, assistantIDHeader string) {
+	s.linkSetupAssistantThread(ctx, projectID, chatID, source, assistantIDHeader)
+}
 
 // TestingNewPoisonedSession builds a CaptureSession in the state
 // StartOrResumeChat produces when its upfront user-message persistence failed:

@@ -1,7 +1,12 @@
-import { useSession } from "@/contexts/Auth";
+import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { defineFrontendTool, type FrontendTool } from "@gram-ai/elements";
+import { useRBAC } from "@/hooks/useRBAC";
+import { DEFAULT_ASSISTANT_MODEL } from "@/lib/models";
+import { defineFrontendTool, type FrontendTool } from "@/elements";
 import { Gram } from "@gram/client";
+import type { AssistantSkillRef } from "@gram/client/models/components/assistantskillref.js";
+import type { Skill } from "@gram/client/models/components/skill.js";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { useMemo } from "react";
 import { z } from "zod";
@@ -226,7 +231,7 @@ async function ensureAssistant(
     createAssistantForm: {
       name: payload.name ?? "Untitled assistant",
       instructions: payload.instructions ?? "You are a helpful assistant.",
-      model: payload.model ?? "anthropic/claude-opus-4.7",
+      model: payload.model ?? DEFAULT_ASSISTANT_MODEL,
       status: payload.status,
       toolsets: [],
       ...(payload.warm_ttl_seconds !== undefined
@@ -328,6 +333,13 @@ type AttachToolsetArgs = {
   environment_slug?: string;
 };
 type DetachToolsetArgs = { toolset_slug: string };
+type AttachMCPServerArgs = {
+  mcp_server_slug: string;
+  environment_slug?: string;
+};
+type DetachMCPServerArgs = { mcp_server_slug: string };
+type AttachSkillArgs = { skill_name: string; pinned_version_id?: string };
+type DetachSkillArgs = { skill_name: string };
 type CreateToolsetArgs = {
   name: string;
   description?: string;
@@ -396,6 +408,33 @@ type PersonalityChoice =
   | { kind: "generate"; describe: string }
   | { kind: "random" };
 
+async function listAllSkills(sdk: Gram): Promise<Skill[]> {
+  const pages = await sdk.skills.list({ limit: 200 });
+  const skills: Skill[] = [];
+  for await (const page of pages) skills.push(...page.result.skills);
+  return skills;
+}
+
+function resolveSkillByName(skills: Skill[], requestedName: string): Skill {
+  const name = requestedName.trim().toLowerCase();
+  const normalizedMatch = skills.find(
+    (skill) => skill.name.toLowerCase() === name,
+  );
+  if (normalizedMatch) return normalizedMatch;
+  const displayMatches = skills.filter(
+    (skill) => skill.displayName.toLowerCase() === name,
+  );
+  if (displayMatches.length === 1) return displayMatches[0]!;
+  if (displayMatches.length > 1) {
+    throw new Error(
+      `More than one skill is named "${requestedName}". Use its unique normalized name.`,
+    );
+  }
+  throw new Error(
+    `Skill "${requestedName}" was not found. Call list_skills first.`,
+  );
+}
+
 function buildAssistantTools(deps: ToolDeps) {
   const { sdk, draft, organizationId } = deps;
 
@@ -407,27 +446,39 @@ function buildAssistantTools(deps: ToolDeps) {
     toolsetSlug: string;
     environmentSlug?: string | undefined;
   };
+  type LiveMCPServer = {
+    mcpServerSlug: string;
+    environmentSlug?: string | undefined;
+  };
   const live: {
     id: string | null;
     name: string | undefined;
     instructions: string;
     toolsets: ReadonlyArray<LiveToolset>;
+    mcpServers: ReadonlyArray<LiveMCPServer>;
+    skills: ReadonlyArray<AssistantSkillRef>;
   } = {
     id: draft.assistantId,
     name: draft.assistant?.name,
     instructions: draft.assistant?.instructions ?? "",
     toolsets: draft.assistant?.toolsets ?? [],
+    mcpServers: draft.assistant?.mcpServers ?? [],
+    skills: draft.assistant?.skills ?? [],
   };
   const trackLive = (a: {
     id: string;
     name: string;
     instructions: string;
     toolsets: ReadonlyArray<LiveToolset>;
+    mcpServers?: ReadonlyArray<LiveMCPServer> | undefined;
+    skills?: ReadonlyArray<AssistantSkillRef> | undefined;
   }) => {
     live.id = a.id;
     live.name = a.name;
     live.instructions = a.instructions;
     live.toolsets = a.toolsets;
+    live.mcpServers = a.mcpServers ?? [];
+    live.skills = a.skills ?? [];
   };
 
   // The LLM may emit multiple mutating tool calls in parallel within one turn.
@@ -438,6 +489,14 @@ function buildAssistantTools(deps: ToolDeps) {
     const next = mutationTail.then(fn, fn);
     mutationTail = next.catch(() => undefined);
     return next;
+  };
+  let skillsPromise: Promise<Skill[]> | undefined;
+  const loadSkills = (): Promise<Skill[]> => {
+    skillsPromise ??= listAllSkills(sdk).catch((error: unknown) => {
+      skillsPromise = undefined;
+      throw error;
+    });
+    return skillsPromise;
   };
 
   const triggerCreateInFlight = new Map<string, Promise<ToolResult>>();
@@ -842,6 +901,278 @@ function buildAssistantTools(deps: ToolDeps) {
     "detach_toolset",
   );
 
+  const attach_mcp_server = defineFrontendTool<AttachMCPServerArgs, ToolResult>(
+    {
+      description:
+        "Attach an MCP server registered in this project (a remote external-SaaS MCP server) to the assistant so it can call those tools at runtime. Use this for MCP servers that are NOT backed by a Gram toolset — attach_toolset covers toolset-backed ones. Find the slug with list_mcp_servers; tunnelled or disabled servers are rejected. Pass environment_slug only when the server needs a specific environment's variables; most remote servers carry their own connection auth and need none. Replaces any prior reference to the same mcp_server_slug.",
+      parameters: z.object({
+        mcp_server_slug: z.string(),
+        environment_slug: z
+          .string()
+          .optional()
+          .describe(
+            "Bind a specific environment for this server. Omit for remote servers that authenticate through their own connection.",
+          ),
+      }),
+      execute: async (args) =>
+        serialize(async () => {
+          const { mcp_server_slug, environment_slug } =
+            args as AttachMCPServerArgs;
+          try {
+            const a = await ensureAssistant(deps, {}, live.id);
+            trackLive(a);
+            const next = (a.mcpServers ?? [])
+              .filter((m) => m.mcpServerSlug !== mcp_server_slug)
+              .concat([
+                {
+                  mcpServerSlug: mcp_server_slug,
+                  environmentSlug: environment_slug,
+                },
+              ]);
+            const updated = await sdk.assistants.update({
+              updateAssistantForm: { id: a.id, mcpServers: next },
+            });
+            draft.setAssistant(updated);
+            trackLive(updated);
+            draft.invalidateAll();
+            return okResult({
+              mcp_servers: updated.mcpServers,
+              ...(environment_slug ? { environment_slug } : {}),
+            });
+          } catch (e) {
+            return errResult(e instanceof Error ? e.message : "attach failed");
+          }
+        }),
+    },
+    "attach_mcp_server",
+  );
+
+  const detach_mcp_server = defineFrontendTool<DetachMCPServerArgs, ToolResult>(
+    {
+      description:
+        "Remove an MCP server from the assistant. Does not delete the server itself.",
+      parameters: z.object({ mcp_server_slug: z.string() }),
+      execute: async (args) =>
+        serialize(async () => {
+          const { mcp_server_slug } = args as DetachMCPServerArgs;
+          try {
+            if (!live.id) {
+              return errResult("No assistant exists yet. Create one first.");
+            }
+            const next = live.mcpServers.filter(
+              (m) => m.mcpServerSlug !== mcp_server_slug,
+            );
+            const updated = await sdk.assistants.update({
+              updateAssistantForm: { id: live.id, mcpServers: next },
+            });
+            draft.setAssistant(updated);
+            trackLive(updated);
+            draft.invalidateAll();
+            return okResult({ mcp_servers: updated.mcpServers });
+          } catch (e) {
+            return errResult(e instanceof Error ? e.message : "detach failed");
+          }
+        }),
+    },
+    "detach_mcp_server",
+  );
+
+  const list_skills = defineFrontendTool<Record<string, never>, ToolResult>(
+    {
+      description:
+        "List project skills and show which are attached to the assistant. Skills are reusable instructions, not MCP servers or toolsets. Call this before attach_skill or detach_skill so you use an exact skill name.",
+      parameters: z.object({}),
+      execute: async () => {
+        try {
+          const skills = await loadSkills();
+          const attached = new Map(
+            live.skills.map((ref) => [ref.skillId, ref]),
+          );
+          return okResult({
+            skills: skills.map((skill) => {
+              const ref = attached.get(skill.id);
+              return {
+                name: skill.name,
+                display_name: skill.displayName,
+                summary: skill.summary,
+                latest_version_id: skill.latestVersionId,
+                attached: !!ref,
+                pinned_version_id: ref?.pinnedVersionId,
+                resolved_version_id: ref?.resolvedVersionId,
+              };
+            }),
+          });
+        } catch (e) {
+          return errResult(
+            e instanceof Error ? e.message : "list skills failed",
+          );
+        }
+      },
+    },
+    "list_skills",
+  );
+
+  const attach_skill = defineFrontendTool<AttachSkillArgs, ToolResult>(
+    {
+      description:
+        "Attach a project skill to the assistant by its exact name. Omit pinned_version_id to track the latest valid version; pass a valid version ID only when the user asks to pin a specific version. Skills are not MCP servers and do not provide callable tools.",
+      parameters: z.object({
+        skill_name: z.string().min(1),
+        pinned_version_id: z
+          .string()
+          .optional()
+          .describe("Valid skill version ID to pin. Omit to track latest."),
+      }),
+      execute: async (args) =>
+        serialize(async () => {
+          const { skill_name, pinned_version_id } = args as AttachSkillArgs;
+          try {
+            const skill = resolveSkillByName(await loadSkills(), skill_name);
+            const resolvedVersionId =
+              pinned_version_id ?? skill.latestVersionId;
+            if (!resolvedVersionId) {
+              return errResult(
+                "This skill has no version yet and cannot be attached.",
+              );
+            }
+            const created = live.id
+              ? undefined
+              : await ensureAssistant(deps, {}, live.id);
+            if (created) trackLive(created);
+            const assistantId = live.id;
+            if (!assistantId) {
+              return errResult("Unable to create the assistant.");
+            }
+            await sdk.skills.distribute({
+              distributeSkillRequestBody: {
+                id: skill.id,
+                assistantId,
+                ...(pinned_version_id
+                  ? { pinnedVersionId: pinned_version_id }
+                  : {}),
+              },
+            });
+            live.skills = [
+              ...live.skills.filter((ref) => ref.skillId !== skill.id),
+              {
+                skillId: skill.id,
+                resolvedVersionId,
+                ...(pinned_version_id
+                  ? { pinnedVersionId: pinned_version_id }
+                  : {}),
+              },
+            ];
+            draft.invalidateSkillAttachments();
+            try {
+              const updated = await sdk.assistants.get({ id: assistantId });
+              draft.setAssistant(updated);
+              trackLive(updated);
+            } catch {
+              draft.invalidateAll();
+              return okResult({
+                skill: {
+                  name: skill.name,
+                  display_name: skill.displayName,
+                  pinned_version_id,
+                },
+                skills: live.skills,
+                warning:
+                  "The skill was attached, but the assistant view did not refresh. Reload to confirm the latest state.",
+              });
+            }
+            return okResult({
+              skill: {
+                name: skill.name,
+                display_name: skill.displayName,
+                pinned_version_id,
+              },
+              skills: live.skills,
+            });
+          } catch (e) {
+            return errResult(
+              e instanceof Error ? e.message : "attach skill failed",
+            );
+          }
+        }),
+    },
+    "attach_skill",
+  );
+
+  const detach_skill = defineFrontendTool<DetachSkillArgs, ToolResult>(
+    {
+      description:
+        "Detach a project skill from the assistant by its exact name. This does not archive or delete the skill.",
+      parameters: z.object({ skill_name: z.string().min(1) }),
+      execute: async (args) =>
+        serialize(async () => {
+          const { skill_name } = args as DetachSkillArgs;
+          try {
+            if (!live.id) {
+              return errResult("No assistant exists yet. Create one first.");
+            }
+            const skill = resolveSkillByName(await loadSkills(), skill_name);
+            await sdk.skills.undistribute({
+              undistributeSkillRequestBody: {
+                id: skill.id,
+                assistantId: live.id,
+              },
+            });
+            live.skills = live.skills.filter((ref) => ref.skillId !== skill.id);
+            draft.invalidateSkillAttachments();
+            try {
+              const updated = await sdk.assistants.get({ id: live.id });
+              draft.setAssistant(updated);
+              trackLive(updated);
+            } catch {
+              draft.invalidateAll();
+              return okResult({
+                skills: live.skills,
+                warning:
+                  "The skill was detached, but the assistant view did not refresh. Reload to confirm the latest state.",
+              });
+            }
+            return okResult({ skills: live.skills });
+          } catch (e) {
+            return errResult(
+              e instanceof Error ? e.message : "detach skill failed",
+            );
+          }
+        }),
+    },
+    "detach_skill",
+  );
+
+  const list_mcp_servers = defineFrontendTool<
+    Record<string, never>,
+    ToolResult
+  >(
+    {
+      description:
+        "List MCP servers registered in the current project — remote (external SaaS) and tunnelled servers as well as toolset-backed ones. Use this to find the slug for attach_mcp_server when the user asks to add an MCP server that is not a Gram toolset. Only enabled, non-tunnelled servers are attachable.",
+      parameters: z.object({}),
+      execute: async () => {
+        try {
+          const result = await sdk.mcpServers.list();
+          return okResult({
+            mcp_servers: result.mcpServers.map((m) => ({
+              slug: m.slug,
+              name: m.name,
+              backend: m.remoteMcpServerId
+                ? "remote"
+                : m.toolsetId
+                  ? "toolset"
+                  : "tunnelled",
+              visibility: m.visibility,
+            })),
+          });
+        } catch (e) {
+          return errResult(e instanceof Error ? e.message : "list failed");
+        }
+      },
+    },
+    "list_mcp_servers",
+  );
+
   const list_toolsets = defineFrontendTool<Record<string, never>, ToolResult>(
     {
       description:
@@ -960,7 +1291,17 @@ function buildAssistantTools(deps: ToolDeps) {
       execute: async (args) => {
         const { urn_prefix, limit } = args as ListAvailableToolsArgs;
         try {
-          const res = await sdk.tools.list({ urnPrefix: urn_prefix, limit });
+          const res = await sdk.tools.list({
+            urnPrefix: urn_prefix,
+            limit,
+            toolTypes: [
+              "http",
+              "function",
+              "prompt",
+              "platform",
+              "externalmcp",
+            ],
+          });
           return okResult({
             tools: res.tools.map((t) => {
               const def =
@@ -1923,6 +2264,12 @@ function buildAssistantTools(deps: ToolDeps) {
     set_tasks,
     attach_toolset,
     detach_toolset,
+    attach_mcp_server,
+    detach_mcp_server,
+    list_skills,
+    attach_skill,
+    detach_skill,
+    list_mcp_servers,
     list_toolsets,
     create_toolset,
     add_tools_to_toolset,
@@ -1954,13 +2301,45 @@ export function useOnboardingTools(): {
 } {
   const sdk = useSdkClient();
   const session = useSession();
+  const project = useProject();
+  const { hasScope } = useRBAC();
+  const { data: productFeatures } = useProductFeatures();
   const draft = useAssistantDraft();
   const organizationId = session.activeOrganizationId;
 
-  const frontendTools = useMemo<OnboardingTools>(
-    () => buildAssistantTools({ sdk, organizationId, draft }),
-    [sdk, organizationId, draft],
-  );
+  const frontendTools = useMemo<Partial<OnboardingTools>>(() => {
+    const tools = buildAssistantTools({ sdk, organizationId, draft });
+    if (productFeatures?.skillsEnabled !== true) {
+      const { list_skills, attach_skill, detach_skill, ...enabledTools } =
+        tools;
+      void list_skills;
+      void attach_skill;
+      void detach_skill;
+      return enabledTools;
+    }
+    if (!hasScope("skill:read", project.id)) {
+      const { list_skills, attach_skill, detach_skill, ...enabledTools } =
+        tools;
+      void list_skills;
+      void attach_skill;
+      void detach_skill;
+      return enabledTools;
+    }
+    if (!hasScope("project:write", project.id)) {
+      const { attach_skill, detach_skill, ...readableTools } = tools;
+      void attach_skill;
+      void detach_skill;
+      return readableTools;
+    }
+    return tools;
+  }, [
+    sdk,
+    organizationId,
+    draft,
+    productFeatures?.skillsEnabled,
+    hasScope,
+    project.id,
+  ]);
 
   const components = useMemo<Record<string, ToolCallMessagePartComponent>>(
     () => ({

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -28,6 +30,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -51,25 +55,87 @@ type Service struct {
 	chatTitleGenerator ChatTitleGenerator
 	riskScanner        risk.RiskScanner
 	policyBypass       *risk.PolicyBypassEvaluator
+	spendGate          *spendrules.Gate
 	shadowMCPClient    *shadowmcp.Client
 	writer             *chat.ChatMessageWriter
-	siteURL            *url.URL
-	jwtSecret          string
+	// efficacySignaler is optional: when nil, hook paths record exactly as
+	// before and emit no wakes.
+	efficacySignaler efficacy.Signaler
+	serverURL        *url.URL
+	siteURL          *url.URL
+	jwtSecret        string
+	// nowFunc supplies the event timestamp for ingest paths that stamp
+	// server-side because the client sends none (the Cursor hook, and the
+	// Codex/OTEL fallbacks). Injectable so tests can pin telemetry event time
+	// relative to the attribute_metrics_summaries MV cutoff. Defaults to
+	// time.Now via NewService; access through now() for nil-safety.
+	nowFunc func() time.Time
+}
+
+// now returns the current time via the injected clock, falling back to
+// time.Now when unset (e.g. a zero-value Service).
+func (s *Service) now() time.Time {
+	if s.nowFunc != nil {
+		return s.nowFunc()
+	}
+	return time.Now()
 }
 
 type authorizer interface {
 	Authorize(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error)
 }
 
-// SessionMetadata contains validated session information from the Logs endpoint
+// SessionMetadata contains validated session information from the Logs endpoint.
+//
+// Beyond the Gram identity (UserID/GramOrgID/ProjectID) it carries the provider's
+// own account identity, normalized into provider-agnostic fields, so personal vs
+// team AI-account usage can be attributed and tracked. For Claude these map from
+// organization.id, user.account_uuid, user.account_id, and the per-device user.id.
 type SessionMetadata struct {
 	SessionID   string
 	ServiceName string
 	UserEmail   string
 	UserID      string
-	ClaudeOrgID string
-	GramOrgID   string
-	ProjectID   string
+	// Provider is the AI provider this session's account belongs to (e.g.
+	// "anthropic"). Empty for sources that don't track personal accounts yet.
+	Provider string
+	// ExternalOrgID is the provider's organization id (Claude organization.id):
+	// the personal-vs-team discriminator, distinct from GramOrgID.
+	ExternalOrgID string
+	// ExternalAccountUUID is the provider's stable per-account id (Claude
+	// user.account_uuid) — the user_accounts entity key.
+	ExternalAccountUUID string
+	// ExternalAccountID is the provider's tagged account id (Claude user.account_id).
+	ExternalAccountID string
+	// DeviceID is the per-device anonymous id (Claude user.id), stable across the
+	// accounts logged in on one machine — the device bridge that links a personal
+	// account to the employee learned from a team session on the same device.
+	DeviceID string
+	// Hostname is the device hostname the Go hooks report on every event
+	// (gram.hook.hostname). Cached with the session so the Claude OTEL path —
+	// whose rows carry no hostname of their own — can stamp it onto cost rows,
+	// letting the user breakdown fall back to the device when the session has
+	// no email (company-credential sessions emit no user identity).
+	Hostname string
+	// AccountType is "team" or "personal" once classified, else empty.
+	AccountType string
+	// BillingMode is the admin-declared billing mode for the provider org this
+	// session's account belongs to (ai_integration_configs.billing_mode), resolved
+	// at attribution time. Well-known values: "metered", "flat_rate", "unknown";
+	// empty when no declaration covers the session's provider org. Cost figures
+	// are real spend only for "metered" — everything else is an estimate.
+	BillingMode string
+	// UserAccountID is the user_accounts row id for this session's account, set
+	// once the account entity has been upserted.
+	UserAccountID string
+	// ObservedUserEmail is the email the AI account itself reported (Claude
+	// OTEL user.email) — the value persisted on user_accounts.email. Kept
+	// separate from UserEmail, the authenticated actor, so adopting cached
+	// attribution never rewrites the canonical user identity; telemetry
+	// carries it as the gram.account_email attribute.
+	ObservedUserEmail string
+	GramOrgID         string
+	ProjectID         string
 }
 
 // HookSpecificOutput is the structure for hook-specific output in responses
@@ -90,6 +156,29 @@ type ChatTitleGenerator interface {
 	ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID, projectID string) error
 }
 
+// skillEfficacySignalTimeout bounds one wake. A wake is best-effort and always
+// follows a durable write, so it must never hold a hook response open on a
+// slow coordinator.
+const skillEfficacySignalTimeout = time.Second
+
+// signalSkillEfficacy delivers one best-effort wake for a project. Detached
+// from the request context: the write the wake reports is already durable, so a
+// client disconnect must not drop it. Failures are logged and swallowed —
+// no hook decision, response or tool flow depends on a wake landing.
+func (s *Service) signalSkillEfficacy(ctx context.Context, projectID uuid.UUID) {
+	if s.efficacySignaler == nil || projectID == uuid.Nil {
+		return
+	}
+	signalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), skillEfficacySignalTimeout)
+	defer cancel()
+	if err := s.efficacySignaler.Signal(signalCtx, projectID); err != nil {
+		s.logger.ErrorContext(ctx, "signal skill efficacy coordinator from hook",
+			attr.SlogError(err),
+			attr.SlogProjectID(projectID.String()),
+		)
+	}
+}
+
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
@@ -108,8 +197,11 @@ func NewService(
 	chatTitleGenerator ChatTitleGenerator,
 	riskScanner risk.RiskScanner,
 	policyBypass *risk.PolicyBypassEvaluator,
+	spendGate *spendrules.Gate,
 	shadowMCPClient *shadowmcp.Client,
 	writer *chat.ChatMessageWriter,
+	efficacySignaler efficacy.Signaler,
+	serverURL *url.URL,
 	siteURL *url.URL,
 	jwtSecret string,
 ) *Service {
@@ -128,10 +220,14 @@ func NewService(
 		chatTitleGenerator: chatTitleGenerator,
 		riskScanner:        riskScanner,
 		policyBypass:       policyBypass,
+		spendGate:          spendGate,
 		shadowMCPClient:    shadowMCPClient,
 		writer:             writer,
+		efficacySignaler:   efficacySignaler,
+		serverURL:          serverURL,
 		siteURL:            siteURL,
 		jwtSecret:          jwtSecret,
+		nowFunc:            time.Now,
 	}
 }
 
@@ -167,6 +263,28 @@ func hashToolCallIDToTraceID(toolCallID string) string {
 	hash := sha256.Sum256([]byte(toolCallID))
 	// Take first 16 bytes (128 bits) of the hash to create a 32-hex-char trace ID
 	return hex.EncodeToString(hash[:16])
+}
+
+// syntheticToolCallID is the per-(session, tool) tool-call id for senders whose
+// hook payloads carry no per-call id (Codex, and canonical-API senders that
+// omit tool.id). The recorded chat tool_calls id and the telemetry trace id
+// must both derive from this one key: the shadow-MCP provenance lookup joins a
+// recorded id to its telemetry rows via
+// trace_id = hashToolCallIDToTraceID(recorded id) (see
+// internal/telemetry/repo/mcp_match_lookup.go), so deriving the two sides from
+// different values makes every call permanently unjoinable. Returns "" when
+// either part is missing — there is no meaningful per-tool key to share then,
+// and callers keep their previous fallback.
+//
+// The session id is length-prefixed so the encoding is injective: session ids
+// are client-controlled and may themselves contain "|", and two distinct
+// (session, tool) pairs colliding onto one key would let the provenance
+// lookup resolve one call to another call's MCP server.
+func syntheticToolCallID(sessionID, toolName string) string {
+	if sessionID == "" || toolName == "" {
+		return ""
+	}
+	return strconv.Itoa(len(sessionID)) + "|" + sessionID + "|" + toolName
 }
 
 // generateSpanID generates a W3C-compliant span ID (16 hex characters)

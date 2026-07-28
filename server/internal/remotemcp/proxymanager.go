@@ -11,17 +11,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
 
 // ProxyManager builds configured remote-MCP proxies wired up with the
 // MCP-aware interceptor stack: usage limits and tracking, per-tool RBAC,
-// shadow-MCP validation/injection, ClickHouse logging, OTel counters, and
-// PostHog event capture.
+// argument scrubbing, ClickHouse logging, OTel counters, and PostHog event
+// capture.
 //
 // One factory is constructed at server startup and reused across requests.
 // The interceptors that hold no per-request state (usage limits/tracking)
@@ -29,13 +29,12 @@ import (
 // [ProxyManager.Build] so the closure over the per-server correlation ids
 // stays request-scoped.
 type ProxyManager struct {
-	logger          *slog.Logger
-	tracer          trace.Tracer
-	guardianPolicy  *guardian.Policy
-	authz           *authz.Engine
-	shadowmcpClient *shadowmcp.Client
-	posthog         *posthog.Posthog
-	telemLogger     *tm.Logger
+	logger         *slog.Logger
+	tracer         trace.Tracer
+	guardianPolicy *guardian.Policy
+	authz          *authz.Engine
+	posthog        *posthog.Posthog
+	telemLogger    *tm.Logger
 
 	proxyMetrics *proxy.Metrics
 	mcpMetrics   *ProxyMetrics
@@ -56,7 +55,6 @@ func NewProxyManager(
 	meterProvider metric.MeterProvider,
 	guardianPolicy *guardian.Policy,
 	authzEngine *authz.Engine,
-	shadowmcpClient *shadowmcp.Client,
 	posthogClient *posthog.Posthog,
 	telemLogger *tm.Logger,
 	billingRepo billing.Repository,
@@ -70,7 +68,6 @@ func NewProxyManager(
 		tracer:                                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotemcp"),
 		guardianPolicy:                        guardianPolicy,
 		authz:                                 authzEngine,
-		shadowmcpClient:                       shadowmcpClient,
 		posthog:                               posthogClient,
 		telemLogger:                           telemLogger,
 		proxyMetrics:                          proxy.NewMetrics(meter, logger),
@@ -111,6 +108,7 @@ func (f *ProxyManager) Build(
 	visibility string,
 	projectID string,
 	upstreamAuth string,
+	wwwAuthenticate string,
 ) *proxy.Proxy {
 	configured := make([]proxy.ConfiguredHeader, 0, len(headers))
 	for _, h := range headers {
@@ -122,15 +120,23 @@ func (f *ProxyManager) Build(
 		})
 	}
 
-	serverID := server.ID.String()
+	return f.BuildTarget(logger, proxy.ServerIdentity{
+		RemoteMCPServerID:   server.ID.String(),
+		TunneledMCPServerID: "",
+		McpServerID:         mcpServerID,
+	}, server.Url, configured, visibility, projectID, upstreamAuth, wwwAuthenticate)
+}
 
-	// Telemetry interceptors are keyed by both correlation ids: the
-	// remote_mcp_servers id (the upstream) and the fronting mcp_servers id
-	// (the server users manage). server.ID still drives the synthetic tool
-	// URN and the remote-server slog/metric dimension; mcpServerID lets the
-	// same activity be sliced from the fronting-server perspective.
-	identity := proxy.ServerIdentity{RemoteMCPServerID: serverID, McpServerID: mcpServerID}
-
+func (f *ProxyManager) BuildTarget(
+	logger *slog.Logger,
+	identity proxy.ServerIdentity,
+	upstreamURL string,
+	headers []proxy.ConfiguredHeader,
+	visibility string,
+	projectID string,
+	upstreamAuth string,
+	wwwAuthenticate string,
+) *proxy.Proxy {
 	// Per-request instance: the interceptor holds a single nilable start
 	// timestamp set by the request side and consumed by the response side.
 	// A fresh instance per Build makes that field's lifetime match the
@@ -151,41 +157,28 @@ func (f *ProxyManager) Build(
 	// be unable to invoke any tool, and the tools/list filter would
 	// have no grants to consult.
 	//
-	// The shadow-MCP interceptors are attached unconditionally — public
-	// AND private — because they enforce a project-scoped risk policy,
-	// not an identity-scoped grant. A project that enables tool-identity
-	// capture wants the property injected and validated on every call
-	// the proxy serves, regardless of whether the underlying transport
-	// authenticated the caller. The pair self-gates via
-	// shadowmcp.Client.IsEnabledForProject at intercept time; the lookup
-	// is Redis-cached (15-minute TTL) so the hot-path cost when the
-	// policy is disabled is a single cache GET.
+	// The x-gram-toolset-id strip is attached unconditionally — public AND
+	// private — because the property is Gram's own envelope rather than
+	// anything scoped to an identity or a risk policy. It is a no-op for
+	// the arguments that don't carry it.
 	toolsCallReqInterceptors := []proxy.ToolsCallRequestInterceptor{
 		NewToolsCallOTELCounterInterceptor(f.mcpMetrics, identity, logger),
 		f.toolsCallUsageLimitsInterceptor,
-		NewToolsCallShadowMCPValidateAndStripInterceptor(f.shadowmcpClient, serverID, projectID, logger),
+		NewToolsCallStripToolsetIDInterceptor(logger),
 		clickHouseLogInterceptor,
 	}
 	if visibility == mcpservers.VisibilityPrivate {
 		toolsCallReqInterceptors = append(toolsCallReqInterceptors,
-			NewToolsCallAuthzInterceptor(f.authz, mcpServerID, projectID, logger),
+			NewToolsCallAuthzInterceptor(f.authz, identity.McpServerID, projectID, logger),
 		)
 	}
 
-	// ToolsList response chain ordering: filter first (drop tools the
-	// caller can't see), then inject (only mutate schemas of tools that
-	// survive the filter — saves work and prevents leaking the
-	// proxy-only x-gram-toolset-id property on tools the caller couldn't
-	// invoke anyway).
 	toolsListRespInterceptors := []proxy.ToolsListResponseInterceptor{}
 	if visibility == mcpservers.VisibilityPrivate {
 		toolsListRespInterceptors = append(toolsListRespInterceptors,
-			NewToolsListMCPConnectFilterInterceptor(f.authz, mcpServerID, projectID, logger),
+			NewToolsListMCPConnectFilterInterceptor(f.authz, identity.McpServerID, projectID, logger),
 		)
 	}
-	toolsListRespInterceptors = append(toolsListRespInterceptors,
-		NewToolsListShadowMCPInjectInterceptor(f.shadowmcpClient, serverID, projectID, logger),
-	)
 
 	// Resources request chain: free-tier ToolCalls usage limits apply to
 	// resources/read invocations alongside tools/call. Per-resource RBAC
@@ -194,6 +187,7 @@ func (f *ProxyManager) Build(
 	// without touching the proxy package again.
 	return &proxy.Proxy{
 		GuardianPolicy:          f.guardianPolicy,
+		GuardianClientOptions:   nil,
 		Logger:                  logger,
 		Tracer:                  f.tracer,
 		NonStreamingTimeout:     proxy.DefaultNonStreamingTimeout,
@@ -201,10 +195,14 @@ func (f *ProxyManager) Build(
 		Metrics:                 f.proxyMetrics,
 		MaxBufferedBodyBytes:    proxy.DefaultMaxBufferedBodyBytes,
 		Identity:                identity,
-		RemoteURL:               server.Url,
-		Headers:                 configured,
+		RemoteURL:               upstreamURL,
+		Headers:                 headers,
 		AuthorizationOverride:   upstreamAuth,
-		UserRequestInterceptors: nil,
+		UpstreamResponseRetryer: nil,
+		WWWAuthenticate:         wwwAuthenticate,
+		UserRequestInterceptors: []proxy.UserRequestInterceptor{
+			interceptors.NewFigma(upstreamURL, logger),
+		},
 		InitializeRequestInterceptors: []proxy.InitializeRequestInterceptor{
 			NewInitializePostHogEventInterceptor(f.posthog, identity, logger),
 		},

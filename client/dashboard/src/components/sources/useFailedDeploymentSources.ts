@@ -1,13 +1,9 @@
-import type {
-  Deployment,
-  DeploymentLogEvent,
-} from "@gram/client/models/components";
-import {
-  useDeployment,
-  useDeploymentLogs,
-  useLatestDeployment,
-  useListToolsets,
-} from "@gram/client/react-query/index.js";
+import type { Deployment } from "@gram/client/models/components/deployment.js";
+import type { DeploymentLogEvent } from "@gram/client/models/components/deploymentlogevent.js";
+import { useDeployment } from "@gram/client/react-query/deployment.js";
+import { useDeploymentLogs } from "@gram/client/react-query/deploymentLogs.js";
+import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useMemo } from "react";
 import { type SourceType, attachmentToURNPrefix } from "@/lib/sources";
 

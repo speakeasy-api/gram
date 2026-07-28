@@ -7,7 +7,8 @@
 
 package types
 
-// A header configured for a remote MCP server
+// RemoteMcpServerHeader is the result type of the remoteMcp service
+// getServerHeader method.
 type RemoteMcpServerHeader struct {
 	// The ID of the header
 	ID string

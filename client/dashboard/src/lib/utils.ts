@@ -14,6 +14,19 @@ export function getServerURL(): string {
   return __GRAM_SERVER_URL__ ?? window.location.origin;
 }
 
+// tunnel.speakeasy.com in prod, tunnel-pr-N.<env> in previews (single label
+// keeps the wildcard cert valid), tunnel.<host> otherwise.
+export function tunnelGatewayURL(): string {
+  const server = new URL(getServerURL());
+  const host =
+    server.host === "app.getgram.ai"
+      ? "tunnel.speakeasy.com"
+      : /^pr-\d+\./.test(server.host)
+        ? `tunnel-${server.host}`
+        : `tunnel.${server.host}`;
+  return `${server.protocol === "http:" ? "ws" : "wss"}://${host}/connect`;
+}
+
 // __PLAYGROUND_PROXY_URL__ is the dashboard origin in dev (so browser-side MCP
 // requests can ride the vite proxy and ferry cookies the Vercel AI SDK can't
 // forward across origins), and undefined in prod. Consumed by the playground
@@ -48,22 +61,30 @@ export function mcpConnectionUrl(
 }
 
 // firstPartyConnectUrl derives the runtime first-party connect entry point
-// (`/x/mcp/<slug>/connect/first-party`) for a display MCP URL. It's always built
-// on the Gram server origin (getServerURL), never the display URL's origin: a
-// custom-domain endpoint's display URL is `https://<customer-domain>/mcp/<slug>`,
-// but the connect page is a Gram auth surface — the IDP callback, routes, and
-// any session live on the Gram origin, not the customer's MCP domain. Opened as
-// a top-level new tab; the IDP flow is state-based so no dev proxy is needed.
+// (`/<runtimePath>/<slug>/connect/first-party`) for a display MCP URL. It's
+// always built on the Gram server origin (getServerURL), never the display
+// URL's origin: a custom-domain endpoint's display URL is
+// `https://<customer-domain>/mcp/<slug>`, but the connect page is a Gram auth
+// surface — the IDP callback, routes, and any session live on the Gram origin,
+// not the customer's MCP domain. Opened as a top-level new tab; the IDP flow is
+// state-based so no dev proxy is needed.
+//
+// `runtimePath` selects the surface the connect route is mounted on: the
+// experimental remote-MCP surface (`x/mcp`, the default) or the toolset surface
+// (`mcp`, used by the playground). Both display URLs are `/mcp/<slug>`, so the
+// surface can't be inferred from the URL and must be passed explicitly.
 // Returns undefined when the slug can't be derived.
 export function firstPartyConnectUrl(
   displayUrl: string | undefined,
+  options?: { runtimePath?: "mcp" | "x/mcp" },
 ): string | undefined {
   if (!displayUrl) return undefined;
+  const runtimePath = options?.runtimePath ?? "x/mcp";
   try {
     const slug = new URL(displayUrl).pathname.split("/").filter(Boolean).pop();
     if (!slug) return undefined;
     const url = new URL(getServerURL());
-    url.pathname = `/x/mcp/${slug}/connect/first-party`;
+    url.pathname = `/${runtimePath}/${slug}/connect/first-party`;
     return url.toString();
   } catch {
     return undefined;
@@ -105,6 +126,49 @@ export function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(message);
   }
+}
+
+export function assertNever(value: unknown): never {
+  throw new Error(`Unexpected value: ${String(value)}`);
+}
+
+/**
+ * Two-letter initials from a display name or email handle: first letter of
+ * the first and last word for a multi-word name ("Adam Bull" -> "AB"), or
+ * the first two characters of the email's local part / a single-word name
+ * otherwise ("adam@..." -> "AD").
+ */
+export function initialsOf(identifier: string): string {
+  const handle = identifier.includes("@")
+    ? (identifier.split("@")[0] ?? identifier)
+    : identifier;
+  const words = handle.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    return (
+      words[0]!.charAt(0) + words[words.length - 1]!.charAt(0)
+    ).toUpperCase();
+  }
+  return handle.trim().slice(0, 2).toUpperCase();
+}
+
+/** Sleep that respects AbortSignal for clean cancellation. */
+export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", onAbort);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 export function getCustomDomainCNAME(): string {

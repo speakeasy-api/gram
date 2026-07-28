@@ -11,6 +11,7 @@ const (
 	HookEventPostToolUseFailure HookEvent = "PostToolUseFailure"
 	HookEventUserPromptSubmit   HookEvent = "UserPromptSubmit"
 	HookEventStop               HookEvent = "Stop"
+	HookEventSubagentStop       HookEvent = "SubagentStop"
 	HookEventSessionEnd         HookEvent = "SessionEnd"
 	HookEventNotification       HookEvent = "Notification"
 	HookEventPermissionRequest  HookEvent = "PermissionRequest"
@@ -37,6 +38,8 @@ func parseClaudeHookEvent(raw string) (HookEvent, bool) {
 		return HookEventUserPromptSubmit, true
 	case string(HookEventStop):
 		return HookEventStop, true
+	case string(HookEventSubagentStop):
+		return HookEventSubagentStop, true
 	case string(HookEventSessionEnd):
 		return HookEventSessionEnd, true
 	case string(HookEventNotification):

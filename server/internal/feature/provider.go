@@ -12,6 +12,18 @@ type Provider interface {
 	// nil when the flag is targeted purely by distinct ID. Use
 	// OrgProjectGroups to build the org/project groups the dashboard registers.
 	IsFlagEnabled(ctx context.Context, flag Flag, distinctID string, groups map[string]string) (bool, error)
+
+	// IsFlagEnabledLocal evaluates a flag using only locally cached flag
+	// definitions. Providers must fail closed without falling back to remote
+	// evaluation when the local result is unavailable or inconclusive.
+	IsFlagEnabledLocal(ctx context.Context, flag Flag, distinctID string, groups, personProperties map[string]string) (bool, error)
+
+	// FlagPayload returns the raw JSON payload PostHog attaches to the flag
+	// release that matches distinctID, or (nil, nil) when the flag is off, has
+	// no payload, or the provider is disabled. groups is used for group-targeted
+	// releases the same way as IsFlagEnabled. Callers should fail closed: treat a
+	// nil payload or an error as "no clearance".
+	FlagPayload(ctx context.Context, flag Flag, distinctID string, groups map[string]string) ([]byte, error)
 }
 
 type InMemory sync.Map
@@ -32,10 +44,38 @@ func (imp *InMemory) IsFlagEnabled(ctx context.Context, flag Flag, distinctID st
 	return enabled, nil
 }
 
+func (imp *InMemory) IsFlagEnabledLocal(ctx context.Context, flag Flag, distinctID string, groups, personProperties map[string]string) (bool, error) {
+	return imp.IsFlagEnabled(ctx, flag, distinctID, groups)
+}
+
 func (imp *InMemory) SetFlag(flag Flag, distinctID string, enabled bool) {
 	key := distinctID + ":" + string(flag)
 
 	(*sync.Map)(imp).Store(key, enabled)
+}
+
+// payloadKey namespaces payload entries so they never collide with the boolean
+// entries SetFlag/IsFlagEnabled store under "<distinctID>:<flag>".
+func payloadKey(flag Flag, distinctID string) string {
+	return "payload:" + distinctID + ":" + string(flag)
+}
+
+func (imp *InMemory) FlagPayload(ctx context.Context, flag Flag, distinctID string, groups map[string]string) ([]byte, error) {
+	val, ok := (*sync.Map)(imp).Load(payloadKey(flag, distinctID))
+	if !ok {
+		return nil, nil
+	}
+
+	payload, ok := val.([]byte)
+	if !ok {
+		return nil, nil
+	}
+
+	return payload, nil
+}
+
+func (imp *InMemory) SetFlagPayload(flag Flag, distinctID string, payload []byte) {
+	(*sync.Map)(imp).Store(payloadKey(flag, distinctID), payload)
 }
 
 // OrgProjectGroups returns the PostHog group memberships used to evaluate

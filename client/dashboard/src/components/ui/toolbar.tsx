@@ -3,6 +3,7 @@ import React, { Fragment, useEffect, useState, type ReactNode } from "react";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
+  RefreshCw,
   SearchIcon,
   SlidersHorizontal,
   X,
@@ -33,8 +34,8 @@ import {
 } from "@/components/filters/filter-schema";
 
 /**
- * The page Toolbar: the single control strip that sits on its own row below a
- * page title and lets the user shape the collection below it — search, filters,
+ * The page Toolbar: the control strip that sits on its own row below a page
+ * title and lets the user shape the collection below it — search, filters,
  * sort, and view. Compose it from its pieces:
  *
  *   <Page.Toolbar>
@@ -42,16 +43,85 @@ import {
  *     <Page.Toolbar.Filters schema={…} values={…} … />
  *     <Page.Toolbar.SortBy value={sort} options={…} onChange={setSort} />
  *     <Page.Toolbar.ViewAs value={view} onChange={setView} />
+ *     <Page.Toolbar.Refresh onRefresh={refetch} isRefreshing={isFetching} />
  *   </Page.Toolbar>
  *
  * Every control is the same height ({@link CONTROL_HEIGHT}) so the row reads
- * flush. The toolbar groups its children: ViewAs and Count anchor the right
- * edge; everything else stays left in source order. Child order otherwise
- * doesn't matter.
+ * flush. The toolbar groups its children: Search, Filters, and Leading stay
+ * left; Sort, ViewAs, Count, Refresh, and Actions anchor the right edge, in
+ * source order. Child order otherwise doesn't matter.
+ *
+ * A bar that carries too many controls for one line composes explicit rows
+ * instead — each row is the same left/right cluster layout inside the one
+ * shared shell:
+ *
+ *   <Page.Toolbar>
+ *     <Page.Toolbar.Row>
+ *       <Page.Toolbar.Search … />
+ *       <Page.Toolbar.Actions>{…}</Page.Toolbar.Actions>
+ *     </Page.Toolbar.Row>
+ *     <Page.Toolbar.Row>
+ *       <Page.Toolbar.Leading>{…}</Page.Toolbar.Leading>
+ *       <Page.Toolbar.Actions>{…}</Page.Toolbar.Actions>
+ *     </Page.Toolbar.Row>
+ *   </Page.Toolbar>
  */
 
 // Shared height for every control in the toolbar (40px).
 const CONTROL_HEIGHT = "h-10";
+
+// The toolbar's shell (the grey rounded bar) — one definition whether the bar
+// lays out a single row or composes Toolbar.Row children.
+const TOOLBAR_SHELL = "border-border bg-muted/40 w-full rounded-lg border p-2";
+
+// One row of clusters: the left holds the controls that narrow the data
+// (search + filters + leading), spaced apart (justify-between) from the right,
+// which holds how it's ordered and shown (sort + count + view + custom
+// actions). Children are sorted by type, so they can be written in any order.
+function ToolbarClusters({ children }: { children: ReactNode }): JSX.Element {
+  let search: ReactNode = null;
+  let filters: ReactNode = null;
+  let leading: ReactNode = null;
+  let sort: ReactNode = null;
+  const trailing: ReactNode[] = [];
+  React.Children.forEach(children, (child) => {
+    if (!React.isValidElement(child)) return;
+    if (child.type === ToolbarSearch) search = child;
+    else if (child.type === ToolbarFilters) filters = child;
+    else if (child.type === ToolbarLeading) leading = child;
+    else if (child.type === ToolbarSortBy) sort = child;
+    else trailing.push(child);
+  });
+
+  const hasLeft = search != null || filters != null || leading != null;
+  const right: ReactNode[] = [sort, ...trailing].filter((n) => n != null);
+
+  return (
+    <>
+      {hasLeft && (
+        <div className="flex flex-wrap items-center gap-3">
+          {search}
+          {search != null && filters != null && (
+            <div className="bg-border h-6 w-px shrink-0" />
+          )}
+          {filters}
+          {leading}
+        </div>
+      )}
+      {right.length > 0 && (
+        // The cluster wraps right-aligned rather than clipping when it grows
+        // wider than the bar; ml-auto keeps it anchored to the right edge
+        // even when the row's flex-wrap drops the whole cluster onto its own
+        // line below the left cluster. Single-line layouts are unaffected.
+        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
+          {right.map((node, index) => (
+            <Fragment key={index}>{node}</Fragment>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
 
 function ToolbarRoot({
   children,
@@ -60,50 +130,58 @@ function ToolbarRoot({
   children: ReactNode;
   className?: string;
 }): JSX.Element {
-  // Two clusters, spaced apart (justify-between): the left holds the controls
-  // that narrow the data (search + filters), the right holds how it's ordered
-  // and shown (sort + count + view + custom actions). Children are sorted by
-  // type, so they can be written in any order.
-  let search: ReactNode = null;
-  let filters: ReactNode = null;
-  let sort: ReactNode = null;
-  const trailing: ReactNode[] = [];
-  React.Children.forEach(children, (child) => {
-    if (!React.isValidElement(child)) return;
-    if (child.type === ToolbarSearch) search = child;
-    else if (child.type === ToolbarFilters) filters = child;
-    else if (child.type === ToolbarSortBy) sort = child;
-    else trailing.push(child);
-  });
+  // Explicit rows, when present, each render the standard cluster layout on
+  // their own line inside the one shell; otherwise the children form a single
+  // row directly on the shell (the common case, unchanged).
+  const rows = React.Children.toArray(children).filter(
+    (child): child is React.ReactElement<{ children: ReactNode }> =>
+      React.isValidElement(child) && child.type === ToolbarRow,
+  );
 
-  const hasLeft = search != null || filters != null;
-  const right: ReactNode[] = [sort, ...trailing].filter((n) => n != null);
+  if (rows.length > 0) {
+    return (
+      <div className={cn(TOOLBAR_SHELL, "flex flex-col gap-2", className)}>
+        {rows.map((row, index) => (
+          <div
+            key={index}
+            className="flex w-full flex-wrap items-center justify-between gap-3"
+          >
+            <ToolbarClusters>{row.props.children}</ToolbarClusters>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div
       className={cn(
-        "border-border bg-muted/40 flex w-full flex-wrap items-center justify-between gap-3 rounded-lg border p-2",
+        TOOLBAR_SHELL,
+        "flex flex-wrap items-center justify-between gap-3",
         className,
       )}
     >
-      {hasLeft && (
-        <div className="flex flex-wrap items-center gap-3">
-          {search}
-          {search != null && filters != null && (
-            <div className="bg-border h-6 w-px shrink-0" />
-          )}
-          {filters}
-        </div>
-      )}
-      {right.length > 0 && (
-        <div className="flex shrink-0 items-center gap-2">
-          {right.map((node, index) => (
-            <Fragment key={index}>{node}</Fragment>
-          ))}
-        </div>
-      )}
+      <ToolbarClusters>{children}</ToolbarClusters>
     </div>
   );
+}
+
+/**
+ * One explicit row of a multi-row toolbar. Only meaningful as a direct child
+ * of Page.Toolbar; its children are the same pieces a single-row toolbar
+ * takes, sorted into the same left/right clusters.
+ */
+function ToolbarRow({ children }: { children: ReactNode }): JSX.Element {
+  return <>{children}</>;
+}
+
+/**
+ * Custom controls anchored to the LEFT cluster beside Search/Filters — for
+ * page-specific pieces that narrow or re-cut the collection (a segmented axis
+ * track, a scope selector). Right-aligned extras belong in Actions.
+ */
+function ToolbarLeading({ children }: { children: ReactNode }): JSX.Element {
+  return <>{children}</>;
 }
 
 /** Search box (debounced, white, shared height). */
@@ -183,6 +261,11 @@ interface ToolbarFiltersProps {
   onRemoveCustomFilter?: (id: string) => void;
   /** Page-supplied arbitrary-attribute builder, rendered inside the sheet. */
   customBuilder?: ReactNode;
+  /**
+   * Page-supplied chips rendered after the filter chips, before the "More
+   * filters" trigger — for informational badges that belong in the chip row.
+   */
+  extraChips?: ReactNode;
   projectSlug?: string;
 }
 
@@ -197,6 +280,7 @@ function ToolbarFilters({
   onEditCustomFilter,
   onRemoveCustomFilter,
   customBuilder,
+  extraChips,
   projectSlug,
 }: ToolbarFiltersProps): JSX.Element {
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -248,6 +332,8 @@ function ToolbarFilters({
           onRemove={onRemoveCustomFilter ?? (() => {})}
         />
       ))}
+
+      {extraChips}
 
       <Button
         variant="outline"
@@ -389,11 +475,57 @@ function ToolbarActions({ children }: { children: ReactNode }): JSX.Element {
   return <>{children}</>;
 }
 
+// Minimum time the refresh button stays in its spinning state, so a
+// fast/cached refetch still reads as having done something.
+const MIN_REFRESH_MS = 2000;
+
+/** Refresh button (right-aligned). Spins/disables while refreshing. */
+interface ToolbarRefreshProps {
+  onRefresh: () => void;
+  isRefreshing?: boolean;
+  className?: string;
+}
+
+function ToolbarRefresh({
+  onRefresh,
+  isRefreshing = false,
+  className,
+}: ToolbarRefreshProps): JSX.Element {
+  const [minDurationActive, setMinDurationActive] = useState(false);
+
+  useEffect(() => {
+    if (!minDurationActive) return;
+    const timer = setTimeout(() => setMinDurationActive(false), MIN_REFRESH_MS);
+    return () => clearTimeout(timer);
+  }, [minDurationActive]);
+
+  const showRefreshing = isRefreshing || minDurationActive;
+
+  return (
+    <Button
+      variant="outline"
+      onClick={() => {
+        setMinDurationActive(true);
+        onRefresh();
+      }}
+      disabled={showRefreshing}
+      aria-label="Refresh"
+      className={cn(CONTROL_HEIGHT, "gap-2", className)}
+    >
+      <RefreshCw className={cn("size-4", showRefreshing && "animate-spin")} />
+      Refresh
+    </Button>
+  );
+}
+
 export const Toolbar = Object.assign(ToolbarRoot, {
+  Row: ToolbarRow,
   Search: ToolbarSearch,
   Filters: ToolbarFilters,
+  Leading: ToolbarLeading,
   SortBy: ToolbarSortBy,
   ViewAs: ToolbarViewAs,
   Count: ToolbarCount,
   Actions: ToolbarActions,
+  Refresh: ToolbarRefresh,
 });

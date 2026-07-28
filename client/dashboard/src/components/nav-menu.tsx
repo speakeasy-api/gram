@@ -7,6 +7,7 @@ import React from "react";
 import { Link } from "react-router";
 import { ProductTierBadge } from "./product-tier-badge";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { Type } from "./ui/type";
 
 export const NAV_LOADING_DURATION_MS = 600;
@@ -341,6 +342,7 @@ export function NavButton({
   Icon,
   onClick,
   stage,
+  tooltip,
 }: {
   id?: string;
   title: string;
@@ -351,6 +353,10 @@ export function NavButton({
   active?: boolean;
   Icon?: React.ComponentType<{ className?: string }>;
   stage?: ReleaseStage;
+  // When set, wraps the actual focusable <Link> (not a wrapper div) in a
+  // tooltip — e.g. the collapsed sidebar, where only the icon shows and the
+  // title needs to reach keyboard/screen-reader users via the link itself.
+  tooltip?: React.ReactNode;
 }): React.JSX.Element {
   const itemId = id ?? title;
   const navItem = useNavItem(itemId);
@@ -374,6 +380,48 @@ export function NavButton({
     );
   };
 
+  const link = (
+    <Link
+      to={href ?? "#"}
+      target={target}
+      onClick={handleClick}
+      className={cn(
+        "relative z-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:no-underline",
+        "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
+        active
+          ? "text-foreground font-semibold"
+          : "text-muted-foreground hover:text-foreground font-medium",
+      )}
+    >
+      {Icon && (
+        <Icon
+          className={cn(
+            "trans size-4 shrink-0",
+            active ? "text-foreground" : "text-muted-foreground",
+          )}
+        />
+      )}
+      <Type
+        variant="small"
+        className={cn(
+          "transition-[opacity,transform] duration-150 ease-out group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0",
+          active && "font-semibold",
+          isLoading && "nav-shimmer",
+        )}
+      >
+        {titleNode ?? title}
+      </Type>
+      {title === "Billing" && <ProductTierBadge />}
+      {stage && (
+        <ReleaseStageBadge
+          stage={stage}
+          noTooltip
+          className="group-data-[collapsible=icon]:hidden"
+        />
+      )}
+    </Link>
+  );
+
   return (
     <div
       ref={navItem.ref}
@@ -382,45 +430,16 @@ export function NavButton({
       onMouseMove={navItem.onMouseMove}
       className="group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:w-fit"
     >
-      <Link
-        to={href ?? "#"}
-        target={target}
-        onClick={handleClick}
-        className={cn(
-          "relative z-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:no-underline",
-          "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
-          active
-            ? "text-foreground font-semibold"
-            : "text-muted-foreground hover:text-foreground font-medium",
-        )}
-      >
-        {Icon && (
-          <Icon
-            className={cn(
-              "trans size-4 shrink-0",
-              active ? "text-foreground" : "text-muted-foreground",
-            )}
-          />
-        )}
-        <Type
-          variant="small"
-          className={cn(
-            "transition-[opacity,transform] duration-150 ease-out group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0",
-            active && "font-semibold",
-            isLoading && "nav-shimmer",
-          )}
-        >
-          {titleNode ?? title}
-        </Type>
-        {title === "Billing" && <ProductTierBadge />}
-        {stage && (
-          <ReleaseStageBadge
-            stage={stage}
-            noTooltip
-            className="group-data-[collapsible=icon]:hidden"
-          />
-        )}
-      </Link>
+      {tooltip ? (
+        <Tooltip>
+          <TooltipTrigger asChild>{link}</TooltipTrigger>
+          <TooltipContent side="right" sideOffset={4}>
+            {tooltip}
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        link
+      )}
     </div>
   );
 }

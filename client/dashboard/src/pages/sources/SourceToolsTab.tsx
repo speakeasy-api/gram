@@ -1,11 +1,13 @@
+import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { ToolVariationBadge } from "@/components/tool-variation-badge";
+import { MoreActions } from "@/components/ui/more-actions";
 import { SearchBar } from "@/components/ui/search-bar";
 import { Type } from "@/components/ui/type";
 import { ToolUpdateFields } from "@/hooks/useToolUpdate";
 import type { Tool } from "@/lib/toolTypes";
 import { Badge } from "@speakeasy-api/moonshine";
 import { useState } from "react";
-import { SourceToolActions } from "./SourceToolActions";
+import { useSourceToolActions } from "./useSourceToolActions";
 
 type HttpTool = Extract<Tool, { type: "http" }>;
 type FunctionTool = Extract<Tool, { type: "function" }>;
@@ -75,30 +77,35 @@ function HttpToolRow({
   onToolUpdate,
   isToolUpdating,
 }: { tool: HttpTool } & ToolActionsProps) {
+  const { actions, dialog } = useSourceToolActions({
+    tool,
+    onUpdate: (updates) => onToolUpdate?.(tool, updates),
+    isUpdating: isToolUpdating,
+  });
+
   return (
-    <div className="hover:bg-muted/30 grid grid-cols-[80px_40%_1fr] items-center border-b px-4 py-3 transition-colors last:border-b-0">
-      <div>
-        <Badge variant={HTTP_METHOD_VARIANT[tool.httpMethod] ?? "neutral"}>
-          <Badge.Text>{tool.httpMethod}</Badge.Text>
-        </Badge>
-      </div>
-      <div className="text-muted-foreground truncate pr-3 font-mono text-sm">
-        {tool.path}
-      </div>
-      <div className="flex min-w-0 items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-sm">{tool.name}</span>
-          <ToolVariationBadge tool={tool} />
+    <>
+      <TableRowContextMenu actions={onToolUpdate ? actions : []}>
+        <div className="hover:bg-muted/30 grid grid-cols-[80px_40%_1fr] items-center border-b px-4 py-3 transition-colors last:border-b-0">
+          <div>
+            <Badge variant={HTTP_METHOD_VARIANT[tool.httpMethod] ?? "neutral"}>
+              <Badge.Text>{tool.httpMethod}</Badge.Text>
+            </Badge>
+          </div>
+          <div className="text-muted-foreground truncate pr-3 font-mono text-sm">
+            {tool.path}
+          </div>
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-sm">{tool.name}</span>
+              <ToolVariationBadge tool={tool} />
+            </div>
+            {onToolUpdate && <MoreActions actions={actions} />}
+          </div>
         </div>
-        {onToolUpdate && (
-          <SourceToolActions
-            tool={tool}
-            onUpdate={(updates) => onToolUpdate(tool, updates)}
-            isUpdating={isToolUpdating}
-          />
-        )}
-      </div>
-    </div>
+      </TableRowContextMenu>
+      {dialog}
+    </>
   );
 }
 
@@ -107,30 +114,35 @@ function FunctionToolRow({
   onToolUpdate,
   isToolUpdating,
 }: { tool: FunctionTool } & ToolActionsProps) {
+  const { actions, dialog } = useSourceToolActions({
+    tool,
+    onUpdate: (updates) => onToolUpdate?.(tool, updates),
+    isUpdating: isToolUpdating,
+  });
+
   return (
-    <div className="hover:bg-muted/30 grid grid-cols-[120px_1fr_1.5fr] items-center gap-4 border-b px-4 py-3 transition-colors last:border-b-0">
-      <div>
-        <Badge variant={runtimeBadgeVariant(tool.runtime)}>
-          <Badge.Text>{tool.runtime}</Badge.Text>
-        </Badge>
-      </div>
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="truncate font-mono text-sm">{tool.name}</span>
-        <ToolVariationBadge tool={tool} />
-      </div>
-      <div className="flex min-w-0 items-center justify-between gap-2">
-        <div className="text-muted-foreground truncate text-sm">
-          {tool.description}
+    <>
+      <TableRowContextMenu actions={onToolUpdate ? actions : []}>
+        <div className="hover:bg-muted/30 grid grid-cols-[120px_1fr_1.5fr] items-center gap-4 border-b px-4 py-3 transition-colors last:border-b-0">
+          <div>
+            <Badge variant={runtimeBadgeVariant(tool.runtime)}>
+              <Badge.Text>{tool.runtime}</Badge.Text>
+            </Badge>
+          </div>
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate font-mono text-sm">{tool.name}</span>
+            <ToolVariationBadge tool={tool} />
+          </div>
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <div className="text-muted-foreground truncate text-sm">
+              {tool.description}
+            </div>
+            {onToolUpdate && <MoreActions actions={actions} />}
+          </div>
         </div>
-        {onToolUpdate && (
-          <SourceToolActions
-            tool={tool}
-            onUpdate={(updates) => onToolUpdate(tool, updates)}
-            isUpdating={isToolUpdating}
-          />
-        )}
-      </div>
-    </div>
+      </TableRowContextMenu>
+      {dialog}
+    </>
   );
 }
 

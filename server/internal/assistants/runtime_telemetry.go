@@ -164,6 +164,18 @@ func (t *telemetryRuntimeBackend) Status(ctx context.Context, runtime assistantR
 	return status, nil
 }
 
+func (t *telemetryRuntimeBackend) RuntimeExists(ctx context.Context, runtime assistantRuntimeRecord) (bool, error) {
+	checker, ok := t.inner.(runtimeLivenessChecker)
+	if !ok {
+		return true, nil
+	}
+	exists, err := checker.RuntimeExists(ctx, runtime)
+	if err != nil {
+		return false, fmt.Errorf("runtime existence check: %w", err)
+	}
+	return exists, nil
+}
+
 func (t *telemetryRuntimeBackend) Stop(ctx context.Context, runtime assistantRuntimeRecord) error {
 	err := t.inner.Stop(ctx, runtime)
 	if err != nil {
@@ -253,3 +265,5 @@ func (t *telemetryRuntimeBackend) emit(
 		Attributes: attrs,
 	})
 }
+
+var _ runtimeLivenessChecker = (*telemetryRuntimeBackend)(nil)

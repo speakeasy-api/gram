@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { UserSession } from "@gram/client/models/components";
+import type { UserSession } from "@gram/client/models/components/usersession.js";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import {

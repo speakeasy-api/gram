@@ -1,10 +1,9 @@
 import "@speakeasy-api/moonshine/moonshine.css";
 import "./App.css"; // Import this second to override certain values in moonshine.css
 
-import { NuqsAdapter } from "nuqs/adapters/react-router/v7";
+import { NuqsAdapter } from "nuqs/adapters/react-router/v8";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider as LocalTooltipProvider } from "@/components/ui/tooltip";
-import { FontTexture, WebGLCanvas } from "@/components/webgl";
 import {
   MoonshineConfigProvider,
   TooltipProvider,
@@ -34,18 +33,21 @@ import { CommandPaletteProvider } from "./contexts/CommandPaletteProvider";
 import { useSlugs } from "./contexts/Sdk.tsx";
 import { SdkProvider } from "./contexts/SdkProvider.tsx";
 import { TelemetryProvider } from "./contexts/TelemetryProvider.tsx";
-import { RBACDevToolbar } from "./components/dev-toolbar";
+import { PlatformAdminToolbar } from "./components/platform-admin-toolbar";
 import { usePageTitle } from "./hooks/use-page-title";
 import { PREFERRED_THEME_STORAGE_KEY } from "./lib/local-storage-keys";
 import CliCallback from "./pages/cli/CliCallback";
 import ShadowMCPRequestAccess from "./pages/shadow-mcp/RequestAccess";
+import RiskPolicyChallengeAcknowledge from "./pages/risk-policy-challenge/Acknowledge";
 import { BlockPage } from "./pages/blocks/BlockDetail";
+import { SHARED_SKILL_BASE_PATH } from "./pages/skills/share-link";
+import { SharedSkillPage } from "./pages/skills/SharedSkillPage";
 import SwitchOrg from "./pages/demo/SwitchOrg";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
 export default function App(): JSX.Element {
   // Initialize from storage so React/Moonshine match the theme the pre-paint
-  // inline script (in index.html) already applied to <html> — avoids a flash.
+  // script (loaded from index.html) already applied to <html> — avoids a flash.
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     try {
       return localStorage.getItem(PREFERRED_THEME_STORAGE_KEY) === "dark"
@@ -129,26 +131,26 @@ function AppContent() {
    * 4. Authenticated user is redirected back to the component.
    */
   const cliFlow = useCliAuthFlow();
-  const location = useLocation();
-
-  // Only render WebGL canvas during onboarding
-  const isOnboarding = location.pathname.includes("/onboarding");
 
   if (cliFlow) {
-    return <CliCallback localCallbackUrl={cliFlow.cliCallbackUrl} />;
+    return (
+      <CliCallback
+        keyScope={cliFlow.keyScope}
+        localCallbackUrl={cliFlow.cliCallbackUrl}
+        projectSlug={cliFlow.projectSlug}
+        organizationId={cliFlow.organizationId}
+        codeChallenge={cliFlow.codeChallenge}
+        codeChallengeMethod={cliFlow.codeChallengeMethod}
+        callbackMethod={cliFlow.callbackMethod}
+      />
+    );
   }
 
   return (
     <AuthProvider>
       <ProjectProvider>
-        {isOnboarding && (
-          <>
-            <WebGLCanvas />
-            <FontTexture />
-          </>
-        )}
         <RouteProvider />
-        <RBACDevToolbar />
+        <PlatformAdminToolbar />
       </ProjectProvider>
     </AuthProvider>
   );
@@ -235,13 +237,13 @@ const RouteProvider = () => {
     const projectActions = projectSlug
       ? projectNavRoutes
           .filter(
-            ({ route, scope }) =>
+            ({ route, scope, resourceId }) =>
               !route.external &&
               route.component &&
               route.title &&
               // Mirror the sidebar's per-page scope gating so the palette never
               // offers (nor navigates to) pages the user can't access.
-              hasAnyScope(scope),
+              hasAnyScope(scope, resourceId),
           )
           .map(({ route }) =>
             routeToNavAction(route, "Pages", `nav-page-${route.url || "home"}`),
@@ -301,7 +303,15 @@ const RouteProvider = () => {
           path="/risk-policy-bypass/request"
           element={<ShadowMCPRequestAccess />}
         />
+        <Route
+          path="/risk-policy-challenge/acknowledge"
+          element={<RiskPolicyChallengeAcknowledge />}
+        />
         <Route path="/blocks/:id" element={<BlockPage />} />
+        <Route
+          path={`${SHARED_SKILL_BASE_PATH}/:token`}
+          element={<SharedSkillPage />}
+        />
         <Route path="/" element={<LoginCheck />}>
           <Route path=":orgSlug/projects/:projectSlug">
             {routesWithSubroutes(outsideStructureRoutes)}
@@ -418,15 +428,39 @@ const routesWithSubroutes = (routes: AppRoute[]) => {
     ));
 };
 
-function useCliAuthFlow() {
+type LocalAuthFlow = {
+  cliCallbackUrl: string;
+  keyScope: "producer" | "hooks";
+  projectSlug: string | null;
+  organizationId: string | null;
+  codeChallenge: string | null;
+  codeChallengeMethod: string | null;
+  callbackMethod: "get" | "post";
+};
+
+function useCliAuthFlow(): LocalAuthFlow | null {
   const [searchParams] = useSearchParams();
   const location = useLocation();
 
   const fromCli = searchParams.get("from_cli") === "true";
   const cliCallbackUrl = searchParams.get("cli_callback_url");
+  const keyScope = searchParams.get("key_scope");
+  const projectSlug = searchParams.get("project");
+  const organizationId = searchParams.get("organization_id");
+  const codeChallenge = searchParams.get("code_challenge");
+  const codeChallengeMethod = searchParams.get("code_challenge_method");
+  const callbackMethod = searchParams.get("callback_method");
 
   if (location.pathname === "/" && fromCli && cliCallbackUrl) {
-    return { cliCallbackUrl };
+    return {
+      cliCallbackUrl,
+      keyScope: keyScope === "hooks" ? "hooks" : "producer",
+      projectSlug,
+      organizationId,
+      codeChallenge,
+      codeChallengeMethod,
+      callbackMethod: callbackMethod === "post" ? "post" : "get",
+    };
   }
 
   return null;

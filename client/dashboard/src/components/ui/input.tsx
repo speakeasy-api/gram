@@ -71,6 +71,17 @@ function Input({
     onChange(e.target.value);
   };
 
+  // Scrolling while hovering a focused number input natively increments or
+  // decrements the value — an easy way to silently corrupt a form (e.g. a
+  // billing limit) while scrolling the page. Blur on wheel so the scroll
+  // passes through without editing the number.
+  const handleWheel = (e: React.WheelEvent<HTMLInputElement>) => {
+    if (type === "number") {
+      e.currentTarget.blur();
+    }
+    props.onWheel?.(e);
+  };
+
   // --- Prefix width measurement logic ---
   const prefixRef = useRef<HTMLSpanElement>(null);
   const [prefixWidth, setPrefixWidth] = useState(0);
@@ -123,6 +134,7 @@ function Input({
         onKeyDown={handleKeyDown}
         {...props}
         onChange={handleChange}
+        onWheel={handleWheel}
         value={
           props.value?.startsWith(requiredPrefix ?? "")
             ? props.value.replace(requiredPrefix ?? "", "")

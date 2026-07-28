@@ -197,6 +197,8 @@ func (c *Client) AgentChat(
 			Model:                     opts.Model,
 			Stream:                    false,
 			UsageSource:               billing.ModelUsageSourceAssistants,
+			KeyType:                   openrouter.KeyTypeChat,
+			KeySlot:                   "",
 			ChatID:                    chatID,
 			UserID:                    "",
 			ExternalUserID:            "", // TODO

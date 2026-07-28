@@ -24,24 +24,18 @@ import {
 import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
 import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
 import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
-import type {
-  McpServer,
-  RemoteSessionClient,
-  RemoteSessionIssuer,
-  UserSessionIssuer,
-} from "@gram/client/models/components";
-import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components";
-import {
-  invalidateAllGetMcpServer,
-  invalidateAllMcpServers,
-  invalidateAllRemoteSessionClients,
-  invalidateAllRemoteSessionIssuers,
-  invalidateAllUserSessionIssuers,
-} from "@gram/client/react-query/index.js";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
+import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
+import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
+import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
+import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import type { AuthTarget } from "./authTarget";
 import {
   ClientTypeFields,
   EndpointsFields,
@@ -56,6 +50,7 @@ import {
   parseScopes,
   pickPreferredAuthMethod,
 } from "./issuerFormUtils";
+import { IdentityProviderAttachmentErrorAlert } from "./IdentityProviderAttachmentErrorAlert";
 import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import { useIssuerDiscovery } from "./useIssuerDiscovery";
 
@@ -64,16 +59,18 @@ type Mode = "select" | "new";
 export function AttachRemoteIdentityProviderSheet({
   open,
   onOpenChange,
-  mcpServer,
+  target,
   userSessionIssuer,
   selectableIssuers,
   initialIssuerUrl,
+  initialScopes,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mcpServer: McpServer;
-  // null when the MCP server has no user_session_issuer linked yet — the
-  // first add also creates one and links it via updateMcpServer.
+  // The MCP server or toolset the issuer gets linked to.
+  target: AuthTarget;
+  // null when the target has no issuer yet — the first add creates one and
+  // links it via target.linkUserSessionIssuer.
   userSessionIssuer: UserSessionIssuer | null;
   // remote_session_issuers (organization-level and same-project) that are not
   // already associated with userSessionIssuer. Empty list hides the issuer
@@ -84,6 +81,9 @@ export function AttachRemoteIdentityProviderSheet({
   // in "new" mode and runs RFC 8414 discovery against this URL to prefill the
   // upstream endpoints.
   initialIssuerUrl?: string;
+  // RFC 9728 protected-resource scopes. Some providers advertise these only
+  // on the protected resource, not in authorization-server metadata.
+  initialScopes?: string[];
 }): JSX.Element {
   const client = useSdkClient();
   const { fetch: authedFetch } = useFetcher();
@@ -230,7 +230,7 @@ export function AttachRemoteIdentityProviderSheet({
       if (!issuerId) {
         const created = await client.userSessionIssuers.create({
           createUserSessionIssuerForm: {
-            slug: buildUserSessionResourceSlug(mcpServer.slug ?? "mcp"),
+            slug: buildUserSessionResourceSlug(target.slug),
             authnChallengeMode: "interactive",
             sessionDurationHours: DEFAULT_USER_SESSION_DURATION_HOURS,
           },
@@ -272,6 +272,13 @@ export function AttachRemoteIdentityProviderSheet({
             // offer the CIMD client type. False when discovery did not run.
             clientIdMetadataDocumentSupported:
               discoveredSnapshot?.clientIdMetadataDocumentSupported ?? false,
+            // RFC 8414 documentation URLs are discovery-only — there are no form
+            // inputs for them. Undefined when discovery did not run or the issuer
+            // advertised nothing usable.
+            serviceDocumentation:
+              discoveredSnapshot?.serviceDocumentation || undefined,
+            opPolicyUri: discoveredSnapshot?.opPolicyUri || undefined,
+            opTosUri: discoveredSnapshot?.opTosUri || undefined,
           },
         });
         remoteIssuerId = created.id;
@@ -370,22 +377,11 @@ export function AttachRemoteIdentityProviderSheet({
         });
       }
 
-      // Step 4: on first-add, point the MCP server at the freshly-created
-      // user_session_issuer and set visibility to private so the server
-      // begins serving traffic. updateMcpServer is a full-record replace,
-      // so re-send the existing UUID references alongside the update.
+      // Step 4: on first-add, link the target to the new issuer. How the link
+      // is stored (and side effects like flipping a server private) is the
+      // target's business.
       if (!userSessionIssuer) {
-        await client.mcpServers.update({
-          updateMcpServerForm: {
-            id: mcpServer.id,
-            name: mcpServer.name ?? undefined,
-            remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
-            toolsetId: mcpServer.toolsetId ?? undefined,
-            environmentId: mcpServer.environmentId ?? undefined,
-            visibility: "private",
-            userSessionIssuerId: issuerId,
-          },
-        });
+        await target.linkUserSessionIssuer?.(issuerId);
       }
 
       return { unsupportedDcrAuthMethod };
@@ -395,8 +391,7 @@ export function AttachRemoteIdentityProviderSheet({
         invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
-        invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
-        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        target.invalidate(queryClient),
       ]);
 
       toast.success("Identity provider attached");
@@ -418,14 +413,9 @@ export function AttachRemoteIdentityProviderSheet({
   });
 
   const submitting = attachMutation.isPending;
-  const submitError = attachMutation.error
-    ? attachMutation.error instanceof Error && attachMutation.error.message
-      ? attachMutation.error.message
-      : "An unexpected error occurred. Please try again."
-    : null;
   const { reset: resetAttachMutation } = attachMutation;
 
-  // Reset transient state whenever the sheet is reopened. The mcpServer slug
+  // Reset transient state whenever the sheet is reopened. The target slug
   // seeds the default new-issuer slug so most operators can submit without
   // touching the field, but we still allow editing.
   useEffect(() => {
@@ -434,11 +424,11 @@ export function AttachRemoteIdentityProviderSheet({
     setSelectedIssuerId("");
     // Seed the slug from the Issuer URL when we have one (the "Start With
     // Discovered Configuration" path). Otherwise fall back to the
-    // mcpServer-based default. Either way slugDirty resets to false so the
+    // target-based default. Either way slugDirty resets to false so the
     // operator's first keystroke in the field starts locking it in.
     setSlug(
       deriveSlugFromUrl(initialIssuerUrl ?? "") ??
-        buildUserSessionResourceSlug(mcpServer.slug ?? "mcp"),
+        buildUserSessionResourceSlug(target.slug),
     );
     setSlugDirty(false);
     setName(deriveRemoteSessionIssuerNameFromUrl(initialIssuerUrl ?? "") ?? "");
@@ -449,15 +439,16 @@ export function AttachRemoteIdentityProviderSheet({
     setClientId("");
     setClientSecret("");
     setTokenEndpointAuthMethod("");
-    setScopeOverride("");
+    setScopeOverride(initialScopes?.join(", ") ?? "");
     setAudienceOverride("");
     setClientMode("select");
     setSelectedClientId("");
     resetAttachMutation();
   }, [
     open,
-    mcpServer.slug,
+    target.slug,
     initialIssuerUrl,
+    initialScopes,
     hasSelectable,
     setIssuerUrl,
     resetEndpointState,
@@ -599,7 +590,7 @@ export function AttachRemoteIdentityProviderSheet({
           <Stack gap={4}>
             <SectionHeading
               title="Identity Provider"
-              description="The upstream OAuth authorization server Gram delegates to."
+              description="The upstream OAuth authorization server Speakeasy delegates to."
             />
             {hasSelectable && <ModeSwitch mode={mode} onChange={setMode} />}
 
@@ -715,17 +706,13 @@ export function AttachRemoteIdentityProviderSheet({
             <Stack gap={4} className="border-t pt-6">
               <SectionHeading
                 title="Session Client"
-                description="The OAuth client Gram registers and uses with this provider."
+                description="The OAuth client Speakeasy registers and uses with this provider."
               />
               {clientSectionBody}
             </Stack>
           )}
 
-          {submitError && (
-            <Alert variant="error" dismissible={false}>
-              {submitError}
-            </Alert>
-          )}
+          <IdentityProviderAttachmentErrorAlert error={attachMutation.error} />
         </div>
 
         <SheetFooter className="flex-row items-center justify-end gap-2 border-t px-6 py-4">

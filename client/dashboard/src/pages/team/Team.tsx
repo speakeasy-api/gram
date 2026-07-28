@@ -17,20 +17,20 @@ import { formatDistanceToNow } from "date-fns";
 import { z } from "zod";
 import {
   invalidateAllListInvites,
+  useListInvitesSuspense,
+} from "@gram/client/react-query/listInvites.js";
+import {
   invalidateAllListOrganizationUsers,
   useListOrganizationUsersSuspense,
-  useListInvitesSuspense,
-  useSendInviteMutation,
-  useRevokeInviteMutation,
-  useUpdateInviteRoleMutation,
-  useRemoveOrganizationUserMutation,
-} from "@gram/client/react-query";
+} from "@gram/client/react-query/listOrganizationUsers.js";
+import { useRemoveOrganizationUserMutation } from "@gram/client/react-query/removeOrganizationUser.js";
+import { useRevokeInviteMutation } from "@gram/client/react-query/revokeInvite.js";
+import { useSendInviteMutation } from "@gram/client/react-query/sendInvite.js";
+import { useUpdateInviteRoleMutation } from "@gram/client/react-query/updateInviteRole.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import {
-  OrganizationUser,
-  OrganizationInvitation,
-} from "@gram/client/models/components";
+import { OrganizationInvitation } from "@gram/client/models/components/organizationinvitation.js";
+import { OrganizationUser } from "@gram/client/models/components/organizationuser.js";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   Alert,
@@ -62,6 +62,13 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { RequireScope } from "@/components/require-scope";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
 import { cn } from "@/lib/utils";
@@ -85,6 +92,150 @@ function getMemberColors(id: string) {
     to: `hsl(${hue2}, ${saturation}%, 60%)`,
     angle,
   };
+}
+
+/**
+ * Everything from TeamInner's scope that the member actions menu needs,
+ * so the dropdown render fn and MemberRowContextMenu can build the same
+ * menu model for a member.
+ */
+type MemberMenuDeps = {
+  accessMemberByUserId: Map<string, AccessMember>;
+  adminCount: number;
+  adminRoleId: string | undefined;
+  challengesHref: string;
+  isRbacEnabled: boolean;
+  navigate: ReturnType<typeof useNavigate>;
+  roleIdsByUserId: Map<string, string[]>;
+  scimManaged: boolean;
+  setChangingMember: (member: AccessMember | null) => void;
+  setMemberToRemove: (member: OrganizationUser | null) => void;
+  userEmail: string;
+};
+
+type MemberMenuModel = {
+  accessMember: AccessMember | undefined;
+  canRemove: boolean;
+  openChallenges: () => void;
+  openManageRoles: () => void;
+  openRemove: () => void;
+  scimManaged: boolean;
+  showChallenges: boolean;
+  showManageRoles: boolean;
+};
+
+/**
+ * Single source of truth for the per-member actions menu: the visible "⋯"
+ * dropdown in the actions column and the row's right-click context menu both
+ * render from this model, so their conditions and callbacks stay in sync.
+ */
+function getMemberMenuModel(
+  member: OrganizationUser,
+  deps: MemberMenuDeps,
+): MemberMenuModel {
+  const memberRoleIds = deps.roleIdsByUserId.get(member.userId) ?? [];
+  const isLastAdmin =
+    deps.adminRoleId != null &&
+    memberRoleIds.includes(deps.adminRoleId) &&
+    deps.adminCount <= 1;
+  const isSelf = member.email === deps.userEmail;
+  const accessMember: AccessMember | undefined =
+    deps.accessMemberByUserId.get(member.userId) ??
+    (memberRoleIds.length > 0
+      ? {
+          id: member.userId,
+          principalUrn: `user:${member.userId}`,
+          name: member.name,
+          email: member.email,
+          photoUrl: member.photoUrl,
+          roleIds: memberRoleIds,
+          joinedAt: member.createdAt,
+        }
+      : undefined);
+
+  return {
+    accessMember,
+    canRemove: !isSelf && !isLastAdmin,
+    openChallenges: () => {
+      void setTimeout(() => {
+        void deps.navigate(
+          `${deps.challengesHref}?identity=${encodeURIComponent(member.email)}`,
+        );
+      }, 0);
+    },
+    openManageRoles: () => {
+      if (!accessMember) return;
+      void setTimeout(() => deps.setChangingMember(accessMember), 0);
+    },
+    openRemove: () => {
+      void setTimeout(() => deps.setMemberToRemove(member), 0);
+    },
+    scimManaged: deps.scimManaged,
+    showChallenges: deps.isRbacEnabled,
+    showManageRoles: deps.isRbacEnabled,
+  };
+}
+
+/**
+ * Right-click menu for a member row, mirroring the actions-column dropdown
+ * item for item (same model, same permission gating). Renders children
+ * unwrapped when no menu item is renderable.
+ */
+function MemberRowContextMenu({
+  member,
+  deps,
+  children,
+}: {
+  member: OrganizationUser;
+  deps: MemberMenuDeps;
+  children: React.ReactElement;
+}): React.JSX.Element {
+  const model = getMemberMenuModel(member, deps);
+  const hasManageRoles =
+    model.showManageRoles && (model.scimManaged || model.accessMember != null);
+  const hasItemsAbove = hasManageRoles || model.showChallenges;
+
+  if (!hasItemsAbove && !model.canRemove) {
+    return <>{children}</>;
+  }
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent className="min-w-[10rem]">
+        {model.showManageRoles &&
+          (model.scimManaged ? (
+            <ContextMenuItem disabled>Manage roles</ContextMenuItem>
+          ) : (
+            model.accessMember && (
+              <RequireScope scope="org:admin" level="component">
+                <ContextMenuItem onSelect={model.openManageRoles}>
+                  Manage roles
+                </ContextMenuItem>
+              </RequireScope>
+            )
+          ))}
+        {model.showChallenges && (
+          <ContextMenuItem onSelect={model.openChallenges}>
+            View challenges
+          </ContextMenuItem>
+        )}
+        {model.canRemove && (
+          <>
+            {hasItemsAbove && <ContextMenuSeparator />}
+            <RequireScope scope="org:admin" level="component">
+              <ContextMenuItem
+                variant="destructive"
+                onSelect={model.openRemove}
+              >
+                Remove member
+              </ContextMenuItem>
+            </RequireScope>
+          </>
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
+  );
 }
 
 export default function Team(): JSX.Element {
@@ -378,6 +529,20 @@ function TeamInner() {
 
   const membersByUserId = new Map(members.map((m) => [m.userId, m]));
 
+  const memberMenuDeps: MemberMenuDeps = {
+    accessMemberByUserId,
+    adminCount,
+    adminRoleId,
+    challengesHref: orgRoutes.access.challenges.href(),
+    isRbacEnabled,
+    navigate,
+    roleIdsByUserId,
+    scimManaged: Boolean(organization.scimEnabled),
+    setChangingMember,
+    setMemberToRemove,
+    userEmail: user.email,
+  };
+
   const memberColumns: Column<OrganizationUser>[] = [
     {
       key: "member",
@@ -491,25 +656,7 @@ function TeamInner() {
       header: "",
       width: "60px",
       render: (member) => {
-        const memberRoleIds = roleIdsByUserId.get(member.userId) ?? [];
-        const isLastAdmin =
-          adminRoleId != null &&
-          memberRoleIds.includes(adminRoleId) &&
-          adminCount <= 1;
-        const isSelf = member.email === user.email;
-        const accessMember: AccessMember | undefined =
-          accessMemberByUserId.get(member.userId) ??
-          (memberRoleIds.length > 0
-            ? {
-                id: member.userId,
-                principalUrn: `user:${member.userId}`,
-                name: member.name,
-                email: member.email,
-                photoUrl: member.photoUrl,
-                roleIds: memberRoleIds,
-                joinedAt: member.createdAt,
-              }
-            : undefined);
+        const model = getMemberMenuModel(member, memberMenuDeps);
 
         return (
           <DropdownMenu modal={false}>
@@ -524,8 +671,8 @@ function TeamInner() {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {isRbacEnabled &&
-                (organization.scimEnabled ? (
+              {model.showManageRoles &&
+                (model.scimManaged ? (
                   <SimpleTooltip tooltip="Role assignments are managed by your identity provider. Configure them under SSO → SCIM in identity settings.">
                     <span className="inline-flex w-full">
                       <DropdownMenuItem disabled className="w-full">
@@ -534,43 +681,26 @@ function TeamInner() {
                     </span>
                   </SimpleTooltip>
                 ) : (
-                  accessMember && (
+                  model.accessMember && (
                     <RequireScope scope="org:admin" level="component">
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          void setTimeout(
-                            () => setChangingMember(accessMember),
-                            0,
-                          );
-                        }}
-                      >
+                      <DropdownMenuItem onSelect={model.openManageRoles}>
                         Manage roles
                       </DropdownMenuItem>
                     </RequireScope>
                   )
                 ))}
-              {isRbacEnabled && (
-                <DropdownMenuItem
-                  onSelect={() => {
-                    void setTimeout(() => {
-                      void navigate(
-                        `${orgRoutes.access.challenges.href()}?identity=${encodeURIComponent(member.email)}`,
-                      );
-                    }, 0);
-                  }}
-                >
+              {model.showChallenges && (
+                <DropdownMenuItem onSelect={model.openChallenges}>
                   View challenges
                 </DropdownMenuItem>
               )}
-              {!isSelf && !isLastAdmin && (
+              {model.canRemove && (
                 <>
-                  {isRbacEnabled && <DropdownMenuSeparator />}
+                  {model.showManageRoles && <DropdownMenuSeparator />}
                   <RequireScope scope="org:admin" level="component">
                     <DropdownMenuItem
                       className="text-destructive focus:text-destructive"
-                      onSelect={() => {
-                        void setTimeout(() => setMemberToRemove(member), 0);
-                      }}
+                      onSelect={model.openRemove}
                     >
                       Remove member
                     </DropdownMenuItem>
@@ -846,6 +976,15 @@ function TeamInner() {
             columns={memberColumns}
             data={visibleMembers}
             rowKey={(row) => row.userId}
+            renderRow={(row, rowElement) => (
+              <MemberRowContextMenu
+                key={row.userId}
+                member={row}
+                deps={memberMenuDeps}
+              >
+                {rowElement}
+              </MemberRowContextMenu>
+            )}
             className="min-h-fit"
             noResultsMessage={
               <Stack

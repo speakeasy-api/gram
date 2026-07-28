@@ -23,11 +23,12 @@ import {
 import { HumanizeDateTime } from "@/lib/dates";
 import { cn, getCustomDomainCNAME } from "@/lib/utils";
 import { useCustomDomainMcpEndpoints } from "@gram/client/react-query/customDomainMcpEndpoints";
+import { useCheckDomainHealthMutation } from "@gram/client/react-query/checkDomainHealth";
 import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
 import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
 import { useUpdateDomainMutation } from "@gram/client/react-query/updateDomain";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -35,6 +36,7 @@ import {
   ChevronRight,
   Copy,
   Globe,
+  AlertTriangle,
   Loader2,
   Trash2,
   X,
@@ -82,6 +84,49 @@ function validateIPEntry(entry: string): string {
 }
 
 type IPRow = { id: number; value: string; error: string | null };
+
+const healthIssueMessages: Record<string, string> = {
+  dns_not_found:
+    "We couldn't find DNS records for this domain. Check that the record still exists with your DNS provider.",
+  dns_target_mismatch:
+    "This domain's DNS does not resolve to Gram's endpoint. If the domain sits behind a proxy or CDN, traffic may still work; otherwise update its DNS record to the value shown when you registered the domain.",
+  resource_missing:
+    "The routing configuration for this domain is missing. Run the check again to confirm the problem persists.",
+  certificate_missing:
+    "The TLS certificate for this domain is missing. Run the check again to confirm the problem persists.",
+  certificate_not_ready:
+    "The TLS certificate for this domain is not ready. Check your DNS configuration, then run the check again.",
+  certificate_expired:
+    "The TLS certificate for this domain has expired. Check your DNS configuration, then run the check again.",
+  certificate_invalid:
+    "The TLS certificate does not match this domain or could not be read. Run the check again to confirm the problem persists.",
+  check_failed:
+    "We couldn't complete the latest health check. Run it again to confirm whether the domain is healthy.",
+};
+
+function customDomainHealthMessage(issue?: string): string {
+  return issue
+    ? (healthIssueMessages[issue] ??
+        "The latest health check found a problem with this domain.")
+    : "The latest health check found a problem with this domain.";
+}
+
+// A single failed probe (check_failed) is usually a transient Gram-side issue,
+// not a customer-actionable problem; only surface it once it has persisted
+// across consecutive checks.
+function showCustomDomainUnhealthy(domain: {
+  healthStatus?: string;
+  healthIssue?: string;
+  consecutiveFailures?: number;
+}): boolean {
+  if (domain.healthStatus !== "unhealthy") {
+    return false;
+  }
+  return (
+    domain.healthIssue !== "check_failed" ||
+    (domain.consecutiveFailures ?? 0) >= 2
+  );
+}
 
 // Inline editor: each allowlist entry is its own editable field. Entries are
 // validated on blur (and on save, by the parent via `onValidityChange`) rather
@@ -164,7 +209,9 @@ function IPAllowlistEditor({
               onClick={() => handleRemove(row.id)}
               aria-label="Remove entry"
             >
-              <X className="h-4 w-4" />
+              <Button.Icon>
+                <X className="h-4 w-4" />
+              </Button.Icon>
             </Button>
           </div>
           {row.error && (
@@ -286,6 +333,16 @@ function OrgDomainsInner() {
     },
   });
 
+  const checkDomainHealthMutation = useCheckDomainHealthMutation({
+    onSuccess: async () => {
+      await invalidateAllGetDomain(queryClient);
+      toast.success("Custom domain health check completed");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to check custom domain health");
+    },
+  });
+
   // Preview which MCP endpoints will be cascaded by the delete. Only fetched
   // while the confirmation dialog is open and a domain is configured.
   const impactQuery = useCustomDomainMcpEndpoints(undefined, undefined, {
@@ -357,6 +414,10 @@ function OrgDomainsInner() {
                   <SimpleTooltip tooltip="Your domain is being verified. This may take a few minutes.">
                     <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
                   </SimpleTooltip>
+                ) : showCustomDomainUnhealthy(domain) ? (
+                  <SimpleTooltip tooltip="The latest health check found a problem">
+                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  </SimpleTooltip>
                 ) : domain.verified ? (
                   <SimpleTooltip tooltip="Domain verified and active">
                     <Check className="h-4 w-4 stroke-3 text-green-500" />
@@ -418,17 +479,56 @@ function OrgDomainsInner() {
                   </Button>
                 )}
                 <Button
+                  aria-label="Delete custom domain"
                   variant="tertiary"
                   size="sm"
                   onClick={() => setIsDeleteDomainDialogOpen(true)}
                   className="hover:text-destructive"
                   disabled={deleteDomainMutation.isPending}
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Button.Icon>
+                    <Trash2 className="h-4 w-4" />
+                  </Button.Icon>
                 </Button>
               </Stack>
             </RequireScope>
           </Stack>
+          {showCustomDomainUnhealthy(domain) && (
+            <Alert variant="warning" dismissible={false} className="mt-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <Type variant="body" className="font-medium">
+                    This custom domain may not be working
+                  </Type>
+                  <Type variant="body" className="text-sm">
+                    {customDomainHealthMessage(domain.healthIssue)}
+                  </Type>
+                  {domain.healthCheckedAt && (
+                    <Type variant="body" className="text-sm opacity-80">
+                      Last checked{" "}
+                      <HumanizeDateTime date={domain.healthCheckedAt} />
+                    </Type>
+                  )}
+                </div>
+                <RequireScope scope="org:admin" level="component">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={checkDomainHealthMutation.isPending}
+                    onClick={() =>
+                      checkDomainHealthMutation.mutate({
+                        security: { sessionHeaderGramSession: "" },
+                      })
+                    }
+                  >
+                    {checkDomainHealthMutation.isPending
+                      ? "Checking..."
+                      : "Check again"}
+                  </Button>
+                </RequireScope>
+              </div>
+            </Alert>
+          )}
         </div>
       ) : (
         !domainIsLoading && (
@@ -599,16 +699,21 @@ function OrgDomainsInner() {
               <div className="bg-muted mt-2 flex items-center space-x-2 rounded-md p-3">
                 <code className="flex-1 break-all">{CNAME_VALUE}</code>
                 <Button
+                  aria-label={
+                    isCnameCopied ? "CNAME value copied" : "Copy CNAME value"
+                  }
                   variant="tertiary"
                   size="sm"
                   onClick={() => void handleCopyCname()}
                   className="shrink-0"
                 >
-                  {isCnameCopied ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
+                  <Button.Icon>
+                    {isCnameCopied ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button.Icon>
                 </Button>
               </div>
             </div>
@@ -627,16 +732,21 @@ function OrgDomainsInner() {
               <div className="bg-muted mt-2 flex items-center space-x-2 rounded-md p-3">
                 <code className="flex-1 break-all">{txtValue}</code>
                 <Button
+                  aria-label={
+                    isTxtCopied ? "TXT value copied" : "Copy TXT value"
+                  }
                   variant="tertiary"
                   size="sm"
                   onClick={() => void handleCopyTxt()}
                   className="shrink-0"
                 >
-                  {isTxtCopied ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
+                  <Button.Icon>
+                    {isTxtCopied ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button.Icon>
                 </Button>
               </div>
             </div>

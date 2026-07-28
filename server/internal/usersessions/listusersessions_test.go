@@ -2,6 +2,7 @@ package usersessions_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -275,6 +276,68 @@ func TestListUserSessions_FilterByClientID_NoMatch(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, got.Items)
+}
+
+// TestListUserSessions_StatusActiveUsesRefreshExpiry guards the fix for a bug
+// where the Active MCP Connections list intermittently showed "No active
+// sessions". A live MCP connection only refreshes its short-lived (~1h) access
+// token on demand, so its row routinely has a past expires_at while its
+// refresh token — the real session lifetime — is still valid. The "active"
+// filter must key off refresh_expires_at, not expires_at, or those sessions
+// disappear from the list depending on how recently the client last refreshed.
+func TestListUserSessions_StatusActiveUsesRefreshExpiry(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "refresh-expiry-issuer",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+
+	now := time.Now()
+	// Access token expired an hour ago, but the refresh token (session) is
+	// still valid for another day — this is a live connection.
+	live, err := seedUserSessionWithExpiry(t, ctx, ti.conn, uuid.MustParse(issuer.ID), urn.NewUserSubject("live"), now.Add(-time.Hour), now.Add(24*time.Hour))
+	require.NoError(t, err)
+	// Both access and refresh tokens expired — a genuinely dead session.
+	dead, err := seedUserSessionWithExpiry(t, ctx, ti.conn, uuid.MustParse(issuer.ID), urn.NewUserSubject("dead"), now.Add(-2*time.Hour), now.Add(-time.Hour))
+	require.NoError(t, err)
+
+	active := "active"
+	gotActive, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		SubjectUrn:          nil,
+		UserSessionIssuerID: nil,
+		Status:              &active,
+		Cursor:              nil,
+		Limit:               nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, gotActive.Items, 1)
+	require.Equal(t, live.ID.String(), gotActive.Items[0].ID)
+
+	expired := "expired"
+	gotExpired, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		SubjectUrn:          nil,
+		UserSessionIssuerID: nil,
+		Status:              &expired,
+		Cursor:              nil,
+		Limit:               nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, gotExpired.Items, 1)
+	require.Equal(t, dead.ID.String(), gotExpired.Items[0].ID)
 }
 
 func TestListUserSessions_StatusRevokedFilter(t *testing.T) {

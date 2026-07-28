@@ -41,3 +41,28 @@ func VerifyURLRemoteMcpPath() string {
 func DeleteServerRemoteMcpPath() string {
 	return "/rpc/remoteMcp.deleteServer"
 }
+
+// ListServerHeadersRemoteMcpPath returns the URL path to the remoteMcp service listServerHeaders HTTP endpoint.
+func ListServerHeadersRemoteMcpPath() string {
+	return "/rpc/remoteMcp.listServerHeaders"
+}
+
+// GetServerHeaderRemoteMcpPath returns the URL path to the remoteMcp service getServerHeader HTTP endpoint.
+func GetServerHeaderRemoteMcpPath() string {
+	return "/rpc/remoteMcp.getServerHeader"
+}
+
+// CreateServerHeaderRemoteMcpPath returns the URL path to the remoteMcp service createServerHeader HTTP endpoint.
+func CreateServerHeaderRemoteMcpPath() string {
+	return "/rpc/remoteMcp.createServerHeader"
+}
+
+// UpdateServerHeaderRemoteMcpPath returns the URL path to the remoteMcp service updateServerHeader HTTP endpoint.
+func UpdateServerHeaderRemoteMcpPath() string {
+	return "/rpc/remoteMcp.updateServerHeader"
+}
+
+// DeleteServerHeaderRemoteMcpPath returns the URL path to the remoteMcp service deleteServerHeader HTTP endpoint.
+func DeleteServerHeaderRemoteMcpPath() string {
+	return "/rpc/remoteMcp.deleteServerHeader"
+}

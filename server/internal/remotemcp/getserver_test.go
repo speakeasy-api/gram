@@ -20,13 +20,6 @@ func TestGetServer(t *testing.T) {
 		ProjectSlugInput: nil,
 		URL:              "https://mcp.example.com",
 		TransportType:    "streamable-http",
-		Headers: []*gen.HeaderInput{
-			{
-				Name:     "Authorization",
-				IsSecret: new(true),
-				Value:    new("Bearer token123"),
-			},
-		},
 	})
 	require.NoError(t, err)
 
@@ -41,11 +34,6 @@ func TestGetServer(t *testing.T) {
 	require.Equal(t, created.ID, result.ID)
 	require.Equal(t, "https://mcp.example.com", result.URL)
 	require.Equal(t, "streamable-http", result.TransportType)
-	require.Len(t, result.Headers, 1)
-	require.Equal(t, "Authorization", result.Headers[0].Name)
-	require.True(t, result.Headers[0].IsSecret)
-	require.NotNil(t, result.Headers[0].Value)
-	require.Contains(t, *result.Headers[0].Value, "*")
 }
 
 func TestGetServer_NotFound(t *testing.T) {
@@ -74,7 +62,6 @@ func TestGetServer_BySlug(t *testing.T) {
 		ProjectSlugInput: nil,
 		URL:              "https://api.example.com/mcp",
 		TransportType:    "streamable-http",
-		Headers:          []*gen.HeaderInput{},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, created.Slug)

@@ -2,6 +2,7 @@
 
 #MISE dir="{{ config_root }}/dev-idp"
 #MISE description="Start the dev-idp server (mock-workos + oauth2 + oauth2-1 + workos modes)"
+#MISE hide=true
 
 set -e
 

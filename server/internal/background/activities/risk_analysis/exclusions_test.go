@@ -8,6 +8,7 @@ import (
 
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
 func nullableText(s string) pgtype.Text {
@@ -26,14 +27,14 @@ func excl(matchType, matchValue, ruleFilter, sourceFilter string) repo.RiskExclu
 func TestExclusionSet_Excluded(t *testing.T) {
 	t.Parallel()
 
-	finding := func(rule, source, match string) ra.Finding {
-		return ra.Finding{RuleID: rule, Source: source, Match: match}
+	finding := func(rule, source, match string) scanners.Finding {
+		return scanners.Finding{RuleID: rule, Source: source, Match: match}
 	}
 
 	tests := []struct {
 		name      string
 		exclusion repo.RiskExclusion
-		finding   ra.Finding
+		finding   scanners.Finding
 		want      bool
 	}{
 		{"exact match suppresses", excl("exact", "test@example.com", "", ""), finding("pii.email_address", "presidio", "test@example.com"), true},
@@ -64,7 +65,7 @@ func TestExclusionSet_FilterFindings(t *testing.T) {
 		excl("exact", "test@example.com", "", ""),
 		excl("rule_id", "pii.us_ssn", "", ""),
 	})
-	in := []ra.Finding{
+	in := []scanners.Finding{
 		{RuleID: "pii.email_address", Source: "presidio", Match: "test@example.com"}, // dropped (exact)
 		{RuleID: "pii.email_address", Source: "presidio", Match: "real@user.com"},    // kept
 		{RuleID: "pii.us_ssn", Source: "presidio", Match: "123-45-6789"},             // dropped (rule_id)
@@ -79,7 +80,7 @@ func TestExclusionSet_EmptyIsNoOp(t *testing.T) {
 
 	set := ra.NewExclusionSet(nil)
 	require.True(t, set.Empty())
-	in := []ra.Finding{{RuleID: "pii.us_ssn", Match: "x"}}
+	in := []scanners.Finding{{RuleID: "pii.us_ssn", Match: "x"}}
 	require.Equal(t, in, set.FilterFindings(in))
 }
 

@@ -1,12 +1,14 @@
 package hooks
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -84,7 +86,7 @@ func TestCodex_PreToolUse_ShadowMCPBlocksExternalMetaTool(t *testing.T) {
 		Source:        "local",
 		PluginName:    "",
 		Name:          "platform-logs",
-		URL:           "https://chat.speakeasy.com/mcp/speakeasy-team-62awx",
+		URL:           "https://external.example.com/mcp/speakeasy-team-62awx",
 		Command:       "",
 		Transport:     "HTTP",
 		Status:        "unknown",
@@ -108,7 +110,7 @@ func TestCodex_PreToolUse_ShadowMCPBlocksExternalMetaTool(t *testing.T) {
 	require.Equal(t, "deny", *result.Decision)
 	require.NotNil(t, result.Reason)
 	require.Contains(t, *result.Reason, "not Gram-hosted")
-	require.Contains(t, *result.Reason, "https://chat.speakeasy.com/mcp/speakeasy-team-62awx")
+	require.Contains(t, *result.Reason, "https://external.example.com/mcp/speakeasy-team-62awx")
 	require.Contains(t, *result.Reason, "Request access:")
 }
 
@@ -258,18 +260,37 @@ func TestBuildCodexTelemetryAttributes_UsesPayloadUserEmail(t *testing.T) {
 		UserEmail:     &email,
 	}
 	metadata := &SessionMetadata{
-		SessionID:   "",
-		ServiceName: "Codex",
-		UserEmail:   email,
-		UserID:      "",
-		ClaudeOrgID: "",
-		GramOrgID:   "org-id",
-		ProjectID:   "project-id",
+		SessionID:     "",
+		ServiceName:   "Codex",
+		UserEmail:     email,
+		UserID:        "",
+		ExternalOrgID: "",
+		GramOrgID:     "org-id",
+		ProjectID:     "project-id",
 	}
 
 	// User identity travels on LogParams.UserInfo, not the attributes map.
 	attrs := ti.service.buildCodexTelemetryAttributes(t.Context(), payload, metadata)
 	require.NotContains(t, attrs, attr.UserEmailKey)
+}
+
+func TestBuildCodexTelemetryAttributes_StampsOpenAIProvider(t *testing.T) {
+	t.Parallel()
+	_, ti := newTestHooksService(t)
+
+	email := "dev@example.com"
+	attrs := ti.service.buildCodexTelemetryAttributes(t.Context(), &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		UserEmail:     &email,
+	}, &SessionMetadata{
+		ServiceName: "Codex",
+		UserEmail:   email,
+		Provider:    providerOpenAI,
+		GramOrgID:   "org-id",
+		ProjectID:   "project-id",
+	})
+
+	require.Equal(t, providerOpenAI, attrs[attr.ProviderKey])
 }
 
 func TestCodex_SessionStart_CapturesMCPInventory(t *testing.T) {
@@ -330,13 +351,13 @@ func TestBuildCodexTelemetryAttributes_EnrichesMCPToolFromInventory(t *testing.T
 		SessionID:     &sessionID,
 		ToolName:      &toolName,
 	}, &SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: "Codex",
-		UserEmail:   "",
-		UserID:      "",
-		ClaudeOrgID: "",
-		GramOrgID:   "org-id",
-		ProjectID:   "project-id",
+		SessionID:     sessionID,
+		ServiceName:   "Codex",
+		UserEmail:     "",
+		UserID:        "",
+		ExternalOrgID: "",
+		GramOrgID:     "org-id",
+		ProjectID:     "project-id",
 	})
 	require.Equal(t, "https://chat.example.com/mcp/int-linear", attrs[attr.MCPServerURLKey])
 	require.Equal(t, "int-linear", attrs[attr.ToolCallSourceKey])
@@ -369,13 +390,13 @@ func TestBuildCodexTelemetryAttributes_EnrichesMCPMetaToolFromInventory(t *testi
 		ToolName:      &toolName,
 		ToolInput:     map[string]any{"server": "platform-logs"},
 	}, &SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: "Codex",
-		UserEmail:   "",
-		UserID:      "",
-		ClaudeOrgID: "",
-		GramOrgID:   "org-id",
-		ProjectID:   "project-id",
+		SessionID:     sessionID,
+		ServiceName:   "Codex",
+		UserEmail:     "",
+		UserID:        "",
+		ExternalOrgID: "",
+		GramOrgID:     "org-id",
+		ProjectID:     "project-id",
 	})
 	require.Equal(t, "https://chat.example.com/mcp/platform-logs", attrs[attr.MCPServerURLKey])
 	require.Equal(t, "https://chat.example.com/mcp/platform-logs", attrs[attr.MCPMatchKey])
@@ -516,6 +537,111 @@ func TestCodexShadowMCPEvidence_ResolvesURLFromInventory(t *testing.T) {
 	require.Nil(t, matched)
 }
 
+// The recorded chat tool-call id must hash to the telemetry trace id: the
+// shadow-MCP provenance lookup joins the two via
+// trace_id = hashToolCallIDToTraceID(recorded id) (DNO-604).
+func TestCodex_ToolCall_RecordedIDHashesToTelemetryTraceID(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "codex-session-provenance-join"
+	toolName := "mcp__int_linear__get_issue"
+	userEmail := "dev@example.com"
+
+	result, err := ti.service.Codex(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolInput:     map[string]any{"id": "ABC-123"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Nil(t, result.Decision)
+
+	_, err = ti.service.Codex(ctx, &gen.CodexPayload{
+		HookEventName: "PostToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolOutput:    map[string]any{"ok": true},
+	})
+	require.NoError(t, err)
+
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    sessionIDToUUID(sessionID),
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	var toolRequest, toolResult chatRepo.ChatMessage
+	for _, msg := range msgs {
+		switch {
+		case msg.Role == "assistant" && len(msg.ToolCalls) > 0:
+			toolRequest = msg
+		case msg.Role == "tool":
+			toolResult = msg
+		}
+	}
+	require.NotEmpty(t, toolRequest.ID)
+	require.NotEmpty(t, toolResult.ID)
+
+	var toolCalls []struct {
+		ID       string `json:"id"`
+		Function struct {
+			Name string `json:"name"`
+		} `json:"function"`
+	}
+	require.NoError(t, json.Unmarshal(toolRequest.ToolCalls, &toolCalls))
+	require.Len(t, toolCalls, 1)
+	require.Equal(t, syntheticToolCallID(sessionID, toolName), toolCalls[0].ID)
+	require.Equal(t, toolName, toolCalls[0].Function.Name)
+	require.Equal(t, toolCalls[0].ID, toolResult.ToolCallID.String, "result rows must pair on the same id")
+
+	attrs := ti.service.buildCodexTelemetryAttributes(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &toolName,
+	}, &SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "Codex",
+		UserEmail:   userEmail,
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	})
+	require.Equal(t, hashToolCallIDToTraceID(toolCalls[0].ID), attrs[attr.TraceIDKey])
+}
+
+// Non-tool Codex events keep the per-session trace: only tool events move to
+// the per-(session, tool) grouping that makes the provenance join possible.
+func TestBuildCodexTelemetryAttributes_NonToolEventKeepsSessionTrace(t *testing.T) {
+	t.Parallel()
+	_, ti := newTestHooksService(t)
+
+	sessionID := "codex-session-trace-grouping"
+	email := "dev@example.com"
+	prompt := "hello"
+	attrs := ti.service.buildCodexTelemetryAttributes(t.Context(), &gen.CodexPayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+		UserEmail:     &email,
+		Prompt:        &prompt,
+	}, &SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "Codex",
+		UserEmail:   email,
+		GramOrgID:   "org-id",
+		ProjectID:   "project-id",
+	})
+
+	require.Equal(t, hashToolCallIDToTraceID(sessionID), attrs[attr.TraceIDKey])
+}
+
 func TestCodexSessionMetadata_CachesSessionStartEmail(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -551,13 +677,13 @@ func TestCodexSessionMetadata_IgnoresCachedUserIDWhenEmailDoesNotResolve(t *test
 	sessionID := "codex-session-with-stale-cache"
 	email := "cached@example.com"
 	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
-		SessionID:   sessionID,
-		ServiceName: "Codex",
-		UserEmail:   email,
-		UserID:      "cached-user-id",
-		ClaudeOrgID: "",
-		GramOrgID:   authCtx.ActiveOrganizationID,
-		ProjectID:   authCtx.ProjectID.String(),
+		SessionID:     sessionID,
+		ServiceName:   "Codex",
+		UserEmail:     email,
+		UserID:        "cached-user-id",
+		ExternalOrgID: "",
+		GramOrgID:     authCtx.ActiveOrganizationID,
+		ProjectID:     authCtx.ProjectID.String(),
 	}, 0))
 
 	metadata := ti.service.codexSessionMetadata(ctx, &gen.CodexPayload{

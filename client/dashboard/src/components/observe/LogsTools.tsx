@@ -1,8 +1,10 @@
+import { AccountTypeIcon } from "@/components/account-type-icon";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
+import { LoggingPageHeader } from "@/components/observe/LoggingPageHeader";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -10,20 +12,25 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   FilterChip,
   ObserveFilterBar,
+  type ObserveStatusFilterValue,
   type ObserveTypeFilterValue,
 } from "@/components/observe/ObserveFilterBar";
 import {
   buildServerOptionGroups,
+  isDefaultToolUsageTypeSelection,
   parseTargetFilter,
   selectedHookSources,
   selectedTargetValues,
   selectedUserEmails,
   TOOL_USAGE_DEFAULT_TYPES,
+  TOOL_USAGE_STATUS_OPTIONS,
   TOOL_USAGE_TYPE_OPTIONS,
   TOOL_USAGE_VALID_TYPES,
+  toStatuses,
   toTargetTypes,
 } from "@/components/observe/observeTargetFilters";
 import { perPage } from "@/components/observe/observeFilterUtils";
+import { formatToolName } from "@/components/observe/toolNameDisplay";
 import { useObserveFilters } from "@/components/observe/useObserveFilters";
 import { useSlugs } from "@/contexts/Sdk";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
@@ -41,20 +48,20 @@ import {
 } from "@/pages/logs/log-filter-types";
 import { parseFilters, serializeFilters } from "@/pages/logs/log-filter-url";
 import { TraceLogsList } from "@/pages/logs/TraceLogsList";
+import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
-import { type DateRangePreset } from "@gram-ai/elements";
+import { type DateRangePreset } from "@/elements";
 import { telemetryGetToolUsageFilterOptions } from "@gram/client/funcs/telemetryGetToolUsageFilterOptions";
 import { telemetryListToolUsageTraces } from "@gram/client/funcs/telemetryListToolUsageTraces";
-import type {
-  LogFilter,
-  TelemetryLogRecord,
-  ToolUsageTraceSummary,
-} from "@gram/client/models/components";
+import type { LogFilter } from "@gram/client/models/components/logfilter.js";
+import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
+import type { ToolUsageTraceSummary } from "@gram/client/models/components/toolusagetracesummary.js";
 import { Operator } from "@gram/client/models/components/logfilter";
 import type { ListToolUsageTracesPayloadTargetTypes } from "@gram/client/models/components/listtoolusagetracespayload";
 import type { ToolUsageUserFilter } from "@gram/client/models/components/toolusageuserfilter";
-import { useGramContext, useListAttributeKeys } from "@gram/client/react-query";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useListAttributeKeys } from "@gram/client/react-query/listAttributeKeys.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Badge, Icon } from "@speakeasy-api/moonshine";
 import type { BadgeProps } from "@speakeasy-api/moonshine";
@@ -198,6 +205,8 @@ export function LogsTools(): JSX.Element {
     from,
     to,
     selectedHookTypes,
+    selectedStatuses,
+    handleStatusesChange,
     activeFilters,
     handleServerSelectionChange,
     handleUserEmailSelectionChange,
@@ -270,6 +279,11 @@ export function LogsTools(): JSX.Element {
     [selectedHookTypes],
   );
 
+  const statuses = useMemo(
+    () => toStatuses(selectedStatuses),
+    [selectedStatuses],
+  );
+
   const { data: filterOptionsData } = useQuery({
     queryKey: [
       "tool-usage-filter-options",
@@ -331,6 +345,37 @@ export function LogsTools(): JSX.Element {
     [attributeFilters],
   );
 
+  // Account-type scope ("team" | "personal" | ""), persisted in the URL. It
+  // filters on the materialized gram.account_type column via the raw-logs path.
+  // "team" is expressed as "not personal" so unclassified rows count as team
+  // (matching the badge semantics elsewhere).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const accountType = ((): string => {
+    const v = searchParams.get("account_type");
+    return v === "team" || v === "personal" ? v : "";
+  })();
+  const setAccountType = useCallback(
+    (value: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (value) {
+            next.set("account_type", value);
+          } else {
+            next.delete("account_type");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+  // account_type is sent as a first-class payload filter (below), not an
+  // attribute filter, so it stays on the fast trace_summaries path rather than
+  // forcing the raw-logs scan.
+  const queryFilters = attributeSdkFilters;
+
   const {
     data: tracesData,
     error,
@@ -349,10 +394,12 @@ export function LogsTools(): JSX.Element {
         hostedToolsetSlugs,
         shadowServerNames,
         targetTypes,
+        statuses,
         userFilters,
         hookSources,
         attributeSearchQuery,
-        attributeSdkFilters,
+        queryFilters,
+        accountType,
       ],
       queryFn: ({ pageParam }) =>
         unwrapAsync(
@@ -365,13 +412,12 @@ export function LogsTools(): JSX.Element {
               shadowServerNames:
                 shadowServerNames.length > 0 ? shadowServerNames : undefined,
               targetTypes,
+              statuses,
               userFilters: userFilters.length > 0 ? userFilters : undefined,
               hookSources: hookSources.length > 0 ? hookSources : undefined,
+              accountType: accountType || undefined,
               query: attributeSearchQuery ?? undefined,
-              filters:
-                attributeSdkFilters.length > 0
-                  ? attributeSdkFilters
-                  : undefined,
+              filters: queryFilters.length > 0 ? queryFilters : undefined,
               cursor: pageParam,
               limit: perPage,
               sort: "desc",
@@ -442,13 +488,10 @@ export function LogsTools(): JSX.Element {
       />
       {isLogsDisabled ? (
         <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
-          <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="text-xl font-semibold">Tool Logs</h1>
-            <p className="text-muted-foreground text-sm">
-              Dive into tool traces across all tools, skills, and MCP servers
-              used by organization members in this project
-            </p>
-          </div>
+          <LoggingPageHeader
+            title="Tool Logs"
+            description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
+          />
           <div className="relative flex-1">
             <div
               className="pointer-events-none h-full select-none"
@@ -467,6 +510,7 @@ export function LogsTools(): JSX.Element {
           <LogsToolsContent
             isLoading={isLoading}
             isFetching={isFetching}
+            onRefresh={refetch}
             error={displayError}
             traces={traces}
             serverOptionGroups={serverOptionGroups}
@@ -480,6 +524,8 @@ export function LogsTools(): JSX.Element {
             onTypesChange={(types) =>
               handleHookTypesChange(types.filter(isToolUsageType))
             }
+            selectedStatuses={selectedStatuses}
+            onStatusesChange={handleStatusesChange}
             roleOptions={roleOptions}
             selectedRoleIds={selectedRoleIds}
             onRoleSelectionChange={handleRoleSelectionChange}
@@ -509,6 +555,8 @@ export function LogsTools(): JSX.Element {
             onAttributeSearchSubmit={updateAttributeSearchQuery}
             onAttributeFiltersChange={updateAttributeFilters}
             onAddFilterFromLog={handleAddFilterFromLog}
+            accountType={accountType}
+            onAccountTypeChange={setAccountType}
             from={from}
             to={to}
           />
@@ -521,6 +569,7 @@ export function LogsTools(): JSX.Element {
 function LogsToolsContent({
   isLoading,
   isFetching,
+  onRefresh,
   error,
   traces,
   serverOptionGroups,
@@ -532,6 +581,8 @@ function LogsToolsContent({
   activeFilters,
   selectedTypes,
   onTypesChange,
+  selectedStatuses,
+  onStatusesChange,
   roleOptions,
   selectedRoleIds,
   onRoleSelectionChange,
@@ -561,11 +612,14 @@ function LogsToolsContent({
   onAttributeSearchSubmit,
   onAttributeFiltersChange,
   onAddFilterFromLog,
+  accountType,
+  onAccountTypeChange,
   from,
   to,
 }: {
   isLoading: boolean;
   isFetching: boolean;
+  onRefresh: () => void;
   error: Error | null;
   traces: ToolUsageTraceSummary[];
   serverOptionGroups: Parameters<
@@ -579,6 +633,8 @@ function LogsToolsContent({
   activeFilters: FilterChip[];
   selectedTypes: ToolUsageType[];
   onTypesChange: (types: ObserveTypeFilterValue[]) => void;
+  selectedStatuses: ObserveStatusFilterValue[];
+  onStatusesChange: (statuses: ObserveStatusFilterValue[]) => void;
   roleOptions: Array<{ id: string; name: string }>;
   selectedRoleIds: string[];
   onRoleSelectionChange: (values: string[]) => void;
@@ -608,6 +664,8 @@ function LogsToolsContent({
   onAttributeSearchSubmit: (query: string) => void;
   onAttributeFiltersChange: (filters: ActiveLogFilter[]) => void;
   onAddFilterFromLog: (path: string, op: Operator, value: string) => void;
+  accountType: string;
+  onAccountTypeChange: (value: string) => void;
   from: Date;
   to: Date;
 }) {
@@ -618,13 +676,10 @@ function LogsToolsContent({
       <div className="flex min-h-0 w-full flex-1 flex-col">
         <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8">
           <div className="flex shrink-0 items-start justify-between gap-4">
-            <div className="flex min-w-0 flex-col gap-1">
-              <h1 className="text-xl font-semibold">Tool Logs</h1>
-              <p className="text-muted-foreground text-sm">
-                Dive into tool traces across all tools, skills, and MCP servers
-                used by organization members in this project
-              </p>
-            </div>
+            <LoggingPageHeader
+              title="Tool Logs"
+              description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
+            />
             <div className="flex items-center gap-2">
               <HooksSetupButton />
               <Button variant="outline" size="sm" asChild>
@@ -648,6 +703,9 @@ function LogsToolsContent({
             selectedTypes={selectedTypes}
             onTypesChange={onTypesChange}
             typeOptions={TOOL_USAGE_TYPE_OPTIONS}
+            selectedStatuses={selectedStatuses}
+            onStatusesChange={onStatusesChange}
+            statusOptions={TOOL_USAGE_STATUS_OPTIONS}
             roleOptions={roleOptions}
             selectedRoleIds={selectedRoleIds}
             onRoleSelectionChange={onRoleSelectionChange}
@@ -659,6 +717,8 @@ function LogsToolsContent({
             onClearCustomRange={onClearCustomRange}
             projectSlug={projectSlug}
             serverNameMappings={serverNameMappings}
+            accountType={accountType}
+            onAccountTypeChange={onAccountTypeChange}
             attributeSearchControl={
               <div className="min-w-[260px] flex-[1.2]">
                 <LogFilterBar
@@ -672,6 +732,8 @@ function LogsToolsContent({
                 />
               </div>
             }
+            onRefresh={onRefresh}
+            isRefreshing={isFetching}
           />
 
           {isCustomSearchActive(attributeSearchQuery, attributeFilters) && (
@@ -709,9 +771,11 @@ function LogsToolsContent({
                     traces={traces}
                     hasActiveFilters={
                       activeFilters.length > 0 ||
-                      selectedTypes.length > 0 ||
+                      !isDefaultToolUsageTypeSelection(selectedTypes) ||
+                      selectedStatuses.length > 0 ||
                       selectedRoleIds.length > 0 ||
                       attributeFilters.length > 0 ||
+                      accountType !== "" ||
                       Boolean(attributeSearchQuery)
                     }
                     expandedTraceId={expandedTraceId}
@@ -961,12 +1025,20 @@ function LogsToolsTraceRow({
                 {" /"}
               </span>
             )}
-            <span className="truncate font-mono text-xs">{trace.toolName}</span>
+            <span className="truncate font-mono text-xs">
+              {formatToolName(trace.toolName)}
+            </span>
           </div>
         </div>
 
-        <div className="text-muted-foreground min-w-[200px] flex-1 truncate text-xs">
-          {userLabel || "—"}
+        <div className="flex min-w-[200px] flex-1 items-center gap-2 text-xs">
+          <AccountTypeIcon
+            accountType={trace.accountType}
+            className="shrink-0"
+          />
+          <span className="text-muted-foreground min-w-0 truncate">
+            {userLabel || "—"}
+          </span>
         </div>
 
         <div className="flex min-w-28 shrink-0 items-center gap-2">
@@ -977,7 +1049,7 @@ function LogsToolsTraceRow({
                 className="size-4 shrink-0"
               />
               <span className="text-foreground truncate text-xs font-medium">
-                {trace.hookSource}
+                {formatPlatform(trace.hookSource)}
               </span>
             </>
           ) : (
@@ -1048,6 +1120,11 @@ function getTargetConfig(targetType: ToolUsageTraceSummary["targetType"]) {
     case "hosted_mcp_server":
       return {
         label: "Hosted MCP",
+        className: "bg-primary/15 text-primary",
+      };
+    case "tunneled_mcp_server":
+      return {
+        label: "Tunneled MCP",
         className: "bg-primary/15 text-primary",
       };
     case "shadow_mcp_server":

@@ -10,10 +10,12 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.temporal.io/sdk/activity"
 
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
-func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, customRules []CompiledCELRule, exclusions ExclusionSet, outOfPolicyScope []bool) ([][]Finding, error) {
+func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, customRuleIDs []string, exclusions ExclusionSet, masks CategoryScopeMasks) ([][]scanners.Finding, error) {
 	ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
 	defer scanSpan.End()
 	activity.RecordHeartbeat(ctx, 0)
@@ -27,13 +29,13 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 
 	sources := newSourceSet(args.Sources)
 	n := len(messages)
-	gitleaksFindings := make([][]Finding, n)
-	presidioFindings := make([][]Finding, n)
-	shadowMCPFindings := make([][]Finding, n)
-	destructiveToolFindings := make([][]Finding, n)
-	cliDestructiveFindings := make([][]Finding, n)
-	promptInjectionFindings := make([][]Finding, n)
-	customFindings := make([][]Finding, n)
+	gitleaksFindings := make([][]scanners.Finding, n)
+	presidioFindings := make([][]scanners.Finding, n)
+	shadowMCPFindings := make([][]scanners.Finding, n)
+	destructiveToolFindings := make([][]scanners.Finding, n)
+	cliDestructiveFindings := make([][]scanners.Finding, n)
+	promptInjectionFindings := make([][]scanners.Finding, n)
+	customFindings := make([][]scanners.Finding, n)
 
 	var wg sync.WaitGroup
 	var gitleaksErr error
@@ -53,8 +55,10 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 
 	if sources.Has(SourcePresidio) {
 		wg.Go(func() {
-			findings, err := a.scanPresidio(ctx, args, requestID, messages, contents)
-			presidioFindings = findings
+			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePresidio])
+			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourcePresidio, masks.RecommendedPrefilteredCount(sourceCategories[SourcePresidio]))
+			findings, err := a.scanPresidio(ctx, args, requestID, subMessages, subContents)
+			presidioFindings = scatterFindings(n, indices, findings)
 			if err != nil {
 				presidioErr = err
 			}
@@ -63,13 +67,16 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 
 	if sources.Has(SourcePromptInjection) {
 		wg.Go(func() {
-			promptInjectionFindings = a.scanPromptInjection(ctx, args, messages, contents)
+			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePromptInjection])
+			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourcePromptInjection, masks.RecommendedPrefilteredCount(sourceCategories[SourcePromptInjection]))
+			findings := a.scanPromptInjection(ctx, args, requestID, subMessages, subContents)
+			promptInjectionFindings = scatterFindings(n, indices, findings)
 		})
 	}
 
-	if len(customRules) > 0 {
+	if len(customRuleIDs) > 0 {
 		wg.Go(func() {
-			findings, err := a.scanCustomRules(ctx, messages, customRules)
+			findings, err := a.scanCustomRules(ctx, args, requestID, messages, customRuleIDs)
 			if err != nil {
 				customErr = err
 				return
@@ -110,9 +117,17 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		activity.RecordHeartbeat(ctx, SourceCLIDestructive)
 	}
 
+	// Note: SourceAccountIdentity is deliberately absent here — it is
+	// session-scoped and evaluated in Do over the batch's full message-id set,
+	// bypassing the message-type filter and CEL scope that shape `messages`.
+
 	return mergeFindings(mergeFindingsInput{
-		outOfPolicyScope:        outOfPolicyScope,
+		orgID:                   args.OrganizationID,
+		metrics:                 a.metrics,
+		masks:                   masks,
 		exclusions:              exclusions,
+		builtinEnabled:          args.BuiltinPresetsEnabled,
+		builtinPresets:          a.builtinPresets,
 		gitleaksFindings:        gitleaksFindings,
 		presidioFindings:        presidioFindings,
 		shadowMCPFindings:       shadowMCPFindings,
@@ -120,27 +135,28 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		cliDestructiveFindings:  cliDestructiveFindings,
 		promptInjectionFindings: promptInjectionFindings,
 		customFindings:          customFindings,
-	}), nil
+	}, ctx), nil
 }
 
 type mergeFindingsInput struct {
-	outOfPolicyScope        []bool
+	orgID                   string
+	metrics                 *riskMetrics
+	masks                   CategoryScopeMasks
 	exclusions              ExclusionSet
-	gitleaksFindings        [][]Finding
-	presidioFindings        [][]Finding
-	shadowMCPFindings       [][]Finding
-	destructiveToolFindings [][]Finding
-	cliDestructiveFindings  [][]Finding
-	promptInjectionFindings [][]Finding
-	customFindings          [][]Finding
+	builtinEnabled          bool
+	builtinPresets          *presetlib.Library
+	gitleaksFindings        [][]scanners.Finding
+	presidioFindings        [][]scanners.Finding
+	shadowMCPFindings       [][]scanners.Finding
+	destructiveToolFindings [][]scanners.Finding
+	cliDestructiveFindings  [][]scanners.Finding
+	promptInjectionFindings [][]scanners.Finding
+	customFindings          [][]scanners.Finding
 }
 
-func mergeFindings(in mergeFindingsInput) [][]Finding {
-	merged := make([][]Finding, len(in.gitleaksFindings))
+func mergeFindings(in mergeFindingsInput, ctx context.Context) [][]scanners.Finding {
+	merged := make([][]scanners.Finding, len(in.gitleaksFindings))
 	for i := range merged {
-		if len(in.outOfPolicyScope) > 0 && in.outOfPolicyScope[i] {
-			continue
-		}
 		combined := concatFindings(
 			in.gitleaksFindings[i],
 			in.presidioFindings[i],
@@ -150,42 +166,52 @@ func mergeFindings(in mergeFindingsInput) [][]Finding {
 			in.promptInjectionFindings[i],
 			in.customFindings[i],
 		)
+		combined = filterByCategoryScopes(ctx, in.orgID, in.metrics, in.masks, i, combined)
 		if !in.exclusions.Empty() {
 			combined = in.exclusions.FilterFindings(combined)
+		}
+		if in.builtinEnabled {
+			combined = dropBuiltinFalsePositives(in.builtinPresets, combined)
 		}
 		merged[i] = dedup(combined)
 	}
 	return merged
 }
 
-func messageContents(messages []batchMessage) []string {
-	contents := make([]string, len(messages))
-	for i, msg := range messages {
-		contents[i] = msg.Content
+func filterByCategoryScopes(ctx context.Context, orgID string, metrics *riskMetrics, masks CategoryScopeMasks, i int, in []scanners.Finding) []scanners.Finding {
+	if len(in) == 0 {
+		return in
 	}
-	return contents
-}
-
-func concatFindings(groups ...[]Finding) []Finding {
-	total := 0
-	for _, group := range groups {
-		total += len(group)
-	}
-	out := make([]Finding, 0, total)
-	for _, group := range groups {
-		out = append(out, group...)
+	out := make([]scanners.Finding, 0, len(in))
+	for _, finding := range in {
+		cat := categoryForFinding(finding)
+		if masks.InScope(i, cat) {
+			out = append(out, finding)
+			continue
+		}
+		if len(masks.policyOut) == 0 || !masks.policyOut[i] {
+			metrics.RecordRecommendedScopeSuppressed(ctx, orgID, cat)
+		}
 	}
 	return out
 }
 
-func (a *AnalyzeBatch) scopeExclusions(_ context.Context, scope CompiledScope, messages []batchMessage) []bool {
-	if !scope.Active() {
-		return []bool{}
-	}
-	excluded := make([]bool, len(messages))
+func messageContents(messages []batchMessage) []string {
+	contents := make([]string, len(messages))
 	for i, msg := range messages {
-		view := batchMessageView(msg)
-		excluded[i] = !scope.Includes(view) || scope.Exempts(view)
+		contents[i] = msg.scanSurface()
 	}
-	return excluded
+	return contents
+}
+
+func concatFindings(groups ...[]scanners.Finding) []scanners.Finding {
+	total := 0
+	for _, group := range groups {
+		total += len(group)
+	}
+	out := make([]scanners.Finding, 0, total)
+	for _, group := range groups {
+		out = append(out, group...)
+	}
+	return out
 }

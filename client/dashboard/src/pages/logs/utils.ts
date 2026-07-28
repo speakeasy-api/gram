@@ -1,5 +1,5 @@
 import { dateTimeFormatters } from "@/lib/dates";
-import { TelemetryLogRecord } from "@gram/client/models/components";
+import { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 
 /**
  * Format Unix nanoseconds to a readable timestamp

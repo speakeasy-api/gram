@@ -99,7 +99,8 @@ SELECT
 FROM organization_user_relationships our
 JOIN users u ON u.id = our.user_id
 WHERE our.organization_id = @organization_id
-  AND our.deleted_at IS NULL;
+  AND our.deleted_at IS NULL
+  AND u.deleted_at IS NULL;
 
 -- name: ListActiveOrganizationUserIDs :many
 -- Returns the Gram user IDs of active members of the organization. Used to
@@ -111,6 +112,16 @@ JOIN users u ON u.id = our.user_id
 WHERE our.organization_id = @organization_id
   AND our.deleted_at IS NULL
   AND u.deleted_at IS NULL;
+
+-- name: FilterOrganizationMemberUserIDs :many
+-- Returns the subset of the given Gram user IDs that are active members of
+-- the organization. Used to mask Speakeasy staff identities in customer-facing
+-- audit feeds.
+SELECT user_id::text AS user_id
+FROM organization_user_relationships
+WHERE organization_id = @organization_id
+  AND user_id = ANY(@user_ids::text[])
+  AND deleted_at IS NULL;
 
 -- name: DeleteOrganizationUserRelationship :exec
 UPDATE organization_user_relationships

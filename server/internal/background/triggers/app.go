@@ -137,6 +137,7 @@ type App struct {
 	deliveryLogger DeliveryLogger
 	temporalEnv    *tenv.Environment
 	serverURL      *url.URL
+	siteURL        *url.URL
 	dispatchers    map[string]Dispatcher
 	audit          *audit.Logger
 	slackClient    *slackclient.SlackClient
@@ -186,6 +187,7 @@ func NewApp(
 	deliveryLogger DeliveryLogger,
 	auditLogger *audit.Logger,
 	serverURL *url.URL,
+	siteURL *url.URL,
 	slackClient *slackclient.SlackClient,
 	dispatchers ...Dispatcher,
 ) *App {
@@ -204,6 +206,7 @@ func NewApp(
 		deliveryLogger: deliveryLogger,
 		temporalEnv:    temporalEnv,
 		serverURL:      serverURL,
+		siteURL:        siteURL,
 		dispatchers:    dispatcherMap,
 		audit:          auditLogger,
 		slackClient:    slackClient,
@@ -744,6 +747,11 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 	if result.Event.CorrelationID == "" {
 		result.Event.CorrelationID = result.Event.EventID
 	}
+
+	// Unfurl before ProcessEvent: link previews should render even when no
+	// assistant subscribes to link_shared (ProcessEvent would filter the event
+	// out and return a nil task).
+	a.unfurlSlackGramLinks(ctx, instance, envMap, body, *result.Event)
 
 	task, err := a.ProcessEvent(ctx, instance, *result.Event)
 	if err != nil {

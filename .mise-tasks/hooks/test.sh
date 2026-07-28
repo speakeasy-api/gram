@@ -46,10 +46,28 @@ else
   db_query -v org_id="$org_id" >/dev/null <<<"INSERT INTO organization_features (organization_id, feature_name) VALUES (:'org_id', 'session_capture') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING"
   echo "Enabled session_capture for org: ${org_id}"
 
-  user_id=$(db_query <<<"SELECT id FROM users LIMIT 1" 2>/dev/null || true)
-  if [ -z "$user_id" ]; then
-    echo "Warning: no users in DB — skipping API key provisioning."
+  user_row=$(db_query -v org_id="$org_id" <<<"SELECT u.id, u.email FROM users u JOIN organization_user_relationships our ON our.user_id = u.id WHERE our.organization_id = :'org_id' AND our.deleted_at IS NULL AND u.deleted_at IS NULL ORDER BY u.created_at ASC LIMIT 1" 2>/dev/null || true)
+  if [ -z "$user_row" ]; then
+    echo "Warning: no active users for org '${org_id}' in DB — skipping API key provisioning and hook attribution."
   else
+    user_id="${user_row%%|*}"
+    user_email="${GRAM_HOOKS_TEST_USER_EMAIL:-${user_row#*|}}"
+
+    # {{ config_root }} only expands in the #MISE header, not the body, and the
+    # shim path must be absolute since identity.sh runs it from Claude's cwd (not
+    # this task's). Resolve the repo root from this script's location.
+    config_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+    device_agent_shim="${config_root}/local/cmd/gram-hooks-test-identity"
+    mkdir -p "$(dirname "$device_agent_shim")"
+    cat >"$device_agent_shim" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "${GRAM_HOOKS_TEST_RESOLVED_USER_EMAIL:-}"
+EOF
+    chmod +x "$device_agent_shim"
+    export GRAM_HOOKS_TEST_RESOLVED_USER_EMAIL="$user_email"
+    export GRAM_DEVICE_AGENT_COMMANDS="$device_agent_shim"
+    echo "Hook sessions will be attributed to: ${user_email}"
+
     # API key names are unique per organization, so clear any prior local
     # fixture for this org before stashing a new plaintext we know.
     db_query -v org_id="$org_id" >/dev/null <<<"UPDATE api_keys SET deleted_at = NOW() WHERE organization_id = :'org_id' AND name = 'dev-hooks-test' AND deleted IS FALSE"
@@ -81,12 +99,28 @@ else
 fi
 echo ""
 
-if [ "${usage_local:-}" = "true" ] || ! git diff --quiet main -- hooks/; then
-  echo "Using local plugin directory: ./hooks/plugin-claude-test"
+if [ "${usage_local:-}" = "true" ]; then
+  plugin_out="$(mktemp -d)"
+  hooks_binary="${plugin_out}/speakeasy-hooks"
+  echo "Building local hooks binary: ${hooks_binary}"
+  go build -o "$hooks_binary" ./hooks/cmd/speakeasy-hooks
+  "$hooks_binary" install \
+    --provider=claude \
+    --dir="${plugin_out}/plugin-claude" \
+    --server-url="$GRAM_SERVER_URL" \
+    --project="$project_slug" \
+    --browser-login \
+    --binary="$hooks_binary"
   echo ""
-  exec claude --setting-sources project,local --plugin-dir ./hooks/plugin-claude-test --debug
+  exec claude --setting-sources project,local --plugin-dir "${plugin_out}/plugin-claude" --debug
+elif ! git diff --quiet main -- server/internal/plugins/ server/cmd/export-hook-plugin/; then
+  plugin_out="$(mktemp -d)"
+  echo "Rendering local plugin into: ${plugin_out}"
+  (cd server && go run ./cmd/export-hook-plugin -out "$plugin_out" >/dev/null)
+  echo ""
+  exec claude --setting-sources project,local --plugin-dir "${plugin_out}/plugin-claude" --debug
 else
-  echo "No branch changes in hooks/ vs main — using published plugin"
+  echo "No branch changes to the plugin generators vs main — using published plugin"
   echo ""
   exec claude --setting-sources project,local --debug
 fi

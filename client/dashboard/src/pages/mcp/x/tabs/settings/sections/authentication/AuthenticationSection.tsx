@@ -6,19 +6,16 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Type } from "@/components/ui/type";
-import type {
-  McpServer,
-  RemoteSessionIssuer,
-} from "@gram/client/models/components";
-import {
-  useRemoteSessionIssuers,
-  useUserSessionIssuer,
-} from "@gram/client/react-query/index.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
+import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { useMemo, useState, type ReactNode } from "react";
 import { SettingsInlineEmptyState } from "../../SettingsInlineEmptyState";
 import { SettingsSection } from "../../SettingsSection";
 import { AttachRemoteIdentityProviderSheet } from "./AttachRemoteIdentityProviderSheet";
 import { AuthenticationSetupActions } from "./AuthenticationSetupActions";
+import { type AuthTarget, useMcpServerAuthTarget } from "./authTarget";
 import { DeleteRemoteIdentityProviderDialog } from "./DeleteRemoteIdentityProviderDialog";
 import { McpServerSessionsPanel } from "./McpServerSessionsPanel";
 import { ModifyRemoteIdentityProviderSheet } from "./ModifyRemoteIdentityProviderSheet";
@@ -32,12 +29,55 @@ import {
 
 export const MCP_AUTHENTICATION_SECTION_ID = "authentication";
 
+/**
+ * Chrome wrapper for the remote/tunneled MCP server settings tab. The
+ * target-agnostic body below also mounts on the toolset detail page inside
+ * that page's own section chrome.
+ */
 export function AuthenticationSection({
   mcpServer,
 }: {
   mcpServer: McpServer;
 }): JSX.Element {
-  const userSessionIssuerId = mcpServer.userSessionIssuerId;
+  const target = useMcpServerAuthTarget(mcpServer);
+
+  return (
+    <>
+      <SettingsSection id={MCP_AUTHENTICATION_SECTION_ID}>
+        <SettingsSection.Header>
+          <SettingsSection.Title>Authentication</SettingsSection.Title>
+          <SettingsSection.Description>
+            Configure user sessions and, when required, upstream identity
+            providers for clients connecting to this server.
+          </SettingsSection.Description>
+        </SettingsSection.Header>
+        <SettingsSection.Panel>
+          <SettingsSection.Body>
+            <AuthenticationSectionBody target={target} />
+          </SettingsSection.Body>
+          <SettingsSection.Footer>
+            <SettingsSection.FooterHint>
+              Authentication changes apply to new client connections.
+            </SettingsSection.FooterHint>
+          </SettingsSection.Footer>
+        </SettingsSection.Panel>
+      </SettingsSection>
+      <McpServerSessionsPanel mcpServer={mcpServer} />
+    </>
+  );
+}
+
+/**
+ * The auth configuration surface: identity-provider setup or the manage
+ * fields, plus the attach/modify/delete overlays. Chrome-free so both the
+ * remote server settings tab and the toolset detail page can mount it.
+ */
+export function AuthenticationSectionBody({
+  target,
+}: {
+  target: AuthTarget;
+}): JSX.Element {
+  const userSessionIssuerId = target.userSessionIssuerId ?? undefined;
   const issuerConfigured = !!userSessionIssuerId;
 
   const {
@@ -47,16 +87,6 @@ export function AuthenticationSection({
   } = useUserSessionIssuer({ id: userSessionIssuerId }, undefined, {
     enabled: issuerConfigured,
   });
-
-  // Probe the remote MCP server's protected-resource metadata so setup can
-  // offer discovery when the server advertises OAuth metadata.
-  const { status: probeStatus, metadata: protectedResourceMetadata } =
-    useProtectedResourceMetadata(
-      mcpServer.remoteMcpServerId,
-      !issuerConfigured,
-    );
-  const authorizationServer =
-    protectedResourceMetadata?.authorizationServers?.[0];
 
   // listRemoteSessionIssuers returns both this project's issuers and inherited
   // organization-level ones (project_id IS NULL, same org), so the selectable
@@ -73,6 +103,23 @@ export function AuthenticationSection({
       { userSessionIssuerId },
       { enabled: issuerConfigured },
     );
+
+  // Remote MCP servers receive a user-session issuer when they are created,
+  // before any upstream OAuth client is attached. Keep protected-resource
+  // discovery available in that recovery state so providers that advertise
+  // scopes only in RFC 9728 metadata can still be configured manually.
+  const shouldProbeProtectedResource =
+    !!target.remoteMcpServerId &&
+    (!issuerConfigured || (!isLoadingClients && allClients.length === 0));
+  const { status: probeStatus, metadata: protectedResourceMetadata } =
+    useProtectedResourceMetadata(
+      target.remoteMcpServerId,
+      shouldProbeProtectedResource,
+    );
+  const authorizationServer =
+    protectedResourceMetadata?.authorizationServers?.[0];
+  const protectedResourceScopes =
+    protectedResourceMetadata?.scopesSupported ?? [];
 
   const associatedIssuerIds = useMemo(
     () => new Set(allClients.map((client) => client.remoteSessionIssuerId)),
@@ -91,9 +138,11 @@ export function AuthenticationSection({
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetInitialUrl, setSheetInitialUrl] = useState<string | undefined>();
+  const [sheetInitialScopes, setSheetInitialScopes] = useState<string[]>();
 
-  const openSheet = (initialIssuerUrl?: string) => {
+  const openSheet = (initialIssuerUrl?: string, initialScopes?: string[]) => {
     setSheetInitialUrl(initialIssuerUrl);
+    setSheetInitialScopes(initialScopes);
     setSheetOpen(true);
   };
 
@@ -124,7 +173,9 @@ export function AuthenticationSection({
       <IdentityProviderSetupField
         probeStatus={probeStatus}
         hasDiscoveredAuthorizationServer={!!authorizationServer}
-        onUseDiscovered={() => openSheet(authorizationServer)}
+        onUseDiscovered={() =>
+          openSheet(authorizationServer, protectedResourceScopes)
+        }
         onStartManual={() => openSheet(undefined)}
       />
     );
@@ -138,8 +189,10 @@ export function AuthenticationSection({
         <UserSessionDurationField userSessionIssuer={userSessionIssuer} />
         <RemoteIdentityProvidersField
           associatedIssuers={associatedIssuers}
-          isLoading={isLoadingIssuers || isLoadingClients}
-          onAdd={() => openSheet(undefined)}
+          isLoading={
+            isLoadingIssuers || isLoadingClients || probeStatus === "loading"
+          }
+          onAdd={() => openSheet(authorizationServer, protectedResourceScopes)}
           onEdit={handleEdit}
           onDelete={handleDelete}
         />
@@ -149,53 +202,35 @@ export function AuthenticationSection({
 
   return (
     <>
-      <SettingsSection id={MCP_AUTHENTICATION_SECTION_ID}>
-        <SettingsSection.Header>
-          <SettingsSection.Title>Authentication</SettingsSection.Title>
-          <SettingsSection.Description>
-            Configure the upstream identity provider and user session settings
-            for clients connecting to this server.
-          </SettingsSection.Description>
-        </SettingsSection.Header>
-        <SettingsSection.Panel>
-          <SettingsSection.Body>
-            <FieldGroup className="gap-6">{authenticationFields}</FieldGroup>
-          </SettingsSection.Body>
-          <SettingsSection.Footer>
-            <SettingsSection.FooterHint>
-              Authentication changes apply to new client connections.
-            </SettingsSection.FooterHint>
-          </SettingsSection.Footer>
-        </SettingsSection.Panel>
+      <FieldGroup className="gap-6">{authenticationFields}</FieldGroup>
 
-        <AttachRemoteIdentityProviderSheet
-          open={sheetOpen}
-          onOpenChange={setSheetOpen}
-          mcpServer={mcpServer}
-          userSessionIssuer={userSessionIssuer ?? null}
-          selectableIssuers={selectableIssuers}
-          initialIssuerUrl={sheetInitialUrl}
+      <AttachRemoteIdentityProviderSheet
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        target={target}
+        userSessionIssuer={userSessionIssuer ?? null}
+        selectableIssuers={selectableIssuers}
+        initialIssuerUrl={sheetInitialUrl}
+        initialScopes={sheetInitialScopes}
+      />
+
+      {deleteTarget && userSessionIssuerId && (
+        <DeleteRemoteIdentityProviderDialog
+          open={deleteOpen}
+          onOpenChange={setDeleteOpen}
+          userSessionIssuerId={userSessionIssuerId}
+          issuer={deleteTarget}
         />
+      )}
 
-        {deleteTarget && userSessionIssuerId && (
-          <DeleteRemoteIdentityProviderDialog
-            open={deleteOpen}
-            onOpenChange={setDeleteOpen}
-            userSessionIssuerId={userSessionIssuerId}
-            issuer={deleteTarget}
-          />
-        )}
-
-        {modifyTarget && userSessionIssuer && (
-          <ModifyRemoteIdentityProviderSheet
-            open={modifyOpen}
-            onOpenChange={setModifyOpen}
-            userSessionIssuer={userSessionIssuer}
-            issuer={modifyTarget}
-          />
-        )}
-      </SettingsSection>
-      <McpServerSessionsPanel mcpServer={mcpServer} />
+      {modifyTarget && userSessionIssuer && (
+        <ModifyRemoteIdentityProviderSheet
+          open={modifyOpen}
+          onOpenChange={setModifyOpen}
+          userSessionIssuer={userSessionIssuer}
+          issuer={modifyTarget}
+        />
+      )}
     </>
   );
 }

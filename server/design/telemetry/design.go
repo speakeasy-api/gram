@@ -332,6 +332,31 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryQuery", "type": "query"}`)
 	})
 
+	Method("queryTumDetails", func() {
+		Description("Org-scoped daily usage details for the billing page, computed in one pass: the tokens-under-management daily token-type split (observed agent traffic; cache reads excluded) and per-dimension breakdowns over the same population.")
+
+		// Org-scoped like telemetry.query; project_id optionally narrows the
+		// slice to one of the caller's projects.
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(TelemetryWindowPayload)
+			security.SessionPayload()
+		})
+
+		Result(TumDetailsResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.queryTumDetails")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "queryTumDetails")
+		Meta("openapi:extension:x-speakeasy-name-override", "queryTumDetails")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryQueryTumDetails", "type": "query"}`)
+	})
+
 	Method("listSessions", func() {
 		Description("Org-scoped list of individual chat sessions for a slice of usage, filtered by the same allowlisted dimensions as telemetry.query. Returns per-session cost, token, and tool metrics with cursor pagination.")
 
@@ -473,6 +498,214 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageSummary", "type": "query"}`)
 	})
 
+	// The seven getToolUsage* methods below expose the individual aggregates of
+	// getToolUsageSummary as standalone endpoints so the MCP & Tools dashboard can
+	// fetch and render each panel independently as its data arrives, rather than
+	// blocking on the slowest aggregate. They share GetToolUsageSummaryPayload.
+
+	Method("getToolUsageTotals", func() {
+		Description("Get overall MCP and tool usage totals")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetToolUsageSummaryPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetToolUsageTotalsResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getToolUsageTotals")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getToolUsageTotals")
+		Meta("openapi:extension:x-speakeasy-name-override", "getToolUsageTotals")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageTotals", "type": "query"}`)
+	})
+
+	Method("getToolUsageTargets", func() {
+		Description("Get top MCP and tool usage targets")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetToolUsageSummaryPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetToolUsageTargetsResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getToolUsageTargets")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getToolUsageTargets")
+		Meta("openapi:extension:x-speakeasy-name-override", "getToolUsageTargets")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageTargets", "type": "query"}`)
+	})
+
+	Method("getToolUsageUsers", func() {
+		Description("Get top MCP and tool usage user identities")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetToolUsageSummaryPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetToolUsageUsersResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getToolUsageUsers")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getToolUsageUsers")
+		Meta("openapi:extension:x-speakeasy-name-override", "getToolUsageUsers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageUsers", "type": "query"}`)
+	})
+
+	Method("getToolUsageTargetTimeSeries", func() {
+		Description("Get time-series MCP and tool usage grouped by target")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetToolUsageSummaryPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetToolUsageTargetTimeSeriesResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getToolUsageTargetTimeSeries")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getToolUsageTargetTimeSeries")
+		Meta("openapi:extension:x-speakeasy-name-override", "getToolUsageTargetTimeSeries")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageTargetTimeSeries", "type": "query"}`)
+	})
+
+	Method("getToolUsageUserTimeSeries", func() {
+		Description("Get time-series MCP and tool usage grouped by user identity")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetToolUsageSummaryPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetToolUsageUserTimeSeriesResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getToolUsageUserTimeSeries")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getToolUsageUserTimeSeries")
+		Meta("openapi:extension:x-speakeasy-name-override", "getToolUsageUserTimeSeries")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageUserTimeSeries", "type": "query"}`)
+	})
+
+	Method("getToolUsageUsersByTarget", func() {
+		Description("Get cross-dimensional MCP and tool usage grouped by target and user identity")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetToolUsageSummaryPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetToolUsageUsersByTargetResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getToolUsageUsersByTarget")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getToolUsageUsersByTarget")
+		Meta("openapi:extension:x-speakeasy-name-override", "getToolUsageUsersByTarget")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageUsersByTarget", "type": "query"}`)
+	})
+
+	Method("getToolUsageTargetToolBreakdown", func() {
+		Description("Get per-tool MCP and tool usage grouped by target")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetToolUsageSummaryPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetToolUsageTargetToolBreakdownResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getToolUsageTargetToolBreakdown")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getToolUsageTargetToolBreakdown")
+		Meta("openapi:extension:x-speakeasy-name-override", "getToolUsageTargetToolBreakdown")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageTargetToolBreakdown", "type": "query"}`)
+	})
+
 	Method("listToolUsageTraces", func() {
 		Description("List target-aware MCP and tool usage traces")
 		Security(security.ByKey, security.ProjectSlug, func() {
@@ -529,6 +762,35 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:operationId", "getToolUsageFilterOptions")
 		Meta("openapi:extension:x-speakeasy-name-override", "getToolUsageFilterOptions")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageFilterOptions", "type": "query"}`)
+	})
+
+	Method("getMcpServerActivity", func() {
+		Description("Get per-MCP-server tool-call activity for the Distribute MCP listing. Returns, for every MCP server with usage in the lookback window, its total and recent tool-call counts plus the last tool-call time, so the listing can flag servers that have never received a tool call or that have gone quiet.")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetMcpServerActivityPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetMcpServerActivityResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getMcpServerActivity")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getMcpServerActivity")
+		Meta("openapi:extension:x-speakeasy-name-override", "getMcpServerActivity")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetMcpServerActivity", "type": "query"}`)
 	})
 
 	Method("listHooksTraces", func() {
@@ -919,6 +1181,8 @@ var SearchUsersFilter = Type("SearchUsersFilter", func() {
 	Attribute("user_ids", ArrayOf(String), "Optional list of user identifiers to include. Matches user_id for internal searches and external_user_id for external searches.")
 	Attribute("event_source", String, "Optional event source filter (e.g. 'hook'). When set, only rows with a matching event_source are included.")
 	Attribute("hook_source", String, "Optional hook source filter (e.g. 'cursor', 'claude-code').")
+	Attribute("account_type", String, "Optional account type filter ('team' or 'personal').")
+	Attribute("external_org_id", String, "Optional filter to a single AI account by its provider org id (the per-account discriminator); scopes results to that one account.")
 
 	Required("from", "to")
 })
@@ -943,6 +1207,14 @@ var SearchUsersPayload = Type("SearchUsersPayload", func() {
 		Minimum(1)
 		Maximum(1000)
 		Default(50)
+	})
+	Attribute("metrics", String, "Level of usage metrics to compute per user. 'full' (default) returns the complete set: chat counts, cost, cache tokens, tool-call totals, and the per-tool and per-hook-source breakdowns. 'basic' computes only user identity, first/last activity, and input/output token sums — a much cheaper aggregation for large orgs (e.g. the employee enrollment list, which renders only those fields). The remaining fields are zero/empty under 'basic'. Ignored when source='agent_metrics'.", func() {
+		Enum("full", "basic")
+		Default("full")
+	})
+	Attribute("source", String, "Where per-user summaries are read from (internal employee grouping only). 'logs' (default) scans raw telemetry_logs and computes the metrics selected by 'metrics'. 'agent_metrics' reads the pre-aggregated attribute_metrics_summaries view — canonical observed agent usage (Claude Code, Codex, Cursor, Claude Chat), keyed by email — which is far cheaper but returns only identity, last activity (hourly), and input/output/total token sums; users without an email in the window are surfaced separately from raw logs with activity but no token counts.", func() {
+		Enum("logs", "agent_metrics")
+		Default("logs")
 	})
 
 	Required("filter", "user_type")
@@ -1017,6 +1289,17 @@ var UserSummaryType = Type("UserSummary", func() {
 	// Per-tool breakdown
 	Attribute("tools", ArrayOf(ToolUsage), "Per-tool usage breakdown")
 	Attribute("hook_sources", ArrayOf(HookSourceUsage), "Per-hook-source usage breakdown")
+
+	// Distinct AI account types observed for this user in the window ('team',
+	// 'personal'). Lets the employees list flag who is also driving
+	// personal-account usage. Empty for older telemetry without the dimension.
+	Attribute("account_types", ArrayOf(String), "Distinct account types observed for this user ('team', 'personal')")
+
+	// Registered AI accounts for this user from the user_accounts directory
+	// (identity, not windowed telemetry). Each (provider, email) is a distinct
+	// account, so a user can hold several across providers. Drives the per-user
+	// accounts breakdown on the employees list.
+	Attribute("accounts", ArrayOf(UserAccountType), "Linked AI accounts for this user (team and personal, across providers)")
 
 	Required(
 		"user_id",
@@ -1097,6 +1380,19 @@ var HookSourceUsage = Type("HookSourceUsage", func() {
 	Attribute("event_count", Int64, "Total hook events for this source")
 
 	Required("source", "event_count")
+})
+
+var UserAccountType = Type("UserAccount", func() {
+	Description("A linked AI account for a user. The identity is (provider, email): the same email registered on two providers is two distinct accounts.")
+
+	Attribute("id", String, "Account record id (user_accounts.id); used to scope chat/session views to this account")
+	Attribute("provider", String, "AI provider the account belongs to ('anthropic', 'openai', 'cursor')")
+	Attribute("email", String, "Email associated with the account; may differ from the user's work email for personal accounts")
+	Attribute("account_type", String, "'team' (enterprise) or 'personal' (individual); empty when not yet classified")
+	Attribute("external_org_id", String, "Provider org id for this account; the per-account discriminator used to scope telemetry to this one account")
+	Attribute("last_seen_unix_nano", String, "Latest activity timestamp for this account in Unix nanoseconds")
+
+	Required("provider")
 })
 
 var ProjectSummaryType = Type("ProjectSummary", func() {
@@ -1218,6 +1514,8 @@ var GetUserMetricsSummaryPayload = Type("GetUserMetricsSummaryPayload", func() {
 	Attribute("external_user_id", String, "External user ID to get metrics for (mutually exclusive with user_id)")
 	Attribute("event_source", String, "Optional event source filter (e.g. 'hook')")
 	Attribute("hook_source", String, "Optional hook source filter (e.g. 'cursor', 'claude-code')")
+	Attribute("account_type", String, "Optional account type filter ('team' or 'personal')")
+	Attribute("external_org_id", String, "Optional filter to a single AI account by its provider org id; scopes metrics to that one account")
 
 	Required("from", "to")
 })
@@ -1245,6 +1543,8 @@ var GetEmployeeDataFlowGraphPayload = Type("GetEmployeeDataFlowGraphPayload", fu
 	})
 	Attribute("user_id", String, "User ID to get the graph for (mutually exclusive with external_user_id)")
 	Attribute("external_user_id", String, "External user ID to get the graph for (mutually exclusive with user_id)")
+	Attribute("account_type", String, "Optional account type filter ('team' or 'personal')")
+	Attribute("external_org_id", String, "Optional filter to a single AI account by its provider org id; scopes the graph to that one account")
 
 	Required("from", "to")
 })
@@ -1300,8 +1600,18 @@ var queryDimensions = []any{
 	"division_name",
 	"cost_center_name",
 	"email",
+	"hostname", // device hostname reported by the Go hooks (gram.hook.hostname)
 	"model",
-	"hook_source", // consuming surface (claude-code, cowork, cursor, ...)
+	"hook_source",  // consuming surface (claude-code, cowork, cursor, ...)
+	"account_type", // AI account classification (team | personal | unclassified)
+	"provider",     // AI provider for the account (anthropic | openai | cursor)
+	"billing_mode", // metered (real cost) | flat_rate (estimate) | unknown
+	"query_source",
+	"skill_name",
+	"skill_version",
+	"agent_name",
+	"mcp_server_name",
+	"mcp_tool_name",
 	"role",
 	"group",
 	"project_id",
@@ -1318,10 +1628,13 @@ var queryMeasures = []any{
 	"cache_creation_input_tokens",
 	"total_tool_calls",
 	"total_chats",
+	"total_work_units",
+	"scored_cost",
+	"scored_tokens",
 }
 
 var QueryPayload = Type("QueryPayload", func() {
-	Description("Payload for a generic org-scoped analytics query")
+	Description("Payload for a generic org-scoped analytics query. Queries involving skill_version use raw telemetry retained for 90 days and attribute each whole session to every activated version; timeseries place the whole session in its start-time bucket.")
 
 	Attribute("from", String, "Start time in ISO 8601 format", func() {
 		Format(FormatDateTime)
@@ -1362,6 +1675,84 @@ var QueryFilter = Type("QueryFilter", func() {
 	Required("dimension", "values")
 })
 
+// TelemetryWindowPayload is an org-scoped time window with an optional
+// project filter, named neutrally so future window-shaped endpoints can
+// share it without the generated SDK surfacing one endpoint's payload under
+// another's name (queryTumDetails is the current consumer).
+var TelemetryWindowPayload = Type("TelemetryWindowPayload", func() {
+	Description("An org-scoped time window, optionally narrowed to one project")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-26T10:00:00Z")
+	})
+	Attribute("project_id", String, "Optional project to scope to; defaults to every project in the organization.", func() {
+		Format(FormatUUID)
+	})
+
+	Required("from", "to")
+})
+
+// The per-metric fields shared by the daily points and the range totals.
+// Every measure describes the observed agent traffic (the tokens-under-
+// management population) with cache reads excluded, so total_tokens =
+// input + output + cache_creation.
+func tumDetailsMeasures() {
+	Attribute("input_tokens", Int64, "Observed input tokens (cache reads excluded)")
+	Attribute("output_tokens", Int64, "Observed output tokens")
+	Attribute("cache_creation_tokens", Int64, "Observed cache-write tokens — prompt content entering the provider cache, counted once")
+	Attribute("total_tokens", Int64, "Tokens under management: input + output + cache writes")
+	Required("input_tokens", "output_tokens", "cache_creation_tokens", "total_tokens")
+}
+
+var TumDetailsPoint = Type("TumDetailsPoint", func() {
+	Description("One UTC day of billing usage details")
+
+	Attribute("bucket_time_unix_nano", String, "Bucket start time in Unix nanoseconds (string for JS precision)")
+	tumDetailsMeasures()
+	Required("bucket_time_unix_nano")
+})
+
+var TumDetailsTotals = Type("TumDetailsTotals", func() {
+	Description("Whole-range totals for the billing usage details")
+
+	tumDetailsMeasures()
+})
+
+var TumDetailsBreakdownRow = Type("TumDetailsBreakdownRow", func() {
+	Description("One value of a breakdown dimension with its billed token usage over the range")
+
+	Attribute("value", String, "The dimension value; empty for rows recorded before the dimension existed")
+	Attribute("total_tokens", Int64, "Billed tokens for this value over the range")
+	Attribute("series", ArrayOf(Int64), "Daily tokens aligned to the result's points buckets")
+
+	Required("value", "total_tokens", "series")
+})
+
+var TumDetailsBreakdown = Type("TumDetailsBreakdown", func() {
+	Description("Per-dimension billed token breakdown for the usage details table")
+
+	Attribute("key", String, "The breakdown dimension key (model, hook_source, provider, account_type, email, division_name, department_name, role, project_id) — the public telemetry dimension identifiers, so the same keys work as telemetry.query filters. project_id rows carry project UUIDs; clients map them to names.")
+	Attribute("rows", ArrayOf(TumDetailsBreakdownRow), "Top values by tokens in descending order, with the remainder rolled into 'Other'")
+
+	Required("key", "rows")
+})
+
+var TumDetailsResult = Type("TumDetailsResult", func() {
+	Description("Result of the billing usage details query. Everything derives from the tokens-under-management population — observed agent traffic with cache reads excluded — computed live from the telemetry aggregate. Matches the billed totals for cycles billed under this definition; cycles finalized before the observed-traffic redefinition serve immutable snapshot totals on the usage endpoint that can differ from this live compute.")
+
+	Attribute("interval_seconds", Int64, "Timeseries bucket width in seconds. Always 86400 — the details are bucketed daily.")
+	Attribute("points", ArrayOf(TumDetailsPoint), "Gap-filled daily buckets in ascending time order")
+	Attribute("totals", TumDetailsTotals, "Whole-range totals")
+	Attribute("breakdowns", ArrayOf(TumDetailsBreakdown), "Billed token usage per breakdown dimension")
+
+	Required("interval_seconds", "points", "totals", "breakdowns")
+})
+
 var QueryMeasures = Type("QueryMeasures", func() {
 	Description("Aggregated measure values for a group or time bucket")
 
@@ -1373,6 +1764,9 @@ var QueryMeasures = Type("QueryMeasures", func() {
 	Attribute("cache_creation_input_tokens", Int64, "Sum of cache creation input tokens")
 	Attribute("total_tool_calls", Int64, "Total number of tool calls")
 	Attribute("total_chats", Int64, "Number of distinct chat sessions")
+	Attribute("total_work_units", Float64, "Total work units delivered by scored sessions (work-units analysis)")
+	Attribute("scored_cost", Float64, "Total cost in USD of the sessions that carry a work-units score. Divide by total_work_units for cost per unit; using total_cost would overstate it whenever analysis coverage is partial.")
+	Attribute("scored_tokens", Int64, "Total tokens of the sessions that carry a work-units score. Divide by total_work_units for tokens per unit.")
 
 	Required(
 		"total_cost",
@@ -1383,6 +1777,9 @@ var QueryMeasures = Type("QueryMeasures", func() {
 		"cache_creation_input_tokens",
 		"total_tool_calls",
 		"total_chats",
+		"total_work_units",
+		"scored_cost",
+		"scored_tokens",
 	)
 })
 
@@ -1448,6 +1845,8 @@ var GetObservabilityOverviewPayload = Type("GetObservabilityOverviewPayload", fu
 	})
 	Attribute("event_source", String, "Optional event source filter (e.g. 'hook')")
 	Attribute("hook_source", String, "Optional hook source filter (e.g. 'cursor', 'claude-code')")
+	Attribute("account_type", String, "Optional account type filter ('team' or 'personal')")
+	Attribute("external_org_id", String, "Optional filter to a single AI account by its provider org id; scopes the overview to that one account")
 	Attribute("include_time_series", Boolean, "Whether to include time series data (default: true)", func() {
 		Default(true)
 	})
@@ -1767,12 +2166,17 @@ var GetHooksSummaryResult = Type("GetHooksSummaryResult", func() {
 
 var ToolUsageTargetType = Type("ToolUsageTargetType", String, func() {
 	Description("Tool usage target type")
-	Enum("hosted_mcp_server", "shadow_mcp_server", "local_tool", "skill")
+	Enum("hosted_mcp_server", "tunneled_mcp_server", "shadow_mcp_server", "local_tool", "skill")
 })
 
 var ToolUsageTargetKind = Type("ToolUsageTargetKind", String, func() {
 	Description("Tool usage aggregation target kind")
 	Enum("server", "local_tools", "skill")
+})
+
+var ToolUsageStatus = Type("ToolUsageStatus", String, func() {
+	Description("Tool usage trace outcome")
+	Enum("error", "success", "blocked", "pending")
 })
 
 var ToolUsageUserKind = Type("ToolUsageUserKind", String, func() {
@@ -1808,6 +2212,7 @@ var GetToolUsageSummaryPayload = Type("GetToolUsageSummaryPayload", func() {
 	Attribute("shadow_server_names", ArrayOf(String), "Shadow MCP server names to include")
 	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include")
 	Attribute("hook_sources", ArrayOf(String), "Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.")
+	Attribute("account_type", String, "Optional account type filter ('team' or 'personal').")
 
 	Required("from", "to")
 })
@@ -1826,6 +2231,48 @@ var GetToolUsageSummaryResult = Type("GetToolUsageSummaryResult", func() {
 	Required("totals", "targets", "users", "target_time_series", "user_time_series", "users_by_target", "target_tool_breakdown")
 })
 
+var GetToolUsageTotalsResult = Type("GetToolUsageTotalsResult", func() {
+	Description("Overall MCP and tool usage totals for the selected filters and time range")
+	Attribute("totals", ToolUsageTotals, "Overall usage totals for the selected filters and time range")
+	Required("totals")
+})
+
+var GetToolUsageTargetsResult = Type("GetToolUsageTargetsResult", func() {
+	Description("Top MCP and tool usage targets for the selected filters and time range")
+	Attribute("targets", ArrayOf(ToolUsageTargetSummary), "Top usage targets for the selected filters and time range")
+	Required("targets")
+})
+
+var GetToolUsageUsersResult = Type("GetToolUsageUsersResult", func() {
+	Description("Top MCP and tool usage user identities for the selected filters and time range")
+	Attribute("users", ArrayOf(ToolUsageUserSummary), "Top user identities for the selected filters and time range")
+	Required("users")
+})
+
+var GetToolUsageTargetTimeSeriesResult = Type("GetToolUsageTargetTimeSeriesResult", func() {
+	Description("Time-series MCP and tool usage grouped by target")
+	Attribute("target_time_series", ArrayOf(ToolUsageTargetTimeSeriesPoint), "Time-series usage buckets grouped by target")
+	Required("target_time_series")
+})
+
+var GetToolUsageUserTimeSeriesResult = Type("GetToolUsageUserTimeSeriesResult", func() {
+	Description("Time-series MCP and tool usage grouped by user identity")
+	Attribute("user_time_series", ArrayOf(ToolUsageUserTimeSeriesPoint), "Time-series usage buckets grouped by user identity")
+	Required("user_time_series")
+})
+
+var GetToolUsageUsersByTargetResult = Type("GetToolUsageUsersByTargetResult", func() {
+	Description("Cross-dimensional MCP and tool usage grouped by target and user identity")
+	Attribute("users_by_target", ArrayOf(ToolUsageUsersByTargetRow), "Cross-dimensional usage rows grouped by target and user identity")
+	Required("users_by_target")
+})
+
+var GetToolUsageTargetToolBreakdownResult = Type("GetToolUsageTargetToolBreakdownResult", func() {
+	Description("Per-tool MCP and tool usage grouped by target")
+	Attribute("target_tool_breakdown", ArrayOf(ToolUsageTargetToolBreakdownRow), "Per-tool usage rows grouped by target")
+	Required("target_tool_breakdown")
+})
+
 var ListToolUsageTracesPayload = Type("ListToolUsageTracesPayload", func() {
 	Description("Payload for listing target-aware MCP and tool usage traces")
 
@@ -1842,6 +2289,8 @@ var ListToolUsageTracesPayload = Type("ListToolUsageTracesPayload", func() {
 	Attribute("shadow_server_names", ArrayOf(String), "Shadow MCP server names to include")
 	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include")
 	Attribute("hook_sources", ArrayOf(String), "Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.")
+	Attribute("account_type", String, "Optional account type filter ('team' or 'personal'). 'team' includes unclassified traces.")
+	Attribute("statuses", ArrayOf(ToolUsageStatus), "Trace outcomes to include (error, success, blocked, pending). Empty means all.")
 	Attribute("query", String, "Free-text attribute search string from the q URL param. Matches useful identifier attributes such as Gram URN, conversation ID, and trigger instance ID.")
 	Attribute("filters", ArrayOf(LogFilter), "Arbitrary attribute filter conditions from the af URL param")
 	Attribute("cursor", String, "Cursor for pagination")
@@ -1891,6 +2340,7 @@ var ToolUsageTraceSummary = Type("ToolUsageTraceSummary", func() {
 		Enum("success", "failure", "blocked", "pending")
 	})
 	Attribute("block_reason", String, "Hook block reason when hook_status is blocked")
+	Attribute("account_type", String, "AI account classification ('team' or 'personal'); empty/absent when unclassified")
 
 	Required("id", "log_group", "start_time_unix_nano", "log_count", "gram_urn", "tool_name", "target_type", "target_kind", "target_id", "target_label", "user_key", "user_label", "user_kind", "event_source")
 })
@@ -2067,6 +2517,46 @@ var ToolUsageTargetToolBreakdownRow = Type("ToolUsageTargetToolBreakdownRow", fu
 	Attribute("failure_rate", Float64, "Fraction of completed tool usage events for the target and tool that failed")
 
 	Required("target_type", "target_kind", "target_id", "target_label", "tool_name", "event_count", "success_count", "failure_count", "failure_rate")
+})
+
+var GetMcpServerActivityPayload = Type("GetMcpServerActivityPayload", func() {
+	Description("Payload for per-MCP-server tool-call activity used by the Distribute MCP listing indicators")
+
+	Attribute("recent_window_days", Int, "Size of the recent-activity window in days. A server with tool calls in the overall lookback window but none inside this window is flagged as stale. Defaults to 14.", func() {
+		Minimum(1)
+		Maximum(90)
+		Default(14)
+	})
+})
+
+var GetMcpServerActivityResult = Type("GetMcpServerActivityResult", func() {
+	Description("Per-MCP-server tool-call activity. Only servers with at least one tool call inside the lookback window are returned; a server absent from the list has never received a tool call (within the telemetry retention window).")
+
+	Attribute("activity", ArrayOf(McpServerActivity), "One entry per MCP server (hosted or tunneled) that has received at least one tool call within the lookback window")
+	Attribute("recent_window_days", Int, "The recent-activity window size in days that was applied")
+	Attribute("lookback_days", Int, "The overall lookback window size in days (bounded by telemetry retention)")
+
+	Required("activity", "recent_window_days", "lookback_days")
+})
+
+var McpServerActivityTargetType = Type("McpServerActivityTargetType", String, func() {
+	Description("MCP server activity target type. Only the two server-backed kinds this endpoint reports are valid, unlike the broader tool-usage target types.")
+	Enum("hosted_mcp_server", "tunneled_mcp_server")
+})
+
+var McpServerActivity = Type("McpServerActivity", func() {
+	Description("Tool-call activity for one MCP server, keyed by the same target identifier used elsewhere (toolset slug for hosted servers, MCP server slug for tunneled/remote servers)")
+
+	Attribute("target_type", McpServerActivityTargetType, "Specific kind of MCP server target (hosted_mcp_server or tunneled_mcp_server)")
+	Attribute("target_id", String, "Stable target identifier: toolset slug for hosted servers, MCP server slug for tunneled/remote servers")
+	Attribute("target_label", String, "User-facing label for the target")
+	Attribute("total_tool_calls", Int64, "Number of tool calls observed across the whole lookback window")
+	Attribute("recent_tool_calls", Int64, "Number of tool calls observed inside the recent-activity window")
+	Attribute("last_tool_call_at", String, "ISO 8601 timestamp of the most recent tool call", func() {
+		Format(FormatDateTime)
+	})
+
+	Required("target_type", "target_id", "target_label", "total_tool_calls", "recent_tool_calls")
 })
 
 var HooksBreakdownRowType = Type("HooksBreakdownRow", func() {

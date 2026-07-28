@@ -1,0 +1,115 @@
+import {
+  InvalidateQueryFilters,
+  QueryClient,
+  UseQueryResult,
+  UseSuspenseQueryResult,
+} from "@tanstack/react-query";
+import { GramError } from "../models/errors/gramerror.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
+import { ServiceError } from "../models/errors/serviceerror.js";
+import {
+  LoadChatRequest,
+  LoadChatSecurity,
+} from "../models/operations/loadchat.js";
+import {
+  QueryHookOptions,
+  SuspenseQueryHookOptions,
+  TupleToPrefixes,
+} from "./_types.js";
+import {
+  buildLoadChatQuery,
+  LoadChatQueryData,
+  prefetchLoadChat,
+  queryKeyLoadChat,
+} from "./loadChat.core.js";
+export {
+  buildLoadChatQuery,
+  type LoadChatQueryData,
+  prefetchLoadChat,
+  queryKeyLoadChat,
+};
+export type LoadChatQueryError =
+  | ServiceError
+  | GramError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+/**
+ * loadChat chat
+ *
+ * @remarks
+ * Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `query` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `risk_only`).
+ */
+export declare function useLoadChat(
+  request: LoadChatRequest,
+  security?: LoadChatSecurity | undefined,
+  options?: QueryHookOptions<LoadChatQueryData, LoadChatQueryError>,
+): UseQueryResult<LoadChatQueryData, LoadChatQueryError>;
+/**
+ * loadChat chat
+ *
+ * @remarks
+ * Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `query` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `risk_only`).
+ */
+export declare function useLoadChatSuspense(
+  request: LoadChatRequest,
+  security?: LoadChatSecurity | undefined,
+  options?: SuspenseQueryHookOptions<LoadChatQueryData, LoadChatQueryError>,
+): UseSuspenseQueryResult<LoadChatQueryData, LoadChatQueryError>;
+export declare function setLoadChatData(
+  client: QueryClient,
+  queryKeyBase: [
+    parameters: {
+      id: string;
+      generation?: number | undefined;
+      limit?: number | undefined;
+      beforeSeq?: number | undefined;
+      afterSeq?: number | undefined;
+      fromStart?: boolean | undefined;
+      riskOnly?: boolean | undefined;
+      query?: string | undefined;
+      gramSession?: string | undefined;
+      gramProject?: string | undefined;
+      gramChatSession?: string | undefined;
+    },
+  ],
+  data: LoadChatQueryData,
+): LoadChatQueryData | undefined;
+export declare function invalidateLoadChat(
+  client: QueryClient,
+  queryKeyBase: TupleToPrefixes<
+    [
+      parameters: {
+        id: string;
+        generation?: number | undefined;
+        limit?: number | undefined;
+        beforeSeq?: number | undefined;
+        afterSeq?: number | undefined;
+        fromStart?: boolean | undefined;
+        riskOnly?: boolean | undefined;
+        query?: string | undefined;
+        gramSession?: string | undefined;
+        gramProject?: string | undefined;
+        gramChatSession?: string | undefined;
+      },
+    ]
+  >,
+  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
+): Promise<void>;
+export declare function invalidateAllLoadChat(
+  client: QueryClient,
+  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
+): Promise<void>;
+//# sourceMappingURL=loadChat.d.ts.map

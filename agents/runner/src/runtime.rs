@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::panic::AssertUnwindSafe;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use agentkit_adapter_completions::CompletionsAdapter;
@@ -25,6 +25,7 @@ use futures::FutureExt;
 use serde_json::Value;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::sync::{OnceCell, oneshot};
+use tracing::Instrument;
 
 use agentkit_compaction::{AgentBuilderCompactorExt, CompactionReason, Compactor};
 
@@ -33,6 +34,7 @@ use crate::compaction::{Compaction, PersistingCompactor, PrimaryCompaction, buil
 use crate::errors::RunnerError;
 use crate::gram_client::GramBootstrapClient;
 use crate::http_layer::{McpRotatingClient, TokenRegistry, build_bootstrap_client, build_http};
+use crate::telemetry::SpanIdentity;
 use crate::tools;
 use crate::wire::{McpServer, RunnerMessage, ThreadBootstrap};
 use crate::workdir::ASSISTANT_WORKDIR;
@@ -59,11 +61,9 @@ pub type AppState = Arc<RuntimeHost>;
 
 /// Singleton host shared by every per-thread task on the VM.
 pub struct RuntimeHost {
-    /// The assistant this VM serves, surfaced in /state. Set from the
-    /// GRAM_ASSISTANT_ID boot env when present (Fly, GKE cold-start), or
-    /// stamped by the first turn that carries one (GKE warm-pool sandbox).
-    /// Set-once: boot env wins.
-    pub assistant_id: OnceLock<String>,
+    /// Gram identity shared with the span processor registered in
+    /// `init_tracing`; see [`SpanIdentity`] for the set-once discipline.
+    pub identity: Arc<SpanIdentity>,
     pub started_at: Instant,
     /// Per-idempotency-key admission slot. The bool tracks whether the
     /// keyed turn has actually been enqueued: holding the mutex covers
@@ -128,7 +128,7 @@ impl ConfiguredThread {
 }
 
 pub async fn build_host(
-    assistant_id: Option<String>,
+    identity: Arc<SpanIdentity>,
     server_url: String,
     initial_token: String,
     thread_idle_ttl: Duration,
@@ -148,14 +148,8 @@ pub async fn build_host(
 
     let gram_client =
         GramBootstrapClient::new(server_url, build_bootstrap_client(http_client.clone()));
-    let assistant_id_cell = OnceLock::new();
-    // Ignore an empty/whitespace boot env so warm-pool pods stay unbound and
-    // can learn their assistant from the first turn.
-    if let Some(id) = assistant_id.filter(|id| !id.trim().is_empty()) {
-        let _ = assistant_id_cell.set(id);
-    }
     let host = Arc::new(RuntimeHost {
-        assistant_id: assistant_id_cell,
+        identity,
         started_at: Instant::now(),
         seen: DashMap::new(),
         threads: DashMap::new(),
@@ -452,11 +446,18 @@ async fn spawn_thread(
     let log_thread_id = thread_id.clone();
     let host_for_eviction = Arc::clone(host);
     let evict_thread_id = thread_id.clone();
+    let loop_thread_id = thread_id.clone();
 
     let task_handle = tokio::spawn(async move {
-        let outcome = AssertUnwindSafe(run_loop(driver, inbox_rx, loop_idle, turn_end_compactor))
-            .catch_unwind()
-            .await;
+        let outcome = AssertUnwindSafe(run_loop(
+            driver,
+            inbox_rx,
+            loop_idle,
+            turn_end_compactor,
+            loop_thread_id,
+        ))
+        .catch_unwind()
+        .await;
         match outcome {
             Ok(Ok(reason)) => {
                 tracing::info!(thread_id = %log_thread_id, reason = %reason, "thread loop exited")
@@ -809,12 +810,18 @@ async fn run_loop<S>(
     mut inbox: UnboundedReceiver<String>,
     idle_since: Arc<Mutex<Option<Instant>>>,
     turn_end_compactor: Option<PersistingCompactor>,
+    thread_id: String,
 ) -> Result<&'static str, RunnerError>
 where
     S: ModelSession,
 {
     loop {
-        match driver.next().await? {
+        // A fresh root span per driver step (one model call plus its tool
+        // executions) bounds traces and carries the thread id. Gram identity
+        // rides the span processor registered on the tracer provider, which
+        // stamps every exported span.
+        let step_span = tracing::info_span!("agent.step", thread_id = %thread_id);
+        match driver.next().instrument(step_span).await? {
             LoopStep::Finished(_turn) => {
                 if let Some(compactor) = &turn_end_compactor {
                     compact_at_turn_end(compactor, &driver).await;
@@ -966,10 +973,10 @@ mod tests {
             "http://localhost".to_string(),
             build_bootstrap_client(http_client.clone()),
         );
-        let assistant_id = OnceLock::new();
-        let _ = assistant_id.set("asst".to_string());
+        let identity = Arc::new(SpanIdentity::default());
+        let _ = identity.assistant_id.set("asst".to_string());
         Arc::new(RuntimeHost {
-            assistant_id,
+            identity,
             started_at: Instant::now(),
             seen: DashMap::new(),
             threads: DashMap::new(),

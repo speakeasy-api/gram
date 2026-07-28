@@ -119,32 +119,46 @@ func TestLogs_PersistsClaudeOTELRecordWithoutSessionID(t *testing.T) {
 	require.NotContains(t, logs[0].Attributes, "conversation")
 }
 
-func TestLogs_CodexPayloadContinuesThroughUsagePath(t *testing.T) {
+// A canonical hooks session.started carrying only the device hostname (an
+// org-scoped ingest key with no self-reported email) seeds the session cache,
+// and the Claude OTEL path stamps that hostname onto the session's rows —
+// which is what lets the email dimension fall back to the device for
+// company-credential sessions that emit no user identity.
+func TestLogs_StampsCachedHostnameOnClaudeRows(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
 	chClient := enableHookTelemetryLogger(t, ctx, ti)
 	authCtx := hookAuthContext(t, ctx)
-	timestamp := time.Unix(0, 1780468942284000000)
 
-	err := ti.service.Logs(ctx, codexLogsPayload(tokenBearingRecord()))
+	sessionID := "claude-hostname-fallback-" + uuid.NewString()
+	hostname := "ci-runner-hostname-test"
+
+	payload := canonicalIngestPayload("claude", "session.started", sessionID)
+	payload.Source.Hostname = &hostname
+	_, err := ti.service.Ingest(ctx, payload)
 	require.NoError(t, err)
 
-	codexLogs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), codexUsageMetricsURN, timestamp, 1)
-	require.Equal(t, "Codex usage metrics", codexLogs[0].Body)
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	err = ti.service.Logs(ctx, claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		nil,
+		&gen.OTELLogRecord{
+			TimeUnixNano: new(nanoString(timestamp)),
+			Body:         &gen.OTELLogBody{StringValue: new("api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", sessionID),
+				strAttr("prompt.id", "prompt-hostname-1"),
+				strAttr("event.name", "api_request"),
+				strAttr("model", "claude-opus-4-8"),
+			},
+		},
+	))
+	require.NoError(t, err)
 
-	require.Never(t, func() bool {
-		logs, err := chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
-			GramProjectID: authCtx.ProjectID.String(),
-			TimeStart:     timestamp.Add(-time.Minute).UnixNano(),
-			TimeEnd:       time.Now().Add(time.Minute).UnixNano(),
-			GramURNs:      []string{claudeOTELLogsURN},
-			SortOrder:     "desc",
-			Cursor:        "",
-			Limit:         10,
-		})
-		return err == nil && len(logs) > 0
-	}, 300*time.Millisecond, 50*time.Millisecond)
+	logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), claudeOTELLogsURN, timestamp, 1)
+	require.Contains(t, logs[0].Attributes, "hostname")
+	require.Contains(t, logs[0].Attributes, hostname)
 }
 
 func TestLogs_CachesMultiSessionBatchPerSessionWithoutLeakingIdentity(t *testing.T) {
@@ -185,14 +199,14 @@ func TestLogs_CachesMultiSessionBatchPerSessionWithoutLeakingIdentity(t *testing
 	require.NoError(t, ti.service.cache.Get(ctx, sessionCacheKey("claude-session-a"), &sessionA))
 	require.Equal(t, "claude-session-a", sessionA.SessionID)
 	require.Equal(t, "a@example.com", sessionA.UserEmail)
-	require.Equal(t, "claude-org-a", sessionA.ClaudeOrgID)
+	require.Equal(t, "claude-org-a", sessionA.ExternalOrgID)
 	require.Equal(t, userID, sessionA.UserID)
 
 	var sessionB SessionMetadata
 	require.NoError(t, ti.service.cache.Get(ctx, sessionCacheKey("claude-session-b"), &sessionB))
 	require.Equal(t, "claude-session-b", sessionB.SessionID)
 	require.Empty(t, sessionB.UserEmail)
-	require.Empty(t, sessionB.ClaudeOrgID)
+	require.Empty(t, sessionB.ExternalOrgID)
 	require.Empty(t, sessionB.UserID)
 }
 
@@ -243,7 +257,7 @@ func TestExtractSessionMetadataSkipsNilOTELAttributeElements(t *testing.T) {
 	require.Equal(t, "claude-code", sessions[0].ServiceName)
 	require.Equal(t, "claude-session-1", sessions[0].SessionID)
 	require.Equal(t, "dev@example.com", sessions[0].UserEmail)
-	require.Equal(t, "claude-org-1", sessions[0].ClaudeOrgID)
+	require.Equal(t, "claude-org-1", sessions[0].ExternalOrgID)
 
 	require.Empty(t, extractLogData(&gen.OTELLogRecord{Attributes: []*gen.OTELAttribute{nil}}).SessionID)
 	require.Empty(t, extractAttributeString([]*gen.OTELAttribute{nil}, "session.id"))
@@ -286,7 +300,7 @@ func TestExtractSessionMetadataKeepsEmailFromEarlierRecordInBatch(t *testing.T) 
 	require.Len(t, sessions, 1)
 	require.Equal(t, sessionID, sessions[0].SessionID)
 	require.Equal(t, "dev@example.com", sessions[0].UserEmail)
-	require.Equal(t, "claude-org-1", sessions[0].ClaudeOrgID)
+	require.Equal(t, "claude-org-1", sessions[0].ExternalOrgID)
 }
 
 func TestExtractSessionMetadataIsolatesIdentityAcrossSessionsInBatch(t *testing.T) {
@@ -322,22 +336,46 @@ func TestExtractSessionMetadataIsolatesIdentityAcrossSessionsInBatch(t *testing.
 
 	require.Equal(t, "claude-session-a", sessions[0].SessionID)
 	require.Equal(t, "a@example.com", sessions[0].UserEmail)
-	require.Equal(t, "claude-org-a", sessions[0].ClaudeOrgID)
+	require.Equal(t, "claude-org-a", sessions[0].ExternalOrgID)
 
 	require.Equal(t, "claude-session-b", sessions[1].SessionID)
 	require.Empty(t, sessions[1].UserEmail)
-	require.Empty(t, sessions[1].ClaudeOrgID)
+	require.Empty(t, sessions[1].ExternalOrgID)
+}
+
+func TestExtractSessionMetadataCapturesDeviceAndAccountIdentity(t *testing.T) {
+	t.Parallel()
+
+	payload := claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		nil,
+		&gen.OTELLogRecord{
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", "device-identity-session"),
+				strAttr("user.email", "dev@example.com"),
+				strAttr("organization.id", "ext-org"),
+				strAttr("user.account_uuid", "acct-uuid"),
+				strAttr("user.account_id", "user_tagged"),
+				strAttr("user.id", "device-xyz"),
+			},
+		},
+	)
+
+	sessions := extractSessionMetadata(payload)
+	require.Len(t, sessions, 1)
+	require.Equal(t, "device-identity-session", sessions[0].SessionID)
+	require.Equal(t, "ext-org", sessions[0].ExternalOrgID)
+	require.Equal(t, "acct-uuid", sessions[0].ExternalAccountUUID)
+	require.Equal(t, "user_tagged", sessions[0].ExternalAccountID)
+	require.Equal(t, "device-xyz", sessions[0].DeviceID)
 }
 
 func enableHookTelemetryLogger(t *testing.T, ctx context.Context, ti *testInstance) *telemetryrepo.Queries {
 	t.Helper()
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	enabled := func(context.Context, string) (bool, error) { return true, nil }
-	ti.service.telemetryLogger = telemetry.NewLogger(ctx, testenv.NewLogger(t), chConn, enabled, enabled, nil)
-	return telemetryrepo.New(chConn)
+	ti.service.telemetryLogger = telemetry.NewLogger(ctx, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.chConn, enabled, enabled, nil, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
+	return telemetryrepo.New(ti.chConn)
 }
 
 func hookAuthContext(t *testing.T, ctx context.Context) *contextvalues.AuthContext {

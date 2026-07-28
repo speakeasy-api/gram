@@ -36,8 +36,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -125,7 +127,7 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, nil, authzEngine, auditLogger)
+	svc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, nil, authzEngine, auditLogger, temporalEnv, false)
 	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, authzEngine, auditLogger)
 	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
 	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, authzEngine)
@@ -136,6 +138,103 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 		deployments:    deploymentsSvc,
 		assets:         assetsSvc,
 		packages:       packagesSvc,
+		conn:           conn,
+		temporalEnv:    temporalEnv,
+		sessionManager: sessionManager,
+		assetStorage:   assetStorage,
+	}
+}
+
+// fakeGitHubPublisher is a no-op plugins.GitHubPublisher: it never touches
+// the network, so the initial-publish workflow's activity completes
+// successfully and leaves behind a real plugin_github_connections row.
+type fakeGitHubPublisher struct{}
+
+func (fakeGitHubPublisher) CreateRepo(ctx context.Context, installationID int64, org, name string, private bool) error {
+	return nil
+}
+
+func (fakeGitHubPublisher) PushFiles(ctx context.Context, installationID int64, owner, repo, branch, commitMsg string, files map[string][]byte) (string, error) {
+	return "fake-sha", nil
+}
+
+func (fakeGitHubPublisher) AddCollaborator(ctx context.Context, installationID int64, owner, repo, username, permission string) error {
+	return nil
+}
+
+func (fakeGitHubPublisher) HasDirectCollaborator(ctx context.Context, installationID int64, owner, repo string) (bool, error) {
+	return false, nil
+}
+
+func (fakeGitHubPublisher) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string) (map[string][]byte, error) {
+	return nil, ghclient.ErrRepoNotFound
+}
+
+func (fakeGitHubPublisher) GetFileContent(ctx context.Context, installationID int64, owner, repo, branch, path string) ([]byte, error) {
+	return nil, ghclient.ErrFileNotFound
+}
+
+// newTestToolsetsServiceWithGitHubPublishing is newTestToolsetsService with
+// GitHub publishing turned on end-to-end: the shared Temporal worker is
+// additionally configured with a plugins.Service backed by a fake (no-op)
+// GitHub client, so a toolset's auto-attach-triggered initial publish
+// actually runs its workflow to completion instead of just being enqueued.
+func newTestToolsetsServiceWithGitHubPublishing(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+
+	ctx := t.Context()
+
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	meterProvider := testenv.NewMeterProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+
+	enc := testenv.NewEncryptionClient(t)
+	funcs := functionstest.NewOrchestrator(t, assetStorage)
+	mcpRegistryClient := externalmcptest.NewRegistryClient(t, logger, tracerProvider)
+	temporalEnv, _ := infra.NewTemporalEnv(t)
+	auditLogger := audit.NewLogger()
+	f := &feature.InMemory{}
+
+	ghConfig := &plugins.GitHubConfig{
+		Client:         fakeGitHubPublisher{},
+		Org:            "test-org",
+		InstallationID: 12345,
+	}
+	pluginPublisher := plugins.NewPublisher(logger, conn, auditLogger, ghConfig, "local", "https://app.getgram.ai", f)
+
+	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider,
+		background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, mcpRegistryClient, auditLogger),
+		&background.WorkerOptions{PluginPublisher: pluginPublisher},
+	)
+	t.Cleanup(func() {
+		worker.Stop()
+	})
+	require.NoError(t, worker.Start(), "start temporal worker")
+
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+
+	billingClient := billing.NewStubClient(logger, tracerProvider)
+
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+
+	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	svc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, nil, authzEngine, auditLogger, temporalEnv, true)
+
+	return ctx, &testInstance{
+		service:        svc,
 		conn:           conn,
 		temporalEnv:    temporalEnv,
 		sessionManager: sessionManager,
@@ -178,6 +277,60 @@ func createPetstoreDeployment(t *testing.T, ctx context.Context, ti *testInstanc
 		ExternalURL:      nil,
 	})
 	require.NoError(t, err, "create petstore deployment")
+	require.Equal(t, "completed", dep.Deployment.Status, "deployment status is not completed")
+
+	return dep
+}
+
+// createTodoDeploymentWithDocs creates a single deployment attaching the
+// todo-valid.yaml fixture multiple times under different document slugs.
+// todo-valid.yaml (unlike petstore-valid.yaml) declares HTTP security
+// schemes (ApiKeyAuth/BearerAuth), and the env var names derived for them are
+// slug-scoped (see internal/openapi/extract_speakeasy.go). Because
+// FindHttpToolEntriesByUrn only ever resolves tools from a project's single
+// latest completed deployment, reproducing "two OpenAPI documents in the
+// same project define a same-named security scheme with different env
+// vars" requires both documents to live in ONE deployment (distinct
+// openapiv3_document_id, shared deployment_id) rather than two sequential
+// deployments.
+func createTodoDeploymentWithDocs(t *testing.T, ctx context.Context, ti *testInstance, idempotencyKey string, docSlugs ...string) *dgen.CreateDeploymentResult {
+	t.Helper()
+
+	assetForms := make([]*dgen.AddOpenAPIv3DeploymentAssetForm, 0, len(docSlugs))
+	for _, docSlug := range docSlugs {
+		bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
+
+		ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+			ApikeyToken:      nil,
+			SessionToken:     nil,
+			ProjectSlugInput: nil,
+			ContentType:      "application/x-yaml",
+			ContentLength:    int64(bs.Len()),
+		}, io.NopCloser(bs))
+		require.NoError(t, err, "upload todo openapi v3 asset for slug %s", docSlug)
+
+		assetForms = append(assetForms, &dgen.AddOpenAPIv3DeploymentAssetForm{
+			AssetID: ares.Asset.ID,
+			Name:    docSlug,
+			Slug:    types.Slug(docSlug),
+		})
+	}
+
+	dep, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
+		IdempotencyKey:   idempotencyKey,
+		Openapiv3Assets:  assetForms,
+		Functions:        []*dgen.AddFunctionsForm{},
+		Packages:         []*dgen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create todo deployment")
 	require.Equal(t, "completed", dep.Deployment.Status, "deployment status is not completed")
 
 	return dep

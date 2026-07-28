@@ -75,6 +75,8 @@ func (s *GetUserMetricsSummary) Call(ctx context.Context, _ toolconfig.ToolCallE
 		ExternalUserID:   input.ExternalUserID,
 		EventSource:      input.EventSource,
 		HookSource:       input.HookSource,
+		AccountType:      nil,
+		ExternalOrgID:    nil,
 	})
 	if err != nil {
 		if errors.Is(err, telemetryerrs.ErrLogsDisabled) {

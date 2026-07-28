@@ -1,14 +1,43 @@
+// Product surfaces are distinct from their providers: for example, Anthropic is
+// a provider while Claude Chat Desktop, Claude Code, and Claude Cowork are
+// separate surfaces. Raw source values come from several generations of hook
+// and compliance ingestion, so aliases must share one label across reporting.
+const PRODUCT_SURFACE_LABELS: Record<string, string> = {
+  claude: "Claude Chat Desktop",
+  "claude-desktop": "Claude Chat Desktop",
+  "claude-chat-desktop": "Claude Chat Desktop",
+  "claude-web": "Claude Chat Web",
+  "claude-chat-web": "Claude Chat Web",
+  claudecode: "Claude Code",
+  "claude-code": "Claude Code",
+  // Claude Code Desktop is its own surface, distinct from the claude-code CLI
+  // and from cowork (which shares CCD's hook adapter slug but resolves to
+  // "cowork" server-side via the OTEL service.name).
+  "claude-code-desktop": "Claude Code Desktop",
+  cowork: "Claude Cowork",
+  "claude-cowork": "Claude Cowork",
+  cursor: "Cursor",
+  codex: "Codex",
+  copilot: "Copilot",
+  "github-copilot": "Copilot",
+  gemini: "Gemini",
+  glean: "Glean",
+  bedrock: "AWS Bedrock",
+  "aws-bedrock": "AWS Bedrock",
+};
+
 /**
- * Format a raw agent/client "source" string (e.g. "claude-code", "aws-bedrock")
- * into a human-readable label ("Claude Code", "Aws Bedrock") by splitting on
- * `-`/`_` and title-casing each part.
- *
- * Shared by the observability pages so source labels are consistent everywhere
- * and derived from the data rather than a hardcoded per-page catalog.
+ * Format a raw agent/client source as its normalized product-surface label.
+ * Unknown sources fall back to delimiter-aware title casing.
  */
 export function formatPlatform(value: string): string {
-  return value
-    .split(/[-_]/)
+  const trimmed = value.trim();
+  const normalized = trimmed.toLowerCase().replace(/[\s_]+/g, "-");
+  const known = PRODUCT_SURFACE_LABELS[normalized];
+  if (known) return known;
+
+  return trimmed
+    .split(/[-_\s]+/)
     .filter(Boolean)
     .map((part) => part[0]!.toUpperCase() + part.slice(1))
     .join(" ");

@@ -19,7 +19,7 @@ import { Type } from "@/components/ui/type";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useLatestDeployment, useListResources } from "@/hooks/toolTypes";
 import { Resource, Toolset } from "@/lib/toolTypes";
-import { useUpdateToolsetMutation } from "@gram/client/react-query";
+import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
 import { Dialog, Stack } from "@speakeasy-api/moonshine";
 import { Newspaper } from "lucide-react";
 import { useMemo, useState } from "react";

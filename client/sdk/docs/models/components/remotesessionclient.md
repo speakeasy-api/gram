@@ -1,0 +1,40 @@
+# RemoteSessionClient
+
+A remote_session_client record. client_secret_encrypted is never returned.
+
+## Example Usage
+
+```typescript
+import { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
+
+let value: RemoteSessionClient = {
+  clientId: "<id>",
+  clientIdIssuedAt: new Date("2026-05-19T00:28:02.897Z"),
+  createdAt: new Date("2024-09-30T08:40:54.477Z"),
+  id: "2ec7b21d-ec2d-4413-8af6-c41a585f7992",
+  organizationId: "<id>",
+  projectId: "<id>",
+  remoteSessionIssuerId: "557db6a7-f9f2-46a4-a248-f24f6316df2a",
+  updatedAt: new Date("2025-09-16T08:42:48.310Z"),
+  userSessionIssuerIds: ["04aa7ff1-da0d-4307-af3d-4f6c22121f08"],
+};
+```
+
+## Fields
+
+| Field                     | Type                                                                                                                           | Required           | Description                                                                                                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `audience`                | _string_                                                                                                                       | :heavy_minus_sign: | Upstream OAuth audience sent on the authorize redirect and token exchange. Null omits the audience parameter.                                                                          |
+| `clientId`                | _string_                                                                                                                       | :heavy_check_mark: | The client_id used to identify this client at the issuer's token and authorization endpoints.                                                                                          |
+| `clientIdIssuedAt`        | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date)                                  | :heavy_check_mark: | N/A                                                                                                                                                                                    |
+| `clientIdMetadataUri`     | _string_                                                                                                                       | :heavy_minus_sign: | When set, the client is in Client ID Metadata Document (CIMD) mode: Gram hosts its OAuth client metadata document at this URL and uses it as the client_id. Null for non-CIMD clients. |
+| `clientSecretExpiresAt`   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date)                                  | :heavy_minus_sign: | Null when the secret does not expire.                                                                                                                                                  |
+| `createdAt`               | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date)                                  | :heavy_check_mark: | N/A                                                                                                                                                                                    |
+| `id`                      | _string_                                                                                                                       | :heavy_check_mark: | The remote_session_client id.                                                                                                                                                          |
+| `organizationId`          | _string_                                                                                                                       | :heavy_check_mark: | The owning organization id. Empty for legacy rows not yet backfilled and global clients.                                                                                               |
+| `projectId`               | _string_                                                                                                                       | :heavy_check_mark: | The owning project id. Empty for organization-level and global clients.                                                                                                                |
+| `remoteSessionIssuerId`   | _string_                                                                                                                       | :heavy_check_mark: | The owning remote_session_issuer id.                                                                                                                                                   |
+| `scope`                   | _string_[]                                                                                                                     | :heavy_minus_sign: | Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.                                                                   |
+| `tokenEndpointAuthMethod` | [components.RemoteSessionClientTokenEndpointAuthMethod](../../models/components/remotesessionclienttokenendpointauthmethod.md) | :heavy_minus_sign: | How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.                                                                          |
+| `updatedAt`               | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date)                                  | :heavy_check_mark: | N/A                                                                                                                                                                                    |
+| `userSessionIssuerIds`    | _string_[]                                                                                                                     | :heavy_check_mark: | The user_session_issuers this client is attached to via the join table. Empty for a standalone client with no attachments.                                                             |

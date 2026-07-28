@@ -2,7 +2,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Type } from "@/components/ui/type";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useOrgRoutes } from "@/routes";
-import { useGetPeriodUsage } from "@gram/client/react-query";
+import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { CreditCard, Server } from "lucide-react";
 
@@ -83,8 +83,10 @@ export function ServerEnableDialog({
           </Button>
           {!canEnable ? (
             <Button onClick={handleUpgrade} className="gap-2">
-              <CreditCard className="h-4 w-4" />
-              Upgrade Plan
+              <Button.LeftIcon>
+                <CreditCard className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Upgrade Plan</Button.Text>
             </Button>
           ) : (
             <Button

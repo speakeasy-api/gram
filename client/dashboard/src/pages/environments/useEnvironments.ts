@@ -1,4 +1,4 @@
-import { useListEnvironmentsSuspense } from "@gram/client/react-query/index.js";
+import { useListEnvironmentsSuspense } from "@gram/client/react-query/listEnvironments.js";
 
 export function useEnvironments(): NonNullable<
   ReturnType<typeof useListEnvironmentsSuspense>["data"]

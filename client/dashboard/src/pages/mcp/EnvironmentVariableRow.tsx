@@ -1,4 +1,3 @@
-import { PrivateInput } from "@/components/ui/private-input";
 import {
   Select,
   SelectContent,
@@ -6,16 +5,25 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { type Action, MoreActions } from "@/components/ui/more-actions";
 import { cn } from "@/lib/utils";
-import { Pencil } from "lucide-react";
+import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Eye, EyeOff, Pencil } from "lucide-react";
+import { useEffect, useState } from "react";
 import {
   environmentHasValue,
   EnvironmentVariable,
   EnvVarState,
-  getEditingValue,
   getHeaderDisplayName,
+  getValueForEnvironment,
+  hasEntryInEnvironment,
   hasHeaderOverride,
+  isSecretInEnvironment,
 } from "./environmentVariableUtils";
+
+// Stands in for a value that is set but not on display, matching the
+// environment page.
+const MASK = "••••••••••••";
 
 interface EnvironmentVariableRowProps {
   envVar: EnvironmentVariable;
@@ -28,11 +36,12 @@ interface EnvironmentVariableRowProps {
     providedBy: string;
     headerDisplayName?: string;
   }>;
-  editingState: Map<string, { value: string; headerDisplayName?: string }>;
+  editingState: Map<string, { headerDisplayName?: string }>;
   editingHeaderId: string | null;
   hasUnsavedChanges: boolean;
   onStateChange: (id: string, state: EnvVarState) => void;
-  onValueChange: (id: string, value: string) => void;
+  onEditValue: (envVar: EnvironmentVariable) => void;
+  onDeleteValue: (envVar: EnvironmentVariable) => void;
   onEditHeaderName: (id: string) => void;
   onHeaderDisplayNameChange: (id: string, value: string) => void;
   onHeaderBlur: () => void;
@@ -71,7 +80,8 @@ export function EnvironmentVariableRow({
   editingHeaderId,
   hasUnsavedChanges,
   onStateChange,
-  onValueChange,
+  onEditValue,
+  onDeleteValue,
   onEditHeaderName,
   onHeaderDisplayNameChange,
   onHeaderBlur,
@@ -90,22 +100,70 @@ export function EnvironmentVariableRow({
     editingState.get(envVar.id)!.headerDisplayName !== undefined;
   const showHeaderName = hasOverride || hasUnsavedHeaderEdit;
 
-  const editingValue = getEditingValue(
-    envVar,
-    editingState,
-    selectedEnvironmentView,
-  );
-  // Check if there's a value - use editing state if actively editing, otherwise saved state
-  const savedHasValue = environmentHasValue(envVar, selectedEnvironmentView);
-  const isActivelyEditing = editingState.has(envVar.id);
-  const editingHasValue =
-    isActivelyEditing && !!editingState.get(envVar.id)!.value;
-  // When actively editing, use editing value to determine indicator; otherwise use saved
-  const hasValue = isActivelyEditing ? editingHasValue : savedHasValue;
+  // Values are saved by the dialog rather than typed into the row, so what the
+  // row shows is always what the server last returned.
+  const storedValue = getValueForEnvironment(envVar, selectedEnvironmentView);
+  const hasValue = environmentHasValue(envVar, selectedEnvironmentView);
 
   const isDisabled = mcpAttachedEnvironmentSlug
     ? selectedEnvironmentView !== mcpAttachedEnvironmentSlug
     : false; // When no environment is attached, allow editing on any environment
+
+  // A secret only ever loads as a redacted preview, so showing it would only
+  // put a mask on screen. A non-secret value is stored in cleartext and meant
+  // to be read back. A variable this environment has no entry for defaults to
+  // secret, matching what the server will store, but it gets no badge: nothing
+  // is stored yet to describe.
+  const isSecret = isSecretInEnvironment(envVar, selectedEnvironmentView);
+  const isStored = hasEntryInEnvironment(envVar, selectedEnvironmentView);
+  const showSensitiveBadge = isSecret && envVar.state === "system" && isStored;
+
+  // Values are masked until asked for, as on the environment page. Revealing a
+  // secret shows its redacted preview, which is all the server ever returns;
+  // revealing a non-secret shows the value itself.
+  const [revealed, setRevealed] = useState(false);
+  const canReveal = envVar.state === "system" && isStored;
+  // Switching environments swaps the value under a mounted row, so a reveal
+  // must not carry over to a different environment's value.
+  useEffect(() => {
+    setRevealed(false);
+  }, [selectedEnvironmentView]);
+
+  const { valueDisplay, isValueSet } = getValueDisplay(
+    envVar.state,
+    isStored,
+    revealed,
+    storedValue,
+  );
+
+  const actions: Action[] = [
+    {
+      label: isStored ? "Edit" : "Set value",
+      onClick: () => onEditValue(envVar),
+      icon: "pencil",
+      disabled: isDisabled,
+    },
+  ];
+  // A secret hands back only its redacted preview, so copying one would put a
+  // useless string on the clipboard. Keep the row shape steady by showing the
+  // action locked rather than dropping it.
+  actions.push({
+    label: "Copy to Clipboard",
+    onClick: () => {
+      void navigator.clipboard.writeText(storedValue);
+    },
+    icon: isSecret ? "lock" : "copy",
+    disabled: isSecret || !isStored,
+  });
+  if (isStored) {
+    actions.push({
+      label: "Delete",
+      onClick: () => onDeleteValue(envVar),
+      icon: "trash",
+      destructive: true,
+      disabled: isDisabled,
+    });
+  }
 
   return (
     <div
@@ -169,6 +227,15 @@ export function EnvironmentVariableRow({
             >
               {showHeaderName && headerName ? headerName : envVar.key}
             </div>
+            {showSensitiveBadge && (
+              <Badge
+                variant="neutral"
+                size="sm"
+                className="h-4 shrink-0 px-1 text-xs"
+              >
+                Sensitive
+              </Badge>
+            )}
             {showHeaderName && headerName ? (
               <SimpleTooltip tooltip={`Variable name: ${envVar.key}`}>
                 <button
@@ -254,27 +321,71 @@ export function EnvironmentVariableRow({
             </SelectContent>
           </Select>
 
-          {/* Value Input or Status Text */}
-          <div className="flex h-full w-48 items-center">
-            {envVar.state === "user-provided" ? (
-              <div className="text-muted-foreground flex h-full items-center px-3 font-mono text-xs">
-                Set at runtime
-              </div>
-            ) : envVar.state === "omitted" ? (
-              <div className="text-muted-foreground flex h-full items-center px-3 font-mono text-xs">
-                Not included
-              </div>
-            ) : (
-              <PrivateInput
-                value={editingValue}
-                onChange={(value) => onValueChange(envVar.id, value)}
-                placeholder="Enter value..."
-                className="placeholder:text-muted-foreground h-full w-full border-0 bg-transparent px-3 pr-9 font-mono text-sm shadow-none focus:outline-none focus-visible:ring-0"
-              />
+          {/* Value display or status text */}
+          <div className="flex h-full w-48 items-center gap-1 pr-1">
+            <span
+              className={cn(
+                "text-muted-foreground flex-1 truncate px-3 font-mono text-xs",
+                !isValueSet && "italic",
+              )}
+            >
+              {valueDisplay}
+            </span>
+            {canReveal && (
+              <Button
+                variant="tertiary"
+                size="sm"
+                className="h-7 w-7 flex-shrink-0"
+                onClick={() => setRevealed(!revealed)}
+                aria-label={
+                  revealed ? `Hide ${envVar.key}` : `View ${envVar.key}`
+                }
+              >
+                <Button.LeftIcon>
+                  {revealed ? (
+                    <EyeOff className="h-3.5 w-3.5" />
+                  ) : (
+                    <Eye className="h-3.5 w-3.5" />
+                  )}
+                </Button.LeftIcon>
+              </Button>
             )}
           </div>
+        </div>
+
+        {/* Kept in the layout for every state so switching modes doesn't
+            shift the value input; only the system state shows the menu. */}
+        <div
+          className={cn(
+            "ml-3 shrink-0",
+            envVar.state !== "system" && "invisible",
+          )}
+        >
+          <MoreActions actions={actions} />
         </div>
       </div>
     </div>
   );
+}
+
+// What the value cell reads for a variable. A stored value stays masked until
+// it is revealed; the states that store nothing say so instead.
+function getValueDisplay(
+  state: EnvVarState,
+  isStored: boolean,
+  revealed: boolean,
+  storedValue: string,
+): { valueDisplay: string; isValueSet: boolean } {
+  switch (state) {
+    case "user-provided":
+      return { valueDisplay: "Set at runtime", isValueSet: false };
+    case "omitted":
+      return { valueDisplay: "Not included", isValueSet: false };
+    case "system":
+      if (!isStored) return { valueDisplay: "Not set", isValueSet: false };
+      return {
+        valueDisplay: revealed ? storedValue : MASK,
+        isValueSet: true,
+      };
+  }
 }

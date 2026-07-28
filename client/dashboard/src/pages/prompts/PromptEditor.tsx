@@ -4,7 +4,7 @@ import { Button } from "@speakeasy-api/moonshine";
 import { Label } from "@/components/ui/label";
 import { MUSTACHE_VAR_REGEX, PROMPT_NAME_PATTERN } from "@/lib/constants";
 import { assert, cn } from "@/lib/utils";
-import { PromptTemplate } from "@gram/client/models/components";
+import { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";
 import { MutationStatus } from "@tanstack/react-query";
 import { Fullscreen, Loader2, X } from "lucide-react";
 import { useCallback, useState } from "react";
@@ -184,10 +184,12 @@ export function PromptEditor({
                     className="absolute top-4 right-4"
                     type="button"
                     variant="tertiary"
+                    aria-label="Exit full screen"
                     onClick={() => setFullScreenEditor(false)}
                   >
-                    <span className="sr-only">Exit full screen</span>
-                    <X className="h-4 w-4" />
+                    <Button.Icon>
+                      <X aria-hidden="true" className="h-4 w-4" />
+                    </Button.Icon>
                   </Button>
                 ) : null}
                 {!fullScreenEditor ? (
@@ -195,13 +197,15 @@ export function PromptEditor({
                     className="absolute right-4 bottom-4"
                     type="button"
                     variant="tertiary"
+                    aria-label="Enter full screen"
                     onClick={() => {
                       setFullScreenEditor(true);
                       document.querySelector("textarea")?.focus();
                     }}
                   >
-                    <span className="sr-only">Enter full screen</span>
-                    <Fullscreen className="h-4 w-4" />
+                    <Button.Icon>
+                      <Fullscreen aria-hidden="true" className="h-4 w-4" />
+                    </Button.Icon>
                   </Button>
                 ) : null}
               </div>
@@ -249,9 +253,11 @@ export function PromptEditor({
           ) : null}
           <Button type="submit" disabled={isPending} size="md">
             {isPending ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Button.LeftIcon>
+                <Loader2 className="h-4 w-4 animate-spin" />
+              </Button.LeftIcon>
             ) : null}
-            {isPending ? "Saving..." : "Save Prompt"}
+            <Button.Text>{isPending ? "Saving..." : "Save Prompt"}</Button.Text>
           </Button>
         </div>
       </form>

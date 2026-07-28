@@ -991,10 +991,28 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 	}
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		s.logger.ErrorContext(ctx, "DCR failed",
+		logAttrs := []slog.Attr{
 			attr.SlogHTTPResponseStatusCode(resp.StatusCode),
-			attr.SlogHTTPResponseBody(string(respBody)))
-		return oops.E(oops.CodeGatewayError, nil, "registration endpoint returned %d", resp.StatusCode).LogError(ctx, s.logger)
+			attr.SlogHTTPResponseBody(string(respBody)),
+		}
+
+		// A 4xx means the upstream refused this particular registration —
+		// e.g. an unsupported scope, a restricted set of redirect URIs, or a
+		// token-endpoint auth method it does not offer. That's a configuration
+		// mismatch the operator can act on, not a gateway fault, so surface the
+		// upstream error/error_description and classify it as a bad request
+		// rather than flattening it into an opaque 502.
+		if resp.StatusCode >= http.StatusBadRequest && resp.StatusCode < http.StatusInternalServerError {
+			return oops.E(oops.CodeBadRequest, nil,
+				"identity provider rejected the client registration: %s",
+				dcrErrorDetail(respBody, resp.StatusCode),
+			).LogWarn(ctx, s.logger, logAttrs...)
+		}
+
+		// A 5xx (or any other unexpected status) is a genuine upstream failure.
+		return oops.E(oops.CodeGatewayError, nil,
+			"registration endpoint returned %d", resp.StatusCode,
+		).LogError(ctx, s.logger, logAttrs...)
 	}
 
 	var dcrResp DCRResponse
@@ -1015,4 +1033,25 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 		s.logger.ErrorContext(ctx, "failed to encode proxyRegister response", attr.SlogError(err))
 	}
 	return nil
+}
+
+// dcrErrorDetail extracts a human-readable reason from an RFC 7591 error
+// response body, preferring the machine-readable error/error_description fields
+// and falling back to the status code when the body carries neither.
+func dcrErrorDetail(body []byte, statusCode int) string {
+	var e struct {
+		Error            string `json:"error"`
+		ErrorDescription string `json:"error_description"`
+	}
+	if err := json.Unmarshal(body, &e); err == nil {
+		switch {
+		case e.Error != "" && e.ErrorDescription != "":
+			return fmt.Sprintf("%s: %s", e.Error, e.ErrorDescription)
+		case e.ErrorDescription != "":
+			return e.ErrorDescription
+		case e.Error != "":
+			return e.Error
+		}
+	}
+	return fmt.Sprintf("HTTP %d", statusCode)
 }

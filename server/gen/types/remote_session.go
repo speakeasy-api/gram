@@ -7,9 +7,8 @@
 
 package types
 
-// A remote_session record — Gram's upstream OAuth session for a (principal,
-// remote_session_client) pair. access_token_encrypted and
-// refresh_token_encrypted are never returned.
+// RemoteSession is the result type of the organizationRemoteSessions service
+// refreshSession method.
 type RemoteSession struct {
 	// The remote_session id.
 	ID string

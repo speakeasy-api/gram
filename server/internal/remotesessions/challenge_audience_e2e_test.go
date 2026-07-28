@@ -112,7 +112,7 @@ func TestBuildAuthorizationUrl_AudienceResolution(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, userIssuer)
+			clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuer)
 			require.NoError(t, err)
 			require.Len(t, clients, 1)
 

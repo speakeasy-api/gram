@@ -31,6 +31,13 @@ const scopeDefinitions = [
     visibility: "user_visible",
     exclusionScope: "mcp:blocked_connect",
   },
+  {
+    slug: "skill:write",
+    description: "Create and modify skills within the project.",
+    resourceType: "skill",
+    visibility: "user_visible",
+    exclusionScope: "skill:blocked_write",
+  },
 ] satisfies ScopeDefinition[];
 
 function role(grants: Role["grants"]): Role {
@@ -145,6 +152,31 @@ describe("role grant round-trip (grantsFromRole → sdkGrantsFromForm)", () => {
         selectors: [
           { resourceKind: "mcp", resourceId: "*", projectId: "project_123" },
         ],
+      },
+    ]);
+  });
+
+  it("round-trips project-selectable skill rules and exceptions", () => {
+    const r = role([
+      {
+        scope: "skill:write",
+        selectors: [{ resourceKind: "skill", resourceId: "project_123" }],
+      },
+      {
+        scope: "skill:blocked_write",
+        selectors: [{ resourceKind: "skill", resourceId: "project_456" }],
+      },
+    ]);
+
+    const rules = grantsFromRole(r, scopeDefinitions);
+    expect(sdkGrantsFromForm(rules, scopeDefinitions)).toEqual([
+      {
+        scope: "skill:write",
+        selectors: [{ resourceKind: "skill", resourceId: "project_123" }],
+      },
+      {
+        scope: "skill:blocked_write",
+        selectors: [{ resourceKind: "skill", resourceId: "project_456" }],
       },
     ]);
   });

@@ -27,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
@@ -196,7 +195,7 @@ func TestRemoteLoginChallenge_CustomDomainRegistersGramCallback(t *testing.T) {
 	result.Toolset, _ = attachCustomDomainToToolset(t, ctx, ti, authCtx, result.Toolset, "remote-login-custom.example.com")
 
 	mgr, _ := buildChallengeManagerForTest(t, ti)
-	clients, err := mgr.ListClients(ctx, result.Toolset.ProjectID, result.UserSessionIssuer.ID)
+	clients, err := mgr.ListClients(ctx, result.Toolset.ProjectID, result.Toolset.OrganizationID, result.UserSessionIssuer.ID)
 	require.NoError(t, err)
 	require.Len(t, clients, 1)
 
@@ -246,7 +245,7 @@ func runRemoteLoginRoundTrip(
 ) {
 	t.Helper()
 
-	clients, err := mgr.ListClients(ctx, result.Toolset.ProjectID, result.UserSessionIssuer.ID)
+	clients, err := mgr.ListClients(ctx, result.Toolset.ProjectID, result.Toolset.OrganizationID, result.UserSessionIssuer.ID)
 	require.NoError(t, err)
 	require.Len(t, clients, 1)
 
@@ -286,7 +285,7 @@ func runRemoteLoginRoundTrip(
 	}
 
 	sessions, err := remotesessions_repo.New(ti.conn).ListRemoteSessionsByProjectID(ctx, remotesessions_repo.ListRemoteSessionsByProjectIDParams{
-		ProjectID:  conv.ToNullUUID(result.Toolset.ProjectID),
+		ProjectID:  result.Toolset.ProjectID,
 		LimitValue: 10,
 	})
 	require.NoError(t, err)

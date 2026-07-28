@@ -1,12 +1,12 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env -S node --import tsx
 
 //MISE description="Seed a handful of fake org members locally so the project-card facepile renders with visible stacking"
 
 import crypto from "node:crypto";
 
 import { intro, log, outro } from "@clack/prompts";
-import { GramCore } from "@gram/client/core.js";
-import { authInfo } from "@gram/client/funcs/authInfo.js";
+import { GramCore } from "#gram/client/core.js";
+import { authInfo } from "#gram/client/funcs/authInfo.js";
 import { $ } from "zx";
 
 const FAKE_MEMBERS: { name: string; email: string; pravatarId: number }[] = [

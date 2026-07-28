@@ -51,7 +51,6 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
   name TEXT NOT NULL,
   slug TEXT NOT NULL,
   gram_account_type TEXT NOT NULL DEFAULT 'free',
-  sso_connection_id TEXT, -- links to an organization in the oidc provider to understand if a user is JIT provisioned via SSO. Will be replaced by workos_org_id.
   workos_id TEXT, -- links to an organization in WorkOS to sync metadata like users and groups
   workos_updated_at timestamptz,
   workos_last_event_id TEXT,
@@ -91,9 +90,9 @@ CREATE TABLE IF NOT EXISTS billing_metadata (
   -- Day of month (1-31) the billing cycle starts at 00:00 UTC. Clamped to the
   -- last day of shorter months when computing cycle boundaries.
   billing_cycle_anchor_day INT NOT NULL DEFAULT 1,
-  -- Contracted org-level cap for tunnelled MCP server sources. NULL means use
+  -- Contracted org-level cap for tunneled MCP server sources. NULL means use
   -- the plan default, not unlimited.
-  tunnelled_mcp_server_limit INT CHECK (tunnelled_mcp_server_limit IS NULL OR tunnelled_mcp_server_limit >= 0),
+  tunneled_mcp_server_limit INT CHECK (tunneled_mcp_server_limit IS NULL OR tunneled_mcp_server_limit >= 0),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -106,7 +105,41 @@ CREATE TABLE IF NOT EXISTS billing_metadata (
 CREATE UNIQUE INDEX IF NOT EXISTS billing_metadata_organization_id_key
 ON billing_metadata (organization_id);
 
-COMMENT ON COLUMN billing_metadata.tunnelled_mcp_server_limit IS 'Contracted org-level cap for tunnelled MCP server sources. NULL means use the finite plan default.';
+COMMENT ON COLUMN billing_metadata.tunneled_mcp_server_limit IS 'Contracted org-level cap for tunneled MCP server sources. NULL means use the finite plan default.';
+
+-- Durable per-billing-cycle "tokens under management" (TUM) snapshots for an
+-- organization. ClickHouse telemetry expires (telemetry_logs after 90 days,
+-- chat_token_summaries after 730 days), so rows here are the permanent record
+-- of each cycle's usage for billing, overage math, and admin reporting.
+CREATE TABLE IF NOT EXISTS billing_cycle_usage (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+
+  -- [cycle_start, cycle_end) boundaries computed from
+  -- billing_metadata.billing_cycle_anchor_day at snapshot time.
+  cycle_start timestamptz NOT NULL,
+  cycle_end timestamptz NOT NULL,
+
+  -- Total tokens under management observed for the cycle.
+  tum_tokens BIGINT NOT NULL DEFAULT 0,
+
+  -- Set once the cycle has closed plus an ingest grace period, after which the
+  -- row is treated as immutable. NULL while the cycle is still being refreshed.
+  finalized_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT billing_cycle_usage_pkey PRIMARY KEY (id),
+  CONSTRAINT billing_cycle_usage_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT billing_cycle_usage_cycle_bounds_check CHECK (cycle_end > cycle_start),
+  -- Token counts originate from client-supplied OTEL attributes; a negative
+  -- sum must never become part of the permanent billing record.
+  CONSTRAINT billing_cycle_usage_tum_tokens_check CHECK (tum_tokens >= 0)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS billing_cycle_usage_organization_id_cycle_start_key
+ON billing_cycle_usage (organization_id, cycle_start);
 
 CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_slug_key
 ON organization_metadata (slug);
@@ -228,6 +261,296 @@ CREATE TABLE IF NOT EXISTS assets (
   CONSTRAINT assets_project_id_sha256_key UNIQUE (project_id, sha256)
 );
 
+CREATE TABLE IF NOT EXISTS skills (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  name TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  summary TEXT,
+  source_kind TEXT NOT NULL DEFAULT 'manual',
+  classification TEXT NOT NULL DEFAULT 'custom',
+
+  first_seen_at timestamptz,
+  last_seen_at timestamptz,
+  seen_count bigint NOT NULL DEFAULT 0,
+
+  archived_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skills_pkey PRIMARY KEY (id),
+  CONSTRAINT skills_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS skills_project_id_idx ON skills (project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS skills_project_id_id_key ON skills (project_id, id);
+CREATE UNIQUE INDEX IF NOT EXISTS skills_project_id_name_key ON skills (project_id, name) WHERE archived_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS skill_versions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  skill_id uuid NOT NULL,
+
+  content TEXT NOT NULL,
+  canonical_sha256 TEXT NOT NULL,
+  raw_sha256 TEXT NOT NULL,
+  description TEXT,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  spec_valid boolean NOT NULL,
+  validation_errors JSONB NOT NULL DEFAULT '[]'::jsonb,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_by_user_id TEXT NOT NULL,
+
+  CONSTRAINT skill_versions_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_versions_skill_id_fkey FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE,
+  CONSTRAINT skill_versions_content_size_check CHECK (octet_length(content) <= 65536)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_canonical_sha256_key ON skill_versions (skill_id, canonical_sha256);
+CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_id_key ON skill_versions (skill_id, id);
+CREATE INDEX IF NOT EXISTS skill_versions_skill_id_created_at_id_idx ON skill_versions (skill_id, created_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS skill_version_lineages (
+  skill_version_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  derived_from_version_id uuid NOT NULL,
+
+  CONSTRAINT skill_version_lineages_pkey PRIMARY KEY (skill_version_id),
+  CONSTRAINT skill_version_lineages_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE CASCADE,
+  CONSTRAINT skill_version_lineages_skill_id_derived_from_version_id_fkey FOREIGN KEY (skill_id, derived_from_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS skill_version_lineages_skill_id_derived_from_version_id_idx ON skill_version_lineages (skill_id, derived_from_version_id);
+
+CREATE TABLE IF NOT EXISTS skill_version_origins (
+  skill_version_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  project_id uuid NOT NULL,
+  origin TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_version_origins_pkey PRIMARY KEY (skill_version_id),
+  CONSTRAINT skill_version_origins_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE CASCADE,
+  CONSTRAINT skill_version_origins_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS skill_version_origins_project_id_skill_id_idx
+ON skill_version_origins (project_id, skill_id);
+
+CREATE TABLE IF NOT EXISTS skill_observations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  idempotency_key TEXT,
+  provider TEXT NOT NULL,
+  user_id TEXT,
+  user_email TEXT,
+  hostname TEXT,
+  session_id TEXT,
+  skill_name TEXT NOT NULL,
+  source TEXT,
+  source_level TEXT,
+  source_path TEXT,
+  raw_sha256 TEXT,
+  seen_at timestamptz NOT NULL,
+  skill_id uuid,
+  skill_version_id uuid,
+  reconciled_at timestamptz,
+  metrics_synced_at timestamptz,
+  efficacy_enqueued_at timestamptz,
+  reconcile_error_code TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_observations_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_observations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skill_observations_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE NO ACTION,
+  CONSTRAINT skill_observations_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE NO ACTION,
+  CONSTRAINT skill_observations_skill_id_skill_version_id_check CHECK (skill_version_id IS NULL OR skill_id IS NOT NULL)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_observations_project_id_idempotency_key_key
+ON skill_observations (project_id, idempotency_key)
+WHERE idempotency_key IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_observations_project_id_skill_name_seen_at_id_idx
+ON skill_observations (project_id, skill_name, seen_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS skill_observations_project_id_raw_sha256_idx
+ON skill_observations (project_id, raw_sha256)
+WHERE raw_sha256 IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_observations_pending_reconciliation_idx
+ON skill_observations (project_id, seen_at, id)
+WHERE reconciled_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS skill_observations_pending_metrics_sync_idx
+ON skill_observations (project_id, seen_at, id)
+WHERE reconciled_at IS NOT NULL AND metrics_synced_at IS NULL AND session_id IS NOT NULL AND skill_version_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_observations_pending_efficacy_idx
+ON skill_observations (project_id, seen_at, id)
+WHERE reconciled_at IS NOT NULL AND efficacy_enqueued_at IS NULL AND session_id IS NOT NULL AND skill_version_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_observations_project_id_skill_id_seen_at_idx
+ON skill_observations (project_id, skill_id, seen_at DESC)
+WHERE skill_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_observations_project_id_skill_version_id_seen_at_idx
+ON skill_observations (project_id, skill_version_id, seen_at DESC)
+WHERE skill_version_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_observations_skill_id_skill_version_id_idx
+ON skill_observations (skill_id, skill_version_id)
+WHERE skill_version_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS skill_raw_hashes (
+  project_id uuid NOT NULL,
+  raw_sha256 TEXT NOT NULL,
+  canonical_sha256 TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_raw_hashes_pkey PRIMARY KEY (project_id, raw_sha256),
+  CONSTRAINT skill_raw_hashes_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+-- Plugin definitions: project-scoped distributable bundles of MCP servers.
+-- Admins create plugins and assign them to roles for distribution.
+CREATE TABLE IF NOT EXISTS plugins (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  name TEXT NOT NULL CHECK (name <> ''),
+  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
+  description TEXT,
+  is_default boolean DEFAULT false,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT plugins_pkey PRIMARY KEY (id),
+  CONSTRAINT plugins_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT plugins_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS plugins_organization_id_project_id_slug_key
+  ON plugins (organization_id, project_id, slug)
+  WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS plugins_project_id_idx
+  ON plugins (project_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS plugins_project_id_id_key ON plugins (project_id, id);
+
+-- Only one plugin per project may be the default (fallback) target that new
+-- servers land in absent explicit routing to a named plugin.
+CREATE UNIQUE INDEX IF NOT EXISTS plugins_project_id_is_default_key
+  ON plugins (project_id)
+  WHERE is_default IS TRUE AND deleted IS FALSE;
+
+COMMENT ON COLUMN plugins.is_default IS 'Marks the fallback plugin new servers land in when not explicitly routed to a named plugin. At most one true per project (see plugins_project_id_is_default_key).';
+
+CREATE TABLE IF NOT EXISTS skill_sync_receipts (
+  project_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  skill_version_id uuid,
+
+  user_id TEXT NOT NULL,
+  hostname TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  status TEXT NOT NULL,
+  synced_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_sync_receipts_pkey PRIMARY KEY (project_id, skill_id, user_id, hostname, provider),
+  CONSTRAINT skill_sync_receipts_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skill_sync_receipts_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT skill_sync_receipts_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id)
+);
+
+CREATE INDEX IF NOT EXISTS skill_sync_receipts_skill_id_skill_version_id_idx ON skill_sync_receipts (skill_id, skill_version_id);
+CREATE INDEX IF NOT EXISTS skill_sync_receipts_project_id_skill_version_id_idx ON skill_sync_receipts (project_id, skill_version_id);
+CREATE INDEX IF NOT EXISTS skill_sync_receipts_project_id_user_id_hostname_provider_idx ON skill_sync_receipts (project_id, user_id, hostname, provider, skill_id);
+
+CREATE TABLE IF NOT EXISTS skill_efficacy_settings (
+  organization_id TEXT NOT NULL,
+  enabled boolean NOT NULL,
+  per_skill_daily_cap integer NOT NULL,
+  org_daily_cap integer NOT NULL,
+  new_version_burst integer NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_efficacy_settings_pkey PRIMARY KEY (organization_id),
+  CONSTRAINT skill_efficacy_settings_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT skill_efficacy_settings_caps_check CHECK (per_skill_daily_cap >= 0 AND org_daily_cap >= 0 AND new_version_burst >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS skill_efficacy_evaluations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  surface TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  chat_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  skill_version_id uuid NOT NULL,
+  canonical_sha256 TEXT NOT NULL,
+  observed_at timestamptz NOT NULL,
+
+  state TEXT NOT NULL DEFAULT 'pending',
+  reserved_on date,
+  claim_token uuid,
+  attempts integer NOT NULL DEFAULT 0,
+  last_error TEXT,
+  scored_at timestamptz,
+  failed_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_efficacy_evaluations_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_efficacy_evaluations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT skill_efficacy_evaluations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skill_efficacy_evaluations_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE NO ACTION,
+  CONSTRAINT skill_efficacy_evaluations_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE NO ACTION
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_efficacy_evaluations_scoring_unit_key
+ON skill_efficacy_evaluations (project_id, session_id, skill_version_id, surface);
+
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_pending_idx
+ON skill_efficacy_evaluations (project_id, observed_at DESC, id DESC)
+WHERE state = 'pending';
+
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_recovered_pending_idx
+ON skill_efficacy_evaluations (project_id, observed_at DESC, id DESC)
+WHERE state = 'pending' AND reserved_on IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_organization_id_idx
+ON skill_efficacy_evaluations (organization_id);
+
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_org_spend_idx
+ON skill_efficacy_evaluations (organization_id, reserved_on)
+WHERE reserved_on IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_skill_spend_idx
+ON skill_efficacy_evaluations (skill_id, reserved_on)
+WHERE reserved_on IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_version_lifetime_spend_idx
+ON skill_efficacy_evaluations (skill_version_id)
+WHERE reserved_on IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_stale_reserved_idx
+ON skill_efficacy_evaluations (project_id, updated_at, id)
+WHERE state = 'reserved';
+
 CREATE TABLE IF NOT EXISTS packages (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
@@ -317,6 +640,33 @@ CREATE TABLE IF NOT EXISTS api_keys (
 CREATE UNIQUE INDEX IF NOT EXISTS api_keys_organization_id_name_key
 ON api_keys (organization_id, name)
 WHERE deleted IS FALSE;
+
+-- Tracks which users are actively running the Speakeasy device agent. The agent
+-- polls agent.getPlugins every ~60s carrying the enrolled user's email; that
+-- email is the only per-user signal (the org-scoped API key is shared across the
+-- fleet), so we key last-seen on (organization_id, email).
+CREATE TABLE IF NOT EXISTS device_agent_syncs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+
+  first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT device_agent_syncs_pkey PRIMARY KEY (id),
+  CONSTRAINT device_agent_syncs_org_email_key UNIQUE (organization_id, email),
+  CONSTRAINT device_agent_syncs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+-- Serves the device-integration coverage join, which matches MDM-reported
+-- device emails against agent heartbeats case-insensitively (the raw-column
+-- device_agent_syncs_org_email_key cannot serve a LOWER(email) lookup). See
+-- mdm_devices.
+CREATE INDEX IF NOT EXISTS device_agent_syncs_organization_id_lower_email_idx
+ON device_agent_syncs (organization_id, LOWER(email));
 
 CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -618,6 +968,7 @@ WHERE definition_slug = 'dashboard' AND status = 'active' AND deleted IS FALSE;
 CREATE TABLE IF NOT EXISTS environment_entries (
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
   value TEXT NOT NULL CHECK (value <> '' AND CHAR_LENGTH(value) <= 4000),
+  is_secret BOOLEAN NOT NULL DEFAULT TRUE,
   environment_id uuid NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -656,6 +1007,12 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   provisioner_kind TEXT NOT NULL DEFAULT 'ingress',
   -- IP addresses or CIDR ranges allowed to access this domain. Empty array = unrestricted.
   ip_allowlist TEXT[] NOT NULL DEFAULT '{}',
+  health_status TEXT,
+  health_issue TEXT,
+  health_checked_at timestamptz,
+  unhealthy_since timestamptz,
+  certificate_expires_at timestamptz,
+  consecutive_failures INTEGER CONSTRAINT custom_domains_consecutive_failures_check CHECK (consecutive_failures >= 0),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -763,6 +1120,7 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
   authn_challenge_mode TEXT NOT NULL, -- One of ('chain', 'interactive'). chain exists for backwards compatibility and should be phased out. interactive will be the main mode going forward
   session_duration INTERVAL NOT NULL,
+  classification TEXT NOT NULL DEFAULT 'custom' CHECK (classification IN ('custom', 'project_default_idp')), -- 'project_default_idp' is the auto-provisioned implicit Gram issuer for private servers; 'custom' is user-configured
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -776,6 +1134,11 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_slug_key
 ON user_session_issuers (project_id, slug)
 WHERE deleted IS FALSE;
+
+-- At most one auto-provisioned project-default issuer per project.
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_default_key
+ON user_session_issuers (project_id)
+WHERE classification = 'project_default_idp' AND deleted IS FALSE;
 
 -- User Session Clients are MCP Clients that have registered themselves with Gram
 -- See: https://datatracker.ietf.org/doc/html/rfc6749#section-1.1
@@ -885,6 +1248,9 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   token_endpoint TEXT,
   registration_endpoint TEXT,
   jwks_uri TEXT,
+  service_documentation TEXT,
+  op_policy_uri TEXT,
+  op_tos_uri TEXT,
 
   scopes_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   grant_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
@@ -902,6 +1268,10 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   name TEXT CHECK (name IS NULL OR name <> ''),
   logo_asset_id uuid,
 
+  -- Manually set (not RFC 8414) link to instructions for setting up an OAuth
+  -- client with this issuer's provider, surfaced to customers.
+  client_setup_documentation_url TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -917,8 +1287,26 @@ CREATE UNIQUE INDEX IF NOT EXISTS remote_session_issuers_project_slug_key
 ON remote_session_issuers (project_id, slug)
 WHERE deleted IS FALSE;
 
+-- Slug uniqueness for global issuers (project_id NULL AND organization_id NULL).
+-- The (project_id, slug) index above treats every NULL project_id as distinct,
+-- so it does not constrain globals; this partial index keeps global slugs unique
+-- across the shared catalog.
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_issuers_global_slug_key
+ON remote_session_issuers (slug)
+WHERE deleted IS FALSE AND project_id IS NULL AND organization_id IS NULL;
+
 CREATE INDEX IF NOT EXISTS remote_session_issuers_organization_id_idx
 ON remote_session_issuers (organization_id)
+WHERE deleted IS FALSE;
+
+-- Backs resolving an issuer by its upstream URL, where the URL equality is the
+-- selective predicate and the tenancy tier is applied as a filter on top.
+-- Deliberately NOT unique: a project, an organization and a platform issuer may
+-- all legitimately point at the same authorization server, and a customer may
+-- keep a private duplicate carrying its own client setup documentation. Do not
+-- convert this to a unique index.
+CREATE INDEX IF NOT EXISTS remote_session_issuers_issuer_idx
+ON remote_session_issuers (issuer)
 WHERE deleted IS FALSE;
 
 -- Remote Session Clients are records of Gram's client registrations with
@@ -1179,6 +1567,14 @@ ON http_security (type, scheme);
 CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   organization_id TEXT NOT NULL,
 
+  -- Which upstream OpenRouter key this row provisions: 'chat' pays for
+  -- customer-facing completion surfaces (playground, elements, assistants,
+  -- /chat/completions proxy); 'internal' pays for platform-initiated LLM
+  -- usage (risk judges, title generation, chat resolutions, memory), so a
+  -- burst of scanning inference can never exhaust the chat key's monthly cap
+  -- and 402 the customer's chat surface.
+  key_type TEXT NOT NULL DEFAULT 'chat',
+
   key TEXT NOT NULL,
   key_hash TEXT NOT NULL,
   monthly_credits BIGINT NOT NULL DEFAULT 0,
@@ -1189,7 +1585,7 @@ CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT openrouter_api_keys_pkey PRIMARY KEY (organization_id)
+  CONSTRAINT openrouter_api_keys_pkey PRIMARY KEY (organization_id, key_type)
 );
 
 
@@ -1209,6 +1605,20 @@ CREATE TABLE IF NOT EXISTS chats (
   -- dedicated section above recents; the timestamp orders them by pin time.
   pinned_at timestamptz,
 
+  -- On-demand LLM summary of the session transcript (NULL until generated).
+  -- Written by chat.summarize; regenerated in place when requested.
+  summary text,
+  summary_generated_at timestamptz,
+
+  -- Personal-account tracking: the external AI account (user_accounts row) this
+  -- session belongs to. Join to user_accounts for provider, account_type
+  -- (team/personal), external_org_id, the owning employee, etc. — set by ingest.
+  -- NULL for older rows, non-agent chats, or sessions whose account can't be
+  -- determined. No FK constraint because user_accounts is declared after chats
+  -- (it depends on users, declared later), matching how chats.user_id is
+  -- referenced without a FK; integrity is maintained by ingest.
+  user_account_id uuid,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -1221,6 +1631,15 @@ CREATE TABLE IF NOT EXISTS chats (
 CREATE UNIQUE INDEX IF NOT EXISTS chats_org_external_chat_id_key
 ON chats (organization_id, external_chat_id)
 WHERE external_chat_id IS NOT NULL;
+
+-- Every chat listing (chat.list) drives off project_id + the not-deleted
+-- predicate; without this the planner seq-scans the whole (cross-project) chats
+-- table, which pushes large orgs' listings past statement_timeout. Kept
+-- non-partial so it also backs the ON DELETE CASCADE from projects, whose
+-- internal lookup spans all rows (including soft-deleted) and a
+-- deleted-IS-FALSE partial index could not serve.
+CREATE INDEX IF NOT EXISTS chats_project_id_idx
+ON chats (project_id);
 
 CREATE TABLE IF NOT EXISTS assistants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -1246,6 +1665,68 @@ CREATE TABLE IF NOT EXISTS assistants (
 CREATE UNIQUE INDEX IF NOT EXISTS assistants_project_id_name_key
 ON assistants (project_id, name)
 WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistants_project_id_id_key ON assistants (project_id, id);
+
+CREATE TABLE IF NOT EXISTS skill_distributions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  pinned_version_id uuid,
+  plugin_id uuid,
+  assistant_id uuid,
+
+  channel TEXT NOT NULL,
+  created_by_user_id TEXT NOT NULL,
+  revoked_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_distributions_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_distributions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skill_distributions_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT skill_distributions_skill_id_pinned_version_id_fkey FOREIGN KEY (skill_id, pinned_version_id) REFERENCES skill_versions (skill_id, id),
+  CONSTRAINT skill_distributions_project_id_plugin_id_fkey FOREIGN KEY (project_id, plugin_id) REFERENCES plugins (project_id, id),
+  CONSTRAINT skill_distributions_project_id_assistant_id_fkey FOREIGN KEY (project_id, assistant_id) REFERENCES assistants (project_id, id)
+);
+
+-- Active distributions target either a plugin or an assistant. NULLS NOT
+-- DISTINCT preserves one active row per complete target tuple.
+CREATE UNIQUE INDEX IF NOT EXISTS skill_distributions_active_target_key
+ON skill_distributions (project_id, skill_id, channel, plugin_id, assistant_id) NULLS NOT DISTINCT
+WHERE revoked_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS skill_distributions_project_id_idx ON skill_distributions (project_id);
+CREATE INDEX IF NOT EXISTS skill_distributions_skill_id_pinned_version_id_idx ON skill_distributions (skill_id, pinned_version_id);
+CREATE INDEX IF NOT EXISTS skill_distributions_plugin_id_idx ON skill_distributions (plugin_id);
+CREATE INDEX IF NOT EXISTS skill_distributions_assistant_id_idx ON skill_distributions (assistant_id);
+
+CREATE TABLE IF NOT EXISTS skill_share_links (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+
+  token TEXT NOT NULL,
+  created_by_user_id TEXT NOT NULL,
+  revoked_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_share_links_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_share_links_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skill_share_links_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_share_links_token_key ON skill_share_links (token);
+
+-- At most one active public share link per skill.
+CREATE UNIQUE INDEX IF NOT EXISTS skill_share_links_skill_id_key
+ON skill_share_links (skill_id)
+WHERE revoked_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS skill_share_links_project_id_idx ON skill_share_links (project_id);
 
 -- project_managed_assistants maps a project to its single platform-managed
 -- assistant (the one powering the AI Insights sidebar). Kept in its own table
@@ -1324,6 +1805,8 @@ CREATE TABLE IF NOT EXISTS assistant_threads (
   chat_id uuid NOT NULL,
   source_kind TEXT NOT NULL CHECK (source_kind <> '' AND CHAR_LENGTH(source_kind) <= 50),
   source_ref_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  -- Versioned delivered skill-set document. NULL means no delivered baseline.
+  skill_set_snapshot JSONB,
   last_event_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1474,6 +1957,12 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   -- same logical conversation view share a generation.
   generation INTEGER NOT NULL DEFAULT 0,
 
+  -- True when the message arrived as a replay from a device's offline spool
+  -- after control-plane downtime (X-Gram-Replayed on hooks.ingest), so
+  -- downtime backlog — and findings produced by retroactively scanning it —
+  -- stays distinguishable from live traffic.
+  replayed BOOLEAN NOT NULL DEFAULT false,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   -- Set when all active risk policies have analyzed this message.
@@ -1484,10 +1973,43 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   CONSTRAINT chat_messages_pkey PRIMARY KEY (id),
   CONSTRAINT chat_messages_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
   CONSTRAINT chat_messages_seq_key UNIQUE (seq)
+) WITH (
+  -- Insert-heavy like risk_results, but also update-heavy: risk_analyzed_at
+  -- is set on every message after analysis, so dead tuples accumulate too.
+  -- With the global 0.2 scale factor a table this size tolerates >1.4M dead
+  -- tuples before autovacuum runs, leaving a large fraction of pages not
+  -- all-visible (observed: 76% visible) and pushing the planner off
+  -- index-only scans for project-wide counts onto full seq scans.
+  --
+  -- Fixed insert threshold keeps the vacuum cadence constant as the table
+  -- grows; the tighter dead-tuple scale factor covers the update churn.
+  autovacuum_vacuum_scale_factor = 0.02,
+  autovacuum_vacuum_insert_scale_factor = 0,
+  autovacuum_vacuum_insert_threshold = 250000,
+  autovacuum_vacuum_cost_limit = 2000
 );
 
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_idx ON chat_messages (chat_id);
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_messages (chat_id, generation, seq);
+
+-- Transcript readers and keyset pages order by (created_at, seq) within a
+-- generation (DNO-536: hook rows carry the event's occurred_at, so seq alone
+-- no longer matches display order). This index serves that filter+sort with
+-- an ordered scan and restores keyset LIMIT early-stop.
+CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_created_at_seq_idx
+ON chat_messages (chat_id, generation, created_at, seq);
+
+-- Chat listings derive each chat's message count and last-message time per
+-- request; this lets those be per-chat index-only probes instead of an
+-- aggregate over the chat's full message history.
+CREATE INDEX IF NOT EXISTS chat_messages_chat_id_created_at_idx
+ON chat_messages (chat_id, created_at);
+
+-- Latest non-empty source per chat as a single index-only probe (agent-type
+-- filter options via chats.listSources and the source filter on chats.list).
+CREATE INDEX IF NOT EXISTS chat_messages_chat_id_created_at_source_idx
+ON chat_messages (chat_id, created_at) INCLUDE (source)
+WHERE source IS NOT NULL AND source <> '';
 CREATE INDEX IF NOT EXISTS chat_messages_project_id_id_idx
 ON chat_messages (project_id, id)
 WHERE project_id IS NOT NULL;
@@ -1501,6 +2023,76 @@ WHERE external_message_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS chat_messages_risk_analyzed_at_null_idx
 ON chat_messages (project_id, id)
 WHERE risk_analyzed_at IS NULL;
+
+-- Serves the chat analysis enqueue walk, which pages a project's chats on the
+-- immutable (created_at, id) keyset within a bounded lookback.
+CREATE INDEX IF NOT EXISTS chats_project_id_created_at_id_idx
+ON chats (project_id, created_at, id);
+
+-- Per-(organization, judge) switches and budgets for the chat analysis
+-- pipeline (the generalized session judges: work units and whatever comes
+-- after it). One row per judge rather than one column per judge, so enabling a
+-- new judge for an organization is an insert, never a migration. A judge with
+-- no row for an organization is off: the pipeline is opt-in per judge.
+CREATE TABLE IF NOT EXISTS chat_analysis_settings (
+  organization_id TEXT NOT NULL,
+  judge TEXT NOT NULL,
+  enabled boolean NOT NULL,
+  daily_cap integer NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT chat_analysis_settings_pkey PRIMARY KEY (organization_id, judge),
+  CONSTRAINT chat_analysis_settings_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT chat_analysis_settings_daily_cap_check CHECK (daily_cap >= 0)
+);
+
+-- Durable queue for the chat analysis pipeline: one row per (chat, judge)
+-- scoring unit. Mirrors skill_efficacy_evaluations — pending rows are reserved
+-- against the organization's daily budget, judged, and marked scored; verdicts
+-- live only in the ClickHouse chat_analysis_scores sink while this table holds
+-- pipeline state.
+CREATE TABLE IF NOT EXISTS chat_analysis_evaluations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  chat_id uuid NOT NULL,
+  -- Raw agent session id the chat was captured under, empty when the unit was
+  -- enqueued from the chats walk. Chat ids are a one-way hash of session ids,
+  -- so judges whose domain data is keyed by session id (skill efficacy) need
+  -- the original string carried on the unit.
+  session_id TEXT NOT NULL DEFAULT '',
+  judge TEXT NOT NULL,
+  observed_at timestamptz NOT NULL,
+
+  state TEXT NOT NULL DEFAULT 'pending',
+  reserved_on date,
+  attempts integer NOT NULL DEFAULT 0,
+  last_error TEXT,
+  scored_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT chat_analysis_evaluations_pkey PRIMARY KEY (id),
+  CONSTRAINT chat_analysis_evaluations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT chat_analysis_evaluations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT chat_analysis_evaluations_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS chat_analysis_evaluations_scoring_unit_key
+ON chat_analysis_evaluations (project_id, chat_id, judge);
+
+CREATE INDEX IF NOT EXISTS chat_analysis_evaluations_pending_idx
+ON chat_analysis_evaluations (project_id, observed_at DESC, id DESC)
+WHERE state = 'pending';
+
+-- Spend is counted by reserved_on, not state: failed rows keep their
+-- reserved_on as immutable spend history, so they must stay in the index.
+CREATE INDEX IF NOT EXISTS chat_analysis_evaluations_org_spend_idx
+ON chat_analysis_evaluations (organization_id, reserved_on)
+WHERE reserved_on IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS chat_resolutions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -1733,8 +2325,139 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_key
 ON users (email);
 
+-- Serves case-insensitive email lookups (matching on lower(email), e.g. for
+-- connected-user resolution), which the raw-column users_email_key cannot.
+CREATE INDEX IF NOT EXISTS users_email_lower_idx
+ON users (lower(email));
+
+-- user_accounts is the registry of external AI provider accounts (Claude today;
+-- other providers in the future) observed for a Gram organization, each linked to
+-- the employee (Gram user) who owns it. It is the entity behind personal-account
+-- tracking: the per-employee account selector, the enrollment page's personal-vs-
+-- enterprise plan breakdown, and the org dashboard's list of personal accounts all
+-- read from here. An account is linked to its employee either directly (a team
+-- account whose email resolves to an org member) or via the device bridge (a
+-- personal account whose device owner is known — see device_owners).
+CREATE TABLE IF NOT EXISTS user_accounts (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id TEXT NOT NULL,
+  -- The employee who owns this account. NULL until the account can be attributed
+  -- (e.g. a personal account before its device's owner is known).
+  user_id TEXT,
+  -- The AI provider. 'anthropic' today; the model generalizes to other providers
+  -- (e.g. 'openai') as personal-account tracking expands.
+  provider TEXT NOT NULL DEFAULT 'anthropic',
+  -- The provider's organization id for the account (Claude `organization.id`). For
+  -- Anthropic this is the personal-vs-team discriminator; distinct from organization_id.
+  external_org_id TEXT,
+  -- The provider's stable per-account identity (Claude `user.account_uuid`). The
+  -- account entity key — unique per account even when external_org_id is shared
+  -- across employees (as it is for a Claude enterprise org).
+  external_account_uuid TEXT NOT NULL,
+  -- The provider's tagged account id (Claude `user.account_id`, e.g. user_01…).
+  external_account_id TEXT,
+  -- Email associated with the account; may differ from the employee's work email
+  -- (a personal account typically uses a personal email).
+  email TEXT,
+  -- 'team' (company/enterprise account) or 'personal' (Max/individual). NULL until classified.
+  account_type TEXT
+    CONSTRAINT user_accounts_account_type_check
+    CHECK (account_type IN ('team', 'personal')),
+  -- Billing-mode override for this specific account. NULL means inherit:
+  -- attribution falls through to the org-level declaration on
+  -- ai_integration_configs.billing_mode, and to 'unknown' when neither is set.
+  -- Set by admins via the management API, or programmatically when a provider
+  -- exposes a reliable billing signal (none do today; e.g. a future Admin API
+  -- cost integration could mark accounts metered). Free-form text (deliberately
+  -- not an enum / CHECK) so new modes can be introduced without a schema change.
+  -- Well-known values: 'metered', 'flat_rate', 'unknown'. Cost figures are real
+  -- spend only for 'metered'.
+  billing_mode TEXT,
+  -- The provider's plan name for this account (e.g. 'max', 'pro', 'team',
+  -- 'enterprise'), for providers that expose it. Claude exposes no plan signal
+  -- in telemetry today, so this stays NULL for Anthropic accounts; recorded when
+  -- a provider (or a provider-side API integration) makes the plan visible.
+  -- Free-form text — plan names are provider-defined.
+  plan_type TEXT,
+
+  first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT user_accounts_pkey PRIMARY KEY (id),
+  CONSTRAINT user_accounts_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT user_accounts_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
+);
+
+-- Partial unique index so a soft-deleted account doesn't block re-enrolling the
+-- same external account (a plain UNIQUE constraint would still cover deleted rows).
+CREATE UNIQUE INDEX IF NOT EXISTS user_accounts_org_provider_external_account_uuid_key
+ON user_accounts (organization_id, provider, external_account_uuid)
+WHERE deleted_at IS NULL;
+
+-- The dashboard lists an employee's accounts by (organization_id, user_id).
+CREATE INDEX IF NOT EXISTS user_accounts_organization_id_user_id_idx
+ON user_accounts (organization_id, user_id);
+
+-- Classification looks accounts up by provider org (CountEmployeesForExternalOrg
+-- and the enterprise-org disambiguation), so index the lookup key.
+CREATE INDEX IF NOT EXISTS user_accounts_org_provider_external_org_idx
+ON user_accounts (organization_id, provider, external_org_id);
+
+-- device_owners is the linking mechanism that lets us attribute a personal account
+-- to an employee. A per-device anonymous id (e.g. Claude's user.id) is stable across
+-- the accounts logged in on one machine, so a team session (email resolves to an org
+-- member) teaches us that device -> employee; a personal session later seen on the
+-- same device is then attributed to that employee (and a user_accounts row linked).
+-- Provider-scoped so the same physical machine can be tracked per provider. This is
+-- an internal index, not a user-facing entity.
+CREATE TABLE IF NOT EXISTS device_owners (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id TEXT NOT NULL,
+  -- The AI provider this device id belongs to (e.g. 'anthropic', 'openai').
+  provider TEXT NOT NULL DEFAULT 'anthropic',
+  -- The per-device anonymous id (e.g. Claude's user.id), stable across accounts on the device.
+  device_id TEXT NOT NULL,
+  -- The owning employee, learned from a team session's resolved email. Nullable so
+  -- the FK can ON DELETE SET NULL if the user is removed (the device row stays).
+  linked_user_id TEXT,
+
+  first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT device_owners_pkey PRIMARY KEY (id),
+  CONSTRAINT device_owners_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT device_owners_linked_user_id_fkey FOREIGN KEY (linked_user_id) REFERENCES users (id) ON DELETE SET NULL
+);
+
+-- Partial unique index so a soft-deleted device row doesn't block re-creating the
+-- same (org, provider, device) mapping (a plain UNIQUE would still cover deleted rows).
+CREATE UNIQUE INDEX IF NOT EXISTS device_owners_organization_id_provider_device_id_key
+ON device_owners (organization_id, provider, device_id)
+WHERE deleted_at IS NULL;
+
+-- Non-partial index backing the organization_id FK's ON DELETE CASCADE. The unique
+-- index above is partial (excludes soft-deleted rows), so it can't serve a cascade
+-- delete, which must match every row for the org including deleted ones; without this
+-- a tenant deletion sequentially scans device_owners.
+CREATE INDEX IF NOT EXISTS device_owners_organization_id_idx
+ON device_owners (organization_id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS users_workos_id_key
 ON users (workos_id);
+
+COMMENT ON COLUMN users.admin IS 'Maps to the application''s platform_admin concept: TRUE marks a Gram/Speakeasy platform admin. Distinct from the org-level admin role.';
 
 CREATE TABLE IF NOT EXISTS directory_groups (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -1795,6 +2518,14 @@ ON directory_users (organization_id);
 CREATE INDEX IF NOT EXISTS directory_users_user_id_idx
 ON directory_users (user_id)
 WHERE user_id IS NOT NULL;
+
+-- Case-insensitive email lookup for resolving an org member to their directory
+-- profile (spend-rule evaluation's ListOrgActors matches on LOWER(email)); the
+-- user_id branch is served by directory_users_user_id_idx, so together the two
+-- keep that per-member lookup off a sequential scan of the org's directory rows.
+CREATE INDEX IF NOT EXISTS directory_users_organization_id_lower_email_idx
+ON directory_users (organization_id, LOWER(email))
+WHERE deleted IS FALSE AND workos_deleted IS FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS directory_users_workos_directory_user_id_key
 ON directory_users (workos_directory_user_id);
@@ -2459,6 +3190,18 @@ CREATE TABLE IF NOT EXISTS ai_integration_configs (
   external_organization_id TEXT,
   api_key_encrypted TEXT NOT NULL,
   enabled boolean NOT NULL DEFAULT true,
+  -- Billing mode for the provider org this integration covers. Dashboard cost
+  -- figures are derived from token usage (tokens x published API price), which
+  -- equals real spend only for a metered (pay-per-token) provider org;
+  -- subscription seats (e.g. Claude Max/Pro/Team/Enterprise) include usage in a
+  -- flat fee, making the figure an estimate. Providers expose no billing signal
+  -- in telemetry, so the mode cannot be inferred from a session — it is declared
+  -- by an admin (or set programmatically if a provider ever exposes a reliable
+  -- signal) and attribution stamps it onto the org's telemetry (gram.billing_mode).
+  -- Free-form text (deliberately not an enum / CHECK) so new modes can be
+  -- introduced without a schema change. Well-known values: 'metered', 'flat_rate',
+  -- 'unknown'. NULL means undeclared, treated as unknown (never assume real cost).
+  billing_mode TEXT,
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
@@ -2491,20 +3234,36 @@ CREATE TABLE IF NOT EXISTS ai_integration_syncs (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   ai_integration_config_id uuid NOT NULL,
+  -- Discriminator for the sync pipeline (e.g. 'cursor', 'anthropic_compliance',
+  -- 'anthropic_analytics_usage').
+  schedule TEXT NOT NULL,
+  -- How the schedule checkpoints progress: 'cursor' or 'time'.
+  kind TEXT NOT NULL,
   poll_watermark_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  poll_checkpoint TEXT,
   last_cursor_id TEXT,
   next_poll_after timestamptz NOT NULL DEFAULT clock_timestamp(),
   last_poll_error TEXT,
   last_poll_failed_at timestamptz,
   last_poll_success_at timestamptz,
   consecutive_failures integer NOT NULL DEFAULT 0,
+  -- Set when the scheduler stops polling this schedule because the provider
+  -- repeatedly rejected the configuration (e.g. a revoked api key). Paused
+  -- schedules are skipped by candidate selection until the user updates the
+  -- integration, which resets the sync state and clears this.
+  auto_paused_at timestamptz,
+  -- Set when a user explicitly pauses this schedule from the dashboard.
+  -- Deliberately separate from auto_paused_at so "you paused this" and "we
+  -- paused this over a rejected configuration" stay distinguishable. Only the
+  -- user re-enabling the schedule clears it; config saves do not.
+  disabled_at timestamptz,
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
 
   CONSTRAINT ai_integration_syncs_config_id_fkey FOREIGN KEY (ai_integration_config_id) REFERENCES ai_integration_configs (id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_syncs_config_id_key
-  ON ai_integration_syncs (ai_integration_config_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_syncs_config_id_schedule_key
+  ON ai_integration_syncs (ai_integration_config_id, schedule) NULLS NOT DISTINCT;
 
 CREATE TABLE IF NOT EXISTS principal_grants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -2652,13 +3411,13 @@ WHERE deleted IS FALSE;
 -- Customer-hosted MCP servers connected through outbound tunnels. Gram stores
 -- the durable management/source record; live connection routing is cached in
 -- Redis by the tunnel gateway.
-CREATE TABLE IF NOT EXISTS tunnelled_mcp_servers (
-  -- Stable UUID for the tunnelled MCP source. Used by management APIs,
+CREATE TABLE IF NOT EXISTS tunneled_mcp_servers (
+  -- Stable UUID for the tunneled MCP source. Used by management APIs,
   -- dashboard routes, and Redis connection cache keys.
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   -- Project that owns this source. All management queries are project-scoped.
   project_id uuid NOT NULL,
-  -- User-facing display name for the tunnelled MCP source.
+  -- User-facing display name for the tunneled MCP source.
   name TEXT NOT NULL CHECK (name <> ''),
   -- Hash of the one-time tunnel key. The plaintext key is not stored.
   key_hash TEXT NOT NULL CHECK (key_hash <> ''),
@@ -2666,6 +3425,11 @@ CREATE TABLE IF NOT EXISTS tunnelled_mcp_servers (
   key_prefix TEXT NOT NULL CHECK (key_prefix <> ''),
   -- Durable source lifecycle. Live connection state is derived from Redis.
   status TEXT NOT NULL DEFAULT 'created' CHECK (status IN ('created', 'active', 'revoked')),
+  -- Owner consent for serving this source through a public (anonymous) MCP
+  -- endpoint. An mcp_servers row fronting this source may only take
+  -- visibility=public while this is true (double opt-in, enforced in
+  -- application code at create/update validation and at serve time).
+  allow_public boolean NOT NULL DEFAULT false,
   -- Last persisted tunnel agent version reported for this source.
   agent_version TEXT CHECK (agent_version IS NULL OR agent_version <> ''),
   -- Most recent persisted heartbeat time, used when Redis liveness data is absent.
@@ -2676,38 +3440,72 @@ CREATE TABLE IF NOT EXISTS tunnelled_mcp_servers (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT tunnelled_mcp_servers_pkey PRIMARY KEY (id),
-  CONSTRAINT tunnelled_mcp_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT tunneled_mcp_servers_pkey PRIMARY KEY (id),
+  CONSTRAINT tunneled_mcp_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS tunnelled_mcp_servers_project_id_idx
-ON tunnelled_mcp_servers (project_id)
+CREATE INDEX IF NOT EXISTS tunneled_mcp_servers_project_id_idx
+ON tunneled_mcp_servers (project_id)
 WHERE deleted IS FALSE;
 
-CREATE UNIQUE INDEX IF NOT EXISTS tunnelled_mcp_servers_project_id_name_key
-ON tunnelled_mcp_servers (project_id, name)
+CREATE UNIQUE INDEX IF NOT EXISTS tunneled_mcp_servers_project_id_name_key
+ON tunneled_mcp_servers (project_id, name)
 WHERE deleted IS FALSE;
 
-CREATE UNIQUE INDEX IF NOT EXISTS tunnelled_mcp_servers_key_hash_key
-ON tunnelled_mcp_servers (key_hash)
+CREATE UNIQUE INDEX IF NOT EXISTS tunneled_mcp_servers_key_hash_key
+ON tunneled_mcp_servers (key_hash)
 WHERE deleted IS FALSE;
 
-COMMENT ON TABLE tunnelled_mcp_servers IS 'Customer-hosted MCP server sources that connect to Gram through outbound tunnels.';
-COMMENT ON COLUMN tunnelled_mcp_servers.id IS 'Stable UUID for the tunnelled MCP source. Used by management APIs, dashboard routes, and Redis connection cache keys.';
-COMMENT ON COLUMN tunnelled_mcp_servers.project_id IS 'Project that owns this tunnelled MCP source. All management queries are scoped by project_id.';
-COMMENT ON COLUMN tunnelled_mcp_servers.name IS 'User-facing display name for the tunnelled MCP source.';
-COMMENT ON COLUMN tunnelled_mcp_servers.key_hash IS 'Hash of the one-time tunnel key. Used for future tunnel authentication without storing the plaintext key.';
-COMMENT ON COLUMN tunnelled_mcp_servers.key_prefix IS 'Non-secret prefix of the tunnel key shown in the UI so users can identify which key/source they are using.';
-COMMENT ON COLUMN tunnelled_mcp_servers.status IS 'Durable lifecycle state for the source: created, active, or revoked. Live connection state is derived from Redis.';
-COMMENT ON COLUMN tunnelled_mcp_servers.agent_version IS 'Last persisted tunnel agent version reported for this source. Per-connection agent versions are stored in Redis.';
-COMMENT ON COLUMN tunnelled_mcp_servers.last_seen_at IS 'Most recent persisted heartbeat time for the source, used when Redis liveness data is absent or expired.';
-COMMENT ON COLUMN tunnelled_mcp_servers.created_at IS 'Time when the tunnelled MCP source was created.';
-COMMENT ON COLUMN tunnelled_mcp_servers.updated_at IS 'Time when the durable tunnelled MCP source record was last updated.';
-COMMENT ON COLUMN tunnelled_mcp_servers.deleted_at IS 'Soft-delete timestamp for the tunnelled MCP source. NULL means the source is active.';
-COMMENT ON COLUMN tunnelled_mcp_servers.deleted IS 'Generated soft-delete flag derived from deleted_at and used by partial indexes.';
+COMMENT ON TABLE tunneled_mcp_servers IS 'Customer-hosted MCP server sources that connect to Gram through outbound tunnels.';
+COMMENT ON COLUMN tunneled_mcp_servers.id IS 'Stable UUID for the tunneled MCP source. Used by management APIs, dashboard routes, and Redis connection cache keys.';
+COMMENT ON COLUMN tunneled_mcp_servers.project_id IS 'Project that owns this tunneled MCP source. All management queries are scoped by project_id.';
+COMMENT ON COLUMN tunneled_mcp_servers.name IS 'User-facing display name for the tunneled MCP source.';
+COMMENT ON COLUMN tunneled_mcp_servers.key_hash IS 'Hash of the one-time tunnel key. Used for future tunnel authentication without storing the plaintext key.';
+COMMENT ON COLUMN tunneled_mcp_servers.key_prefix IS 'Non-secret prefix of the tunnel key shown in the UI so users can identify which key/source they are using.';
+COMMENT ON COLUMN tunneled_mcp_servers.status IS 'Durable lifecycle state for the source: created, active, or revoked. Live connection state is derived from Redis.';
+COMMENT ON COLUMN tunneled_mcp_servers.allow_public IS 'Owner consent for anonymous public MCP serving of this source. Double opt-in with mcp_servers.visibility=public, enforced in application code.';
+COMMENT ON COLUMN tunneled_mcp_servers.agent_version IS 'Last persisted tunnel agent version reported for this source. Per-connection agent versions are stored in Redis.';
+COMMENT ON COLUMN tunneled_mcp_servers.last_seen_at IS 'Most recent persisted heartbeat time for the source, used when Redis liveness data is absent or expired.';
+COMMENT ON COLUMN tunneled_mcp_servers.created_at IS 'Time when the tunneled MCP source was created.';
+COMMENT ON COLUMN tunneled_mcp_servers.updated_at IS 'Time when the durable tunneled MCP source record was last updated.';
+COMMENT ON COLUMN tunneled_mcp_servers.deleted_at IS 'Soft-delete timestamp for the tunneled MCP source. NULL means the source is active.';
+COMMENT ON COLUMN tunneled_mcp_servers.deleted IS 'Generated soft-delete flag derived from deleted_at and used by partial indexes.';
+
+-- Configurable request headers attached to a tunneled MCP server. Each header
+-- resolves either to a static value (optionally encrypted at rest when secret)
+-- or to a named inbound request header that is passed through. Values are
+-- injected onto the request forwarded through the tunnel gateway to the
+-- customer's upstream MCP server. Mirrors remote_mcp_server_headers.
+CREATE TABLE IF NOT EXISTS tunneled_mcp_server_headers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  tunneled_mcp_server_id uuid NOT NULL,
+  name TEXT NOT NULL CHECK (name <> ''),
+  description TEXT,
+  is_required BOOLEAN NOT NULL DEFAULT FALSE,
+  is_secret BOOLEAN NOT NULL DEFAULT FALSE,
+  value TEXT,
+  value_from_request_header TEXT CHECK (value_from_request_header IS NULL OR value_from_request_header <> ''),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT tunneled_mcp_server_headers_pkey PRIMARY KEY (id),
+  CONSTRAINT tunneled_mcp_server_headers_tunneled_mcp_server_id_fkey FOREIGN KEY (tunneled_mcp_server_id) REFERENCES tunneled_mcp_servers (id) ON DELETE CASCADE,
+  CONSTRAINT tunneled_mcp_server_headers_value_source_check CHECK ((value IS NULL) != (value_from_request_header IS NULL))
+);
+
+CREATE INDEX IF NOT EXISTS tunneled_mcp_server_headers_tunneled_mcp_server_id_idx
+ON tunneled_mcp_server_headers (tunneled_mcp_server_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS tunneled_mcp_server_headers_tunneled_mcp_server_id_name_key
+ON tunneled_mcp_server_headers (tunneled_mcp_server_id, name)
+WHERE deleted IS FALSE;
 
 -- MCP Servers: user-facing MCP server configurations that link an MCP
--- backend (a toolset, a remote MCP server, or a tunnelled MCP server) to
+-- backend (a toolset, a remote MCP server, or a tunneled MCP server) to
 -- environment and OAuth settings. Each server is addressable via one or more
 -- mcp_endpoints.
 CREATE TABLE IF NOT EXISTS mcp_servers (
@@ -2719,7 +3517,7 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   environment_id uuid,
   user_session_issuer_id uuid,
   remote_mcp_server_id uuid,
-  tunnelled_mcp_server_id uuid,
+  tunneled_mcp_server_id uuid,
   toolset_id uuid,
   -- Optionally enables a variations group for runtime filtering and
   -- modifications. Otherwise defaults to project global (source-level)
@@ -2737,11 +3535,15 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   CONSTRAINT mcp_servers_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL,
   CONSTRAINT mcp_servers_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
   CONSTRAINT mcp_servers_remote_mcp_server_id_fkey FOREIGN KEY (remote_mcp_server_id) REFERENCES remote_mcp_servers (id) ON DELETE RESTRICT,
-  CONSTRAINT mcp_servers_tunnelled_mcp_server_id_fkey FOREIGN KEY (tunnelled_mcp_server_id) REFERENCES tunnelled_mcp_servers (id) ON DELETE RESTRICT,
+  CONSTRAINT mcp_servers_tunneled_mcp_server_id_fkey FOREIGN KEY (tunneled_mcp_server_id) REFERENCES tunneled_mcp_servers (id) ON DELETE RESTRICT,
   CONSTRAINT mcp_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
   CONSTRAINT mcp_servers_tool_variations_group_id_fkey FOREIGN KEY (tool_variations_group_id) REFERENCES tool_variations_groups (id) ON DELETE SET NULL,
   -- Exactly one backend must be set.
-  CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunnelled_mcp_server_id, toolset_id) = 1)
+  CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, toolset_id) = 1),
+  -- Remote and tunneled servers carry a Gram-as-AS issuer attached at create
+  -- time for the server's lifetime, regardless of visibility. Toolset-backed
+  -- servers are exempt (their auth lives on toolsets.user_session_issuer_id).
+  CONSTRAINT mcp_servers_issuer_required_check CHECK (deleted OR (remote_mcp_server_id IS NULL AND tunneled_mcp_server_id IS NULL) OR user_session_issuer_id IS NOT NULL)
 );
 
 CREATE INDEX IF NOT EXISTS mcp_servers_project_id_idx
@@ -2756,11 +3558,11 @@ CREATE INDEX IF NOT EXISTS mcp_servers_remote_mcp_server_id_idx
 ON mcp_servers (remote_mcp_server_id)
 WHERE remote_mcp_server_id IS NOT NULL;
 
-CREATE INDEX IF NOT EXISTS mcp_servers_tunnelled_mcp_server_id_idx
-ON mcp_servers (tunnelled_mcp_server_id)
-WHERE tunnelled_mcp_server_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS mcp_servers_tunneled_mcp_server_id_idx
+ON mcp_servers (tunneled_mcp_server_id)
+WHERE tunneled_mcp_server_id IS NOT NULL;
 
-COMMENT ON COLUMN mcp_servers.tunnelled_mcp_server_id IS 'Optional backend reference to a tunnelled MCP source. Exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be set.';
+COMMENT ON COLUMN mcp_servers.tunneled_mcp_server_id IS 'Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be set.';
 
 CREATE INDEX IF NOT EXISTS mcp_servers_toolset_id_idx
 ON mcp_servers (toolset_id)
@@ -2889,29 +3691,67 @@ CREATE UNIQUE INDEX IF NOT EXISTS mcp_endpoints_slug_null_custom_domain_id_key
 ON mcp_endpoints (slug)
 WHERE custom_domain_id IS NULL AND deleted IS FALSE;
 
--- Plugin definitions: project-scoped distributable bundles of MCP servers.
--- Admins create plugins and assign them to roles for distribution.
-CREATE TABLE IF NOT EXISTS plugins (
+-- MCP servers attached directly to an assistant. The legacy toolset
+-- attachment path lives in assistant_toolsets; this table covers
+-- mcp_servers-modelled backends (remote, tunnelled) that have no toolsets
+-- row and so cannot be attached there. resolveAssistantMCPServers merges
+-- both into the runtime MCP set. Replace-on-write like assistant_toolsets,
+-- so no soft-delete column.
+CREATE TABLE IF NOT EXISTS assistant_mcp_servers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT NOT NULL,
+  assistant_id uuid NOT NULL,
+  mcp_server_id uuid NOT NULL,
+  environment_id uuid,
   project_id uuid NOT NULL,
-  name TEXT NOT NULL CHECK (name <> ''),
-  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
-  description TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT assistant_mcp_servers_pkey PRIMARY KEY (id),
+  CONSTRAINT assistant_mcp_servers_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES assistants (id) ON DELETE CASCADE,
+  -- RESTRICT mirrors plugin_servers: mcp_servers soft-delete, so RESTRICT only
+  -- blocks manual hard deletes; SET NULL is not viable for a required backend.
+  CONSTRAINT assistant_mcp_servers_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE RESTRICT,
+  CONSTRAINT assistant_mcp_servers_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL,
+  CONSTRAINT assistant_mcp_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT assistant_mcp_servers_assistant_id_mcp_server_id_key UNIQUE (assistant_id, mcp_server_id)
+);
+
+CREATE INDEX IF NOT EXISTS assistant_mcp_servers_mcp_server_id_idx ON assistant_mcp_servers (mcp_server_id);
+CREATE INDEX IF NOT EXISTS assistant_mcp_servers_project_id_idx ON assistant_mcp_servers (project_id);
+
+-- Admin-authoritative per-tool annotation metadata for an MCP server, read by
+-- the runtime proxy to fill the disposition dimension of RBAC checks.
+CREATE TABLE IF NOT EXISTS mcp_server_tool_metadata (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  mcp_server_id uuid NOT NULL,
+  tool_name TEXT NOT NULL,
+
+  -- MCP tool annotations (admin-set behavioral hints)
+  title TEXT,
+  read_only_hint boolean,
+  destructive_hint boolean,
+  idempotent_hint boolean,
+  open_world_hint boolean,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
 
-  CONSTRAINT plugins_pkey PRIMARY KEY (id),
-  CONSTRAINT plugins_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT plugins_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT mcp_server_tool_metadata_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_server_tool_metadata_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_server_tool_metadata_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS plugins_organization_id_project_id_slug_key
-  ON plugins (organization_id, project_id, slug)
-  WHERE deleted IS FALSE;
+CREATE INDEX IF NOT EXISTS mcp_server_tool_metadata_project_id_idx
+ON mcp_server_tool_metadata (project_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_server_tool_metadata_mcp_server_id_tool_name_key
+ON mcp_server_tool_metadata (mcp_server_id, tool_name)
+WHERE deleted IS FALSE;
 
 -- Links a plugin to an MCP server, backed by either a toolset or an
 -- mcp_servers row (exactly one, enforced by the exclusivity check below).
@@ -2994,13 +3834,37 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
   -- existing connections (and any future connection without the marketplace
   -- surface enabled) are unconstrained.
   marketplace_token TEXT,
-  -- Stable content hash of the plugin packages last published to this repo,
-  -- independent of per-publish values (manifest version, injected API keys).
-  -- The automated generator rollout compares the current fingerprint against
-  -- this value and skips republishing when nothing has changed. Nullable so
-  -- connections published before fingerprinting existed re-publish once to
-  -- backfill it.
+  -- DEPRECATED: superseded by published_mcp_fingerprint + published_hooks_version
+  -- when hooks and MCP plugin generation were decoupled. No longer written or
+  -- read; retained per expand-contract and dropped in a later contract migration.
   published_fingerprint TEXT,
+  -- Per-plugin content fingerprints of the MCP (feature) plugins last published
+  -- to this repo: a JSON object mapping plugin slug -> stable hash (plus a
+  -- reserved "__shared__" key for the marketplace/README files), independent of
+  -- per-publish values (manifest version, injected API key). The automated
+  -- rollout compares the current fingerprints against this value to skip no-op
+  -- MCP republishes. JSON (rather than a single hash) so a future per-plugin
+  -- publish flow can decide independently which plugins have unpublished changes
+  -- without another migration. Excludes the hooks subtree, which rolls out on
+  -- published_hooks_version instead. Nullable so connections predating the split
+  -- republish once to backfill it.
+  published_mcp_fingerprints JSONB,
+  -- The hooksGeneratorVersion stamped into the observability (hooks) plugin last
+  -- published to this repo. The rollout regenerates the hooks subtree only when
+  -- the current hooksGeneratorVersion differs from this value, so an MCP-only
+  -- publish leaves the hooks plugin untouched. Nullable so connections predating
+  -- the split republish the hooks plugin once to backfill it.
+  published_hooks_version TEXT,
+  -- Snapshot of the hook-output-affecting config the observability (hooks) plugin
+  -- was last generated from: a JSON object with the resolved marketplace name,
+  -- observability mode, server URL, org id, and project slug. Stored verbatim (not
+  -- just a hash) so it stays human-readable; the publish path compares a hash of
+  -- it to decide whether the hooks subtree must be regenerated. The
+  -- hooksGeneratorVersion alone can't catch these config changes (a rename or an
+  -- observability-mode toggle leaves the version untouched), so without this the
+  -- carried hooks subtree would keep stale commands. Nullable so connections
+  -- predating this column republish the hooks plugin once to backfill it.
+  published_hooks_config JSONB,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3091,6 +3955,10 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   -- (model id, temperature, fail-mode, etc.) as a JSON object. NULL for
   -- standard policies.
   model_config JSONB,
+  -- CVSS-style severity (0.1-10) the policy author assigns to findings this
+  -- policy produces. Purely descriptive; changing it does NOT bump `version`
+  -- or re-scan messages. Bounds are validated in the application layer.
+  score DOUBLE PRECISION NOT NULL DEFAULT 5.0,
   version BIGINT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3240,6 +4108,22 @@ CREATE TABLE IF NOT EXISTS risk_results (
   CONSTRAINT risk_results_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
   CONSTRAINT risk_results_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies(id) ON DELETE CASCADE,
   CONSTRAINT risk_results_chat_message_id_fkey FOREIGN KEY (chat_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
+) WITH (
+  -- This table is append-heavy and rarely updated, so the only autovacuum
+  -- trigger that ever fires is the insert one. With the global 0.2 scale
+  -- factor that threshold scales with the table itself, so on a table this
+  -- size vacuum only runs every several million inserts — longer than the
+  -- window the risk overview queries scan. The freshly inserted pages are
+  -- therefore never marked all-visible, and the overview's index-only scan
+  -- degrades into a random heap scan (observed: ~93% heap fetches).
+  --
+  -- A fixed threshold with no scale factor keeps the vacuum cadence constant
+  -- as the table grows instead of stretching indefinitely. Dead tuples stay
+  -- negligible here, so these passes skip index cleanup and mostly just set
+  -- visibility map bits.
+  autovacuum_vacuum_insert_scale_factor = 0,
+  autovacuum_vacuum_insert_threshold = 250000,
+  autovacuum_vacuum_cost_limit = 2000
 );
 
 CREATE INDEX IF NOT EXISTS risk_results_project_policy_version_message_idx
@@ -3252,6 +4136,25 @@ CREATE INDEX IF NOT EXISTS risk_results_project_found_idx
 ON risk_results (project_id, created_at DESC)
 WHERE found IS TRUE AND excluded_at IS NULL AND false_positive_at IS NULL;
 
+-- Open-findings reads that join risk_policies (CountFindings*,
+-- ListRiskResultsByProjectFound) filter on the same open-findings predicate
+-- but need risk_policy_id, which _project_found_idx lacks — and the planner
+-- overestimates the predicate's row count ~5x (it multiplies the
+-- found/excluded_at/false_positive_at selectivities as if independent), which
+-- priced the resulting bitmap heap scan above a parallel seq scan of the
+-- whole table. Keying on risk_policy_id makes the policy-join count an
+-- index-only scan, which stays cheap no matter how far off the estimate is.
+CREATE INDEX IF NOT EXISTS risk_results_project_open_policy_idx
+ON risk_results (project_id, risk_policy_id)
+WHERE found IS TRUE AND excluded_at IS NULL AND false_positive_at IS NULL;
+
+-- Serves the risk overview window scan (GetRiskOverviewCounts): counts every
+-- scanned message in a project's created_at window regardless of found state,
+-- so the partial _project_found_idx cannot help. Range-scans just the window;
+-- trailing chat_message_id enables an index-only distinct for messages_scanned.
+CREATE INDEX IF NOT EXISTS risk_results_project_created_msg_idx
+ON risk_results (project_id, created_at, chat_message_id);
+
 -- Narrows the exclusion sweeps (exact/rule_id/source) by project + policy +
 -- rule. The verbatim match column is intentionally NOT indexed: it can exceed
 -- the btree row-size limit (2704 bytes), and the sweep queries apply
@@ -3263,6 +4166,49 @@ ON risk_results (project_id, risk_policy_id, rule_id);
 CREATE INDEX IF NOT EXISTS risk_results_excluded_exclusion_idx
 ON risk_results (excluded_exclusion_id)
 WHERE excluded_exclusion_id IS NOT NULL;
+
+-- risk_policy_eval_reviews is the durable "regression set" for a prompt-based
+-- risk policy: a reviewer's ground-truth verdict on whether a given chat session
+-- should be flagged by the policy. The policy-eval workbench replays the
+-- guardrail live and scores its agreement against these saved verdicts. A
+-- verdict is the reviewer's judgment of the policy INTENT, so it persists across
+-- guardrail edits; risk_policy_version records the version in effect when the
+-- verdict was recorded (provenance only). Physically separate from risk_results:
+-- eval review activity never touches live findings, the outbox, or enforcement.
+CREATE TABLE IF NOT EXISTS risk_policy_eval_reviews (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  risk_policy_id uuid NOT NULL,
+  -- Policy version in effect when the verdict was recorded. Provenance only; the
+  -- verdict itself is version-independent ground truth.
+  risk_policy_version BIGINT NOT NULL,
+  chat_id uuid NOT NULL,
+  -- The reviewer's ground-truth judgment of this session under the policy:
+  --   correct        -> the guardrail's flag/clean call matched the reviewer
+  --   false_positive -> the guardrail flagged a session it should not (tighten)
+  --   missed         -> the guardrail missed a session it should flag (broaden)
+  verdict TEXT NOT NULL,
+  -- User id of the reviewer who recorded the verdict.
+  reviewed_by TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT risk_policy_eval_reviews_pkey PRIMARY KEY (id),
+  CONSTRAINT risk_policy_eval_reviews_verdict_check CHECK (verdict IN ('correct', 'false_positive', 'missed')),
+  CONSTRAINT risk_policy_eval_reviews_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  CONSTRAINT risk_policy_eval_reviews_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
+  CONSTRAINT risk_policy_eval_reviews_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies(id) ON DELETE CASCADE,
+  CONSTRAINT risk_policy_eval_reviews_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
+);
+
+-- One active verdict per reviewer per session per policy.
+CREATE UNIQUE INDEX IF NOT EXISTS risk_policy_eval_reviews_policy_chat_reviewer_key
+ON risk_policy_eval_reviews (project_id, risk_policy_id, chat_id, reviewed_by)
+WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS authz_challenge_resolutions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -3342,6 +4288,75 @@ WHERE deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS risk_policy_bypass_requests_project_status_updated_idx
 ON risk_policy_bypass_requests (project_id, status, updated_at DESC)
 WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS risk_policy_challenges (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  risk_policy_id uuid NOT NULL,
+
+  -- The user the warn policy fired for (the one who must acknowledge).
+  user_id TEXT NOT NULL,
+  -- Tool the challenge applies to; NULL for a non-tool (e.g. prompt) challenge.
+  tool_name TEXT,
+
+  status TEXT NOT NULL DEFAULT 'challenged',
+
+  -- Log-safe context for display/audit ONLY. The raw matched value
+  -- (secret/PII) is NEVER stored here — it lives only in the ephemeral
+  -- agent-facing warning message.
+  policy_name TEXT,
+  entity TEXT,
+  rule_id TEXT,
+
+  -- SHA-256 (hex) of the exact scanned call input. Scopes an acknowledgement to
+  -- one concrete call, so an ack clears only an identical retry — not every call
+  -- of the same tool under the same policy. NULL for non-call-scoped rows.
+  call_fingerprint TEXT,
+
+  challenged_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  acknowledged_at timestamptz,
+  -- When an acknowledgement stops suppressing re-challenge (the "remember" window).
+  expires_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT risk_policy_challenges_pkey PRIMARY KEY (id),
+  CONSTRAINT risk_policy_challenges_status_check CHECK (status IN ('challenged', 'acknowledged', 'declined')),
+  CONSTRAINT risk_policy_challenges_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT risk_policy_challenges_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT risk_policy_challenges_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies (id) ON DELETE CASCADE
+);
+
+COMMENT ON TABLE risk_policy_challenges IS 'Interactive warn/challenge lifecycle for warn-action policies: a warn match records a challenged row; the user self-service acknowledges to proceed on retry. Never stores the raw matched value.';
+
+CREATE UNIQUE INDEX IF NOT EXISTS risk_policy_challenges_current_key
+ON risk_policy_challenges (project_id, user_id, risk_policy_id, tool_name, call_fingerprint) NULLS NOT DISTINCT
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS risk_policy_challenges_project_status_updated_idx
+ON risk_policy_challenges (project_id, status, updated_at DESC)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS risk_policy_challenges_active_ack_idx
+ON risk_policy_challenges (project_id, user_id, risk_policy_id, tool_name, call_fingerprint, expires_at)
+WHERE deleted IS FALSE AND status = 'acknowledged';
+
+-- Non-partial indexes backing the ON DELETE CASCADE foreign keys. The RI
+-- cascade trigger scans child rows with no `deleted IS FALSE` predicate, so it
+-- cannot use the partial indexes above; without these a parent delete (org,
+-- project, or risk policy) degrades to a sequential scan and holds locks longer.
+CREATE INDEX IF NOT EXISTS risk_policy_challenges_organization_id_idx
+ON risk_policy_challenges (organization_id);
+
+CREATE INDEX IF NOT EXISTS risk_policy_challenges_project_id_idx
+ON risk_policy_challenges (project_id);
+
+CREATE INDEX IF NOT EXISTS risk_policy_challenges_risk_policy_id_idx
+ON risk_policy_challenges (risk_policy_id);
 
 CREATE TABLE IF NOT EXISTS tool_call_blocks (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -3443,3 +4458,613 @@ CREATE TABLE IF NOT EXISTS outbox_relays (
 CREATE INDEX IF NOT EXISTS outbox_relays_pending_idx
 ON outbox_relays (outbox_id)
 WHERE processed_at IS NULL AND dead_lettered IS FALSE;
+
+-- Sharable records for how to authenticate into an external service, such as
+-- any ambient infrastructure environment or customer-managed product. This is
+-- implemented using the Class Table Inheritance pattern with provider acting
+-- as the discriminator. Each row in this table has exactly one provider subtype
+-- row (e.g. in tables such as aws_iam_credentials, gcp_iam_credentials, etc.).
+-- The canonical `provider` values are defined in this supertype table, while
+-- subtype tables carry a pinned `external_credentials_provider` that
+-- composite-FKs back to (id, provider) to enforce 1:1 semantics across tables.
+-- Support addititional providers by updating the provider check in this table
+-- and creating a subtype table.
+CREATE TABLE IF NOT EXISTS external_credentials (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT,
+  project_id uuid,
+  provider TEXT NOT NULL,
+  name TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT external_credentials_pkey PRIMARY KEY (id),
+  CONSTRAINT external_credentials_id_provider_key UNIQUE (id, provider),
+  CONSTRAINT external_credentials_provider_check CHECK (provider IN ('aws_iam', 'gcp_iam')),
+  CONSTRAINT external_credentials_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT external_credentials_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS external_credentials_organization_id_idx
+ON external_credentials (organization_id)
+WHERE deleted IS FALSE;
+
+-- AWS credential: AssumeRole+ExternalId | AssumeRoleWithWebIdentity | key-policy grant (mode derived)
+CREATE TABLE IF NOT EXISTS aws_iam_credentials (
+  external_credential_id uuid NOT NULL,
+  external_credentials_provider TEXT NOT NULL DEFAULT 'aws_iam',
+  assume_role_arn TEXT,
+  external_id TEXT,
+  oidc_audience TEXT,
+  oidc_subject TEXT,
+  sts_region TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT aws_iam_credentials_pkey PRIMARY KEY (external_credential_id),
+  CONSTRAINT aws_iam_credentials_external_credentials_provider_check CHECK (external_credentials_provider = 'aws_iam'),
+  CONSTRAINT aws_iam_credentials_auth_exclusive_check CHECK (num_nonnulls(external_id, oidc_audience) <= 1),
+  CONSTRAINT aws_iam_credentials_fkey FOREIGN KEY (external_credential_id, external_credentials_provider) REFERENCES external_credentials (id, provider) ON DELETE CASCADE
+);
+
+-- GCP credential: ambient | impersonation | WIF (mode derived); keyless, no SA-JSON
+CREATE TABLE IF NOT EXISTS gcp_iam_credentials (
+  external_credential_id uuid NOT NULL,
+  external_credentials_provider TEXT NOT NULL DEFAULT 'gcp_iam',
+  impersonate_service_account TEXT,
+  wif_pool_id TEXT,
+  wif_provider_id TEXT,
+  wif_project_number TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT gcp_iam_credentials_pkey PRIMARY KEY (external_credential_id),
+  CONSTRAINT gcp_iam_credentials_external_credentials_provider_check CHECK (external_credentials_provider = 'gcp_iam'),
+  CONSTRAINT gcp_iam_credentials_wif_complete_check CHECK (num_nonnulls(wif_pool_id, wif_provider_id, wif_project_number) IN (0, 3)),
+  CONSTRAINT gcp_iam_credentials_fkey FOREIGN KEY (external_credential_id, external_credentials_provider) REFERENCES external_credentials (id, provider) ON DELETE CASCADE
+);
+
+-- Sharable records for referencing an externally-managed key, such as KMS key
+-- for signing. This is implemented using the Class Table Inheritance pattern
+-- with `provider` acting as the discriminator. Each row in
+-- this table has exactly one key provider subtype row (e.g. in tables such as
+-- aws_kms_keys, gcp_kms_keys, etc.). The canonical `provider` values are
+-- defined in this supertype table, while subtype tables carry a pinned
+-- `external_keys_provider` that composite-FKs back to (id, provider) to enforce
+-- 1:1 semantics across tables. Support addititional key providers by updating
+-- the provider check in this table and creating a subtype table.
+CREATE TABLE IF NOT EXISTS external_keys (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT,
+  project_id uuid,
+  external_credential_id uuid NOT NULL,
+  provider TEXT NOT NULL,
+  algorithm TEXT NOT NULL,
+  name TEXT NOT NULL,
+  -- Reference to the access grant the customer configured on their KMS key: the
+  -- gram-owned cloud identity (GCP service-account email or AWS principal ARN)
+  -- they granted. Set only for the "ambient identity" model, where the customer
+  -- grants gram's own principal directly (AWS KMS key policy / GCP IAM binding)
+  -- instead of gram assuming a customer role; NULL for the assume-role models.
+  -- Kept for audit and drift detection: if gram rotates its own identity, this
+  -- can be compared against the current one to flag a stale grant and prompt a
+  -- re-grant before signing starts failing.
+  customer_grant_reference TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT external_keys_pkey PRIMARY KEY (id),
+  CONSTRAINT external_keys_id_provider_key UNIQUE (id, provider),
+  CONSTRAINT external_keys_provider_check CHECK (provider IN ('aws_kms', 'gcp_kms')),
+  CONSTRAINT external_keys_external_credential_id_fkey FOREIGN KEY (external_credential_id) REFERENCES external_credentials (id),
+  CONSTRAINT external_keys_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT external_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS external_keys_organization_id_idx
+ON external_keys (organization_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS external_keys_external_credential_id_idx
+ON external_keys (external_credential_id)
+WHERE deleted IS FALSE;
+
+-- Composite unique key so tenant-scoped tables (e.g. json_web_key_sets) can
+-- composite-FK to (organization_id, id) and pin the reference to one org.
+CREATE UNIQUE INDEX IF NOT EXISTS external_keys_organization_id_id_key
+ON external_keys (organization_id, id);
+
+CREATE TABLE IF NOT EXISTS aws_kms_keys (
+  external_key_id uuid NOT NULL,
+  external_keys_provider TEXT NOT NULL DEFAULT 'aws_kms',
+  key_arn TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT aws_kms_keys_pkey PRIMARY KEY (external_key_id),
+  CONSTRAINT aws_kms_keys_external_keys_provider_check CHECK (external_keys_provider = 'aws_kms'),
+  CONSTRAINT aws_kms_keys_fkey FOREIGN KEY (external_key_id, external_keys_provider) REFERENCES external_keys (id, provider) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS gcp_kms_keys (
+  external_key_id uuid NOT NULL,
+  external_keys_provider TEXT NOT NULL DEFAULT 'gcp_kms',
+  resource_name TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT gcp_kms_keys_pkey PRIMARY KEY (external_key_id),
+  CONSTRAINT gcp_kms_keys_external_keys_provider_check CHECK (external_keys_provider = 'gcp_kms'),
+  CONSTRAINT gcp_kms_keys_fkey FOREIGN KEY (external_key_id, external_keys_provider) REFERENCES external_keys (id, provider) ON DELETE CASCADE
+);
+
+-- JSON Web Key Set (JWKS): the published collection of public keys for an
+-- issuer. Individual keys are external key based (e.g. KMS keys) and hold
+-- public JWK material only; the private key never leaves the customer KMS and
+-- is only ever called to sign. The backing external key is tenancy-pinned via
+-- a composite FK to (organization_id, id) so a set can only reference a key
+-- owned by the same organization.
+CREATE TABLE IF NOT EXISTS json_web_key_sets (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid,
+  external_key_id uuid NOT NULL,
+  name TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT json_web_key_sets_pkey PRIMARY KEY (id),
+  CONSTRAINT json_web_key_sets_external_key_tenant_fkey FOREIGN KEY (organization_id, external_key_id) REFERENCES external_keys (organization_id, id),
+  CONSTRAINT json_web_key_sets_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT json_web_key_sets_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+-- Composite unique key so json_web_keys can composite-FK to (organization_id, id)
+-- and pin the reference to one org. A unique index for parity with external_keys.
+CREATE UNIQUE INDEX IF NOT EXISTS json_web_key_sets_organization_id_id_key
+ON json_web_key_sets (organization_id, id);
+
+-- Individual published key entries within a JSON Web Key Set. Each row is one
+-- public JWK (identified by `kid`) with a lifecycle state.
+CREATE TABLE IF NOT EXISTS json_web_keys (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid,
+  json_web_key_set_id uuid NOT NULL,
+  external_key_id uuid NOT NULL,
+  -- Pin the key version for external key providers that support versioning
+  external_key_version TEXT,
+  state TEXT NOT NULL,
+  kid TEXT NOT NULL,
+  public_jwk JSONB NOT NULL,
+  activated_at timestamptz,
+  retired_at timestamptz,
+  revoked_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT json_web_keys_pkey PRIMARY KEY (id),
+  CONSTRAINT json_web_keys_set_tenant_fkey FOREIGN KEY (organization_id, json_web_key_set_id) REFERENCES json_web_key_sets (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT json_web_keys_external_key_tenant_fkey FOREIGN KEY (organization_id, external_key_id) REFERENCES external_keys (organization_id, id),
+  CONSTRAINT json_web_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS json_web_keys_one_active_idx
+ON json_web_keys (json_web_key_set_id)
+WHERE state = 'active' AND deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS json_web_keys_set_kid_idx
+ON json_web_keys (json_web_key_set_id, kid)
+WHERE deleted IS FALSE;
+
+-- Non-partial index backing json_web_keys_set_tenant_fkey (ON DELETE CASCADE):
+-- keeps set/org/project cascade deletes off a seq scan, including soft-deleted
+-- rows that the partial unique indexes above exclude.
+CREATE INDEX IF NOT EXISTS json_web_keys_set_tenant_idx
+ON json_web_keys (organization_id, json_web_key_set_id);
+
+-- Customer-supplied model provider API keys (BYOK), scoped per project and
+-- responsibility slot (completion surface). The 'default' slot applies to
+-- every surface that has no dedicated override row. Key material is
+-- AES-256-GCM encrypted at rest and never returned by the API.
+CREATE TABLE IF NOT EXISTS model_provider_keys (
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  slot TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  api_key_encrypted TEXT NOT NULL,
+  enabled boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT model_provider_keys_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT model_provider_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS model_provider_keys_project_id_slot_key
+  ON model_provider_keys (project_id, slot)
+  WHERE deleted IS FALSE;
+
+-- Non-partial indexes backing the cascade FKs: keep org/project cascade
+-- deletes off a seq scan, including soft-deleted rows that the partial
+-- unique index above excludes.
+CREATE INDEX IF NOT EXISTS model_provider_keys_project_id_idx
+  ON model_provider_keys (project_id);
+
+CREATE INDEX IF NOT EXISTS model_provider_keys_organization_id_idx
+  ON model_provider_keys (organization_id);
+-- Org-scoped spend control rules. Each rule targets a set of actors via a CEL
+-- expression over org members' attributes (directory-synced attributes, group
+-- memberships, and org roles) and grants every matched actor a per-person USD
+-- budget for a UTC calendar window. A periodic evaluator compares each
+-- actor's spend against the limit and emits warning/breach events; rules with
+-- action = 'block' also open a circuit that denies the actor's Claude hook
+-- traffic until the window resets.
+--
+-- Rows are append-only version snapshots: editing a rule archives the current
+-- row (superseded_by points at its replacement) and inserts a new row with the
+-- same slug and version + 1. Config columns are never updated in place — only
+-- enabled (an operational toggle) and the archival columns change after
+-- insert — so events can join their exact rule row and always see the config
+-- that produced them. There is no hard delete; archiving ends a lineage while
+-- keeping its slug reserved and its history resolvable.
+CREATE TABLE IF NOT EXISTS spend_rules (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+
+  name TEXT NOT NULL,
+  -- URL-safe lineage identifier derived from the name at creation time and
+  -- shared by every version row of one rule. Immutable thereafter: the rule
+  -- URN ('spend_rule:<slug>:v<version>') embeds it, so renames must not
+  -- change it or historical events would detach from their rule. A slug is
+  -- never reused for a new rule, even after its lineage is archived (creation
+  -- checks the slug against all rows, archived included).
+  slug TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  -- CEL boolean expression over actor attributes (see
+  -- internal/spendrules/celenv). A rule applies to an actor when this
+  -- evaluates true.
+  target_expr TEXT NOT NULL,
+  -- Per-person budget in cents for one window. Must be positive; validated in
+  -- application code. External APIs and CEL still expose USD values.
+  limit_usd_cents BIGINT NOT NULL,
+  -- CEL boolean expression over the actor plus current-window usage. The
+  -- expression identifies budget breaches inside the target audience.
+  rule_expr TEXT NOT NULL DEFAULT 'spend_usd >= limit_usd',
+  -- UTC calendar window the budget covers ('daily', 'weekly' or 'monthly';
+  -- validated in application code). 'window' is a reserved keyword.
+  window_kind TEXT NOT NULL,
+  -- Percentage of the limit at which a warning event is emitted (1-100;
+  -- validated in application code).
+  warn_at_pct INT NOT NULL DEFAULT 80,
+  -- 'flag' or 'block'; validated in application code.
+  action TEXT NOT NULL DEFAULT 'flag',
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  -- Position of this row in its slug lineage; bumps by one on every edit.
+  version BIGINT NOT NULL DEFAULT 1,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  -- Set when the row stops being the live version of its lineage: either an
+  -- admin archived the rule, or an edit superseded this row.
+  archived_at timestamptz,
+  archived boolean NOT NULL GENERATED ALWAYS AS (archived_at IS NOT NULL) STORED,
+  -- The replacement row when this row was archived by an edit; NULL when an
+  -- admin archived the lineage outright (no successor).
+  superseded_by uuid,
+
+  CONSTRAINT spend_rules_pkey PRIMARY KEY (id),
+  -- Tenancy-pinning key: the superseded_by FK below and spend_rule_events
+  -- composite-FK (organization_id, id) here so neither can ever reference a
+  -- rule owned by another organization. A table-level constraint (not a
+  -- CREATE UNIQUE INDEX) because the self-referential FK must resolve inline;
+  -- the table is created in one migration so there is no online-index concern.
+  CONSTRAINT spend_rules_organization_id_id_key UNIQUE (organization_id, id),
+  CONSTRAINT spend_rules_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  -- Composite so the successor reference is pinned to the same organization —
+  -- a UUID-only FK would let a row point at another org's rule. No delete
+  -- action: rule rows are never hard-deleted individually (append-only,
+  -- archive-only), and the only delete path — the organization cascade —
+  -- removes referencer and referenced in one statement, which the
+  -- end-of-statement NO ACTION check accepts. ON DELETE SET NULL is not an
+  -- option here: on a composite key it would null organization_id (NOT NULL),
+  -- and Postgres 15's `SET NULL (column list)` form is not modeled by Atlas.
+  CONSTRAINT spend_rules_organization_id_superseded_by_fkey FOREIGN KEY (organization_id, superseded_by) REFERENCES spend_rules (organization_id, id)
+);
+
+-- URNs are unique because every (slug, version) pair maps to exactly one row.
+CREATE UNIQUE INDEX IF NOT EXISTS spend_rules_organization_id_slug_version_key
+ON spend_rules (organization_id, slug, version);
+
+-- At most one live (non-archived) version per lineage: an edit must archive
+-- the current row before inserting its replacement.
+CREATE UNIQUE INDEX IF NOT EXISTS spend_rules_organization_id_slug_live_key
+ON spend_rules (organization_id, slug)
+WHERE archived IS FALSE;
+
+-- Backs the self-referential (organization_id, superseded_by) foreign key's
+-- referencing side; without it every rule row delete (organization cascade)
+-- scans the table for referencing rows. superseded_by alone is selective
+-- enough — no need to widen it to the full key.
+CREATE INDEX IF NOT EXISTS spend_rules_superseded_by_idx
+ON spend_rules (superseded_by);
+
+-- Warning/breach events emitted by the spend rule evaluator. One row per
+-- (rule version row, actor, window, event type) — the unique index makes
+-- evaluator writes idempotent across its 5-minute cycles. spend_rule_id points
+-- at the exact (immutable) rule version row that fired, so every event
+-- resolves to the config that produced it; rule_urn carries the same identity
+-- in human-readable form. No soft delete: events are the audit trail shown in
+-- the dashboard events tab.
+CREATE TABLE IF NOT EXISTS spend_rule_events (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  spend_rule_id uuid NOT NULL,
+  -- Versioned rule URN, e.g. 'spend_rule:eng-monthly-cap:v3'.
+  rule_urn TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+
+  -- Actor identity as known at evaluation time. user_id is NULL when the
+  -- directory user has not been linked to a Gram user.
+  user_id TEXT,
+  email TEXT NOT NULL,
+  display_name TEXT,
+
+  spend_usd_cents BIGINT NOT NULL,
+  limit_usd_cents BIGINT NOT NULL,
+  window_start timestamptz NOT NULL,
+  window_end timestamptz NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT spend_rule_events_pkey PRIMARY KEY (id),
+  CONSTRAINT spend_rule_events_event_type_check CHECK (event_type IN ('warning', 'breach')),
+  CONSTRAINT spend_rule_events_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT spend_rule_events_organization_id_spend_rule_id_fkey FOREIGN KEY (organization_id, spend_rule_id) REFERENCES spend_rules (organization_id, id) ON DELETE CASCADE
+);
+
+-- spend_rule_id identifies one immutable rule version, so (rule row, actor,
+-- window, type) is the natural idempotency key for evaluator writes.
+CREATE UNIQUE INDEX IF NOT EXISTS spend_rule_events_dedupe_key
+ON spend_rule_events (spend_rule_id, event_type, email, window_start);
+
+-- Backs the events feed: filtered by organization, ordered by id DESC
+-- (UUIDv7, so id order is creation order) with an `id <` cursor.
+CREATE INDEX IF NOT EXISTS spend_rule_events_organization_id_id_idx
+ON spend_rule_events (organization_id, id DESC);
+
+-- Device integrations connect an organization to external device-management
+-- and compliance vendors, in two capability families: inventory sources
+-- (MDMs such as Jamf or Kandji, polled for the managed-device fleet) and
+-- evidence sinks (compliance platforms such as Drata or Vanta, pushed
+-- agent-coverage evidence). One row per (organization, provider). This is the
+-- audited, human-written identity of an integration; machine-churned
+-- scheduler state lives in device_integration_syncs and synced inventory in
+-- mdm_devices, so poller writes never contend with these rows.
+CREATE TABLE IF NOT EXISTS device_integration_configs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id TEXT NOT NULL,
+  -- Vendor identifier (e.g. 'jamf', 'kandji', 'drata', 'vanta'). Free-form
+  -- text validated against the provider registry in application code so new
+  -- vendors need no schema change.
+  provider TEXT NOT NULL,
+  -- Secret credential material only (API keys, OAuth client secrets),
+  -- encrypted as a JSON document whose fields are provider-specific. Write
+  -- only: the management API never returns the value, only whether one is
+  -- set.
+  credentials_encrypted TEXT NOT NULL,
+  -- Non-secret, admin-visible provider settings (e.g. the Jamf instance URL
+  -- or Drata region). Split from credentials_encrypted so the dashboard can
+  -- redisplay them; validated against the provider's credential spec in
+  -- application code.
+  settings jsonb NOT NULL DEFAULT '{}'::jsonb,
+  enabled boolean NOT NULL DEFAULT TRUE,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT device_integration_configs_pkey PRIMARY KEY (id),
+  CONSTRAINT device_integration_configs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+-- Partial unique index so a soft-deleted config doesn't block reconnecting
+-- the same provider (a plain UNIQUE would still cover deleted rows).
+CREATE UNIQUE INDEX IF NOT EXISTS device_integration_configs_organization_id_provider_key
+ON device_integration_configs (organization_id, provider)
+WHERE deleted IS FALSE;
+
+-- Non-partial index backing the organization_id FK's ON DELETE CASCADE. The
+-- unique index above is partial (excludes soft-deleted rows), so it can't
+-- serve a cascade delete, which must match every row for the org including
+-- deleted ones.
+CREATE INDEX IF NOT EXISTS device_integration_configs_organization_id_idx
+ON device_integration_configs (organization_id);
+
+-- Non-partial (organization_id, id) key serving as the composite FK target
+-- that tenant-pins child rows (mdm_devices) to their config's organization —
+-- same pattern as spend_rules. Declared as a unique index rather than a
+-- table constraint so Atlas creates it concurrently.
+CREATE UNIQUE INDEX IF NOT EXISTS device_integration_configs_organization_id_id_key
+ON device_integration_configs (organization_id, id);
+
+-- Device integration schedules: user-owned intent, one row per (config,
+-- schedule). Declares which of the provider's sync pipelines run for this
+-- integration and whether the user has paused one. Deliberately separate
+-- from device_integration_syncs (machine-owned execution state) so poller
+-- writes never touch user intent, and resetting sync state on a config
+-- update cannot clobber a user's pause by construction.
+CREATE TABLE IF NOT EXISTS device_integration_schedules (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  device_integration_config_id uuid NOT NULL,
+  -- Discriminator for the sync pipeline (e.g. 'jamf_inventory',
+  -- 'drata_evidence'). Declared by the provider's schedule spec.
+  schedule TEXT NOT NULL,
+  -- Set when a user explicitly pauses this schedule from the dashboard.
+  -- Only the user re-enabling the schedule clears it; config saves do not.
+  -- The machine-initiated counterpart (auto_paused_at) lives on the sync
+  -- row, so "you paused this" and "we paused this over a rejected
+  -- configuration" stay distinguishable.
+  disabled_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT device_integration_schedules_pkey PRIMARY KEY (id),
+  CONSTRAINT device_integration_schedules_device_integration_config_id_fkey FOREIGN KEY (device_integration_config_id) REFERENCES device_integration_configs (id) ON DELETE CASCADE
+);
+
+-- One schedule row per (config, schedule); the leading config_id column
+-- also backs the config FK's ON DELETE CASCADE.
+CREATE UNIQUE INDEX IF NOT EXISTS device_integration_schedules_config_id_schedule_key
+ON device_integration_schedules (device_integration_config_id, schedule);
+
+-- Device integration syncs: machine-owned execution state and failure
+-- metadata, exactly one row per schedule. The poller churns these rows
+-- every cycle; user intent lives on device_integration_schedules. A config
+-- update resets sync state by reinitializing these rows, leaving the
+-- schedule rows untouched.
+CREATE TABLE IF NOT EXISTS device_integration_syncs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  device_integration_schedule_id uuid NOT NULL,
+
+  -- Start time (database clock) of the last fully completed inventory
+  -- snapshot; advances only when a snapshot completes, never on a partial
+  -- pull. Bookkeeping only today: the mark-missing cutoff is the running
+  -- sync's own start time, not this stored value.
+  poll_watermark_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  next_poll_after timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_poll_success_at timestamptz,
+  last_poll_failed_at timestamptz,
+  last_poll_error TEXT,
+  consecutive_failures integer NOT NULL DEFAULT 0,
+  -- Consecutive credential-rejection (401/403-class) failures, tracked
+  -- separately from consecutive_failures so transient vendor errors cannot
+  -- contribute to the auto-pause threshold: only a pure streak of
+  -- credential rejections pauses a schedule.
+  consecutive_auth_rejections integer NOT NULL DEFAULT 0,
+  -- Digest of the last successfully pushed evidence snapshot. Evidence sinks
+  -- compare the current snapshot's digest against this and skip the push
+  -- when coverage hasn't changed. NULL for inventory schedules and before
+  -- the first successful push.
+  last_push_digest TEXT,
+  -- Set when the scheduler stops polling this schedule because the provider
+  -- repeatedly rejected the configuration (e.g. a revoked credential).
+  -- Paused schedules are skipped by candidate selection until the user
+  -- updates the integration, which resets the sync state and clears this.
+  -- The user-initiated counterpart (disabled_at) lives on the schedule row.
+  auto_paused_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT device_integration_syncs_pkey PRIMARY KEY (id),
+  CONSTRAINT device_integration_syncs_device_integration_schedule_id_fkey FOREIGN KEY (device_integration_schedule_id) REFERENCES device_integration_schedules (id) ON DELETE CASCADE
+);
+
+-- Exactly one sync row per schedule; also backs the schedule FK's
+-- ON DELETE CASCADE.
+CREATE UNIQUE INDEX IF NOT EXISTS device_integration_syncs_schedule_id_key
+ON device_integration_syncs (device_integration_schedule_id);
+
+-- Serves the coordinator's candidates query: due and not auto-paused.
+-- User-disabled filtering happens on the joined schedule row, and
+-- enabled/deleted filtering on the joined config row.
+CREATE INDEX IF NOT EXISTS device_integration_syncs_next_poll_after_idx
+ON device_integration_syncs (next_poll_after)
+WHERE auto_paused_at IS NULL;
+
+-- mdm_devices is the MDM-reported hardware inventory synced from a device
+-- integration (one row per device per config). NOTE: distinct from
+-- device_owners, which maps an AI provider's anonymous per-device id to an
+-- employee for personal-account attribution — that table knows nothing about
+-- hardware, and this one nothing about AI accounts. Rows hang off the config
+-- rather than (organization, provider) so disconnecting an integration
+-- (soft-deleting its config) makes its inventory invisible to coverage
+-- queries, and reconnecting repopulates fresh with no stale-row merge
+-- questions. The sync never hard-deletes rows: devices absent from the
+-- latest fully completed snapshot are stamped missing_since instead (a
+-- laptop in a drawer isn't gone), so this table deliberately has no
+-- deleted_at — missing_since is its lifecycle column and config teardown
+-- cascades the rest.
+CREATE TABLE IF NOT EXISTS mdm_devices (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  device_integration_config_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  -- The MDM's own identifier for the device, unique within one config.
+  external_id TEXT NOT NULL,
+  -- Hardware serial number as reported by the MDM. Reserved join point for
+  -- device-level agent attestation: once the agent reports its hardware
+  -- serial, coverage can match on it instead of the per-user email join.
+  serial_number TEXT,
+  hostname TEXT,
+  os_name TEXT,
+  os_version TEXT,
+  -- Email of the device's assigned user exactly as the MDM reported it. May
+  -- be absent or fail to resolve to an org member; coverage surfaces those
+  -- as distinct buckets rather than silently mis-bucketing.
+  user_email TEXT,
+  -- The resolved org member for user_email, resolved at sync time via the
+  -- case-insensitive email lookups (same pattern as user_accounts.user_id
+  -- and directory_users.user_id). NULL when the MDM reported no email or it
+  -- doesn't resolve.
+  user_id TEXT,
+  -- Last device check-in as reported by the MDM (distinct from last_seen_at,
+  -- which is when *our* sync last observed the device in a snapshot).
+  mdm_last_check_in_at timestamptz,
+  -- Full vendor device record as returned by the MDM API. Lets future
+  -- normalized fields be a code change instead of a re-sync, and is the
+  -- debugging trail when a device looks wrong.
+  raw jsonb NOT NULL DEFAULT '{}'::jsonb,
+
+  first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  -- Set when the device was absent from the latest fully completed
+  -- snapshot — SETTING it happens only in the transaction that records the
+  -- completed snapshot, never by a partial pull. CLEARING it happens on
+  -- reappearance, by the per-page inventory upsert.
+  missing_since timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT mdm_devices_pkey PRIMARY KEY (id),
+  CONSTRAINT mdm_devices_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  -- Composite FK tenant-pins each device to its config's organization: the
+  -- denormalized organization_id cannot disagree with the config it hangs
+  -- off (two independent FKs would allow that).
+  CONSTRAINT mdm_devices_organization_id_device_integration_config_id_fkey FOREIGN KEY (organization_id, device_integration_config_id) REFERENCES device_integration_configs (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT mdm_devices_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
+);
+
+-- Upsert key for inventory reconciliation; the leading config_id column also
+-- backs the config FK's ON DELETE CASCADE.
+CREATE UNIQUE INDEX IF NOT EXISTS mdm_devices_config_id_external_id_key
+ON mdm_devices (device_integration_config_id, external_id);
+
+-- Serves org-scoped coverage lookups by resolved member; the leading
+-- organization_id column also backs the org FK's ON DELETE CASCADE.
+CREATE INDEX IF NOT EXISTS mdm_devices_organization_id_user_id_idx
+ON mdm_devices (organization_id, user_id);
+
+-- Serves the coverage join's email fallback against present devices
+-- (missing devices are excluded from coverage). Pairs with
+-- device_agent_syncs_organization_id_lower_email_idx on the agent side.
+CREATE INDEX IF NOT EXISTS mdm_devices_organization_id_lower_user_email_idx
+ON mdm_devices (organization_id, LOWER(user_email))
+WHERE missing_since IS NULL;
+
+-- Backs the user FK's ON DELETE SET NULL, which must match every row for
+-- the user across orgs; the composite org-scoped index above cannot serve
+-- it.
+CREATE INDEX IF NOT EXISTS mdm_devices_user_id_idx
+ON mdm_devices (user_id)
+WHERE user_id IS NOT NULL;

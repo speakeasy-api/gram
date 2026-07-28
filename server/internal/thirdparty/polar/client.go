@@ -188,8 +188,12 @@ func (p *Client) InvalidateBillingCustomerCaches(ctx context.Context, orgID stri
 }
 
 func (p *Client) TrackModelUsage(ctx context.Context, event billing.ModelUsageEvent) {
-	// For now, don't bill customers on "Gram" usage. Gram source means it is internal to the platform and not customer usage.
-	if event.Source == billing.ModelUsageSourceGram {
+	// For now, don't bill customers on "Gram" usage. Gram source means it is
+	// internal to the platform and not customer usage. Risk-analysis inference
+	// carried the gram tag before it got its own source, so it inherits the
+	// same exemption. Skill-efficacy scoring is also platform-funded internal
+	// inference. Pro-plan customers are never metered for these sources.
+	if !isPolarMeteredModelUsage(event.Source) {
 		return
 	}
 
@@ -259,6 +263,10 @@ func (p *Client) TrackModelUsage(ctx context.Context, event billing.ModelUsageEv
 		span.SetStatus(codes.Error, err.Error())
 		p.logger.ErrorContext(ctx, "failed to ingest model usage event to Polar", attr.SlogError(err))
 	}
+}
+
+func isPolarMeteredModelUsage(source billing.ModelUsageSource) bool {
+	return source != billing.ModelUsageSourceGram && source != billing.ModelUsageSourceRiskAnalysis && source != billing.ModelUsageSourceSkillEfficacy && source != billing.ModelUsageSourceChatAnalysis
 }
 
 func (p *Client) TrackToolCallUsage(ctx context.Context, event billing.ToolCallUsageEvent) {

@@ -45,8 +45,11 @@ type OpenRouterCreditsMetric struct {
 	OrganizationID   string
 	OrganizationSlug string
 	AccountType      string
-	CreditsUsed      float64
-	CreditLimit      int64
+	// KeyType distinguishes the chat and internal key series; without it the
+	// two rows per org would overwrite each other's gauges.
+	KeyType     string
+	CreditsUsed float64
+	CreditLimit int64
 }
 
 type CollectOpenRouterCreditsMetricsArgs struct {
@@ -89,7 +92,7 @@ func (c *CollectOpenRouterCreditsMetrics) Do(ctx context.Context, args CollectOp
 			// write is swallowed for the same reason GetKeyUsage failures are
 			// — one bad org should not blank the batch — and we fall back to
 			// the cached DB value for this tick.
-			effectiveLimit, err := c.openRouter.ReconcileMonthlyCredits(gctx, row.OrganizationID, row.MonthlyCredits, upstreamLimit)
+			effectiveLimit, err := c.openRouter.ReconcileMonthlyCredits(gctx, row.OrganizationID, openrouter.KeyType(row.KeyType), row.MonthlyCredits, upstreamLimit)
 			if err != nil {
 				c.logger.ErrorContext(gctx, "reconcile openrouter monthly credits",
 					attr.SlogOrganizationID(row.OrganizationID),
@@ -103,6 +106,7 @@ func (c *CollectOpenRouterCreditsMetrics) Do(ctx context.Context, args CollectOp
 				OrganizationID:   row.OrganizationID,
 				OrganizationSlug: row.OrganizationSlug,
 				AccountType:      row.GramAccountType,
+				KeyType:          row.KeyType,
 				CreditsUsed:      used,
 				CreditLimit:      effectiveLimit,
 			}
@@ -167,6 +171,7 @@ func (f *FireOpenRouterCreditsMetrics) Do(ctx context.Context, metrics []OpenRou
 			attr.OrganizationID(m.OrganizationID),
 			attr.OrganizationSlug(m.OrganizationSlug),
 			attr.OrganizationAccountType(m.AccountType),
+			attr.OpenRouterKeyType(m.KeyType),
 		)
 
 		if f.creditsRemaining != nil {

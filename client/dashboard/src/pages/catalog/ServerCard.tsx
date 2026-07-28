@@ -5,7 +5,6 @@ import {
 import { DotCard } from "@/components/ui/dot-card";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
-import type { DeploymentExternalMCP } from "@gram/client/models/components";
 import { Badge, Button } from "@speakeasy-api/moonshine";
 import { ArrowRight, Check } from "lucide-react";
 import { Link } from "react-router";
@@ -15,7 +14,8 @@ import { ManualSetupBadge } from "./ManualSetupBadge";
 interface ServerCardProps {
   server: PulseMCPServer;
   detailHref: string;
-  externalMcps: DeploymentExternalMCP[];
+  /** Whether this catalog server is already installed in the project. */
+  isAdded: boolean;
   isSelected?: boolean;
   onToggleSelect?: () => void;
 }
@@ -32,7 +32,7 @@ interface ServerCardProps {
 export function ServerCard({
   server,
   detailHref,
-  externalMcps,
+  isAdded,
   isSelected,
   onToggleSelect,
 }: ServerCardProps): JSX.Element {
@@ -41,11 +41,6 @@ export function ServerCard({
   const isSpeakeasyServer = server.registrySpecifier.startsWith(
     "com.pulsemcp.mirror/gram",
   );
-
-  const existingMcp = externalMcps.find(
-    (mcp) => mcp.registryServerSpecifier === server.registrySpecifier,
-  );
-  const isAdded = !!existingMcp;
 
   // The catalog list carries a precomputed tool count, not the tool defs.
   const toolCount = server.toolCount;

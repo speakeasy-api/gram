@@ -18,6 +18,9 @@ export type UseIssuerDiscoveryInitial = {
   responseTypesSupported: string[];
   tokenEndpointAuthMethodsSupported: string[];
   clientIdMetadataDocumentSupported: boolean;
+  serviceDocumentation: string;
+  opPolicyUri: string;
+  opTosUri: string;
 } | null;
 
 // Options controlling how `initial` seeds the hook.
@@ -74,6 +77,9 @@ function useIssuerDiscoveryImpl(
               initial.tokenEndpointAuthMethodsSupported,
             clientIdMetadataDocumentSupported:
               initial.clientIdMetadataDocumentSupported,
+            serviceDocumentation: initial.serviceDocumentation,
+            opPolicyUri: initial.opPolicyUri,
+            opTosUri: initial.opTosUri,
           }
         : null,
     );
@@ -97,6 +103,9 @@ function useIssuerDiscoveryImpl(
           draft.tokenEndpointAuthMethodsSupported ?? [],
         clientIdMetadataDocumentSupported:
           draft.clientIdMetadataDocumentSupported,
+        serviceDocumentation: draft.serviceDocumentation ?? "",
+        opPolicyUri: draft.opPolicyUri ?? "",
+        opTosUri: draft.opTosUri ?? "",
       };
     },
     onSuccess: (snapshot) => {

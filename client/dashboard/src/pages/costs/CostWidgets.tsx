@@ -1,7 +1,9 @@
-import type { Dimension } from "@gram/client/models/components";
-import type { Measures } from "./taxonomy";
+import { formatCost } from "@/lib/money";
+import type { Dimension } from "@gram/client/models/components/queryfilter.js";
+import { formatWorkUnits, type Measures, unsetLabel } from "./taxonomy";
 import { Sparkline } from "./Sparkline";
 import { movingAverage, resample, smoothPath } from "./sparkline-math";
+import { EstimatedCostIndicator } from "@/components/estimated-cost";
 
 const BRAND = "#6366f1"; // indigo-500 — neutral headline accent
 const NEUTRAL = "#64748b"; // slate-500 — KPI sparklines
@@ -48,13 +50,6 @@ const MIX_SKELETON_ROWS = [
   { label: 30, bar: 40 },
   { label: 38, bar: 28 },
 ];
-
-function formatCost(value: number): string {
-  return `$${value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
 
 function formatCompact(value: number): string {
   return value.toLocaleString(undefined, {
@@ -124,7 +119,7 @@ function Card({
   range,
   children,
 }: {
-  title: string;
+  title: React.ReactNode;
   // Optional muted date-range suffix, e.g. "Total cost (June 15–19)".
   range?: string;
   children: React.ReactNode;
@@ -150,27 +145,34 @@ function TrendCard({
   prevTotal,
   range,
   loading,
+  billingMode,
 }: {
   values: number[];
   total: number;
   prevTotal: number;
   range: string;
   loading: boolean;
+  billingMode?: string;
 }): JSX.Element {
   const delta = relDelta(total, prevTotal);
   let deltaColor: string | undefined;
   if (delta !== null && Math.abs(delta) >= 1)
     deltaColor = delta > 0 ? UP : DOWN;
+  const title = (
+    <>
+      Total cost <EstimatedCostIndicator billingMode={billingMode} />
+    </>
+  );
   if (loading) {
     return (
-      <Card title="Total cost" range={range}>
+      <Card title={title} range={range}>
         <Skeleton className="mt-1 h-8 w-28" />
         <Skeleton className="mt-3 h-20 w-full" />
       </Card>
     );
   }
   return (
-    <Card title="Total cost" range={range}>
+    <Card title={title} range={range}>
       <div className="mt-1 flex items-baseline gap-2">
         <span className="text-2xl font-semibold tabular-nums">
           {formatCost(total)}
@@ -197,12 +199,16 @@ type MixRow = { label: string; cost: number };
 // hover) when `onSelect` is supplied, so the user can drill straight into it.
 function MixRowItem({
   label,
+  sublabel,
+  clampTitle,
   cost,
   barPct,
   barColor,
   onSelect,
 }: {
   label: string;
+  sublabel?: string;
+  clampTitle?: boolean;
   cost: number;
   barPct: number;
   barColor: string;
@@ -210,9 +216,22 @@ function MixRowItem({
 }): JSX.Element {
   const inner = (
     <>
-      <div className="flex items-center justify-between gap-2 text-sm">
-        <span className="truncate">{label || "(unset)"}</span>
-        <span className="text-muted-foreground tabular-nums">
+      <div className="flex items-start justify-between gap-2 text-sm">
+        <span className="min-w-0">
+          <span
+            className={
+              clampTitle ? "line-clamp-2 text-[13px]" : "block truncate"
+            }
+          >
+            {label || "(unset)"}
+          </span>
+          {sublabel ? (
+            <span className="text-muted-foreground block truncate text-xs">
+              {sublabel}
+            </span>
+          ) : null}
+        </span>
+        <span className="text-muted-foreground shrink-0 tabular-nums">
           {formatCost(cost)}
         </span>
       </div>
@@ -302,7 +321,7 @@ function MixCard({
             return (
               <MixRowItem
                 key={r.label}
-                label={r.label}
+                label={r.label === "" ? unsetLabel(dim) : r.label}
                 cost={r.cost}
                 barPct={(r.cost / max) * 100}
                 barColor={gradeColor(t)}
@@ -347,6 +366,8 @@ function SessionsCard({
               <MixRowItem
                 key={r.id}
                 label={r.label}
+                sublabel={r.sublabel}
+                clampTitle
                 cost={r.cost}
                 barPct={(r.cost / max) * 100}
                 barColor={gradeColor(t)}
@@ -375,28 +396,28 @@ function KpiTile({
   range: string;
   loading: boolean;
 }): JSX.Element {
+  // Shares the Card shell with the row above rather than a squatter box of its
+  // own, so the two rows read as one family: same padding, same title, same
+  // value size, with the sparkline sized to fill the tile instead of tucking
+  // into a corner.
   return (
-    <div className="border-border rounded-lg border p-3">
-      <div className="text-muted-foreground text-xs">
-        {label}
-        <span className="text-muted-foreground/60 ml-1">{range}</span>
-      </div>
+    <Card title={label} range={range}>
       {loading ? (
-        <Skeleton className="mt-2 h-6 w-16" />
+        <Skeleton className="mt-3 h-8 w-20" />
       ) : (
-        <>
-          <div className="mt-1 flex items-end justify-between gap-2">
-            <span className="text-lg font-semibold tabular-nums">{value}</span>
-            <Sparkline values={series} width={64} height={20} color={NEUTRAL} />
+        <div className="mt-3 flex items-end justify-between gap-3">
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-semibold tabular-nums">{value}</span>
+            {delta !== null && (
+              <span className="text-muted-foreground text-xs font-medium tabular-nums">
+                {formatDelta(delta)}
+              </span>
+            )}
           </div>
-          {delta !== null && (
-            <div className="text-muted-foreground mt-1 text-xs tabular-nums">
-              {formatDelta(delta)}
-            </div>
-          )}
-        </>
+          <Sparkline values={series} width={96} height={36} color={NEUTRAL} />
+        </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -405,6 +426,9 @@ export type WidgetSeries = {
   chats: number[];
   tools: number[];
   tokens: number[];
+  cacheCreation: number[];
+  workUnits: number[];
+  scoredCost: number[];
 };
 
 // A single big-number stat (e.g. cost per session).
@@ -453,7 +477,12 @@ type StatCardSpec = {
   caption?: string;
   loading: boolean;
 };
-type SessionRow = { id: string; label: string; cost: number };
+type SessionRow = {
+  id: string;
+  label: string;
+  sublabel?: string;
+  cost: number;
+};
 type SessionsCardSpec = {
   kind: "sessions";
   title: string;
@@ -506,15 +535,25 @@ function CardItem({
   }
 }
 
+// Cost of the slice's scored sessions per work unit delivered; null (rendered
+// "—") until the slice has any scored work. Uses scoredCost — not the full
+// total — so partial analysis coverage can't overstate the ratio (see Measures).
+function costPerUnit(m: Measures): number | null {
+  return m.workUnits > 0 ? m.scoredCost / m.workUnits : null;
+}
+
 export function CostWidgets({
   series,
   totals,
   prevTotals,
   cards,
   rangeLabel,
+  cacheMetric,
+  efficiency,
   onDrill,
   onOpenSession,
   loading,
+  billingMode,
 }: {
   series: WidgetSeries;
   totals: Measures;
@@ -523,13 +562,97 @@ export function CostWidgets({
   cards: CardSpec[];
   // Human date-range label shown beside the headline metric titles.
   rangeLabel: string;
+  // Attribution lens: swap the "Tool calls" KPI tile for "Tokens added".
+  cacheMetric?: boolean;
+  // Efficiency lens: swap the "Tool calls"/"Tokens" KPI tiles for the
+  // work-units pair (work units delivered, cost per unit).
+  efficiency?: boolean;
   // Drill into a mix-card row by its (dimension, value).
   onDrill?: (dim: Dimension, value: string) => void;
   // Open a session's detail from the "Most costly sessions" widget.
   onOpenSession?: (id: string) => void;
   // True while the main slice is still loading (trend + KPI skeletons).
   loading: boolean;
+  // The view's resolved billing mode; "metered" hides the cost-estimate caveat.
+  billingMode?: string;
 }): JSX.Element {
+  // The KPI row's second and third tiles, by lens: work-units pair on the
+  // efficiency lens, cache tokens on attribution cuts, tool calls otherwise.
+  function trailingKpiTiles(): JSX.Element {
+    if (efficiency) {
+      const unitCost = costPerUnit(totals);
+      const prevUnitCost = costPerUnit(prevTotals);
+      // Per-bucket ratio for the sparkline; buckets with no scored work chart
+      // as 0 rather than inheriting a stale ratio.
+      const unitCostSeries = series.workUnits.map((units, i) =>
+        units > 0 ? (series.scoredCost[i] ?? 0) / units : 0,
+      );
+      return (
+        <>
+          <KpiTile
+            label="Work delivered"
+            value={formatWorkUnits(totals.workUnits)}
+            series={series.workUnits}
+            delta={relDelta(totals.workUnits, prevTotals.workUnits)}
+            range={rangeLabel}
+            loading={loading}
+          />
+          <KpiTile
+            label="Cost efficiency"
+            value={unitCost !== null ? formatCost(unitCost) : "—"}
+            series={unitCostSeries}
+            delta={
+              unitCost !== null ? relDelta(unitCost, prevUnitCost ?? 0) : null
+            }
+            range={rangeLabel}
+            loading={loading}
+          />
+        </>
+      );
+    }
+    if (cacheMetric) {
+      return (
+        <>
+          <KpiTile
+            label="Tokens added"
+            value={formatCompact(totals.cacheCreation)}
+            series={series.cacheCreation}
+            delta={relDelta(totals.cacheCreation, prevTotals.cacheCreation)}
+            range={rangeLabel}
+            loading={loading}
+          />
+          <KpiTile
+            label="Tokens"
+            value={formatCompact(totals.tokens)}
+            series={series.tokens}
+            delta={relDelta(totals.tokens, prevTotals.tokens)}
+            range={rangeLabel}
+            loading={loading}
+          />
+        </>
+      );
+    }
+    return (
+      <>
+        <KpiTile
+          label="Tool calls"
+          value={formatCompact(totals.tools)}
+          series={series.tools}
+          delta={relDelta(totals.tools, prevTotals.tools)}
+          range={rangeLabel}
+          loading={loading}
+        />
+        <KpiTile
+          label="Tokens"
+          value={formatCompact(totals.tokens)}
+          series={series.tokens}
+          delta={relDelta(totals.tokens, prevTotals.tokens)}
+          range={rangeLabel}
+          loading={loading}
+        />
+      </>
+    );
+  }
   return (
     <div className="flex flex-col gap-4">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -539,6 +662,7 @@ export function CostWidgets({
           prevTotal={prevTotals.cost}
           range={rangeLabel}
           loading={loading}
+          billingMode={billingMode}
         />
         {cards.map((c) => (
           <CardItem
@@ -558,22 +682,7 @@ export function CostWidgets({
           range={rangeLabel}
           loading={loading}
         />
-        <KpiTile
-          label="Tool calls"
-          value={formatCompact(totals.tools)}
-          series={series.tools}
-          delta={relDelta(totals.tools, prevTotals.tools)}
-          range={rangeLabel}
-          loading={loading}
-        />
-        <KpiTile
-          label="Tokens"
-          value={formatCompact(totals.tokens)}
-          series={series.tokens}
-          delta={relDelta(totals.tokens, prevTotals.tokens)}
-          range={rangeLabel}
-          loading={loading}
-        />
+        {trailingKpiTiles()}
       </div>
     </div>
   );

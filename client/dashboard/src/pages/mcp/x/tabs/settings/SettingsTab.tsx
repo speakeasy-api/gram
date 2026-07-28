@@ -1,12 +1,14 @@
-import type { McpEndpoint, McpServer } from "@gram/client/models/components";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useEffect } from "react";
 import { useLocation } from "react-router";
 import {
-  AuthenticationSection,
   MCP_AUTHENTICATION_SECTION_ID,
+  AuthenticationSection,
 } from "./sections/authentication/AuthenticationSection";
 import { BrandingSection } from "./sections/BrandingSection";
 import { DangerZoneSection } from "./sections/DangerZoneSection";
+import { HeadersSection } from "./sections/HeadersSection";
 import { PublishingSection } from "./sections/PublishingSection";
 import {
   MCP_SERVER_URL_SECTION_ID,
@@ -56,6 +58,12 @@ export function SettingsTab({
         isLoadingEndpoints={isLoadingEndpoints}
       />
       <AuthenticationSection mcpServer={mcpServer} />
+      {mcpServer.remoteMcpServerId ? (
+        <HeadersSection
+          remoteMcpServerId={mcpServer.remoteMcpServerId}
+          context={{ kind: "mcp-server" }}
+        />
+      ) : null}
       <ToolFilteringSection mcpServer={mcpServer} />
       <PublishingSection mcpServer={mcpServer} endpoints={endpoints} />
       <DangerZoneSection mcpServer={mcpServer} endpoints={endpoints} />

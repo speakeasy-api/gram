@@ -1,6 +1,6 @@
 import { useRBAC } from "@/hooks/useRBAC";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
-import { useGramContext } from "@gram/client/react-query";
+import { useGramContext } from "@gram/client/react-query/_context.js";
 import {
   buildListAPIKeysQuery,
   invalidateListAPIKeys,

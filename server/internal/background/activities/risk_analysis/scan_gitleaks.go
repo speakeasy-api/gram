@@ -9,20 +9,17 @@ import (
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
-func (a *AnalyzeBatch) scanGitleaks(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage, contents []string) ([][]Finding, error) {
+func (a *AnalyzeBatch) scanGitleaks(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage, contents []string) ([][]scanners.Finding, error) {
 	a.publishGitleaksScanRequests(ctx, args, requestID, messages)
 
-	results, err := a.scanner.ScanBatchParallel(contents)
+	findings, err := a.gitleaksScanner.ScanBatch(ctx, contents)
 	if err != nil {
-		return [][]Finding{}, fmt.Errorf("scan batch parallel: %w", err)
+		return [][]scanners.Finding{}, fmt.Errorf("scan gitleaks batch: %w", err)
 	}
 
-	findings := make([][]Finding, len(results))
-	for i, detections := range results {
-		findings[i] = fromDetections(detections)
-	}
 	return findings, nil
 }
 

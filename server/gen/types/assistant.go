@@ -23,6 +23,10 @@ type Assistant struct {
 	Instructions string
 	// Toolsets available to the assistant.
 	Toolsets []*AssistantToolsetRef
+	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	McpServers []*AssistantMCPServerRef
+	// Skills attached to the assistant.
+	Skills []*AssistantSkillRef
 	// Warm runtime TTL in seconds.
 	WarmTTLSeconds int
 	// Maximum active warm runtimes for the assistant.

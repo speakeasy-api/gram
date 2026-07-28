@@ -1,0 +1,32 @@
+# ExternalMCPServer
+
+An MCP server from an external registry
+
+## Example Usage
+
+```typescript
+import { ExternalMCPServer } from "@gram/client/models/components/externalmcpserver.js";
+
+let value: ExternalMCPServer = {
+  description: "yahoo lest joshingly forgery",
+  registrySpecifier: "io.modelcontextprotocol.anonymous/exa",
+  version: "1.0.0",
+};
+```
+
+## Fields
+
+| Field                                 | Type                                                                           | Required           | Description                                                                                               | Example                               |
+| ------------------------------------- | ------------------------------------------------------------------------------ | ------------------ | --------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| `description`                         | _string_                                                                       | :heavy_check_mark: | Description of what the server does                                                                       |                                       |
+| `iconUrl`                             | _string_                                                                       | :heavy_minus_sign: | URL to the server's icon                                                                                  |                                       |
+| `mcpServerId`                         | _string_                                                                       | :heavy_minus_sign: | ID of the attached MCP server when this server is listed from a Collection (mcp_server-backed attachment) |                                       |
+| `meta`                                | _any_                                                                          | :heavy_minus_sign: | Opaque metadata from the registry                                                                         |                                       |
+| `organizationMcpCollectionRegistryId` | _string_                                                                       | :heavy_minus_sign: | ID of the internal collection registry this server came from                                              |                                       |
+| `registryId`                          | _string_                                                                       | :heavy_minus_sign: | ID of the external MCP registry this server came from                                                     |                                       |
+| `registrySpecifier`                   | _string_                                                                       | :heavy_check_mark: | Server specifier used to look up in the registry (e.g., 'io.github.user/server')                          | io.modelcontextprotocol.anonymous/exa |
+| `remotes`                             | [components.ExternalMCPRemote](../../models/components/externalmcpremote.md)[] | :heavy_minus_sign: | Available remote endpoints for the server                                                                 |                                       |
+| `title`                               | _string_                                                                       | :heavy_minus_sign: | Display name for the server                                                                               |                                       |
+| `tools`                               | [components.ExternalMCPTool](../../models/components/externalmcptool.md)[]     | :heavy_minus_sign: | Tools available on the server                                                                             |                                       |
+| `toolsetId`                           | _string_                                                                       | :heavy_minus_sign: | ID of the attached toolset when this server is listed from a Collection (toolset-backed attachment)       |                                       |
+| `version`                             | _string_                                                                       | :heavy_check_mark: | Semantic version of the server                                                                            | 1.0.0                                 |

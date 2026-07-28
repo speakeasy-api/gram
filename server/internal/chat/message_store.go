@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -49,11 +50,40 @@ func (w *ChatMessageWriter) AddObserver(obs MessageObserver) {
 	w.observers = append(w.observers, obs)
 }
 
-// Write inserts messages via the pool and notifies observers on success.
-func (w *ChatMessageWriter) Write(ctx context.Context, projectID uuid.UUID, params []repo.CreateChatMessageParams) (int64, error) {
-	n, err := repo.New(w.db).CreateChatMessage(ctx, params)
+// stampUnsetCreatedAt fills rows that carry no explicit created_at with one
+// shared write-time value. Sharing a single timestamp per batch makes rows
+// tie on created_at so seq (insertion order) decides — exactly the pre-DNO-536
+// ordering for playground/assistant writers, whose rows may have been
+// CONSTRUCTED out of order relative to their intended position. Hook ingest
+// sets created_at explicitly to the event's occurred_at and is left alone.
+func stampUnsetCreatedAt(params []repo.CreateChatMessageParams) {
+	now := conv.ToPGTimestamptz(time.Now())
+	for i := range params {
+		if !params[i].CreatedAt.Valid {
+			params[i].CreatedAt = now
+		}
+	}
+}
+
+// insertChatMessages is the single chokepoint between CreateChatMessageParams
+// and the copyfrom insert. created_at is in the COPY column list, so the DB
+// default can never apply — an unstamped row would insert NULL into a NOT
+// NULL column and fail the whole batch. Every insert routes through here so
+// no call site can forget the stamp.
+func insertChatMessages(ctx context.Context, db repo.DBTX, params []repo.CreateChatMessageParams) (int64, error) {
+	stampUnsetCreatedAt(params)
+	n, err := repo.New(db).CreateChatMessage(ctx, params)
 	if err != nil {
 		return 0, fmt.Errorf("create chat messages: %w", err)
+	}
+	return n, nil
+}
+
+// Write inserts messages via the pool and notifies observers on success.
+func (w *ChatMessageWriter) Write(ctx context.Context, projectID uuid.UUID, params []repo.CreateChatMessageParams) (int64, error) {
+	n, err := insertChatMessages(ctx, w.db, params)
+	if err != nil {
+		return 0, err
 	}
 	if n > 0 {
 		w.notifyMessagesStored(ctx, projectID)
@@ -85,11 +115,7 @@ func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UU
 // atomic with surrounding DB operations (e.g. a row-level lock for generation
 // serialisation).
 func (w *ChatMessageWriter) WriteInTx(ctx context.Context, tx repo.DBTX, params []repo.CreateChatMessageParams) (int64, error) {
-	n, err := repo.New(tx).CreateChatMessage(ctx, params)
-	if err != nil {
-		return 0, fmt.Errorf("create chat messages: %w", err)
-	}
-	return n, nil
+	return insertChatMessages(ctx, tx, params)
 }
 
 // NotifyStored fans out a stored-messages signal to registered observers.
@@ -118,7 +144,7 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 		return fmt.Errorf("store pending chat messages: %w", err)
 	}
 
-	n, err := repo.New(tx).CreateChatMessage(ctx, assistants)
+	n, err := insertChatMessages(ctx, tx, assistants)
 	if err != nil {
 		return fmt.Errorf("store assistant chat messages: %w", err)
 	}

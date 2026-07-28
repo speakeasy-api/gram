@@ -1,6 +1,6 @@
 #!/usr/bin/env -S node
 
-//MISE description="Setup Gram Functions to use Fly.io during development."
+//MISE description="Setup Gram Functions to use Fly.io during development. Assistant runtimes run locally and need no Fly.io setup."
 //MISE dir="{{ config_root }}"
 //USAGE flag "--restart" default="false" help="Force the onboarding even if configuration already exists."
 
@@ -49,11 +49,9 @@ function isExistingConfigComplete(): boolean {
   const content = readFileSync(configPath, "utf-8");
   const functionsProvider = configValue(content, "GRAM_FUNCTIONS_PROVIDER");
 
-  // Skip was chosen previously — local provider with assistant runtime placeholders
+  // Skip was chosen previously — local functions provider needs nothing else.
   if (functionsProvider === "local") {
-    return (
-      configValue(content, "GRAM_ASSISTANT_RUNTIME_PROVIDER") !== undefined
-    );
+    return true;
   }
 
   const requiredKeys = [
@@ -63,11 +61,6 @@ function isExistingConfigComplete(): boolean {
     "GRAM_FUNCTIONS_RUNNER_OCI_IMAGE",
     "GRAM_FUNCTIONS_RUNNER_VERSION",
     "GRAM_FUNCTIONS_FLYIO_REGION",
-    "GRAM_ASSISTANT_RUNTIME_PROVIDER",
-    "GRAM_ASSISTANT_RUNTIME_FLYIO_API_TOKEN",
-    "GRAM_ASSISTANT_RUNTIME_FLYIO_ORG",
-    "GRAM_ASSISTANT_RUNTIME_FLYIO_REGION",
-    "GRAM_ASSISTANT_RUNTIME_OCI_IMAGE",
     "GRAM_FUNCTIONS_TIGRIS_BUCKET_URI",
     "GRAM_FUNCTIONS_TIGRIS_KEY",
     "GRAM_FUNCTIONS_TIGRIS_SECRET",
@@ -77,10 +70,7 @@ function isExistingConfigComplete(): boolean {
     return false;
   }
 
-  return (
-    configValue(content, "GRAM_FUNCTIONS_PROVIDER") === "flyio" &&
-    configValue(content, "GRAM_ASSISTANT_RUNTIME_PROVIDER") === "flyio"
-  );
+  return configValue(content, "GRAM_FUNCTIONS_PROVIDER") === "flyio";
 }
 
 function getExisting(...keys: string[]): string | undefined {
@@ -106,14 +96,9 @@ async function saveConfigs(values: Record<string, string>): Promise<void> {
 async function fallbackToMockFlyio() {
   await saveConfigs({
     GRAM_FUNCTIONS_PROVIDER: "local",
-    GRAM_ASSISTANT_RUNTIME_PROVIDER: "flyio",
-    GRAM_ASSISTANT_RUNTIME_FLYIO_ORG: "TODO",
-    GRAM_ASSISTANT_RUNTIME_FLYIO_API_TOKEN: "TODO",
-    GRAM_ASSISTANT_RUNTIME_FLYIO_REGION: "us",
-    GRAM_ASSISTANT_RUNTIME_OCI_IMAGE: "gram-assistant-runtime",
   });
   outro(
-    "Defaulted Gram Functions to the local provider and wrote TODO assistant runtime Fly.io placeholders. To configure real Fly.io credentials later, run `mise run zero:fly --restart`.",
+    "Defaulted Gram Functions to the local provider. Assistant runtimes run locally by default and need no Fly.io setup. To configure real Fly.io credentials later, run `mise run zero:fly --restart`.",
   );
   process.exit(0);
 }
@@ -474,7 +459,7 @@ async function run() {
 
   note(
     `
-To deploy Gram Functions and assistant runtimes to Fly.io, you'll need:
+To deploy Gram Functions to Fly.io, you'll need:
     - A Fly.io account
     - A Fly.io organization-scoped token
     - A Fly.io app namespace for runner images
@@ -498,14 +483,8 @@ To deploy Gram Functions and assistant runtimes to Fly.io, you'll need:
   }
 
   const s = spinner();
-  const existingToken = getExisting(
-    "GRAM_FUNCTIONS_FLYIO_API_TOKEN",
-    "GRAM_ASSISTANT_RUNTIME_FLYIO_API_TOKEN",
-  );
-  const existingOrg = getExisting(
-    "GRAM_FUNCTIONS_FLYIO_ORG",
-    "GRAM_ASSISTANT_RUNTIME_FLYIO_ORG",
-  );
+  const existingToken = getExisting("GRAM_FUNCTIONS_FLYIO_API_TOKEN");
+  const existingOrg = getExisting("GRAM_FUNCTIONS_FLYIO_ORG");
 
   let token: string;
   let org: string;
@@ -530,7 +509,6 @@ To deploy Gram Functions and assistant runtimes to Fly.io, you'll need:
 
   const initialApp =
     registryAppName(getExisting("GRAM_FUNCTIONS_RUNNER_OCI_IMAGE")) ??
-    registryAppName(getExisting("GRAM_ASSISTANT_RUNTIME_OCI_IMAGE")) ??
     randomAppName();
   const app = await text({
     message:
@@ -558,18 +536,13 @@ To deploy Gram Functions and assistant runtimes to Fly.io, you'll need:
     GRAM_FUNCTIONS_RUNNER_OCI_IMAGE: `registry.fly.io/${app}`,
     GRAM_FUNCTIONS_RUNNER_VERSION: "main",
     GRAM_FUNCTIONS_FLYIO_REGION: "us",
-    GRAM_ASSISTANT_RUNTIME_PROVIDER: "flyio",
-    GRAM_ASSISTANT_RUNTIME_FLYIO_ORG: org,
-    GRAM_ASSISTANT_RUNTIME_FLYIO_API_TOKEN: token,
-    GRAM_ASSISTANT_RUNTIME_FLYIO_REGION: "us",
-    GRAM_ASSISTANT_RUNTIME_OCI_IMAGE: `registry.fly.io/${app}`,
     GRAM_FUNCTIONS_TIGRIS_BUCKET_URI: `s3://${bucket}`,
     GRAM_FUNCTIONS_TIGRIS_KEY: tigrisKey,
     GRAM_FUNCTIONS_TIGRIS_SECRET: tigrisSecret,
   });
 
   outro(
-    "Updated mise.local.toml. You're ready to deploy Gram Functions and assistant runtimes to Fly.io.",
+    "Updated mise.local.toml. You're ready to deploy Gram Functions to Fly.io.",
   );
 }
 

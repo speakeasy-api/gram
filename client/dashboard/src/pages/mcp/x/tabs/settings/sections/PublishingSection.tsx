@@ -2,9 +2,10 @@ import { RequireScope } from "@/components/require-scope";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Type } from "@/components/ui/type";
 import { usePublishing } from "@/pages/mcp/usePublishing";
-import type { McpEndpoint, McpServer } from "@gram/client/models/components";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { Button, Stack } from "@speakeasy-api/moonshine";
-import { FooterSaveButtonContent, SettingsSection } from "../SettingsSection";
+import { FooterSaveButton, SettingsSection } from "../SettingsSection";
 
 export function PublishingSection({
   mcpServer,
@@ -117,14 +118,11 @@ export function PublishingSection({
                 >
                   <Button.Text>Discard</Button.Text>
                 </Button>
-                <Button
-                  variant="primary"
-                  size="md"
+                <FooterSaveButton
+                  pending={isSaving}
                   disabled={isSaving}
                   onClick={() => void handleSave()}
-                >
-                  <FooterSaveButtonContent pending={isSaving} />
-                </Button>
+                />
               </SettingsSection.FooterActions>
             )}
           </SettingsSection.Footer>

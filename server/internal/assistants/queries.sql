@@ -64,6 +64,14 @@ WHERE t.id = @thread_id
   AND t.deleted IS FALSE
   AND a.deleted IS FALSE;
 
+-- name: InitThreadSkillSnapshot :one
+UPDATE assistant_threads
+SET skill_set_snapshot = COALESCE(skill_set_snapshot, @candidate::jsonb)
+WHERE id = @thread_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING skill_set_snapshot;
+
 -- name: ResolveThreadCorrelation :one
 SELECT id, project_id, assistant_id, correlation_id
 FROM assistant_threads
@@ -126,6 +134,113 @@ WHERE at.assistant_id = ANY(@assistant_ids::UUID[])
   AND at.project_id = @project_id
 ORDER BY at.created_at;
 
+-- The active/resolvable predicates in LoadAssistantSkills and
+-- LoadAttachedAssistantSkill must stay identical.
+-- name: LoadAssistantSkills :many
+SELECT
+  sd.assistant_id,
+  sd.skill_id,
+  sd.pinned_version_id,
+  s.name,
+  resolved.id AS resolved_version_id,
+  resolved.description
+FROM skill_distributions sd
+JOIN assistants a
+  ON a.id = sd.assistant_id
+  AND a.project_id = sd.project_id
+  AND a.deleted IS FALSE
+JOIN skills s
+  ON s.id = sd.skill_id
+  AND s.project_id = sd.project_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.id, sv.description
+  FROM skill_versions sv
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE sd.assistant_id = ANY(@assistant_ids::uuid[])
+  AND sd.project_id = @project_id
+  AND sd.channel = 'assistant'
+  AND sd.plugin_id IS NULL
+  AND sd.assistant_id IS NOT NULL
+  AND sd.revoked_at IS NULL
+ORDER BY s.name ASC, s.id ASC;
+
+-- name: LoadAttachedAssistantSkill :one
+SELECT
+  s.id AS skill_id,
+  s.name,
+  resolved.id AS skill_version_id,
+  resolved.content,
+  resolved.canonical_sha256,
+  resolved.raw_sha256
+FROM skill_distributions sd
+JOIN assistants a
+  ON a.id = sd.assistant_id
+  AND a.project_id = sd.project_id
+  AND a.deleted IS FALSE
+JOIN skills s
+  ON s.id = sd.skill_id
+  AND s.project_id = sd.project_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.id, sv.content, sv.canonical_sha256, sv.raw_sha256
+  FROM skill_versions sv
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE sd.assistant_id = @assistant_id
+  AND sd.project_id = @project_id
+  AND sd.channel = 'assistant'
+  AND sd.plugin_id IS NULL
+  AND sd.assistant_id IS NOT NULL
+  AND sd.revoked_at IS NULL
+  AND s.name = @name;
+
+-- name: RecordAssistantSkillObservation :execrows
+WITH observed AS (
+  SELECT clock_timestamp() AS seen_at
+)
+INSERT INTO skill_observations (
+    project_id
+  , idempotency_key
+  , provider
+  , session_id
+  , skill_name
+  , raw_sha256
+  , seen_at
+  , skill_id
+  , skill_version_id
+  , reconciled_at
+)
+SELECT
+    s.project_id
+  , 'assistant:' || @session_id::text || ':' || sv.id::text
+  , 'assistant'
+  , @session_id::text
+  , s.name
+  , sv.raw_sha256
+  , observed.seen_at
+  , s.id
+  , sv.id
+  , observed.seen_at
+FROM skills s
+JOIN skill_versions sv
+  ON sv.skill_id = s.id
+  AND sv.id = @skill_version_id
+CROSS JOIN observed
+WHERE s.project_id = @project_id
+  AND s.id = @skill_id
+ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL
+DO NOTHING;
+
 -- name: ClearAssistantToolsets :exec
 DELETE FROM assistant_toolsets
 WHERE assistant_id = @assistant_id
@@ -158,6 +273,78 @@ WHERE id = ANY(@toolset_ids::UUID[])
   AND mcp_enabled IS FALSE
   AND mcp_slug IS NOT NULL
   AND deleted IS FALSE;
+
+-- name: LoadAssistantMcpServers :many
+-- Hydrates assistant_mcp_servers with the fronting mcp_servers row, its
+-- Gram-hosted endpoint slug (custom_domain_id IS NULL), and the bound
+-- environment. Soft-deleted servers are skipped so the runtime never targets a
+-- dead endpoint; a row whose server has no Gram-hosted endpoint yields a NULL
+-- endpoint_slug and is filtered out in Go. Visibility is returned rather than
+-- filtered here so API reads still show disabled attachments while the runtime
+-- resolver skips them. Mirrors LoadAssistantToolsets: one read supplies
+-- everything dispatch needs to build the MCP URL.
+SELECT
+  ams.assistant_id,
+  ams.mcp_server_id,
+  ms.slug AS server_slug,
+  ms.visibility,
+  COALESCE((
+    SELECT me.slug
+    FROM mcp_endpoints me
+    WHERE me.mcp_server_id = ms.id
+      AND me.custom_domain_id IS NULL
+      AND me.deleted IS FALSE
+    ORDER BY me.created_at
+    LIMIT 1
+  ), '')::text AS endpoint_slug,
+  ams.environment_id,
+  e.slug AS environment_slug
+FROM assistant_mcp_servers ams
+JOIN mcp_servers ms ON ms.id = ams.mcp_server_id AND ms.deleted IS FALSE
+LEFT JOIN environments e ON e.id = ams.environment_id
+WHERE ams.assistant_id = ANY(@assistant_ids::UUID[])
+  AND ams.project_id = @project_id
+ORDER BY ams.created_at;
+
+-- name: ResolveMcpServersForWrite :many
+-- Besides resolving slugs to ids, this returns everything attach-time
+-- validation needs to reject servers the assistant runtime cannot reach:
+-- the backend kind (tunnelled servers have no serving path), visibility,
+-- and whether a Gram-hosted endpoint exists to build the /mcp/{slug} URL.
+SELECT
+  ms.id,
+  ms.slug,
+  ms.visibility,
+  (ms.tunneled_mcp_server_id IS NOT NULL)::bool AS tunneled,
+  EXISTS (
+    SELECT 1
+    FROM mcp_endpoints me
+    WHERE me.mcp_server_id = ms.id
+      AND me.custom_domain_id IS NULL
+      AND me.deleted IS FALSE
+  ) AS has_gram_endpoint
+FROM mcp_servers ms
+WHERE ms.project_id = @project_id
+  AND ms.slug = ANY(@slugs::TEXT[])
+  AND ms.deleted IS FALSE;
+
+-- name: ClearAssistantMcpServers :exec
+DELETE FROM assistant_mcp_servers
+WHERE assistant_id = @assistant_id
+  AND project_id = @project_id;
+
+-- name: AddAssistantMcpServers :copyfrom
+INSERT INTO assistant_mcp_servers (
+  assistant_id,
+  mcp_server_id,
+  environment_id,
+  project_id
+) VALUES (
+  @assistant_id,
+  @mcp_server_id,
+  @environment_id,
+  @project_id
+);
 
 -- name: CreateAssistant :one
 INSERT INTO assistants (
@@ -255,6 +442,32 @@ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE id = @assistant_id
   AND project_id = @project_id
   AND deleted IS FALSE;
+
+-- name: RevokeSkillDistributionsByAssistant :many
+-- Returns pre-revocation state and skill identity for per-edge audit events.
+UPDATE skill_distributions sd
+SET revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM skill_distributions prev
+JOIN skills s ON s.id = prev.skill_id AND s.project_id = prev.project_id
+JOIN assistants a ON a.id = prev.assistant_id AND a.project_id = prev.project_id
+JOIN LATERAL (
+  SELECT sv.id
+  FROM skill_versions sv
+  WHERE sv.skill_id = prev.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (prev.pinned_version_id IS NULL OR sv.id = prev.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE prev.id = sd.id
+  AND sd.project_id = @project_id
+  AND sd.assistant_id = @assistant_id
+  AND sd.channel = 'assistant'
+  AND sd.plugin_id IS NULL
+  AND sd.revoked_at IS NULL
+RETURNING sd.*, prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id,
+  s.name AS skill_name, s.display_name AS skill_display_name, a.organization_id;
 
 -- name: UpsertAssistantChat :exec
 -- user_id is the conversation owner — stamped on first insert so reads can
@@ -361,12 +574,17 @@ WHERE project_id = @project_id
 -- thread is excluded too: it holds the VM warm but never occupies a
 -- runner slot, and counting it would block max_concurrency=1 assistants
 -- from admitting their first real turn until the window lapses.
+-- Client-driven setup/onboarding threads are excluded for the same reason:
+-- they carry no runtime events and never occupy a runner slot, so counting
+-- them would wrongly consume max_concurrency / warm headroom against real
+-- turns even though the setup chat runs entirely client-side.
 SELECT COUNT(*)::BIGINT AS active_threads
 FROM assistant_threads t
 WHERE t.project_id = @project_id
   AND t.assistant_id = @assistant_id
   AND t.deleted IS FALSE
   AND t.source_kind <> @warmup_source_kind
+  AND t.source_kind <> @setup_source_kind
   AND t.last_event_at > @active_since
   AND NOT EXISTS (
     SELECT 1
@@ -667,15 +885,19 @@ LIMIT 1;
 
 -- name: ClaimNextPendingEvent :one
 WITH next_event AS (
-  SELECT e.id
+  SELECT e.id, t.skill_set_snapshot
   FROM assistant_thread_events e
+  JOIN assistant_threads t
+    ON t.id = e.assistant_thread_id
+    AND t.project_id = e.project_id
   WHERE e.project_id = @project_id
     AND e.assistant_thread_id = @thread_id
     AND e.deleted IS FALSE
     AND e.status = @pending_status
+    AND t.deleted IS FALSE
   ORDER BY e.created_at ASC
   LIMIT 1
-  FOR UPDATE SKIP LOCKED
+  FOR UPDATE OF e SKIP LOCKED
 )
 UPDATE assistant_thread_events e
 SET
@@ -684,17 +906,38 @@ SET
   updated_at = clock_timestamp()
 FROM next_event
 WHERE e.id = next_event.id
-RETURNING e.id, e.assistant_thread_id, e.assistant_id, e.project_id, e.trigger_instance_id, e.event_id, e.correlation_id, e.status, e.normalized_payload_json, e.source_payload_json, e.attempts, e.last_error, e.created_at;
+  AND e.project_id = @project_id
+RETURNING e.id, e.assistant_thread_id, e.assistant_id, e.project_id, e.trigger_instance_id, e.event_id, e.correlation_id, e.status, e.normalized_payload_json, e.source_payload_json, e.attempts, e.last_error, e.created_at, next_event.skill_set_snapshot;
 
--- name: CompleteAssistantThreadEvent :exec
-UPDATE assistant_thread_events
-SET
-  status = @completed_status,
-  processed_at = clock_timestamp(),
-  last_error = NULL,
-  updated_at = clock_timestamp()
-WHERE id = @event_id
-  AND project_id = @project_id;
+-- name: CompleteAssistantThreadEventAndAdvanceSkillSnapshot :one
+WITH completed_event AS (
+  UPDATE assistant_thread_events event
+  SET
+    status = @completed_status,
+    processed_at = clock_timestamp(),
+    last_error = NULL,
+    updated_at = clock_timestamp()
+  WHERE event.id = @event_id
+    AND event.project_id = @project_id
+    AND event.status = @processing_status
+    AND event.attempts = @claimed_attempt
+  RETURNING event.assistant_thread_id
+), advanced_snapshot AS (
+  UPDATE assistant_threads t
+  SET skill_set_snapshot = sqlc.narg('current_snapshot')::jsonb
+  FROM completed_event e
+  WHERE t.id = e.assistant_thread_id
+    AND t.project_id = @project_id
+    AND t.deleted IS FALSE
+    AND t.skill_set_snapshot IS NOT DISTINCT FROM sqlc.narg('claimed_snapshot')::jsonb
+    AND (t.skill_set_snapshot IS NULL OR @allow_advance::boolean)
+    AND (
+      sqlc.narg('claimed_snapshot')::jsonb IS NULL
+      OR sqlc.narg('current_snapshot')::jsonb IS DISTINCT FROM sqlc.narg('claimed_snapshot')::jsonb
+    )
+  RETURNING t.id
+)
+SELECT EXISTS(SELECT 1 FROM completed_event) AS completed;
 
 -- name: FailAssistantThreadEvent :exec
 UPDATE assistant_thread_events
@@ -832,14 +1075,12 @@ WHERE id = @runtime_id
   AND state = @active_state
   AND deleted IS FALSE;
 
--- name: ListActiveAssistantRuntimesForImageRecycle :many
--- Returns live v2 runtime rows that carry backend metadata so a deploy-time
--- sweep can roll their machines onto the current runtime image. Only `active`
--- rows qualify: `starting` rows are mid-boot and already pull the current
--- image, while expiring/stopped rows are torn down or recycled lazily on the
--- next admission. Rows orphaned by a deleted assistant are excluded: they
--- belong to the deleted-assistant janitor, and recycling them would bump
--- updated_at and postpone the inactivity-based reap.
+-- name: ListActiveAssistantRuntimes :many
+-- Returns live v2 runtime rows that carry backend metadata for runtime
+-- reconciliation sweeps. Only `active` rows qualify: `starting` rows are
+-- mid-boot, while expiring/stopped rows are already being torn down or await
+-- re-admission. Rows orphaned by a deleted assistant belong to the
+-- deleted-assistant janitor and are excluded here.
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.state = @active_state

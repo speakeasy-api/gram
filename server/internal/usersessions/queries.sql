@@ -43,10 +43,48 @@ WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: DeleteUserSessionIssuer :one
-UPDATE user_session_issuers
+-- Recheck active owners in the write so an owner added after the handler's
+-- preflight check prevents the issuer from being soft-deleted.
+UPDATE user_session_issuers AS issuer
 SET deleted_at = clock_timestamp()
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
-RETURNING *;
+WHERE issuer.id = @id
+  AND issuer.project_id = @project_id
+  AND issuer.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_servers AS server
+    WHERE server.project_id = @project_id
+      AND server.user_session_issuer_id = issuer.id
+      AND server.deleted IS FALSE
+
+    UNION ALL
+
+    SELECT 1
+    FROM toolsets AS toolset
+    WHERE toolset.project_id = @project_id
+      AND toolset.user_session_issuer_id = issuer.id
+      AND toolset.deleted IS FALSE
+  )
+RETURNING issuer.*;
+
+-- name: UserSessionIssuerHasActiveOwner :one
+-- An issuer can be referenced by an MCP server or toolset. Only delete it once
+-- no active owner remains.
+SELECT EXISTS (
+    SELECT 1
+    FROM mcp_servers AS server
+    WHERE server.project_id = sqlc.arg('project_id')
+      AND server.user_session_issuer_id = sqlc.arg('user_session_issuer_id')::uuid
+      AND server.deleted IS FALSE
+
+    UNION ALL
+
+    SELECT 1
+    FROM toolsets AS toolset
+    WHERE toolset.project_id = sqlc.arg('project_id')
+      AND toolset.user_session_issuer_id = sqlc.arg('user_session_issuer_id')::uuid
+      AND toolset.deleted IS FALSE
+);
 
 -- name: DeleteRemoteSessionClientAttachmentsForUserSessionIssuer :exec
 DELETE FROM remote_session_client_user_session_issuers AS link
@@ -191,9 +229,16 @@ LEFT JOIN api_keys AS k
            END
 WHERE iss.project_id = @project_id
   AND iss.deleted IS FALSE
+  -- "active"/"expired" are keyed off refresh_expires_at (the session/refresh
+  -- lifetime), NOT expires_at (the ~1h access-token lifetime). An active MCP
+  -- connection only refreshes its access token on demand, so a live session
+  -- routinely has a past expires_at while its refresh token is still valid;
+  -- keying "active" off expires_at would drop those sessions and make the
+  -- Active MCP Connections list flicker between showing them and "No active
+  -- sessions" depending on how recently the client last refreshed.
   AND CASE sqlc.narg('status')::text
-        WHEN 'active'  THEN (s.deleted IS FALSE AND s.expires_at > now())
-        WHEN 'expired' THEN (s.deleted IS FALSE AND s.expires_at <= now())
+        WHEN 'active'  THEN (s.deleted IS FALSE AND s.refresh_expires_at > now())
+        WHEN 'expired' THEN (s.deleted IS FALSE AND s.refresh_expires_at <= now())
         WHEN 'revoked' THEN (s.deleted IS TRUE)
         WHEN 'all'     THEN TRUE
         ELSE (s.deleted IS FALSE)

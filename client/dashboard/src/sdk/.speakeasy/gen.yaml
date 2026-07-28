@@ -1,0 +1,107 @@
+configVersion: 2.0.0
+generation:
+  devContainers:
+    enabled: true
+    schemaPath: ../../server/gen/http/openapi3.yaml
+  sdkClassName: Gram
+  maintainOpenAPIOrder: true
+  usageSnippets:
+    optionalPropertyRendering: withExample
+    sdkInitStyle: constructor
+  useClassNamesForArrayFields: true
+  fixes:
+    nameResolutionDec2023: true
+    nameResolutionFeb2025: false
+    parameterOrderingFeb2024: true
+    requestResponseComponentNamesFeb2024: true
+    securityFeb2025: true
+    sharedErrorComponentsApr2025: false
+    sharedNestedComponentsJan2026: false
+    nameOverrideFeb2026: false
+  auth:
+    oAuth2ClientCredentialsEnabled: true
+    oAuth2PasswordEnabled: true
+    hoistGlobalSecurity: true
+  inferSSEOverload: true
+  sdkHooksConfigAccess: true
+  schemas:
+    allOfMergeStrategy: shallowMerge
+  requestBodyFieldName: ""
+  versioningStrategy: manual
+  persistentEdits:
+    enabled: never
+  tests:
+    generateTests: true
+    generateNewTests: false
+    skipResponseBodyAssertions: false
+typescript:
+  version: 0.33.8
+  acceptHeaderEnum: true
+  additionalDependencies:
+    dependencies: {}
+    devDependencies:
+      '@tanstack/react-query': 'catalog:'
+      '@types/react': 'catalog:'
+      '@types/react-dom': 'catalog:'
+      typescript: 'catalog:'
+    peerDependencies: {}
+  additionalPackageJSON:
+    private: true
+  additionalScripts: {}
+  alwaysIncludeInboundAndOutbound: false
+  apiPromiseHelpers: false
+  author: Speakeasy
+  baseErrorName: GramError
+  clientServerStatusCodesAsErrors: true
+  compileCommand:
+    - "true"
+  constFieldsAlwaysOptional: false
+  defaultErrorName: APIError
+  enableCustomCodeRegions: false
+  enableMCPServer: false
+  enableReactQuery: true
+  enumFormat: union
+  envVarPrefix: GRAM
+  eventStreamClassName: EventStream
+  exportZodModelNamespace: false
+  fixEnumNameSanitization: false
+  flatAdditionalProperties: false
+  flattenGlobalSecurity: true
+  flatteningOrder: parameters-first
+  formStringArrayEncodeMode: encoded-string
+  forwardCompatibleEnumsByDefault: false
+  forwardCompatibleUnionsByDefault: "false"
+  generateExamples: true
+  imports:
+    option: openapi
+    paths:
+      callbacks: models/callbacks
+      errors: models/errors
+      operations: models/operations
+      shared: models/components
+      webhooks: models/webhooks
+  inferUnionDiscriminators: true
+  inputModelSuffix: input
+  jsonpath: rfc9535
+  laxMode: strict
+  legacyFileNaming: true
+  maxMethodParams: 0
+  methodArguments: infer-optional-args
+  modelPropertyCasing: camel
+  moduleFormat: esm
+  multipartArrayFormat: legacy
+  outputModelSuffix: output
+  packageName: '@gram/client'
+  preApplyUnionDiscriminators: true
+  preserveModelFieldNames: false
+  privateIdentifierPrefix: '#'
+  requestExtras: false
+  responseFormat: flat
+  sseFlatResponse: false
+  templateVersion: v2
+  unionStrategy: left-to-right
+  usageSDKInitImports: []
+  useIndexModules: false
+  useOxlint: true
+  useTsgo: false
+  zodVersion: v4-mini

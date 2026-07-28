@@ -12,6 +12,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	hooks "github.com/speakeasy-api/gram/server/gen/hooks"
@@ -710,6 +711,458 @@ func EncodeCodexError(encoder func(context.Context, http.ResponseWriter) goahttp
 	}
 }
 
+// EncodeIngestResponse returns an encoder for responses returned by the hooks
+// ingest endpoint.
+func EncodeIngestResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*hooks.IngestHookResult)
+		enc := encoder(ctx, w)
+		body := NewIngestResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeIngestRequest returns a decoder for requests sent to the hooks ingest
+// endpoint.
+func DecodeIngestRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*hooks.IngestPayload, error) {
+	return func(r *http.Request) (*hooks.IngestPayload, error) {
+		var payload *hooks.IngestPayload
+		var (
+			body IngestRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateIngestRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken      *string
+			projectSlugInput *string
+			idempotencyKey   *string
+			replayed         *bool
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		idempotencyKeyRaw := r.Header.Get("Idempotency-Key")
+		if idempotencyKeyRaw != "" {
+			idempotencyKey = &idempotencyKeyRaw
+		}
+		{
+			replayedRaw := r.Header.Get("X-Gram-Replayed")
+			if replayedRaw != "" {
+				v, err2 := strconv.ParseBool(replayedRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("replayed", replayedRaw, "boolean"))
+				}
+				replayed = &v
+			}
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewIngestPayload(&body, apikeyToken, projectSlugInput, idempotencyKey, replayed)
+
+		return payload, nil
+	}
+}
+
+// EncodeIngestError returns an encoder for errors returned by the ingest hooks
+// endpoint.
+func EncodeIngestError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewIngestUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewIngestForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewIngestBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewIngestNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewIngestConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewIngestUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewIngestInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewIngestInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewIngestUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewIngestGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeUploadSkillContentResponse returns an encoder for responses returned
+// by the hooks uploadSkillContent endpoint.
+func EncodeUploadSkillContentResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+}
+
+// DecodeUploadSkillContentRequest returns a decoder for requests sent to the
+// hooks uploadSkillContent endpoint.
+func DecodeUploadSkillContentRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*hooks.UploadSkillContentPayload, error) {
+	return func(r *http.Request) (*hooks.UploadSkillContentPayload, error) {
+		var payload *hooks.UploadSkillContentPayload
+		var (
+			body UploadSkillContentRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateUploadSkillContentRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken      *string
+			projectSlugInput *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewUploadSkillContentPayload(&body, apikeyToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeUploadSkillContentError returns an encoder for errors returned by the
+// uploadSkillContent hooks endpoint.
+func EncodeUploadSkillContentError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUploadSkillContentUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUploadSkillContentForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUploadSkillContentBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUploadSkillContentNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUploadSkillContentConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUploadSkillContentUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUploadSkillContentInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUploadSkillContentInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUploadSkillContentUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUploadSkillContentGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeLogsResponse returns an encoder for responses returned by the hooks
 // logs endpoint.
 func EncodeLogsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -1152,6 +1605,236 @@ func EncodeMetricsError(encoder func(context.Context, http.ResponseWriter) goaht
 			return encodeError(ctx, w, v)
 		}
 	}
+}
+
+// unmarshalHookIngestSourceRequestBodyToHooksHookIngestSource builds a value
+// of type *hooks.HookIngestSource from a value of type
+// *HookIngestSourceRequestBody.
+func unmarshalHookIngestSourceRequestBodyToHooksHookIngestSource(v *HookIngestSourceRequestBody) *hooks.HookIngestSource {
+	res := &hooks.HookIngestSource{
+		Adapter:        *v.Adapter,
+		AdapterVersion: v.AdapterVersion,
+		RawEventName:   v.RawEventName,
+		Hostname:       v.Hostname,
+		UserEmail:      v.UserEmail,
+	}
+
+	return res
+}
+
+// unmarshalHookIngestSessionRequestBodyToHooksHookIngestSession builds a value
+// of type *hooks.HookIngestSession from a value of type
+// *HookIngestSessionRequestBody.
+func unmarshalHookIngestSessionRequestBodyToHooksHookIngestSession(v *HookIngestSessionRequestBody) *hooks.HookIngestSession {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookIngestSession{
+		ID:     v.ID,
+		TurnID: v.TurnID,
+		Cwd:    v.Cwd,
+		Model:  v.Model,
+	}
+
+	return res
+}
+
+// unmarshalHookIngestEventRequestBodyToHooksHookIngestEvent builds a value of
+// type *hooks.HookIngestEvent from a value of type *HookIngestEventRequestBody.
+func unmarshalHookIngestEventRequestBodyToHooksHookIngestEvent(v *HookIngestEventRequestBody) *hooks.HookIngestEvent {
+	res := &hooks.HookIngestEvent{
+		Type:       *v.Type,
+		OccurredAt: v.OccurredAt,
+	}
+
+	return res
+}
+
+// unmarshalHookIngestDataRequestBodyToHooksHookIngestData builds a value of
+// type *hooks.HookIngestData from a value of type *HookIngestDataRequestBody.
+func unmarshalHookIngestDataRequestBodyToHooksHookIngestData(v *HookIngestDataRequestBody) *hooks.HookIngestData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookIngestData{}
+	if v.Prompt != nil {
+		res.Prompt = unmarshalHookPromptDataRequestBodyToHooksHookPromptData(v.Prompt)
+	}
+	if v.ToolCall != nil {
+		res.ToolCall = unmarshalHookToolCallDataRequestBodyToHooksHookToolCallData(v.ToolCall)
+	}
+	if v.Mcp != nil {
+		res.Mcp = unmarshalHookMCPDataRequestBodyToHooksHookMCPData(v.Mcp)
+	}
+	if v.McpInventory != nil {
+		res.McpInventory = make([]*hooks.HookMCPData, len(v.McpInventory))
+		for i, val := range v.McpInventory {
+			if val == nil {
+				res.McpInventory[i] = nil
+				continue
+			}
+			res.McpInventory[i] = unmarshalHookMCPDataRequestBodyToHooksHookMCPData(val)
+		}
+	}
+	if v.Usage != nil {
+		res.Usage = unmarshalHookUsageDataRequestBodyToHooksHookUsageData(v.Usage)
+	}
+	if v.Message != nil {
+		res.Message = unmarshalHookMessageDataRequestBodyToHooksHookMessageData(v.Message)
+	}
+	if v.Skill != nil {
+		res.Skill = unmarshalHookSkillDataRequestBodyToHooksHookSkillData(v.Skill)
+	}
+	if v.Notification != nil {
+		res.Notification = unmarshalHookNotificationDataRequestBodyToHooksHookNotificationData(v.Notification)
+	}
+	if v.McpAttribution != nil {
+		res.McpAttribution = make([]*hooks.HookMCPAttributionEntry, len(v.McpAttribution))
+		for i, val := range v.McpAttribution {
+			if val == nil {
+				res.McpAttribution[i] = nil
+				continue
+			}
+			res.McpAttribution[i] = unmarshalHookMCPAttributionEntryRequestBodyToHooksHookMCPAttributionEntry(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalHookPromptDataRequestBodyToHooksHookPromptData builds a value of
+// type *hooks.HookPromptData from a value of type *HookPromptDataRequestBody.
+func unmarshalHookPromptDataRequestBodyToHooksHookPromptData(v *HookPromptDataRequestBody) *hooks.HookPromptData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookPromptData{
+		Text: v.Text,
+	}
+
+	return res
+}
+
+// unmarshalHookToolCallDataRequestBodyToHooksHookToolCallData builds a value
+// of type *hooks.HookToolCallData from a value of type
+// *HookToolCallDataRequestBody.
+func unmarshalHookToolCallDataRequestBodyToHooksHookToolCallData(v *HookToolCallDataRequestBody) *hooks.HookToolCallData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookToolCallData{
+		ID:             v.ID,
+		Name:           v.Name,
+		Input:          v.Input,
+		Output:         v.Output,
+		Error:          v.Error,
+		IsInterrupt:    v.IsInterrupt,
+		PermissionType: v.PermissionType,
+		DurationMs:     v.DurationMs,
+		Status:         v.Status,
+	}
+
+	return res
+}
+
+// unmarshalHookMCPDataRequestBodyToHooksHookMCPData builds a value of type
+// *hooks.HookMCPData from a value of type *HookMCPDataRequestBody.
+func unmarshalHookMCPDataRequestBodyToHooksHookMCPData(v *HookMCPDataRequestBody) *hooks.HookMCPData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookMCPData{
+		ServerName:     v.ServerName,
+		ServerIdentity: v.ServerIdentity,
+		URL:            v.URL,
+		Command:        v.Command,
+		ResultJSON:     v.ResultJSON,
+	}
+
+	return res
+}
+
+// unmarshalHookUsageDataRequestBodyToHooksHookUsageData builds a value of type
+// *hooks.HookUsageData from a value of type *HookUsageDataRequestBody.
+func unmarshalHookUsageDataRequestBodyToHooksHookUsageData(v *HookUsageDataRequestBody) *hooks.HookUsageData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookUsageData{
+		InputTokens:      v.InputTokens,
+		OutputTokens:     v.OutputTokens,
+		CacheReadTokens:  v.CacheReadTokens,
+		CacheWriteTokens: v.CacheWriteTokens,
+		Cost:             v.Cost,
+		LoopCount:        v.LoopCount,
+		Status:           v.Status,
+	}
+
+	return res
+}
+
+// unmarshalHookMessageDataRequestBodyToHooksHookMessageData builds a value of
+// type *hooks.HookMessageData from a value of type *HookMessageDataRequestBody.
+func unmarshalHookMessageDataRequestBodyToHooksHookMessageData(v *HookMessageDataRequestBody) *hooks.HookMessageData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookMessageData{
+		Text:       v.Text,
+		Role:       v.Role,
+		DurationMs: v.DurationMs,
+	}
+
+	return res
+}
+
+// unmarshalHookSkillDataRequestBodyToHooksHookSkillData builds a value of type
+// *hooks.HookSkillData from a value of type *HookSkillDataRequestBody.
+func unmarshalHookSkillDataRequestBodyToHooksHookSkillData(v *HookSkillDataRequestBody) *hooks.HookSkillData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookSkillData{
+		Name:        *v.Name,
+		Source:      v.Source,
+		SourceLevel: v.SourceLevel,
+		SourcePath:  v.SourcePath,
+		RawSha256:   v.RawSha256,
+	}
+
+	return res
+}
+
+// unmarshalHookNotificationDataRequestBodyToHooksHookNotificationData builds a
+// value of type *hooks.HookNotificationData from a value of type
+// *HookNotificationDataRequestBody.
+func unmarshalHookNotificationDataRequestBodyToHooksHookNotificationData(v *HookNotificationDataRequestBody) *hooks.HookNotificationData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookNotificationData{
+		Type:    v.Type,
+		Title:   v.Title,
+		Message: v.Message,
+	}
+
+	return res
+}
+
+// unmarshalHookMCPAttributionEntryRequestBodyToHooksHookMCPAttributionEntry
+// builds a value of type *hooks.HookMCPAttributionEntry from a value of type
+// *HookMCPAttributionEntryRequestBody.
+func unmarshalHookMCPAttributionEntryRequestBodyToHooksHookMCPAttributionEntry(v *HookMCPAttributionEntryRequestBody) *hooks.HookMCPAttributionEntry {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookMCPAttributionEntry{
+		RequestID: *v.RequestID,
+		McpServer: v.McpServer,
+		McpTool:   v.McpTool,
+	}
+
+	return res
 }
 
 // unmarshalOTELResourceLogRequestBodyToHooksOTELResourceLog builds a value of

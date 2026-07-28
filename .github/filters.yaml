@@ -1,10 +1,12 @@
 server:
+  - ".github/**"
   - "go.mod"
   - "go.sum"
   - "agents/**"
   - "server/**"
 
 client:
+  - ".github/**"
   - "client/**"
   - "package.json"
   - "pnpm-lock.yaml"
@@ -13,6 +15,7 @@ client:
   - "sdks/typescript/**"
 
 functions:
+  - ".github/**"
   - "go.mod"
   - "go.sum"
   - "functions/**"
@@ -24,29 +27,38 @@ cli:
   - "server/design/**"
   - "server/gen/**"
 
+hooks:
+  - ".github/**"
+  - "go.mod"
+  - "go.sum"
+  - "hooks/**"
+  - ".mise-tasks/build/hooks.sh"
+  - ".mise-tasks/test/hooks.sh"
+
 tsframework:
   - "ts-framework/**"
 
 sdk:
-  - "client/sdk/**"
+  - "client/dashboard/src/sdk/**"
   - "package.json"
   - "pnpm-lock.yaml"
 
 sdk-gen:
   - ".speakeasy/workflow.yaml"
-  - "client/sdk/.speakeasy/gen.yaml"
+  - "client/dashboard/src/sdk/.speakeasy/gen.yaml"
+  - "hooks/sdk/.speakeasy/gen.yaml"
   - "mise.toml"
   - "overlays/**"
   - "server/gen/http/openapi3.yaml"
-
-elements:
-  - "elements/**"
 
 migrations:
   - "go.mod"
   - "go.sum"
   - "server/migrations/**"
+  - "server/database/schema.sql"
   - "server/clickhouse/migrations/**"
+  - "server/clickhouse/local/golang_migrate/**"
+  - "server/clickhouse/schema.sql"
 
 database-changes:
   - "server/migrations/**"
@@ -58,11 +70,13 @@ db-migrations:
   - "server/clickhouse/migrations/**"
 
 plog:
+  - ".github/**"
   - "go.mod"
   - "go.sum"
   - "plog/**"
 
 infra:
+  - ".github/**"
   - "go.mod"
   - "go.sum"
   - "infra/**"
@@ -75,6 +89,7 @@ infra:
   - ".mise-tasks/gen/infra.sh"
 
 pystreams:
+  - ".github/**"
   - "uv.lock"
   - "pyproject.toml"
   - "pystreams/**"
@@ -91,3 +106,9 @@ webhooks-catalog:
 
 otel-collector:
   - "otel-collector/**"
+
+tunnel:
+  - ".github/**"
+  - "go.mod"
+  - "go.sum"
+  - "tunnel/**"

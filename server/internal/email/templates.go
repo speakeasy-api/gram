@@ -24,6 +24,14 @@ type TransactionalID string
 const (
 	transactionalIDTeamInvite                TransactionalID = "cml3n1h2n27o50i2rakc30bwb"
 	transactionalIDEnterpriseAdminOnboarding TransactionalID = "cmpqyxnzl00hj0jwtkibhyjdz"
+	transactionalIDAccessRequestCreated      TransactionalID = "cmq12wqp901sl0j0ll8cpr0yj"
+	transactionalIDTumUsageThreshold         TransactionalID = "cmrdon75q00390jvq44l87erv"
+	transactionalIDTumUsageOverage           TransactionalID = "cmrdopjpd028m0jx0v8sl25wj"
+	// gosec's G101 name heuristic matches the "Cred" in "Credits"; these are
+	// Loops template ids like every other constant in this block, not secrets.
+	transactionalIDOpenRouterChatCreditsThreshold     TransactionalID = "cmrpjavhw06x10j1dsxivfted" //nolint:gosec // template id, not a credential
+	transactionalIDOpenRouterInternalCreditsThreshold TransactionalID = "cmrpkq1r6014d0jze28webret" //nolint:gosec // template id, not a credential
+	transactionalIDCustomDomainUnhealthy              TransactionalID = "cmrvye9w306z30j1pnuldvunv"
 )
 
 // Template is implemented by every concrete email template. Concrete types
@@ -57,5 +65,43 @@ var RegisteredTemplates = []Template{
 	},
 	EnterpriseAdminOnboarding{
 		SetupLink: "",
+	},
+	AccessRequestCreated{
+		RequesterEmail: "",
+		DisplayName:    "",
+		ApprovalURL:    "",
+	},
+	TumUsageThreshold{
+		OrganizationName: "",
+		ThresholdPercent: "",
+		UsageTokens:      "",
+		TokenLimit:       "",
+		CycleStart:       "",
+		CycleEnd:         "",
+	},
+	TumUsageOverage{
+		OrganizationName: "",
+		ThresholdPercent: "",
+		UsageTokens:      "",
+		TokenLimit:       "",
+		OverageTokens:    "",
+		CycleStart:       "",
+		CycleEnd:         "",
+	},
+	OpenRouterChatCreditsThreshold{
+		OrganizationName: "",
+		ThresholdPercent: "",
+		Exhausted:        false,
+	},
+	OpenRouterInternalCreditsThreshold{
+		OrganizationName: "",
+		ThresholdPercent: "",
+		Exhausted:        false,
+	},
+	CustomDomainUnhealthy{
+		Email:        "",
+		Domain:       "",
+		IssueMessage: "",
+		DomainLink:   "",
 	},
 }

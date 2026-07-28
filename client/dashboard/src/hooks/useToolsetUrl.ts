@@ -1,7 +1,8 @@
 import { useProject } from "@/contexts/Auth";
 import { getServerURL } from "@/lib/utils";
-import { McpEndpoint, ToolsetEntry } from "@gram/client/models/components";
-import { useGetDomain } from "@gram/client/react-query";
+import { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
+import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
+import { useGetDomain } from "@gram/client/react-query/getDomain.js";
 import { useMemo } from "react";
 
 export function useCustomDomain(enabled = true): {

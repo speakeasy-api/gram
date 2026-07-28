@@ -3,6 +3,7 @@ package customdomains_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -15,6 +16,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // pgTextValid is a terse wrapper around conv.ToPGText for test fixtures.
@@ -48,13 +50,21 @@ func seedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projec
 		Url:           "https://test.example.com/mcp/" + uuid.NewString(),
 	})
 
+	issuer, err := usersessionsrepo.New(conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          projectID,
+		Slug:               "usi-" + uuid.NewString()[:8],
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+
 	mcpServerID, err := uuid.NewV7()
 	require.NoError(t, err)
 	row, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                  mcpServerID,
 		ProjectID:           projectID,
 		EnvironmentID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
 		RemoteMcpServerID:   uuid.NullUUID{UUID: remote.ID, Valid: true},
 		ToolsetID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Visibility:          "disabled",

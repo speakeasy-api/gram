@@ -36,7 +36,7 @@ _meter = metrics.get_meter("github.com/speakeasy-api/gram/pystreams")
 # incrementing is cheap; once a provider is installed the count flows out wherever
 # metrics are collected.
 _violations_counter = _meter.create_counter(
-    "pystreams.event_loop.blocking_violations",
+    "python.event_loop.blocking_violations",
     unit="{violation}",
     description="Blocking-IO violations detected on the event loop, by severity.",
 )

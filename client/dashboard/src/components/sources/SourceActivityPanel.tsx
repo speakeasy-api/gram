@@ -1,7 +1,7 @@
 import { type SourceTelemetrySummary } from "@/components/sources/sourceTelemetrySummary";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
-import type { ToolMetric } from "@gram/client/models/components";
+import type { ToolMetric } from "@gram/client/models/components/toolmetric.js";
 
 // Brand-inspired muted palette (from moonshine gradient colors). Defined here
 // so both Source overview tabs (OpenAPI + Remote MCP) share one palette.

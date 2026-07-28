@@ -3,26 +3,38 @@ import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
+import { LoggingPageHeader } from "@/components/observe/LoggingPageHeader";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
-import type { ChatOverview } from "@gram/client/models/components";
+import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import {
+  AccountType,
   HasRisk,
+  Pinned,
   SortBy,
   SortOrder as ApiSortOrder,
 } from "@gram/client/models/operations/listchats";
+import { useAssistantsGet } from "@gram/client/react-query/assistantsGet.js";
+import { useChatDeleteMutation } from "@gram/client/react-query/chatDelete.js";
+import { useListChatSources } from "@gram/client/react-query/listChatSources.js";
 import {
-  useChatDeleteMutation,
   invalidateAllListChats,
-  useAssistantsGet,
   useListChats,
-  useListChatSources,
-} from "@gram/client/react-query";
+} from "@gram/client/react-query/listChats.js";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { Badge } from "@/components/ui/badge";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Alert, Button, Icon } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { Pin } from "lucide-react";
+import {
+  useState,
+  useMemo,
+  useCallback,
+  useRef,
+  useEffect,
+  type ReactNode,
+} from "react";
 import { Link, useSearchParams } from "react-router";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
@@ -34,11 +46,12 @@ import {
   type OptionsById,
 } from "@/components/filters";
 import { Page } from "@/components/page-layout";
-import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
+import { type DateRangePreset, getPresetRange } from "@/elements";
 import { isValidPreset } from "@/components/observe/observeFilterUtils";
 
 type SortField = "chronological" | "messageCount";
 type SortOrder = "asc" | "desc";
+type SessionsView = "all" | "pinned";
 
 function toApiSortBy(field: SortField): SortBy {
   switch (field) {
@@ -52,6 +65,18 @@ function toApiSortBy(field: SortField): SortBy {
 function toApiHasRisk(value: string): HasRisk | undefined {
   if (value === "true") return HasRisk.True;
   if (value === "false") return HasRisk.False;
+  return undefined;
+}
+
+function toApiAccountType(value: string): AccountType | undefined {
+  if (value === "team") return AccountType.Team;
+  if (value === "personal") return AccountType.Personal;
+  return undefined;
+}
+
+function toApiPinned(value: string): Pinned | undefined {
+  if (value === "true") return Pinned.True;
+  if (value === "false") return Pinned.False;
   return undefined;
 }
 
@@ -93,6 +118,12 @@ const SESSION_FILTERS = defineFilters([
   },
   { id: "has_risk", label: "Risk", kind: "select", allLabel: "All" },
   {
+    id: "account_type",
+    label: "Account type",
+    kind: "select",
+    allLabel: "All",
+  },
+  {
     id: "min_risk_score",
     label: "Min risk score",
     kind: "number",
@@ -110,7 +141,33 @@ const HAS_RISK_OPTIONS: OptionsById = {
     { value: "true", label: "With Risk" },
     { value: "false", label: "No Risk" },
   ],
+  account_type: [
+    { value: "team", label: "Team" },
+    { value: "personal", label: "Personal" },
+  ],
 };
+
+const SESSIONS_VIEW_OPTIONS: {
+  value: SessionsView;
+  label: ReactNode;
+  tooltip: string;
+}[] = [
+  {
+    value: "all",
+    label: "All",
+    tooltip: "All agent sessions in the current filters",
+  },
+  {
+    value: "pinned",
+    label: (
+      <span className="inline-flex items-center gap-1.5">
+        <Pin className="size-3.5" aria-hidden />
+        Pinned
+      </span>
+    ),
+    tooltip: "Sessions you've pinned for quick access",
+  },
+];
 
 // Shown when RBAC is on and the caller lacks chat:read: the list is scoped to
 // their own sessions, so explain why and (for admins) point at the roles page
@@ -192,6 +249,8 @@ export function LogsAgentsContent(): JSX.Element {
   const urlSearch = searchParams.get("search");
   const urlChatId = searchParams.get("chatId");
   const urlHasRisk = searchParams.get("has_risk");
+  const urlAccountType = searchParams.get("account_type");
+  const urlPinned = searchParams.get("pinned");
   const urlSource = searchParams.get("source");
   const urlMinRiskScore = searchParams.get("min_risk_score");
   const urlAssistantId = searchParams.get("assistantId");
@@ -204,6 +263,14 @@ export function LogsAgentsContent(): JSX.Element {
   const sortOrder: SortOrder = urlOrder === "asc" ? "asc" : "desc";
   const hasRisk: string =
     urlHasRisk === "true" || urlHasRisk === "false" ? urlHasRisk : "";
+  const accountType: string =
+    urlAccountType === "team" || urlAccountType === "personal"
+      ? urlAccountType
+      : "";
+  // Pinned sessions get a dedicated view (toolbar segment), not a filter chip —
+  // otherwise they disappear into the chronological scroll of All sessions.
+  // Legacy ?pinned=false is ignored so the segment stays a two-way All/Pinned.
+  const sessionsView: SessionsView = urlPinned === "true" ? "pinned" : "all";
   const minRiskScore = useMemo(
     () => parseMinRiskScore(urlMinRiskScore),
     [urlMinRiskScore],
@@ -311,6 +378,20 @@ export function LogsAgentsContent(): JSX.Element {
     [updateSearchParams],
   );
 
+  const setAccountType = useCallback(
+    (value: string) => {
+      updateSearchParams({ account_type: value || null });
+    },
+    [updateSearchParams],
+  );
+
+  const setSessionsView = useCallback(
+    (view: SessionsView) => {
+      updateSearchParams({ pinned: view === "pinned" ? "true" : null });
+    },
+    [updateSearchParams],
+  );
+
   const setSources = useCallback(
     (values: string[]) => {
       updateSearchParams({
@@ -338,13 +419,15 @@ export function LogsAgentsContent(): JSX.Element {
   );
 
   // Single setSearchParams so the synchronous clears don't clobber each other
-  // (react-router's setSearchParams reads a memoized snapshot).
+  // (react-router's setSearchParams reads a memoized snapshot). The All/Pinned
+  // view segment is independent of filters, so Reset leaves `pinned` alone.
   const clearAllFilters = useCallback(() => {
     updateSearchParams({
       range: null,
       from: null,
       to: null,
       has_risk: null,
+      account_type: null,
       source: null,
       min_risk_score: null,
     });
@@ -368,7 +451,7 @@ export function LogsAgentsContent(): JSX.Element {
     [updateSearchParams],
   );
 
-  const { data, isLoading, error, refetch, isLogsDisabled } =
+  const { data, isLoading, isFetching, error, refetch, isLogsDisabled } =
     useLogsEnabledErrorCheck(
       useListChats(
         {
@@ -379,6 +462,8 @@ export function LogsAgentsContent(): JSX.Element {
           hasRisk:
             minRiskScore !== undefined ? undefined : toApiHasRisk(hasRisk),
           minRiskScore,
+          accountType: toApiAccountType(accountType),
+          pinned: toApiPinned(sessionsView === "pinned" ? "true" : ""),
           assistantId: assistantId || undefined,
           source: sources.length ? sources.join(",") : undefined,
           from: timeRange.from,
@@ -412,8 +497,12 @@ export function LogsAgentsContent(): JSX.Element {
     [sourcesData?.sources],
   );
 
+  // Cache the last known total so pagination stays stable while a refetch is
+  // in flight (data briefly undefined). Include 0 so an empty view — e.g.
+  // Pinned after unpinning the last session — does not keep the previous
+  // view's count and leave Next enabled.
   const lastTotalRef = useRef(0);
-  if (data?.total !== undefined && data.total > 0) {
+  if (data?.total !== undefined) {
     lastTotalRef.current = data.total;
   }
   const total = lastTotalRef.current;
@@ -493,6 +582,10 @@ export function LogsAgentsContent(): JSX.Element {
         setSearchQuery={setSearchQuery}
         hasRisk={hasRisk}
         setHasRisk={setHasRisk}
+        accountType={accountType}
+        setAccountType={setAccountType}
+        sessionsView={sessionsView}
+        setSessionsView={setSessionsView}
         sources={sources}
         setSources={setSources}
         filterOptions={filterOptions}
@@ -514,6 +607,8 @@ export function LogsAgentsContent(): JSX.Element {
         error={error}
         isLogsDisabled={isLogsDisabled}
         onLogsEnabled={() => void refetch()}
+        onRefresh={() => void refetch()}
+        isRefreshing={isFetching}
         hasMore={hasMore}
         offset={offset}
         setOffset={setOffset}
@@ -535,6 +630,10 @@ function AgentSessionsPageContent({
   setSearchQuery,
   hasRisk,
   setHasRisk,
+  accountType,
+  setAccountType,
+  sessionsView,
+  setSessionsView,
   sources,
   setSources,
   filterOptions,
@@ -556,6 +655,8 @@ function AgentSessionsPageContent({
   error,
   isLogsDisabled,
   onLogsEnabled,
+  onRefresh,
+  isRefreshing,
   hasMore,
   offset,
   setOffset,
@@ -572,6 +673,10 @@ function AgentSessionsPageContent({
   setSearchQuery: (value: string) => void;
   hasRisk: string;
   setHasRisk: (value: string) => void;
+  accountType: string;
+  setAccountType: (value: string) => void;
+  sessionsView: SessionsView;
+  setSessionsView: (view: SessionsView) => void;
   sources: string[];
   setSources: (values: string[]) => void;
   filterOptions: OptionsById;
@@ -593,6 +698,8 @@ function AgentSessionsPageContent({
   error: Error | null;
   isLogsDisabled: boolean;
   onLogsEnabled: () => void;
+  onRefresh: () => void;
+  isRefreshing: boolean;
   hasMore: boolean;
   offset: number;
   setOffset: (offset: number) => void;
@@ -603,13 +710,10 @@ function AgentSessionsPageContent({
   if (isLogsDisabled) {
     return (
       <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="text-xl font-semibold">Agent Sessions</h1>
-          <p className="text-muted-foreground text-sm">
-            View and debug individual agent sessions captured for organization
-            members in this project
-          </p>
-        </div>
+        <LoggingPageHeader
+          title="Agent Sessions"
+          description="View and debug individual agent sessions captured for organization members in this project"
+        />
         <div className="relative flex-1">
           <div
             className="pointer-events-none h-full select-none"
@@ -627,13 +731,10 @@ function AgentSessionsPageContent({
     <>
       <div className="flex min-h-0 w-full flex-1 flex-col">
         <div className="shrink-0 space-y-4 px-8 py-4">
-          <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="text-xl font-semibold">Agent Sessions</h1>
-            <p className="text-muted-foreground text-sm">
-              View and debug individual agent sessions captured for organization
-              members in this project
-            </p>
-          </div>
+          <LoggingPageHeader
+            title="Agent Sessions"
+            description="View and debug individual agent sessions captured for organization members in this project"
+          />
           {hasAssistantFilter && (
             <Badge
               variant="secondary"
@@ -660,7 +761,7 @@ function AgentSessionsPageContent({
             <Page.Toolbar.Search
               value={searchQuery}
               onChange={setSearchQuery}
-              placeholder="Search by chat ID, user ID, or title..."
+              placeholder="Search by chat ID, user ID, user name, or title..."
               debounceMs={500}
             />
             <Page.Toolbar.Filters
@@ -672,6 +773,7 @@ function AgentSessionsPageContent({
                   customLabel: null,
                 },
                 has_risk: hasRisk || null,
+                account_type: accountType || null,
                 source: sources,
                 min_risk_score: minRiskScore ?? null,
               }}
@@ -694,6 +796,8 @@ function AgentSessionsPageContent({
                   }
                 } else if (id === "has_risk") {
                   setHasRisk((value as string | null) ?? "");
+                } else if (id === "account_type") {
+                  setAccountType((value as string | null) ?? "");
                 } else if (id === "source") {
                   setSources((value as string[]) ?? []);
                 } else if (id === "min_risk_score") {
@@ -705,6 +809,8 @@ function AgentSessionsPageContent({
                   setDateRangeParam("30d");
                 } else if (id === "has_risk") {
                   setHasRisk("");
+                } else if (id === "account_type") {
+                  setAccountType("");
                 } else if (id === "source") {
                   setSources([]);
                 } else if (id === "min_risk_score") {
@@ -713,6 +819,13 @@ function AgentSessionsPageContent({
               }}
               onClearAll={clearAllFilters}
             />
+            <Page.Toolbar.Actions>
+              <SegmentedControl
+                value={sessionsView}
+                onChange={setSessionsView}
+                options={SESSIONS_VIEW_OPTIONS}
+              />
+            </Page.Toolbar.Actions>
             <Page.Toolbar.SortBy
               value={sortField}
               onChange={(v) => setSortField(v as SortField)}
@@ -722,6 +835,10 @@ function AgentSessionsPageContent({
               ]}
               direction={sortOrder}
               onDirectionChange={setSortOrder}
+            />
+            <Page.Toolbar.Refresh
+              onRefresh={onRefresh}
+              isRefreshing={isRefreshing}
             />
           </Page.Toolbar>
           <OwnSessionsNotice />
@@ -737,6 +854,15 @@ function AgentSessionsPageContent({
                 onDeleteChat={onDeleteChat}
                 isLoading={isLoading}
                 error={error}
+                emptyState={
+                  sessionsView === "pinned"
+                    ? {
+                        title: "No pinned sessions",
+                        description:
+                          "Pin a session from All to keep it here for quick access.",
+                      }
+                    : undefined
+                }
               />
             </div>
             {(hasMore || offset > 0) && (

@@ -1,4 +1,4 @@
-import type { AuditLog } from "@gram/client/models/components";
+import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { computeChangedFields } from "@/lib/compute-changed-fields";
 import { useMemo, useState, Suspense } from "react";
 import React from "react";

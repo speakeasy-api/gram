@@ -77,6 +77,8 @@ type CreateAssistantPayload struct {
 	Instructions string
 	// Toolsets available to the assistant.
 	Toolsets []*types.AssistantToolsetRef
+	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	McpServers []*types.AssistantMCPServerRef
 	// Optional warm runtime TTL in seconds.
 	WarmTTLSeconds *int
 	// Optional maximum active warm runtimes.
@@ -175,6 +177,8 @@ type UpdateAssistantPayload struct {
 	Instructions *string
 	// Toolsets available to the assistant.
 	Toolsets []*types.AssistantToolsetRef
+	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	McpServers []*types.AssistantMCPServerRef
 	// Warm runtime TTL in seconds.
 	WarmTTLSeconds *int
 	// Maximum active warm runtimes.

@@ -1,4 +1,4 @@
-import type { ExternalMCPServer } from "@gram/client/models/components";
+import type { ExternalMCPServer } from "@gram/client/models/components/externalmcpserver.js";
 
 const AUTHORIZATION_HEADER_VALUE = "Bearer ${GRAM_API_KEY}";
 

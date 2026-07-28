@@ -108,6 +108,8 @@ func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *te
 			workos.NewStubClient(),
 		),
 		auditLogger,
+		nil,
+		false,
 	)
 
 	return ctx, &testInstance{

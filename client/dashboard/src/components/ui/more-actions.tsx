@@ -16,6 +16,10 @@ export type Action = {
   onClick: () => void;
   disabled?: boolean;
   destructive?: boolean;
+  /** Secondary line under the label, e.g. why a disabled action is unavailable. */
+  description?: string;
+  /** Render a separator above this item (context menus and custom dropdown renderers). */
+  separatorBefore?: boolean;
 };
 
 export function MoreActions({

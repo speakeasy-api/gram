@@ -1,8 +1,6 @@
-import type { McpMetadata } from "@gram/client/models/components";
-import {
-  invalidateGetMcpMetadata,
-  useMcpMetadataSetMutation,
-} from "@gram/client/react-query";
+import type { McpMetadata } from "@gram/client/models/components/mcpmetadata.js";
+import { invalidateGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
+import { useMcpMetadataSetMutation } from "@gram/client/react-query/mcpMetadataSet.js";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   type ChangeEventHandler,

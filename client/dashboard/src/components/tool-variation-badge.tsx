@@ -1,6 +1,6 @@
 import { ReactElement } from "react";
 import { Tool } from "@/lib/toolTypes";
-import { CanonicalToolAttributes } from "@gram/client/models/components";
+import { CanonicalToolAttributes } from "@gram/client/models/components/canonicaltoolattributes.js";
 import { Icon } from "@speakeasy-api/moonshine";
 import { SimpleTooltip } from "./ui/tooltip";
 

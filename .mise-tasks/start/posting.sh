@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 #MISE dir="{{ config_root }}"
 #MISE description="Open Posting collection to play with the API"
 

@@ -22,8 +22,6 @@ type RemoteMcpServer struct {
 	URL string
 	// The transport type for the remote MCP server
 	TransportType string
-	// Headers configured for this remote MCP server
-	Headers []*RemoteMcpServerHeader
 	// When the remote MCP server was created
 	CreatedAt string
 	// When the remote MCP server was last updated

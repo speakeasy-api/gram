@@ -63,11 +63,60 @@ func TestAssistantRuntimeConfigFromCLIFallsBackToServerURL(t *testing.T) {
 	require.Equal(t, serverURL, cfg.Fly.ServerURL)
 }
 
+func TestAssistantRuntimeConfigFromCLIAcceptsLocalProvider(t *testing.T) {
+	t.Parallel()
+
+	ctx := newAssistantRuntimeCLIContext(t, map[string]string{
+		"assistant-runtime-provider": assistants.RuntimeProviderLocal,
+		"environment":                "local",
+	})
+
+	serverURL := &url.URL{Scheme: "https", Host: "localhost:8080"}
+	cfg, err := assistantRuntimeConfigFromCLI(ctx, serverURL)
+	require.NoError(t, err)
+	require.Equal(t, assistants.RuntimeProviderLocal, cfg.Provider)
+	require.True(t, cfg.Local.Enabled)
+	// The container-facing URL swaps the host for Docker's host gateway alias
+	// while preserving scheme and port.
+	require.Equal(t, "https://host.docker.internal:8080", cfg.Local.ServerURL.String())
+}
+
+func TestAssistantRuntimeConfigFromCLILocalHonorsOverrideURL(t *testing.T) {
+	t.Parallel()
+
+	ctx := newAssistantRuntimeCLIContext(t, map[string]string{
+		"assistant-runtime-provider":   assistants.RuntimeProviderLocal,
+		"assistant-runtime-server-url": "https://runtime.example.com",
+		"environment":                  "local",
+	})
+
+	cfg, err := assistantRuntimeConfigFromCLI(ctx, &url.URL{Scheme: "https", Host: "localhost:8080"})
+	require.NoError(t, err)
+	require.Equal(t, "https://runtime.example.com", cfg.Local.ServerURL.String())
+}
+
+func TestAssistantRuntimeConfigFromCLIEnablesLocalInLocalEnvironment(t *testing.T) {
+	t.Parallel()
+
+	ctx := newAssistantRuntimeCLIContext(t, map[string]string{
+		"assistant-runtime-provider": assistants.RuntimeProviderFlyIO,
+		"environment":                "local",
+	})
+
+	cfg, err := assistantRuntimeConfigFromCLI(ctx, &url.URL{Scheme: "https", Host: "localhost:8080"})
+	require.NoError(t, err)
+	require.Equal(t, assistants.RuntimeProviderFlyIO, cfg.Provider)
+	// Locally created rows stay routable for cleanup even when targeting
+	// another backend.
+	require.True(t, cfg.Local.Enabled)
+}
+
 func newAssistantRuntimeCLIContext(t *testing.T, values map[string]string) *cli.Context {
 	t.Helper()
 
 	set := flag.NewFlagSet("test", flag.ContinueOnError)
 	require.NoError(t, (&cli.StringFlag{Name: "server-url"}).Apply(set))
+	require.NoError(t, (&cli.StringFlag{Name: "environment"}).Apply(set))
 	for _, item := range functionsFlags {
 		require.NoError(t, item.Apply(set))
 	}

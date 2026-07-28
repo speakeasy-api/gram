@@ -1,4 +1,4 @@
-import type { GramChatMessage } from "@gram-ai/elements";
+import type { GramChatMessage } from "@/elements";
 
 // The Gram assistant runtime persists each turn's input with a
 // `<message-context>…</message-context>` framing block that the backend's source
@@ -9,7 +9,7 @@ import type { GramChatMessage } from "@gram-ai/elements";
 //
 // This is a Gram-product transcript convention, so it lives in the dashboard and
 // is handed to Elements via `history.transformChatMessage` rather than baked
-// into the shared `@gram-ai/elements` library.
+// into the shared `@/elements` library.
 const MESSAGE_CONTEXT_RE =
   /^\s*<message-context>[\s\S]*?<\/message-context>\s*/;
 

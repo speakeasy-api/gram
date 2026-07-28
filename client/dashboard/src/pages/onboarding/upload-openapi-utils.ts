@@ -3,16 +3,12 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { slugify } from "@/lib/constants";
 import { getServerURL } from "@/lib/utils";
-import {
-  Deployment,
-  GetDeploymentResult,
-  UploadOpenAPIv3Result,
-} from "@gram/client/models/components";
+import { Deployment } from "@gram/client/models/components/deployment.js";
+import { GetDeploymentResult } from "@gram/client/models/components/getdeploymentresult.js";
+import { UploadOpenAPIv3Result } from "@gram/client/models/components/uploadopenapiv3result.js";
 import { assetsServeOpenAPIv3 } from "@gram/client/funcs/assetsServeOpenAPIv3";
-import {
-  useLatestDeployment,
-  useListToolsets,
-} from "@gram/client/react-query/index.js";
+import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useParams } from "react-router";

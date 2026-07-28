@@ -253,7 +253,7 @@ func remoteSessionClientOrganizationID(t *testing.T, ctx context.Context, conn *
 
 	row, err := repo.New(conn).GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
 		ID:        clientID,
-		ProjectID: conv.ToNullUUID(projectID),
+		ProjectID: projectID,
 	})
 	require.NoError(t, err)
 
@@ -331,6 +331,31 @@ func seedOrgLevelRemoteIssuer(t *testing.T, ctx context.Context, conn *pgxpool.P
 	return issuer.ID
 }
 
+// seedOrgLevelRemoteClient creates an organization-level (project_id IS NULL,
+// organization_id set) remote_session_client referencing remoteIssuerID and
+// attaches it to each userSessionIssuerID through the join table. Org-level
+// clients carry no project; any project in the org can bind one to its own
+// user_session_issuer.
+func seedOrgLevelRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, remoteIssuerID uuid.UUID, clientID string, userSessionIssuerIDs ...uuid.UUID) uuid.UUID {
+	t.Helper()
+	q := repo.New(conn)
+	created, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ProjectID:             uuid.NullUUID{},
+		OrganizationID:        conv.ToPGText(organizationID),
+		RemoteSessionIssuerID: remoteIssuerID,
+		ClientID:              clientID,
+		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
+	})
+	require.NoError(t, err)
+	for _, usi := range userSessionIssuerIDs {
+		require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+			RemoteSessionClientID: created.ID,
+			UserSessionIssuerID:   usi,
+		}))
+	}
+	return created.ID
+}
+
 // seedMCPServerInOrg creates a project in the supplied organization and an MCP
 // server within it, returning the MCP server id. Used to exercise cross-org
 // isolation on org-admin MCP server lookups.
@@ -353,13 +378,16 @@ func seedMCPServerInOrg(t *testing.T, ctx context.Context, conn *pgxpool.Pool, o
 	})
 	require.NoError(t, err)
 
+	issuerID := createUserSessionIssuerInProject(t, ctx, conn, project.ID, "usi-"+uuid.NewString()[:8])
+
 	server, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                uuid.New(),
-		ProjectID:         project.ID,
-		Name:              conv.ToPGText(slug),
-		Slug:              conv.ToPGText(slug),
-		RemoteMcpServerID: conv.ToNullUUID(remoteServer.ID),
-		Visibility:        "private",
+		ID:                  uuid.New(),
+		ProjectID:           project.ID,
+		Name:                conv.ToPGText(slug),
+		Slug:                conv.ToPGText(slug),
+		RemoteMcpServerID:   conv.ToNullUUID(remoteServer.ID),
+		Visibility:          "private",
+		UserSessionIssuerID: conv.ToNullUUID(issuerID),
 	})
 	require.NoError(t, err)
 	return server.ID
@@ -532,14 +560,17 @@ func seedEnvironmentWithEntries(t *testing.T, ctx context.Context, ti *testInsta
 
 	names := make([]string, 0, len(entries))
 	values := make([]string, 0, len(entries))
+	isSecrets := make([]bool, 0, len(entries))
 	for name, value := range entries {
 		names = append(names, name)
 		values = append(values, value)
+		isSecrets = append(isSecrets, true)
 	}
 	_, err = ti.envEntries.CreateEnvironmentEntries(ctx, environmentsrepo.CreateEnvironmentEntriesParams{
 		EnvironmentID: envRow.ID,
 		Names:         names,
 		Values:        values,
+		IsSecrets:     isSecrets,
 	})
 	require.NoError(t, err)
 	return envRow.Slug

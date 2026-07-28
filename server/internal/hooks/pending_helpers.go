@@ -46,17 +46,26 @@ func (s *Service) isHookDuplicate(ctx context.Context) bool {
 // is a no-op. An empty token (older plugins, OTEL-only flows) always persists —
 // there is nothing to dedupe on. A cache error fails open: dropping a hook is
 // worse than the rare duplicate a backend blip might cause.
-func (s *Service) claimHookIdempotency(ctx context.Context, token string) bool {
+//
+// replayed marks a redelivery from a device's offline spool (X-Gram-Replayed):
+// the claim then holds for hookReplayIdempotencyTTL instead of the retry-burst
+// window, since competing drain triggers can re-deliver the same entry hours
+// apart.
+func (s *Service) claimHookIdempotency(ctx context.Context, token string, replayed bool) bool {
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return true
+	}
+	ttl := hookIdempotencyTTL
+	if replayed {
+		ttl = hookReplayIdempotencyTTL
 	}
 	// The claim must outlive the request: a transient reset cancels the request
 	// context, and the retry that re-sends the same token would otherwise also
 	// find an unwritten marker (the canceled SETNX returns an error → fail open
 	// → true) and persist a second time. WithoutCancel keeps the marker write
 	// running so the retry actually loses the guard.
-	claimed, err := s.cache.Add(context.WithoutCancel(ctx), hookIdempotencyCacheKey(token), hookIdempotencyTTL)
+	claimed, err := s.cache.Add(context.WithoutCancel(ctx), hookIdempotencyCacheKey(token), ttl)
 	if err != nil {
 		s.logger.WarnContext(ctx, "hook idempotency guard failed; persisting anyway",
 			attr.SlogEvent("hook_idempotency_guard_failed"),
@@ -67,6 +76,32 @@ func (s *Service) claimHookIdempotency(ctx context.Context, token string) bool {
 	if !claimed {
 		s.logger.InfoContext(ctx, "skipping duplicate hook delivery",
 			attr.SlogEvent("hook_idempotency_duplicate"),
+		)
+	}
+	return claimed
+}
+
+func (s *Service) claimBlockedPromptTelemetry(ctx context.Context, payload *gen.ClaudePayload) bool {
+	if payload == nil || payload.SessionID == nil || payload.Prompt == nil {
+		return true
+	}
+	sessionID := strings.TrimSpace(*payload.SessionID)
+	prompt := strings.TrimSpace(*payload.Prompt)
+	if sessionID == "" || prompt == "" {
+		return true
+	}
+
+	claimed, err := s.cache.Add(context.WithoutCancel(ctx), blockedPromptTelemetryCacheKey("claude", sessionID, prompt), hookIdempotencyTTL)
+	if err != nil {
+		s.logger.WarnContext(ctx, "blocked prompt telemetry guard failed; persisting anyway",
+			attr.SlogEvent("blocked_prompt_telemetry_guard_failed"),
+			attr.SlogError(err),
+		)
+		return true
+	}
+	if !claimed {
+		s.logger.InfoContext(ctx, "skipping duplicate blocked prompt telemetry",
+			attr.SlogEvent("blocked_prompt_telemetry_duplicate"),
 		)
 	}
 	return claimed
@@ -170,10 +205,10 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 		toolName = *payload.ToolName
 	}
 
-	hookSource := "claude"
-	if metadata.ServiceName != "" {
-		hookSource = metadata.ServiceName
-	}
+	// The resolved product surface (OTEL service.name first, SessionStart
+	// variant fallback) labels per-tool-call rows so cowork sessions stay
+	// filterable in tool logs.
+	hookSource := conv.Default(s.claudeSessionSurface(ctx, metadata), "claude")
 
 	attrs := map[attr.Key]any{
 		attr.EventSourceKey:    string(telemetry.EventSourceHook),
@@ -189,6 +224,10 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	if metadata.UserID == "" && metadata.UserEmail != "" {
 		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
 	}
+	// Carry the account attribution (provider, external_org_id, account_type,
+	// device_id) onto every hook event row so per-tool-call telemetry can be
+	// split by personal vs team account, not just the OTEL log stream.
+	stampAccountAttribution(attrs, *metadata)
 	applyHookHostnameAttr(attrs, payload.HookHostname)
 
 	if payload.Error != nil {
@@ -335,6 +374,42 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 			attr.OrganizationIDKey: orgID,
 			attr.ResourceURNKey:    urn,
 			attr.HookSourceKey:     "claude-code",
+			attr.ProviderKey:       providerAnthropic,
+		}
+
+		// Stamp the account attribution (account_type, provider, external_org_id,
+		// device_id) the OTEL Logs endpoint computed for this session, so cost and
+		// token metric rows carry the same personal/team classification as the log
+		// rows. Without this, cost rows land unclassified and a personal (Claude
+		// Max) session's spend can't be told apart from billed team usage in the
+		// cost rollup (DNO-384). The metric datapoints carry session.id; the logs
+		// path seeds SessionMetadata under sessionCacheKey. A cache miss (metrics
+		// arriving before logs seed the session) leaves the columns empty and
+		// self-heals on the session's later metric batches.
+		// The session cache is keyed by session id alone, so only trust cached
+		// metadata that the same org+project seeded — a colliding or spoofed
+		// session id must not stamp another tenant's attribution or user identity
+		// onto this org's rows.
+		var sessionMeta SessionMetadata
+		if m.SessionID != "" {
+			if meta, err := s.getSessionMetadata(ctx, m.SessionID); err == nil &&
+				meta.GramOrgID == orgID && meta.ProjectID == projectID {
+				sessionMeta = meta
+			}
+		}
+		stampAccountAttribution(attrs, sessionMeta)
+		// Cost/token metric rows carry the session's resolved surface (OTEL
+		// service.name first, SessionStart agent variant fallback for older
+		// cowork builds whose OTEL reports "claude-code") so cowork and Claude
+		// Code Desktop spend is not misfiled under claude-code. The variant
+		// fallback rides sessionMeta's SessionID, which is only populated once
+		// the tenant check above validated the cached metadata — the variant
+		// cache is keyed by session id alone, and an unvalidated id must not
+		// pull another tenant's surface label. Until then (metrics beating the
+		// logs path, or a rejected id) rows keep the claude-code default and
+		// self-heal on the session's later batches.
+		if surface := claudeSurfaceFromServiceName(s.claudeSessionSurface(ctx, &sessionMeta)); surface != "" {
+			attrs[attr.HookSourceKey] = surface
 		}
 
 		// Only include non-zero values
@@ -370,9 +445,17 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 			FunctionID:     nil,
 		}
 
+		// Attribute usage to the owning employee. Team accounts resolve by email;
+		// a personal account's email won't resolve, but the device bridge may have
+		// supplied the owner on the OTEL Logs path — prefer it so personal spend
+		// still rolls up under the employee while account_type=personal preserves
+		// the split.
 		userInfo := telemetry.UserInfoByEmail(m.UserEmail)
 		if userID := emailToUserID[conv.NormalizeEmail(m.UserEmail)]; userID != "" {
 			userInfo = telemetry.UserInfoByID(userID)
+		}
+		if sessionMeta.UserID != "" {
+			userInfo = telemetry.UserInfoByIDAndEmail(sessionMeta.UserID, conv.Default(sessionMeta.UserEmail, m.UserEmail))
 		}
 
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{

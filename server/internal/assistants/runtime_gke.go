@@ -1,14 +1,11 @@
 package assistants
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
-	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -39,16 +36,10 @@ const (
 	gkeRuntimePollInterval  = time.Second
 	// gkeRuntimeReapCallTimeout caps a single delete during reap so one wedged
 	// row cannot consume the parent activity's deadline.
-	gkeRuntimeReapCallTimeout   = 30 * time.Second
-	gkeRuntimeDefaultReqTimeout = 2 * time.Minute
-	gkeRuntimeTurnTimeout       = 30 * time.Minute
+	gkeRuntimeReapCallTimeout = 30 * time.Second
+	gkeRuntimeTurnTimeout     = 30 * time.Minute
 
 	gkeSandboxReadyConditionType = "Ready"
-
-	gkeMetadataAssistantID = "gram.speakeasy.com/assistant-id"
-	gkeMetadataProjectID   = "gram.speakeasy.com/project-id"
-	gkeMetadataRole        = "gram.speakeasy.com/role"
-	gkeMetadataRoleValue   = "assistant_runtime"
 
 	// gkeClaimUIDLabel is injected by the SandboxClaim controller onto the pod,
 	// carrying the owning claim's UID. We resolve the runner pod (for its IP) by
@@ -135,10 +126,10 @@ type gkeRuntimeMetadata struct {
 }
 
 type GKERuntimeBackend struct {
-	logger     *slog.Logger
-	tracer     trace.Tracer
-	config     GKERuntimeConfig
-	httpClient runtimeHTTPDoer
+	logger *slog.Logger
+	tracer trace.Tracer
+	config GKERuntimeConfig
+	runner runnerClient
 }
 
 func NewGKERuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider, httpClient runtimeHTTPDoer, config GKERuntimeConfig) *GKERuntimeBackend {
@@ -146,10 +137,10 @@ func NewGKERuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvid
 		config.GuestPort = defaultRuntimeGuestPort
 	}
 	return &GKERuntimeBackend{
-		logger:     logger.With(attr.SlogComponent("assistants_gke")),
-		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
-		config:     config,
-		httpClient: httpClient,
+		logger: logger.With(attr.SlogComponent("assistants_gke")),
+		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
+		config: config,
+		runner: runnerClient{do: httpClient, backend: runtimeBackendGKE},
 	}
 }
 
@@ -170,14 +161,11 @@ func (g *GKERuntimeBackend) ImageRef() string { return g.desiredImageRef() }
 func (g *GKERuntimeBackend) ReusesIdleRuntimes() bool { return false }
 
 func (g *GKERuntimeBackend) desiredImageRef() string {
-	if g.config.ImageTag == "" {
-		return g.config.OCIImage
-	}
-	return g.config.OCIImage + ":" + g.config.ImageTag
+	return runtimeImageRef(g.config.OCIImage, g.config.ImageTag)
 }
 
 func (g *GKERuntimeBackend) claimName(runtime assistantRuntimeRecord) string {
-	return "gram-asst-" + strings.ToLower(runtime.AssistantID.String())
+	return runtimeResourcePrefix + "-" + strings.ToLower(runtime.AssistantID.String())
 }
 
 func (g *GKERuntimeBackend) claims() dynamic.ResourceInterface {
@@ -240,7 +228,7 @@ func (g *GKERuntimeBackend) Ensure(ctx context.Context, runtime assistantRuntime
 	}
 	metadata.Image = g.desiredImageRef()
 
-	if err := g.waitForHealth(ctx, metadata); err != nil {
+	if err := g.runner.health(ctx, g.endpoint(metadata), gkeRuntimeHealthTimeout, 500*time.Millisecond); err != nil {
 		return RuntimeBackendEnsureResult{}, err
 	}
 
@@ -253,9 +241,9 @@ func (g *GKERuntimeBackend) Ensure(ctx context.Context, runtime assistantRuntime
 
 func (g *GKERuntimeBackend) buildClaim(name string, runtime assistantRuntimeRecord) *unstructured.Unstructured {
 	labels := map[string]any{
-		gkeMetadataAssistantID: strings.ToLower(runtime.AssistantID.String()),
-		gkeMetadataProjectID:   strings.ToLower(runtime.ProjectID.String()),
-		gkeMetadataRole:        gkeMetadataRoleValue,
+		runtimeLabelAssistantID: strings.ToLower(runtime.AssistantID.String()),
+		runtimeLabelProjectID:   strings.ToLower(runtime.ProjectID.String()),
+		runtimeLabelRole:        runtimeLabelRoleAssistantRuntime,
 	}
 	return &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": gkeSandboxClaimGVR.Group + "/" + gkeSandboxClaimGVR.Version,
@@ -362,23 +350,6 @@ func (g *GKERuntimeBackend) endpoint(metadata gkeRuntimeMetadata) string {
 	return fmt.Sprintf("http://%s:%d", metadata.PodIP, g.config.GuestPort)
 }
 
-func (g *GKERuntimeBackend) waitForHealth(ctx context.Context, metadata gkeRuntimeMetadata) error {
-	deadline := time.Now().Add(gkeRuntimeHealthTimeout)
-	for {
-		if _, err := g.doRequest(ctx, metadata, http.MethodGet, "/healthz", nil, "", "", 0); err == nil {
-			return nil
-		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("%w: gke runtime health check timed out", ErrRuntimeUnhealthy)
-		}
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("wait for gke runtime health: %w", ctx.Err())
-		case <-time.After(500 * time.Millisecond):
-		}
-	}
-}
-
 func (g *GKERuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string, mcpServers []runtimeMCPServer) error {
 	if err := validateRuntimeBackend(g, runtime.Backend); err != nil {
 		return err
@@ -391,19 +362,7 @@ func (g *GKERuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 		return fmt.Errorf("%w: gke runtime pod ip is not available", ErrRuntimeUnhealthy)
 	}
 
-	reqBody, err := json.Marshal(runtimeTurnRequest{
-		Input:       prompt,
-		AuthToken:   authToken,
-		MCPServers:  mcpServers,
-		AssistantID: runtime.AssistantID.String(),
-	})
-	if err != nil {
-		return fmt.Errorf("marshal gke runtime turn request: %w", err)
-	}
-	if _, err := g.doRequest(ctx, metadata, http.MethodPost, "/threads/"+threadID.String()+"/turn", reqBody, "application/json", idempotencyKey, gkeRuntimeTurnTimeout); err != nil {
-		return fmt.Errorf("%w: execute gke turn request: %w", classifyTurnError(err), err)
-	}
-	return nil
+	return g.runner.turn(ctx, g.endpoint(metadata), runtime, threadID, idempotencyKey, authToken, prompt, mcpServers, gkeRuntimeTurnTimeout)
 }
 
 func (g *GKERuntimeBackend) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {
@@ -417,13 +376,9 @@ func (g *GKERuntimeBackend) Status(ctx context.Context, runtime assistantRuntime
 	if metadata.PodIP == "" {
 		return RuntimeBackendStatus{}, fmt.Errorf("%w: gke runtime pod ip is not available", ErrRuntimeUnhealthy)
 	}
-	body, err := g.doRequest(ctx, metadata, http.MethodGet, "/state", nil, "", "", 0)
+	state, err := g.runner.state(ctx, g.endpoint(metadata))
 	if err != nil {
 		return RuntimeBackendStatus{}, fmt.Errorf("load gke runtime state: %w", err)
-	}
-	var state runnerStateResponse
-	if err := json.Unmarshal(body, &state); err != nil {
-		return RuntimeBackendStatus{}, fmt.Errorf("decode gke runtime state: %w", err)
 	}
 	return RuntimeBackendStatus{Configured: true, IdleSeconds: state.minThreadIdle()}, nil
 }
@@ -480,45 +435,6 @@ func (g *GKERuntimeBackend) RecycleImage(ctx context.Context, runtime assistantR
 		return RuntimeBackendRecycleResult{}, err
 	}
 	return RuntimeBackendRecycleResult{Recycled: false, BackendMetadataJSON: nil}, nil
-}
-
-func (g *GKERuntimeBackend) doRequest(ctx context.Context, metadata gkeRuntimeMetadata, method, path string, body []byte, contentType, idempotencyKey string, maxTimeout time.Duration) ([]byte, error) {
-	fallback := gkeRuntimeDefaultReqTimeout
-	if maxTimeout > 0 {
-		fallback = maxTimeout
-	}
-	reqCtx, cancel := context.WithTimeout(ctx, fallback)
-	defer cancel()
-
-	var reader io.Reader
-	if body != nil {
-		reader = bytes.NewReader(body)
-	}
-	req, err := http.NewRequestWithContext(reqCtx, method, g.endpoint(metadata)+path, reader)
-	if err != nil {
-		return nil, fmt.Errorf("build gke runtime request: %w", err)
-	}
-	if contentType != "" {
-		req.Header.Set("Content-Type", contentType)
-	}
-	if idempotencyKey != "" {
-		req.Header.Set("X-Idempotency-Key", idempotencyKey)
-	}
-
-	resp, err := g.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("execute gke runtime request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read gke runtime response: %w", err)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, &runtimeResponseError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(respBody))}
-	}
-	return respBody, nil
 }
 
 func decodeGKERuntimeMetadata(raw []byte) (gkeRuntimeMetadata, error) {

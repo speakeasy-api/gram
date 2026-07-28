@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+#MISE description="Stop all development processes with pitchfork"
+#MISE raw=true
+
+set -e
+
+pitchfork stop --all-local
+
+gum style \
+  --foreground 9 --border-foreground 9 --border rounded \
+  --align center --width 40 --margin "0 0" --padding "0 0" \
+  'Local development services stopped'

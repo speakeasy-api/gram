@@ -61,11 +61,11 @@ linters:
       - path: cmd/|internal/dns/
         linters:
           - forbidigo
-      # riskjudgebench is a developer/benchmark CLI (not part of the server
-      # binary). Like test files, it favors terse partial structs and direct
-      # error returns over production-grade hardening, so exempt it from the
+      # Bench commands and dev-mcp are developer CLIs (not part of the server
+      # binary). Like test files, they favor terse partial structs and direct
+      # error returns over production-grade hardening, so exempt them from the
       # same dev-tooling linters we exempt tests from.
-      - path: cmd/riskjudgebench/
+      - path: cmd/(riskjudge|skillefficacy)bench/|cmd/dev-mcp/
         linters:
           - exhaustruct
           - wrapcheck
@@ -73,7 +73,7 @@ linters:
           - sloglint
       # gosec stays on for the tool; exempt only G304 (the input cases file is a
       # CLI flag, so a variable path is inherent and not attacker-controlled).
-      - path: cmd/riskjudgebench/
+      - path: cmd/(riskjudge|skillefficacy)bench/
         linters:
           - gosec
         text: G304
@@ -91,6 +91,11 @@ linters:
         text: G101
       # False positives that audit action constants containing "bypass" are somehow hardcoded credentials.
       - path: internal/audit/risk\.go
+        linters:
+          - gosec
+        text: G101
+      # False positives that audit subject/action constants containing "credential" are somehow hardcoded credentials.
+      - path: internal/audit/(events|awsiamcredentials|gcpiamcredentials)\.go
         linters:
           - gosec
         text: G101
@@ -114,6 +119,11 @@ linters:
         linters:
           - glint
         text: enforceo11yconventions
+      # sloglint's constant key linter does not recognise the use of constants with type `attribute.Key` from `go.opentelemetry.io/otel/attribute`.
+      - path: internal/attr/conventions\.go
+        linters:
+          - sloglint
+        text: key should be a constant
       # This is forwarding log events from within pgx library that we have no control over.
       - path: internal/o11y/slog\.go
         linters:
@@ -137,6 +147,13 @@ linters:
         linters:
           - forbidigo
         text: GG001|GG002|GG011|GG012
+      # GG006/GG009 redirect tests to the testenv helpers; production code may
+      # legitimately construct discard loggers and noop meter providers, so
+      # they are only enforced in test files.
+      - path-except: _test\.go
+        linters:
+          - forbidigo
+        text: GG006|GG009
       # The testenv package is the canonical provider of the helpers that
       # GG006/GG008/GG009 redirect tests to. It necessarily constructs the
       # underlying primitives directly.
@@ -147,6 +164,12 @@ linters:
       # Production observability setup falls back to noop providers when
       # no exporter is configured.
       - path: internal/o11y/setup\.go
+        linters:
+          - forbidigo
+        text: GG008|GG009
+      # NewNoopLogPublisher builds the inert shadow publisher for the stub
+      # telemetry logger from noop providers.
+      - path: internal/telemetry/log_publisher\.go
         linters:
           - forbidigo
         text: GG008|GG009
@@ -191,6 +214,8 @@ linters:
               # are migrated to `.LogWarn` / `.LogInfo`. An empty list reports
               # nothing, so the rule stays silent until a code is enabled here.
               codes: []
+            rpc-endpoint-format:
+              disabled: false
     gosec:
       excludes:
         # Temporarily ignore this lint rule because it needs to be a separate
@@ -255,6 +280,9 @@ linters:
         - pattern: ^time\.Sleep$
           pkg: ^time$
           msg: "GG013: Avoid time.Sleep. In tests, poll with require.EventuallyWithT (wait until assertions pass) or require.Never (assert a condition never holds)."
+        - pattern: ^clickhouse\.With(Std)?Async$
+          pkg: ^github\.com/ClickHouse/clickhouse-go/v2$
+          msg: "GG014: clickhouse.WithAsync does not enable or disable async insert. It always sets async_insert=1 and its bool only picks wait_for_async_insert, so WithAsync(false) is fire-and-forget. State the posture explicitly with WithSettings instead: async_insert 0 for a synchronous insert, or async_insert 1 plus wait_for_async_insert 0 for fire-and-forget."
     sloglint:
       no-mixed-args: true
       attr-only: true
@@ -403,6 +431,7 @@ linters:
         - "fmt.Errorf("
 
         - "(*github.com/sourcegraph/conc/pool.ErrorPool).Wait("
+        - "(*golang.org/x/sync/singleflight.Group).Do("
         - "go.temporal.io/sdk/temporal.NewApplicationErrorWithOptions("
         - "go.temporal.io/sdk/temporal.NewApplicationErrorWithCause("
         - "go.temporal.io/sdk/temporal.NewNonRetryableApplicationError("
@@ -417,6 +446,7 @@ linters:
         - "github.com/speakeasy-api/gram/server/internal/oops.C("
         - "github.com/speakeasy-api/gram/server/internal/oops.E("
         - "github.com/speakeasy-api/gram/server/internal/oops.Permanent("
+        - "github.com/speakeasy-api/gram/server/internal/httpcache.WriteCacheableJSON("
         - "github.com/speakeasy-api/gram/server/internal/platformtools/core.DecodeInput("
         - "github.com/speakeasy-api/gram/server/internal/platformtools/core.EncodeResult("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).Require("

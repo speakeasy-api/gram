@@ -82,9 +82,14 @@ type consentTemplateData struct {
 	// completed (a card is Connected). Cancel is always available.
 	ConsentEnabled bool
 	// FirstParty swaps the approve/deny client-grant footer for a terminal
-	// "you can close this tab" message: a first-party challenge has no MCP
-	// client to grant to, so linking the cards is the whole job.
+	// completion message: a first-party challenge has no MCP client to grant
+	// to, so linking the cards is the whole job.
 	FirstParty bool
+	// AutoClose marks a fully completed first-party connection: every bound
+	// remote_session_client is connected. The consent script closes only this
+	// terminal state; partially-linked connections (some cards still
+	// disconnected) and MCP client consent remain open.
+	AutoClose bool
 }
 
 // remoteSessionCard is the per-remote view rendered by the {{range}} block
@@ -214,13 +219,14 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		return oops.E(oops.CodeUnexpected, err, "build remote session cards").LogError(ctx, logger)
 	}
 
-	consentEnabled := len(cards) == 0
+	hasConnectedCard := false
 	for _, c := range cards {
 		if c.Connected {
-			consentEnabled = true
+			hasConnectedCard = true
 			break
 		}
 	}
+	consentEnabled := len(cards) == 0 || hasConnectedCard
 
 	data := consentTemplateData{
 		ClientName:         clientName,
@@ -234,6 +240,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		RemoteSessionCards: cards,
 		ConsentEnabled:     consentEnabled,
 		FirstParty:         challengeState.FirstParty,
+		AutoClose:          shouldAutoCloseFirstParty(challengeState.FirstParty, cards),
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -436,6 +443,24 @@ func isUniqueViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
+// shouldAutoCloseFirstParty reports whether a first-party connect tab is fully
+// terminal and safe to auto-close: every bound remote_session_client is
+// connected. The runtime gate (remotesessions.ResolveAccessTokens) fails the
+// request unless all bound clients have a usable token, so closing after only
+// the first of several providers is linked would strand the user mid-flow. A
+// challenge with no cards is never auto-closed — there is nothing to complete.
+func shouldAutoCloseFirstParty(firstParty bool, cards []remoteSessionCard) bool {
+	if !firstParty || len(cards) == 0 {
+		return false
+	}
+	for _, c := range cards {
+		if !c.Connected {
+			return false
+		}
+	}
+	return true
+}
+
 // buildRemoteSessionCards loads every remote_session_client linked to the
 // endpoint's user_session_issuer and materialises a card per client. Each
 // card carries a connected/disconnected state (read from remote_sessions
@@ -447,7 +472,7 @@ func (s *Service) buildRemoteSessionCards(
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
 ) ([]remoteSessionCard, error) {
-	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.UserSessionIssuerID)
+	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}
@@ -470,11 +495,13 @@ func (s *Service) buildRemoteSessionCards(
 	parent := remotesessions.ParentChallenge{
 		ID:                  challengeState.ID,
 		ProjectID:           endpoint.ProjectID,
+		OrganizationID:      endpoint.OrganizationID,
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		Subject:             challengeState.Subject,
 		McpSlug:             endpoint.Slug,
 		RouteBase:           endpoint.RouteBase,
 		FinalRedirectURI:    "",
+		Resource:            endpoint.UpstreamResource,
 	}
 
 	cards := make([]remoteSessionCard, 0, len(clients))

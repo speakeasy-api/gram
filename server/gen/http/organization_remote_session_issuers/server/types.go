@@ -8,8 +8,6 @@
 package server
 
 import (
-	"unicode/utf8"
-
 	organizationremotesessionissuers "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
@@ -31,6 +29,9 @@ type CreateIssuerRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Optional logo asset id.
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
+	// URL of OAuth client setup documentation shown when creating clients.
+	// Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
+	ClientSetupDocumentationURL *string `form:"client_setup_documentation_url,omitempty" json:"client_setup_documentation_url,omitempty" xml:"client_setup_documentation_url,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -39,6 +40,16 @@ type CreateIssuerRequestBody struct {
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// RFC 8414 service_documentation; developer documentation for the issuer.
+	// Discovered from the issuer metadata document; rejected unless an absolute
+	// http(s) URL.
+	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
+	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Discovered
+	// from the issuer metadata document; rejected unless an absolute http(s) URL.
+	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
+	// RFC 8414 op_tos_uri; the issuer's terms of service. Discovered from the
+	// issuer metadata document; rejected unless an absolute http(s) URL.
+	OpTosURI *string `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
 	// Scopes advertised by the issuer.
 	ScopesSupported []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
 	// Grant types advertised by the issuer.
@@ -72,6 +83,10 @@ type UpdateIssuerRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Set the logo asset id.
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
+	// Set or clear the URL of OAuth client setup documentation shown when creating
+	// clients. An empty string clears it to NULL; any other value must be an
+	// absolute http(s) URL.
+	ClientSetupDocumentationURL *string `form:"client_setup_documentation_url,omitempty" json:"client_setup_documentation_url,omitempty" xml:"client_setup_documentation_url,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -79,7 +94,16 @@ type UpdateIssuerRequestBody struct {
 	// Upstream RFC 7591 registration endpoint.
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI.
-	JwksURI                           *string  `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// Set or clear RFC 8414 service_documentation. An empty string clears it to
+	// NULL; any other value must be an absolute http(s) URL.
+	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
+	// Set or clear RFC 8414 op_policy_uri. An empty string clears it to NULL; any
+	// other value must be an absolute http(s) URL.
+	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
+	// Set or clear RFC 8414 op_tos_uri. An empty string clears it to NULL; any
+	// other value must be an absolute http(s) URL.
+	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
 	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
 	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
 	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
@@ -101,101 +125,15 @@ type MoveIssuerRequestBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 }
 
-// CreateClientRequestBody is the type of the
-// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// MigrateIssuerRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
 // request body.
-type CreateClientRequestBody struct {
-	// The owning remote_session_issuer id; must belong to the caller's
-	// organization.
-	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
-	// Owning project id for the new client; the project must belong to the
-	// caller's organization. Omit to inherit a project-specific issuer's project;
-	// required when the issuer is organization-level.
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// client_id supplied by the caller, e.g. from Dynamic Client Registration.
-	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
-	// Optional client_secret supplied by the caller. Gram encrypts before
-	// persisting; the plaintext is never returned.
-	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
-	// How the client authenticates at the issuer's token endpoint. Omit to default
-	// to client_secret_basic.
-	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	// Explicit upstream OAuth scopes the dance should request for this client.
-	// Omit to fall back to the issuer's scopes_supported.
-	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// Optional upstream OAuth audience to send on the authorize redirect and token
-	// exchange.
-	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-}
-
-// CreateCimdClientRequestBody is the type of the
-// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
-// request body.
-type CreateCimdClientRequestBody struct {
-	// The owning remote_session_issuer id; must belong to the caller's
-	// organization and advertise client_id_metadata_document_supported.
-	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
-	// Owning project id for the new client; the project must belong to the
-	// caller's organization. Omit to inherit a project-specific issuer's project;
-	// required when the issuer is organization-level.
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// Explicit upstream OAuth scopes the dance should request for this client.
-	// Omit to fall back to the issuer's scopes_supported.
-	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// Optional upstream OAuth audience to send on the authorize redirect and token
-	// exchange.
-	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-}
-
-// UpdateClientRequestBody is the type of the
-// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
-// request body.
-type UpdateClientRequestBody struct {
-	// The remote_session_client id.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Rotate the client secret. Gram re-encrypts before persisting; the plaintext
-	// is never returned.
-	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
-	// Change how the client authenticates at the issuer's token endpoint.
-	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	// Replace the explicit upstream OAuth scopes for this client.
-	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// Replace the upstream OAuth audience sent for this client.
-	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-}
-
-// RemoveClientFromMcpServerRequestBody is the type of the
-// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
-// endpoint HTTP request body.
-type RemoveClientFromMcpServerRequestBody struct {
-	// The remote_session_client id.
-	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
-	// The mcp_server id to detach from.
-	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-}
-
-// RevokeSessionRequestBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
-// request body.
-type RevokeSessionRequestBody struct {
-	// The remote_session id.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-}
-
-// RefreshSessionRequestBody is the type of the
-// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
-// request body.
-type RefreshSessionRequestBody struct {
-	// The remote_session id.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-}
-
-// RevokeAllClientSessionsRequestBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
-// endpoint HTTP request body.
-type RevokeAllClientSessionsRequestBody struct {
-	// The remote_session_client id.
-	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+type MigrateIssuerRequestBody struct {
+	// The remote_session_issuer to migrate away from; soft-deleted on success.
+	SourceID *string `form:"source_id,omitempty" json:"source_id,omitempty" xml:"source_id,omitempty"`
+	// The remote_session_issuer to migrate onto; survives and adopts the source's
+	// clients.
+	TargetID *string `form:"target_id,omitempty" json:"target_id,omitempty" xml:"target_id,omitempty"`
 }
 
 // CreateIssuerResponseBody is the type of the
@@ -216,6 +154,9 @@ type CreateIssuerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Optional logo asset id; null when unset.
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
+	// URL of OAuth client setup documentation shown when creating clients.
+	// Manually set, not RFC 8414; null when unset.
+	ClientSetupDocumentationURL *string `form:"client_setup_documentation_url,omitempty" json:"client_setup_documentation_url,omitempty" xml:"client_setup_documentation_url,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -223,7 +164,15 @@ type CreateIssuerResponseBody struct {
 	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
-	JwksURI                           *string  `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// RFC 8414 service_documentation; developer documentation for the issuer. Null
+	// when not advertised.
+	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
+	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not
+	// advertised.
+	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
+	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
+	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
 	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
 	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
 	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
@@ -265,6 +214,9 @@ type GetIssuerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Optional logo asset id; null when unset.
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
+	// URL of OAuth client setup documentation shown when creating clients.
+	// Manually set, not RFC 8414; null when unset.
+	ClientSetupDocumentationURL *string `form:"client_setup_documentation_url,omitempty" json:"client_setup_documentation_url,omitempty" xml:"client_setup_documentation_url,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -272,7 +224,15 @@ type GetIssuerResponseBody struct {
 	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
-	JwksURI                           *string  `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// RFC 8414 service_documentation; developer documentation for the issuer. Null
+	// when not advertised.
+	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
+	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not
+	// advertised.
+	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
+	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
+	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
 	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
 	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
 	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
@@ -316,6 +276,9 @@ type UpdateIssuerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Optional logo asset id; null when unset.
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
+	// URL of OAuth client setup documentation shown when creating clients.
+	// Manually set, not RFC 8414; null when unset.
+	ClientSetupDocumentationURL *string `form:"client_setup_documentation_url,omitempty" json:"client_setup_documentation_url,omitempty" xml:"client_setup_documentation_url,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -323,7 +286,15 @@ type UpdateIssuerResponseBody struct {
 	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
-	JwksURI                           *string  `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// RFC 8414 service_documentation; developer documentation for the issuer. Null
+	// when not advertised.
+	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
+	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not
+	// advertised.
+	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
+	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
+	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
 	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
 	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
 	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
@@ -356,6 +327,9 @@ type MoveIssuerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Optional logo asset id; null when unset.
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
+	// URL of OAuth client setup documentation shown when creating clients.
+	// Manually set, not RFC 8414; null when unset.
+	ClientSetupDocumentationURL *string `form:"client_setup_documentation_url,omitempty" json:"client_setup_documentation_url,omitempty" xml:"client_setup_documentation_url,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -363,7 +337,15 @@ type MoveIssuerResponseBody struct {
 	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
-	JwksURI                           *string  `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// RFC 8414 service_documentation; developer documentation for the issuer. Null
+	// when not advertised.
+	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
+	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not
+	// advertised.
+	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
+	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
+	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
 	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
 	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
 	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
@@ -379,223 +361,42 @@ type MoveIssuerResponseBody struct {
 	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
-// ListClientsResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
-// response body.
-type ListClientsResponseBody struct {
-	Items []*OrganizationRemoteSessionClientResponseBody `form:"items" json:"items" xml:"items"`
-	// Cursor for the next page; empty when exhausted.
-	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
-}
-
-// GetClientResponseBody is the type of the "organizationRemoteSessionIssuers"
-// service "getClient" endpoint HTTP response body.
-type GetClientResponseBody struct {
-	// The remote_session_client id.
-	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning remote_session_issuer id.
-	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
-	// The user_session_issuers this client is attached to via the join table.
-	// Empty for a standalone client with no attachments.
-	UserSessionIssuerIds []string `form:"user_session_issuer_ids" json:"user_session_issuer_ids" xml:"user_session_issuer_ids"`
-	// The client_id used to identify this client at the issuer's token and
-	// authorization endpoints.
-	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
-	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
-	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
-	// Null when the secret does not expire.
-	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
-	// How the client authenticates at the issuer's token endpoint. Null resolves
-	// to client_secret_basic at runtime.
-	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	// Explicit upstream OAuth scopes the dance requests for this client. Null
-	// falls back to the issuer's scopes_supported.
-	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// Upstream OAuth audience sent on the authorize redirect and token exchange.
-	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
-}
-
-// GetClientDeletePreflightResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// GetIssuerMigratePreflightResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
 // endpoint HTTP response body.
-type GetClientDeletePreflightResponseBody struct {
-	// Number of non-deleted remote_sessions minted against this client.
-	SessionCount int `form:"session_count" json:"session_count" xml:"session_count"`
-	// Display names of MCP servers this client is attached to.
+type GetIssuerMigratePreflightResponseBody struct {
+	// Number of non-deleted remote_session_clients that would be re-pointed from
+	// the source issuer to the target issuer.
+	ClientCount int `form:"client_count" json:"client_count" xml:"client_count"`
+	// Display names of MCP servers attached to the source issuer's clients.
 	McpServerNames []string `form:"mcp_server_names" json:"mcp_server_names" xml:"mcp_server_names"`
+	// Names of the authorization-server metadata fields (issuer, token_endpoint,
+	// authorization_endpoint) that differ between source and target. Non-empty
+	// blocks the migration.
+	EndpointMismatches []string `form:"endpoint_mismatches" json:"endpoint_mismatches" xml:"endpoint_mismatches"`
+	// Display names of MCP servers where both the source and the target issuer
+	// already have a client bound. Non-empty blocks the migration; detach one
+	// client per listed server and retry.
+	ConflictingMcpServerNames []string `form:"conflicting_mcp_server_names" json:"conflicting_mcp_server_names" xml:"conflicting_mcp_server_names"`
+	// Non-blocking divergences (oidc, passthrough, scopes_supported). The target
+	// issuer's values become authoritative for the migrated clients.
+	Warnings []string `form:"warnings" json:"warnings" xml:"warnings"`
+	// TRUE when the migration would succeed: no endpoint mismatches and no
+	// conflicting MCP-server bindings.
+	CanMigrate bool `form:"can_migrate" json:"can_migrate" xml:"can_migrate"`
 }
 
-// ListClientMcpServersResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
-// HTTP response body.
-type ListClientMcpServersResponseBody struct {
-	Items []*OrganizationMcpServerResponseBody `form:"items" json:"items" xml:"items"`
-}
-
-// ListClientSessionsResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
-// HTTP response body.
-type ListClientSessionsResponseBody struct {
-	Items []*RemoteSessionResponseBody `form:"items" json:"items" xml:"items"`
-	// Cursor for the next page; empty when exhausted.
-	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
-}
-
-// CreateClientResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// MigrateIssuerResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
 // response body.
-type CreateClientResponseBody struct {
-	// The remote_session_client id.
-	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning remote_session_issuer id.
-	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
-	// The user_session_issuers this client is attached to via the join table.
-	// Empty for a standalone client with no attachments.
-	UserSessionIssuerIds []string `form:"user_session_issuer_ids" json:"user_session_issuer_ids" xml:"user_session_issuer_ids"`
-	// The client_id used to identify this client at the issuer's token and
-	// authorization endpoints.
-	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
-	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
-	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
-	// Null when the secret does not expire.
-	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
-	// How the client authenticates at the issuer's token endpoint. Null resolves
-	// to client_secret_basic at runtime.
-	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	// Explicit upstream OAuth scopes the dance requests for this client. Null
-	// falls back to the issuer's scopes_supported.
-	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// Upstream OAuth audience sent on the authorize redirect and token exchange.
-	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
-}
-
-// CreateCimdClientResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
-// response body.
-type CreateCimdClientResponseBody struct {
-	// The remote_session_client id.
-	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning remote_session_issuer id.
-	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
-	// The user_session_issuers this client is attached to via the join table.
-	// Empty for a standalone client with no attachments.
-	UserSessionIssuerIds []string `form:"user_session_issuer_ids" json:"user_session_issuer_ids" xml:"user_session_issuer_ids"`
-	// The client_id used to identify this client at the issuer's token and
-	// authorization endpoints.
-	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
-	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
-	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
-	// Null when the secret does not expire.
-	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
-	// How the client authenticates at the issuer's token endpoint. Null resolves
-	// to client_secret_basic at runtime.
-	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	// Explicit upstream OAuth scopes the dance requests for this client. Null
-	// falls back to the issuer's scopes_supported.
-	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// Upstream OAuth audience sent on the authorize redirect and token exchange.
-	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
-}
-
-// UpdateClientResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
-// response body.
-type UpdateClientResponseBody struct {
-	// The remote_session_client id.
-	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning remote_session_issuer id.
-	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
-	// The user_session_issuers this client is attached to via the join table.
-	// Empty for a standalone client with no attachments.
-	UserSessionIssuerIds []string `form:"user_session_issuer_ids" json:"user_session_issuer_ids" xml:"user_session_issuer_ids"`
-	// The client_id used to identify this client at the issuer's token and
-	// authorization endpoints.
-	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
-	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
-	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
-	// Null when the secret does not expire.
-	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
-	// How the client authenticates at the issuer's token endpoint. Null resolves
-	// to client_secret_basic at runtime.
-	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	// Explicit upstream OAuth scopes the dance requests for this client. Null
-	// falls back to the issuer's scopes_supported.
-	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// Upstream OAuth audience sent on the authorize redirect and token exchange.
-	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
-}
-
-// RefreshSessionResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
-// response body.
-type RefreshSessionResponseBody struct {
-	// The remote_session id.
-	ID string `form:"id" json:"id" xml:"id"`
-	// The session's subject URN (user:<id> | apikey:<uuid> |
-	// anonymous:<mcp-session-id>).
-	SubjectUrn string `form:"subject_urn" json:"subject_urn" xml:"subject_urn"`
-	// Resolved display name when the subject is a Gram user. Absent for
-	// apikey/anonymous subjects or unresolved users.
-	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
-	// Resolved email when the subject is a Gram user. Absent for apikey/anonymous
-	// subjects or unresolved users.
-	SubjectEmail *string `form:"subject_email,omitempty" json:"subject_email,omitempty" xml:"subject_email,omitempty"`
-	// The user_session_issuer this session is bound to.
-	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
-	// The remote_session_client this session was minted against.
-	RemoteSessionClientID string `form:"remote_session_client_id" json:"remote_session_client_id" xml:"remote_session_client_id"`
-	// Upstream access-token expiry. Independent of refresh_expires_at.
-	AccessExpiresAt string `form:"access_expires_at" json:"access_expires_at" xml:"access_expires_at"`
-	// Upstream refresh-token expiry. Null when the session has no refresh token.
-	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
-	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
-	// action; refresh_expires_at is insufficient because an upstream may issue a
-	// non-expiring refresh token. The token itself is never returned.
-	HasRefreshToken bool `form:"has_refresh_token" json:"has_refresh_token" xml:"has_refresh_token"`
-	// Scopes held by this session.
-	Scopes    []string `form:"scopes" json:"scopes" xml:"scopes"`
-	CreatedAt string   `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string   `form:"updated_at" json:"updated_at" xml:"updated_at"`
-}
-
-// RevokeAllClientSessionsResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
-// endpoint HTTP response body.
-type RevokeAllClientSessionsResponseBody struct {
-	// Number of remote_sessions revoked.
-	RevokedCount int `form:"revoked_count" json:"revoked_count" xml:"revoked_count"`
+type MigrateIssuerResponseBody struct {
+	// The surviving target remote_session_issuer.
+	Issuer *RemoteSessionIssuerResponseBody `form:"issuer" json:"issuer" xml:"issuer"`
+	// Number of remote_session_clients re-pointed from the source issuer to the
+	// target issuer. Zero when the source had no active clients.
+	ClientsMigrated int `form:"clients_migrated" json:"clients_migrated" xml:"clients_migrated"`
+	// TRUE when the source issuer was soft-deleted.
+	SourceDeleted bool `form:"source_deleted" json:"source_deleted" xml:"source_deleted"`
 }
 
 // CreateIssuerUnauthorizedResponseBody is the type of the
@@ -1928,390 +1729,10 @@ type MoveIssuerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListClientsUnauthorizedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
-// response body for the "unauthorized" error.
-type ListClientsUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientsForbiddenResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
-// response body for the "forbidden" error.
-type ListClientsForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientsBadRequestResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
-// response body for the "bad_request" error.
-type ListClientsBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientsNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
-// response body for the "not_found" error.
-type ListClientsNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientsConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
-// response body for the "conflict" error.
-type ListClientsConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientsUnsupportedMediaResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
-// response body for the "unsupported_media" error.
-type ListClientsUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientsInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
-// response body for the "invalid" error.
-type ListClientsInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientsInvariantViolationResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
-// response body for the "invariant_violation" error.
-type ListClientsInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientsUnexpectedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
-// response body for the "unexpected" error.
-type ListClientsUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientsGatewayErrorResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClients" endpoint HTTP
-// response body for the "gateway_error" error.
-type ListClientsGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetClientUnauthorizedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
-// response body for the "unauthorized" error.
-type GetClientUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetClientForbiddenResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
-// response body for the "forbidden" error.
-type GetClientForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetClientBadRequestResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
-// response body for the "bad_request" error.
-type GetClientBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetClientNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
-// response body for the "not_found" error.
-type GetClientNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetClientConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
-// response body for the "conflict" error.
-type GetClientConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetClientUnsupportedMediaResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
-// response body for the "unsupported_media" error.
-type GetClientUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetClientInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
-// response body for the "invalid" error.
-type GetClientInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetClientInvariantViolationResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
-// response body for the "invariant_violation" error.
-type GetClientInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetClientUnexpectedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
-// response body for the "unexpected" error.
-type GetClientUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetClientGatewayErrorResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "getClient" endpoint HTTP
-// response body for the "gateway_error" error.
-type GetClientGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetClientDeletePreflightUnauthorizedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// GetIssuerMigratePreflightUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
 // endpoint HTTP response body for the "unauthorized" error.
-type GetClientDeletePreflightUnauthorizedResponseBody struct {
+type GetIssuerMigratePreflightUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2327,10 +1748,10 @@ type GetClientDeletePreflightUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetClientDeletePreflightForbiddenResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// GetIssuerMigratePreflightForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
 // endpoint HTTP response body for the "forbidden" error.
-type GetClientDeletePreflightForbiddenResponseBody struct {
+type GetIssuerMigratePreflightForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2346,10 +1767,10 @@ type GetClientDeletePreflightForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetClientDeletePreflightBadRequestResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// GetIssuerMigratePreflightBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
 // endpoint HTTP response body for the "bad_request" error.
-type GetClientDeletePreflightBadRequestResponseBody struct {
+type GetIssuerMigratePreflightBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2365,10 +1786,10 @@ type GetClientDeletePreflightBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetClientDeletePreflightNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// GetIssuerMigratePreflightNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
 // endpoint HTTP response body for the "not_found" error.
-type GetClientDeletePreflightNotFoundResponseBody struct {
+type GetIssuerMigratePreflightNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2384,10 +1805,10 @@ type GetClientDeletePreflightNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetClientDeletePreflightConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// GetIssuerMigratePreflightConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
 // endpoint HTTP response body for the "conflict" error.
-type GetClientDeletePreflightConflictResponseBody struct {
+type GetIssuerMigratePreflightConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2403,10 +1824,10 @@ type GetClientDeletePreflightConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetClientDeletePreflightUnsupportedMediaResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// GetIssuerMigratePreflightUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
 // endpoint HTTP response body for the "unsupported_media" error.
-type GetClientDeletePreflightUnsupportedMediaResponseBody struct {
+type GetIssuerMigratePreflightUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2422,10 +1843,10 @@ type GetClientDeletePreflightUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetClientDeletePreflightInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// GetIssuerMigratePreflightInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
 // endpoint HTTP response body for the "invalid" error.
-type GetClientDeletePreflightInvalidResponseBody struct {
+type GetIssuerMigratePreflightInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2441,10 +1862,10 @@ type GetClientDeletePreflightInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetClientDeletePreflightInvariantViolationResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// GetIssuerMigratePreflightInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
 // endpoint HTTP response body for the "invariant_violation" error.
-type GetClientDeletePreflightInvariantViolationResponseBody struct {
+type GetIssuerMigratePreflightInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2460,10 +1881,10 @@ type GetClientDeletePreflightInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetClientDeletePreflightUnexpectedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// GetIssuerMigratePreflightUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
 // endpoint HTTP response body for the "unexpected" error.
-type GetClientDeletePreflightUnexpectedResponseBody struct {
+type GetIssuerMigratePreflightUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2479,10 +1900,10 @@ type GetClientDeletePreflightUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetClientDeletePreflightGatewayErrorResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "getClientDeletePreflight"
+// GetIssuerMigratePreflightGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
 // endpoint HTTP response body for the "gateway_error" error.
-type GetClientDeletePreflightGatewayErrorResponseBody struct {
+type GetIssuerMigratePreflightGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2498,390 +1919,10 @@ type GetClientDeletePreflightGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListClientMcpServersUnauthorizedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
-// HTTP response body for the "unauthorized" error.
-type ListClientMcpServersUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientMcpServersForbiddenResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
-// HTTP response body for the "forbidden" error.
-type ListClientMcpServersForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientMcpServersBadRequestResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
-// HTTP response body for the "bad_request" error.
-type ListClientMcpServersBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientMcpServersNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
-// HTTP response body for the "not_found" error.
-type ListClientMcpServersNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientMcpServersConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
-// HTTP response body for the "conflict" error.
-type ListClientMcpServersConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientMcpServersUnsupportedMediaResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
-// HTTP response body for the "unsupported_media" error.
-type ListClientMcpServersUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientMcpServersInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
-// HTTP response body for the "invalid" error.
-type ListClientMcpServersInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientMcpServersInvariantViolationResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
-// HTTP response body for the "invariant_violation" error.
-type ListClientMcpServersInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientMcpServersUnexpectedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
-// HTTP response body for the "unexpected" error.
-type ListClientMcpServersUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientMcpServersGatewayErrorResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClientMcpServers" endpoint
-// HTTP response body for the "gateway_error" error.
-type ListClientMcpServersGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientSessionsUnauthorizedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
-// HTTP response body for the "unauthorized" error.
-type ListClientSessionsUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientSessionsForbiddenResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
-// HTTP response body for the "forbidden" error.
-type ListClientSessionsForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientSessionsBadRequestResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
-// HTTP response body for the "bad_request" error.
-type ListClientSessionsBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientSessionsNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
-// HTTP response body for the "not_found" error.
-type ListClientSessionsNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientSessionsConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
-// HTTP response body for the "conflict" error.
-type ListClientSessionsConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientSessionsUnsupportedMediaResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
-// HTTP response body for the "unsupported_media" error.
-type ListClientSessionsUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientSessionsInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
-// HTTP response body for the "invalid" error.
-type ListClientSessionsInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientSessionsInvariantViolationResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
-// HTTP response body for the "invariant_violation" error.
-type ListClientSessionsInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientSessionsUnexpectedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
-// HTTP response body for the "unexpected" error.
-type ListClientSessionsUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListClientSessionsGatewayErrorResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "listClientSessions" endpoint
-// HTTP response body for the "gateway_error" error.
-type ListClientSessionsGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CreateClientUnauthorizedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// MigrateIssuerUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
 // response body for the "unauthorized" error.
-type CreateClientUnauthorizedResponseBody struct {
+type MigrateIssuerUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2897,10 +1938,10 @@ type CreateClientUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateClientForbiddenResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// MigrateIssuerForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
 // response body for the "forbidden" error.
-type CreateClientForbiddenResponseBody struct {
+type MigrateIssuerForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2916,10 +1957,10 @@ type CreateClientForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateClientBadRequestResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// MigrateIssuerBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
 // response body for the "bad_request" error.
-type CreateClientBadRequestResponseBody struct {
+type MigrateIssuerBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2935,10 +1976,10 @@ type CreateClientBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateClientNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// MigrateIssuerNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
 // response body for the "not_found" error.
-type CreateClientNotFoundResponseBody struct {
+type MigrateIssuerNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2954,10 +1995,10 @@ type CreateClientNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateClientConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// MigrateIssuerConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
 // response body for the "conflict" error.
-type CreateClientConflictResponseBody struct {
+type MigrateIssuerConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2973,10 +2014,10 @@ type CreateClientConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateClientUnsupportedMediaResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// MigrateIssuerUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
 // response body for the "unsupported_media" error.
-type CreateClientUnsupportedMediaResponseBody struct {
+type MigrateIssuerUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2992,10 +2033,10 @@ type CreateClientUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateClientInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// MigrateIssuerInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
 // response body for the "invalid" error.
-type CreateClientInvalidResponseBody struct {
+type MigrateIssuerInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3011,10 +2052,10 @@ type CreateClientInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateClientInvariantViolationResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// MigrateIssuerInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
 // response body for the "invariant_violation" error.
-type CreateClientInvariantViolationResponseBody struct {
+type MigrateIssuerInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3030,10 +2071,10 @@ type CreateClientInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateClientUnexpectedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// MigrateIssuerUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
 // response body for the "unexpected" error.
-type CreateClientUnexpectedResponseBody struct {
+type MigrateIssuerUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3049,1340 +2090,10 @@ type CreateClientUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateClientGatewayErrorResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "createClient" endpoint HTTP
+// MigrateIssuerGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
 // response body for the "gateway_error" error.
-type CreateClientGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CreateCimdClientUnauthorizedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
-// response body for the "unauthorized" error.
-type CreateCimdClientUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CreateCimdClientForbiddenResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
-// response body for the "forbidden" error.
-type CreateCimdClientForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CreateCimdClientBadRequestResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
-// response body for the "bad_request" error.
-type CreateCimdClientBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CreateCimdClientNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
-// response body for the "not_found" error.
-type CreateCimdClientNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CreateCimdClientConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
-// response body for the "conflict" error.
-type CreateCimdClientConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CreateCimdClientUnsupportedMediaResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
-// response body for the "unsupported_media" error.
-type CreateCimdClientUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CreateCimdClientInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
-// response body for the "invalid" error.
-type CreateCimdClientInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CreateCimdClientInvariantViolationResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
-// response body for the "invariant_violation" error.
-type CreateCimdClientInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CreateCimdClientUnexpectedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
-// response body for the "unexpected" error.
-type CreateCimdClientUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CreateCimdClientGatewayErrorResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "createCimdClient" endpoint HTTP
-// response body for the "gateway_error" error.
-type CreateCimdClientGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpdateClientUnauthorizedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
-// response body for the "unauthorized" error.
-type UpdateClientUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpdateClientForbiddenResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
-// response body for the "forbidden" error.
-type UpdateClientForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpdateClientBadRequestResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
-// response body for the "bad_request" error.
-type UpdateClientBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpdateClientNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
-// response body for the "not_found" error.
-type UpdateClientNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpdateClientConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
-// response body for the "conflict" error.
-type UpdateClientConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpdateClientUnsupportedMediaResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
-// response body for the "unsupported_media" error.
-type UpdateClientUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpdateClientInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
-// response body for the "invalid" error.
-type UpdateClientInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpdateClientInvariantViolationResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
-// response body for the "invariant_violation" error.
-type UpdateClientInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpdateClientUnexpectedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
-// response body for the "unexpected" error.
-type UpdateClientUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpdateClientGatewayErrorResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "updateClient" endpoint HTTP
-// response body for the "gateway_error" error.
-type UpdateClientGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteClientUnauthorizedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
-// response body for the "unauthorized" error.
-type DeleteClientUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteClientForbiddenResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
-// response body for the "forbidden" error.
-type DeleteClientForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteClientBadRequestResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
-// response body for the "bad_request" error.
-type DeleteClientBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteClientNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
-// response body for the "not_found" error.
-type DeleteClientNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteClientConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
-// response body for the "conflict" error.
-type DeleteClientConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteClientUnsupportedMediaResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
-// response body for the "unsupported_media" error.
-type DeleteClientUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteClientInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
-// response body for the "invalid" error.
-type DeleteClientInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteClientInvariantViolationResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
-// response body for the "invariant_violation" error.
-type DeleteClientInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteClientUnexpectedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
-// response body for the "unexpected" error.
-type DeleteClientUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteClientGatewayErrorResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "deleteClient" endpoint HTTP
-// response body for the "gateway_error" error.
-type DeleteClientGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RemoveClientFromMcpServerUnauthorizedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
-// endpoint HTTP response body for the "unauthorized" error.
-type RemoveClientFromMcpServerUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RemoveClientFromMcpServerForbiddenResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
-// endpoint HTTP response body for the "forbidden" error.
-type RemoveClientFromMcpServerForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RemoveClientFromMcpServerBadRequestResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
-// endpoint HTTP response body for the "bad_request" error.
-type RemoveClientFromMcpServerBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RemoveClientFromMcpServerNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
-// endpoint HTTP response body for the "not_found" error.
-type RemoveClientFromMcpServerNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RemoveClientFromMcpServerConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
-// endpoint HTTP response body for the "conflict" error.
-type RemoveClientFromMcpServerConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RemoveClientFromMcpServerUnsupportedMediaResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
-// endpoint HTTP response body for the "unsupported_media" error.
-type RemoveClientFromMcpServerUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RemoveClientFromMcpServerInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
-// endpoint HTTP response body for the "invalid" error.
-type RemoveClientFromMcpServerInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RemoveClientFromMcpServerInvariantViolationResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
-// endpoint HTTP response body for the "invariant_violation" error.
-type RemoveClientFromMcpServerInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RemoveClientFromMcpServerUnexpectedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
-// endpoint HTTP response body for the "unexpected" error.
-type RemoveClientFromMcpServerUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RemoveClientFromMcpServerGatewayErrorResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "removeClientFromMcpServer"
-// endpoint HTTP response body for the "gateway_error" error.
-type RemoveClientFromMcpServerGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RevokeSessionUnauthorizedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
-// response body for the "unauthorized" error.
-type RevokeSessionUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RevokeSessionForbiddenResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
-// response body for the "forbidden" error.
-type RevokeSessionForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RevokeSessionBadRequestResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
-// response body for the "bad_request" error.
-type RevokeSessionBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RevokeSessionNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
-// response body for the "not_found" error.
-type RevokeSessionNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RevokeSessionConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
-// response body for the "conflict" error.
-type RevokeSessionConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RevokeSessionUnsupportedMediaResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
-// response body for the "unsupported_media" error.
-type RevokeSessionUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RevokeSessionInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
-// response body for the "invalid" error.
-type RevokeSessionInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RevokeSessionInvariantViolationResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
-// response body for the "invariant_violation" error.
-type RevokeSessionInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RevokeSessionUnexpectedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
-// response body for the "unexpected" error.
-type RevokeSessionUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RevokeSessionGatewayErrorResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeSession" endpoint HTTP
-// response body for the "gateway_error" error.
-type RevokeSessionGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RefreshSessionUnauthorizedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
-// response body for the "unauthorized" error.
-type RefreshSessionUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RefreshSessionForbiddenResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
-// response body for the "forbidden" error.
-type RefreshSessionForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RefreshSessionBadRequestResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
-// response body for the "bad_request" error.
-type RefreshSessionBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RefreshSessionNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
-// response body for the "not_found" error.
-type RefreshSessionNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RefreshSessionConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
-// response body for the "conflict" error.
-type RefreshSessionConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RefreshSessionUnsupportedMediaResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
-// response body for the "unsupported_media" error.
-type RefreshSessionUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RefreshSessionInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
-// response body for the "invalid" error.
-type RefreshSessionInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RefreshSessionInvariantViolationResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
-// response body for the "invariant_violation" error.
-type RefreshSessionInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RefreshSessionUnexpectedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
-// response body for the "unexpected" error.
-type RefreshSessionUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RefreshSessionGatewayErrorResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
-// response body for the "gateway_error" error.
-type RefreshSessionGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RevokeAllClientSessionsUnauthorizedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
-// endpoint HTTP response body for the "unauthorized" error.
-type RevokeAllClientSessionsUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RevokeAllClientSessionsForbiddenResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
-// endpoint HTTP response body for the "forbidden" error.
-type RevokeAllClientSessionsForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RevokeAllClientSessionsBadRequestResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
-// endpoint HTTP response body for the "bad_request" error.
-type RevokeAllClientSessionsBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RevokeAllClientSessionsNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
-// endpoint HTTP response body for the "not_found" error.
-type RevokeAllClientSessionsNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RevokeAllClientSessionsConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
-// endpoint HTTP response body for the "conflict" error.
-type RevokeAllClientSessionsConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RevokeAllClientSessionsUnsupportedMediaResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
-// endpoint HTTP response body for the "unsupported_media" error.
-type RevokeAllClientSessionsUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RevokeAllClientSessionsInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
-// endpoint HTTP response body for the "invalid" error.
-type RevokeAllClientSessionsInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RevokeAllClientSessionsInvariantViolationResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
-// endpoint HTTP response body for the "invariant_violation" error.
-type RevokeAllClientSessionsInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RevokeAllClientSessionsUnexpectedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
-// endpoint HTTP response body for the "unexpected" error.
-type RevokeAllClientSessionsUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RevokeAllClientSessionsGatewayErrorResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
-// endpoint HTTP response body for the "gateway_error" error.
-type RevokeAllClientSessionsGatewayErrorResponseBody struct {
+type MigrateIssuerGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -4427,6 +2138,9 @@ type RemoteSessionIssuerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Optional logo asset id; null when unset.
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
+	// URL of OAuth client setup documentation shown when creating clients.
+	// Manually set, not RFC 8414; null when unset.
+	ClientSetupDocumentationURL *string `form:"client_setup_documentation_url,omitempty" json:"client_setup_documentation_url,omitempty" xml:"client_setup_documentation_url,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -4434,7 +2148,15 @@ type RemoteSessionIssuerResponseBody struct {
 	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
-	JwksURI                           *string  `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// RFC 8414 service_documentation; developer documentation for the issuer. Null
+	// when not advertised.
+	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
+	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not
+	// advertised.
+	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
+	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
+	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
 	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
 	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
 	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
@@ -4450,101 +2172,6 @@ type RemoteSessionIssuerResponseBody struct {
 	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
-// OrganizationRemoteSessionClientResponseBody is used to define fields on
-// response body types.
-type OrganizationRemoteSessionClientResponseBody struct {
-	// The remote_session_client record.
-	Client *RemoteSessionClientResponseBody `form:"client" json:"client" xml:"client"`
-	// Number of non-deleted MCP servers attached to this client (via
-	// user_session_issuers).
-	McpServerCount int `form:"mcp_server_count" json:"mcp_server_count" xml:"mcp_server_count"`
-	// Number of non-deleted (active) remote_sessions minted against this client.
-	ActiveSessionCount int `form:"active_session_count" json:"active_session_count" xml:"active_session_count"`
-}
-
-// RemoteSessionClientResponseBody is used to define fields on response body
-// types.
-type RemoteSessionClientResponseBody struct {
-	// The remote_session_client id.
-	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning remote_session_issuer id.
-	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
-	// The user_session_issuers this client is attached to via the join table.
-	// Empty for a standalone client with no attachments.
-	UserSessionIssuerIds []string `form:"user_session_issuer_ids" json:"user_session_issuer_ids" xml:"user_session_issuer_ids"`
-	// The client_id used to identify this client at the issuer's token and
-	// authorization endpoints.
-	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
-	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
-	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
-	// Null when the secret does not expire.
-	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
-	// How the client authenticates at the issuer's token endpoint. Null resolves
-	// to client_secret_basic at runtime.
-	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	// Explicit upstream OAuth scopes the dance requests for this client. Null
-	// falls back to the issuer's scopes_supported.
-	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// Upstream OAuth audience sent on the authorize redirect and token exchange.
-	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
-}
-
-// OrganizationMcpServerResponseBody is used to define fields on response body
-// types.
-type OrganizationMcpServerResponseBody struct {
-	// The mcp_server id.
-	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning project's slug, for linking to the MCP server in its project.
-	ProjectSlug *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
-	// The MCP server name; empty when unset (display falls back to the URL).
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The MCP server slug.
-	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// The remote MCP server URL; empty for non-remote (toolset-backed) servers.
-	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
-}
-
-// RemoteSessionResponseBody is used to define fields on response body types.
-type RemoteSessionResponseBody struct {
-	// The remote_session id.
-	ID string `form:"id" json:"id" xml:"id"`
-	// The session's subject URN (user:<id> | apikey:<uuid> |
-	// anonymous:<mcp-session-id>).
-	SubjectUrn string `form:"subject_urn" json:"subject_urn" xml:"subject_urn"`
-	// Resolved display name when the subject is a Gram user. Absent for
-	// apikey/anonymous subjects or unresolved users.
-	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
-	// Resolved email when the subject is a Gram user. Absent for apikey/anonymous
-	// subjects or unresolved users.
-	SubjectEmail *string `form:"subject_email,omitempty" json:"subject_email,omitempty" xml:"subject_email,omitempty"`
-	// The user_session_issuer this session is bound to.
-	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
-	// The remote_session_client this session was minted against.
-	RemoteSessionClientID string `form:"remote_session_client_id" json:"remote_session_client_id" xml:"remote_session_client_id"`
-	// Upstream access-token expiry. Independent of refresh_expires_at.
-	AccessExpiresAt string `form:"access_expires_at" json:"access_expires_at" xml:"access_expires_at"`
-	// Upstream refresh-token expiry. Null when the session has no refresh token.
-	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
-	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
-	// action; refresh_expires_at is insufficient because an upstream may issue a
-	// non-expiring refresh token. The token itself is never returned.
-	HasRefreshToken bool `form:"has_refresh_token" json:"has_refresh_token" xml:"has_refresh_token"`
-	// Scopes held by this session.
-	Scopes    []string `form:"scopes" json:"scopes" xml:"scopes"`
-	CreatedAt string   `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string   `form:"updated_at" json:"updated_at" xml:"updated_at"`
-}
-
 // NewCreateIssuerResponseBody builds the HTTP response body from the result of
 // the "createIssuer" endpoint of the "organizationRemoteSessionIssuers"
 // service.
@@ -4557,10 +2184,14 @@ func NewCreateIssuerResponseBody(res *types.RemoteSessionIssuer) *CreateIssuerRe
 		Issuer:                            res.Issuer,
 		Name:                              res.Name,
 		LogoAssetID:                       res.LogoAssetID,
+		ClientSetupDocumentationURL:       res.ClientSetupDocumentationURL,
 		AuthorizationEndpoint:             res.AuthorizationEndpoint,
 		TokenEndpoint:                     res.TokenEndpoint,
 		RegistrationEndpoint:              res.RegistrationEndpoint,
 		JwksURI:                           res.JwksURI,
+		ServiceDocumentation:              res.ServiceDocumentation,
+		OpPolicyURI:                       res.OpPolicyURI,
+		OpTosURI:                          res.OpTosURI,
 		Oidc:                              res.Oidc,
 		Passthrough:                       res.Passthrough,
 		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
@@ -4626,10 +2257,14 @@ func NewGetIssuerResponseBody(res *types.RemoteSessionIssuer) *GetIssuerResponse
 		Issuer:                            res.Issuer,
 		Name:                              res.Name,
 		LogoAssetID:                       res.LogoAssetID,
+		ClientSetupDocumentationURL:       res.ClientSetupDocumentationURL,
 		AuthorizationEndpoint:             res.AuthorizationEndpoint,
 		TokenEndpoint:                     res.TokenEndpoint,
 		RegistrationEndpoint:              res.RegistrationEndpoint,
 		JwksURI:                           res.JwksURI,
+		ServiceDocumentation:              res.ServiceDocumentation,
+		OpPolicyURI:                       res.OpPolicyURI,
+		OpTosURI:                          res.OpTosURI,
 		Oidc:                              res.Oidc,
 		Passthrough:                       res.Passthrough,
 		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
@@ -4693,10 +2328,14 @@ func NewUpdateIssuerResponseBody(res *types.RemoteSessionIssuer) *UpdateIssuerRe
 		Issuer:                            res.Issuer,
 		Name:                              res.Name,
 		LogoAssetID:                       res.LogoAssetID,
+		ClientSetupDocumentationURL:       res.ClientSetupDocumentationURL,
 		AuthorizationEndpoint:             res.AuthorizationEndpoint,
 		TokenEndpoint:                     res.TokenEndpoint,
 		RegistrationEndpoint:              res.RegistrationEndpoint,
 		JwksURI:                           res.JwksURI,
+		ServiceDocumentation:              res.ServiceDocumentation,
+		OpPolicyURI:                       res.OpPolicyURI,
+		OpTosURI:                          res.OpTosURI,
 		Oidc:                              res.Oidc,
 		Passthrough:                       res.Passthrough,
 		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
@@ -4741,10 +2380,14 @@ func NewMoveIssuerResponseBody(res *types.RemoteSessionIssuer) *MoveIssuerRespon
 		Issuer:                            res.Issuer,
 		Name:                              res.Name,
 		LogoAssetID:                       res.LogoAssetID,
+		ClientSetupDocumentationURL:       res.ClientSetupDocumentationURL,
 		AuthorizationEndpoint:             res.AuthorizationEndpoint,
 		TokenEndpoint:                     res.TokenEndpoint,
 		RegistrationEndpoint:              res.RegistrationEndpoint,
 		JwksURI:                           res.JwksURI,
+		ServiceDocumentation:              res.ServiceDocumentation,
+		OpPolicyURI:                       res.OpPolicyURI,
+		OpTosURI:                          res.OpTosURI,
 		Oidc:                              res.Oidc,
 		Passthrough:                       res.Passthrough,
 		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
@@ -4778,66 +2421,13 @@ func NewMoveIssuerResponseBody(res *types.RemoteSessionIssuer) *MoveIssuerRespon
 	return body
 }
 
-// NewListClientsResponseBody builds the HTTP response body from the result of
-// the "listClients" endpoint of the "organizationRemoteSessionIssuers" service.
-func NewListClientsResponseBody(res *organizationremotesessionissuers.ListOrganizationRemoteSessionClientsResult) *ListClientsResponseBody {
-	body := &ListClientsResponseBody{
-		NextCursor: res.NextCursor,
-	}
-	if res.Items != nil {
-		body.Items = make([]*OrganizationRemoteSessionClientResponseBody, len(res.Items))
-		for i, val := range res.Items {
-			if val == nil {
-				body.Items[i] = nil
-				continue
-			}
-			body.Items[i] = marshalOrganizationremotesessionissuersOrganizationRemoteSessionClientToOrganizationRemoteSessionClientResponseBody(val)
-		}
-	} else {
-		body.Items = []*OrganizationRemoteSessionClientResponseBody{}
-	}
-	return body
-}
-
-// NewGetClientResponseBody builds the HTTP response body from the result of
-// the "getClient" endpoint of the "organizationRemoteSessionIssuers" service.
-func NewGetClientResponseBody(res *types.RemoteSessionClient) *GetClientResponseBody {
-	body := &GetClientResponseBody{
-		ID:                      res.ID,
-		ProjectID:               res.ProjectID,
-		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
-		ClientID:                res.ClientID,
-		ClientIDMetadataURI:     res.ClientIDMetadataURI,
-		ClientIDIssuedAt:        res.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
-		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
-		Audience:                res.Audience,
-		CreatedAt:               res.CreatedAt,
-		UpdatedAt:               res.UpdatedAt,
-	}
-	if res.UserSessionIssuerIds != nil {
-		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
-		for i, val := range res.UserSessionIssuerIds {
-			body.UserSessionIssuerIds[i] = val
-		}
-	} else {
-		body.UserSessionIssuerIds = []string{}
-	}
-	if res.Scope != nil {
-		body.Scope = make([]string, len(res.Scope))
-		for i, val := range res.Scope {
-			body.Scope[i] = val
-		}
-	}
-	return body
-}
-
-// NewGetClientDeletePreflightResponseBody builds the HTTP response body from
-// the result of the "getClientDeletePreflight" endpoint of the
+// NewGetIssuerMigratePreflightResponseBody builds the HTTP response body from
+// the result of the "getIssuerMigratePreflight" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewGetClientDeletePreflightResponseBody(res *organizationremotesessionissuers.OrganizationClientDeletePreflight) *GetClientDeletePreflightResponseBody {
-	body := &GetClientDeletePreflightResponseBody{
-		SessionCount: res.SessionCount,
+func NewGetIssuerMigratePreflightResponseBody(res *organizationremotesessionissuers.OrganizationIssuerMigratePreflight) *GetIssuerMigratePreflightResponseBody {
+	body := &GetIssuerMigratePreflightResponseBody{
+		ClientCount: res.ClientCount,
+		CanMigrate:  res.CanMigrate,
 	}
 	if res.McpServerNames != nil {
 		body.McpServerNames = make([]string, len(res.McpServerNames))
@@ -4847,187 +2437,43 @@ func NewGetClientDeletePreflightResponseBody(res *organizationremotesessionissue
 	} else {
 		body.McpServerNames = []string{}
 	}
-	return body
-}
-
-// NewListClientMcpServersResponseBody builds the HTTP response body from the
-// result of the "listClientMcpServers" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientMcpServersResponseBody(res *organizationremotesessionissuers.ListOrganizationMcpServersResult) *ListClientMcpServersResponseBody {
-	body := &ListClientMcpServersResponseBody{}
-	if res.Items != nil {
-		body.Items = make([]*OrganizationMcpServerResponseBody, len(res.Items))
-		for i, val := range res.Items {
-			if val == nil {
-				body.Items[i] = nil
-				continue
-			}
-			body.Items[i] = marshalOrganizationremotesessionissuersOrganizationMcpServerToOrganizationMcpServerResponseBody(val)
+	if res.EndpointMismatches != nil {
+		body.EndpointMismatches = make([]string, len(res.EndpointMismatches))
+		for i, val := range res.EndpointMismatches {
+			body.EndpointMismatches[i] = val
 		}
 	} else {
-		body.Items = []*OrganizationMcpServerResponseBody{}
+		body.EndpointMismatches = []string{}
 	}
-	return body
-}
-
-// NewListClientSessionsResponseBody builds the HTTP response body from the
-// result of the "listClientSessions" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientSessionsResponseBody(res *organizationremotesessionissuers.ListOrganizationRemoteSessionsResult) *ListClientSessionsResponseBody {
-	body := &ListClientSessionsResponseBody{
-		NextCursor: res.NextCursor,
-	}
-	if res.Items != nil {
-		body.Items = make([]*RemoteSessionResponseBody, len(res.Items))
-		for i, val := range res.Items {
-			if val == nil {
-				body.Items[i] = nil
-				continue
-			}
-			body.Items[i] = marshalTypesRemoteSessionToRemoteSessionResponseBody(val)
+	if res.ConflictingMcpServerNames != nil {
+		body.ConflictingMcpServerNames = make([]string, len(res.ConflictingMcpServerNames))
+		for i, val := range res.ConflictingMcpServerNames {
+			body.ConflictingMcpServerNames[i] = val
 		}
 	} else {
-		body.Items = []*RemoteSessionResponseBody{}
+		body.ConflictingMcpServerNames = []string{}
+	}
+	if res.Warnings != nil {
+		body.Warnings = make([]string, len(res.Warnings))
+		for i, val := range res.Warnings {
+			body.Warnings[i] = val
+		}
+	} else {
+		body.Warnings = []string{}
 	}
 	return body
 }
 
-// NewCreateClientResponseBody builds the HTTP response body from the result of
-// the "createClient" endpoint of the "organizationRemoteSessionIssuers"
+// NewMigrateIssuerResponseBody builds the HTTP response body from the result
+// of the "migrateIssuer" endpoint of the "organizationRemoteSessionIssuers"
 // service.
-func NewCreateClientResponseBody(res *types.RemoteSessionClient) *CreateClientResponseBody {
-	body := &CreateClientResponseBody{
-		ID:                      res.ID,
-		ProjectID:               res.ProjectID,
-		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
-		ClientID:                res.ClientID,
-		ClientIDMetadataURI:     res.ClientIDMetadataURI,
-		ClientIDIssuedAt:        res.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
-		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
-		Audience:                res.Audience,
-		CreatedAt:               res.CreatedAt,
-		UpdatedAt:               res.UpdatedAt,
+func NewMigrateIssuerResponseBody(res *organizationremotesessionissuers.MigrateOrganizationRemoteSessionIssuerResult) *MigrateIssuerResponseBody {
+	body := &MigrateIssuerResponseBody{
+		ClientsMigrated: res.ClientsMigrated,
+		SourceDeleted:   res.SourceDeleted,
 	}
-	if res.UserSessionIssuerIds != nil {
-		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
-		for i, val := range res.UserSessionIssuerIds {
-			body.UserSessionIssuerIds[i] = val
-		}
-	} else {
-		body.UserSessionIssuerIds = []string{}
-	}
-	if res.Scope != nil {
-		body.Scope = make([]string, len(res.Scope))
-		for i, val := range res.Scope {
-			body.Scope[i] = val
-		}
-	}
-	return body
-}
-
-// NewCreateCimdClientResponseBody builds the HTTP response body from the
-// result of the "createCimdClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewCreateCimdClientResponseBody(res *types.RemoteSessionClient) *CreateCimdClientResponseBody {
-	body := &CreateCimdClientResponseBody{
-		ID:                      res.ID,
-		ProjectID:               res.ProjectID,
-		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
-		ClientID:                res.ClientID,
-		ClientIDMetadataURI:     res.ClientIDMetadataURI,
-		ClientIDIssuedAt:        res.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
-		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
-		Audience:                res.Audience,
-		CreatedAt:               res.CreatedAt,
-		UpdatedAt:               res.UpdatedAt,
-	}
-	if res.UserSessionIssuerIds != nil {
-		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
-		for i, val := range res.UserSessionIssuerIds {
-			body.UserSessionIssuerIds[i] = val
-		}
-	} else {
-		body.UserSessionIssuerIds = []string{}
-	}
-	if res.Scope != nil {
-		body.Scope = make([]string, len(res.Scope))
-		for i, val := range res.Scope {
-			body.Scope[i] = val
-		}
-	}
-	return body
-}
-
-// NewUpdateClientResponseBody builds the HTTP response body from the result of
-// the "updateClient" endpoint of the "organizationRemoteSessionIssuers"
-// service.
-func NewUpdateClientResponseBody(res *types.RemoteSessionClient) *UpdateClientResponseBody {
-	body := &UpdateClientResponseBody{
-		ID:                      res.ID,
-		ProjectID:               res.ProjectID,
-		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
-		ClientID:                res.ClientID,
-		ClientIDMetadataURI:     res.ClientIDMetadataURI,
-		ClientIDIssuedAt:        res.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
-		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
-		Audience:                res.Audience,
-		CreatedAt:               res.CreatedAt,
-		UpdatedAt:               res.UpdatedAt,
-	}
-	if res.UserSessionIssuerIds != nil {
-		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
-		for i, val := range res.UserSessionIssuerIds {
-			body.UserSessionIssuerIds[i] = val
-		}
-	} else {
-		body.UserSessionIssuerIds = []string{}
-	}
-	if res.Scope != nil {
-		body.Scope = make([]string, len(res.Scope))
-		for i, val := range res.Scope {
-			body.Scope[i] = val
-		}
-	}
-	return body
-}
-
-// NewRefreshSessionResponseBody builds the HTTP response body from the result
-// of the "refreshSession" endpoint of the "organizationRemoteSessionIssuers"
-// service.
-func NewRefreshSessionResponseBody(res *types.RemoteSession) *RefreshSessionResponseBody {
-	body := &RefreshSessionResponseBody{
-		ID:                    res.ID,
-		SubjectUrn:            res.SubjectUrn,
-		SubjectDisplayName:    res.SubjectDisplayName,
-		SubjectEmail:          res.SubjectEmail,
-		UserSessionIssuerID:   res.UserSessionIssuerID,
-		RemoteSessionClientID: res.RemoteSessionClientID,
-		AccessExpiresAt:       res.AccessExpiresAt,
-		RefreshExpiresAt:      res.RefreshExpiresAt,
-		HasRefreshToken:       res.HasRefreshToken,
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
-	}
-	if res.Scopes != nil {
-		body.Scopes = make([]string, len(res.Scopes))
-		for i, val := range res.Scopes {
-			body.Scopes[i] = val
-		}
-	} else {
-		body.Scopes = []string{}
-	}
-	return body
-}
-
-// NewRevokeAllClientSessionsResponseBody builds the HTTP response body from
-// the result of the "revokeAllClientSessions" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRevokeAllClientSessionsResponseBody(res *organizationremotesessionissuers.RevokeAllRemoteSessionsResult) *RevokeAllClientSessionsResponseBody {
-	body := &RevokeAllClientSessionsResponseBody{
-		RevokedCount: res.RevokedCount,
+	if res.Issuer != nil {
+		body.Issuer = marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(res.Issuer)
 	}
 	return body
 }
@@ -6082,386 +3528,11 @@ func NewMoveIssuerGatewayErrorResponseBody(res *goa.ServiceError) *MoveIssuerGat
 	return body
 }
 
-// NewListClientsUnauthorizedResponseBody builds the HTTP response body from
-// the result of the "listClients" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientsUnauthorizedResponseBody(res *goa.ServiceError) *ListClientsUnauthorizedResponseBody {
-	body := &ListClientsUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientsForbiddenResponseBody builds the HTTP response body from the
-// result of the "listClients" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientsForbiddenResponseBody(res *goa.ServiceError) *ListClientsForbiddenResponseBody {
-	body := &ListClientsForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientsBadRequestResponseBody builds the HTTP response body from the
-// result of the "listClients" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientsBadRequestResponseBody(res *goa.ServiceError) *ListClientsBadRequestResponseBody {
-	body := &ListClientsBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientsNotFoundResponseBody builds the HTTP response body from the
-// result of the "listClients" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientsNotFoundResponseBody(res *goa.ServiceError) *ListClientsNotFoundResponseBody {
-	body := &ListClientsNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientsConflictResponseBody builds the HTTP response body from the
-// result of the "listClients" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientsConflictResponseBody(res *goa.ServiceError) *ListClientsConflictResponseBody {
-	body := &ListClientsConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientsUnsupportedMediaResponseBody builds the HTTP response body
-// from the result of the "listClients" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListClientsUnsupportedMediaResponseBody {
-	body := &ListClientsUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientsInvalidResponseBody builds the HTTP response body from the
-// result of the "listClients" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientsInvalidResponseBody(res *goa.ServiceError) *ListClientsInvalidResponseBody {
-	body := &ListClientsInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientsInvariantViolationResponseBody builds the HTTP response body
-// from the result of the "listClients" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientsInvariantViolationResponseBody(res *goa.ServiceError) *ListClientsInvariantViolationResponseBody {
-	body := &ListClientsInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientsUnexpectedResponseBody builds the HTTP response body from the
-// result of the "listClients" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientsUnexpectedResponseBody(res *goa.ServiceError) *ListClientsUnexpectedResponseBody {
-	body := &ListClientsUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientsGatewayErrorResponseBody builds the HTTP response body from
-// the result of the "listClients" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientsGatewayErrorResponseBody(res *goa.ServiceError) *ListClientsGatewayErrorResponseBody {
-	body := &ListClientsGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetClientUnauthorizedResponseBody builds the HTTP response body from the
-// result of the "getClient" endpoint of the "organizationRemoteSessionIssuers"
-// service.
-func NewGetClientUnauthorizedResponseBody(res *goa.ServiceError) *GetClientUnauthorizedResponseBody {
-	body := &GetClientUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetClientForbiddenResponseBody builds the HTTP response body from the
-// result of the "getClient" endpoint of the "organizationRemoteSessionIssuers"
-// service.
-func NewGetClientForbiddenResponseBody(res *goa.ServiceError) *GetClientForbiddenResponseBody {
-	body := &GetClientForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetClientBadRequestResponseBody builds the HTTP response body from the
-// result of the "getClient" endpoint of the "organizationRemoteSessionIssuers"
-// service.
-func NewGetClientBadRequestResponseBody(res *goa.ServiceError) *GetClientBadRequestResponseBody {
-	body := &GetClientBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetClientNotFoundResponseBody builds the HTTP response body from the
-// result of the "getClient" endpoint of the "organizationRemoteSessionIssuers"
-// service.
-func NewGetClientNotFoundResponseBody(res *goa.ServiceError) *GetClientNotFoundResponseBody {
-	body := &GetClientNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetClientConflictResponseBody builds the HTTP response body from the
-// result of the "getClient" endpoint of the "organizationRemoteSessionIssuers"
-// service.
-func NewGetClientConflictResponseBody(res *goa.ServiceError) *GetClientConflictResponseBody {
-	body := &GetClientConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetClientUnsupportedMediaResponseBody builds the HTTP response body from
-// the result of the "getClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewGetClientUnsupportedMediaResponseBody(res *goa.ServiceError) *GetClientUnsupportedMediaResponseBody {
-	body := &GetClientUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetClientInvalidResponseBody builds the HTTP response body from the
-// result of the "getClient" endpoint of the "organizationRemoteSessionIssuers"
-// service.
-func NewGetClientInvalidResponseBody(res *goa.ServiceError) *GetClientInvalidResponseBody {
-	body := &GetClientInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetClientInvariantViolationResponseBody builds the HTTP response body
-// from the result of the "getClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewGetClientInvariantViolationResponseBody(res *goa.ServiceError) *GetClientInvariantViolationResponseBody {
-	body := &GetClientInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetClientUnexpectedResponseBody builds the HTTP response body from the
-// result of the "getClient" endpoint of the "organizationRemoteSessionIssuers"
-// service.
-func NewGetClientUnexpectedResponseBody(res *goa.ServiceError) *GetClientUnexpectedResponseBody {
-	body := &GetClientUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetClientGatewayErrorResponseBody builds the HTTP response body from the
-// result of the "getClient" endpoint of the "organizationRemoteSessionIssuers"
-// service.
-func NewGetClientGatewayErrorResponseBody(res *goa.ServiceError) *GetClientGatewayErrorResponseBody {
-	body := &GetClientGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetClientDeletePreflightUnauthorizedResponseBody builds the HTTP response
-// body from the result of the "getClientDeletePreflight" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewGetClientDeletePreflightUnauthorizedResponseBody(res *goa.ServiceError) *GetClientDeletePreflightUnauthorizedResponseBody {
-	body := &GetClientDeletePreflightUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetClientDeletePreflightForbiddenResponseBody builds the HTTP response
-// body from the result of the "getClientDeletePreflight" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewGetClientDeletePreflightForbiddenResponseBody(res *goa.ServiceError) *GetClientDeletePreflightForbiddenResponseBody {
-	body := &GetClientDeletePreflightForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetClientDeletePreflightBadRequestResponseBody builds the HTTP response
-// body from the result of the "getClientDeletePreflight" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewGetClientDeletePreflightBadRequestResponseBody(res *goa.ServiceError) *GetClientDeletePreflightBadRequestResponseBody {
-	body := &GetClientDeletePreflightBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetClientDeletePreflightNotFoundResponseBody builds the HTTP response
-// body from the result of the "getClientDeletePreflight" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewGetClientDeletePreflightNotFoundResponseBody(res *goa.ServiceError) *GetClientDeletePreflightNotFoundResponseBody {
-	body := &GetClientDeletePreflightNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetClientDeletePreflightConflictResponseBody builds the HTTP response
-// body from the result of the "getClientDeletePreflight" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewGetClientDeletePreflightConflictResponseBody(res *goa.ServiceError) *GetClientDeletePreflightConflictResponseBody {
-	body := &GetClientDeletePreflightConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetClientDeletePreflightUnsupportedMediaResponseBody builds the HTTP
-// response body from the result of the "getClientDeletePreflight" endpoint of
+// NewGetIssuerMigratePreflightUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getIssuerMigratePreflight" endpoint of
 // the "organizationRemoteSessionIssuers" service.
-func NewGetClientDeletePreflightUnsupportedMediaResponseBody(res *goa.ServiceError) *GetClientDeletePreflightUnsupportedMediaResponseBody {
-	body := &GetClientDeletePreflightUnsupportedMediaResponseBody{
+func NewGetIssuerMigratePreflightUnauthorizedResponseBody(res *goa.ServiceError) *GetIssuerMigratePreflightUnauthorizedResponseBody {
+	body := &GetIssuerMigratePreflightUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6472,11 +3543,11 @@ func NewGetClientDeletePreflightUnsupportedMediaResponseBody(res *goa.ServiceErr
 	return body
 }
 
-// NewGetClientDeletePreflightInvalidResponseBody builds the HTTP response body
-// from the result of the "getClientDeletePreflight" endpoint of the
+// NewGetIssuerMigratePreflightForbiddenResponseBody builds the HTTP response
+// body from the result of the "getIssuerMigratePreflight" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewGetClientDeletePreflightInvalidResponseBody(res *goa.ServiceError) *GetClientDeletePreflightInvalidResponseBody {
-	body := &GetClientDeletePreflightInvalidResponseBody{
+func NewGetIssuerMigratePreflightForbiddenResponseBody(res *goa.ServiceError) *GetIssuerMigratePreflightForbiddenResponseBody {
+	body := &GetIssuerMigratePreflightForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6487,11 +3558,56 @@ func NewGetClientDeletePreflightInvalidResponseBody(res *goa.ServiceError) *GetC
 	return body
 }
 
-// NewGetClientDeletePreflightInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "getClientDeletePreflight" endpoint of
+// NewGetIssuerMigratePreflightBadRequestResponseBody builds the HTTP response
+// body from the result of the "getIssuerMigratePreflight" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetIssuerMigratePreflightBadRequestResponseBody(res *goa.ServiceError) *GetIssuerMigratePreflightBadRequestResponseBody {
+	body := &GetIssuerMigratePreflightBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerMigratePreflightNotFoundResponseBody builds the HTTP response
+// body from the result of the "getIssuerMigratePreflight" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetIssuerMigratePreflightNotFoundResponseBody(res *goa.ServiceError) *GetIssuerMigratePreflightNotFoundResponseBody {
+	body := &GetIssuerMigratePreflightNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerMigratePreflightConflictResponseBody builds the HTTP response
+// body from the result of the "getIssuerMigratePreflight" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetIssuerMigratePreflightConflictResponseBody(res *goa.ServiceError) *GetIssuerMigratePreflightConflictResponseBody {
+	body := &GetIssuerMigratePreflightConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerMigratePreflightUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getIssuerMigratePreflight" endpoint of
 // the "organizationRemoteSessionIssuers" service.
-func NewGetClientDeletePreflightInvariantViolationResponseBody(res *goa.ServiceError) *GetClientDeletePreflightInvariantViolationResponseBody {
-	body := &GetClientDeletePreflightInvariantViolationResponseBody{
+func NewGetIssuerMigratePreflightUnsupportedMediaResponseBody(res *goa.ServiceError) *GetIssuerMigratePreflightUnsupportedMediaResponseBody {
+	body := &GetIssuerMigratePreflightUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6502,11 +3618,11 @@ func NewGetClientDeletePreflightInvariantViolationResponseBody(res *goa.ServiceE
 	return body
 }
 
-// NewGetClientDeletePreflightUnexpectedResponseBody builds the HTTP response
-// body from the result of the "getClientDeletePreflight" endpoint of the
+// NewGetIssuerMigratePreflightInvalidResponseBody builds the HTTP response
+// body from the result of the "getIssuerMigratePreflight" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewGetClientDeletePreflightUnexpectedResponseBody(res *goa.ServiceError) *GetClientDeletePreflightUnexpectedResponseBody {
-	body := &GetClientDeletePreflightUnexpectedResponseBody{
+func NewGetIssuerMigratePreflightInvalidResponseBody(res *goa.ServiceError) *GetIssuerMigratePreflightInvalidResponseBody {
+	body := &GetIssuerMigratePreflightInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6517,926 +3633,11 @@ func NewGetClientDeletePreflightUnexpectedResponseBody(res *goa.ServiceError) *G
 	return body
 }
 
-// NewGetClientDeletePreflightGatewayErrorResponseBody builds the HTTP response
-// body from the result of the "getClientDeletePreflight" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewGetClientDeletePreflightGatewayErrorResponseBody(res *goa.ServiceError) *GetClientDeletePreflightGatewayErrorResponseBody {
-	body := &GetClientDeletePreflightGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientMcpServersUnauthorizedResponseBody builds the HTTP response
-// body from the result of the "listClientMcpServers" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientMcpServersUnauthorizedResponseBody(res *goa.ServiceError) *ListClientMcpServersUnauthorizedResponseBody {
-	body := &ListClientMcpServersUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientMcpServersForbiddenResponseBody builds the HTTP response body
-// from the result of the "listClientMcpServers" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientMcpServersForbiddenResponseBody(res *goa.ServiceError) *ListClientMcpServersForbiddenResponseBody {
-	body := &ListClientMcpServersForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientMcpServersBadRequestResponseBody builds the HTTP response body
-// from the result of the "listClientMcpServers" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientMcpServersBadRequestResponseBody(res *goa.ServiceError) *ListClientMcpServersBadRequestResponseBody {
-	body := &ListClientMcpServersBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientMcpServersNotFoundResponseBody builds the HTTP response body
-// from the result of the "listClientMcpServers" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientMcpServersNotFoundResponseBody(res *goa.ServiceError) *ListClientMcpServersNotFoundResponseBody {
-	body := &ListClientMcpServersNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientMcpServersConflictResponseBody builds the HTTP response body
-// from the result of the "listClientMcpServers" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientMcpServersConflictResponseBody(res *goa.ServiceError) *ListClientMcpServersConflictResponseBody {
-	body := &ListClientMcpServersConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientMcpServersUnsupportedMediaResponseBody builds the HTTP response
-// body from the result of the "listClientMcpServers" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientMcpServersUnsupportedMediaResponseBody(res *goa.ServiceError) *ListClientMcpServersUnsupportedMediaResponseBody {
-	body := &ListClientMcpServersUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientMcpServersInvalidResponseBody builds the HTTP response body
-// from the result of the "listClientMcpServers" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientMcpServersInvalidResponseBody(res *goa.ServiceError) *ListClientMcpServersInvalidResponseBody {
-	body := &ListClientMcpServersInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientMcpServersInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "listClientMcpServers" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientMcpServersInvariantViolationResponseBody(res *goa.ServiceError) *ListClientMcpServersInvariantViolationResponseBody {
-	body := &ListClientMcpServersInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientMcpServersUnexpectedResponseBody builds the HTTP response body
-// from the result of the "listClientMcpServers" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientMcpServersUnexpectedResponseBody(res *goa.ServiceError) *ListClientMcpServersUnexpectedResponseBody {
-	body := &ListClientMcpServersUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientMcpServersGatewayErrorResponseBody builds the HTTP response
-// body from the result of the "listClientMcpServers" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientMcpServersGatewayErrorResponseBody(res *goa.ServiceError) *ListClientMcpServersGatewayErrorResponseBody {
-	body := &ListClientMcpServersGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientSessionsUnauthorizedResponseBody builds the HTTP response body
-// from the result of the "listClientSessions" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientSessionsUnauthorizedResponseBody(res *goa.ServiceError) *ListClientSessionsUnauthorizedResponseBody {
-	body := &ListClientSessionsUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientSessionsForbiddenResponseBody builds the HTTP response body
-// from the result of the "listClientSessions" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientSessionsForbiddenResponseBody(res *goa.ServiceError) *ListClientSessionsForbiddenResponseBody {
-	body := &ListClientSessionsForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientSessionsBadRequestResponseBody builds the HTTP response body
-// from the result of the "listClientSessions" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientSessionsBadRequestResponseBody(res *goa.ServiceError) *ListClientSessionsBadRequestResponseBody {
-	body := &ListClientSessionsBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientSessionsNotFoundResponseBody builds the HTTP response body from
-// the result of the "listClientSessions" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientSessionsNotFoundResponseBody(res *goa.ServiceError) *ListClientSessionsNotFoundResponseBody {
-	body := &ListClientSessionsNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientSessionsConflictResponseBody builds the HTTP response body from
-// the result of the "listClientSessions" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientSessionsConflictResponseBody(res *goa.ServiceError) *ListClientSessionsConflictResponseBody {
-	body := &ListClientSessionsConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientSessionsUnsupportedMediaResponseBody builds the HTTP response
-// body from the result of the "listClientSessions" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientSessionsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListClientSessionsUnsupportedMediaResponseBody {
-	body := &ListClientSessionsUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientSessionsInvalidResponseBody builds the HTTP response body from
-// the result of the "listClientSessions" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientSessionsInvalidResponseBody(res *goa.ServiceError) *ListClientSessionsInvalidResponseBody {
-	body := &ListClientSessionsInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientSessionsInvariantViolationResponseBody builds the HTTP response
-// body from the result of the "listClientSessions" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientSessionsInvariantViolationResponseBody(res *goa.ServiceError) *ListClientSessionsInvariantViolationResponseBody {
-	body := &ListClientSessionsInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientSessionsUnexpectedResponseBody builds the HTTP response body
-// from the result of the "listClientSessions" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientSessionsUnexpectedResponseBody(res *goa.ServiceError) *ListClientSessionsUnexpectedResponseBody {
-	body := &ListClientSessionsUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListClientSessionsGatewayErrorResponseBody builds the HTTP response body
-// from the result of the "listClientSessions" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewListClientSessionsGatewayErrorResponseBody(res *goa.ServiceError) *ListClientSessionsGatewayErrorResponseBody {
-	body := &ListClientSessionsGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateClientUnauthorizedResponseBody builds the HTTP response body from
-// the result of the "createClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewCreateClientUnauthorizedResponseBody(res *goa.ServiceError) *CreateClientUnauthorizedResponseBody {
-	body := &CreateClientUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateClientForbiddenResponseBody builds the HTTP response body from the
-// result of the "createClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewCreateClientForbiddenResponseBody(res *goa.ServiceError) *CreateClientForbiddenResponseBody {
-	body := &CreateClientForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateClientBadRequestResponseBody builds the HTTP response body from the
-// result of the "createClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewCreateClientBadRequestResponseBody(res *goa.ServiceError) *CreateClientBadRequestResponseBody {
-	body := &CreateClientBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateClientNotFoundResponseBody builds the HTTP response body from the
-// result of the "createClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewCreateClientNotFoundResponseBody(res *goa.ServiceError) *CreateClientNotFoundResponseBody {
-	body := &CreateClientNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateClientConflictResponseBody builds the HTTP response body from the
-// result of the "createClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewCreateClientConflictResponseBody(res *goa.ServiceError) *CreateClientConflictResponseBody {
-	body := &CreateClientConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateClientUnsupportedMediaResponseBody builds the HTTP response body
-// from the result of the "createClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewCreateClientUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateClientUnsupportedMediaResponseBody {
-	body := &CreateClientUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateClientInvalidResponseBody builds the HTTP response body from the
-// result of the "createClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewCreateClientInvalidResponseBody(res *goa.ServiceError) *CreateClientInvalidResponseBody {
-	body := &CreateClientInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateClientInvariantViolationResponseBody builds the HTTP response body
-// from the result of the "createClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewCreateClientInvariantViolationResponseBody(res *goa.ServiceError) *CreateClientInvariantViolationResponseBody {
-	body := &CreateClientInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateClientUnexpectedResponseBody builds the HTTP response body from the
-// result of the "createClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewCreateClientUnexpectedResponseBody(res *goa.ServiceError) *CreateClientUnexpectedResponseBody {
-	body := &CreateClientUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateClientGatewayErrorResponseBody builds the HTTP response body from
-// the result of the "createClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewCreateClientGatewayErrorResponseBody(res *goa.ServiceError) *CreateClientGatewayErrorResponseBody {
-	body := &CreateClientGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateCimdClientUnauthorizedResponseBody builds the HTTP response body
-// from the result of the "createCimdClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewCreateCimdClientUnauthorizedResponseBody(res *goa.ServiceError) *CreateCimdClientUnauthorizedResponseBody {
-	body := &CreateCimdClientUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateCimdClientForbiddenResponseBody builds the HTTP response body from
-// the result of the "createCimdClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewCreateCimdClientForbiddenResponseBody(res *goa.ServiceError) *CreateCimdClientForbiddenResponseBody {
-	body := &CreateCimdClientForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateCimdClientBadRequestResponseBody builds the HTTP response body from
-// the result of the "createCimdClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewCreateCimdClientBadRequestResponseBody(res *goa.ServiceError) *CreateCimdClientBadRequestResponseBody {
-	body := &CreateCimdClientBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateCimdClientNotFoundResponseBody builds the HTTP response body from
-// the result of the "createCimdClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewCreateCimdClientNotFoundResponseBody(res *goa.ServiceError) *CreateCimdClientNotFoundResponseBody {
-	body := &CreateCimdClientNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateCimdClientConflictResponseBody builds the HTTP response body from
-// the result of the "createCimdClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewCreateCimdClientConflictResponseBody(res *goa.ServiceError) *CreateCimdClientConflictResponseBody {
-	body := &CreateCimdClientConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateCimdClientUnsupportedMediaResponseBody builds the HTTP response
-// body from the result of the "createCimdClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewCreateCimdClientUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateCimdClientUnsupportedMediaResponseBody {
-	body := &CreateCimdClientUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateCimdClientInvalidResponseBody builds the HTTP response body from
-// the result of the "createCimdClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewCreateCimdClientInvalidResponseBody(res *goa.ServiceError) *CreateCimdClientInvalidResponseBody {
-	body := &CreateCimdClientInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateCimdClientInvariantViolationResponseBody builds the HTTP response
-// body from the result of the "createCimdClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewCreateCimdClientInvariantViolationResponseBody(res *goa.ServiceError) *CreateCimdClientInvariantViolationResponseBody {
-	body := &CreateCimdClientInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateCimdClientUnexpectedResponseBody builds the HTTP response body from
-// the result of the "createCimdClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewCreateCimdClientUnexpectedResponseBody(res *goa.ServiceError) *CreateCimdClientUnexpectedResponseBody {
-	body := &CreateCimdClientUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateCimdClientGatewayErrorResponseBody builds the HTTP response body
-// from the result of the "createCimdClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewCreateCimdClientGatewayErrorResponseBody(res *goa.ServiceError) *CreateCimdClientGatewayErrorResponseBody {
-	body := &CreateCimdClientGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateClientUnauthorizedResponseBody builds the HTTP response body from
-// the result of the "updateClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewUpdateClientUnauthorizedResponseBody(res *goa.ServiceError) *UpdateClientUnauthorizedResponseBody {
-	body := &UpdateClientUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateClientForbiddenResponseBody builds the HTTP response body from the
-// result of the "updateClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewUpdateClientForbiddenResponseBody(res *goa.ServiceError) *UpdateClientForbiddenResponseBody {
-	body := &UpdateClientForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateClientBadRequestResponseBody builds the HTTP response body from the
-// result of the "updateClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewUpdateClientBadRequestResponseBody(res *goa.ServiceError) *UpdateClientBadRequestResponseBody {
-	body := &UpdateClientBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateClientNotFoundResponseBody builds the HTTP response body from the
-// result of the "updateClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewUpdateClientNotFoundResponseBody(res *goa.ServiceError) *UpdateClientNotFoundResponseBody {
-	body := &UpdateClientNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateClientConflictResponseBody builds the HTTP response body from the
-// result of the "updateClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewUpdateClientConflictResponseBody(res *goa.ServiceError) *UpdateClientConflictResponseBody {
-	body := &UpdateClientConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateClientUnsupportedMediaResponseBody builds the HTTP response body
-// from the result of the "updateClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewUpdateClientUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateClientUnsupportedMediaResponseBody {
-	body := &UpdateClientUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateClientInvalidResponseBody builds the HTTP response body from the
-// result of the "updateClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewUpdateClientInvalidResponseBody(res *goa.ServiceError) *UpdateClientInvalidResponseBody {
-	body := &UpdateClientInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateClientInvariantViolationResponseBody builds the HTTP response body
-// from the result of the "updateClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewUpdateClientInvariantViolationResponseBody(res *goa.ServiceError) *UpdateClientInvariantViolationResponseBody {
-	body := &UpdateClientInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateClientUnexpectedResponseBody builds the HTTP response body from the
-// result of the "updateClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewUpdateClientUnexpectedResponseBody(res *goa.ServiceError) *UpdateClientUnexpectedResponseBody {
-	body := &UpdateClientUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateClientGatewayErrorResponseBody builds the HTTP response body from
-// the result of the "updateClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewUpdateClientGatewayErrorResponseBody(res *goa.ServiceError) *UpdateClientGatewayErrorResponseBody {
-	body := &UpdateClientGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteClientUnauthorizedResponseBody builds the HTTP response body from
-// the result of the "deleteClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewDeleteClientUnauthorizedResponseBody(res *goa.ServiceError) *DeleteClientUnauthorizedResponseBody {
-	body := &DeleteClientUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteClientForbiddenResponseBody builds the HTTP response body from the
-// result of the "deleteClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewDeleteClientForbiddenResponseBody(res *goa.ServiceError) *DeleteClientForbiddenResponseBody {
-	body := &DeleteClientForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteClientBadRequestResponseBody builds the HTTP response body from the
-// result of the "deleteClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewDeleteClientBadRequestResponseBody(res *goa.ServiceError) *DeleteClientBadRequestResponseBody {
-	body := &DeleteClientBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteClientNotFoundResponseBody builds the HTTP response body from the
-// result of the "deleteClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewDeleteClientNotFoundResponseBody(res *goa.ServiceError) *DeleteClientNotFoundResponseBody {
-	body := &DeleteClientNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteClientConflictResponseBody builds the HTTP response body from the
-// result of the "deleteClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewDeleteClientConflictResponseBody(res *goa.ServiceError) *DeleteClientConflictResponseBody {
-	body := &DeleteClientConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteClientUnsupportedMediaResponseBody builds the HTTP response body
-// from the result of the "deleteClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewDeleteClientUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteClientUnsupportedMediaResponseBody {
-	body := &DeleteClientUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteClientInvalidResponseBody builds the HTTP response body from the
-// result of the "deleteClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewDeleteClientInvalidResponseBody(res *goa.ServiceError) *DeleteClientInvalidResponseBody {
-	body := &DeleteClientInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteClientInvariantViolationResponseBody builds the HTTP response body
-// from the result of the "deleteClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewDeleteClientInvariantViolationResponseBody(res *goa.ServiceError) *DeleteClientInvariantViolationResponseBody {
-	body := &DeleteClientInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteClientUnexpectedResponseBody builds the HTTP response body from the
-// result of the "deleteClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewDeleteClientUnexpectedResponseBody(res *goa.ServiceError) *DeleteClientUnexpectedResponseBody {
-	body := &DeleteClientUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteClientGatewayErrorResponseBody builds the HTTP response body from
-// the result of the "deleteClient" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewDeleteClientGatewayErrorResponseBody(res *goa.ServiceError) *DeleteClientGatewayErrorResponseBody {
-	body := &DeleteClientGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRemoveClientFromMcpServerUnauthorizedResponseBody builds the HTTP
-// response body from the result of the "removeClientFromMcpServer" endpoint of
+// NewGetIssuerMigratePreflightInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getIssuerMigratePreflight" endpoint of
 // the "organizationRemoteSessionIssuers" service.
-func NewRemoveClientFromMcpServerUnauthorizedResponseBody(res *goa.ServiceError) *RemoveClientFromMcpServerUnauthorizedResponseBody {
-	body := &RemoveClientFromMcpServerUnauthorizedResponseBody{
+func NewGetIssuerMigratePreflightInvariantViolationResponseBody(res *goa.ServiceError) *GetIssuerMigratePreflightInvariantViolationResponseBody {
+	body := &GetIssuerMigratePreflightInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -7447,11 +3648,11 @@ func NewRemoveClientFromMcpServerUnauthorizedResponseBody(res *goa.ServiceError)
 	return body
 }
 
-// NewRemoveClientFromMcpServerForbiddenResponseBody builds the HTTP response
-// body from the result of the "removeClientFromMcpServer" endpoint of the
+// NewGetIssuerMigratePreflightUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getIssuerMigratePreflight" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewRemoveClientFromMcpServerForbiddenResponseBody(res *goa.ServiceError) *RemoveClientFromMcpServerForbiddenResponseBody {
-	body := &RemoveClientFromMcpServerForbiddenResponseBody{
+func NewGetIssuerMigratePreflightUnexpectedResponseBody(res *goa.ServiceError) *GetIssuerMigratePreflightUnexpectedResponseBody {
+	body := &GetIssuerMigratePreflightUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -7462,56 +3663,11 @@ func NewRemoveClientFromMcpServerForbiddenResponseBody(res *goa.ServiceError) *R
 	return body
 }
 
-// NewRemoveClientFromMcpServerBadRequestResponseBody builds the HTTP response
-// body from the result of the "removeClientFromMcpServer" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRemoveClientFromMcpServerBadRequestResponseBody(res *goa.ServiceError) *RemoveClientFromMcpServerBadRequestResponseBody {
-	body := &RemoveClientFromMcpServerBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRemoveClientFromMcpServerNotFoundResponseBody builds the HTTP response
-// body from the result of the "removeClientFromMcpServer" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRemoveClientFromMcpServerNotFoundResponseBody(res *goa.ServiceError) *RemoveClientFromMcpServerNotFoundResponseBody {
-	body := &RemoveClientFromMcpServerNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRemoveClientFromMcpServerConflictResponseBody builds the HTTP response
-// body from the result of the "removeClientFromMcpServer" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRemoveClientFromMcpServerConflictResponseBody(res *goa.ServiceError) *RemoveClientFromMcpServerConflictResponseBody {
-	body := &RemoveClientFromMcpServerConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRemoveClientFromMcpServerUnsupportedMediaResponseBody builds the HTTP
-// response body from the result of the "removeClientFromMcpServer" endpoint of
+// NewGetIssuerMigratePreflightGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getIssuerMigratePreflight" endpoint of
 // the "organizationRemoteSessionIssuers" service.
-func NewRemoveClientFromMcpServerUnsupportedMediaResponseBody(res *goa.ServiceError) *RemoveClientFromMcpServerUnsupportedMediaResponseBody {
-	body := &RemoveClientFromMcpServerUnsupportedMediaResponseBody{
+func NewGetIssuerMigratePreflightGatewayErrorResponseBody(res *goa.ServiceError) *GetIssuerMigratePreflightGatewayErrorResponseBody {
+	body := &GetIssuerMigratePreflightGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -7522,11 +3678,11 @@ func NewRemoveClientFromMcpServerUnsupportedMediaResponseBody(res *goa.ServiceEr
 	return body
 }
 
-// NewRemoveClientFromMcpServerInvalidResponseBody builds the HTTP response
-// body from the result of the "removeClientFromMcpServer" endpoint of the
+// NewMigrateIssuerUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "migrateIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewRemoveClientFromMcpServerInvalidResponseBody(res *goa.ServiceError) *RemoveClientFromMcpServerInvalidResponseBody {
-	body := &RemoveClientFromMcpServerInvalidResponseBody{
+func NewMigrateIssuerUnauthorizedResponseBody(res *goa.ServiceError) *MigrateIssuerUnauthorizedResponseBody {
+	body := &MigrateIssuerUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -7537,26 +3693,11 @@ func NewRemoveClientFromMcpServerInvalidResponseBody(res *goa.ServiceError) *Rem
 	return body
 }
 
-// NewRemoveClientFromMcpServerInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "removeClientFromMcpServer" endpoint of
-// the "organizationRemoteSessionIssuers" service.
-func NewRemoveClientFromMcpServerInvariantViolationResponseBody(res *goa.ServiceError) *RemoveClientFromMcpServerInvariantViolationResponseBody {
-	body := &RemoveClientFromMcpServerInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRemoveClientFromMcpServerUnexpectedResponseBody builds the HTTP response
-// body from the result of the "removeClientFromMcpServer" endpoint of the
+// NewMigrateIssuerForbiddenResponseBody builds the HTTP response body from the
+// result of the "migrateIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewRemoveClientFromMcpServerUnexpectedResponseBody(res *goa.ServiceError) *RemoveClientFromMcpServerUnexpectedResponseBody {
-	body := &RemoveClientFromMcpServerUnexpectedResponseBody{
+func NewMigrateIssuerForbiddenResponseBody(res *goa.ServiceError) *MigrateIssuerForbiddenResponseBody {
+	body := &MigrateIssuerForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -7567,26 +3708,11 @@ func NewRemoveClientFromMcpServerUnexpectedResponseBody(res *goa.ServiceError) *
 	return body
 }
 
-// NewRemoveClientFromMcpServerGatewayErrorResponseBody builds the HTTP
-// response body from the result of the "removeClientFromMcpServer" endpoint of
-// the "organizationRemoteSessionIssuers" service.
-func NewRemoveClientFromMcpServerGatewayErrorResponseBody(res *goa.ServiceError) *RemoveClientFromMcpServerGatewayErrorResponseBody {
-	body := &RemoveClientFromMcpServerGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRevokeSessionUnauthorizedResponseBody builds the HTTP response body from
-// the result of the "revokeSession" endpoint of the
+// NewMigrateIssuerBadRequestResponseBody builds the HTTP response body from
+// the result of the "migrateIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewRevokeSessionUnauthorizedResponseBody(res *goa.ServiceError) *RevokeSessionUnauthorizedResponseBody {
-	body := &RevokeSessionUnauthorizedResponseBody{
+func NewMigrateIssuerBadRequestResponseBody(res *goa.ServiceError) *MigrateIssuerBadRequestResponseBody {
+	body := &MigrateIssuerBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -7597,11 +3723,11 @@ func NewRevokeSessionUnauthorizedResponseBody(res *goa.ServiceError) *RevokeSess
 	return body
 }
 
-// NewRevokeSessionForbiddenResponseBody builds the HTTP response body from the
-// result of the "revokeSession" endpoint of the
+// NewMigrateIssuerNotFoundResponseBody builds the HTTP response body from the
+// result of the "migrateIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewRevokeSessionForbiddenResponseBody(res *goa.ServiceError) *RevokeSessionForbiddenResponseBody {
-	body := &RevokeSessionForbiddenResponseBody{
+func NewMigrateIssuerNotFoundResponseBody(res *goa.ServiceError) *MigrateIssuerNotFoundResponseBody {
+	body := &MigrateIssuerNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -7612,11 +3738,11 @@ func NewRevokeSessionForbiddenResponseBody(res *goa.ServiceError) *RevokeSession
 	return body
 }
 
-// NewRevokeSessionBadRequestResponseBody builds the HTTP response body from
-// the result of the "revokeSession" endpoint of the
+// NewMigrateIssuerConflictResponseBody builds the HTTP response body from the
+// result of the "migrateIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewRevokeSessionBadRequestResponseBody(res *goa.ServiceError) *RevokeSessionBadRequestResponseBody {
-	body := &RevokeSessionBadRequestResponseBody{
+func NewMigrateIssuerConflictResponseBody(res *goa.ServiceError) *MigrateIssuerConflictResponseBody {
+	body := &MigrateIssuerConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -7627,11 +3753,11 @@ func NewRevokeSessionBadRequestResponseBody(res *goa.ServiceError) *RevokeSessio
 	return body
 }
 
-// NewRevokeSessionNotFoundResponseBody builds the HTTP response body from the
-// result of the "revokeSession" endpoint of the
+// NewMigrateIssuerUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "migrateIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewRevokeSessionNotFoundResponseBody(res *goa.ServiceError) *RevokeSessionNotFoundResponseBody {
-	body := &RevokeSessionNotFoundResponseBody{
+func NewMigrateIssuerUnsupportedMediaResponseBody(res *goa.ServiceError) *MigrateIssuerUnsupportedMediaResponseBody {
+	body := &MigrateIssuerUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -7642,11 +3768,11 @@ func NewRevokeSessionNotFoundResponseBody(res *goa.ServiceError) *RevokeSessionN
 	return body
 }
 
-// NewRevokeSessionConflictResponseBody builds the HTTP response body from the
-// result of the "revokeSession" endpoint of the
+// NewMigrateIssuerInvalidResponseBody builds the HTTP response body from the
+// result of the "migrateIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewRevokeSessionConflictResponseBody(res *goa.ServiceError) *RevokeSessionConflictResponseBody {
-	body := &RevokeSessionConflictResponseBody{
+func NewMigrateIssuerInvalidResponseBody(res *goa.ServiceError) *MigrateIssuerInvalidResponseBody {
+	body := &MigrateIssuerInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -7657,11 +3783,11 @@ func NewRevokeSessionConflictResponseBody(res *goa.ServiceError) *RevokeSessionC
 	return body
 }
 
-// NewRevokeSessionUnsupportedMediaResponseBody builds the HTTP response body
-// from the result of the "revokeSession" endpoint of the
+// NewMigrateIssuerInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "migrateIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewRevokeSessionUnsupportedMediaResponseBody(res *goa.ServiceError) *RevokeSessionUnsupportedMediaResponseBody {
-	body := &RevokeSessionUnsupportedMediaResponseBody{
+func NewMigrateIssuerInvariantViolationResponseBody(res *goa.ServiceError) *MigrateIssuerInvariantViolationResponseBody {
+	body := &MigrateIssuerInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -7672,11 +3798,11 @@ func NewRevokeSessionUnsupportedMediaResponseBody(res *goa.ServiceError) *Revoke
 	return body
 }
 
-// NewRevokeSessionInvalidResponseBody builds the HTTP response body from the
-// result of the "revokeSession" endpoint of the
+// NewMigrateIssuerUnexpectedResponseBody builds the HTTP response body from
+// the result of the "migrateIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewRevokeSessionInvalidResponseBody(res *goa.ServiceError) *RevokeSessionInvalidResponseBody {
-	body := &RevokeSessionInvalidResponseBody{
+func NewMigrateIssuerUnexpectedResponseBody(res *goa.ServiceError) *MigrateIssuerUnexpectedResponseBody {
+	body := &MigrateIssuerUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -7687,341 +3813,11 @@ func NewRevokeSessionInvalidResponseBody(res *goa.ServiceError) *RevokeSessionIn
 	return body
 }
 
-// NewRevokeSessionInvariantViolationResponseBody builds the HTTP response body
-// from the result of the "revokeSession" endpoint of the
+// NewMigrateIssuerGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "migrateIssuer" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewRevokeSessionInvariantViolationResponseBody(res *goa.ServiceError) *RevokeSessionInvariantViolationResponseBody {
-	body := &RevokeSessionInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRevokeSessionUnexpectedResponseBody builds the HTTP response body from
-// the result of the "revokeSession" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRevokeSessionUnexpectedResponseBody(res *goa.ServiceError) *RevokeSessionUnexpectedResponseBody {
-	body := &RevokeSessionUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRevokeSessionGatewayErrorResponseBody builds the HTTP response body from
-// the result of the "revokeSession" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRevokeSessionGatewayErrorResponseBody(res *goa.ServiceError) *RevokeSessionGatewayErrorResponseBody {
-	body := &RevokeSessionGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRefreshSessionUnauthorizedResponseBody builds the HTTP response body from
-// the result of the "refreshSession" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRefreshSessionUnauthorizedResponseBody(res *goa.ServiceError) *RefreshSessionUnauthorizedResponseBody {
-	body := &RefreshSessionUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRefreshSessionForbiddenResponseBody builds the HTTP response body from
-// the result of the "refreshSession" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRefreshSessionForbiddenResponseBody(res *goa.ServiceError) *RefreshSessionForbiddenResponseBody {
-	body := &RefreshSessionForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRefreshSessionBadRequestResponseBody builds the HTTP response body from
-// the result of the "refreshSession" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRefreshSessionBadRequestResponseBody(res *goa.ServiceError) *RefreshSessionBadRequestResponseBody {
-	body := &RefreshSessionBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRefreshSessionNotFoundResponseBody builds the HTTP response body from the
-// result of the "refreshSession" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRefreshSessionNotFoundResponseBody(res *goa.ServiceError) *RefreshSessionNotFoundResponseBody {
-	body := &RefreshSessionNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRefreshSessionConflictResponseBody builds the HTTP response body from the
-// result of the "refreshSession" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRefreshSessionConflictResponseBody(res *goa.ServiceError) *RefreshSessionConflictResponseBody {
-	body := &RefreshSessionConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRefreshSessionUnsupportedMediaResponseBody builds the HTTP response body
-// from the result of the "refreshSession" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRefreshSessionUnsupportedMediaResponseBody(res *goa.ServiceError) *RefreshSessionUnsupportedMediaResponseBody {
-	body := &RefreshSessionUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRefreshSessionInvalidResponseBody builds the HTTP response body from the
-// result of the "refreshSession" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRefreshSessionInvalidResponseBody(res *goa.ServiceError) *RefreshSessionInvalidResponseBody {
-	body := &RefreshSessionInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRefreshSessionInvariantViolationResponseBody builds the HTTP response
-// body from the result of the "refreshSession" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRefreshSessionInvariantViolationResponseBody(res *goa.ServiceError) *RefreshSessionInvariantViolationResponseBody {
-	body := &RefreshSessionInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRefreshSessionUnexpectedResponseBody builds the HTTP response body from
-// the result of the "refreshSession" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRefreshSessionUnexpectedResponseBody(res *goa.ServiceError) *RefreshSessionUnexpectedResponseBody {
-	body := &RefreshSessionUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRefreshSessionGatewayErrorResponseBody builds the HTTP response body from
-// the result of the "refreshSession" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRefreshSessionGatewayErrorResponseBody(res *goa.ServiceError) *RefreshSessionGatewayErrorResponseBody {
-	body := &RefreshSessionGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRevokeAllClientSessionsUnauthorizedResponseBody builds the HTTP response
-// body from the result of the "revokeAllClientSessions" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRevokeAllClientSessionsUnauthorizedResponseBody(res *goa.ServiceError) *RevokeAllClientSessionsUnauthorizedResponseBody {
-	body := &RevokeAllClientSessionsUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRevokeAllClientSessionsForbiddenResponseBody builds the HTTP response
-// body from the result of the "revokeAllClientSessions" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRevokeAllClientSessionsForbiddenResponseBody(res *goa.ServiceError) *RevokeAllClientSessionsForbiddenResponseBody {
-	body := &RevokeAllClientSessionsForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRevokeAllClientSessionsBadRequestResponseBody builds the HTTP response
-// body from the result of the "revokeAllClientSessions" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRevokeAllClientSessionsBadRequestResponseBody(res *goa.ServiceError) *RevokeAllClientSessionsBadRequestResponseBody {
-	body := &RevokeAllClientSessionsBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRevokeAllClientSessionsNotFoundResponseBody builds the HTTP response body
-// from the result of the "revokeAllClientSessions" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRevokeAllClientSessionsNotFoundResponseBody(res *goa.ServiceError) *RevokeAllClientSessionsNotFoundResponseBody {
-	body := &RevokeAllClientSessionsNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRevokeAllClientSessionsConflictResponseBody builds the HTTP response body
-// from the result of the "revokeAllClientSessions" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRevokeAllClientSessionsConflictResponseBody(res *goa.ServiceError) *RevokeAllClientSessionsConflictResponseBody {
-	body := &RevokeAllClientSessionsConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRevokeAllClientSessionsUnsupportedMediaResponseBody builds the HTTP
-// response body from the result of the "revokeAllClientSessions" endpoint of
-// the "organizationRemoteSessionIssuers" service.
-func NewRevokeAllClientSessionsUnsupportedMediaResponseBody(res *goa.ServiceError) *RevokeAllClientSessionsUnsupportedMediaResponseBody {
-	body := &RevokeAllClientSessionsUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRevokeAllClientSessionsInvalidResponseBody builds the HTTP response body
-// from the result of the "revokeAllClientSessions" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRevokeAllClientSessionsInvalidResponseBody(res *goa.ServiceError) *RevokeAllClientSessionsInvalidResponseBody {
-	body := &RevokeAllClientSessionsInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRevokeAllClientSessionsInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "revokeAllClientSessions" endpoint of
-// the "organizationRemoteSessionIssuers" service.
-func NewRevokeAllClientSessionsInvariantViolationResponseBody(res *goa.ServiceError) *RevokeAllClientSessionsInvariantViolationResponseBody {
-	body := &RevokeAllClientSessionsInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRevokeAllClientSessionsUnexpectedResponseBody builds the HTTP response
-// body from the result of the "revokeAllClientSessions" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRevokeAllClientSessionsUnexpectedResponseBody(res *goa.ServiceError) *RevokeAllClientSessionsUnexpectedResponseBody {
-	body := &RevokeAllClientSessionsUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRevokeAllClientSessionsGatewayErrorResponseBody builds the HTTP response
-// body from the result of the "revokeAllClientSessions" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewRevokeAllClientSessionsGatewayErrorResponseBody(res *goa.ServiceError) *RevokeAllClientSessionsGatewayErrorResponseBody {
-	body := &RevokeAllClientSessionsGatewayErrorResponseBody{
+func NewMigrateIssuerGatewayErrorResponseBody(res *goa.ServiceError) *MigrateIssuerGatewayErrorResponseBody {
+	body := &MigrateIssuerGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -8041,10 +3837,14 @@ func NewCreateIssuerPayload(body *CreateIssuerRequestBody, sessionToken *string,
 		Issuer:                            *body.Issuer,
 		Name:                              body.Name,
 		LogoAssetID:                       body.LogoAssetID,
+		ClientSetupDocumentationURL:       body.ClientSetupDocumentationURL,
 		AuthorizationEndpoint:             body.AuthorizationEndpoint,
 		TokenEndpoint:                     body.TokenEndpoint,
 		RegistrationEndpoint:              body.RegistrationEndpoint,
 		JwksURI:                           body.JwksURI,
+		ServiceDocumentation:              body.ServiceDocumentation,
+		OpPolicyURI:                       body.OpPolicyURI,
+		OpTosURI:                          body.OpTosURI,
 		Oidc:                              body.Oidc,
 		Passthrough:                       body.Passthrough,
 		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
@@ -8122,10 +3922,14 @@ func NewUpdateIssuerPayload(body *UpdateIssuerRequestBody, sessionToken *string,
 		Issuer:                            body.Issuer,
 		Name:                              body.Name,
 		LogoAssetID:                       body.LogoAssetID,
+		ClientSetupDocumentationURL:       body.ClientSetupDocumentationURL,
 		AuthorizationEndpoint:             body.AuthorizationEndpoint,
 		TokenEndpoint:                     body.TokenEndpoint,
 		RegistrationEndpoint:              body.RegistrationEndpoint,
 		JwksURI:                           body.JwksURI,
+		ServiceDocumentation:              body.ServiceDocumentation,
+		OpPolicyURI:                       body.OpPolicyURI,
+		OpTosURI:                          body.OpTosURI,
 		Oidc:                              body.Oidc,
 		Passthrough:                       body.Passthrough,
 		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
@@ -8184,183 +3988,25 @@ func NewMoveIssuerPayload(body *MoveIssuerRequestBody, sessionToken *string, api
 	return v
 }
 
-// NewListClientsPayload builds a organizationRemoteSessionIssuers service
-// listClients endpoint payload.
-func NewListClientsPayload(issuerID string, cursor *string, limit *int, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.ListClientsPayload {
-	v := &organizationremotesessionissuers.ListClientsPayload{}
-	v.IssuerID = issuerID
-	v.Cursor = cursor
-	v.Limit = limit
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-
-	return v
-}
-
-// NewGetClientPayload builds a organizationRemoteSessionIssuers service
-// getClient endpoint payload.
-func NewGetClientPayload(id string, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.GetClientPayload {
-	v := &organizationremotesessionissuers.GetClientPayload{}
-	v.ID = id
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-
-	return v
-}
-
-// NewGetClientDeletePreflightPayload builds a organizationRemoteSessionIssuers
-// service getClientDeletePreflight endpoint payload.
-func NewGetClientDeletePreflightPayload(id string, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.GetClientDeletePreflightPayload {
-	v := &organizationremotesessionissuers.GetClientDeletePreflightPayload{}
-	v.ID = id
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-
-	return v
-}
-
-// NewListClientMcpServersPayload builds a organizationRemoteSessionIssuers
-// service listClientMcpServers endpoint payload.
-func NewListClientMcpServersPayload(clientID string, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.ListClientMcpServersPayload {
-	v := &organizationremotesessionissuers.ListClientMcpServersPayload{}
-	v.ClientID = clientID
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-
-	return v
-}
-
-// NewListClientSessionsPayload builds a organizationRemoteSessionIssuers
-// service listClientSessions endpoint payload.
-func NewListClientSessionsPayload(clientID string, cursor *string, limit *int, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.ListClientSessionsPayload {
-	v := &organizationremotesessionissuers.ListClientSessionsPayload{}
-	v.ClientID = clientID
-	v.Cursor = cursor
-	v.Limit = limit
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-
-	return v
-}
-
-// NewCreateClientPayload builds a organizationRemoteSessionIssuers service
-// createClient endpoint payload.
-func NewCreateClientPayload(body *CreateClientRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.CreateClientPayload {
-	v := &organizationremotesessionissuers.CreateClientPayload{
-		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
-		ProjectID:               body.ProjectID,
-		ClientID:                *body.ClientID,
-		ClientSecret:            body.ClientSecret,
-		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
-		Audience:                body.Audience,
-	}
-	if body.Scope != nil {
-		v.Scope = make([]string, len(body.Scope))
-		for i, val := range body.Scope {
-			v.Scope[i] = val
-		}
-	}
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-
-	return v
-}
-
-// NewCreateCimdClientPayload builds a organizationRemoteSessionIssuers service
-// createCimdClient endpoint payload.
-func NewCreateCimdClientPayload(body *CreateCimdClientRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.CreateCimdClientPayload {
-	v := &organizationremotesessionissuers.CreateCimdClientPayload{
-		RemoteSessionIssuerID: *body.RemoteSessionIssuerID,
-		ProjectID:             body.ProjectID,
-		Audience:              body.Audience,
-	}
-	if body.Scope != nil {
-		v.Scope = make([]string, len(body.Scope))
-		for i, val := range body.Scope {
-			v.Scope[i] = val
-		}
-	}
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-
-	return v
-}
-
-// NewUpdateClientPayload builds a organizationRemoteSessionIssuers service
-// updateClient endpoint payload.
-func NewUpdateClientPayload(body *UpdateClientRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.UpdateClientPayload {
-	v := &organizationremotesessionissuers.UpdateClientPayload{
-		ID:                      *body.ID,
-		ClientSecret:            body.ClientSecret,
-		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
-		Audience:                body.Audience,
-	}
-	if body.Scope != nil {
-		v.Scope = make([]string, len(body.Scope))
-		for i, val := range body.Scope {
-			v.Scope[i] = val
-		}
-	}
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-
-	return v
-}
-
-// NewDeleteClientPayload builds a organizationRemoteSessionIssuers service
-// deleteClient endpoint payload.
-func NewDeleteClientPayload(id string, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.DeleteClientPayload {
-	v := &organizationremotesessionissuers.DeleteClientPayload{}
-	v.ID = id
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-
-	return v
-}
-
-// NewRemoveClientFromMcpServerPayload builds a
-// organizationRemoteSessionIssuers service removeClientFromMcpServer endpoint
+// NewGetIssuerMigratePreflightPayload builds a
+// organizationRemoteSessionIssuers service getIssuerMigratePreflight endpoint
 // payload.
-func NewRemoveClientFromMcpServerPayload(body *RemoveClientFromMcpServerRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.RemoveClientFromMcpServerPayload {
-	v := &organizationremotesessionissuers.RemoveClientFromMcpServerPayload{
-		ClientID:    *body.ClientID,
-		McpServerID: *body.McpServerID,
-	}
+func NewGetIssuerMigratePreflightPayload(sourceID string, targetID string, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.GetIssuerMigratePreflightPayload {
+	v := &organizationremotesessionissuers.GetIssuerMigratePreflightPayload{}
+	v.SourceID = sourceID
+	v.TargetID = targetID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 
 	return v
 }
 
-// NewRevokeSessionPayload builds a organizationRemoteSessionIssuers service
-// revokeSession endpoint payload.
-func NewRevokeSessionPayload(body *RevokeSessionRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.RevokeSessionPayload {
-	v := &organizationremotesessionissuers.RevokeSessionPayload{
-		ID: *body.ID,
-	}
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-
-	return v
-}
-
-// NewRefreshSessionPayload builds a organizationRemoteSessionIssuers service
-// refreshSession endpoint payload.
-func NewRefreshSessionPayload(body *RefreshSessionRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.RefreshSessionPayload {
-	v := &organizationremotesessionissuers.RefreshSessionPayload{
-		ID: *body.ID,
-	}
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-
-	return v
-}
-
-// NewRevokeAllClientSessionsPayload builds a organizationRemoteSessionIssuers
-// service revokeAllClientSessions endpoint payload.
-func NewRevokeAllClientSessionsPayload(body *RevokeAllClientSessionsRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.RevokeAllClientSessionsPayload {
-	v := &organizationremotesessionissuers.RevokeAllClientSessionsPayload{
-		ClientID: *body.ClientID,
+// NewMigrateIssuerPayload builds a organizationRemoteSessionIssuers service
+// migrateIssuer endpoint payload.
+func NewMigrateIssuerPayload(body *MigrateIssuerRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.MigrateIssuerPayload {
+	v := &organizationremotesessionissuers.MigrateIssuerPayload{
+		SourceID: *body.SourceID,
+		TargetID: *body.TargetID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -8416,153 +4062,20 @@ func ValidateMoveIssuerRequestBody(body *MoveIssuerRequestBody) (err error) {
 	return
 }
 
-// ValidateCreateClientRequestBody runs the validations defined on
-// CreateClientRequestBody
-func ValidateCreateClientRequestBody(body *CreateClientRequestBody) (err error) {
-	if body.RemoteSessionIssuerID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
+// ValidateMigrateIssuerRequestBody runs the validations defined on
+// MigrateIssuerRequestBody
+func ValidateMigrateIssuerRequestBody(body *MigrateIssuerRequestBody) (err error) {
+	if body.SourceID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_id", "body"))
 	}
-	if body.ClientID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	if body.TargetID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("target_id", "body"))
 	}
-	if body.RemoteSessionIssuerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	if body.SourceID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.source_id", *body.SourceID, goa.FormatUUID))
 	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
-	}
-	if body.TokenEndpointAuthMethod != nil {
-		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
-		}
-	}
-	for _, e := range body.Scope {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))
-		if utf8.RuneCountInString(e) > 128 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope[*]", e, utf8.RuneCountInString(e), 128, false))
-		}
-	}
-	if body.Audience != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
-	}
-	if body.Audience != nil {
-		if utf8.RuneCountInString(*body.Audience) > 512 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
-		}
-	}
-	return
-}
-
-// ValidateCreateCimdClientRequestBody runs the validations defined on
-// CreateCimdClientRequestBody
-func ValidateCreateCimdClientRequestBody(body *CreateCimdClientRequestBody) (err error) {
-	if body.RemoteSessionIssuerID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
-	}
-	if body.RemoteSessionIssuerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
-	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
-	}
-	for _, e := range body.Scope {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))
-		if utf8.RuneCountInString(e) > 128 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope[*]", e, utf8.RuneCountInString(e), 128, false))
-		}
-	}
-	if body.Audience != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
-	}
-	if body.Audience != nil {
-		if utf8.RuneCountInString(*body.Audience) > 512 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
-		}
-	}
-	return
-}
-
-// ValidateUpdateClientRequestBody runs the validations defined on
-// UpdateClientRequestBody
-func ValidateUpdateClientRequestBody(body *UpdateClientRequestBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.TokenEndpointAuthMethod != nil {
-		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
-		}
-	}
-	for _, e := range body.Scope {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))
-		if utf8.RuneCountInString(e) > 128 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope[*]", e, utf8.RuneCountInString(e), 128, false))
-		}
-	}
-	if body.Audience != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
-	}
-	if body.Audience != nil {
-		if utf8.RuneCountInString(*body.Audience) > 512 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
-		}
-	}
-	return
-}
-
-// ValidateRemoveClientFromMcpServerRequestBody runs the validations defined on
-// RemoveClientFromMcpServerRequestBody
-func ValidateRemoveClientFromMcpServerRequestBody(body *RemoveClientFromMcpServerRequestBody) (err error) {
-	if body.ClientID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
-	}
-	if body.McpServerID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
-	}
-	if body.ClientID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id", *body.ClientID, goa.FormatUUID))
-	}
-	if body.McpServerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
-	}
-	return
-}
-
-// ValidateRevokeSessionRequestBody runs the validations defined on
-// RevokeSessionRequestBody
-func ValidateRevokeSessionRequestBody(body *RevokeSessionRequestBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	return
-}
-
-// ValidateRefreshSessionRequestBody runs the validations defined on
-// RefreshSessionRequestBody
-func ValidateRefreshSessionRequestBody(body *RefreshSessionRequestBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	return
-}
-
-// ValidateRevokeAllClientSessionsRequestBody runs the validations defined on
-// RevokeAllClientSessionsRequestBody
-func ValidateRevokeAllClientSessionsRequestBody(body *RevokeAllClientSessionsRequestBody) (err error) {
-	if body.ClientID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
-	}
-	if body.ClientID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id", *body.ClientID, goa.FormatUUID))
+	if body.TargetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.target_id", *body.TargetID, goa.FormatUUID))
 	}
 	return
 }

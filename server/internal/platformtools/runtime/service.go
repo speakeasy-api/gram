@@ -18,11 +18,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	platformchangelog "github.com/speakeasy-api/gram/server/internal/platformtools/changelog"
 	platformchats "github.com/speakeasy-api/gram/server/internal/platformtools/chats"
 	platformdeployments "github.com/speakeasy-api/gram/server/internal/platformtools/deployments"
 	platformlogs "github.com/speakeasy-api/gram/server/internal/platformtools/logs"
 	platformmemory "github.com/speakeasy-api/gram/server/internal/platformtools/memory"
 	platformrisk "github.com/speakeasy-api/gram/server/internal/platformtools/risk"
+	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
 	platformtriggers "github.com/speakeasy-api/gram/server/internal/platformtools/triggers"
 	platformusers "github.com/speakeasy-api/gram/server/internal/platformtools/users"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -115,6 +117,13 @@ func MemoryExternalTools(svc *memory.MemoryService) []platformtools.ExternalTool
 	}
 }
 
+// AssistantSkillTools returns the always-on attached-skill loader.
+func AssistantSkillTools(logger *slog.Logger, db *pgxpool.Pool, opts ...platformskills.LoadOption) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformskills.NewLoadTool(logger, db, opts...), RequiredFeature: ""},
+	}
+}
+
 // TriggerExternalTools returns the assistant self-config trigger tools
 // (list + configure). Both variants pin target_kind/target_ref to the calling
 // assistant principal and strip those fields from the schema so the LLM
@@ -133,6 +142,7 @@ func ManagedAssistantLogsTools(telemetrySvc platformtools.TelemetryService) []pl
 	return []platformtools.ExternalTool{
 		{Executor: platformlogs.NewSearchLogsTool(telemetrySvc), RequiredFeature: ""},
 		{Executor: platformlogs.NewSearchToolCallsTool(telemetrySvc), RequiredFeature: ""},
+		{Executor: platformlogs.NewGetToolUsageSummaryTool(telemetrySvc), RequiredFeature: ""},
 		{Executor: platformlogs.NewSearchChatsTool(telemetrySvc), RequiredFeature: ""},
 		{Executor: platformlogs.NewSearchUsersTool(telemetrySvc), RequiredFeature: ""},
 		{Executor: platformlogs.NewGetProjectMetricsSummaryTool(telemetrySvc), RequiredFeature: ""},
@@ -179,6 +189,28 @@ func ManagedAssistantDeploymentsTools(deploymentsSvc platformdeployments.Deploym
 	}
 }
 
+// ManagedAssistantChangelogTools returns the public-changelog tool for the
+// project's managed assistant so it can answer "what's new on the platform"
+// questions. The HTTP client must come from a guardian policy so the outbound
+// fetch stays within the egress rules.
+func ManagedAssistantChangelogTools(httpClient *guardian.HTTPClient) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformchangelog.NewGetChangelogTool(httpClient), RequiredFeature: ""},
+	}
+}
+
+// ManagedAssistantSkillsTools returns read-only skill management tools for the
+// project's managed assistant.
+func ManagedAssistantSkillsTools(skillsSvc platformskills.SkillsService, insights platformskills.SkillInsightsReader) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformskills.NewListTool(skillsSvc), RequiredFeature: "skills"},
+		{Executor: platformskills.NewGetTool(skillsSvc), RequiredFeature: "skills"},
+		{Executor: platformskills.NewListVersionsTool(skillsSvc), RequiredFeature: "skills"},
+		{Executor: platformskills.NewListDistributionsTool(skillsSvc), RequiredFeature: "skills"},
+		{Executor: platformskills.NewInsightsTool(skillsSvc, insights), RequiredFeature: "skills"},
+	}
+}
+
 func (s *Service) ExecuteTool(ctx context.Context, plan *gateway.ToolCallPlan, env toolconfig.ToolCallEnv, requestBody io.Reader) (*gateway.PlatformResult, error) {
 	if plan == nil || plan.Kind != gateway.ToolKindPlatform || plan.Descriptor == nil || plan.Platform == nil {
 		return nil, fmt.Errorf("invalid platform tool plan")
@@ -195,7 +227,7 @@ func (s *Service) ExecuteTool(ctx context.Context, plan *gateway.ToolCallPlan, e
 
 	if feature, gated := s.featureGates[urnStr]; gated && s.featureChecker != nil {
 		if !s.featureChecker(ctx, authCtx.ActiveOrganizationID, feature) {
-			return nil, oops.E(oops.CodeNotFound, nil, "platform tool not found").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeNotFound, nil, "platform tool not found").LogWarn(ctx, s.logger)
 		}
 	}
 
@@ -216,7 +248,7 @@ func (s *Service) ExecuteTool(ctx context.Context, plan *gateway.ToolCallPlan, e
 
 	executor, ok := s.executors[urnStr]
 	if !ok {
-		return nil, oops.E(oops.CodeNotFound, nil, "platform tool not found").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "platform tool not found").LogWarn(ctx, s.logger)
 	}
 
 	var out bytes.Buffer

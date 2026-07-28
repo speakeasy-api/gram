@@ -1,5 +1,5 @@
 import { useFetcher } from "@/contexts/Fetcher";
-import { UploadImageResult } from "@gram/client/models/components";
+import { UploadImageResult } from "@gram/client/models/components/uploadimageresult.js";
 
 export function useAssetImageUploadHandler(
   onSuccess: (res: UploadImageResult) => void,

@@ -7,7 +7,7 @@ import {
   Search,
 } from "lucide-react";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
-import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query";
+import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
 import { StepContainer } from "../step-container";

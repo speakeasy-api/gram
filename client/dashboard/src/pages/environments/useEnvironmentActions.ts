@@ -1,7 +1,7 @@
 import { useTelemetry } from "@/contexts/Telemetry";
 import { handleAPIError } from "@/lib/errors";
 import { useRoutes } from "@/routes";
-import { useCloneEnvironmentMutation } from "@gram/client/react-query/index.js";
+import { useCloneEnvironmentMutation } from "@gram/client/react-query/cloneEnvironment.js";
 import { toast } from "sonner";
 import { useEnvironments } from "./useEnvironments";
 

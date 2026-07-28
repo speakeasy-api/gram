@@ -257,7 +257,7 @@ SET version = version + 1
 WHERE id = $1
   AND project_id = $2
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 `
 
 type BumpRiskPolicyVersionParams struct {
@@ -290,6 +290,7 @@ func (q *Queries) BumpRiskPolicyVersion(ctx context.Context, arg BumpRiskPolicyV
 		&i.UserMessage,
 		&i.Prompt,
 		&i.ModelConfig,
+		&i.Score,
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -402,6 +403,30 @@ func (q *Queries) CountRiskResultsByPolicyID(ctx context.Context, arg CountRiskR
 	return column_1, err
 }
 
+const countRiskResultsByProjectAndPolicy = `-- name: CountRiskResultsByProjectAndPolicy :one
+SELECT COUNT(*)::BIGINT
+FROM risk_results rr
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
+WHERE rr.project_id = $1
+  AND rr.risk_policy_id = $2
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+`
+
+type CountRiskResultsByProjectAndPolicyParams struct {
+	ProjectID    uuid.UUID
+	RiskPolicyID uuid.UUID
+}
+
+// Matches the filter semantics of ListRiskResultsByProjectAndPolicy: a
+// disabled policy still counts its historical findings, only deleted policies
+// are excluded.
+func (q *Queries) CountRiskResultsByProjectAndPolicy(ctx context.Context, arg CountRiskResultsByProjectAndPolicyParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countRiskResultsByProjectAndPolicy, arg.ProjectID, arg.RiskPolicyID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const countTotalMessages = `-- name: CountTotalMessages :one
 SELECT COUNT(*)::BIGINT
 FROM chat_messages cm
@@ -413,6 +438,58 @@ func (q *Queries) CountTotalMessages(ctx context.Context, projectID uuid.NullUUI
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const createChatForTest = `-- name: CreateChatForTest :one
+INSERT INTO chats (project_id, organization_id, user_id, external_user_id)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type CreateChatForTestParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+}
+
+func (q *Queries) CreateChatForTest(ctx context.Context, arg CreateChatForTestParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createChatForTest,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.ExternalUserID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createChatMessageForTest = `-- name: CreateChatMessageForTest :one
+INSERT INTO chat_messages (chat_id, project_id, role, content, user_id, external_user_id)
+VALUES ($1, $2, 'user', $3, $4, $5)
+RETURNING id
+`
+
+type CreateChatMessageForTestParams struct {
+	ChatID         uuid.UUID
+	ProjectID      uuid.NullUUID
+	Content        string
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+}
+
+func (q *Queries) CreateChatMessageForTest(ctx context.Context, arg CreateChatMessageForTestParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createChatMessageForTest,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Content,
+		arg.UserID,
+		arg.ExternalUserID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const createCustomDetectionRule = `-- name: CreateCustomDetectionRule :one
@@ -569,6 +646,7 @@ INSERT INTO risk_policies (
   , user_message
   , prompt
   , model_config
+  , score
   , version
 )
 VALUES (
@@ -593,9 +671,10 @@ VALUES (
   , $19
   , $20::text
   , $21::jsonb
+  , COALESCE($22::double precision, 5.0)
   , 1
 )
-RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateRiskPolicyParams struct {
@@ -620,6 +699,7 @@ type CreateRiskPolicyParams struct {
 	UserMessage          pgtype.Text
 	Prompt               pgtype.Text
 	ModelConfig          []byte
+	Score                pgtype.Float8
 }
 
 func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyParams) (RiskPolicy, error) {
@@ -645,6 +725,7 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		arg.UserMessage,
 		arg.Prompt,
 		arg.ModelConfig,
+		arg.Score,
 	)
 	var i RiskPolicy
 	err := row.Scan(
@@ -669,6 +750,7 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		&i.UserMessage,
 		&i.Prompt,
 		&i.ModelConfig,
+		&i.Score,
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -851,6 +933,206 @@ func (q *Queries) FetchUnanalyzedMessageIDs(ctx context.Context, arg FetchUnanal
 	return items, nil
 }
 
+const getActiveRiskPolicyAck = `-- name: GetActiveRiskPolicyAck :one
+SELECT id, organization_id, project_id, risk_policy_id, user_id, tool_name, status, policy_name, entity, rule_id, call_fingerprint, challenged_at, acknowledged_at, expires_at, created_at, updated_at, deleted_at, deleted
+FROM risk_policy_challenges
+WHERE project_id = $1
+  AND user_id = $2
+  AND risk_policy_id = $3
+  AND tool_name IS NOT DISTINCT FROM $4::text
+  AND call_fingerprint IS NOT DISTINCT FROM $5::text
+  AND status = 'acknowledged'
+  AND expires_at IS NOT NULL
+  AND expires_at > clock_timestamp()
+  AND deleted IS FALSE
+`
+
+type GetActiveRiskPolicyAckParams struct {
+	ProjectID       uuid.UUID
+	UserID          string
+	RiskPolicyID    uuid.UUID
+	ToolName        pgtype.Text
+	CallFingerprint pgtype.Text
+}
+
+// Hook-time gate: is there a live acknowledgement for this concrete call
+// (user, policy, tool, call_fingerprint)? The agent retries with NO token, so
+// this table lookup — not the cache token — is what allows the retry through.
+// Scoped by call_fingerprint so only an identical retry clears, not any
+// same-tool call under the policy.
+func (q *Queries) GetActiveRiskPolicyAck(ctx context.Context, arg GetActiveRiskPolicyAckParams) (RiskPolicyChallenge, error) {
+	row := q.db.QueryRow(ctx, getActiveRiskPolicyAck,
+		arg.ProjectID,
+		arg.UserID,
+		arg.RiskPolicyID,
+		arg.ToolName,
+		arg.CallFingerprint,
+	)
+	var i RiskPolicyChallenge
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RiskPolicyID,
+		&i.UserID,
+		&i.ToolName,
+		&i.Status,
+		&i.PolicyName,
+		&i.Entity,
+		&i.RuleID,
+		&i.CallFingerprint,
+		&i.ChallengedAt,
+		&i.AcknowledgedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getBatchChatIdentities = `-- name: GetBatchChatIdentities :many
+SELECT earliest_message_id, chat_id, account_type, email, flagged_rule_ids
+FROM (
+  SELECT DISTINCT ON (cm.chat_id)
+      cm.id AS earliest_message_id
+    , cm.chat_id
+    , ua.account_type
+    , ua.email
+    , (
+        SELECT COALESCE(array_agg(DISTINCT rr.rule_id), '{}')
+        FROM risk_results rr
+        JOIN chat_messages prior ON prior.id = rr.chat_message_id
+        WHERE rr.project_id = $1::uuid
+          AND rr.risk_policy_id = $2
+          AND rr.risk_policy_version = $3
+          AND rr.source = 'account_identity'
+          AND rr.found IS TRUE
+          AND rr.rule_id IS NOT NULL
+          AND prior.chat_id = cm.chat_id
+          AND rr.chat_message_id != ALL($4::uuid[])
+      )::text[] AS flagged_rule_ids
+  FROM chat_messages cm
+  JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.deleted IS FALSE
+  WHERE cm.id = ANY($4::uuid[])
+    AND cm.project_id = $1::uuid
+  ORDER BY cm.chat_id, cm.id ASC
+) batch_chats
+ORDER BY earliest_message_id ASC
+`
+
+type GetBatchChatIdentitiesParams struct {
+	ProjectID         uuid.UUID
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	Ids               []uuid.UUID
+}
+
+type GetBatchChatIdentitiesRow struct {
+	EarliestMessageID uuid.UUID
+	ChatID            uuid.UUID
+	AccountType       pgtype.Text
+	Email             pgtype.Text
+	FlaggedRuleIds    []string
+}
+
+// One row per chat represented in a batch of messages, for the session-scoped
+// account_identity scanner: the chat's earliest in-batch message (UUIDv7
+// order = creation order, the message the finding attaches to) plus the
+// chat's AI-account identity from personal-account tracking (NULL
+// account_type/email for unattributed chats — the scanner emits nothing for
+// those).
+//
+// flagged_rule_ids carries the account_identity rules already recorded for
+// the chat at this policy version on messages OUTSIDE the batch; the scanner
+// drops those rules and emits only the rest, so session-scoped findings
+// dedupe to one per chat PER RULE per policy version. Dedupe must be
+// rule-scoped, not chat-scoped: identity fields arrive incrementally (an
+// account can be classified personal before its email is known, and vice
+// versa), so a later batch can legitimately fire a rule the first batch could
+// not evaluate yet. Findings on in-batch messages do not block re-emission
+// because the writer deletes and re-inserts results for the batch's messages.
+func (q *Queries) GetBatchChatIdentities(ctx context.Context, arg GetBatchChatIdentitiesParams) ([]GetBatchChatIdentitiesRow, error) {
+	rows, err := q.db.Query(ctx, getBatchChatIdentities,
+		arg.ProjectID,
+		arg.RiskPolicyID,
+		arg.RiskPolicyVersion,
+		arg.Ids,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetBatchChatIdentitiesRow
+	for rows.Next() {
+		var i GetBatchChatIdentitiesRow
+		if err := rows.Scan(
+			&i.EarliestMessageID,
+			&i.ChatID,
+			&i.AccountType,
+			&i.Email,
+			&i.FlaggedRuleIds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getChatMessageAttribution = `-- name: GetChatMessageAttribution :many
+SELECT
+    cm.id
+  , cm.chat_id
+  , COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id
+  , COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
+FROM chat_messages cm
+LEFT JOIN chats c
+  ON c.id = cm.chat_id
+  AND c.deleted IS FALSE
+WHERE cm.id = ANY($1::uuid[])
+`
+
+type GetChatMessageAttributionRow struct {
+	ID             uuid.UUID
+	ChatID         uuid.UUID
+	UserID         string
+	ExternalUserID string
+}
+
+// Resolves the denormalized attribution (chat id, user ids) the ClickHouse
+// finding writer stamps on risk_findings rows at ingest. Message-level ids win
+// over chat-level ids; both empty and NULL collapse to ”.
+func (q *Queries) GetChatMessageAttribution(ctx context.Context, ids []uuid.UUID) ([]GetChatMessageAttributionRow, error) {
+	rows, err := q.db.Query(ctx, getChatMessageAttribution, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetChatMessageAttributionRow
+	for rows.Next() {
+		var i GetChatMessageAttributionRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.UserID,
+			&i.ExternalUserID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getCustomDetectionRule = `-- name: GetCustomDetectionRule :one
 SELECT id, project_id, organization_id, rule_id, title, description, regex, match_config, detection_expr, severity, created_at, updated_at, deleted_at, deleted
 FROM risk_custom_detection_rules
@@ -887,10 +1169,12 @@ func (q *Queries) GetCustomDetectionRule(ctx context.Context, arg GetCustomDetec
 }
 
 const getMessageContentBatch = `-- name: GetMessageContentBatch :many
-SELECT id, role, content, tool_calls
-FROM chat_messages
-WHERE id = ANY($1::uuid[])
-  AND project_id = $2
+SELECT cm.id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.source,
+  COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id
+FROM chat_messages cm
+LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+WHERE cm.id = ANY($1::uuid[])
+  AND cm.project_id = $2
 `
 
 type GetMessageContentBatchParams struct {
@@ -899,12 +1183,30 @@ type GetMessageContentBatchParams struct {
 }
 
 type GetMessageContentBatchRow struct {
-	ID        uuid.UUID
-	Role      string
-	Content   string
-	ToolCalls []byte
+	ID         uuid.UUID
+	Role       string
+	Content    string
+	ToolCalls  []byte
+	CreatedAt  pgtype.Timestamptz
+	Source     pgtype.Text
+	ChatUserID string
 }
 
+// The scanned user's id rides along so the LLM judge's completion telemetry
+// can attribute scanning volume to whose traffic was analyzed. Same
+// attribution rule as ListRiskOverviewTopUsers: the message's own user_id
+// wins, the chat owner's is the fallback — and a soft-deleted chat's owner
+// never is (LEFT JOIN so the message still gets scanned, just unattributed).
+//
+// created_at bounds the shadow-MCP scanner's ClickHouse provenance lookup to
+// the batch's own time range, keeping that query on the telemetry table's
+// time-ordered primary key instead of scanning the full retention window.
+//
+// source names the agent that recorded the message (Codex, Cursor, the ingest
+// adapter, ...). The shadow-MCP scanner attributes its provenance-resolution
+// metric to it, which is the one attribution available when the call resolved
+// to no telemetry row at all — precisely the population that metric exists to
+// measure.
 func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageContentBatchParams) ([]GetMessageContentBatchRow, error) {
 	rows, err := q.db.Query(ctx, getMessageContentBatch, arg.Ids, arg.ProjectID)
 	if err != nil {
@@ -919,6 +1221,9 @@ func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageCont
 			&i.Role,
 			&i.Content,
 			&i.ToolCalls,
+			&i.CreatedAt,
+			&i.Source,
+			&i.ChatUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -1024,16 +1329,45 @@ func (q *Queries) GetRiskExclusionForReconcile(ctx context.Context, arg GetRiskE
 	return i, err
 }
 
-const getRiskOverviewCounts = `-- name: GetRiskOverviewCounts :one
+const getRiskOverviewFindingCounts = `-- name: GetRiskOverviewFindingCounts :one
+SELECT
+    COUNT(*)::BIGINT AS findings
+  , COUNT(DISTINCT cm.chat_id)::BIGINT AS flagged_sessions
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+WHERE rr.project_id = $1
+  AND rr.created_at >= $2
+  AND rr.created_at < $3
+  AND rr.found IS TRUE
+  AND rr.excluded_at IS NULL
+  AND rr.false_positive_at IS NULL
+`
+
+type GetRiskOverviewFindingCountsParams struct {
+	ProjectID uuid.UUID
+	FromTime  pgtype.Timestamptz
+	ToTime    pgtype.Timestamptz
+}
+
+type GetRiskOverviewFindingCountsRow struct {
+	Findings        int64
+	FlaggedSessions int64
+}
+
+// findings + flagged_sessions over the live-found subset. Pushing the found
+// predicate into WHERE lets the partial risk_results_project_found_idx serve the
+// scan, so the JOIN to chat_messages only touches found rows instead of every
+// scanned row. COUNT(DISTINCT cm.chat_id) already skips NULL chat_ids.
+func (q *Queries) GetRiskOverviewFindingCounts(ctx context.Context, arg GetRiskOverviewFindingCountsParams) (GetRiskOverviewFindingCountsRow, error) {
+	row := q.db.QueryRow(ctx, getRiskOverviewFindingCounts, arg.ProjectID, arg.FromTime, arg.ToTime)
+	var i GetRiskOverviewFindingCountsRow
+	err := row.Scan(&i.Findings, &i.FlaggedSessions)
+	return i, err
+}
+
+const getRiskOverviewScanCounts = `-- name: GetRiskOverviewScanCounts :one
 SELECT
     COUNT(DISTINCT rr.chat_message_id)::BIGINT AS messages_scanned
-  , (COUNT(*) FILTER (
-      WHERE rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-    ))::BIGINT AS findings
-  , (COUNT(DISTINCT cm.chat_id) FILTER (
-      WHERE rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-        AND cm.chat_id IS NOT NULL
-    ))::BIGINT AS flagged_sessions
   , (
       SELECT COUNT(*)::BIGINT
       FROM risk_policies active_rp
@@ -1042,39 +1376,36 @@ SELECT
         AND deleted IS FALSE
     ) AS active_policies
 FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
 WHERE rr.project_id = $1
   AND rr.created_at >= $2
   AND rr.created_at < $3
 `
 
-type GetRiskOverviewCountsParams struct {
+type GetRiskOverviewScanCountsParams struct {
 	ProjectID uuid.UUID
 	FromTime  pgtype.Timestamptz
 	ToTime    pgtype.Timestamptz
 }
 
-type GetRiskOverviewCountsRow struct {
+type GetRiskOverviewScanCountsRow struct {
 	MessagesScanned int64
-	Findings        int64
-	FlaggedSessions int64
 	ActivePolicies  int64
 }
 
-func (q *Queries) GetRiskOverviewCounts(ctx context.Context, arg GetRiskOverviewCountsParams) (GetRiskOverviewCountsRow, error) {
-	row := q.db.QueryRow(ctx, getRiskOverviewCounts, arg.ProjectID, arg.FromTime, arg.ToTime)
-	var i GetRiskOverviewCountsRow
-	err := row.Scan(
-		&i.MessagesScanned,
-		&i.Findings,
-		&i.FlaggedSessions,
-		&i.ActivePolicies,
-	)
+// messages_scanned counts every scanned message in the window regardless of
+// found state. chat_message_id is NOT NULL with a FK to chat_messages, so the
+// old JOIN was lossless — dropping it lets this be an index-only distinct on
+// risk_results_project_created_msg_idx (project_id, created_at, chat_message_id).
+// active_policies is a cheap scalar subquery, folded in here to save a round trip.
+func (q *Queries) GetRiskOverviewScanCounts(ctx context.Context, arg GetRiskOverviewScanCountsParams) (GetRiskOverviewScanCountsRow, error) {
+	row := q.db.QueryRow(ctx, getRiskOverviewScanCounts, arg.ProjectID, arg.FromTime, arg.ToTime)
+	var i GetRiskOverviewScanCountsRow
+	err := row.Scan(&i.MessagesScanned, &i.ActivePolicies)
 	return i, err
 }
 
 const getRiskPolicy = `-- name: GetRiskPolicy :one
-SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE id = $1
   AND project_id = $2
@@ -1111,6 +1442,7 @@ func (q *Queries) GetRiskPolicy(ctx context.Context, arg GetRiskPolicyParams) (R
 		&i.UserMessage,
 		&i.Prompt,
 		&i.ModelConfig,
+		&i.Score,
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1161,7 +1493,7 @@ func (q *Queries) GetRiskPolicyBypassRequest(ctx context.Context, arg GetRiskPol
 }
 
 const getRiskPolicyForUpdate = `-- name: GetRiskPolicyForUpdate :one
-SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE id = $1
   AND project_id = $2
@@ -1199,6 +1531,7 @@ func (q *Queries) GetRiskPolicyForUpdate(ctx context.Context, arg GetRiskPolicyF
 		&i.UserMessage,
 		&i.Prompt,
 		&i.ModelConfig,
+		&i.Score,
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1225,6 +1558,46 @@ func (q *Queries) GetRiskPolicyNameIncludingDeleted(ctx context.Context, arg Get
 	var name string
 	err := row.Scan(&name)
 	return name, err
+}
+
+const getRiskResultByID = `-- name: GetRiskResultByID :one
+SELECT rr.id, rr.match, rr.source, cm.chat_id
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+WHERE rr.id = $1
+  AND rr.project_id = $2
+  AND rr.found IS TRUE
+  AND rr.excluded_at IS NULL
+  AND rr.false_positive_at IS NULL
+`
+
+type GetRiskResultByIDParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetRiskResultByIDRow struct {
+	ID     uuid.UUID
+	Match  pgtype.Text
+	Source string
+	ChatID uuid.UUID
+}
+
+// Single-row lookup backing risk.results.unmask: fetch a result's raw match
+// plus its owning chat_id so the caller can authorize a chat:read check
+// before returning the plaintext. Applies the same found/excluded/
+// false-positive filters as every other risk_results read so a stale result
+// id (excluded or swept as noise since it was listed) can't be unmasked.
+func (q *Queries) GetRiskResultByID(ctx context.Context, arg GetRiskResultByIDParams) (GetRiskResultByIDRow, error) {
+	row := q.db.QueryRow(ctx, getRiskResultByID, arg.ID, arg.ProjectID)
+	var i GetRiskResultByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Match,
+		&i.Source,
+		&i.ChatID,
+	)
+	return i, err
 }
 
 const getToolCallBlock = `-- name: GetToolCallBlock :one
@@ -1370,14 +1743,16 @@ func (q *Queries) ListCustomDetectionRules(ctx context.Context, projectID uuid.U
 }
 
 const listEnabledEnforcingPoliciesByProject = `-- name: ListEnabledEnforcingPoliciesByProject :many
-SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
-  AND action = 'block'
+  AND action IN ('block', 'warn')
   AND deleted IS FALSE
 `
 
+// Enforcing actions are block (hard deny) and warn (challenge: deny + ack link,
+// allowed after acknowledgement). flag is non-enforcing and excluded.
 func (q *Queries) ListEnabledEnforcingPoliciesByProject(ctx context.Context, projectID uuid.UUID) ([]RiskPolicy, error) {
 	rows, err := q.db.Query(ctx, listEnabledEnforcingPoliciesByProject, projectID)
 	if err != nil {
@@ -1409,6 +1784,7 @@ func (q *Queries) ListEnabledEnforcingPoliciesByProject(ctx context.Context, pro
 			&i.UserMessage,
 			&i.Prompt,
 			&i.ModelConfig,
+			&i.Score,
 			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -1477,7 +1853,7 @@ func (q *Queries) ListEnabledExclusionsForPolicy(ctx context.Context, arg ListEn
 }
 
 const listEnabledRiskPoliciesByProject = `-- name: ListEnabledRiskPoliciesByProject :many
-SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
@@ -1515,6 +1891,7 @@ func (q *Queries) ListEnabledRiskPoliciesByProject(ctx context.Context, projectI
 			&i.UserMessage,
 			&i.Prompt,
 			&i.ModelConfig,
+			&i.Score,
 			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -1532,7 +1909,7 @@ func (q *Queries) ListEnabledRiskPoliciesByProject(ctx context.Context, projectI
 }
 
 const listEnabledShadowMCPPoliciesByProject = `-- name: ListEnabledShadowMCPPoliciesByProject :many
-SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
@@ -1572,6 +1949,7 @@ func (q *Queries) ListEnabledShadowMCPPoliciesByProject(ctx context.Context, pro
 			&i.UserMessage,
 			&i.Prompt,
 			&i.ModelConfig,
+			&i.Score,
 			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -1589,7 +1967,7 @@ func (q *Queries) ListEnabledShadowMCPPoliciesByProject(ctx context.Context, pro
 }
 
 const listEnabledToolIdentityPoliciesByProject = `-- name: ListEnabledToolIdentityPoliciesByProject :many
-SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
@@ -1632,6 +2010,7 @@ func (q *Queries) ListEnabledToolIdentityPoliciesByProject(ctx context.Context, 
 			&i.UserMessage,
 			&i.Prompt,
 			&i.ModelConfig,
+			&i.Score,
 			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -1933,7 +2312,7 @@ func (q *Queries) ListRiskOverviewTopUsers(ctx context.Context, arg ListRiskOver
 }
 
 const listRiskPolicies = `-- name: ListRiskPolicies :many
-SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -1971,6 +2350,7 @@ func (q *Queries) ListRiskPolicies(ctx context.Context, projectID uuid.UUID) ([]
 			&i.UserMessage,
 			&i.Prompt,
 			&i.ModelConfig,
+			&i.Score,
 			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -2049,8 +2429,57 @@ func (q *Queries) ListRiskPolicyBypassRequests(ctx context.Context, arg ListRisk
 	return items, nil
 }
 
+const listRiskPolicyEvalReviews = `-- name: ListRiskPolicyEvalReviews :many
+SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_id, verdict, reviewed_by, created_at, updated_at, deleted_at, deleted
+FROM risk_policy_eval_reviews
+WHERE project_id = $1
+  AND risk_policy_id = $2
+  AND deleted IS FALSE
+ORDER BY created_at DESC
+`
+
+type ListRiskPolicyEvalReviewsParams struct {
+	ProjectID    uuid.UUID
+	RiskPolicyID uuid.UUID
+}
+
+// The active regression set for a policy: every reviewer's current verdicts.
+// Scoped to project_id.
+func (q *Queries) ListRiskPolicyEvalReviews(ctx context.Context, arg ListRiskPolicyEvalReviewsParams) ([]RiskPolicyEvalReview, error) {
+	rows, err := q.db.Query(ctx, listRiskPolicyEvalReviews, arg.ProjectID, arg.RiskPolicyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskPolicyEvalReview
+	for rows.Next() {
+		var i RiskPolicyEvalReview
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.RiskPolicyID,
+			&i.RiskPolicyVersion,
+			&i.ChatID,
+			&i.Verdict,
+			&i.ReviewedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRiskResultsByChatFound = `-- name: ListRiskResultsByChatFound :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.false_positive_at, rr.false_positive_reason, rr.created_at, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.false_positive_at, rr.false_positive_reason, rr.created_at, cm.chat_id, cm.created_at AS message_created_at, cm.replayed, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -2106,6 +2535,7 @@ type ListRiskResultsByChatFoundRow struct {
 	CreatedAt           pgtype.Timestamptz
 	ChatID              uuid.UUID
 	MessageCreatedAt    pgtype.Timestamptz
+	Replayed            bool
 	ChatTitle           pgtype.Text
 	ChatUserID          pgtype.Text
 	BlockID             uuid.UUID
@@ -2151,6 +2581,7 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 			&i.CreatedAt,
 			&i.ChatID,
 			&i.MessageCreatedAt,
+			&i.Replayed,
 			&i.ChatTitle,
 			&i.ChatUserID,
 			&i.BlockID,
@@ -2170,7 +2601,7 @@ SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_poli
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
 LEFT JOIN LATERAL (
   SELECT tcb.id AS block_id FROM tool_call_blocks tcb
   WHERE tcb.project_id = rr.project_id
@@ -2227,6 +2658,11 @@ type ListRiskResultsByProjectAndPolicyRow struct {
 	BlockID             uuid.UUID
 }
 
+// Unlike the other list queries, this does NOT require the policy to be
+// enabled. When the user explicitly filters to a specific policy we surface its
+// historical findings even after it has been turned off, so disabled policies
+// still show the matches they produced while active. Deleted policies remain
+// excluded. The frontend flags the inactive policy as historical data.
 func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg ListRiskResultsByProjectAndPolicyParams) ([]ListRiskResultsByProjectAndPolicyRow, error) {
 	rows, err := q.db.Query(ctx, listRiskResultsByProjectAndPolicy,
 		arg.ProjectID,
@@ -2288,14 +2724,14 @@ SELECT
     sub.rule_id, sub.description, sub.match, sub.start_pos, sub.end_pos,
     sub.confidence, sub.tags, sub.spans, sub.dead_letter_reason, sub.created_at,
     sub.chat_id, sub.message_created_at, sub.chat_title, sub.chat_user_id,
-    sub.block_id
+    sub.block_id, sub.replayed
 FROM (
   SELECT
       rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id,
       rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found,
       rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos,
       rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.created_at,
-      cm.chat_id, cm.created_at AS message_created_at,
+      cm.chat_id, cm.created_at AS message_created_at, cm.replayed,
       c.title AS chat_title, c.external_user_id AS chat_user_id,
       COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id,
       CASE
@@ -2308,7 +2744,8 @@ FROM (
   FROM risk_results rr
   JOIN chat_messages cm ON cm.id = rr.chat_message_id
   LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
-  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
+    AND (rp.enabled IS TRUE OR rr.risk_policy_id = $2::uuid)
   LEFT JOIN LATERAL (
     SELECT tcb.id AS block_id FROM tool_call_blocks tcb
     WHERE tcb.project_id = rr.project_id
@@ -2316,13 +2753,23 @@ FROM (
       AND tcb.deleted IS FALSE
     ORDER BY tcb.created_at DESC LIMIT 1
   ) blk ON TRUE
-  WHERE rr.project_id = $2
+  WHERE rr.project_id = $3
     AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-    AND ($3::timestamptz IS NULL OR cm.created_at >= $3::timestamptz)
-    AND ($4::timestamptz IS NULL OR cm.created_at < $4::timestamptz)
-    AND ($5::text = '' OR rr.rule_id ILIKE '%' || $5::text || '%')
-    AND ($6::text = '' OR c.external_user_id ILIKE '%' || $6::text || '%')
-    AND ($7::text = '' OR (
+    AND ($2::uuid IS NULL OR rr.risk_policy_id = $2::uuid)
+    AND ($4::timestamptz IS NULL OR cm.created_at >= $4::timestamptz)
+    AND ($5::timestamptz IS NULL OR cm.created_at < $5::timestamptz)
+    AND ($6::text = '' OR rr.rule_id ILIKE '%' || $6::text || '%')
+    AND ($7::text = '' OR c.external_user_id ILIKE '%' || $7::text || '%')
+    AND (NOT $8::boolean OR NOT EXISTS (
+      SELECT 1 FROM assistant_threads at
+      WHERE at.chat_id = cm.chat_id AND at.deleted IS FALSE
+    ))
+    AND ($9::uuid IS NULL OR EXISTS (
+      SELECT 1 FROM assistant_threads at
+      WHERE at.chat_id = cm.chat_id AND at.deleted IS FALSE
+        AND at.assistant_id = $9::uuid
+    ))
+    AND ($10::text = '' OR (
     CASE
       WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
@@ -2368,24 +2815,27 @@ FROM (
       WHEN rr.source = 'presidio' THEN 'pii'
       ELSE 'custom'
     END
-  ) = $7::text)
+  ) = $10::text)
 ) sub
 WHERE sub.dedup_rank = 1
   AND (
-    $8::timestamptz IS NULL
-    OR (sub.message_created_at, sub.id) < ($8::timestamptz, $9::uuid)
+    $11::timestamptz IS NULL
+    OR (sub.message_created_at, sub.id) < ($11::timestamptz, $12::uuid)
   )
 ORDER BY sub.message_created_at DESC, sub.id DESC
-LIMIT $10
+LIMIT $13
 `
 
 type ListRiskResultsByProjectFoundParams struct {
 	UniqueMatch            bool
+	PolicyID               uuid.NullUUID
 	ProjectID              uuid.UUID
 	FromTime               pgtype.Timestamptz
 	ToTime                 pgtype.Timestamptz
 	RuleID                 string
 	UserID                 string
+	NonAssistant           bool
+	AssistantID            uuid.NullUUID
 	Category               string
 	CursorMessageCreatedAt pgtype.Timestamptz
 	CursorID               uuid.NullUUID
@@ -2416,6 +2866,7 @@ type ListRiskResultsByProjectFoundRow struct {
 	ChatTitle         pgtype.Text
 	ChatUserID        pgtype.Text
 	BlockID           uuid.UUID
+	Replayed          bool
 }
 
 // Sort by the underlying chat message's created_at (the event time), NOT
@@ -2432,14 +2883,26 @@ type ListRiskResultsByProjectFoundRow struct {
 // (risk_policy_id, rule_id, match), choosing the most recent occurrence. Done
 // inside a subquery so pagination over the deduped stream stays correct
 // (client-side dedup over paged data broke "Load more").
+//
+// @policy_id is optional. When NULL only enabled policies are considered (the
+// default project-wide view). When set the results are scoped to that policy
+// AND disabled-but-not-deleted policies are included, so explicitly filtering
+// to a policy still surfaces its historical findings after it was turned off.
+//
+// @assistant_id scopes results to chats linked to that assistant (live
+// assistant_threads row); @non_assistant instead restricts to chats with no
+// assistant link at all.
 func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRiskResultsByProjectFoundParams) ([]ListRiskResultsByProjectFoundRow, error) {
 	rows, err := q.db.Query(ctx, listRiskResultsByProjectFound,
 		arg.UniqueMatch,
+		arg.PolicyID,
 		arg.ProjectID,
 		arg.FromTime,
 		arg.ToTime,
 		arg.RuleID,
 		arg.UserID,
+		arg.NonAssistant,
+		arg.AssistantID,
 		arg.Category,
 		arg.CursorMessageCreatedAt,
 		arg.CursorID,
@@ -2476,6 +2939,7 @@ func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRis
 			&i.ChatTitle,
 			&i.ChatUserID,
 			&i.BlockID,
+			&i.Replayed,
 		); err != nil {
 			return nil, err
 		}
@@ -2809,6 +3273,50 @@ func (q *Queries) ListRiskUserRuleBreakdown(ctx context.Context, arg ListRiskUse
 	return items, nil
 }
 
+const listUserEmailsByIDs = `-- name: ListUserEmailsByIDs :many
+SELECT u.id, u.email
+FROM users u
+JOIN organization_user_relationships our
+  ON our.user_id = u.id
+  AND our.organization_id = $1
+WHERE u.id = ANY($2::text[])
+`
+
+type ListUserEmailsByIDsParams struct {
+	OrganizationID string
+	Ids            []string
+}
+
+type ListUserEmailsByIDsRow struct {
+	ID    string
+	Email string
+}
+
+// Display-email lookup for the ClickHouse-backed overview top-users list,
+// tenant-bound through org membership so a caller can never resolve emails of
+// users outside its organization. Soft-deleted memberships are intentionally
+// included: findings from since-removed org members keep a resolvable email,
+// mirroring the Postgres overview query's unconditional users join.
+func (q *Queries) ListUserEmailsByIDs(ctx context.Context, arg ListUserEmailsByIDsParams) ([]ListUserEmailsByIDsRow, error) {
+	rows, err := q.db.Query(ctx, listUserEmailsByIDs, arg.OrganizationID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserEmailsByIDsRow
+	for rows.Next() {
+		var i ListUserEmailsByIDsRow
+		if err := rows.Scan(&i.ID, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markMessagesRiskAnalyzed = `-- name: MarkMessagesRiskAnalyzed :exec
 UPDATE chat_messages
 SET risk_analyzed_at = clock_timestamp()
@@ -2824,6 +3332,236 @@ type MarkMessagesRiskAnalyzedParams struct {
 func (q *Queries) MarkMessagesRiskAnalyzed(ctx context.Context, arg MarkMessagesRiskAnalyzedParams) error {
 	_, err := q.db.Exec(ctx, markMessagesRiskAnalyzed, arg.MessageIds, arg.ProjectID)
 	return err
+}
+
+const markRiskPolicyChallengeAcknowledged = `-- name: MarkRiskPolicyChallengeAcknowledged :one
+INSERT INTO risk_policy_challenges (
+    id
+  , organization_id
+  , project_id
+  , risk_policy_id
+  , user_id
+  , tool_name
+  , call_fingerprint
+  , status
+  , policy_name
+  , challenged_at
+  , acknowledged_at
+  , expires_at
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6::text
+  , $7::text
+  , 'acknowledged'
+  , $8::text
+  , clock_timestamp()
+  , clock_timestamp()
+  , $9
+)
+ON CONFLICT (project_id, user_id, risk_policy_id, tool_name, call_fingerprint)
+WHERE deleted IS FALSE
+DO UPDATE
+SET status = 'acknowledged'
+  , acknowledged_at = clock_timestamp()
+  , expires_at = EXCLUDED.expires_at
+  , policy_name = COALESCE(EXCLUDED.policy_name, risk_policy_challenges.policy_name)
+  , updated_at = clock_timestamp()
+WHERE risk_policy_challenges.status <> 'declined'
+RETURNING id, organization_id, project_id, risk_policy_id, user_id, tool_name, status, policy_name, entity, rule_id, call_fingerprint, challenged_at, acknowledged_at, expires_at, created_at, updated_at, deleted_at, deleted
+`
+
+type MarkRiskPolicyChallengeAcknowledgedParams struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	RiskPolicyID    uuid.UUID
+	UserID          string
+	ToolName        pgtype.Text
+	CallFingerprint pgtype.Text
+	PolicyName      pgtype.Text
+	ExpiresAt       pgtype.Timestamptz
+}
+
+// Self-service redeem: mark the challenge acknowledged with a remember-until
+// expiry. Upserts so a redeem that beats the async challenge insert still works.
+// A decline is final for this challenge: never resurrect a declined row into an
+// acknowledgement (e.g. a leaked/un-evicted token redeemed after decline). A
+// genuine re-challenge (UpsertRiskPolicyChallenge) resets declined -> challenged
+// first, after which acknowledgement can proceed. When this predicate is false
+// the update is a no-op and RETURNING yields no rows (ErrNoRows), which the
+// caller maps to a "declined" client error.
+func (q *Queries) MarkRiskPolicyChallengeAcknowledged(ctx context.Context, arg MarkRiskPolicyChallengeAcknowledgedParams) (RiskPolicyChallenge, error) {
+	row := q.db.QueryRow(ctx, markRiskPolicyChallengeAcknowledged,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.RiskPolicyID,
+		arg.UserID,
+		arg.ToolName,
+		arg.CallFingerprint,
+		arg.PolicyName,
+		arg.ExpiresAt,
+	)
+	var i RiskPolicyChallenge
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RiskPolicyID,
+		&i.UserID,
+		&i.ToolName,
+		&i.Status,
+		&i.PolicyName,
+		&i.Entity,
+		&i.RuleID,
+		&i.CallFingerprint,
+		&i.ChallengedAt,
+		&i.AcknowledgedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const markRiskPolicyChallengeDeclined = `-- name: MarkRiskPolicyChallengeDeclined :one
+INSERT INTO risk_policy_challenges (
+    id
+  , organization_id
+  , project_id
+  , risk_policy_id
+  , user_id
+  , tool_name
+  , call_fingerprint
+  , status
+  , policy_name
+  , challenged_at
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6::text
+  , $7::text
+  , 'declined'
+  , $8::text
+  , clock_timestamp()
+)
+ON CONFLICT (project_id, user_id, risk_policy_id, tool_name, call_fingerprint)
+WHERE deleted IS FALSE
+DO UPDATE
+SET status = 'declined'
+  , acknowledged_at = NULL
+  , expires_at = NULL
+  , policy_name = COALESCE(EXCLUDED.policy_name, risk_policy_challenges.policy_name)
+  , updated_at = clock_timestamp()
+RETURNING id, organization_id, project_id, risk_policy_id, user_id, tool_name, status, policy_name, entity, rule_id, call_fingerprint, challenged_at, acknowledged_at, expires_at, created_at, updated_at, deleted_at, deleted
+`
+
+type MarkRiskPolicyChallengeDeclinedParams struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	RiskPolicyID    uuid.UUID
+	UserID          string
+	ToolName        pgtype.Text
+	CallFingerprint pgtype.Text
+	PolicyName      pgtype.Text
+}
+
+// Self-service decline: mark the challenge declined and never grant an ack
+// window. Upserts so a decline that beats the async challenge insert still works.
+func (q *Queries) MarkRiskPolicyChallengeDeclined(ctx context.Context, arg MarkRiskPolicyChallengeDeclinedParams) (RiskPolicyChallenge, error) {
+	row := q.db.QueryRow(ctx, markRiskPolicyChallengeDeclined,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.RiskPolicyID,
+		arg.UserID,
+		arg.ToolName,
+		arg.CallFingerprint,
+		arg.PolicyName,
+	)
+	var i RiskPolicyChallenge
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RiskPolicyID,
+		&i.UserID,
+		&i.ToolName,
+		&i.Status,
+		&i.PolicyName,
+		&i.Entity,
+		&i.RuleID,
+		&i.CallFingerprint,
+		&i.ChallengedAt,
+		&i.AcknowledgedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const refreshAccountIdentityFindingMatch = `-- name: RefreshAccountIdentityFindingMatch :execrows
+UPDATE risk_results rr
+SET description = $1, match = $2
+FROM chat_messages cm
+WHERE rr.chat_message_id = cm.id
+  AND cm.chat_id = $3::uuid
+  AND rr.project_id = $4::uuid
+  AND rr.risk_policy_id = $5
+  AND rr.risk_policy_version = $6
+  AND rr.source = 'account_identity'
+  AND rr.rule_id = $7
+  AND rr.found IS TRUE
+  AND (rr.match IS NULL OR rr.match = '')
+`
+
+type RefreshAccountIdentityFindingMatchParams struct {
+	Description       pgtype.Text
+	Match             pgtype.Text
+	ChatID            uuid.UUID
+	ProjectID         uuid.UUID
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	RuleID            pgtype.Text
+}
+
+// Enriches an already-recorded account_identity finding in place once identity
+// fields that were unknown at first analysis arrive — e.g. a personal account
+// classified before its email was known. Session-scoped findings dedupe per
+// rule (GetBatchChatIdentities.flagged_rule_ids), so a later batch's richer
+// finding is dropped rather than inserted; without this the original row keeps
+// its empty match and generic description forever. Restricted to rows whose
+// match is still empty so it is idempotent and never clobbers a finding that
+// already carries its detail.
+func (q *Queries) RefreshAccountIdentityFindingMatch(ctx context.Context, arg RefreshAccountIdentityFindingMatchParams) (int64, error) {
+	result, err := q.db.Exec(ctx, refreshAccountIdentityFindingMatch,
+		arg.Description,
+		arg.Match,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.RiskPolicyID,
+		arg.RiskPolicyVersion,
+		arg.RuleID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const reverseExclusionFlagsBatch = `-- name: ReverseExclusionFlagsBatch :many
@@ -2871,6 +3609,96 @@ func (q *Queries) ReverseExclusionFlagsBatch(ctx context.Context, arg ReverseExc
 		return nil, err
 	}
 	return items, nil
+}
+
+const riskEvalChatBelongsToProject = `-- name: RiskEvalChatBelongsToProject :one
+SELECT EXISTS (
+  SELECT 1
+  FROM chats
+  WHERE id = $1
+    AND project_id = $2
+    AND deleted IS FALSE
+)
+`
+
+type RiskEvalChatBelongsToProjectParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) RiskEvalChatBelongsToProject(ctx context.Context, arg RiskEvalChatBelongsToProjectParams) (bool, error) {
+	row := q.db.QueryRow(ctx, riskEvalChatBelongsToProject, arg.ChatID, arg.ProjectID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const setRiskResultExcludedForTest = `-- name: SetRiskResultExcludedForTest :exec
+UPDATE risk_results
+SET excluded_at = clock_timestamp()
+WHERE id = $1
+`
+
+func (q *Queries) SetRiskResultExcludedForTest(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setRiskResultExcludedForTest, id)
+	return err
+}
+
+const setRiskResultFalsePositiveForTest = `-- name: SetRiskResultFalsePositiveForTest :exec
+UPDATE risk_results
+SET false_positive_at = clock_timestamp()
+WHERE id = $1
+`
+
+func (q *Queries) SetRiskResultFalsePositiveForTest(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setRiskResultFalsePositiveForTest, id)
+	return err
+}
+
+const softDeleteRiskPolicyEvalReview = `-- name: SoftDeleteRiskPolicyEvalReview :one
+UPDATE risk_policy_eval_reviews
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = $1
+  AND risk_policy_id = $2
+  AND chat_id = $3
+  AND reviewed_by = $4
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_id, verdict, reviewed_by, created_at, updated_at, deleted_at, deleted
+`
+
+type SoftDeleteRiskPolicyEvalReviewParams struct {
+	ProjectID    uuid.UUID
+	RiskPolicyID uuid.UUID
+	ChatID       uuid.UUID
+	ReviewedBy   string
+}
+
+// Removes the current reviewer's verdict for one session (the toggle-off path).
+// Scoped to project_id and reviewed_by so a reviewer only clears their own row.
+func (q *Queries) SoftDeleteRiskPolicyEvalReview(ctx context.Context, arg SoftDeleteRiskPolicyEvalReviewParams) (RiskPolicyEvalReview, error) {
+	row := q.db.QueryRow(ctx, softDeleteRiskPolicyEvalReview,
+		arg.ProjectID,
+		arg.RiskPolicyID,
+		arg.ChatID,
+		arg.ReviewedBy,
+	)
+	var i RiskPolicyEvalReview
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.RiskPolicyID,
+		&i.RiskPolicyVersion,
+		&i.ChatID,
+		&i.Verdict,
+		&i.ReviewedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const updateCustomDetectionRule = `-- name: UpdateCustomDetectionRule :one
@@ -2999,6 +3827,8 @@ SET name = $1
   , user_message = $15
   , prompt = $16::text
   , model_config = $17::jsonb
+  -- Descriptive severity: preserve on omit, never contributes to the version bump.
+  , score = COALESCE($18::double precision, score)
   , version = CASE
       WHEN sources IS DISTINCT FROM $2
         OR presidio_entities IS DISTINCT FROM $3
@@ -3018,10 +3848,10 @@ SET name = $1
       ELSE version
     END
   , updated_at = clock_timestamp()
-WHERE id = $18
-  AND project_id = $19
+WHERE id = $19
+  AND project_id = $20
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateRiskPolicyParams struct {
@@ -3042,6 +3872,7 @@ type UpdateRiskPolicyParams struct {
 	UserMessage          pgtype.Text
 	Prompt               pgtype.Text
 	ModelConfig          []byte
+	Score                pgtype.Float8
 	ID                   uuid.UUID
 	ProjectID            uuid.UUID
 }
@@ -3065,6 +3896,7 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		arg.UserMessage,
 		arg.Prompt,
 		arg.ModelConfig,
+		arg.Score,
 		arg.ID,
 		arg.ProjectID,
 	)
@@ -3091,6 +3923,7 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		&i.UserMessage,
 		&i.Prompt,
 		&i.ModelConfig,
+		&i.Score,
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -3319,6 +4152,167 @@ func (q *Queries) UpsertRiskPolicyBypassRequest(ctx context.Context, arg UpsertR
 		&i.DecidedBy,
 		&i.GrantedPrincipalUrns,
 		&i.DecidedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const upsertRiskPolicyChallenge = `-- name: UpsertRiskPolicyChallenge :one
+INSERT INTO risk_policy_challenges (
+    id
+  , organization_id
+  , project_id
+  , risk_policy_id
+  , user_id
+  , tool_name
+  , call_fingerprint
+  , status
+  , policy_name
+  , entity
+  , rule_id
+  , challenged_at
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6::text
+  , $7::text
+  , 'challenged'
+  , $8::text
+  , $9::text
+  , $10::text
+  , clock_timestamp()
+)
+ON CONFLICT (project_id, user_id, risk_policy_id, tool_name, call_fingerprint)
+WHERE deleted IS FALSE
+DO UPDATE
+SET status = CASE
+      WHEN risk_policy_challenges.status = 'acknowledged'
+        AND risk_policy_challenges.expires_at IS NOT NULL
+        AND risk_policy_challenges.expires_at > clock_timestamp()
+      THEN risk_policy_challenges.status
+      ELSE 'challenged'
+    END
+  , policy_name = EXCLUDED.policy_name
+  , entity = EXCLUDED.entity
+  , rule_id = EXCLUDED.rule_id
+  , challenged_at = CASE
+      WHEN risk_policy_challenges.status = 'acknowledged'
+        AND risk_policy_challenges.expires_at IS NOT NULL
+        AND risk_policy_challenges.expires_at > clock_timestamp()
+      THEN risk_policy_challenges.challenged_at
+      ELSE clock_timestamp()
+    END
+  , updated_at = clock_timestamp()
+RETURNING id, organization_id, project_id, risk_policy_id, user_id, tool_name, status, policy_name, entity, rule_id, call_fingerprint, challenged_at, acknowledged_at, expires_at, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertRiskPolicyChallengeParams struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	RiskPolicyID    uuid.UUID
+	UserID          string
+	ToolName        pgtype.Text
+	CallFingerprint pgtype.Text
+	PolicyName      pgtype.Text
+	Entity          pgtype.Text
+	RuleID          pgtype.Text
+}
+
+// Records (or refreshes) a warn/challenge for a (user, policy, tool). Never
+// stores the raw matched value. A live acknowledgement is preserved so a
+// re-scan does not wipe a still-valid ack before the agent retries.
+func (q *Queries) UpsertRiskPolicyChallenge(ctx context.Context, arg UpsertRiskPolicyChallengeParams) (RiskPolicyChallenge, error) {
+	row := q.db.QueryRow(ctx, upsertRiskPolicyChallenge,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.RiskPolicyID,
+		arg.UserID,
+		arg.ToolName,
+		arg.CallFingerprint,
+		arg.PolicyName,
+		arg.Entity,
+		arg.RuleID,
+	)
+	var i RiskPolicyChallenge
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RiskPolicyID,
+		&i.UserID,
+		&i.ToolName,
+		&i.Status,
+		&i.PolicyName,
+		&i.Entity,
+		&i.RuleID,
+		&i.CallFingerprint,
+		&i.ChallengedAt,
+		&i.AcknowledgedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const upsertRiskPolicyEvalReview = `-- name: UpsertRiskPolicyEvalReview :one
+INSERT INTO risk_policy_eval_reviews (
+  project_id, organization_id, risk_policy_id, risk_policy_version, chat_id, verdict, reviewed_by
+) VALUES (
+  $1, $2, $3, $4, $5, $6, $7
+)
+ON CONFLICT (project_id, risk_policy_id, chat_id, reviewed_by) WHERE deleted IS FALSE
+DO UPDATE SET
+  verdict = EXCLUDED.verdict,
+  risk_policy_version = EXCLUDED.risk_policy_version,
+  updated_at = clock_timestamp()
+RETURNING id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_id, verdict, reviewed_by, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertRiskPolicyEvalReviewParams struct {
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	ChatID            uuid.UUID
+	Verdict           string
+	ReviewedBy        string
+}
+
+// Records (or replaces) the current reviewer's ground-truth verdict for one
+// chat session under a prompt-based policy. Scoped to project_id. Upserts on the
+// active-row unique key so a reviewer has at most one verdict per session.
+func (q *Queries) UpsertRiskPolicyEvalReview(ctx context.Context, arg UpsertRiskPolicyEvalReviewParams) (RiskPolicyEvalReview, error) {
+	row := q.db.QueryRow(ctx, upsertRiskPolicyEvalReview,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.RiskPolicyID,
+		arg.RiskPolicyVersion,
+		arg.ChatID,
+		arg.Verdict,
+		arg.ReviewedBy,
+	)
+	var i RiskPolicyEvalReview
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.RiskPolicyID,
+		&i.RiskPolicyVersion,
+		&i.ChatID,
+		&i.Verdict,
+		&i.ReviewedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

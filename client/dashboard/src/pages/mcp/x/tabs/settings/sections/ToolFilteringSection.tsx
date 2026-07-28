@@ -8,21 +8,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toolVariationsGroupDisplayName } from "@/lib/toolVariationGroups";
-import type { McpServer } from "@gram/client/models/components";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import { useCreateGlobalToolVariationGroupMutation } from "@gram/client/react-query/createGlobalToolVariationGroup.js";
+import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import {
-  invalidateAllGetMcpServer,
-  invalidateAllMcpServers,
   invalidateAllToolVariationGroups,
-  useCreateGlobalToolVariationGroupMutation,
   useToolVariationGroups,
-  useUpdateMcpServerMutation,
-} from "@gram/client/react-query/index.js";
+} from "@gram/client/react-query/toolVariationGroups.js";
+import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { FooterSaveButtonContent, SettingsSection } from "../SettingsSection";
+import { FooterSaveButton, SettingsSection } from "../SettingsSection";
 
 // Radix Select disallows an empty-string value, so the "Disabled" option needs
 // a sentinel that maps back to null (filtering off) when persisted.
@@ -72,9 +72,9 @@ export function ToolFilteringSection({
           id: mcpServer.id,
           name: mcpServer.name ?? undefined,
           remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
+          tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
           toolsetId: mcpServer.toolsetId ?? undefined,
           environmentId: mcpServer.environmentId ?? undefined,
-          userSessionIssuerId: mcpServer.userSessionIssuerId ?? undefined,
           visibility: mcpServer.visibility,
           toolVariationsGroupId: groupId ?? undefined,
         },
@@ -101,17 +101,6 @@ export function ToolFilteringSection({
   const isSaving = updateMcpServer.isPending || createGroup.isPending;
   const dirty = draft !== currentValue;
   const hasGroups = groups.length > 0;
-  let enableButtonContent = <Button.Text>Enable</Button.Text>;
-  if (createGroup.isPending) {
-    enableButtonContent = (
-      <>
-        <Button.LeftIcon>
-          <Loader2 className="size-4 animate-spin" />
-        </Button.LeftIcon>
-        <Button.Text>Enabling</Button.Text>
-      </>
-    );
-  }
 
   return (
     <SettingsSection>
@@ -160,7 +149,14 @@ export function ToolFilteringSection({
                   disabled={isSaving || groupsQuery.isLoading}
                   onClick={() => createGroup.mutate({})}
                 >
-                  {enableButtonContent}
+                  {createGroup.isPending && (
+                    <Button.LeftIcon>
+                      <Loader2 className="size-4 animate-spin" />
+                    </Button.LeftIcon>
+                  )}
+                  <Button.Text>
+                    {createGroup.isPending ? "Enabling" : "Enable"}
+                  </Button.Text>
                 </Button>
               </RequireScope>
             )}
@@ -173,18 +169,13 @@ export function ToolFilteringSection({
           {hasGroups && (
             <SettingsSection.FooterActions>
               <RequireScope scope="mcp:write" level="component">
-                <Button
-                  variant="primary"
-                  size="md"
+                <FooterSaveButton
+                  pending={updateMcpServer.isPending}
                   disabled={!dirty || isSaving}
                   onClick={() =>
                     applyGroup(draft === DISABLED_VALUE ? null : draft)
                   }
-                >
-                  <FooterSaveButtonContent
-                    pending={updateMcpServer.isPending}
-                  />
-                </Button>
+                />
               </RequireScope>
             </SettingsSection.FooterActions>
           )}

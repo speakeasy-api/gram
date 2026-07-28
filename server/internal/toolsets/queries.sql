@@ -70,6 +70,18 @@ WHERE toolset_id = @toolset_id
   AND organization_id = @organization_id
   AND deleted IS FALSE;
 
+-- name: GetToolsetOriginsByToolsetIDs :many
+SELECT
+    id
+  , toolset_id
+  , origin_registry_specifier AS registry_specifier
+  , created_at
+  , updated_at
+FROM toolset_origins
+WHERE toolset_id = ANY(@toolset_ids::uuid[])
+  AND organization_id = @organization_id
+  AND deleted IS FALSE;
+
 -- name: ListToolsetsByProject :many
 SELECT *
 FROM toolsets
@@ -181,6 +193,26 @@ JOIN ranked_templates rt ON (
 WHERE rel.toolset_id = @toolset_id
   AND rel.project_id = @project_id
 ORDER BY rel.prompt_name;
+
+-- name: GetPromptTemplatesForToolsets :many
+WITH ranked_templates AS (
+  SELECT
+    pt.*,
+    ROW_NUMBER() OVER (PARTITION BY pt.history_id ORDER BY pt.id DESC) as rn
+  FROM prompt_templates pt
+  WHERE project_id = @project_id
+    AND pt.deleted IS FALSE
+)
+SELECT rel.toolset_id, rel.id as tp_id, rt.*
+FROM toolset_prompts rel
+JOIN ranked_templates rt ON (
+  (rel.prompt_template_id IS NOT NULL AND rt.id = rel.prompt_template_id)
+  OR
+  (rel.prompt_template_id IS NULL AND rt.history_id = rel.prompt_history_id AND rt.rn = 1)
+)
+WHERE rel.toolset_id = ANY(@toolset_ids::uuid[])
+  AND rel.project_id = @project_id
+ORDER BY rel.toolset_id, rel.prompt_name;
 
 -- name: ClearToolsetPromptTemplates :exec
 DELETE FROM toolset_prompts

@@ -203,8 +203,7 @@ fn token_threshold_trigger(window: u64, percent: u32, fire_at_turn_end: bool) ->
             .iter()
             .map(estimate_item_chars)
             .sum();
-        let projected =
-            tokens.input_tokens + tokens.output_tokens + (appended_chars / 4) as u64;
+        let projected = tokens.input_tokens + tokens.output_tokens + (appended_chars / 4) as u64;
         (projected >= threshold).then(|| {
             CompactionReason::Custom(format!(
                 "projected_tokens={projected} >= threshold={threshold} (window={window}, {percent}%, {point:?})"
@@ -439,11 +438,7 @@ impl Compactor for CachedCompactor {
         _reason: CompactionReason,
         _cancellation: Option<TurnCancellation>,
     ) -> Result<Vec<Item>, CompactionError> {
-        let cached = self
-            .cache
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .take();
+        let cached = self.cache.lock().unwrap_or_else(|p| p.into_inner()).take();
         match cached {
             Some(c) if c.input_len <= transcript.len() => {
                 let mut out = c.items;

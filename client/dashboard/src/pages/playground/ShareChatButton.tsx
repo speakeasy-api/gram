@@ -1,5 +1,5 @@
 import { useTelemetry } from "@/contexts/Telemetry";
-import { ShareButton, useThreadId } from "@gram-ai/elements";
+import { ShareButton, useThreadId } from "@/elements";
 import { toast } from "sonner";
 
 /**

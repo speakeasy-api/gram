@@ -40,7 +40,9 @@ export function visiblePermissionCount(
 ): number {
   return grants.filter(
     (grant) =>
-      grant.scope !== undefined && !grant.scope.startsWith("risk_policy:"),
+      grant.scope !== undefined &&
+      !grant.scope.startsWith("risk_policy:") &&
+      !grant.scope.includes(":blocked_"),
   ).length;
 }
 
@@ -128,6 +130,7 @@ export function computeRuleLabel(
   projects: ProjectRef[],
 ): string {
   if (selectors === null) {
+    if (resourceType === "skill") return "All projects";
     return resourceType === "project" ? "All projects" : "All servers";
   }
   if (selectors.length === 0) return "Select\u2026";
@@ -158,6 +161,16 @@ export function computeRuleLabel(
     return `${projectSels.length} projects`;
   }
 
+  if (resourceType === "skill") {
+    if (selectors.length === 1) {
+      const name = projects.find(
+        (p) => p.id === selectors[0]!.resourceId,
+      )?.name;
+      return name ? `Project: ${name}` : "1 project";
+    }
+    return `${selectors.length} projects`;
+  }
+
   if (selectors.length === 1) return "1 server";
   return `${selectors.length} servers`;
 }
@@ -172,6 +185,9 @@ export function computeRuleTooltip(
   const verb = effect === "allow" ? "Permits" : "Excludes";
 
   if (selectors === null) {
+    if (resourceType === "skill") {
+      return `${verb} access to skills in all projects in your org`;
+    }
     return resourceType === "project"
       ? `${verb} access to all projects in your org`
       : `${verb} access to all servers across your org`;
@@ -203,6 +219,18 @@ export function computeRuleTooltip(
         : `${verb} access to 1 project`;
     }
     return `${verb} access to ${projectSels.length} projects`;
+  }
+
+  if (resourceType === "skill") {
+    if (selectors.length === 1) {
+      const name = projects.find(
+        (p) => p.id === selectors[0]!.resourceId,
+      )?.name;
+      return name
+        ? `${verb} access to skills in ${name}`
+        : `${verb} access to skills in 1 project`;
+    }
+    return `${verb} access to skills in ${selectors.length} projects`;
   }
 
   if (selectors.length === 1) return `${verb} access to 1 server`;

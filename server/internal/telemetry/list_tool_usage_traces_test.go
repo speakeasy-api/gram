@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/stretchr/testify/require"
 )
@@ -243,6 +244,97 @@ func TestListToolUsageTraces_DerivesSkillNameFromToolInput(t *testing.T) {
 	require.Equal(t, "success", *result.Traces[0].HookStatus)
 }
 
+func TestListToolUsageTraces_ClassifiesDirectTunneledMCP(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	fixture := createTunneledMCPServerFixture(t, ctx, ti, tunneledMCPServerFixtureParams{
+		name: "Tunneled Postgres MCP",
+		slug: "postgres-tunnel",
+	})
+	now := time.Now().UTC()
+	insertDirectMCPToolEvent(t, ctx, ti, directMCPToolEventParams{
+		projectID:   projectID,
+		timestamp:   now.Add(-5 * time.Minute),
+		sourceID:    fixture.sourceID.String(),
+		mcpServerID: fixture.mcpServerID.String(),
+		toolName:    "query",
+		userEmail:   "alice@example.com",
+		statusCode:  200,
+	})
+
+	result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+		From:        now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:          now.Add(1 * time.Hour).Format(time.RFC3339),
+		TargetTypes: []gen.ToolUsageTargetType{"tunneled_mcp_server"},
+		Limit:       10,
+		Sort:        "desc",
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 1
+	})
+	require.NotNil(t, result)
+	require.Len(t, result.Traces, 1)
+	trace := result.Traces[0]
+	require.Equal(t, gen.ToolUsageTargetType("tunneled_mcp_server"), trace.TargetType)
+	require.Equal(t, gen.ToolUsageTargetKind("server"), trace.TargetKind)
+	require.Equal(t, "postgres-tunnel", trace.TargetID)
+	require.Equal(t, "Tunneled Postgres MCP", trace.TargetLabel)
+	require.Equal(t, "query", trace.ToolName)
+	require.Equal(t, "alice@example.com", trace.UserLabel)
+	require.Nil(t, trace.HookSource)
+}
+
+func TestListToolUsageTraces_KeepsClassificationAfterServerDeleted(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	fixture := createTunneledMCPServerFixture(t, ctx, ti, tunneledMCPServerFixtureParams{
+		name: "Tunneled Postgres MCP",
+		slug: "postgres-tunnel",
+	})
+	now := time.Now().UTC()
+	insertDirectMCPToolEvent(t, ctx, ti, directMCPToolEventParams{
+		projectID:   projectID,
+		timestamp:   now.Add(-5 * time.Minute),
+		sourceID:    fixture.sourceID.String(),
+		mcpServerID: fixture.mcpServerID.String(),
+		toolName:    "query",
+		userEmail:   "alice@example.com",
+		statusCode:  200,
+	})
+
+	// Soft-delete the fronting MCP server. Its historical calls must keep their
+	// tunneled_mcp_server classification instead of flipping to shadow_mcp_server
+	// once the server no longer appears in the live registry.
+	_, err := mcpserversRepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversRepo.DeleteMCPServerParams{
+		ID:        fixture.mcpServerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+		From:        now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:          now.Add(1 * time.Hour).Format(time.RFC3339),
+		TargetTypes: []gen.ToolUsageTargetType{"tunneled_mcp_server"},
+		Limit:       10,
+		Sort:        "desc",
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 1
+	})
+	require.NotNil(t, result)
+	require.Len(t, result.Traces, 1)
+	trace := result.Traces[0]
+	require.Equal(t, gen.ToolUsageTargetType("tunneled_mcp_server"), trace.TargetType)
+	require.Equal(t, "postgres-tunnel", trace.TargetID)
+	require.Equal(t, "Tunneled Postgres MCP", trace.TargetLabel)
+}
+
 func TestListToolUsageTraces_FiltersByTargetsUsersAndHookSource(t *testing.T) {
 	t.Parallel()
 
@@ -420,6 +512,192 @@ func TestListToolUsageTraces_PrefersWorstStatusInGroupedTrace(t *testing.T) {
 	require.Equal(t, "blocked", *result.Traces[0].HookStatus)
 	require.NotNil(t, result.Traces[0].BlockReason)
 	require.Equal(t, "policy denied", *result.Traces[0].BlockReason)
+}
+
+// A trace's status is a per-trace aggregate, but attribute filters are pushed down to
+// individual telemetry_logs rows and the survivors are then regrouped into traces. A
+// successful trace typically spans multiple rows, only some of which carry
+// http.response.status_code. Filtering "http.response.status_code != 200" must not leak
+// such a trace back in just because one of its status-less rows trivially satisfies the
+// predicate (an empty status string is unequal to "200"). See DNO-447.
+func TestListToolUsageTraces_StatusFilterExcludesSuccessfulTracesWithStatuslessRows(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	// Successful trace: two rows sharing one trace_id and classification. One carries a
+	// 200 status; the other carries none (like a hook row with no HTTP response).
+	successTrace := uuid.New().String()
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-6 * time.Minute),
+		traceID:        successTrace,
+		userEmail:      "alice@example.com",
+		hookSource:     "cursor",
+		toolSource:     "shadow-db",
+		toolName:       "query",
+		result:         `"ok"`,
+		conversationID: "conv-success",
+		customAttrs:    map[string]any{"http.response.status_code": 200},
+	})
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-5 * time.Minute),
+		traceID:        successTrace,
+		userEmail:      "alice@example.com",
+		hookSource:     "cursor",
+		toolSource:     "shadow-db",
+		toolName:       "query",
+		result:         `"ok"`,
+		conversationID: "conv-success",
+	})
+
+	// Failed trace: a single row that carries a 500 status and a hook error.
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-4 * time.Minute),
+		traceID:        uuid.New().String(),
+		userEmail:      "alice@example.com",
+		hookSource:     "cursor",
+		toolSource:     "shadow-db",
+		toolName:       "query",
+		errorMsg:       "boom",
+		conversationID: "conv-failure",
+		customAttrs:    map[string]any{"http.response.status_code": 500},
+	})
+
+	// Sanity check: without a status filter both traces are present. A non-empty query
+	// (":" is in every seeded gram_urn) forces the same raw path the status filter uses.
+	rawPathQuery := ":"
+	all := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+		From:  now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:    now.Add(1 * time.Hour).Format(time.RFC3339),
+		Query: &rawPathQuery,
+		Limit: 10,
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 2
+	})
+	require.Len(t, all.Traces, 2)
+
+	filtered := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+		Filters: []*gen.LogFilter{
+			{Path: "http.response.status_code", Operator: "not_eq", Values: []string{"200"}},
+		},
+		Limit: 10,
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 1
+	})
+	require.Len(t, filtered.Traces, 1, "only the 500 trace should match != 200")
+	require.NotNil(t, filtered.Traces[0].HookStatus)
+	require.Equal(t, "failure", *filtered.Traces[0].HookStatus)
+}
+
+// The first-class Status filter selects traces by their per-trace outcome (error /
+// success / blocked / pending), computed from the aggregated hook_status and
+// http_status_code columns. It must behave identically on the summaries fast path (no
+// other filters) and the raw path (a free-text query is present). See DNO-447.
+func TestListToolUsageTraces_FiltersByStatus(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	// Success (hook result, no error).
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-6 * time.Minute),
+		traceID:        uuid.New().String(),
+		userEmail:      "alice@example.com",
+		hookSource:     "cursor",
+		toolSource:     "shadow-db",
+		toolName:       "query",
+		result:         `"ok"`,
+		conversationID: "conv-ok",
+	})
+	// Failure (hook error).
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-5 * time.Minute),
+		traceID:        uuid.New().String(),
+		userEmail:      "bob@example.com",
+		hookSource:     "cursor",
+		toolSource:     "shadow-db",
+		toolName:       "query",
+		errorMsg:       "boom",
+		conversationID: "conv-fail",
+	})
+	// Blocked (hook block reason).
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-4 * time.Minute),
+		traceID:        uuid.New().String(),
+		userEmail:      "carol@example.com",
+		hookSource:     "cursor",
+		toolSource:     "shadow-db",
+		toolName:       "query",
+		conversationID: "conv-block",
+		customAttrs:    map[string]any{"gram.hook.block_reason": "policy denied"},
+	})
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	// Wait until all three traces are queryable.
+	waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+		From: from, To: to, Limit: 10,
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 3
+	})
+
+	rawPathQuery := ":"
+	cases := []struct {
+		name       string
+		statuses   []gen.ToolUsageStatus
+		query      *string
+		wantStatus []string
+	}{
+		{name: "error fast path", statuses: []gen.ToolUsageStatus{"error"}, wantStatus: []string{"failure"}},
+		{name: "error raw path", statuses: []gen.ToolUsageStatus{"error"}, query: &rawPathQuery, wantStatus: []string{"failure"}},
+		{name: "blocked fast path", statuses: []gen.ToolUsageStatus{"blocked"}, wantStatus: []string{"blocked"}},
+		{name: "error+success", statuses: []gen.ToolUsageStatus{"error", "success"}, wantStatus: []string{"failure", "success"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			want := len(tc.wantStatus)
+			result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+				From:     from,
+				To:       to,
+				Statuses: tc.statuses,
+				Query:    tc.query,
+				Limit:    10,
+			}, func(result *gen.ListToolUsageTracesResult) bool {
+				return len(result.Traces) == want
+			})
+			require.Len(t, result.Traces, want)
+			got := make([]string, 0, len(result.Traces))
+			for _, trace := range result.Traces {
+				require.NotNil(t, trace.HookStatus)
+				got = append(got, *trace.HookStatus)
+			}
+			require.ElementsMatch(t, tc.wantStatus, got)
+		})
+	}
 }
 
 func TestListToolUsageTraces_IncludesTriggerOnlyRowsForTriggerFilter(t *testing.T) {

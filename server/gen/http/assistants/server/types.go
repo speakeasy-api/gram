@@ -26,6 +26,8 @@ type CreateAssistantRequestBody struct {
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// Toolsets available to the assistant.
 	Toolsets []*AssistantToolsetRefRequestBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
+	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	McpServers []*AssistantMCPServerRefRequestBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Optional warm runtime TTL in seconds.
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Optional maximum active warm runtimes.
@@ -47,6 +49,8 @@ type UpdateAssistantRequestBody struct {
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// Toolsets available to the assistant.
 	Toolsets []*AssistantToolsetRefRequestBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
+	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	McpServers []*AssistantMCPServerRefRequestBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Warm runtime TTL in seconds.
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes.
@@ -94,6 +98,10 @@ type GetAssistantResponseBody struct {
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
 	// Toolsets available to the assistant.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
+	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers" json:"mcp_servers" xml:"mcp_servers"`
+	// Skills attached to the assistant.
+	Skills []*AssistantSkillRefResponseBody `form:"skills" json:"skills" xml:"skills"`
 	// Warm runtime TTL in seconds.
 	WarmTTLSeconds int `form:"warm_ttl_seconds" json:"warm_ttl_seconds" xml:"warm_ttl_seconds"`
 	// Maximum active warm runtimes for the assistant.
@@ -123,6 +131,10 @@ type CreateAssistantResponseBody struct {
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
 	// Toolsets available to the assistant.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
+	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers" json:"mcp_servers" xml:"mcp_servers"`
+	// Skills attached to the assistant.
+	Skills []*AssistantSkillRefResponseBody `form:"skills" json:"skills" xml:"skills"`
 	// Warm runtime TTL in seconds.
 	WarmTTLSeconds int `form:"warm_ttl_seconds" json:"warm_ttl_seconds" xml:"warm_ttl_seconds"`
 	// Maximum active warm runtimes for the assistant.
@@ -152,6 +164,10 @@ type UpdateAssistantResponseBody struct {
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
 	// Toolsets available to the assistant.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
+	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers" json:"mcp_servers" xml:"mcp_servers"`
+	// Skills attached to the assistant.
+	Skills []*AssistantSkillRefResponseBody `form:"skills" json:"skills" xml:"skills"`
 	// Warm runtime TTL in seconds.
 	WarmTTLSeconds int `form:"warm_ttl_seconds" json:"warm_ttl_seconds" xml:"warm_ttl_seconds"`
 	// Maximum active warm runtimes for the assistant.
@@ -193,6 +209,10 @@ type GetManagedAssistantResponseBody struct {
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
 	// Toolsets available to the assistant.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
+	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers" json:"mcp_servers" xml:"mcp_servers"`
+	// Skills attached to the assistant.
+	Skills []*AssistantSkillRefResponseBody `form:"skills" json:"skills" xml:"skills"`
 	// Warm runtime TTL in seconds.
 	WarmTTLSeconds int `form:"warm_ttl_seconds" json:"warm_ttl_seconds" xml:"warm_ttl_seconds"`
 	// Maximum active warm runtimes for the assistant.
@@ -222,6 +242,10 @@ type EnsureManagedAssistantResponseBody struct {
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
 	// Toolsets available to the assistant.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
+	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers" json:"mcp_servers" xml:"mcp_servers"`
+	// Skills attached to the assistant.
+	Skills []*AssistantSkillRefResponseBody `form:"skills" json:"skills" xml:"skills"`
 	// Warm runtime TTL in seconds.
 	WarmTTLSeconds int `form:"warm_ttl_seconds" json:"warm_ttl_seconds" xml:"warm_ttl_seconds"`
 	// Maximum active warm runtimes for the assistant.
@@ -1736,6 +1760,10 @@ type AssistantResponseBody struct {
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
 	// Toolsets available to the assistant.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
+	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers" json:"mcp_servers" xml:"mcp_servers"`
+	// Skills attached to the assistant.
+	Skills []*AssistantSkillRefResponseBody `form:"skills" json:"skills" xml:"skills"`
 	// Warm runtime TTL in seconds.
 	WarmTTLSeconds int `form:"warm_ttl_seconds" json:"warm_ttl_seconds" xml:"warm_ttl_seconds"`
 	// Maximum active warm runtimes for the assistant.
@@ -1757,6 +1785,31 @@ type AssistantToolsetRefResponseBody struct {
 	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
 }
 
+// AssistantMCPServerRefResponseBody is used to define fields on response body
+// types.
+type AssistantMCPServerRefResponseBody struct {
+	// The MCP server slug exposed to the assistant. Covers remote- and
+	// tunnelled-backed MCP servers, which have no toolset to attach.
+	McpServerSlug string `form:"mcp_server_slug" json:"mcp_server_slug" xml:"mcp_server_slug"`
+	// Optional environment slug used when connecting to the MCP server.
+	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
+	// The slug of the server's Gram-hosted MCP endpoint (/mcp/{endpoint_slug}).
+	// Populated on reads; ignored on writes. Absent when the server has no
+	// Gram-hosted endpoint.
+	EndpointSlug *string `form:"endpoint_slug,omitempty" json:"endpoint_slug,omitempty" xml:"endpoint_slug,omitempty"`
+}
+
+// AssistantSkillRefResponseBody is used to define fields on response body
+// types.
+type AssistantSkillRefResponseBody struct {
+	// The attached skill ID.
+	SkillID string `form:"skill_id" json:"skill_id" xml:"skill_id"`
+	// The pinned version, absent when tracking latest valid.
+	PinnedVersionID *string `form:"pinned_version_id,omitempty" json:"pinned_version_id,omitempty" xml:"pinned_version_id,omitempty"`
+	// The currently resolved valid version.
+	ResolvedVersionID string `form:"resolved_version_id" json:"resolved_version_id" xml:"resolved_version_id"`
+}
+
 // AssistantToolsetRefRequestBody is used to define fields on request body
 // types.
 type AssistantToolsetRefRequestBody struct {
@@ -1764,6 +1817,20 @@ type AssistantToolsetRefRequestBody struct {
 	ToolsetSlug *string `form:"toolset_slug,omitempty" json:"toolset_slug,omitempty" xml:"toolset_slug,omitempty"`
 	// Optional environment slug used when invoking the toolset.
 	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
+}
+
+// AssistantMCPServerRefRequestBody is used to define fields on request body
+// types.
+type AssistantMCPServerRefRequestBody struct {
+	// The MCP server slug exposed to the assistant. Covers remote- and
+	// tunnelled-backed MCP servers, which have no toolset to attach.
+	McpServerSlug *string `form:"mcp_server_slug,omitempty" json:"mcp_server_slug,omitempty" xml:"mcp_server_slug,omitempty"`
+	// Optional environment slug used when connecting to the MCP server.
+	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
+	// The slug of the server's Gram-hosted MCP endpoint (/mcp/{endpoint_slug}).
+	// Populated on reads; ignored on writes. Absent when the server has no
+	// Gram-hosted endpoint.
+	EndpointSlug *string `form:"endpoint_slug,omitempty" json:"endpoint_slug,omitempty" xml:"endpoint_slug,omitempty"`
 }
 
 // NewListAssistantsResponseBody builds the HTTP response body from the result
@@ -1813,6 +1880,30 @@ func NewGetAssistantResponseBody(res *types.Assistant) *GetAssistantResponseBody
 	} else {
 		body.Toolsets = []*AssistantToolsetRefResponseBody{}
 	}
+	if res.McpServers != nil {
+		body.McpServers = make([]*AssistantMCPServerRefResponseBody, len(res.McpServers))
+		for i, val := range res.McpServers {
+			if val == nil {
+				body.McpServers[i] = nil
+				continue
+			}
+			body.McpServers[i] = marshalTypesAssistantMCPServerRefToAssistantMCPServerRefResponseBody(val)
+		}
+	} else {
+		body.McpServers = []*AssistantMCPServerRefResponseBody{}
+	}
+	if res.Skills != nil {
+		body.Skills = make([]*AssistantSkillRefResponseBody, len(res.Skills))
+		for i, val := range res.Skills {
+			if val == nil {
+				body.Skills[i] = nil
+				continue
+			}
+			body.Skills[i] = marshalTypesAssistantSkillRefToAssistantSkillRefResponseBody(val)
+		}
+	} else {
+		body.Skills = []*AssistantSkillRefResponseBody{}
+	}
 	return body
 }
 
@@ -1844,6 +1935,30 @@ func NewCreateAssistantResponseBody(res *types.Assistant) *CreateAssistantRespon
 	} else {
 		body.Toolsets = []*AssistantToolsetRefResponseBody{}
 	}
+	if res.McpServers != nil {
+		body.McpServers = make([]*AssistantMCPServerRefResponseBody, len(res.McpServers))
+		for i, val := range res.McpServers {
+			if val == nil {
+				body.McpServers[i] = nil
+				continue
+			}
+			body.McpServers[i] = marshalTypesAssistantMCPServerRefToAssistantMCPServerRefResponseBody(val)
+		}
+	} else {
+		body.McpServers = []*AssistantMCPServerRefResponseBody{}
+	}
+	if res.Skills != nil {
+		body.Skills = make([]*AssistantSkillRefResponseBody, len(res.Skills))
+		for i, val := range res.Skills {
+			if val == nil {
+				body.Skills[i] = nil
+				continue
+			}
+			body.Skills[i] = marshalTypesAssistantSkillRefToAssistantSkillRefResponseBody(val)
+		}
+	} else {
+		body.Skills = []*AssistantSkillRefResponseBody{}
+	}
 	return body
 }
 
@@ -1874,6 +1989,30 @@ func NewUpdateAssistantResponseBody(res *types.Assistant) *UpdateAssistantRespon
 		}
 	} else {
 		body.Toolsets = []*AssistantToolsetRefResponseBody{}
+	}
+	if res.McpServers != nil {
+		body.McpServers = make([]*AssistantMCPServerRefResponseBody, len(res.McpServers))
+		for i, val := range res.McpServers {
+			if val == nil {
+				body.McpServers[i] = nil
+				continue
+			}
+			body.McpServers[i] = marshalTypesAssistantMCPServerRefToAssistantMCPServerRefResponseBody(val)
+		}
+	} else {
+		body.McpServers = []*AssistantMCPServerRefResponseBody{}
+	}
+	if res.Skills != nil {
+		body.Skills = make([]*AssistantSkillRefResponseBody, len(res.Skills))
+		for i, val := range res.Skills {
+			if val == nil {
+				body.Skills[i] = nil
+				continue
+			}
+			body.Skills[i] = marshalTypesAssistantSkillRefToAssistantSkillRefResponseBody(val)
+		}
+	} else {
+		body.Skills = []*AssistantSkillRefResponseBody{}
 	}
 	return body
 }
@@ -1917,6 +2056,30 @@ func NewGetManagedAssistantResponseBody(res *types.Assistant) *GetManagedAssista
 	} else {
 		body.Toolsets = []*AssistantToolsetRefResponseBody{}
 	}
+	if res.McpServers != nil {
+		body.McpServers = make([]*AssistantMCPServerRefResponseBody, len(res.McpServers))
+		for i, val := range res.McpServers {
+			if val == nil {
+				body.McpServers[i] = nil
+				continue
+			}
+			body.McpServers[i] = marshalTypesAssistantMCPServerRefToAssistantMCPServerRefResponseBody(val)
+		}
+	} else {
+		body.McpServers = []*AssistantMCPServerRefResponseBody{}
+	}
+	if res.Skills != nil {
+		body.Skills = make([]*AssistantSkillRefResponseBody, len(res.Skills))
+		for i, val := range res.Skills {
+			if val == nil {
+				body.Skills[i] = nil
+				continue
+			}
+			body.Skills[i] = marshalTypesAssistantSkillRefToAssistantSkillRefResponseBody(val)
+		}
+	} else {
+		body.Skills = []*AssistantSkillRefResponseBody{}
+	}
 	return body
 }
 
@@ -1947,6 +2110,30 @@ func NewEnsureManagedAssistantResponseBody(res *types.Assistant) *EnsureManagedA
 		}
 	} else {
 		body.Toolsets = []*AssistantToolsetRefResponseBody{}
+	}
+	if res.McpServers != nil {
+		body.McpServers = make([]*AssistantMCPServerRefResponseBody, len(res.McpServers))
+		for i, val := range res.McpServers {
+			if val == nil {
+				body.McpServers[i] = nil
+				continue
+			}
+			body.McpServers[i] = marshalTypesAssistantMCPServerRefToAssistantMCPServerRefResponseBody(val)
+		}
+	} else {
+		body.McpServers = []*AssistantMCPServerRefResponseBody{}
+	}
+	if res.Skills != nil {
+		body.Skills = make([]*AssistantSkillRefResponseBody, len(res.Skills))
+		for i, val := range res.Skills {
+			if val == nil {
+				body.Skills[i] = nil
+				continue
+			}
+			body.Skills[i] = marshalTypesAssistantSkillRefToAssistantSkillRefResponseBody(val)
+		}
+	} else {
+		body.Skills = []*AssistantSkillRefResponseBody{}
 	}
 	return body
 }
@@ -3143,6 +3330,16 @@ func NewCreateAssistantPayload(body *CreateAssistantRequestBody, sessionToken *s
 		}
 		v.Toolsets[i] = unmarshalAssistantToolsetRefRequestBodyToTypesAssistantToolsetRef(val)
 	}
+	if body.McpServers != nil {
+		v.McpServers = make([]*types.AssistantMCPServerRef, len(body.McpServers))
+		for i, val := range body.McpServers {
+			if val == nil {
+				v.McpServers[i] = nil
+				continue
+			}
+			v.McpServers[i] = unmarshalAssistantMCPServerRefRequestBodyToTypesAssistantMCPServerRef(val)
+		}
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -3169,6 +3366,16 @@ func NewUpdateAssistantPayload(body *UpdateAssistantRequestBody, sessionToken *s
 				continue
 			}
 			v.Toolsets[i] = unmarshalAssistantToolsetRefRequestBodyToTypesAssistantToolsetRef(val)
+		}
+	}
+	if body.McpServers != nil {
+		v.McpServers = make([]*types.AssistantMCPServerRef, len(body.McpServers))
+		for i, val := range body.McpServers {
+			if val == nil {
+				v.McpServers[i] = nil
+				continue
+			}
+			v.McpServers[i] = unmarshalAssistantMCPServerRefRequestBodyToTypesAssistantMCPServerRef(val)
 		}
 	}
 	v.SessionToken = sessionToken
@@ -3245,6 +3452,13 @@ func ValidateCreateAssistantRequestBody(body *CreateAssistantRequestBody) (err e
 			}
 		}
 	}
+	for _, e := range body.McpServers {
+		if e != nil {
+			if err2 := ValidateAssistantMCPServerRefRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.Status != nil {
 		if !(*body.Status == "active" || *body.Status == "paused") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "paused"}))
@@ -3265,6 +3479,13 @@ func ValidateUpdateAssistantRequestBody(body *UpdateAssistantRequestBody) (err e
 	for _, e := range body.Toolsets {
 		if e != nil {
 			if err2 := ValidateAssistantToolsetRefRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.McpServers {
+		if e != nil {
+			if err2 := ValidateAssistantMCPServerRefRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -3315,6 +3536,15 @@ func ValidateSendMessageRequestBody(body *SendMessageRequestBody) (err error) {
 func ValidateAssistantToolsetRefRequestBody(body *AssistantToolsetRefRequestBody) (err error) {
 	if body.ToolsetSlug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_slug", "body"))
+	}
+	return
+}
+
+// ValidateAssistantMCPServerRefRequestBody runs the validations defined on
+// AssistantMCPServerRefRequestBody
+func ValidateAssistantMCPServerRefRequestBody(body *AssistantMCPServerRefRequestBody) (err error) {
+	if body.McpServerSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_slug", "body"))
 	}
 	return
 }

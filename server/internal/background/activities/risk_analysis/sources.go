@@ -1,10 +1,29 @@
 package risk_analysis
 
-import "github.com/speakeasy-api/gram/server/internal/gitleaks"
+import (
+	"github.com/speakeasy-api/gram/server/internal/scanners/accountidentity"
+	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
+	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+)
 
 const (
 	// SourceGitleaks is the policy source value for secret scanning.
 	SourceGitleaks = gitleaks.Source
+	// SourceCLIDestructive is the policy source value that flags tool calls
+	// whose arguments contain a curated destructive CLI command pattern
+	// (rm -rf, git push --force, DROP TABLE, ...). It is content-driven
+	// instead of annotation-driven and applies to native tools (Bash,
+	// run_terminal_cmd) as well as MCP-routed calls whose arguments happen to
+	// carry a destructive payload.
+	SourceCLIDestructive = clidestructive.Source
+	// SourceAccountIdentity is the policy source value flagging sessions
+	// authenticated with a non-corporate AI account. Unlike the content
+	// scanners it inspects the chat's account attribution (personal-account
+	// tracking data on user_accounts), not the message text.
+	SourceAccountIdentity = accountidentity.Source
+	// SourcePromptInjection is the policy source value for prompt injection scanning.
+	SourcePromptInjection = promptinjection.Source
 	// SourceNone marks the sentinel row for an analyzed message with no findings.
 	SourceNone = "none"
 

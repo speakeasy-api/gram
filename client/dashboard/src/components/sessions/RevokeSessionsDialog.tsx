@@ -3,7 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { useRevokeUserSessionMutation } from "@gram/client/react-query";
+import { useRevokeUserSessionMutation } from "@gram/client/react-query/revokeUserSession.js";
 
 export function RevokeSessionsDialog({
   sessionIds,

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
+	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -105,6 +106,83 @@ func TestListRiskResults_ByPolicy(t *testing.T) {
 	require.Equal(t, "aws-access-key-id", *result.Results[0].RuleID)
 }
 
+// A disabled ("turned off") policy still holds the findings it produced while
+// active. When the user explicitly filters to that policy the list must surface
+// those historical findings rather than coming back empty, while the default
+// unfiltered view keeps hiding them (only active policies contribute there).
+func TestListRiskResults_ByPolicy_DisabledPolicyShowsHistoricalFindings(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Disabled Policy Test")})
+	require.NoError(t, err)
+
+	policyID, _ := uuid.Parse(policy.ID)
+	_, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, msgID, true)
+
+	// Turn the policy off.
+	disabled := false
+	_, err = ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
+		ID:      policy.ID,
+		Name:    policy.Name,
+		Enabled: &disabled,
+	})
+	require.NoError(t, err)
+
+	// Explicit filter on the disabled policy surfaces its historical findings.
+	byPolicy, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
+		PolicyID: &policy.ID,
+	})
+	require.NoError(t, err)
+	require.Len(t, byPolicy.Results, 1, "disabled policy should still show its historical findings when filtered")
+	require.Equal(t, "aws-access-key-id", *byPolicy.Results[0].RuleID)
+	require.Equal(t, int64(1), byPolicy.TotalCount, "by-policy total count should match the listing, not the enabled-only aggregate")
+
+	// The default unfiltered view keeps excluding disabled-policy findings.
+	unfiltered, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
+	require.NoError(t, err)
+	require.Empty(t, unfiltered.Results, "unfiltered view should not include disabled-policy findings")
+	require.Equal(t, int64(0), unfiltered.TotalCount, "unfiltered total count should not include disabled-policy findings")
+}
+
+// A policy filter must not swallow the other filters. Selecting a policy and a
+// rule id together has to honor both, otherwise (as reported in FDE-32) picking
+// a policy causes rule_id/user_id/category/time filters to be silently ignored.
+func TestListRiskResults_ByPolicyAndRuleID(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Policy+Rule Filter")})
+	require.NoError(t, err)
+	policyID, _ := uuid.Parse(policy.ID)
+
+	_, injMsg := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	seedRiskResultWith(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, injMsg, "prompt_injection", "prompt_injection", "ignore previous instructions")
+
+	_, emailMsg := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	seedRiskResultWith(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, emailMsg, "presidio", "pii.email_address", "a@b.com")
+
+	ruleID := "prompt_injection"
+	result, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
+		PolicyID: &policy.ID,
+		RuleID:   &ruleID,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Results, 1, "policy + rule_id filter should return only the matching rule")
+	require.Equal(t, "prompt_injection", *result.Results[0].RuleID)
+}
+
 func TestListRiskResults_ByChatID(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
@@ -179,6 +257,89 @@ func TestListRiskResults_ByUserID(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Results, 1)
 	require.Equal(t, "alice@example.com", *result.Results[0].UserID)
+}
+
+// linkAssistantThread attaches a chat to a freshly created assistant so the
+// chat counts as "assistant-driven" for the non_assistant filter.
+func linkAssistantThread(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID string, chatID uuid.UUID) uuid.UUID {
+	t.Helper()
+	ctx := t.Context()
+
+	assistant, err := assistantsrepo.New(ti.conn).CreateAssistant(ctx, assistantsrepo.CreateAssistantParams{
+		ProjectID:      projectID,
+		OrganizationID: orgID,
+		Name:           "Assistant " + uuid.NewString()[:8],
+		Model:          "anthropic/claude-opus-4.8",
+		Instructions:   "be helpful",
+		WarmTtlSeconds: 300,
+		MaxConcurrency: 1,
+		Status:         "active",
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, ti.chatRepo.SeedAssistantThread(ctx, chatrepo.SeedAssistantThreadParams{
+		AssistantID:   assistant.ID,
+		ProjectID:     projectID,
+		CorrelationID: "corr-" + uuid.NewString()[:8],
+		ChatID:        chatID,
+	}))
+	return assistant.ID
+}
+
+// The assistant filter dimension: non_assistant surfaces only findings whose
+// chat is not linked to an assistant (the events most likely to be missing
+// user attribution), while assistant_id scopes to a single assistant's chats.
+func TestListRiskResults_NonAssistant(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Non-assistant Filter Test")})
+	require.NoError(t, err)
+	policyID, _ := uuid.Parse(policy.ID)
+
+	// One finding from an assistant-driven chat, one from a plain chat.
+	assistantChat, assistantMsg := seedChatMessageWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "assistant@example.com")
+	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, assistantMsg, true)
+	assistantID := linkAssistantThread(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, assistantChat)
+
+	_, humanMsg := seedChatMessageWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "human@example.com")
+	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, humanMsg, true)
+
+	// Without the filter, both findings are returned.
+	all, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
+	require.NoError(t, err)
+	require.Len(t, all.Results, 2)
+
+	// With non_assistant=true, only the non-assistant finding remains.
+	nonAssistant := true
+	filtered, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
+		NonAssistant: &nonAssistant,
+	})
+	require.NoError(t, err)
+	require.Len(t, filtered.Results, 1)
+	require.Equal(t, "human@example.com", *filtered.Results[0].UserID)
+
+	// With assistant_id, only that assistant's finding remains.
+	assistantIDStr := assistantID.String()
+	scoped, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
+		AssistantID: &assistantIDStr,
+	})
+	require.NoError(t, err)
+	require.Len(t, scoped.Results, 1)
+	require.Equal(t, "assistant@example.com", *scoped.Results[0].UserID)
+
+	// An assistant with no linked chats matches nothing.
+	otherAssistant := uuid.NewString()
+	empty, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
+		AssistantID: &otherAssistant,
+	})
+	require.NoError(t, err)
+	require.Empty(t, empty.Results)
 }
 
 func TestGetRiskPolicyStatus_WithAnalyzedMessages(t *testing.T) {

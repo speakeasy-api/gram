@@ -5,18 +5,21 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agent"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -73,6 +76,11 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
+	// The device agent authenticates with an org-scoped key, so the default
+	// context represents the org install key (`agent` scope) — getPlugins treats
+	// the vouched `email` param as authoritative on this path. Per-user-key
+	// behavior is exercised explicitly via withPerUserKeyAuth.
+	authCtx.APIKeyScopes = []string{"agent", "agent_user"}
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
@@ -86,6 +94,22 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 		orgID:     authCtx.ActiveOrganizationID,
 		projectID: *authCtx.ProjectID,
 	}
+}
+
+// withPerUserKeyAuth rewrites the request's auth context to look like a per-user
+// device-agent key (minted by token-exchange or manual enrollment): it carries
+// only the `agent_user` scope, and its owner email IS the enrolled developer.
+// getPlugins must therefore attribute to the key owner and ignore any vouched
+// `email` param.
+func withPerUserKeyAuth(t *testing.T, ctx context.Context, ownerEmail string) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	clone := *authCtx
+	clone.Email = &ownerEmail
+	clone.APIKeyScopes = []string{"agent_user"}
+	clone.SessionID = nil
+	return contextvalues.SetAuthContext(ctx, &clone)
 }
 
 // publishMarketplace gives a project a marketplace_token, which is what makes
@@ -147,6 +171,40 @@ func assignPlugin(t *testing.T, ctx context.Context, conn *pgxpool.Pool, pluginI
 		PrincipalUrn:   principalURN,
 	})
 	require.NoError(t, err)
+}
+
+// assignUserToRole creates an org role and assigns userID to it, returning the
+// role's principal URN (role:organization:<id>) — the same URN
+// authz.ResolveUserPrincipals emits for a member of that role, so it can be used
+// directly as a plugin assignment target.
+func assignUserToRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID, userID, slug string) string {
+	t.Helper()
+
+	q := accessrepo.New(conn)
+	now := time.Now()
+	role, err := q.CreateOrganizationRole(ctx, accessrepo.CreateOrganizationRoleParams{
+		OrganizationID:    orgID,
+		WorkosSlug:        slug,
+		WorkosName:        slug,
+		WorkosDescription: conv.ToPGText(""),
+		WorkosCreatedAt:   conv.ToPGTimestamptz(now),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(now),
+		WorkosLastEventID: conv.ToPGText(""),
+	})
+	require.NoError(t, err)
+
+	_, err = q.UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+		OrganizationID:     orgID,
+		WorkosUserID:       userID,
+		UserID:             conv.ToPGText(userID),
+		WorkosMembershipID: conv.ToPGText(""),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(now),
+		WorkosLastEventID:  conv.ToPGText(""),
+		WorkosRoleSlug:     slug,
+	})
+	require.NoError(t, err)
+
+	return role.RoleUrn
 }
 
 // seedSecondOrg creates a separate org with its own published marketplace +

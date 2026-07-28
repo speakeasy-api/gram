@@ -1,4 +1,4 @@
-import { getPresetRange, type DateRangePreset } from "@gram-ai/elements";
+import { getPresetRange, type DateRangePreset } from "@/elements";
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
 import {
@@ -7,10 +7,10 @@ import {
   safeBase64Encode,
 } from "./observeFilterUtils";
 
-const DEFAULT_PRESET: DateRangePreset = "7d";
+export const DEFAULT_DATE_RANGE_PRESET: DateRangePreset = "7d";
 
 export function useDateRangeFilter(
-  defaultPreset: DateRangePreset = DEFAULT_PRESET,
+  defaultPreset: DateRangePreset = DEFAULT_DATE_RANGE_PRESET,
 ): {
   dateRange: DateRangePreset;
   customRange: { from: Date; to: Date } | null;

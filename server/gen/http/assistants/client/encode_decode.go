@@ -1922,6 +1922,22 @@ func unmarshalAssistantResponseBodyToTypesAssistant(v *AssistantResponseBody) *t
 		}
 		res.Toolsets[i] = unmarshalAssistantToolsetRefResponseBodyToTypesAssistantToolsetRef(val)
 	}
+	res.McpServers = make([]*types.AssistantMCPServerRef, len(v.McpServers))
+	for i, val := range v.McpServers {
+		if val == nil {
+			res.McpServers[i] = nil
+			continue
+		}
+		res.McpServers[i] = unmarshalAssistantMCPServerRefResponseBodyToTypesAssistantMCPServerRef(val)
+	}
+	res.Skills = make([]*types.AssistantSkillRef, len(v.Skills))
+	for i, val := range v.Skills {
+		if val == nil {
+			res.Skills[i] = nil
+			continue
+		}
+		res.Skills[i] = unmarshalAssistantSkillRefResponseBodyToTypesAssistantSkillRef(val)
+	}
 
 	return res
 }
@@ -1933,6 +1949,32 @@ func unmarshalAssistantToolsetRefResponseBodyToTypesAssistantToolsetRef(v *Assis
 	res := &types.AssistantToolsetRef{
 		ToolsetSlug:     *v.ToolsetSlug,
 		EnvironmentSlug: v.EnvironmentSlug,
+	}
+
+	return res
+}
+
+// unmarshalAssistantMCPServerRefResponseBodyToTypesAssistantMCPServerRef
+// builds a value of type *types.AssistantMCPServerRef from a value of type
+// *AssistantMCPServerRefResponseBody.
+func unmarshalAssistantMCPServerRefResponseBodyToTypesAssistantMCPServerRef(v *AssistantMCPServerRefResponseBody) *types.AssistantMCPServerRef {
+	res := &types.AssistantMCPServerRef{
+		McpServerSlug:   *v.McpServerSlug,
+		EnvironmentSlug: v.EnvironmentSlug,
+		EndpointSlug:    v.EndpointSlug,
+	}
+
+	return res
+}
+
+// unmarshalAssistantSkillRefResponseBodyToTypesAssistantSkillRef builds a
+// value of type *types.AssistantSkillRef from a value of type
+// *AssistantSkillRefResponseBody.
+func unmarshalAssistantSkillRefResponseBodyToTypesAssistantSkillRef(v *AssistantSkillRefResponseBody) *types.AssistantSkillRef {
+	res := &types.AssistantSkillRef{
+		SkillID:           *v.SkillID,
+		PinnedVersionID:   v.PinnedVersionID,
+		ResolvedVersionID: *v.ResolvedVersionID,
 	}
 
 	return res
@@ -1950,6 +1992,22 @@ func marshalTypesAssistantToolsetRefToAssistantToolsetRefRequestBody(v *types.As
 	return res
 }
 
+// marshalTypesAssistantMCPServerRefToAssistantMCPServerRefRequestBody builds a
+// value of type *AssistantMCPServerRefRequestBody from a value of type
+// *types.AssistantMCPServerRef.
+func marshalTypesAssistantMCPServerRefToAssistantMCPServerRefRequestBody(v *types.AssistantMCPServerRef) *AssistantMCPServerRefRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &AssistantMCPServerRefRequestBody{
+		McpServerSlug:   v.McpServerSlug,
+		EnvironmentSlug: v.EnvironmentSlug,
+		EndpointSlug:    v.EndpointSlug,
+	}
+
+	return res
+}
+
 // marshalAssistantToolsetRefRequestBodyToTypesAssistantToolsetRef builds a
 // value of type *types.AssistantToolsetRef from a value of type
 // *AssistantToolsetRefRequestBody.
@@ -1957,6 +2015,22 @@ func marshalAssistantToolsetRefRequestBodyToTypesAssistantToolsetRef(v *Assistan
 	res := &types.AssistantToolsetRef{
 		ToolsetSlug:     v.ToolsetSlug,
 		EnvironmentSlug: v.EnvironmentSlug,
+	}
+
+	return res
+}
+
+// marshalAssistantMCPServerRefRequestBodyToTypesAssistantMCPServerRef builds a
+// value of type *types.AssistantMCPServerRef from a value of type
+// *AssistantMCPServerRefRequestBody.
+func marshalAssistantMCPServerRefRequestBodyToTypesAssistantMCPServerRef(v *AssistantMCPServerRefRequestBody) *types.AssistantMCPServerRef {
+	if v == nil {
+		return nil
+	}
+	res := &types.AssistantMCPServerRef{
+		McpServerSlug:   v.McpServerSlug,
+		EnvironmentSlug: v.EnvironmentSlug,
+		EndpointSlug:    v.EndpointSlug,
 	}
 
 	return res

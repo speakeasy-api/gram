@@ -13,10 +13,12 @@ import {
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useIsAdmin } from "@/contexts/Auth";
+import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { Scope, useRBAC } from "@/hooks/useRBAC";
+import { useRBAC } from "@/hooks/useRBAC";
+import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { AppRoute, useOrgRoutes } from "@/routes";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { Icon } from "@speakeasy-api/moonshine";
 import * as React from "react";
 import { Link } from "react-router";
@@ -66,9 +68,13 @@ export function OrgSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>): React.JSX.Element {
   const orgRoutes = useOrgRoutes();
-  const isAdmin = useIsAdmin();
   const { isRbacEnabled, isLoading: rbacLoading } = useRBAC();
   const telemetry = useTelemetry();
+  const { data: productFeatures } = useProductFeatures(undefined, undefined, {
+    staleTime: 30_000,
+    throwOnError: false,
+  });
+  const isPlatformAdmin = useIsPlatformAdmin();
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
   const isUserSessionsEnabled =
@@ -79,8 +85,10 @@ export function OrgSidebar({
     orgRoutes.apiKeys,
     orgRoutes.domains,
     orgRoutes.logs,
+    orgRoutes.skills,
+    orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
-    orgRoutes.adminSettings,
+    orgRoutes.externalServices,
   ].some((r) => r.active);
 
   const secureActive = [
@@ -111,8 +119,10 @@ export function OrgSidebar({
     orgRoutes.apiKeys,
     orgRoutes.domains,
     orgRoutes.logs,
+    orgRoutes.skills,
+    orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
-    orgRoutes.adminSettings,
+    orgRoutes.externalServices,
     orgRoutes.auditLogs,
     orgRoutes.deviceAgent,
     orgRoutes.access,
@@ -184,12 +194,25 @@ export function OrgSidebar({
                   item={orgRoutes.logs}
                   scope={["org:read", "org:admin"]}
                 />
+                {productFeatures?.skillsEnabled === true && (
+                  <ScopeGatedNavItem
+                    item={orgRoutes.skills}
+                    scope="org:admin"
+                  />
+                )}
+                <ScopeGatedNavItem
+                  item={orgRoutes.aiIntegrations}
+                  scope={["org:read", "org:admin"]}
+                />
                 <ScopeGatedNavItem
                   item={orgRoutes.webhooks}
                   scope={["org:read", "org:admin"]}
                 />
-                {isAdmin && (
-                  <CollapsibleNavItem item={orgRoutes.adminSettings} />
+                {/* Platform-admin only for now; gated on the platform-admin
+                    flag rather than an org RBAC scope. Later expands to org
+                    admins managing their own external credentials. */}
+                {isPlatformAdmin && (
+                  <CollapsibleNavItem item={orgRoutes.externalServices} />
                 )}
               </CollapsibleNavGroup>
 

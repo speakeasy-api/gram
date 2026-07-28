@@ -1,1 +1,0 @@
-../../plugin-claude/hooks/http.sh

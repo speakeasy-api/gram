@@ -258,7 +258,7 @@ var _ = Service("organizations", func() {
 	})
 
 	Method("sendEnterpriseAdminOnboardingEmail", func() {
-		Description("Send the enterprise admin onboarding email to one or more recipients. The email links each recipient to the wizard for the active organization. Used by the super-admin Onboarding tab.")
+		Description("Send the enterprise admin onboarding email to one or more recipients. The email links each recipient to the wizard for the active organization. Used by the Platform Admin onboarding tools.")
 
 		Payload(func() {
 			Attribute("recipients", ArrayOf(String, func() {

@@ -1,5 +1,7 @@
 package risk_analysis
 
+import "github.com/speakeasy-api/gram/server/internal/scanners"
+
 // DisabledRuleSet is a lookup set of canonical rule_ids the policy author has
 // unchecked within otherwise-enabled categories. The scanner pipeline calls
 // FilterFindings after each scanner returns to drop matching findings before
@@ -41,7 +43,7 @@ func (d DisabledRuleSet) Empty() bool {
 // FilterFindings returns a new slice with findings whose RuleID is in the
 // disabled set removed. Returns the input slice unchanged when the set is
 // empty so callers can call this unconditionally.
-func (d DisabledRuleSet) FilterFindings(in []Finding) []Finding {
+func (d DisabledRuleSet) FilterFindings(in []scanners.Finding) []scanners.Finding {
 	if d.Empty() || len(in) == 0 {
 		return in
 	}

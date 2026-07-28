@@ -118,10 +118,13 @@ ON CONFLICT (workos_directory_user_id) DO UPDATE SET
   user_id = COALESCE(EXCLUDED.user_id, directory_users.user_id),
   email = EXCLUDED.email,
   attributes = EXCLUDED.attributes,
-  deleted_at = NULL,
+  -- Only an event that explicitly reports the directory user as active may
+  -- resurrect a soft-deleted row. Events without a state keep the existing
+  -- deletion markers so replayed upserts cannot restore a deactivated user.
+  deleted_at = CASE WHEN @restore_deleted::boolean THEN NULL ELSE directory_users.deleted_at END,
   workos_created_at = EXCLUDED.workos_created_at,
   workos_updated_at = EXCLUDED.workos_updated_at,
-  workos_deleted_at = NULL,
+  workos_deleted_at = CASE WHEN @restore_deleted::boolean THEN NULL ELSE directory_users.workos_deleted_at END,
   workos_last_event_id = EXCLUDED.workos_last_event_id,
   updated_at = clock_timestamp()
 RETURNING id;

@@ -1,6 +1,6 @@
-import type { RemoteSessionClient } from "@gram/client/models/components";
-import type { ListRemoteSessionClientsRequest } from "@gram/client/models/operations";
-import { useRemoteSessionClientsInfinite } from "@gram/client/react-query/index.js";
+import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
+import type { ListRemoteSessionClientsRequest } from "@gram/client/models/operations/listremotesessionclients.js";
+import { useRemoteSessionClientsInfinite } from "@gram/client/react-query/remoteSessionClients.js";
 import { useEffect, useMemo } from "react";
 
 // Walk every page of remote_session_clients matching the filter and return

@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/contexts/Auth", () => ({
   useUser: () => ({ displayName: "Sagar", email: "s@x.dev", photoUrl: "" }),
-  useIsAdmin: () => false,
   useSession: () => ({ organizations: [{ id: "o1" }] }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
@@ -17,7 +16,6 @@ vi.mock("@/routes", () => ({
   useRoutes: () => ({ settings: { goTo: vi.fn() } }),
   useOrgRoutes: () => ({
     billing: { goTo: vi.fn() },
-    adminSettings: { goTo: vi.fn() },
   }),
 }));
 vi.mock("react-router", () => ({
@@ -82,13 +80,11 @@ describe("SidebarUserMenu", () => {
     expect(screen.queryByText(/Bug or Feature Request/)).toBeNull();
   });
 
-  it("links Platform Status to status.speakeasyapi.dev in a new tab", () => {
+  it("links Platform Status to status.speakeasy.com in a new tab", () => {
     render(<SidebarUserMenu />);
     fireEvent.click(screen.getByTestId("user-menu-trigger"));
     const status = screen.getByText("Platform Status").closest("a");
-    expect(status?.getAttribute("href")).toBe(
-      "https://status.speakeasyapi.dev/",
-    );
+    expect(status?.getAttribute("href")).toBe("https://status.speakeasy.com/");
     expect(status?.getAttribute("target")).toBe("_blank");
     expect(status?.getAttribute("rel")).toBe("noopener noreferrer");
   });

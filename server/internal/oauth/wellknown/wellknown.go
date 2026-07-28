@@ -101,6 +101,13 @@ type OAuthRepo interface {
 // also passes `toolset.mcp_slug` here even though its protected-resource
 // URL uses an `mcp_endpoints.slug` instead — see the companion
 // resourceURL argument on [ResolveOAuthProtectedResourceFromToolset].
+//
+// resourceURL is the absolute URL of the protected resource — the same value
+// [ResolveOAuthProtectedResourceFromToolset] emits as `resource` and
+// `authorization_servers`. For the external-OAuth-server case it becomes the
+// served document's `issuer` so the metadata satisfies RFC 8414 §3.3 (the
+// served `issuer` must equal the issuer identifier the client fetched it
+// under); the proxy case ignores it and keys its issuer off oauthSlug.
 func ResolveOAuthServerMetadataFromToolset(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -110,6 +117,7 @@ func ResolveOAuthServerMetadataFromToolset(
 	toolset *toolsets_repo.Toolset,
 	baseURL string,
 	oauthSlug string,
+	resourceURL string,
 ) (*OAuthServerMetadataResult, error) {
 	if toolset.OauthProxyServerID.Valid {
 		providers, err := oauthRepo.ListOAuthProxyProvidersByServer(ctx, repo.ListOAuthProxyProvidersByServerParams{
@@ -166,15 +174,61 @@ func ResolveOAuthServerMetadataFromToolset(
 			return nil, fmt.Errorf("get external oauth server metadata: %w", err)
 		}
 
+		// The captured upstream document's `issuer` identifies the upstream
+		// authorization server, but Gram re-serves that document from its own
+		// `/.well-known/oauth-authorization-server/...` URL. RFC 8414 §3.3
+		// requires the served `issuer` to equal the issuer identifier the
+		// client used to fetch the document — here the Gram resource URL that
+		// the protected-resource metadata advertises in
+		// `authorization_servers` — so a spec-compliant MCP client does not
+		// reject the metadata on a mismatch. The upstream's own
+		// authorization/token/registration endpoints are preserved verbatim;
+		// RFC 8414 does not require those to share the issuer's origin.
+		rewritten, err := rewriteMetadataIssuer(externalOAuthServer.Metadata, resourceURL)
+		if err != nil {
+			return nil, fmt.Errorf("rewrite external oauth server issuer: %w", err)
+		}
+
 		return &OAuthServerMetadataResult{
 			Kind:     OAuthServerMetadataResultKindRaw,
 			Static:   nil,
-			Raw:      externalOAuthServer.Metadata,
+			Raw:      rewritten,
 			ProxyURL: "",
 		}, nil
 	}
 
 	return nil, nil
+}
+
+// rewriteMetadataIssuer returns raw with its top-level "issuer" field set to
+// issuer, leaving every other field untouched. Used to reconcile a captured
+// upstream OAuth authorization-server metadata document with the Gram URL it
+// is re-served from (RFC 8414 §3.3). Preserving the raw form of every other
+// field keeps upstream-specific extensions (e.g. userinfo/introspection
+// endpoints, claims_supported) that Gram's typed structs do not model.
+func rewriteMetadataIssuer(raw json.RawMessage, issuer string) (json.RawMessage, error) {
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, fmt.Errorf("decode oauth server metadata: %w", err)
+	}
+	// A JSON `null` payload unmarshals into a nil map without error; guard
+	// against it (and any non-object that decoded to nil) so the issuer
+	// assignment below does not panic on a nil map.
+	if fields == nil {
+		return nil, fmt.Errorf("decode oauth server metadata: expected a JSON object")
+	}
+
+	issuerJSON, err := json.Marshal(issuer)
+	if err != nil {
+		return nil, fmt.Errorf("encode issuer: %w", err)
+	}
+	fields["issuer"] = issuerJSON
+
+	out, err := json.Marshal(fields)
+	if err != nil {
+		return nil, fmt.Errorf("encode oauth server metadata: %w", err)
+	}
+	return out, nil
 }
 
 // ResolveOAuthProtectedResourceFromToolset returns OAuth Protected Resource

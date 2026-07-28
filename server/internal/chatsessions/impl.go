@@ -135,9 +135,12 @@ func (s *Service) Revoke(ctx context.Context, p *gen.RevokePayload) error {
 	}
 
 	// Validate the token and extract JTI
-	claims, err := s.chatSessionsManager.ValidateToken(ctx, p.Token)
-	if err != nil {
+	claims, invalidToken, err := s.chatSessionsManager.ValidateToken(ctx, p.Token)
+	if invalidToken {
 		return oops.E(oops.CodeBadRequest, err, "invalid token").LogError(ctx, s.logger)
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to validate token").LogError(ctx, s.logger)
 	}
 
 	// Verify the token belongs to the same org/project

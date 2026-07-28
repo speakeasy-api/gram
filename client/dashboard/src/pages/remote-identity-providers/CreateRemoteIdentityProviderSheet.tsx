@@ -17,11 +17,9 @@ import {
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
-import {
-  invalidateAllOrganizationRemoteSessionIssuers,
-  useCreateOrganizationRemoteSessionIssuerMutation,
-  useListProjects,
-} from "@gram/client/react-query/index.js";
+import { useCreateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/createOrganizationRemoteSessionIssuer.js";
+import { useListProjects } from "@gram/client/react-query/listProjects.js";
+import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
 import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
@@ -73,6 +71,8 @@ export function CreateRemoteIdentityProviderSheet({
   const [nameDirty, setNameDirty] = useState(false);
   const [slug, setSlug] = useState("");
   const [slugDirty, setSlugDirty] = useState(false);
+  const [clientSetupDocumentationUrl, setClientSetupDocumentationUrl] =
+    useState("");
 
   const {
     issuerUrl,
@@ -130,6 +130,7 @@ export function CreateRemoteIdentityProviderSheet({
     setNameDirty(false);
     setSlug("");
     setSlugDirty(false);
+    setClientSetupDocumentationUrl("");
     setIssuerUrl("");
     resetEndpointState();
     clearDiscoverError();
@@ -156,6 +157,8 @@ export function CreateRemoteIdentityProviderSheet({
           slug: slug.trim(),
           issuer: issuerUrl.trim(),
           name: name.trim() || undefined,
+          clientSetupDocumentationUrl:
+            clientSetupDocumentationUrl.trim() || undefined,
           authorizationEndpoint: authorizationEndpoint.trim() || undefined,
           tokenEndpoint: tokenEndpoint.trim() || undefined,
           registrationEndpoint: registrationEndpoint.trim() || undefined,
@@ -174,6 +177,13 @@ export function CreateRemoteIdentityProviderSheet({
           // operator skipped Discover and typed the endpoints by hand.
           clientIdMetadataDocumentSupported:
             discoveredSnapshot?.clientIdMetadataDocumentSupported ?? false,
+          // RFC 8414 documentation URLs are discovery-only — there are no form
+          // inputs for them. Undefined when the operator skipped Discover or the
+          // issuer advertised nothing usable.
+          serviceDocumentation:
+            discoveredSnapshot?.serviceDocumentation || undefined,
+          opPolicyUri: discoveredSnapshot?.opPolicyUri || undefined,
+          opTosUri: discoveredSnapshot?.opTosUri || undefined,
         },
       },
     });
@@ -272,6 +282,21 @@ export function CreateRemoteIdentityProviderSheet({
                 Friendly label shown in the dashboard. Auto-derived from the
                 Issuer URL until you edit it; falls back to the Issuer URL when
                 left blank.
+              </Type>
+            </Stack>
+
+            <Stack gap={2}>
+              <Label className="text-muted-foreground text-xs">
+                Client setup documentation URL (optional)
+              </Label>
+              <Input
+                value={clientSetupDocumentationUrl}
+                onChange={setClientSetupDocumentationUrl}
+                placeholder="https://docs.example.com/oauth/apps"
+              />
+              <Type muted small>
+                Linked from the New Client sheet so operators can set up an
+                OAuth client with this provider themselves.
               </Type>
             </Stack>
 

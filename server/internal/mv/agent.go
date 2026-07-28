@@ -10,6 +10,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 )
 
@@ -17,11 +18,14 @@ import (
 // agent.GetAgentPluginSet into the tool-agnostic marketplaces + plugins view
 // the agent endpoint returns.
 //
-// For every published marketplace in the org it emits the marketplace and its
+// For every marketplace the query returns it emits the marketplace and its
 // always-required observability plugin, then layers on the user's assigned
-// plugins (the non-null plugin rows). Rows arrive grouped by project
-// (`ORDER BY pr.id, p.slug`), one row per project even when the user has no
-// assignment there (null plugin columns).
+// plugins (the non-null plugin rows). The query already scopes which projects
+// appear — the org's default project always, non-default projects only where the
+// caller has a matching assignment — so this builder emits a marketplace for
+// every row it receives. Rows arrive grouped by project (`ORDER BY pr.id,
+// p.slug`); the default project can still yield one row with null plugin columns
+// when the caller has no assignment there.
 //
 // Each project's marketplace name is resolved the same way the publish path
 // resolves it: the per-project override (project_marketplace_settings) when set,
@@ -83,8 +87,12 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 				row.MarketplaceUpdatedAt.Time.UnixNano(),
 			)
 			// Observability is required on every published marketplace,
-			// independent of assignments.
-			observabilitySlug := naming.ObservabilitySlug(row.OrganizationName)
+			// independent of assignments. The slug must name the plugin as it
+			// exists in the published repo: the hooks rollout gate can pin the
+			// subtree under a pre-rename org name, recorded in the published
+			// hooks config snapshot.
+			hooksOrgName := conv.Default(naming.PublishedHooksOrgName(row.PublishedHooksConfig), row.OrganizationName)
+			observabilitySlug := naming.ObservabilitySlug(hooksOrgName)
 			plugins = append(plugins, &gen.AgentPlugin{
 				Slug:            observabilitySlug,
 				MarketplaceName: name,

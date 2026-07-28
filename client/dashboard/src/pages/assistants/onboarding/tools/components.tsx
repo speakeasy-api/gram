@@ -323,6 +323,7 @@ export function ShowSlackAppGuideComponent({
         webhookUrl: a.webhook_url,
         extraScopes: a.bot_scopes,
         extraBotEvents: a.bot_events,
+        unfurlDomain: window.location.hostname,
       }),
     [a.app_name, a.webhook_url, a.bot_scopes, a.bot_events, assistantName],
   );

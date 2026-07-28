@@ -14,6 +14,8 @@ type AuthContext struct {
 	UserID                string
 	ExternalUserID        string // Customer-provided user identifier (e.g., from chat session JWTs)
 	APIKeyID              string
+	APIKeyName            string // Dashboard-visible key name
+	OrgWidePluginHooksKey bool   // Authenticated key carries the publish-minted hooks token/name marker
 	SessionID             *string
 	ProjectID             *uuid.UUID
 	OrganizationSlug      string

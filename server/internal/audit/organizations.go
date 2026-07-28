@@ -18,6 +18,9 @@ const (
 	ActionOrganizationInviteRoleUpdate Action = "organization_invitation:update_role"
 	ActionOrganizationWebhooksEnabled  Action = "organization:webhooks_enabled"
 	ActionOrganizationWebhooksDisabled Action = "organization:webhooks_disabled"
+
+	ActionOrganizationHooksFailOpenEnabled  Action = "organization:hooks_fail_open_enabled"
+	ActionOrganizationHooksFailOpenDisabled Action = "organization:hooks_fail_open_disabled"
 )
 
 type LogOrganizationInviteCreateEvent struct {
@@ -211,4 +214,49 @@ func (l *Logger) LogOrganizationWebhooksToggled(ctx context.Context, dbtx repo.D
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationWebhooksV1})
+}
+
+type LogOrganizationHooksFailOpenToggledEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	OrganizationName string
+	OrganizationSlug string
+
+	FailOpenEnabled bool
+}
+
+func (l *Logger) LogOrganizationHooksFailOpenToggled(ctx context.Context, dbtx repo.DBTX, event LogOrganizationHooksFailOpenToggledEvent) error {
+	var action Action
+	if event.FailOpenEnabled {
+		action = ActionOrganizationHooksFailOpenEnabled
+	} else {
+		action = ActionOrganizationHooksFailOpenDisabled
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.OrganizationID,
+		SubjectType:        "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
+
+		Metadata:       nil,
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationHooksFailOpenV1})
 }

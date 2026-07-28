@@ -9,7 +9,7 @@ package client
 
 // ListTriggerDefinitionsTriggersPath returns the URL path to the triggers service listTriggerDefinitions HTTP endpoint.
 func ListTriggerDefinitionsTriggersPath() string {
-	return "/rpc/triggers.definitions.list"
+	return "/rpc/triggers.listDefinitions"
 }
 
 // ListTriggerInstancesTriggersPath returns the URL path to the triggers service listTriggerInstances HTTP endpoint.

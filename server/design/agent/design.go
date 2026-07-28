@@ -10,18 +10,32 @@ import (
 // --- Service ---
 
 var _ = Service("agent", func() {
-	Description("Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an org-scoped API key carrying the 'agent' scope.")
+	Description("Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies these endpoints (it implies 'agent_user'), so existing installs keep working during the transition.")
 	Security(security.ByKey, func() {
-		Scope("agent")
+		Scope("agent_user")
 	})
 	shared.DeclareErrorResponses()
 
 	Method("getPlugins", func() {
 		Description("Resolve the marketplaces and plugins assigned to the enrolled user. The device agent reconciles these into whichever AI developer tools it manages (Claude Code today), so each tool's own plugin manager fetches and installs the bundles. The response is tool-agnostic: it names what to install, and each tool's syncer decides how to render it into that tool's native configuration.")
 
+		// Authenticated with an API key carrying the `agent_user` scope — the
+		// per-user key minted by token-exchange, so the enrolled user is the key
+		// owner and the org derives from the key. An org `agent` install key also
+		// passes (it implies `agent_user`; see auth.Authorize), so agents still
+		// on the shared org key keep working during the transition. `email` is
+		// retained as an optional param for the legacy vouched-email path.
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
 		Payload(func() {
 			security.ByKeyPayload()
-			Attribute("email", String, "Email address of the enrolled user. Used to resolve plugin assignments against principal URNs.", func() {
+			// Authoritative when authenticating with an org install key (`agent`
+			// scope): that key's owner is an admin, not the enrolled developer, so
+			// the MDM profile vouches the developer's email here. Ignored for a
+			// per-user key (`agent_user`), whose owner is the enrolled user.
+			Attribute("email", String, "Email address of the enrolled user. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.", func() {
 				Example("dev@acme.corp")
 			})
 			Required("email")
@@ -39,6 +53,28 @@ var _ = Service("agent", func() {
 		Meta("openapi:operationId", "getAgentPlugins")
 		Meta("openapi:extension:x-speakeasy-name-override", "getPlugins")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentPlugins"}`)
+	})
+
+	Method("listSyncedUsers", func() {
+		Description("List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.")
+
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(ListSyncedUsersResult)
+
+		HTTP(func() {
+			GET("/rpc/agent.listSyncedUsers")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listSyncedAgentUsers")
+		Meta("openapi:extension:x-speakeasy-name-override", "listSyncedUsers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SyncedAgentUsers"}`)
 	})
 })
 
@@ -61,4 +97,24 @@ var AgentPluginModel = Type("AgentPlugin", func() {
 	Required("slug", "marketplace_name")
 	Attribute("slug", String, "Plugin slug. Combined with marketplace_name, this identifies the plugin the agent enables in the managed tool.")
 	Attribute("marketplace_name", String, "Name of the marketplace this plugin lives in. Always equals the `name` of one of the marketplaces in the same response.")
+})
+
+var SyncedAgentUserModel = Type("SyncedAgentUser", func() {
+	Required("email", "first_seen_at", "last_seen_at")
+	Attribute("email", String, "Email the device agent reported on sync. Resolve against org members for display.", func() {
+		Example("dev@acme.corp")
+	})
+	Attribute("first_seen_at", String, func() {
+		Description("First time this email was seen syncing the device agent.")
+		Format(FormatDateTime)
+	})
+	Attribute("last_seen_at", String, func() {
+		Description("Most recent time this email was seen syncing the device agent.")
+		Format(FormatDateTime)
+	})
+})
+
+var ListSyncedUsersResult = Type("ListSyncedUsersResult", func() {
+	Required("users")
+	Attribute("users", ArrayOf(SyncedAgentUserModel), "Emails seen syncing the device agent, most recently active first.")
 })

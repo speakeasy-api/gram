@@ -1,8 +1,8 @@
 import { Type } from "@/components/ui/type";
 import { Combobox } from "@/components/ui/combobox";
 import { capitalize } from "@/lib/utils";
-import { ToolsetEntry } from "@gram/client/models/components";
-import { useListToolsets } from "@gram/client/react-query";
+import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useEffect, useMemo } from "react";
 
 export function ToolsetDropdown({

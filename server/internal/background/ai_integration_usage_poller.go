@@ -27,15 +27,19 @@ const (
 
 	// aiUsagePollerCoordinatorRunTimeout is the total budgeted
 	// time for each scheduled coordinator run.
-	aiUsagePollerCoordinatorRunTimeout = 45 * time.Minute
+	aiUsagePollerCoordinatorRunTimeout = 8 * time.Hour
 
 	// aiUsagePollerCoordinatorActivityTimeout is the budget for
 	// short coordinator activities like candidate listing.
 	aiUsagePollerCoordinatorActivityTimeout = 30 * time.Second
 
 	// aiUsagePollerActivityTimeout is the budget for
-	// one provider/config usage poll activity.
-	aiUsagePollerActivityTimeout = 50 * time.Minute
+	// one provider/config usage poll attempt.
+	aiUsagePollerActivityTimeout = 2 * time.Hour
+
+	// aiUsagePollerActivityScheduleToCloseTimeout bounds the full
+	// provider/config usage poll across all Temporal retries.
+	aiUsagePollerActivityScheduleToCloseTimeout = 12 * time.Hour
 
 	// aiUsagePollerCoordinatorChildConcurrency limits how many
 	// provider/config child workflows a coordinator starts per batch.
@@ -44,6 +48,14 @@ const (
 	// aiUsagePollerCoordinatorRetryInitialInterval is the first
 	// backoff delay for short coordinator activity retries.
 	aiUsagePollerCoordinatorRetryInitialInterval = 5 * time.Second
+
+	// aiUsagePollerActivityRetryInitialInterval is the first backoff delay
+	// for provider/config usage poll activity retries.
+	aiUsagePollerActivityRetryInitialInterval = time.Minute
+
+	// aiUsagePollerActivityRetryMaximumInterval caps backoff between
+	// provider/config usage poll activity retries.
+	aiUsagePollerActivityRetryMaximumInterval = 15 * time.Minute
 )
 
 func AIUsagePollerCoordinatorWorkflow(ctx workflow.Context) error {
@@ -78,12 +90,12 @@ func AIUsagePollerCoordinatorWorkflow(ctx workflow.Context) error {
 		batch := make([]runningPoller, 0, len(candidates))
 		for _, candidate := range candidates {
 			childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-				WorkflowID:            buildAIUsagePollerWorkflowID(candidate.OrganizationSlug, candidate.ID, candidate.Provider),
+				WorkflowID:            buildAIUsagePollerWorkflowID(candidate.OrganizationSlug, candidate.SyncID),
 				WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 				WaitForCancellation:   true,
 			})
 
-			child := workflow.ExecuteChildWorkflow(childCtx, AIUsagePollerWorkflow, candidate.ID.String())
+			child := workflow.ExecuteChildWorkflow(childCtx, AIUsagePollerWorkflow, candidate.SyncID.String())
 			if err := child.GetChildWorkflowExecution().Get(ctx, nil); err != nil {
 				if !temporal.IsWorkflowExecutionAlreadyStartedError(err) {
 					return fmt.Errorf("start poller child: %w", err)
@@ -117,39 +129,43 @@ func AIUsagePollerCoordinatorWorkflow(ctx workflow.Context) error {
 	return nil
 }
 
-func AIUsagePollerWorkflow(ctx workflow.Context, configID string) error {
+func AIUsagePollerWorkflow(ctx workflow.Context, input string) error {
 	taskQueue := AIUsagePollerTaskQueue(tenv.TaskQueueName(workflow.GetInfo(ctx).TaskQueueName))
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		TaskQueue:           taskQueue,
-		StartToCloseTimeout: aiUsagePollerActivityTimeout,
-		HeartbeatTimeout:    time.Minute,
+		TaskQueue:              taskQueue,
+		StartToCloseTimeout:    aiUsagePollerActivityTimeout,
+		ScheduleToCloseTimeout: aiUsagePollerActivityScheduleToCloseTimeout,
+		HeartbeatTimeout:       time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts: activities.PollUsageMaxAttempts,
+			MaximumAttempts:    activities.PollUsageMaxAttempts,
+			InitialInterval:    aiUsagePollerActivityRetryInitialInterval,
+			BackoffCoefficient: 2,
+			MaximumInterval:    aiUsagePollerActivityRetryMaximumInterval,
 		},
 	})
 
 	var a *Activities
-	if err := workflow.ExecuteActivity(ctx, a.PollAIData, configID).Get(ctx, nil); err != nil {
+	if err := workflow.ExecuteActivity(ctx, a.PollAIData, input).Get(ctx, nil); err != nil {
 		return fmt.Errorf("poll and persist ai integration usage: %w", err)
 	}
 
 	return nil
 }
 
-func buildAIUsagePollerWorkflowID(organizationSlug string, configID uuid.UUID, provider string) string {
-	return fmt.Sprintf("v1:ai-usage-poller:%s:%s:%s", organizationSlug, configID.String(), provider)
+func buildAIUsagePollerWorkflowID(organizationSlug string, syncID uuid.UUID) string {
+	return fmt.Sprintf("v1:ai-usage-poller:%s:%s", organizationSlug, syncID.String())
 }
 
 type TemporalAIUsagePoller struct {
 	TemporalEnv *tenv.Environment
 }
 
-func (p *TemporalAIUsagePoller) Poll(ctx context.Context, organizationSlug string, configID uuid.UUID, provider string) error {
+func (p *TemporalAIUsagePoller) Poll(ctx context.Context, organizationSlug string, syncID uuid.UUID) error {
 	_, err := p.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:                    buildAIUsagePollerWorkflowID(organizationSlug, configID, provider),
+		ID:                    buildAIUsagePollerWorkflowID(organizationSlug, syncID),
 		TaskQueue:             string(p.TemporalEnv.Queue()),
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-	}, AIUsagePollerWorkflow, configID.String())
+	}, AIUsagePollerWorkflow, syncID.String())
 	return err
 }
 

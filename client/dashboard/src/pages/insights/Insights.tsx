@@ -8,7 +8,7 @@ import { InsightsToolsContent } from "@/components/observe/InsightsTools";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { ObserveTabNav } from "@/components/observe/ObserveTabNav";
-import { useMembers } from "@gram/client/react-query";
+import { useMembers } from "@gram/client/react-query/members.js";
 import { slugify } from "@/lib/constants";
 
 export function InsightsRoot(): JSX.Element {
@@ -78,7 +78,7 @@ export function InsightsEmployeesLayout(): JSX.Element {
 
 export function InsightsHooksPage(): JSX.Element {
   return (
-    <RequireScope scope={["project:read", "project:write"]} level="page">
+    <RequireScope scope="org:admin" level="page">
       <InsightsToolsContent />
     </RequireScope>
   );
@@ -86,7 +86,7 @@ export function InsightsHooksPage(): JSX.Element {
 
 export function InsightsEmployeesPage(): JSX.Element {
   return (
-    <RequireScope scope="project:read" level="page">
+    <RequireScope scope="org:admin" level="page">
       <InsightsEmployeesContent />
     </RequireScope>
   );
@@ -94,7 +94,7 @@ export function InsightsEmployeesPage(): JSX.Element {
 
 export function InsightsEmployeeDetailPage(): JSX.Element {
   return (
-    <RequireScope scope="project:read" level="page">
+    <RequireScope scope="org:admin" level="page">
       <InsightsEmployeeDetailContent />
     </RequireScope>
   );
@@ -103,7 +103,7 @@ export function InsightsEmployeeDetailPage(): JSX.Element {
 export function InsightsAgentsPage(): JSX.Element {
   return (
     <ObservePageShell>
-      <RequireScope scope="project:read" level="page">
+      <RequireScope scope="org:admin" level="page">
         <InsightsAgentsContent />
       </RequireScope>
     </ObservePageShell>

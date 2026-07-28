@@ -19,7 +19,7 @@ WITH latest_user_message AS (
   WHERE chat_messages.chat_id = $2
     AND (chat_messages.project_id IS NULL OR chat_messages.project_id = $3::uuid)
     AND chat_messages.role = 'user'
-  ORDER BY chat_messages.seq DESC
+  ORDER BY chat_messages.created_at DESC, chat_messages.seq DESC
   LIMIT 1
 )
 UPDATE chat_messages
@@ -43,6 +43,34 @@ func (q *Queries) BackfillLatestClaudeUserMessagePromptID(ctx context.Context, a
 	return result.RowsAffected(), nil
 }
 
+const countEmployeesForExternalOrg = `-- name: CountEmployeesForExternalOrg :one
+SELECT COUNT(DISTINCT user_id)::bigint
+FROM user_accounts
+WHERE organization_id = $1
+  AND provider = $2
+  AND external_org_id = $3
+  AND user_id IS NOT NULL
+  AND deleted_at IS NULL
+`
+
+type CountEmployeesForExternalOrgParams struct {
+	OrganizationID string
+	Provider       string
+	ExternalOrgID  pgtype.Text
+}
+
+// Distinct employees (resolved Gram users) ever seen under a provider org. An
+// enterprise org is shared by many employees; a personal org maps to exactly one.
+// A count >= 2 marks the org as the company's enterprise org: accounts under it
+// classify team even when their own email has not resolved, and a resolved work
+// email under a solo org is checked against the work-email guard instead.
+func (q *Queries) CountEmployeesForExternalOrg(ctx context.Context, arg CountEmployeesForExternalOrgParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countEmployeesForExternalOrg, arg.OrganizationID, arg.Provider, arg.ExternalOrgID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const deleteHooksServerNameOverride = `-- name: DeleteHooksServerNameOverride :exec
 DELETE FROM hooks_server_name_overrides
 WHERE id = $1 AND project_id = $2
@@ -56,6 +84,51 @@ type DeleteHooksServerNameOverrideParams struct {
 func (q *Queries) DeleteHooksServerNameOverride(ctx context.Context, arg DeleteHooksServerNameOverrideParams) error {
 	_, err := q.db.Exec(ctx, deleteHooksServerNameOverride, arg.ID, arg.ProjectID)
 	return err
+}
+
+const employeeHasSharedExternalOrg = `-- name: EmployeeHasSharedExternalOrg :one
+SELECT EXISTS (
+  SELECT 1
+  FROM user_accounts mine
+  WHERE mine.organization_id = $1
+    AND mine.provider = $2
+    AND mine.user_id = $3
+    AND mine.deleted_at IS NULL
+    AND mine.external_org_id IS NOT NULL
+    AND mine.external_org_id <> $4
+    AND (
+      SELECT COUNT(DISTINCT peers.user_id)
+      FROM user_accounts peers
+      WHERE peers.organization_id = mine.organization_id
+        AND peers.provider = mine.provider
+        AND peers.external_org_id = mine.external_org_id
+        AND peers.user_id IS NOT NULL
+        AND peers.deleted_at IS NULL
+    ) >= 2
+)::boolean
+`
+
+type EmployeeHasSharedExternalOrgParams struct {
+	OrganizationID string
+	Provider       string
+	UserID         pgtype.Text
+	ExternalOrgID  pgtype.Text
+}
+
+// Whether this employee also appears under a DIFFERENT provider org that is
+// shared by >= 2 employees (i.e. the company's real enterprise org). If so, a
+// solo provider org for the same employee is almost certainly a personal account
+// signed in with their work email, and should not be classified team.
+func (q *Queries) EmployeeHasSharedExternalOrg(ctx context.Context, arg EmployeeHasSharedExternalOrgParams) (bool, error) {
+	row := q.db.QueryRow(ctx, employeeHasSharedExternalOrg,
+		arg.OrganizationID,
+		arg.Provider,
+		arg.UserID,
+		arg.ExternalOrgID,
+	)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const findAssistantToolCallMessageID = `-- name: FindAssistantToolCallMessageID :one
@@ -85,6 +158,138 @@ func (q *Queries) FindAssistantToolCallMessageID(ctx context.Context, arg FindAs
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const getDeviceOwner = `-- name: GetDeviceOwner :one
+SELECT id, organization_id, provider, device_id, linked_user_id, first_seen_at, last_seen_at, created_at, updated_at, deleted_at, deleted FROM device_owners
+WHERE organization_id = $1
+  AND provider = $2
+  AND device_id = $3
+  AND deleted_at IS NULL
+`
+
+type GetDeviceOwnerParams struct {
+	OrganizationID string
+	Provider       string
+	DeviceID       string
+}
+
+func (q *Queries) GetDeviceOwner(ctx context.Context, arg GetDeviceOwnerParams) (DeviceOwner, error) {
+	row := q.db.QueryRow(ctx, getDeviceOwner, arg.OrganizationID, arg.Provider, arg.DeviceID)
+	var i DeviceOwner
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.DeviceID,
+		&i.LinkedUserID,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getProviderOrgBillingMode = `-- name: GetProviderOrgBillingMode :one
+SELECT billing_mode
+FROM ai_integration_configs
+WHERE organization_id = $1
+  AND provider = $2
+  AND enabled = TRUE
+  AND deleted IS FALSE
+  AND billing_mode IS NOT NULL
+  AND (
+    external_organization_id IS NULL
+    OR external_organization_id = ''
+    OR external_organization_id = $3
+  )
+ORDER BY (external_organization_id = $3) DESC NULLS LAST
+LIMIT 1
+`
+
+type GetProviderOrgBillingModeParams struct {
+	OrganizationID string
+	Provider       string
+	ExternalOrgID  pgtype.Text
+}
+
+// Resolves the org-level admin-declared billing mode for a provider org from the
+// org's AI integration config (the org-level tier of the billing-mode cascade).
+// A config scoped to a specific external_organization_id must match the session's
+// provider org; a config with none applies provider-wide. Exact-org matches are
+// preferred over provider-wide (NULLS LAST because the comparison is NULL for a
+// NULL-scoped row, and DESC would otherwise sort NULL ahead of an exact match).
+// Only one live config per (org, provider) can exist today, so the ordering is
+// defensive. Only configs with a non-null billing_mode are considered, so an
+// undeclared org returns no rows (treated as unknown upstream).
+func (q *Queries) GetProviderOrgBillingMode(ctx context.Context, arg GetProviderOrgBillingModeParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getProviderOrgBillingMode, arg.OrganizationID, arg.Provider, arg.ExternalOrgID)
+	var billing_mode pgtype.Text
+	err := row.Scan(&billing_mode)
+	return billing_mode, err
+}
+
+const getUserAccount = `-- name: GetUserAccount :one
+SELECT id, organization_id, user_id, provider, external_org_id, external_account_uuid, external_account_id, email, account_type, billing_mode, plan_type, first_seen_at, last_seen_at, created_at, updated_at, deleted_at, deleted FROM user_accounts
+WHERE organization_id = $1
+  AND provider = $2
+  AND external_account_uuid = $3
+  AND deleted_at IS NULL
+`
+
+type GetUserAccountParams struct {
+	OrganizationID      string
+	Provider            string
+	ExternalAccountUuid string
+}
+
+func (q *Queries) GetUserAccount(ctx context.Context, arg GetUserAccountParams) (UserAccount, error) {
+	row := q.db.QueryRow(ctx, getUserAccount, arg.OrganizationID, arg.Provider, arg.ExternalAccountUuid)
+	var i UserAccount
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.UserID,
+		&i.Provider,
+		&i.ExternalOrgID,
+		&i.ExternalAccountUuid,
+		&i.ExternalAccountID,
+		&i.Email,
+		&i.AccountType,
+		&i.BillingMode,
+		&i.PlanType,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const hasSkillObservationRawHash = `-- name: HasSkillObservationRawHash :one
+SELECT EXISTS (
+  SELECT 1
+  FROM skill_observations so
+  WHERE so.project_id = $1
+    AND so.raw_sha256 = $2
+)::boolean
+`
+
+type HasSkillObservationRawHashParams struct {
+	ProjectID uuid.UUID
+	RawSha256 pgtype.Text
+}
+
+func (q *Queries) HasSkillObservationRawHash(ctx context.Context, arg HasSkillObservationRawHashParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasSkillObservationRawHash, arg.ProjectID, arg.RawSha256)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const insertShadowMCPBlockResult = `-- name: InsertShadowMCPBlockResult :exec
@@ -143,6 +348,78 @@ func (q *Queries) InsertShadowMCPBlockResult(ctx context.Context, arg InsertShad
 		arg.Confidence,
 	)
 	return err
+}
+
+const insertSkillObservation = `-- name: InsertSkillObservation :execrows
+INSERT INTO skill_observations (
+    project_id
+  , idempotency_key
+  , provider
+  , user_id
+  , user_email
+  , hostname
+  , session_id
+  , skill_name
+  , source
+  , source_level
+  , source_path
+  , raw_sha256
+  , seen_at
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+  , $10
+  , $11
+  , $12
+  , $13
+)
+ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL
+DO NOTHING
+`
+
+type InsertSkillObservationParams struct {
+	ProjectID      uuid.UUID
+	IdempotencyKey pgtype.Text
+	Provider       string
+	UserID         pgtype.Text
+	UserEmail      pgtype.Text
+	Hostname       pgtype.Text
+	SessionID      pgtype.Text
+	SkillName      string
+	Source         pgtype.Text
+	SourceLevel    pgtype.Text
+	SourcePath     pgtype.Text
+	RawSha256      pgtype.Text
+	SeenAt         pgtype.Timestamptz
+}
+
+func (q *Queries) InsertSkillObservation(ctx context.Context, arg InsertSkillObservationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertSkillObservation,
+		arg.ProjectID,
+		arg.IdempotencyKey,
+		arg.Provider,
+		arg.UserID,
+		arg.UserEmail,
+		arg.Hostname,
+		arg.SessionID,
+		arg.SkillName,
+		arg.Source,
+		arg.SourceLevel,
+		arg.SourcePath,
+		arg.RawSha256,
+		arg.SeenAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const insertToolCallBlock = `-- name: InsertToolCallBlock :exec
@@ -209,6 +486,36 @@ func (q *Queries) InsertToolCallBlock(ctx context.Context, arg InsertToolCallBlo
 	return err
 }
 
+const linkChatUserAccount = `-- name: LinkChatUserAccount :execrows
+UPDATE chats
+SET user_account_id = $1
+  , updated_at = NOW()
+WHERE id = $2
+  AND project_id = $3
+  AND user_account_id IS NULL
+  AND deleted IS FALSE
+`
+
+type LinkChatUserAccountParams struct {
+	UserAccountID uuid.NullUUID
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+}
+
+// Backfills the chat -> user_accounts link for a session whose chat row was
+// created before account attribution landed. A chat is created once, on the
+// session's first persisted message, so a first prompt that beats the first
+// OTEL export would otherwise leave the chat unlinked forever (and the
+// account-identity risk rules blind to it). Fill-once: never overwrites a
+// link that chat creation or an earlier backfill already set.
+func (q *Queries) LinkChatUserAccount(ctx context.Context, arg LinkChatUserAccountParams) (int64, error) {
+	result, err := q.db.Exec(ctx, linkChatUserAccount, arg.UserAccountID, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const listHooksServerNameOverrides = `-- name: ListHooksServerNameOverrides :many
 SELECT id, raw_server_name, display_name, created_at, updated_at
 FROM hooks_server_name_overrides
@@ -250,6 +557,163 @@ func (q *Queries) ListHooksServerNameOverrides(ctx context.Context, projectID uu
 	return items, nil
 }
 
+const listSkillObservations = `-- name: ListSkillObservations :many
+SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source, source_level, source_path, raw_sha256, seen_at, skill_id, skill_version_id, reconciled_at, metrics_synced_at, efficacy_enqueued_at, reconcile_error_code, created_at
+FROM skill_observations
+WHERE project_id = $1
+ORDER BY seen_at ASC, id ASC
+`
+
+func (q *Queries) ListSkillObservations(ctx context.Context, projectID uuid.UUID) ([]SkillObservation, error) {
+	rows, err := q.db.Query(ctx, listSkillObservations, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SkillObservation
+	for rows.Next() {
+		var i SkillObservation
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.IdempotencyKey,
+			&i.Provider,
+			&i.UserID,
+			&i.UserEmail,
+			&i.Hostname,
+			&i.SessionID,
+			&i.SkillName,
+			&i.Source,
+			&i.SourceLevel,
+			&i.SourcePath,
+			&i.RawSha256,
+			&i.SeenAt,
+			&i.SkillID,
+			&i.SkillVersionID,
+			&i.ReconciledAt,
+			&i.MetricsSyncedAt,
+			&i.EfficacyEnqueuedAt,
+			&i.ReconcileErrorCode,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserAccountsByUsers = `-- name: ListUserAccountsByUsers :many
+SELECT id, user_id, provider, email, account_type, external_org_id, last_seen_at
+FROM user_accounts
+WHERE organization_id = $1
+  AND user_id = ANY($2::text[])
+  AND deleted_at IS NULL
+ORDER BY user_id, account_type DESC, provider, last_seen_at DESC
+`
+
+type ListUserAccountsByUsersParams struct {
+	OrganizationID string
+	UserIds        []string
+}
+
+type ListUserAccountsByUsersRow struct {
+	ID            uuid.UUID
+	UserID        pgtype.Text
+	Provider      string
+	Email         pgtype.Text
+	AccountType   pgtype.Text
+	ExternalOrgID pgtype.Text
+	LastSeenAt    pgtype.Timestamptz
+}
+
+// Returns the linked AI accounts for a set of users within an org. Each
+// (provider, email) row is a distinct account, so a user may have several across
+// providers. Used to attach a per-user accounts breakdown to usage summaries on
+// the employees list. Ordered team-first, then by provider for stable display.
+func (q *Queries) ListUserAccountsByUsers(ctx context.Context, arg ListUserAccountsByUsersParams) ([]ListUserAccountsByUsersRow, error) {
+	rows, err := q.db.Query(ctx, listUserAccountsByUsers, arg.OrganizationID, arg.UserIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserAccountsByUsersRow
+	for rows.Next() {
+		var i ListUserAccountsByUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Provider,
+			&i.Email,
+			&i.AccountType,
+			&i.ExternalOrgID,
+			&i.LastSeenAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const rememberKnownSkillRawHash = `-- name: RememberKnownSkillRawHash :one
+WITH existing_alias AS (
+  SELECT srh.canonical_sha256
+  FROM skill_raw_hashes srh
+  WHERE srh.project_id = $1
+    AND srh.raw_sha256 = $2
+), known_version AS (
+  SELECT MIN(sv.canonical_sha256) AS canonical_sha256
+  FROM skill_versions sv
+  JOIN skills s ON s.id = sv.skill_id
+  WHERE s.project_id = $1
+    AND s.archived_at IS NULL
+    AND sv.raw_sha256 = $2
+    AND NOT EXISTS (SELECT 1 FROM existing_alias)
+  HAVING COUNT(*) = 1
+), inserted AS (
+  INSERT INTO skill_raw_hashes (project_id, raw_sha256, canonical_sha256)
+  SELECT $1, $2, canonical_sha256
+  FROM known_version
+  WHERE canonical_sha256 IS NOT NULL
+  ON CONFLICT (project_id, raw_sha256) DO NOTHING
+  RETURNING canonical_sha256
+), canonical_hash AS (
+  SELECT canonical_sha256 FROM existing_alias
+  UNION ALL
+  SELECT canonical_sha256 FROM inserted
+), resolved AS (
+  SELECT sv.id
+  FROM canonical_hash hash
+  JOIN skills s ON s.project_id = $1
+  JOIN skill_versions sv
+    ON sv.skill_id = s.id
+    AND sv.canonical_sha256 = hash.canonical_sha256
+  WHERE s.archived_at IS NULL
+  LIMIT 2
+)
+SELECT COUNT(*) = 1 AS known
+FROM resolved
+`
+
+type RememberKnownSkillRawHashParams struct {
+	ProjectID uuid.UUID
+	RawSha256 string
+}
+
+func (q *Queries) RememberKnownSkillRawHash(ctx context.Context, arg RememberKnownSkillRawHashParams) (bool, error) {
+	row := q.db.QueryRow(ctx, rememberKnownSkillRawHash, arg.ProjectID, arg.RawSha256)
+	var known bool
+	err := row.Scan(&known)
+	return known, err
+}
+
 const updateClaudeCodeSessionTimestamp = `-- name: UpdateClaudeCodeSessionTimestamp :exec
 UPDATE chats SET updated_at = NOW() WHERE id = $1 AND project_id = $2
 `
@@ -271,6 +735,7 @@ INSERT INTO chats (
   , organization_id
   , user_id
   , external_user_id
+  , user_account_id
   , title
   , created_at
   , updated_at
@@ -282,10 +747,13 @@ VALUES (
     $4,
     $5,
     $6,
+    $7,
     NOW(),
     NOW()
 )
-ON CONFLICT (id) DO UPDATE SET updated_at = NOW()
+ON CONFLICT (id) DO UPDATE SET
+    updated_at = NOW()
+  , user_account_id = COALESCE(EXCLUDED.user_account_id, chats.user_account_id)
 RETURNING id
 `
 
@@ -295,6 +763,7 @@ type UpsertClaudeCodeSessionParams struct {
 	OrganizationID string
 	UserID         pgtype.Text
 	ExternalUserID pgtype.Text
+	UserAccountID  uuid.NullUUID
 	Title          pgtype.Text
 }
 
@@ -305,11 +774,55 @@ func (q *Queries) UpsertClaudeCodeSession(ctx context.Context, arg UpsertClaudeC
 		arg.OrganizationID,
 		arg.UserID,
 		arg.ExternalUserID,
+		arg.UserAccountID,
 		arg.Title,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const upsertDeviceOwner = `-- name: UpsertDeviceOwner :one
+INSERT INTO device_owners (
+    organization_id
+  , provider
+  , device_id
+  , linked_user_id
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+)
+ON CONFLICT (organization_id, provider, device_id) WHERE deleted_at IS NULL
+DO UPDATE SET
+    linked_user_id = COALESCE(EXCLUDED.linked_user_id, device_owners.linked_user_id)
+  , last_seen_at   = clock_timestamp()
+  , updated_at     = clock_timestamp()
+RETURNING linked_user_id
+`
+
+type UpsertDeviceOwnerParams struct {
+	OrganizationID string
+	Provider       string
+	DeviceID       string
+	LinkedUserID   pgtype.Text
+}
+
+// Records (and over time, links to an employee) a per-device anonymous id so a
+// personal account seen on the same device can be attributed to the employee
+// learned from a team session. COALESCE keeps a known owner if a later session
+// arrives without one. Returns the linked employee (NULL until one is learned).
+func (q *Queries) UpsertDeviceOwner(ctx context.Context, arg UpsertDeviceOwnerParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, upsertDeviceOwner,
+		arg.OrganizationID,
+		arg.Provider,
+		arg.DeviceID,
+		arg.LinkedUserID,
+	)
+	var linked_user_id pgtype.Text
+	err := row.Scan(&linked_user_id)
+	return linked_user_id, err
 }
 
 const upsertHooksServerNameOverride = `-- name: UpsertHooksServerNameOverride :one
@@ -337,5 +850,77 @@ func (q *Queries) UpsertHooksServerNameOverride(ctx context.Context, arg UpsertH
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
+	return i, err
+}
+
+const upsertUserAccount = `-- name: UpsertUserAccount :one
+INSERT INTO user_accounts (
+    organization_id
+  , provider
+  , external_account_uuid
+  , user_id
+  , external_org_id
+  , external_account_id
+  , email
+  , account_type
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+)
+ON CONFLICT (organization_id, provider, external_account_uuid) WHERE deleted_at IS NULL
+DO UPDATE SET
+    user_id             = COALESCE(EXCLUDED.user_id, user_accounts.user_id)
+  , external_org_id     = COALESCE(EXCLUDED.external_org_id, user_accounts.external_org_id)
+  , external_account_id = COALESCE(EXCLUDED.external_account_id, user_accounts.external_account_id)
+  , email               = COALESCE(EXCLUDED.email, user_accounts.email)
+  , account_type        = COALESCE(EXCLUDED.account_type, user_accounts.account_type)
+  , last_seen_at        = clock_timestamp()
+  , updated_at          = clock_timestamp()
+RETURNING id, billing_mode
+`
+
+type UpsertUserAccountParams struct {
+	OrganizationID      string
+	Provider            string
+	ExternalAccountUuid string
+	UserID              pgtype.Text
+	ExternalOrgID       pgtype.Text
+	ExternalAccountID   pgtype.Text
+	Email               pgtype.Text
+	AccountType         pgtype.Text
+}
+
+type UpsertUserAccountRow struct {
+	ID          uuid.UUID
+	BillingMode pgtype.Text
+}
+
+// Records the external AI provider account observed for a session, keyed by the
+// provider's stable per-account id. COALESCE on conflict keeps a previously
+// learned owner/email/account_id rather than clobbering it with a null from a
+// later session that lacked that field. The conflict target carries the partial
+// index predicate so it matches user_accounts_org_provider_external_account_uuid_key.
+// billing_mode is intentionally not written here: it is an admin/out-of-band
+// override, never set by ingest. Returning it lets attribution resolve the
+// account-level tier of the billing-mode cascade without a second round trip.
+func (q *Queries) UpsertUserAccount(ctx context.Context, arg UpsertUserAccountParams) (UpsertUserAccountRow, error) {
+	row := q.db.QueryRow(ctx, upsertUserAccount,
+		arg.OrganizationID,
+		arg.Provider,
+		arg.ExternalAccountUuid,
+		arg.UserID,
+		arg.ExternalOrgID,
+		arg.ExternalAccountID,
+		arg.Email,
+		arg.AccountType,
+	)
+	var i UpsertUserAccountRow
+	err := row.Scan(&i.ID, &i.BillingMode)
 	return i, err
 }

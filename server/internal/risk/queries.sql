@@ -21,6 +21,7 @@ INSERT INTO risk_policies (
   , user_message
   , prompt
   , model_config
+  , score
   , version
 )
 VALUES (
@@ -45,6 +46,7 @@ VALUES (
   , @user_message
   , sqlc.narg(prompt)::text
   , sqlc.narg(model_config)::jsonb
+  , COALESCE(sqlc.narg(score)::double precision, 5.0)
   , 1
 )
 RETURNING *;
@@ -103,6 +105,8 @@ SET name = @name
   , user_message = @user_message
   , prompt = sqlc.narg(prompt)::text
   , model_config = sqlc.narg(model_config)::jsonb
+  -- Descriptive severity: preserve on omit, never contributes to the version bump.
+  , score = COALESCE(sqlc.narg(score)::double precision, score)
   , version = CASE
       WHEN sources IS DISTINCT FROM @sources
         OR presidio_entities IS DISTINCT FROM @presidio_entities
@@ -223,6 +227,164 @@ SET target_label = EXCLUDED.target_label
   , updated_at = clock_timestamp()
 RETURNING *;
 
+-- name: UpsertRiskPolicyChallenge :one
+-- Records (or refreshes) a warn/challenge for a (user, policy, tool). Never
+-- stores the raw matched value. A live acknowledgement is preserved so a
+-- re-scan does not wipe a still-valid ack before the agent retries.
+INSERT INTO risk_policy_challenges (
+    id
+  , organization_id
+  , project_id
+  , risk_policy_id
+  , user_id
+  , tool_name
+  , call_fingerprint
+  , status
+  , policy_name
+  , entity
+  , rule_id
+  , challenged_at
+)
+VALUES (
+    @id
+  , @organization_id
+  , @project_id
+  , @risk_policy_id
+  , @user_id
+  , sqlc.narg(tool_name)::text
+  , sqlc.narg(call_fingerprint)::text
+  , 'challenged'
+  , sqlc.narg(policy_name)::text
+  , sqlc.narg(entity)::text
+  , sqlc.narg(rule_id)::text
+  , clock_timestamp()
+)
+ON CONFLICT (project_id, user_id, risk_policy_id, tool_name, call_fingerprint)
+WHERE deleted IS FALSE
+DO UPDATE
+SET status = CASE
+      WHEN risk_policy_challenges.status = 'acknowledged'
+        AND risk_policy_challenges.expires_at IS NOT NULL
+        AND risk_policy_challenges.expires_at > clock_timestamp()
+      THEN risk_policy_challenges.status
+      ELSE 'challenged'
+    END
+  , policy_name = EXCLUDED.policy_name
+  , entity = EXCLUDED.entity
+  , rule_id = EXCLUDED.rule_id
+  , challenged_at = CASE
+      WHEN risk_policy_challenges.status = 'acknowledged'
+        AND risk_policy_challenges.expires_at IS NOT NULL
+        AND risk_policy_challenges.expires_at > clock_timestamp()
+      THEN risk_policy_challenges.challenged_at
+      ELSE clock_timestamp()
+    END
+  , updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: MarkRiskPolicyChallengeAcknowledged :one
+-- Self-service redeem: mark the challenge acknowledged with a remember-until
+-- expiry. Upserts so a redeem that beats the async challenge insert still works.
+INSERT INTO risk_policy_challenges (
+    id
+  , organization_id
+  , project_id
+  , risk_policy_id
+  , user_id
+  , tool_name
+  , call_fingerprint
+  , status
+  , policy_name
+  , challenged_at
+  , acknowledged_at
+  , expires_at
+)
+VALUES (
+    @id
+  , @organization_id
+  , @project_id
+  , @risk_policy_id
+  , @user_id
+  , sqlc.narg(tool_name)::text
+  , sqlc.narg(call_fingerprint)::text
+  , 'acknowledged'
+  , sqlc.narg(policy_name)::text
+  , clock_timestamp()
+  , clock_timestamp()
+  , @expires_at
+)
+ON CONFLICT (project_id, user_id, risk_policy_id, tool_name, call_fingerprint)
+WHERE deleted IS FALSE
+DO UPDATE
+SET status = 'acknowledged'
+  , acknowledged_at = clock_timestamp()
+  , expires_at = EXCLUDED.expires_at
+  , policy_name = COALESCE(EXCLUDED.policy_name, risk_policy_challenges.policy_name)
+  , updated_at = clock_timestamp()
+-- A decline is final for this challenge: never resurrect a declined row into an
+-- acknowledgement (e.g. a leaked/un-evicted token redeemed after decline). A
+-- genuine re-challenge (UpsertRiskPolicyChallenge) resets declined -> challenged
+-- first, after which acknowledgement can proceed. When this predicate is false
+-- the update is a no-op and RETURNING yields no rows (ErrNoRows), which the
+-- caller maps to a "declined" client error.
+WHERE risk_policy_challenges.status <> 'declined'
+RETURNING *;
+
+-- name: MarkRiskPolicyChallengeDeclined :one
+-- Self-service decline: mark the challenge declined and never grant an ack
+-- window. Upserts so a decline that beats the async challenge insert still works.
+INSERT INTO risk_policy_challenges (
+    id
+  , organization_id
+  , project_id
+  , risk_policy_id
+  , user_id
+  , tool_name
+  , call_fingerprint
+  , status
+  , policy_name
+  , challenged_at
+)
+VALUES (
+    @id
+  , @organization_id
+  , @project_id
+  , @risk_policy_id
+  , @user_id
+  , sqlc.narg(tool_name)::text
+  , sqlc.narg(call_fingerprint)::text
+  , 'declined'
+  , sqlc.narg(policy_name)::text
+  , clock_timestamp()
+)
+ON CONFLICT (project_id, user_id, risk_policy_id, tool_name, call_fingerprint)
+WHERE deleted IS FALSE
+DO UPDATE
+SET status = 'declined'
+  , acknowledged_at = NULL
+  , expires_at = NULL
+  , policy_name = COALESCE(EXCLUDED.policy_name, risk_policy_challenges.policy_name)
+  , updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: GetActiveRiskPolicyAck :one
+-- Hook-time gate: is there a live acknowledgement for this concrete call
+-- (user, policy, tool, call_fingerprint)? The agent retries with NO token, so
+-- this table lookup — not the cache token — is what allows the retry through.
+-- Scoped by call_fingerprint so only an identical retry clears, not any
+-- same-tool call under the policy.
+SELECT *
+FROM risk_policy_challenges
+WHERE project_id = @project_id
+  AND user_id = @user_id
+  AND risk_policy_id = @risk_policy_id
+  AND tool_name IS NOT DISTINCT FROM sqlc.narg(tool_name)::text
+  AND call_fingerprint IS NOT DISTINCT FROM sqlc.narg(call_fingerprint)::text
+  AND status = 'acknowledged'
+  AND expires_at IS NOT NULL
+  AND expires_at > clock_timestamp()
+  AND deleted IS FALSE;
+
 -- name: ListRiskPolicyBypassRequests :many
 SELECT *
 FROM risk_policy_bypass_requests
@@ -341,16 +503,25 @@ JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND r
 WHERE rr.project_id = @project_id
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL;
 
--- name: GetRiskOverviewCounts :one
+-- name: CountRiskResultsByProjectAndPolicy :one
+-- Matches the filter semantics of ListRiskResultsByProjectAndPolicy: a
+-- disabled policy still counts its historical findings, only deleted policies
+-- are excluded.
+SELECT COUNT(*)::BIGINT
+FROM risk_results rr
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
+WHERE rr.project_id = @project_id
+  AND rr.risk_policy_id = @risk_policy_id
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL;
+
+-- name: GetRiskOverviewScanCounts :one
+-- messages_scanned counts every scanned message in the window regardless of
+-- found state. chat_message_id is NOT NULL with a FK to chat_messages, so the
+-- old JOIN was lossless — dropping it lets this be an index-only distinct on
+-- risk_results_project_created_msg_idx (project_id, created_at, chat_message_id).
+-- active_policies is a cheap scalar subquery, folded in here to save a round trip.
 SELECT
     COUNT(DISTINCT rr.chat_message_id)::BIGINT AS messages_scanned
-  , (COUNT(*) FILTER (
-      WHERE rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-    ))::BIGINT AS findings
-  , (COUNT(DISTINCT cm.chat_id) FILTER (
-      WHERE rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-        AND cm.chat_id IS NOT NULL
-    ))::BIGINT AS flagged_sessions
   , (
       SELECT COUNT(*)::BIGINT
       FROM risk_policies active_rp
@@ -359,10 +530,26 @@ SELECT
         AND deleted IS FALSE
     ) AS active_policies
 FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
 WHERE rr.project_id = @project_id
   AND rr.created_at >= @from_time
   AND rr.created_at < @to_time;
+
+-- name: GetRiskOverviewFindingCounts :one
+-- findings + flagged_sessions over the live-found subset. Pushing the found
+-- predicate into WHERE lets the partial risk_results_project_found_idx serve the
+-- scan, so the JOIN to chat_messages only touches found rows instead of every
+-- scanned row. COUNT(DISTINCT cm.chat_id) already skips NULL chat_ids.
+SELECT
+    COUNT(*)::BIGINT AS findings
+  , COUNT(DISTINCT cm.chat_id)::BIGINT AS flagged_sessions
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+WHERE rr.project_id = @project_id
+  AND rr.created_at >= @from_time
+  AND rr.created_at < @to_time
+  AND rr.found IS TRUE
+  AND rr.excluded_at IS NULL
+  AND rr.false_positive_at IS NULL;
 
 -- name: ListRiskOverviewTopRules :many
 -- Project-wide finding counts grouped by rule_id within a window.
@@ -655,10 +842,95 @@ WHERE id = ANY(@message_ids::uuid[])
   AND project_id = @project_id;
 
 -- name: GetMessageContentBatch :many
-SELECT id, role, content, tool_calls
-FROM chat_messages
-WHERE id = ANY(@ids::uuid[])
-  AND project_id = @project_id;
+-- The scanned user's id rides along so the LLM judge's completion telemetry
+-- can attribute scanning volume to whose traffic was analyzed. Same
+-- attribution rule as ListRiskOverviewTopUsers: the message's own user_id
+-- wins, the chat owner's is the fallback — and a soft-deleted chat's owner
+-- never is (LEFT JOIN so the message still gets scanned, just unattributed).
+--
+-- created_at bounds the shadow-MCP scanner's ClickHouse provenance lookup to
+-- the batch's own time range, keeping that query on the telemetry table's
+-- time-ordered primary key instead of scanning the full retention window.
+--
+-- source names the agent that recorded the message (Codex, Cursor, the ingest
+-- adapter, ...). The shadow-MCP scanner attributes its provenance-resolution
+-- metric to it, which is the one attribution available when the call resolved
+-- to no telemetry row at all — precisely the population that metric exists to
+-- measure.
+SELECT cm.id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.source,
+  COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id
+FROM chat_messages cm
+LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+WHERE cm.id = ANY(@ids::uuid[])
+  AND cm.project_id = @project_id;
+
+-- name: GetBatchChatIdentities :many
+-- One row per chat represented in a batch of messages, for the session-scoped
+-- account_identity scanner: the chat's earliest in-batch message (UUIDv7
+-- order = creation order, the message the finding attaches to) plus the
+-- chat's AI-account identity from personal-account tracking (NULL
+-- account_type/email for unattributed chats — the scanner emits nothing for
+-- those).
+--
+-- flagged_rule_ids carries the account_identity rules already recorded for
+-- the chat at this policy version on messages OUTSIDE the batch; the scanner
+-- drops those rules and emits only the rest, so session-scoped findings
+-- dedupe to one per chat PER RULE per policy version. Dedupe must be
+-- rule-scoped, not chat-scoped: identity fields arrive incrementally (an
+-- account can be classified personal before its email is known, and vice
+-- versa), so a later batch can legitimately fire a rule the first batch could
+-- not evaluate yet. Findings on in-batch messages do not block re-emission
+-- because the writer deletes and re-inserts results for the batch's messages.
+SELECT earliest_message_id, chat_id, account_type, email, flagged_rule_ids
+FROM (
+  SELECT DISTINCT ON (cm.chat_id)
+      cm.id AS earliest_message_id
+    , cm.chat_id
+    , ua.account_type
+    , ua.email
+    , (
+        SELECT COALESCE(array_agg(DISTINCT rr.rule_id), '{}')
+        FROM risk_results rr
+        JOIN chat_messages prior ON prior.id = rr.chat_message_id
+        WHERE rr.project_id = @project_id::uuid
+          AND rr.risk_policy_id = @risk_policy_id
+          AND rr.risk_policy_version = @risk_policy_version
+          AND rr.source = 'account_identity'
+          AND rr.found IS TRUE
+          AND rr.rule_id IS NOT NULL
+          AND prior.chat_id = cm.chat_id
+          AND rr.chat_message_id != ALL(@ids::uuid[])
+      )::text[] AS flagged_rule_ids
+  FROM chat_messages cm
+  JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.deleted IS FALSE
+  WHERE cm.id = ANY(@ids::uuid[])
+    AND cm.project_id = @project_id::uuid
+  ORDER BY cm.chat_id, cm.id ASC
+) batch_chats
+ORDER BY earliest_message_id ASC;
+
+-- name: RefreshAccountIdentityFindingMatch :execrows
+-- Enriches an already-recorded account_identity finding in place once identity
+-- fields that were unknown at first analysis arrive — e.g. a personal account
+-- classified before its email was known. Session-scoped findings dedupe per
+-- rule (GetBatchChatIdentities.flagged_rule_ids), so a later batch's richer
+-- finding is dropped rather than inserted; without this the original row keeps
+-- its empty match and generic description forever. Restricted to rows whose
+-- match is still empty so it is idempotent and never clobbers a finding that
+-- already carries its detail.
+UPDATE risk_results rr
+SET description = @description, match = @match
+FROM chat_messages cm
+WHERE rr.chat_message_id = cm.id
+  AND cm.chat_id = @chat_id::uuid
+  AND rr.project_id = @project_id::uuid
+  AND rr.risk_policy_id = @risk_policy_id
+  AND rr.risk_policy_version = @risk_policy_version
+  AND rr.source = 'account_identity'
+  AND rr.rule_id = @rule_id
+  AND rr.found IS TRUE
+  AND (rr.match IS NULL OR rr.match = '');
 
 -- name: InsertRiskResults :copyfrom
 INSERT INTO risk_results (
@@ -706,6 +978,21 @@ WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
   AND chat_message_id = ANY(@message_ids::uuid[]);
 
+-- name: GetRiskResultByID :one
+-- Single-row lookup backing risk.results.unmask: fetch a result's raw match
+-- plus its owning chat_id so the caller can authorize a chat:read check
+-- before returning the plaintext. Applies the same found/excluded/
+-- false-positive filters as every other risk_results read so a stale result
+-- id (excluded or swept as noise since it was listed) can't be unmasked.
+SELECT rr.id, rr.match, rr.source, cm.chat_id
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+WHERE rr.id = @id
+  AND rr.project_id = @project_id
+  AND rr.found IS TRUE
+  AND rr.excluded_at IS NULL
+  AND rr.false_positive_at IS NULL;
+
 -- name: ListRiskResultsByProjectFound :many
 -- Sort by the underlying chat message's created_at (the event time), NOT
 -- rr.created_at (the scan time). The background drain workflow analyzes
@@ -721,20 +1008,29 @@ WHERE risk_policy_id = @risk_policy_id
 -- (risk_policy_id, rule_id, match), choosing the most recent occurrence. Done
 -- inside a subquery so pagination over the deduped stream stays correct
 -- (client-side dedup over paged data broke "Load more").
+--
+-- @policy_id is optional. When NULL only enabled policies are considered (the
+-- default project-wide view). When set the results are scoped to that policy
+-- AND disabled-but-not-deleted policies are included, so explicitly filtering
+-- to a policy still surfaces its historical findings after it was turned off.
+--
+-- @assistant_id scopes results to chats linked to that assistant (live
+-- assistant_threads row); @non_assistant instead restricts to chats with no
+-- assistant link at all.
 SELECT
     sub.id, sub.project_id, sub.organization_id, sub.risk_policy_id,
     sub.risk_policy_version, sub.chat_message_id, sub.source, sub.found,
     sub.rule_id, sub.description, sub.match, sub.start_pos, sub.end_pos,
     sub.confidence, sub.tags, sub.spans, sub.dead_letter_reason, sub.created_at,
     sub.chat_id, sub.message_created_at, sub.chat_title, sub.chat_user_id,
-    sub.block_id
+    sub.block_id, sub.replayed
 FROM (
   SELECT
       rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id,
       rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found,
       rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos,
       rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.created_at,
-      cm.chat_id, cm.created_at AS message_created_at,
+      cm.chat_id, cm.created_at AS message_created_at, cm.replayed,
       c.title AS chat_title, c.external_user_id AS chat_user_id,
       COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id,
       CASE
@@ -747,7 +1043,8 @@ FROM (
   FROM risk_results rr
   JOIN chat_messages cm ON cm.id = rr.chat_message_id
   LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
-  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
+    AND (rp.enabled IS TRUE OR rr.risk_policy_id = sqlc.narg(policy_id)::uuid)
   LEFT JOIN LATERAL (
     SELECT tcb.id AS block_id FROM tool_call_blocks tcb
     WHERE tcb.project_id = rr.project_id
@@ -757,10 +1054,20 @@ FROM (
   ) blk ON TRUE
   WHERE rr.project_id = @project_id
     AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+    AND (sqlc.narg(policy_id)::uuid IS NULL OR rr.risk_policy_id = sqlc.narg(policy_id)::uuid)
     AND (sqlc.narg(from_time)::timestamptz IS NULL OR cm.created_at >= sqlc.narg(from_time)::timestamptz)
     AND (sqlc.narg(to_time)::timestamptz IS NULL OR cm.created_at < sqlc.narg(to_time)::timestamptz)
     AND (@rule_id::text = '' OR rr.rule_id ILIKE '%' || @rule_id::text || '%')
     AND (@user_id::text = '' OR c.external_user_id ILIKE '%' || @user_id::text || '%')
+    AND (NOT @non_assistant::boolean OR NOT EXISTS (
+      SELECT 1 FROM assistant_threads at
+      WHERE at.chat_id = cm.chat_id AND at.deleted IS FALSE
+    ))
+    AND (sqlc.narg(assistant_id)::uuid IS NULL OR EXISTS (
+      SELECT 1 FROM assistant_threads at
+      WHERE at.chat_id = cm.chat_id AND at.deleted IS FALSE
+        AND at.assistant_id = sqlc.narg(assistant_id)::uuid
+    ))
     AND (@category::text = '' OR (
     CASE
       WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
@@ -818,11 +1125,16 @@ ORDER BY sub.message_created_at DESC, sub.id DESC
 LIMIT @page_limit;
 
 -- name: ListRiskResultsByProjectAndPolicy :many
+-- Unlike the other list queries, this does NOT require the policy to be
+-- enabled. When the user explicitly filters to a specific policy we surface its
+-- historical findings even after it has been turned off, so disabled policies
+-- still show the matches they produced while active. Deleted policies remain
+-- excluded. The frontend flags the inactive policy as historical data.
 SELECT rr.*, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
 LEFT JOIN LATERAL (
   SELECT tcb.id AS block_id FROM tool_call_blocks tcb
   WHERE tcb.project_id = rr.project_id
@@ -841,7 +1153,7 @@ ORDER BY cm.created_at DESC, rr.id DESC
 LIMIT @page_limit;
 
 -- name: ListRiskResultsByChatFound :many
-SELECT rr.*, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
+SELECT rr.*, cm.chat_id, cm.created_at AS message_created_at, cm.replayed, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -882,11 +1194,13 @@ ORDER BY cm.chat_id DESC
 LIMIT @page_limit;
 
 -- name: ListEnabledEnforcingPoliciesByProject :many
+-- Enforcing actions are block (hard deny) and warn (challenge: deny + ack link,
+-- allowed after acknowledgement). flag is non-enforcing and excluded.
 SELECT *
 FROM risk_policies
 WHERE project_id = @project_id
   AND enabled IS TRUE
-  AND action = 'block'
+  AND action IN ('block', 'warn')
   AND deleted IS FALSE;
 
 -- name: GetProjectFlagGroups :one
@@ -1180,3 +1494,99 @@ RETURNING tool_call_blocks.id, tool_call_blocks.project_id, tool_call_blocks.rea
   tool_call_blocks.feedback, tool_call_blocks.created_at,
   COALESCE((SELECT rp.name FROM risk_policies rp WHERE rp.id = tool_call_blocks.risk_policy_id AND rp.deleted IS FALSE), '')::text AS policy_name;
 
+
+-- name: UpsertRiskPolicyEvalReview :one
+-- Records (or replaces) the current reviewer's ground-truth verdict for one
+-- chat session under a prompt-based policy. Scoped to project_id. Upserts on the
+-- active-row unique key so a reviewer has at most one verdict per session.
+INSERT INTO risk_policy_eval_reviews (
+  project_id, organization_id, risk_policy_id, risk_policy_version, chat_id, verdict, reviewed_by
+) VALUES (
+  @project_id, @organization_id, @risk_policy_id, @risk_policy_version, @chat_id, @verdict, @reviewed_by
+)
+ON CONFLICT (project_id, risk_policy_id, chat_id, reviewed_by) WHERE deleted IS FALSE
+DO UPDATE SET
+  verdict = EXCLUDED.verdict,
+  risk_policy_version = EXCLUDED.risk_policy_version,
+  updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: RiskEvalChatBelongsToProject :one
+SELECT EXISTS (
+  SELECT 1
+  FROM chats
+  WHERE id = @chat_id
+    AND project_id = @project_id
+    AND deleted IS FALSE
+);
+
+-- name: ListRiskPolicyEvalReviews :many
+-- The active regression set for a policy: every reviewer's current verdicts.
+-- Scoped to project_id.
+SELECT *
+FROM risk_policy_eval_reviews
+WHERE project_id = @project_id
+  AND risk_policy_id = @risk_policy_id
+  AND deleted IS FALSE
+ORDER BY created_at DESC;
+
+-- name: SoftDeleteRiskPolicyEvalReview :one
+-- Removes the current reviewer's verdict for one session (the toggle-off path).
+-- Scoped to project_id and reviewed_by so a reviewer only clears their own row.
+UPDATE risk_policy_eval_reviews
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND risk_policy_id = @risk_policy_id
+  AND chat_id = @chat_id
+  AND reviewed_by = @reviewed_by
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: ListUserEmailsByIDs :many
+-- Display-email lookup for the ClickHouse-backed overview top-users list,
+-- tenant-bound through org membership so a caller can never resolve emails of
+-- users outside its organization. Soft-deleted memberships are intentionally
+-- included: findings from since-removed org members keep a resolvable email,
+-- mirroring the Postgres overview query's unconditional users join.
+SELECT u.id, u.email
+FROM users u
+JOIN organization_user_relationships our
+  ON our.user_id = u.id
+  AND our.organization_id = @organization_id
+WHERE u.id = ANY(@ids::text[]);
+
+-- name: GetChatMessageAttribution :many
+-- Resolves the denormalized attribution (chat id, user ids) the ClickHouse
+-- finding writer stamps on risk_findings rows at ingest. Message-level ids win
+-- over chat-level ids; both empty and NULL collapse to ''.
+SELECT
+    cm.id
+  , cm.chat_id
+  , COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id
+  , COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
+FROM chat_messages cm
+LEFT JOIN chats c
+  ON c.id = cm.chat_id
+  AND c.deleted IS FALSE
+WHERE cm.id = ANY(@ids::uuid[]);
+
+-- name: CreateChatForTest :one
+INSERT INTO chats (project_id, organization_id, user_id, external_user_id)
+VALUES (@project_id, @organization_id, @user_id, @external_user_id)
+RETURNING id;
+
+-- name: CreateChatMessageForTest :one
+INSERT INTO chat_messages (chat_id, project_id, role, content, user_id, external_user_id)
+VALUES (@chat_id, @project_id, 'user', @content, @user_id, @external_user_id)
+RETURNING id;
+
+-- name: SetRiskResultExcludedForTest :exec
+UPDATE risk_results
+SET excluded_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: SetRiskResultFalsePositiveForTest :exec
+UPDATE risk_results
+SET false_positive_at = clock_timestamp()
+WHERE id = @id;

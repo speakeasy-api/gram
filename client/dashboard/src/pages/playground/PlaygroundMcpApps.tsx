@@ -1,7 +1,7 @@
 import { Type } from "@/components/ui/type";
 import type { Toolset } from "@/lib/toolTypes";
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
-import { ToolFallback } from "@gram-ai/elements";
+import { ToolFallback } from "@/elements";
 import { useQuery } from "@tanstack/react-query";
 import { LoaderCircle } from "lucide-react";
 import {

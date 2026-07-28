@@ -7,7 +7,7 @@ import { OpenApiSourceInput } from "../OpenApiSourceInput";
 import { Type } from "../ui/type";
 import { useStep } from "./step/use-step";
 import { useStepper } from "./stepper/use-stepper";
-import type { UploadOpenAPIv3Result } from "@gram/client/models/components";
+import type { UploadOpenAPIv3Result } from "@gram/client/models/components/uploadopenapiv3result.js";
 
 export default function UploadFileStep(): JSX.Element {
   const project = useProject();

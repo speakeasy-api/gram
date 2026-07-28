@@ -20,7 +20,7 @@ reviews:
   auto_approve: disabled
   ignore:
     files:
-      - client/sdk/**/*
+      - client/dashboard/src/sdk/**/*
       - server/gen/**/*
       - "**/repo/*.go"
       - .changesets/*

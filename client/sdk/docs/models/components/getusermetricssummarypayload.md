@@ -1,0 +1,27 @@
+# GetUserMetricsSummaryPayload
+
+Payload for getting user-level metrics summary
+
+## Example Usage
+
+```typescript
+import { GetUserMetricsSummaryPayload } from "@gram/client/models/components/getusermetricssummarypayload.js";
+
+let value: GetUserMetricsSummaryPayload = {
+  from: new Date("2025-12-19T10:00:00Z"),
+  to: new Date("2025-12-19T11:00:00Z"),
+};
+```
+
+## Fields
+
+| Field            | Type                                                                                          | Required           | Description                                                                                       | Example              |
+| ---------------- | --------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------- | -------------------- |
+| `accountType`    | _string_                                                                                      | :heavy_minus_sign: | Optional account type filter ('team' or 'personal')                                               |                      |
+| `eventSource`    | _string_                                                                                      | :heavy_minus_sign: | Optional event source filter (e.g. 'hook')                                                        |                      |
+| `externalOrgId`  | _string_                                                                                      | :heavy_minus_sign: | Optional filter to a single AI account by its provider org id; scopes metrics to that one account |                      |
+| `externalUserId` | _string_                                                                                      | :heavy_minus_sign: | External user ID to get metrics for (mutually exclusive with user_id)                             |                      |
+| `from`           | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark: | Start time in ISO 8601 format                                                                     | 2025-12-19T10:00:00Z |
+| `hookSource`     | _string_                                                                                      | :heavy_minus_sign: | Optional hook source filter (e.g. 'cursor', 'claude-code')                                        |                      |
+| `to`             | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark: | End time in ISO 8601 format                                                                       | 2025-12-19T11:00:00Z |
+| `userId`         | _string_                                                                                      | :heavy_minus_sign: | User ID to get metrics for (mutually exclusive with external_user_id)                             |                      |

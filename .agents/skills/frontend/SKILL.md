@@ -1,10 +1,9 @@
 ---
 name: frontend
-description: Rules and best practices when working on the dashboard and elements React frontend codebases
+description: Rules and best practices when working on the dashboard React frontend codebase (including the inlined Gram Elements code)
 metadata:
   relevant_files:
     - "client/dashboard/**"
-    - "elements/**"
 ---
 
 ## React & Frontend Coding Guidelines
@@ -13,22 +12,22 @@ metadata:
 
 Use `pnpm` package scripts for frontend checks. From the repo root, prefer `pnpm -F <package> <script>` so commands run against the right frontend package without `cd`. Do not run `npm exec`, `npx`, bare `vitest`, bare `eslint`, bare `oxfmt`, or bare `tsc` unless you are debugging the package script itself.
 
-| Need                | Dashboard                       | Elements                                | Whole workspace                             |
-| ------------------- | ------------------------------- | --------------------------------------- | ------------------------------------------- |
-| Package lint gate   | `pnpm -F dashboard lint`        | `pnpm -F @gram-ai/elements lint`        | `pnpm lint`                                 |
-| Type-check only     | `pnpm -F dashboard type-check`  | `pnpm -F @gram-ai/elements type-check`  | `pnpm type-check`                           |
-| Tests once          | `pnpm -F dashboard test`        | `pnpm -F @gram-ai/elements test`        | Run the touched package's `pnpm test`       |
-| Tests in watch mode | `pnpm -F dashboard test:watch`  | `pnpm -F @gram-ai/elements test:watch`  | Run the touched package's `pnpm test:watch` |
-| ESLint only         | `pnpm -F dashboard lint:eslint` | `pnpm -F @gram-ai/elements lint:eslint` | Run the touched package's script            |
-| Format check only   | `pnpm -F dashboard lint:format` | `pnpm -F @gram-ai/elements lint:format` | Run the touched package's script            |
+| Need                | Dashboard                       | Whole workspace                             |
+| ------------------- | ------------------------------- | ------------------------------------------- |
+| Package lint gate   | `pnpm -F dashboard lint`        | `pnpm lint`                                 |
+| Type-check only     | `pnpm -F dashboard type-check`  | `pnpm type-check`                           |
+| Tests once          | `pnpm -F dashboard test`        | Run the touched package's `pnpm test`       |
+| Tests in watch mode | `pnpm -F dashboard test:watch`  | Run the touched package's `pnpm test:watch` |
+| ESLint only         | `pnpm -F dashboard lint:eslint` | Run the touched package's script            |
+| Format check only   | `pnpm -F dashboard lint:format` | Run the touched package's script            |
 
 For small edits, run the narrowest package script that proves the change. For shared or cross-package frontend changes, run the root `pnpm lint` and `pnpm type-check` scripts.
 
 ### General Guidelines
 
 - Use the `pnpm` package manager
-- When interacting with the server, prefer the `@gram/sdk` package (sourced from workspace at `./client/sdk`)
-- The document `client/sdk/REACT_QUERY.md` is very helpful for understanding how to use React Query hooks that come with the SDK.
+- When interacting with the server, use the `@gram/client` package (this is an alias to `client/dashboard/src/sdk/src/...`)
+- The document `client/dashboard/src/sdk/REACT_QUERY.md` is very helpful for understanding how to use React Query hooks that come with the SDK.
 - For data fetching and server state, use `@tanstack/react-query` instead of manual `useEffect`/`useState` patterns
 - When invalidating React Query caches after mutations, invalidate ALL relevant query keys — not just the most specific one. Different hooks may use different query key prefixes for the same data (e.g., `queryKeyInstance` vs `toolsets.getBySlug`). Use broad invalidation helpers like `invalidateAllToolset(queryClient)` to ensure all consumers refresh.
 
@@ -421,6 +420,7 @@ The `@/components/ui/link` wrapper sets `target="_blank"` when `external` is tru
 
 ### Editing copy
 
+- **Always use American (US) English spelling in user-visible copy.** Every string the user reads — labels, headings, buttons, tooltips, placeholders, empty states, toasts, error messages — uses American spelling, per the Speakeasy brand style guide. Highest-frequency cases: `color` not `colour`, `canceled`/`canceling` not `cancelled`/`cancelling`, `behavior` not `behaviour`, `license` (noun and verb) not `licence`, `catalog` not `catalogue`, `gray` not `grey`, `center` not `centre`, `analyze` not `analyse`, and `-ize`/`-ization` endings (`organize`, `customize`, `authorization`, `synchronization`) not `-ise`/`-isation`. This applies only to what the user reads — leave code identifiers, API field names, and third-party tokens alone even when they use British spelling (e.g. an upstream `colour` field stays `colour`; only the visible label is Americanized).
 - **Preserve dynamic tokens.** Page subtext often interpolates state like `{rangeLabel}`, `{periodUsage.credits}`, or `{projectName}`. When rewording copy that contains a token, keep the token in place — replace it with the literal current value (e.g. "the last 30 days") only when the data fetch itself is locked to that value. Otherwise the copy starts lying as soon as the user changes a filter.
 - **Don't fight the Tailwind class sorter.** Prettier's `prettier-plugin-tailwindcss` reorders classes on save. Write classes in any order; the formatter will normalize them and the diff stays clean across the codebase.
 - **AI context strings shadow user-visible names.** When renaming a chart or card (e.g. "Most Used LLM Clients" → "Most Used Agents"), search for the old name in nearby `contextInfo=` / `suggestions=` props passed to `ExploreWithAI` / `InsightsConfig`. Those strings are sent to the LLM as analytical context; if they drift from the visible label, the AI assistant talks about a card the user can't see.

@@ -19,6 +19,26 @@ type AiIntegrationConfig struct {
 	ExternalOrganizationID pgtype.Text
 	ApiKeyEncrypted        string
 	Enabled                bool
+	BillingMode            pgtype.Text
 	ID                     uuid.UUID
 	Deleted                bool
+}
+
+type AiIntegrationSync struct {
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	AiIntegrationConfigID uuid.UUID
+	Schedule              string
+	Kind                  string
+	PollWatermarkAt       pgtype.Timestamptz
+	PollCheckpoint        pgtype.Text
+	LastCursorID          pgtype.Text
+	NextPollAfter         pgtype.Timestamptz
+	LastPollError         pgtype.Text
+	LastPollFailedAt      pgtype.Timestamptz
+	LastPollSuccessAt     pgtype.Timestamptz
+	ConsecutiveFailures   int32
+	AutoPausedAt          pgtype.Timestamptz
+	DisabledAt            pgtype.Timestamptz
+	ID                    uuid.UUID
 }

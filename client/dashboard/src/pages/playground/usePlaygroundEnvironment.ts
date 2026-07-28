@@ -1,11 +1,11 @@
 import { useOrganization, useUser } from "@/contexts/Auth";
 import { Toolset } from "@/lib/toolTypes";
+import { useCreateEnvironmentMutation } from "@gram/client/react-query/createEnvironment.js";
 import {
   invalidateAllListEnvironments,
-  useCreateEnvironmentMutation,
   useListEnvironments,
-  useUpdateEnvironmentMutation,
-} from "@gram/client/react-query";
+} from "@gram/client/react-query/listEnvironments.js";
+import { useUpdateEnvironmentMutation } from "@gram/client/react-query/updateEnvironment.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { toast } from "sonner";

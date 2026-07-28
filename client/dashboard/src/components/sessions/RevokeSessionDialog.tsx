@@ -1,8 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { subjectLabel } from "@/lib/user-session-status";
-import { useRevokeUserSessionMutation } from "@gram/client/react-query";
-import type { UserSession } from "@gram/client/models/components";
+import { useRevokeUserSessionMutation } from "@gram/client/react-query/revokeUserSession.js";
+import type { UserSession } from "@gram/client/models/components/usersession.js";
 
 export function RevokeSessionDialog({
   session,

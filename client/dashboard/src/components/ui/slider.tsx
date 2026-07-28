@@ -29,6 +29,7 @@ const Slider = forwardRef<HTMLInputElement, SliderProps>(
     },
     ref,
   ) => {
+    const hasTicks = !!ticks && ticks.length > 0;
     const input = (
       <input
         type="range"
@@ -39,7 +40,11 @@ const Slider = forwardRef<HTMLInputElement, SliderProps>(
         max={max}
         step={step}
         className={cn(
-          "bg-muted relative z-10 h-2 w-full cursor-pointer appearance-none rounded-lg bg-transparent",
+          "relative z-10 h-2 w-full cursor-pointer appearance-none rounded-lg",
+          // The ticks variant draws its own track behind the input, so the
+          // input's own track must stay transparent; otherwise show a solid
+          // track so the thumb sits on a visible line.
+          hasTicks ? "bg-transparent" : "bg-muted",
           "[&::-webkit-slider-thumb]:appearance-none",
           "[&::-webkit-slider-thumb]:w-4",
           "[&::-webkit-slider-thumb]:h-4",

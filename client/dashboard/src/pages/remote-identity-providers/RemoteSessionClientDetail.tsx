@@ -10,11 +10,10 @@ import {
 } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useOrgRoutes } from "@/routes";
-import {
-  useOrganizationRemoteSessionClient,
-  useOrganizationRemoteSessionIssuer,
-} from "@gram/client/react-query/index.js";
+import { useOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
+import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { Link, Navigate, useLocation, useParams } from "react-router";
+import { ScopeBadge } from "./ScopeBadge";
 import { remoteSessionClientDisplayName } from "./clientDisplay";
 import { issuerDisplayName } from "./issuerDisplay";
 import { OverviewTab } from "./tabs/client/OverviewTab";
@@ -91,9 +90,12 @@ export default function RemoteSessionClientDetail(): JSX.Element {
       </Page.Header>
       <Page.Body fullWidth noPadding className="gap-0">
         <DetailHero>
-          <Type small muted>
-            Remote Session Client
-          </Type>
+          <div className="flex items-center gap-3">
+            <Type small muted>
+              Remote Session Client
+            </Type>
+            {client && <ScopeBadge projectScoped={Boolean(client.projectId)} />}
+          </div>
           <Heading variant="h1" className="break-all normal-case">
             {label}
           </Heading>

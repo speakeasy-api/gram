@@ -28,11 +28,9 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryState } from "nuqs";
 import { toast } from "sonner";
-import {
-  useListChats,
-  useRiskSuggestCustomRuleMutation,
-  useRiskTestDetectionRuleMutation,
-} from "@gram/client/react-query/index.js";
+import { useListChats } from "@gram/client/react-query/listChats.js";
+import { useRiskSuggestCustomRuleMutation } from "@gram/client/react-query/riskSuggestCustomRule.js";
+import { useRiskTestDetectionRuleMutation } from "@gram/client/react-query/riskTestDetectionRule.js";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import type { TestDetectionRuleMatch } from "@gram/client/models/components/testdetectionrulematch.js";
 import type { TestDetectionRuleResult } from "@gram/client/models/components/testdetectionruleresult.js";
@@ -54,6 +52,8 @@ import {
   type SeverityLevel,
 } from "./detection-rules-data";
 import { CelExpressionField } from "./cel-field";
+import { CelReferenceSheet } from "./cel-reference";
+import { CelTrafficPreview } from "./cel-traffic-preview";
 import { useCelStatus } from "./use-cel-status";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
 import { getCategoryCodeForFinding } from "./risk-utils";
@@ -72,6 +72,7 @@ const BUILTIN_CATEGORY_ORDER: RuleCategory[] = [
   ...PRESIDIO_CATEGORIES,
   "shadow_mcp",
   "destructive_tool",
+  "account_identity",
   "prompt_injection",
 ];
 
@@ -581,12 +582,16 @@ function CustomRuleDetail({
         </div>
 
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Detection expression</Label>
+          <div className="flex items-center justify-between gap-3">
+            <Label className="text-sm font-medium">Detection expression</Label>
+            <CelReferenceSheet />
+          </div>
           <CelExpressionField
             value={detectionExpr}
             onChange={setDetectionExpr}
             examples={DETECTION_CEL_EXAMPLES}
           />
+          <CelTrafficPreview includeExpr={detectionExpr} mode="detection" />
         </div>
 
         <RulePlayground
@@ -1418,13 +1423,20 @@ function CreateCustomRuleSheet({
               </div>
 
               <div className="space-y-2">
-                <Label className="text-sm font-medium">
-                  Detection expression
-                </Label>
+                <div className="flex items-center justify-between gap-3">
+                  <Label className="text-sm font-medium">
+                    Detection expression
+                  </Label>
+                  <CelReferenceSheet />
+                </div>
                 <CelExpressionField
                   value={detectionExpr}
                   onChange={setDetectionExpr}
                   examples={DETECTION_CEL_EXAMPLES}
+                />
+                <CelTrafficPreview
+                  includeExpr={detectionExpr}
+                  mode="detection"
                 />
               </div>
             </div>

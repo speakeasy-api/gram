@@ -6,6 +6,19 @@ workdir=/var/lib/gram-assistant/work
 sandbox_src=/usr/share/gram/sandbox
 mkdir -p "$workdir"
 
+# The platform may mount an extra CA bundle (e.g. the mkcert root CA during
+# local development) so the runner and its sandbox children trust the Gram
+# server's TLS certificate. Build a combined bundle in /tmp rather than
+# mutating the system trust store, which must stay pristine (and may sit on a
+# read-only root filesystem).
+extra_ca=/usr/local/share/gram/extra-ca.pem
+if [ -f "$extra_ca" ]; then
+  ca_bundle=/tmp/gram-ca-bundle.pem
+  cat /etc/ssl/certs/ca-certificates.crt "$extra_ca" > "$ca_bundle"
+  export SSL_CERT_FILE="$ca_bundle"
+  export NODE_EXTRA_CA_CERTS="$extra_ca"
+fi
+
 # Size-capped tmpfs + read-only bind-mounted deps where mount(2) is permitted;
 # symlink the deps where it is not (the platform supplies the writable workdir).
 if mount -t tmpfs -o size=256m,mode=0755 tmpfs "$workdir" 2>/dev/null; then

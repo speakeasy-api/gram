@@ -202,7 +202,7 @@ To make your changes to be available in the client SDK, regenerate it. This assu
 mise run gen:sdk
 ```
 
-This will update the TypeScript SDK in [`client/sdk/`](../../client/sdk/) so it can be used in the dashboard.
+This will update the TypeScript SDK in [`client/dashboard/src/sdk/`](../../client/dashboard/src/sdk/) so it can be used in the dashboard.
 
 ## Step 8. Create a PR with your changes
 

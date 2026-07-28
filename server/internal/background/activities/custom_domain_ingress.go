@@ -30,7 +30,6 @@ type CustomDomainIngress struct {
 	domains            *customdomainsRepo.Queries
 	logger             *slog.Logger
 	provisionerFactory k8s.ProvisionerFactory
-	defaultProvisioner k8s.ProvisionerKind
 	setupSleep         time.Duration
 }
 
@@ -44,12 +43,11 @@ func WithSetupSleep(d time.Duration) CustomDomainIngressOption {
 	}
 }
 
-func NewCustomDomainIngress(logger *slog.Logger, db *pgxpool.Pool, k8sClient k8s.ProvisionerFactory, defaultProvisioner k8s.ProvisionerKind, opts ...CustomDomainIngressOption) *CustomDomainIngress {
+func NewCustomDomainIngress(logger *slog.Logger, db *pgxpool.Pool, k8sClient k8s.ProvisionerFactory, opts ...CustomDomainIngressOption) *CustomDomainIngress {
 	c := &CustomDomainIngress{
 		domains:            customdomainsRepo.New(db),
 		logger:             logger,
 		provisionerFactory: k8sClient,
-		defaultProvisioner: defaultProvisioner,
 		setupSleep:         120 * time.Second,
 	}
 	for _, opt := range opts {
@@ -64,7 +62,7 @@ type CustomDomainIngressArgs struct {
 	Action CustomDomainIngressAction
 	// TODO: Remove IngressName in a follow-up release once all in-flight workflows have drained.
 	IngressName     string // Legacy field — kept for in-flight workflow compat. Prefer ResourceName when non-empty.
-	ResourceName    string // Generic resource name (Ingress or HTTPRoute). Preferred over IngressName.
+	ResourceName    string // Generic resource name. Preferred over IngressName.
 	CertSecretName  string
 	ProvisionerKind k8s.ProvisionerKind // Empty = use activity default.
 	// IPAllowlist is the allowlist to apply on the Reapply action. It is passed
@@ -76,9 +74,6 @@ type CustomDomainIngressArgs struct {
 func (c *CustomDomainIngress) resolveKind(args CustomDomainIngressArgs) k8s.ProvisionerKind {
 	if args.ProvisionerKind != "" {
 		return args.ProvisionerKind
-	}
-	if c.defaultProvisioner != "" {
-		return c.defaultProvisioner
 	}
 	return k8s.ProvisionerKindIngress
 }
@@ -141,7 +136,7 @@ func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressAr
 		}
 
 		// Wait for resource convergence — cert issuance and LB propagation.
-		// Both Ingress and Gateway kinds keep this sleep until status-condition polling is implemented.
+		// This sleep stays until status-condition polling is implemented.
 		time.Sleep(c.setupSleep)
 
 		if err := provisioner.Get(ctx, result.ResourceName); err != nil {

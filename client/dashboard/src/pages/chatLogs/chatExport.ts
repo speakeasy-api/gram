@@ -1,9 +1,8 @@
 import { toast } from "sonner";
-import type {
-  ChatMessage,
-  RiskResult,
-  TelemetryLogRecord,
-} from "@gram/client/models/components";
+import type { Gram } from "@gram/client";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
+import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
+import { fetchFullTranscript } from "./transcriptFull";
 
 function downloadJsonFile(filename: string, data: unknown) {
   const json = JSON.stringify(data, null, 2);
@@ -26,22 +25,25 @@ function getTraceExportSlug(chat: { id: string; title?: string | null }) {
   return titleSlug || chat.id.slice(0, 8);
 }
 
-export function exportTraceDataAsJson({
+export async function exportTraceDataAsJson({
+  client,
   chatId,
   chat,
-  messages,
   telemetryLogLimit,
   telemetryLogs,
   riskResults,
 }: {
+  client: Gram;
   chatId: string;
   chat: { id: string; title?: string | null };
-  messages: ChatMessage[];
   telemetryLogLimit: number;
   telemetryLogs: TelemetryLogRecord[];
   riskResults: RiskResult[];
-}): void {
+}): Promise<void> {
   try {
+    // The export always carries the complete transcript, fetched here,
+    // regardless of which messages the panel happens to have loaded.
+    const messages = await fetchFullTranscript(client, chatId);
     const exported = {
       schemaVersion: 1,
       exportScope: "chat_detail_panel",

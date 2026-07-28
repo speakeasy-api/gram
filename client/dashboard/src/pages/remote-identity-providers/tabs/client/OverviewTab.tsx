@@ -1,4 +1,4 @@
-import type { RemoteSessionClient } from "@gram/client/models/components";
+import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import { InfoField, InfoSection, InfoText } from "../../detailFields";
 import { formatTimestamp } from "./formatTimestamp";
 

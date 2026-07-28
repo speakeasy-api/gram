@@ -11,7 +11,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { PromptTemplate } from "@gram/client/models/components";
+import { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";
 import { usePrompts } from "./usePrompts";
 
 export function PromptSelectPopover({

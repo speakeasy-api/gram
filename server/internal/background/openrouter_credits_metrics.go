@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -19,14 +20,16 @@ const (
 	openRouterCreditsMetricsScheduleID          = "v1:collect-openrouter-credits-metrics-schedule"
 	openRouterCreditsMetricsScheduledWorkflowID = "v1:collect-openrouter-credits-metrics/scheduled"
 
-	// Activity budget: timeout (30s) × max attempts (2) × activities (2) = 2min,
-	// which fits comfortably under WorkflowRunTimeout (3min). OpenRouter
-	// `/v1/key` is sub-second in practice; 30s is a generous ceiling that
-	// surfaces stalls quickly rather than masking them through retry loops.
+	// Activity budget: timeout (30s) × max attempts (2) × activities (3:
+	// collect, fire, alert) = 3min, which fits comfortably under
+	// WorkflowRunTimeout (4min). The upstream OpenRouter `/v1/key` poll and the
+	// alert sends are sub-second in practice; 30s is a generous per-activity
+	// ceiling that surfaces stalls quickly rather than masking them through
+	// retry loops.
 	openRouterCreditsMetricsActivityMaxRetries = 2
 	openRouterCreditsMetricsActivityTimeout    = 30 * time.Second
 	openRouterCreditsMetricsScheduleInterval   = 5 * time.Minute
-	openRouterCreditsMetricsWorkflowRunTimeout = 3 * time.Minute
+	openRouterCreditsMetricsWorkflowRunTimeout = 4 * time.Minute
 )
 
 // openRouterCreditsMetricsAccountTypes is the allowlist of organization
@@ -73,25 +76,55 @@ func CollectOpenRouterCreditsMetricsWorkflow(ctx workflow.Context) error {
 		return fmt.Errorf("fire openrouter credits metrics: %w", err)
 	}
 
+	// Threshold alerting is best-effort and must never fail the metrics run:
+	// the gauges above are the durable signal, whereas a missed alert self-heals
+	// on the next 5-minute tick. Log and swallow so a transient email or DB
+	// hiccup does not mark the workflow failed.
+	if err := workflow.ExecuteActivity(ctx, a.MaybeSendOpenRouterCreditsAlerts, metrics).Get(ctx, nil); err != nil {
+		workflow.GetLogger(ctx).Error("send openrouter credits alerts", "error", err.Error())
+	}
+
 	return nil
 }
 
 func AddOpenRouterCreditsMetricsSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {
-	_, err := temporalEnv.Client().ScheduleClient().Create(ctx, client.ScheduleOptions{
-		ID: openRouterCreditsMetricsScheduleID,
-		Spec: client.ScheduleSpec{
-			Intervals: []client.ScheduleIntervalSpec{
-				{Every: openRouterCreditsMetricsScheduleInterval},
-			},
+	sc := temporalEnv.Client().ScheduleClient()
+
+	spec := client.ScheduleSpec{
+		Intervals: []client.ScheduleIntervalSpec{
+			{Every: openRouterCreditsMetricsScheduleInterval},
 		},
-		Action: &client.ScheduleWorkflowAction{
-			ID:                 openRouterCreditsMetricsScheduledWorkflowID,
-			Workflow:           CollectOpenRouterCreditsMetricsWorkflow,
-			TaskQueue:          string(temporalEnv.Queue()),
-			WorkflowRunTimeout: openRouterCreditsMetricsWorkflowRunTimeout,
-		},
+	}
+	action := &client.ScheduleWorkflowAction{
+		ID:                 openRouterCreditsMetricsScheduledWorkflowID,
+		Workflow:           CollectOpenRouterCreditsMetricsWorkflow,
+		TaskQueue:          string(temporalEnv.Queue()),
+		WorkflowRunTimeout: openRouterCreditsMetricsWorkflowRunTimeout,
+	}
+
+	_, err := sc.Create(ctx, client.ScheduleOptions{
+		ID:     openRouterCreditsMetricsScheduleID,
+		Spec:   spec,
+		Action: action,
 	})
-	if err != nil {
+	switch {
+	case errors.Is(err, temporal.ErrScheduleAlreadyRunning):
+		// Push spec/action changes (interval, WorkflowRunTimeout) into the
+		// already-created schedule: Create alone would silently leave deployed
+		// environments running the old values forever.
+		if err := sc.GetHandle(ctx, openRouterCreditsMetricsScheduleID).Update(ctx, client.ScheduleUpdateOptions{
+			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
+				input.Description.Schedule.Spec = &spec
+				input.Description.Schedule.Action = action
+				return &client.ScheduleUpdate{
+					Schedule:              &input.Description.Schedule,
+					TypedSearchAttributes: nil,
+				}, nil
+			},
+		}); err != nil {
+			return fmt.Errorf("update existing openrouter credits metrics schedule: %w", err)
+		}
+	case err != nil:
 		return fmt.Errorf("create openrouter credits metrics schedule: %w", err)
 	}
 

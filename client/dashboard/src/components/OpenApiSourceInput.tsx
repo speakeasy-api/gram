@@ -7,7 +7,7 @@ import { FullWidthUpload } from "@/components/upload";
 import { Spinner } from "@/components/ui/spinner";
 import { useMutation } from "@tanstack/react-query";
 import { useSdkClient } from "@/contexts/Sdk";
-import { UploadOpenAPIv3Result } from "@gram/client/models/components";
+import { UploadOpenAPIv3Result } from "@gram/client/models/components/uploadopenapiv3result.js";
 import { CodeBlock } from "@/components/code";
 
 interface OpenApiSourceInputProps {
@@ -125,8 +125,14 @@ export function OpenApiSourceInput({
               disabled={!url.trim() || fetchMutation.isPending}
               className="w-full"
             >
-              {fetchMutation.isPending && <Spinner className="mr-2 size-4" />}
-              {fetchMutation.isPending ? "Loading..." : "Load OpenAPI Spec"}
+              {fetchMutation.isPending && (
+                <Button.LeftIcon>
+                  <Spinner className="size-4" />
+                </Button.LeftIcon>
+              )}
+              <Button.Text>
+                {fetchMutation.isPending ? "Loading..." : "Load OpenAPI Spec"}
+              </Button.Text>
             </Button>
           </Stack>
         </form>

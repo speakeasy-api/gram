@@ -1,5 +1,8 @@
 import pytest
+import structlog
 from gram.ping.v2 import ping_pb2, processor_pb2
+from gram.risk.v1 import finding_pb2, presidio_analysis_pb2
+from gram_infra.pubsub import PublishResult
 from gram_infra.pubsub.subscriber import MessageMetadata
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -11,6 +14,8 @@ from opentelemetry.trace import StatusCode
 
 from pystreams import attr
 from pystreams.deps import tracing
+from pystreams.risk.handler import PresidioHandler
+from pystreams.risk.scanner import Detection, _AsyncCloseable
 
 TOPIC = ping_pb2.Message.DESCRIPTOR.full_name
 SUBSCRIPTION = processor_pb2.PyProcessor.DESCRIPTOR.full_name
@@ -105,6 +110,48 @@ async def test_traced_starts_new_trace_without_attributes(
 
     (span,) = exporter.get_finished_spans()
     assert span.parent is None
+
+
+class _CleanScanner(_AsyncCloseable):
+    """Scanner stand-in that always finds nothing (the publisher stays unused)."""
+
+    async def scan(
+        self, content: str, entities: list[str] | None, score_threshold: float
+    ) -> list[Detection]:
+        return []
+
+    async def aclose(self) -> None:
+        return None
+
+
+class _UnusedPublisher:
+    """Fails the test if the handler publishes — the clean path never should."""
+
+    def publish(self, message: finding_pb2.Finding) -> PublishResult:
+        raise AssertionError("no findings expected on the clean path")
+
+
+async def test_presidio_handler_stamps_content_size_on_delivery_span(
+    exporter: InMemorySpanExporter,
+):
+    # The handler runs inside the traced-receiver span (start_as_current_span),
+    # so its content-size attribute must land on that delivery span — the exact
+    # per-message value trace analytics correlates against duration.
+    handler = PresidioHandler(
+        structlog.get_logger(), _UnusedPublisher(), _CleanScanner()
+    )
+    wrapped = tracing.traced(
+        handler.handle,
+        topic_proto_name=presidio_analysis_pb2.PresidioAnalysis.DESCRIPTOR.full_name,
+        subscription_proto_name=SUBSCRIPTION,
+    )
+
+    content = "nothing sensitive in here"
+    await wrapped(presidio_analysis_pb2.PresidioAnalysis(content=content), _meta())
+
+    (span,) = exporter.get_finished_spans()
+    assert span.attributes is not None
+    assert span.attributes[attr.RISK_CONTENT_CHARS] == len(content)
 
 
 async def test_traced_marks_error_and_reraises(exporter: InMemorySpanExporter):

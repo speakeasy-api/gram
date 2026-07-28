@@ -169,13 +169,15 @@ func (tp *ToolProxy) doFunctionResource(
 			}
 			return nil
 		},
-		RetryConfig:      functionRunnerRetryConfig(),
-		ID:               descriptor.ID,
-		Name:             descriptor.Name,
-		DeploymentID:     descriptor.DeploymentID,
-		ProjectID:        descriptor.ProjectID,
-		ProjectSlug:      descriptor.ProjectSlug,
-		OrganizationID:   descriptor.OrganizationID,
-		OrganizationSlug: descriptor.OrganizationSlug,
+		RetryConfig:       functionRunnerRetryConfig(),
+		Timeout:           functionRunnerCallTimeout,
+		DisableKeepAlives: true,
+		ID:                descriptor.ID,
+		Name:              descriptor.Name,
+		DeploymentID:      descriptor.DeploymentID,
+		ProjectID:         descriptor.ProjectID,
+		ProjectSlug:       descriptor.ProjectSlug,
+		OrganizationID:    descriptor.OrganizationID,
+		OrganizationSlug:  descriptor.OrganizationSlug,
 	})
 }

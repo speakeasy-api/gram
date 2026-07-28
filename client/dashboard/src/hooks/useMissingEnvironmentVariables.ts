@@ -1,5 +1,6 @@
 import { Toolset } from "@/lib/toolTypes";
-import { Environment, McpMetadata } from "@gram/client/models/components";
+import { Environment } from "@gram/client/models/components/environment.js";
+import { McpMetadata } from "@gram/client/models/components/mcpmetadata.js";
 import { useMemo } from "react";
 
 /**

@@ -17,24 +17,20 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useCustomDomains } from "@/hooks/useToolsetUrl";
 import { getServerURL } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
-import type {
-  CustomDomain,
-  McpEndpoint,
-  McpServer,
-} from "@gram/client/models/components";
-import {
-  invalidateAllMcpEndpoints,
-  useDeleteMcpEndpointMutation,
-  useUpdateMcpEndpointMutation,
-} from "@gram/client/react-query/index.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import { useDeleteMcpEndpointMutation } from "@gram/client/react-query/deleteMcpEndpoint.js";
+import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
+import { useUpdateMcpEndpointMutation } from "@gram/client/react-query/updateMcpEndpoint.js";
+import { Button, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, XIcon } from "lucide-react";
+import { Loader2, Plus, SaveIcon, Trash2, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useMcpEndpointSlugValidation } from "../../../useMcpEndpointSlugValidation";
 import { SettingsInlineEmptyState } from "../SettingsInlineEmptyState";
-import { RowSaveButtonContent, SettingsSection } from "../SettingsSection";
+import { SettingsSection } from "../SettingsSection";
 
 const ADDRESS_INPUT_GROUP_CLASSNAME = "rounded-md";
 const ADDRESS_SLUG_INPUT_CLASSNAME = "font-mono pl-0! font-bold";
@@ -143,6 +139,7 @@ export function ServerUrlSection({
                   <AddressRow
                     mcpServer={mcpServer}
                     endpoint={platformEndpoint}
+                    isLastEndpoint={endpoints.length === 1}
                   />
                 ) : addingPlatform ? (
                   <NewPlatformAddressRow
@@ -176,6 +173,7 @@ export function ServerUrlSection({
                     mcpServer={mcpServer}
                     endpoint={endpoint}
                     domains={availableDomains}
+                    isLastEndpoint={endpoints.length === 1}
                   />
                 ))}
                 {addingCustom && (
@@ -218,15 +216,19 @@ export function ServerUrlSection({
 }
 
 // A single editable address. The slug input is always live; Save persists the
-// edit (disabled until dirty + valid) and Remove deletes immediately.
+// edit (disabled until dirty + valid) and Remove deletes immediately — except
+// for the server's last address, which asks for confirmation first since it
+// leaves the server unreachable and unpublishable.
 function AddressRow({
   mcpServer,
   endpoint,
   domains,
+  isLastEndpoint,
 }: {
   mcpServer: McpServer;
   endpoint: McpEndpoint;
   domains?: CustomDomain[];
+  isLastEndpoint: boolean;
 }) {
   const { orgSlug } = useSlugs();
   // Platform endpoints must carry the `${orgSlug}-` prefix. It's folded into
@@ -261,12 +263,15 @@ function AddressRow({
       );
     },
   });
+  const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false);
   const remove = useDeleteMcpEndpointMutation({
     onSuccess: async () => {
+      setConfirmRemoveOpen(false);
       await invalidateAllMcpEndpoints(queryClient, { refetchType: "all" });
       toast.success("Address removed");
     },
     onError: (error) => {
+      setConfirmRemoveOpen(false);
       toast.error(
         error instanceof Error ? error.message : "Failed to remove address",
       );
@@ -321,14 +326,27 @@ function AddressRow({
             variant="primary"
             disabled={!dirty || !!slugError || update.isPending}
             onClick={handleSave}
+            aria-label={update.isPending ? "Saving address" : "Save address"}
           >
-            <RowSaveButtonContent pending={update.isPending} />
+            <Button.Icon>
+              {update.isPending ? (
+                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+              ) : (
+                <SaveIcon aria-hidden="true" className="size-4" />
+              )}
+            </Button.Icon>
           </Button>
           <Button
             variant="destructive-secondary"
             className="border border-destructive/40 bg-transparent hover:border-destructive"
             disabled={remove.isPending}
-            onClick={() => remove.mutate({ request: { id: endpoint.id } })}
+            onClick={() => {
+              if (isLastEndpoint) {
+                setConfirmRemoveOpen(true);
+                return;
+              }
+              remove.mutate({ request: { id: endpoint.id } });
+            }}
           >
             <Button.LeftIcon>
               <Trash2 className="size-4" />
@@ -338,7 +356,62 @@ function AddressRow({
       </Stack>
       {slugError && <FieldError className="text-xs">{slugError}</FieldError>}
       {update.isError && <FieldError>{update.error.message}</FieldError>}
+      <RemoveLastAddressDialog
+        isOpen={confirmRemoveOpen}
+        isLoading={remove.isPending}
+        onClose={() => setConfirmRemoveOpen(false)}
+        onConfirm={() => remove.mutate({ request: { id: endpoint.id } })}
+      />
     </Field>
+  );
+}
+
+// Confirmation for removing a server's only address. Without an address the
+// server can't serve traffic and stops being publishable — it can't be added
+// to plugins or collections until a new address is created.
+function RemoveLastAddressDialog({
+  isOpen,
+  isLoading,
+  onClose,
+  onConfirm,
+}: {
+  isOpen: boolean;
+  isLoading: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <Dialog.Content className="max-w-md">
+        <Dialog.Header>
+          <Dialog.Title>Remove this server's only address?</Dialog.Title>
+          <Dialog.Description>
+            This is the last address for this MCP server. Removing it means
+            clients can no longer connect, and the server can't be added to
+            plugins or published to collections until you create a new address.
+          </Dialog.Description>
+        </Dialog.Header>
+        <Dialog.Footer>
+          <Button variant="secondary" disabled={isLoading} onClick={onClose}>
+            <Button.Text>Cancel</Button.Text>
+          </Button>
+          <Button
+            variant="destructive-primary"
+            disabled={isLoading}
+            onClick={onConfirm}
+          >
+            {isLoading && (
+              <Button.LeftIcon>
+                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+              </Button.LeftIcon>
+            )}
+            <Button.Text>
+              {isLoading ? "Removing" : "Remove address"}
+            </Button.Text>
+          </Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
   );
 }
 
@@ -408,8 +481,15 @@ function NewPlatformAddressRow({
           variant="primary"
           disabled={!suffix.trim() || !!slugError || submitting}
           onClick={() => void handleCreate()}
+          aria-label={submitting ? "Adding address" : "Add address"}
         >
-          <RowSaveButtonContent pending={submitting} />
+          <Button.Icon>
+            {submitting ? (
+              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+            ) : (
+              <SaveIcon aria-hidden="true" className="size-4" />
+            )}
+          </Button.Icon>
         </Button>
         <Button
           size="md"
@@ -497,8 +577,15 @@ function NewCustomAddressRow({
           variant="primary"
           disabled={!slug.trim() || !domainId || !!slugError || submitting}
           onClick={() => void handleCreate()}
+          aria-label={submitting ? "Adding address" : "Add address"}
         >
-          <RowSaveButtonContent pending={submitting} />
+          <Button.Icon>
+            {submitting ? (
+              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+            ) : (
+              <SaveIcon aria-hidden="true" className="size-4" />
+            )}
+          </Button.Icon>
         </Button>
         <Button
           size="md"

@@ -12,10 +12,14 @@ INSERT INTO remote_session_issuers (
     issuer,
     name,
     logo_asset_id,
+    client_setup_documentation_url,
     authorization_endpoint,
     token_endpoint,
     registration_endpoint,
     jwks_uri,
+    service_documentation,
+    op_policy_uri,
+    op_tos_uri,
     scopes_supported,
     grant_types_supported,
     response_types_supported,
@@ -31,10 +35,14 @@ VALUES (
     @issuer,
     @name,
     @logo_asset_id,
+    @client_setup_documentation_url,
     @authorization_endpoint,
     @token_endpoint,
     @registration_endpoint,
     @jwks_uri,
+    @service_documentation,
+    @op_policy_uri,
+    @op_tos_uri,
     @scopes_supported,
     @grant_types_supported,
     @response_types_supported,
@@ -89,6 +97,10 @@ SET
         ELSE COALESCE(sqlc.narg('name'), name)
     END,
     logo_asset_id = COALESCE(sqlc.narg('logo_asset_id'), logo_asset_id),
+    client_setup_documentation_url = CASE
+        WHEN sqlc.narg('client_setup_documentation_url')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('client_setup_documentation_url'), client_setup_documentation_url)
+    END,
     authorization_endpoint = CASE
         WHEN sqlc.narg('authorization_endpoint')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('authorization_endpoint'), authorization_endpoint)
@@ -104,6 +116,18 @@ SET
     jwks_uri = CASE
         WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)
+    END,
+    service_documentation = CASE
+        WHEN sqlc.narg('service_documentation')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('service_documentation'), service_documentation)
+    END,
+    op_policy_uri = CASE
+        WHEN sqlc.narg('op_policy_uri')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('op_policy_uri'), op_policy_uri)
+    END,
+    op_tos_uri = CASE
+        WHEN sqlc.narg('op_tos_uri')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('op_tos_uri'), op_tos_uri)
     END,
     scopes_supported = COALESCE(sqlc.narg('scopes_supported')::text[], scopes_supported),
     grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
@@ -248,10 +272,14 @@ SELECT
     (
         SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
         FROM remote_session_client_user_session_issuers AS link
+        JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
         WHERE link.remote_session_client_id = c.id
+          AND usi.project_id = @project_id
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
-WHERE c.id = @id AND c.project_id = @project_id AND c.deleted IS FALSE;
+WHERE c.id = @id
+  AND (c.project_id = @project_id OR (c.project_id IS NULL AND c.organization_id = @organization_id))
+  AND c.deleted IS FALSE;
 
 -- name: GetUserSessionIssuerForProject :one
 SELECT id
@@ -264,10 +292,12 @@ SELECT
     (
         SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
         FROM remote_session_client_user_session_issuers AS link
+        JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
         WHERE link.remote_session_client_id = c.id
+          AND usi.project_id = @project_id
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
-WHERE c.project_id = @project_id
+WHERE (c.project_id = @project_id OR (c.project_id IS NULL AND c.organization_id = @organization_id))
   AND c.deleted IS FALSE
   AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR c.remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
   AND (sqlc.narg('cursor')::uuid IS NULL OR c.id < sqlc.narg('cursor')::uuid)
@@ -278,12 +308,16 @@ LIMIT sqlc.arg('limit_value');
 -- Filters to clients bound to the given user_session_issuer through the join
 -- table, while user_session_issuer_ids reports every issuer each client is
 -- attached to (a correlated subquery independent of the filter join).
+-- Includes both the project's own clients and organization-level clients
+-- (project_id NULL) belonging to the project's org.
 SELECT
     sqlc.embed(c),
     (
         SELECT COALESCE(array_agg(all_link.user_session_issuer_id ORDER BY all_link.user_session_issuer_id), '{}'::uuid[])
         FROM remote_session_client_user_session_issuers AS all_link
+        JOIN user_session_issuers AS all_usi ON all_usi.id = all_link.user_session_issuer_id
         WHERE all_link.remote_session_client_id = c.id
+          AND all_usi.project_id = @project_id
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
@@ -291,7 +325,7 @@ JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE link.user_session_issuer_id = @user_session_issuer_id
   AND usi.project_id = @project_id
   AND usi.deleted IS FALSE
-  AND c.project_id = @project_id
+  AND (c.project_id = @project_id OR (c.project_id IS NULL AND c.organization_id = @organization_id))
   AND c.deleted IS FALSE
   AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR c.remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
   AND (sqlc.narg('cursor')::uuid IS NULL OR c.id < sqlc.narg('cursor')::uuid)
@@ -319,6 +353,7 @@ RETURNING *;
 INSERT INTO remote_session_clients (
     id,
     project_id,
+    organization_id,
     remote_session_issuer_id,
     client_id,
     client_id_metadata_uri,
@@ -330,6 +365,7 @@ INSERT INTO remote_session_clients (
 VALUES (
     @id,
     @project_id,
+    @organization_id,
     @remote_session_issuer_id,
     @client_id_metadata_uri,
     @client_id_metadata_uri,
@@ -500,7 +536,10 @@ WHERE c.id = @id
 -- name: ListRemoteSessionClientsForUserSessionIssuer :many
 -- Joined client + issuer view used by the consent renderer and the
 -- ChallengeManager. Returns one row per remote_session_client linked to
--- the given user_session_issuer through the join table.
+-- the given user_session_issuer through the join table. Resolves both the
+-- project's own clients and organization-level clients (project_id NULL)
+-- belonging to the project's org, so an org-level client attached to this
+-- project's user_session_issuer is honored at runtime.
 SELECT
     c.id                                   AS client_id,
     c.client_id                            AS external_client_id,
@@ -522,7 +561,7 @@ JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE link.user_session_issuer_id = @user_session_issuer_id
-  AND c.project_id = @project_id
+  AND (c.project_id = @project_id OR (c.project_id IS NULL AND c.organization_id = @organization_id))
   AND usi.project_id = @project_id
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
@@ -530,13 +569,19 @@ WHERE link.user_session_issuer_id = @user_session_issuer_id
 ORDER BY c.id ASC;
 
 -- name: ListRemoteSessionsByProjectID :many
+-- Scoped by the session's user_session_issuer project, not the client's project:
+-- a remote_session belongs to the project whose user_session_issuer minted it,
+-- so sessions established through an organization-level client (project_id NULL)
+-- bound to this project's user_session_issuer are listed here, while another
+-- project's sessions on the same shared org-level client are not.
 SELECT sqlc.embed(s),
   u.display_name AS subject_display_name,
   u.email AS subject_email
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
-WHERE c.project_id = @project_id
+WHERE usi.project_id = @project_id
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
   AND (sqlc.narg('subject_urn')::text IS NULL OR s.subject_urn = sqlc.narg('subject_urn')::text)
@@ -546,18 +591,27 @@ ORDER BY s.id DESC
 LIMIT sqlc.arg('limit_value');
 
 -- name: GetRemoteSessionByID :one
+-- Scoped by the session's user_session_issuer project (see
+-- ListRemoteSessionsByProjectID), so an organization-level client's session is
+-- reachable from the project whose user_session_issuer minted it.
 SELECT s.*
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
-WHERE s.id = @id AND c.project_id = @project_id AND s.deleted IS FALSE AND c.deleted IS FALSE;
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
+WHERE s.id = @id AND usi.project_id = @project_id AND s.deleted IS FALSE AND c.deleted IS FALSE;
 
 -- name: RevokeRemoteSession :one
+-- Scoped by the session's user_session_issuer project (see
+-- ListRemoteSessionsByProjectID), so a project admin can revoke a session
+-- established through an organization-level client bound to their own
+-- user_session_issuer, but not another project's session on a shared one.
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp()
-FROM remote_session_clients AS c
+FROM remote_session_clients AS c, user_session_issuers AS usi
 WHERE s.id = @id
   AND s.remote_session_client_id = c.id
-  AND c.project_id = @project_id
+  AND usi.id = s.user_session_issuer_id
+  AND usi.project_id = @project_id
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
 RETURNING s.*;
@@ -597,6 +651,25 @@ WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS FALSE;
 
+-- name: GetOrganizationRemoteSessionIssuerByIDForUpdate :one
+-- GetOrganizationRemoteSessionIssuerByID, holding a row lock until the
+-- transaction ends. migrateIssuer decides whether a migration is legal by
+-- reading the issuer's project_id, organization_id, and endpoint metadata, then
+-- acts on that decision later in the same transaction. Without the row lock a
+-- concurrent moveIssuer (which rewrites project_id) or updateIssuer (which
+-- rewrites the endpoints) could commit in between, and the migration would
+-- proceed against a scope or an authorization server it never validated.
+--
+-- The advisory lock in LockRemoteSessionIssuerForClientBinding does not cover
+-- this: those writers never take it. The two locks guard different races, so
+-- migrateIssuer takes both.
+SELECT *
+FROM remote_session_issuers
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: UpdateOrganizationRemoteSessionIssuer :one
 -- Same three-state narg semantics as UpdateRemoteSessionIssuer; scoped to any
 -- issuer in the org (organizational or project-specific).
@@ -609,6 +682,10 @@ SET
         ELSE COALESCE(sqlc.narg('name'), name)
     END,
     logo_asset_id = COALESCE(sqlc.narg('logo_asset_id'), logo_asset_id),
+    client_setup_documentation_url = CASE
+        WHEN sqlc.narg('client_setup_documentation_url')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('client_setup_documentation_url'), client_setup_documentation_url)
+    END,
     authorization_endpoint = CASE
         WHEN sqlc.narg('authorization_endpoint')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('authorization_endpoint'), authorization_endpoint)
@@ -624,6 +701,18 @@ SET
     jwks_uri = CASE
         WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)
+    END,
+    service_documentation = CASE
+        WHEN sqlc.narg('service_documentation')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('service_documentation'), service_documentation)
+    END,
+    op_policy_uri = CASE
+        WHEN sqlc.narg('op_policy_uri')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('op_policy_uri'), op_policy_uri)
+    END,
+    op_tos_uri = CASE
+        WHEN sqlc.narg('op_tos_uri')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('op_tos_uri'), op_tos_uri)
     END,
     scopes_supported = COALESCE(sqlc.narg('scopes_supported')::text[], scopes_supported),
     grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
@@ -786,6 +875,71 @@ WHERE m.deleted IS FALSE
       WHERE c.remote_session_issuer_id = @remote_session_issuer_id AND c.deleted IS FALSE
   );
 
+-- name: LockRemoteSessionIssuerForClientBinding :exec
+-- Serialize every writer that adds or re-points a remote_session_client on a
+-- given remote_session_issuer. No database constraint enforces the
+-- "at most one active client per (user_session_issuer, remote_session_issuer)"
+-- invariant: remote_session_issuer_id lives on remote_session_clients, not on
+-- remote_session_client_user_session_issuers, so no unique index over the join
+-- table can express the pair. Row locks on the issuer do not help either, since
+-- the attach guard reads remote_session_clients and never touches the issuer
+-- row. A transaction-scoped advisory lock keyed on the issuer id is what
+-- actually serializes migrateIssuer's re-point against a concurrent client
+-- attach. Callers taking more than one lock MUST take them in ascending issuer
+-- id order so two concurrent migrations cannot deadlock.
+SELECT pg_advisory_xact_lock(hashtextextended((@remote_session_issuer_id::uuid)::text, 0));
+
+-- name: ListConflictingClientBindingsForIssuerMigration :many
+-- The user_session_issuers that already have an active remote_session_client on
+-- BOTH the source and the target issuer, joined to the MCP servers those
+-- user_session_issuers gate. Re-pointing the source's clients onto the target
+-- would put two clients on the same (user_session_issuer, remote_session_issuer)
+-- pair, violating the invariant that guardSingleClientPerRemoteIssuer enforces
+-- at attach time and that ResolveAccessTokens asserts at serve time. migrateIssuer
+-- refuses when this returns any row.
+--
+-- The mcp_servers join is LEFT so a conflicting user_session_issuer that gates no
+-- MCP server still yields a row: the conflict blocks the migration whether or not
+-- it has a name to show. Keep the "same user_session_issuer, different issuer"
+-- semantics here in sync with guardSingleClientPerRemoteIssuer.
+SELECT DISTINCT
+    link_source.user_session_issuer_id AS user_session_issuer_id,
+    m.name AS mcp_server_name,
+    COALESCE(rms.url, '')::text AS mcp_server_url
+FROM remote_session_client_user_session_issuers AS link_source
+JOIN remote_session_clients AS source_client
+    ON source_client.id = link_source.remote_session_client_id
+JOIN remote_session_client_user_session_issuers AS link_target
+    ON link_target.user_session_issuer_id = link_source.user_session_issuer_id
+JOIN remote_session_clients AS target_client
+    ON target_client.id = link_target.remote_session_client_id
+LEFT JOIN mcp_servers AS m
+    ON m.user_session_issuer_id = link_source.user_session_issuer_id
+   AND m.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id
+WHERE source_client.remote_session_issuer_id = @source_issuer_id
+  AND source_client.deleted IS FALSE
+  AND target_client.remote_session_issuer_id = @target_issuer_id
+  AND target_client.deleted IS FALSE;
+
+-- name: UpdateRemoteSessionClientsToRemoteSessionIssuer :execrows
+-- Move every active client off the source issuer and onto the target. This is
+-- the whole of an issuer migration: remote_session_clients is the only table
+-- with a foreign key to remote_session_issuers, and remote_sessions reference
+-- the client rather than the issuer, so the clients' sessions, tokens, and
+-- user_session_issuer bindings all travel with the re-pointed rows and no user
+-- re-authenticates.
+--
+-- Soft-deleted clients stay on the source issuer: they resolve nowhere, and
+-- dragging tombstones onto the target would corrupt the returned migrated count.
+-- Callers establish org ownership of both issuers and hold the advisory locks
+-- from LockRemoteSessionIssuerForClientBinding. Returns the number of clients moved.
+UPDATE remote_session_clients
+SET remote_session_issuer_id = @target_issuer_id,
+    updated_at = clock_timestamp()
+WHERE remote_session_issuer_id = @source_issuer_id
+  AND deleted IS FALSE;
+
 -- name: DetachRemoteSessionClientFromUserSessionIssuer :execrows
 -- Remove the join-table binding between a remote_session_client and a
 -- user_session_issuer. Used by the org-admin "remove client from MCP server"
@@ -850,3 +1004,144 @@ WHERE s.id = @id
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE;
+
+-- Global remote-session admin surface — issuers and clients shared across every
+-- organization (project_id NULL AND organization_id NULL). Curated by Speakeasy
+-- platform admins. Every query is scoped strictly to that global partition; the
+-- create paths reuse CreateRemoteSessionIssuer / CreateRemoteSessionClient with
+-- NULL project_id and NULL organization_id.
+
+-- name: ListGlobalRemoteSessionIssuers :many
+SELECT *
+FROM remote_session_issuers
+WHERE project_id IS NULL
+  AND organization_id IS NULL
+  AND deleted IS FALSE
+  AND (sqlc.narg('cursor')::uuid IS NULL OR id < sqlc.narg('cursor')::uuid)
+ORDER BY id DESC
+LIMIT sqlc.arg('limit_value');
+
+-- name: GetGlobalRemoteSessionIssuerByID :one
+SELECT *
+FROM remote_session_issuers
+WHERE id = @id
+  AND project_id IS NULL
+  AND organization_id IS NULL
+  AND deleted IS FALSE;
+
+-- name: GetGlobalRemoteSessionIssuerByIDForUpdate :one
+-- Locks the issuer row so DeleteGlobalIssuer's count-then-delete and
+-- CreateGlobalClient's exists-then-insert serialize instead of racing.
+SELECT *
+FROM remote_session_issuers
+WHERE id = @id
+  AND project_id IS NULL
+  AND organization_id IS NULL
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: UpdateGlobalRemoteSessionIssuer :one
+-- Same three-state narg semantics as UpdateRemoteSessionIssuer; scoped to the
+-- global partition (project_id NULL, organization_id NULL).
+UPDATE remote_session_issuers
+SET
+    slug = COALESCE(sqlc.narg('slug'), slug),
+    issuer = COALESCE(sqlc.narg('issuer'), issuer),
+    name = CASE
+        WHEN sqlc.narg('name')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('name'), name)
+    END,
+    logo_asset_id = COALESCE(sqlc.narg('logo_asset_id'), logo_asset_id),
+    client_setup_documentation_url = CASE
+        WHEN sqlc.narg('client_setup_documentation_url')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('client_setup_documentation_url'), client_setup_documentation_url)
+    END,
+    authorization_endpoint = CASE
+        WHEN sqlc.narg('authorization_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('authorization_endpoint'), authorization_endpoint)
+    END,
+    token_endpoint = CASE
+        WHEN sqlc.narg('token_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('token_endpoint'), token_endpoint)
+    END,
+    registration_endpoint = CASE
+        WHEN sqlc.narg('registration_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('registration_endpoint'), registration_endpoint)
+    END,
+    jwks_uri = CASE
+        WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)
+    END,
+    service_documentation = CASE
+        WHEN sqlc.narg('service_documentation')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('service_documentation'), service_documentation)
+    END,
+    op_policy_uri = CASE
+        WHEN sqlc.narg('op_policy_uri')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('op_policy_uri'), op_policy_uri)
+    END,
+    op_tos_uri = CASE
+        WHEN sqlc.narg('op_tos_uri')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('op_tos_uri'), op_tos_uri)
+    END,
+    scopes_supported = COALESCE(sqlc.narg('scopes_supported')::text[], scopes_supported),
+    grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
+    response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
+    token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
+    client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
+    oidc = COALESCE(sqlc.narg('oidc'), oidc),
+    passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
+    updated_at = clock_timestamp()
+WHERE id = @id AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
+RETURNING *;
+
+-- name: DeleteGlobalRemoteSessionIssuer :one
+UPDATE remote_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = @id AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
+RETURNING *;
+
+-- name: ListGlobalRemoteSessionClientsByIssuerID :many
+-- Global clients registered with a global issuer. Global clients carry no
+-- user_session_issuer attachments, so the view is built without the join-table
+-- array.
+SELECT *
+FROM remote_session_clients
+WHERE remote_session_issuer_id = @remote_session_issuer_id
+  AND project_id IS NULL
+  AND organization_id IS NULL
+  AND deleted IS FALSE
+  AND (sqlc.narg('cursor')::uuid IS NULL OR id < sqlc.narg('cursor')::uuid)
+ORDER BY id DESC
+LIMIT sqlc.arg('limit_value');
+
+-- name: GetGlobalRemoteSessionClientByID :one
+SELECT *
+FROM remote_session_clients
+WHERE id = @id
+  AND project_id IS NULL
+  AND organization_id IS NULL
+  AND deleted IS FALSE;
+
+-- name: UpdateGlobalRemoteSessionClient :one
+-- Patch a global client's non-issuer fields. The handler encrypts a rotated
+-- client_secret before passing it as client_secret_encrypted; an omitted narg
+-- keeps the existing secret.
+UPDATE remote_session_clients
+SET
+    client_secret_encrypted = COALESCE(sqlc.narg('client_secret_encrypted'), client_secret_encrypted),
+    token_endpoint_auth_method = COALESCE(sqlc.narg('token_endpoint_auth_method'), token_endpoint_auth_method),
+    scope = COALESCE(sqlc.narg('scope')::text[], scope),
+    audience = CASE
+        WHEN sqlc.narg('audience')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('audience'), audience)
+    END,
+    updated_at = clock_timestamp()
+WHERE id = @id AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
+RETURNING *;
+
+-- name: DeleteGlobalRemoteSessionClient :one
+UPDATE remote_session_clients
+SET deleted_at = clock_timestamp()
+WHERE id = @id AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
+RETURNING *;

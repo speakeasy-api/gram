@@ -490,7 +490,9 @@ var PluginModel = Type("Plugin", func() {
 	Attribute("name", String, "Display name.")
 	Attribute("slug", String, "URL-safe identifier, unique per org.")
 	Attribute("description", String, "Optional description.")
+	Attribute("is_default", Boolean, "Whether this is the project's fallback plugin that new servers attach to.")
 	Attribute("server_count", Int64, "Number of active servers in this plugin.")
+	Attribute("skill_count", Int64, "Number of active skills in this plugin.")
 	Attribute("assignment_count", Int64, "Number of role/user assignments.")
 	Attribute("servers", ArrayOf(PluginServerModel), "Servers included in this plugin.")
 	Attribute("assignments", ArrayOf(PluginAssignmentModel), "Role/user assignments.")
@@ -591,11 +593,15 @@ var PublishStatusResult = Type("PublishStatusResult", func() {
 	Attribute("repo_name", String, "GitHub repo name, if connected.")
 	Attribute("repo_url", String, "Full GitHub repository URL, if connected.")
 	Attribute("marketplace_url", String, "Git-based Claude Code marketplace URL — the value to pass to `/plugin marketplace add` or set as the source URL in `extraKnownMarketplaces`. Present once a marketplace token has been minted, which happens automatically on the first publish.")
+	Attribute("claude_observability_plugin", String, "Slug of the generated Claude Code observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.")
+	Attribute("codex_observability_plugin", String, "Slug of the generated Codex observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.")
+	Attribute("has_collaborators", Boolean, "Whether the repo has at least one directly-added GitHub collaborator (excludes access granted via org membership/teams). Absent when the project is not connected.")
 	Attribute("up_to_date", Boolean, "Whether the project's current plugin state matches what was last published to GitHub. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).")
 	Attribute("last_published_at", String, func() {
 		Description("When the project was last published to GitHub. Absent when the project is not connected.")
 		Format(FormatDateTime)
 	})
+	Attribute("live_version", String, "Version stamped into the currently published plugin.json manifests (e.g. 0.1.1783692954) — the version plugin clients such as Claude Code report for installed plugins. Absent when the project is not connected or the live version could not be determined.")
 })
 
 var PublishPluginsResult = Type("PublishPluginsResult", func() {
@@ -616,4 +622,5 @@ var UpdateMarketplaceSettingsResult = Type("UpdateMarketplaceSettingsResult", fu
 
 	Attribute("settings", MarketplaceSettingsResult, "The updated marketplace settings.")
 	Attribute("republished", Boolean, "Whether the marketplace was automatically republished to GitHub as part of this update.")
+	Attribute("hooks_update_deferred", Boolean, "True when the new name reached the MCP plugins and marketplace manifests but the observability (hooks) plugin could not be updated yet because the organization is not approved for the latest hooks version; it will update automatically once the organization is rolled forward.")
 })

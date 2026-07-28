@@ -1,4 +1,4 @@
-import { useIsAdmin, useSession, useUser } from "@/contexts/Auth";
+import { useSession, useUser } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useOrgRoutes, useRoutes } from "@/routes";
@@ -14,7 +14,6 @@ import {
 } from "@speakeasy-api/moonshine";
 import {
   ActivityIcon,
-  ArrowRightLeftIcon,
   BookOpenIcon,
   BuildingIcon,
   CreditCardIcon,
@@ -33,7 +32,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 export function SidebarUserMenu(): JSX.Element {
   const user = useUser();
   const session = useSession();
-  const isAdmin = useIsAdmin();
   const navigate = useNavigate();
   const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
@@ -148,12 +146,6 @@ export function SidebarUserMenu(): JSX.Element {
                 Billing
               </DropdownMenuItem>
             )}
-            {isAdmin && (
-              <DropdownMenuItem onClick={() => orgRoutes.adminSettings.goTo()}>
-                <ArrowRightLeftIcon className="mr-2 h-4 w-4" />
-                Organization Override
-              </DropdownMenuItem>
-            )}
             {isMultiOrg && (
               <DropdownMenuItem
                 onClick={() => {
@@ -211,7 +203,7 @@ export function SidebarUserMenu(): JSX.Element {
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <a
-                href="https://status.speakeasyapi.dev/"
+                href="https://status.speakeasy.com/"
                 target="_blank"
                 rel="noopener noreferrer"
               >

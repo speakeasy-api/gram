@@ -1,10 +1,10 @@
-import type { ServerNameOverride } from "@gram/client/models/components";
+import type { ServerNameOverride } from "@gram/client/models/components/servernameoverride.js";
+import { useHooksServerNamesDeleteServerNameOverrideMutation as useDeleteServerNameOverrideMutation } from "@gram/client/react-query/hooksServerNamesDeleteServerNameOverride.js";
 import {
   invalidateAllHooksServerNamesListServerNameOverrides as invalidateServerNamesList,
-  useHooksServerNamesDeleteServerNameOverrideMutation as useDeleteServerNameOverrideMutation,
   useHooksServerNamesListServerNameOverrides as useListServerNameOverrides,
-  useHooksServerNamesUpsertServerNameOverrideMutation as useUpsertServerNameOverrides,
-} from "@gram/client/react-query";
+} from "@gram/client/react-query/hooksServerNamesListServerNameOverrides.js";
+import { useHooksServerNamesUpsertServerNameOverrideMutation as useUpsertServerNameOverrides } from "@gram/client/react-query/hooksServerNamesUpsertServerNameOverride.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toast } from "sonner";

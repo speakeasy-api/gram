@@ -4,10 +4,8 @@ import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Assistant } from "@gram/client/models/components/assistant.js";
-import {
-  invalidateAllAssistantsList,
-  useAssistantsUpdateMutation,
-} from "@gram/client/react-query/index.js";
+import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
+import { useAssistantsUpdateMutation } from "@gram/client/react-query/assistantsUpdate.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";

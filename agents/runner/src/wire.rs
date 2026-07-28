@@ -30,6 +30,10 @@ pub struct ThreadTurnRequest {
     /// the first turn. Ignored once the boot env has set it (env wins).
     #[serde(default)]
     pub assistant_id: Option<String>,
+    /// Project the assistant belongs to. Set-once like `assistant_id`; only
+    /// used to stamp exported trace spans so traces filter per project.
+    #[serde(default)]
+    pub project_id: Option<String>,
 }
 
 /// 202-style ack returned by `/threads/{thread_id}/turn`. The actual turn

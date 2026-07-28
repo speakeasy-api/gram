@@ -315,6 +315,9 @@ function DebouncedNumberInput({
         max={max}
         step={step}
         onChange={(e) => setLocal(e.target.value)}
+        // Scrolling over a focused number input natively edits the value;
+        // blur so page scrolls pass through (same guard as ui/input).
+        onWheel={(e) => e.currentTarget.blur()}
         placeholder={placeholder}
         aria-label={ariaLabel}
         autoComplete="off"

@@ -45,6 +45,26 @@ type Client struct {
 	// deleteServer endpoint.
 	DeleteServerDoer goahttp.Doer
 
+	// ListServerHeaders Doer is the HTTP client used to make requests to the
+	// listServerHeaders endpoint.
+	ListServerHeadersDoer goahttp.Doer
+
+	// GetServerHeader Doer is the HTTP client used to make requests to the
+	// getServerHeader endpoint.
+	GetServerHeaderDoer goahttp.Doer
+
+	// CreateServerHeader Doer is the HTTP client used to make requests to the
+	// createServerHeader endpoint.
+	CreateServerHeaderDoer goahttp.Doer
+
+	// UpdateServerHeader Doer is the HTTP client used to make requests to the
+	// updateServerHeader endpoint.
+	UpdateServerHeaderDoer goahttp.Doer
+
+	// DeleteServerHeader Doer is the HTTP client used to make requests to the
+	// deleteServerHeader endpoint.
+	DeleteServerHeaderDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -72,6 +92,11 @@ func NewClient(
 		DiscoverProtectedResourceMetadataDoer: doer,
 		VerifyURLDoer:                         doer,
 		DeleteServerDoer:                      doer,
+		ListServerHeadersDoer:                 doer,
+		GetServerHeaderDoer:                   doer,
+		CreateServerHeaderDoer:                doer,
+		UpdateServerHeaderDoer:                doer,
+		DeleteServerHeaderDoer:                doer,
 		RestoreResponseBody:                   restoreBody,
 		scheme:                                scheme,
 		host:                                  host,
@@ -243,6 +268,126 @@ func (c *Client) DeleteServer() goa.Endpoint {
 		resp, err := c.DeleteServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("remoteMcp", "deleteServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListServerHeaders returns an endpoint that makes HTTP requests to the
+// remoteMcp service listServerHeaders server.
+func (c *Client) ListServerHeaders() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListServerHeadersRequest(c.encoder)
+		decodeResponse = DecodeListServerHeadersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListServerHeadersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListServerHeadersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteMcp", "listServerHeaders", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetServerHeader returns an endpoint that makes HTTP requests to the
+// remoteMcp service getServerHeader server.
+func (c *Client) GetServerHeader() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetServerHeaderRequest(c.encoder)
+		decodeResponse = DecodeGetServerHeaderResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetServerHeaderRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetServerHeaderDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteMcp", "getServerHeader", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateServerHeader returns an endpoint that makes HTTP requests to the
+// remoteMcp service createServerHeader server.
+func (c *Client) CreateServerHeader() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateServerHeaderRequest(c.encoder)
+		decodeResponse = DecodeCreateServerHeaderResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateServerHeaderRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateServerHeaderDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteMcp", "createServerHeader", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateServerHeader returns an endpoint that makes HTTP requests to the
+// remoteMcp service updateServerHeader server.
+func (c *Client) UpdateServerHeader() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateServerHeaderRequest(c.encoder)
+		decodeResponse = DecodeUpdateServerHeaderResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateServerHeaderRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateServerHeaderDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteMcp", "updateServerHeader", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteServerHeader returns an endpoint that makes HTTP requests to the
+// remoteMcp service deleteServerHeader server.
+func (c *Client) DeleteServerHeader() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteServerHeaderRequest(c.encoder)
+		decodeResponse = DecodeDeleteServerHeaderResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteServerHeaderRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteServerHeaderDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteMcp", "deleteServerHeader", err)
 		}
 		return decodeResponse(resp)
 	}
