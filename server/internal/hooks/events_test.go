@@ -87,11 +87,14 @@ func TestParseOpencodeHookEvent(t *testing.T) {
 		ok       bool
 	}{
 		{raw: "session.created", expected: HookEventSessionStart, ok: true},
-		{raw: "session.idle", expected: HookEventAfterAgentResponse, ok: true},
+		// session.idle and message.part.updated fall through to the canonical
+		// Event.Type (see parseOpencodeHookEvent) rather than being re-derived
+		// from the raw name.
+		{raw: "session.idle", expected: HookEventUnknown, ok: false},
 		{raw: "server.instance.disposed", expected: HookEventSessionEnd, ok: true},
 		{raw: "tool.execute.before", expected: HookEventPreToolUse, ok: true},
 		{raw: "tool.execute.after", expected: HookEventPostToolUse, ok: true},
-		{raw: "message.part.updated", expected: HookEventPostToolUseFailure, ok: true},
+		{raw: "message.part.updated", expected: HookEventUnknown, ok: false},
 		{raw: "chat.message", expected: HookEventUserPromptSubmit, ok: true},
 		{raw: "permission.asked", expected: HookEventPermissionRequest, ok: true},
 		{raw: "unknown", expected: HookEventUnknown, ok: false},

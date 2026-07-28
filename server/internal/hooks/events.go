@@ -101,21 +101,21 @@ func parseOpencodeHookEvent(raw string) (HookEvent, bool) {
 	switch raw {
 	case "session.created":
 		return HookEventSessionStart, true
-	case "session.idle":
-		// A finished turn, not a session lifecycle end: agenthooks decodes
-		// session.idle as KindStop and the relay's canonical type is
-		// assistant.responded. server.instance.disposed is the real end.
-		return HookEventAfterAgentResponse, true
+	// session.idle and message.part.updated are intentionally not mapped here.
+	// agenthooks already classifies them: a finished turn is decoded as KindStop
+	// (canonical assistant.responded/usage.reported), and a failed tool call is
+	// lifted from message.part.updated only when the part is a tool in error
+	// state (decodeOpenCodeToolError -> KindToolError -> canonical tool.failed).
+	// Every other message.part.updated is streaming noise (KindOther ->
+	// session.updated). Re-deriving from the raw name would mark all of them as
+	// failures, so these fall through to the canonical Event.Type in
+	// telemetryHookEventName instead.
 	case "server.instance.disposed":
 		return HookEventSessionEnd, true
 	case "tool.execute.before":
 		return HookEventPreToolUse, true
 	case "tool.execute.after":
 		return HookEventPostToolUse, true
-	case "message.part.updated":
-		// The only native signal for a failed tool call: tool.execute.after
-		// does not fire when a tool errors (decodeOpenCodeToolError).
-		return HookEventPostToolUseFailure, true
 	case "chat.message":
 		return HookEventUserPromptSubmit, true
 	case "permission.asked":

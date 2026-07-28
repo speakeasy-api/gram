@@ -1504,6 +1504,14 @@ func TestTelemetryHookEventName_TranslatesCanonicalVocabulary(t *testing.T) {
 	// Unrecognized raw names for known adapters fall back to the canonical map.
 	require.Equal(t, "PreToolUse", telemetryHookEventName(withRaw("cursor", "tool.requested", "beforeReadFile")))
 
+	// OpenCode's message.part.updated carries every streaming part update, not
+	// just failures; agenthooks decides whether it is a real tool failure, so the
+	// raw name must defer to the canonical Event.Type instead of forcing a
+	// failure. session.idle likewise defers (canonical assistant.responded).
+	require.Equal(t, "PostToolUseFailure", telemetryHookEventName(withRaw("opencode", "tool.failed", "message.part.updated")))
+	require.Equal(t, "session.updated", telemetryHookEventName(withRaw("opencode", "session.updated", "message.part.updated")))
+	require.Equal(t, "AfterAgentResponse", telemetryHookEventName(withRaw("opencode", "assistant.responded", "session.idle")))
+
 	// Custom adapters have no raw vocabulary: canonical types map to their
 	// provider-style equivalents so summaries still count them.
 	require.Equal(t, "PostToolUse", telemetryHookEventName(canonicalIngestPayload("openclaw", "tool.completed", "vocab-session")))
