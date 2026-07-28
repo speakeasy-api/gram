@@ -33,6 +33,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 const (
@@ -121,7 +122,7 @@ func instanceBaseURL(settings providers.Settings) (string, error) {
 	}
 	parsed, err := url.Parse(raw)
 	if err != nil {
-		return "", fmt.Errorf("instance_url is not a valid URL")
+		return "", fmt.Errorf("instance_url is not a valid URL: %w", err)
 	}
 	if parsed.Scheme != "https" {
 		return "", fmt.Errorf("instance_url must use https")
@@ -158,7 +159,7 @@ func (s *source) bearerToken(ctx context.Context, creds providers.Credentials, b
 	if err != nil {
 		return "", fmt.Errorf("request token: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	// Classify by status before touching the body: the error branches never
 	// need it, and an oversized error response must not mask a credential
@@ -264,7 +265,7 @@ func (s *source) fetchInventoryPage(ctx context.Context, creds providers.Credent
 	if err != nil {
 		return inventoryPage{}, fmt.Errorf("request inventory: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	// Classify by status before touching the body: the error branches never
 	// need it, and an oversized error response must not mask a credential
@@ -341,10 +342,15 @@ func (s *source) ListDevices(ctx context.Context, creds providers.Credentials, s
 		lastID = numericID
 		var lastContact time.Time
 		if d.General.LastContactTime != "" {
-			// Jamf emits RFC3339 with sub-second precision.
-			if parsed, err := time.Parse(time.RFC3339, d.General.LastContactTime); err == nil {
-				lastContact = parsed.UTC()
+			// Jamf emits RFC3339 with sub-second precision. An unparseable
+			// value fails loudly: a vendor format drift would otherwise
+			// silently NULL every stored check-in on the next pull,
+			// fleet-wide, with nothing surfaced anywhere.
+			parsed, err := time.Parse(time.RFC3339, d.General.LastContactTime)
+			if err != nil {
+				return providers.DevicePage{Devices: nil, NextCursor: ""}, fmt.Errorf("device %s carried unparseable lastContactTime %q", d.ID, d.General.LastContactTime)
 			}
+			lastContact = parsed.UTC()
 		}
 		devices = append(devices, providers.Device{
 			ExternalID:    d.ID,
@@ -358,11 +364,16 @@ func (s *source) ListDevices(ctx context.Context, creds providers.Credentials, s
 		})
 	}
 
-	// A short page means the filtered window is exhausted. A full page
-	// continues from the last id seen; totalCount is not consulted because
-	// it tracks the live filtered collection, not our snapshot.
+	// A page is final only when it is EMPTY. Stopping on the first short
+	// page would trust the vendor never to serve fewer records than
+	// requested mid-listing (a silently clamped page-size): a non-final
+	// short page would truncate the pull, and the completion-gated
+	// mark-missing would then flag the entire unfetched remainder as
+	// missing. One extra empty-page request per pull buys immunity;
+	// totalCount is not consulted because it tracks the live filtered
+	// collection, not our snapshot.
 	next := ""
-	if len(fetched.Results) == pageSize && lastID >= 0 {
+	if len(fetched.Results) > 0 && lastID >= 0 {
 		next = strconv.Itoa(lastID)
 	}
 	return providers.DevicePage{Devices: devices, NextCursor: next}, nil

@@ -283,6 +283,22 @@ func TestInstanceURLValidation(t *testing.T) {
 	require.ErrorContains(t, err, "tenant root")
 }
 
+func TestUnparseableLastContactFailsLoudly(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeJamf(t, 1)
+	fake.devMu.Lock()
+	fake.devices[0]["general"] = map[string]any{
+		"name":            "mac-001",
+		"platform":        "Mac",
+		"lastContactTime": "07/28/2026 10:00",
+	}
+	fake.devMu.Unlock()
+
+	_, err := fake.newSource().ListDevices(t.Context(), fake.creds(), fake.settings(), "")
+	require.ErrorContains(t, err, "lastContactTime", "a format drift must fail loudly, not silently NULL stored check-ins")
+}
+
 func TestInvalidCursorRejected(t *testing.T) {
 	t.Parallel()
 
