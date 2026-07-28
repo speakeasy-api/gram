@@ -1870,8 +1870,17 @@ async function poll(deadlineMs, fn, done) {
 }
 function featureChecks(provider, evidence, chats, opts = {}) {
   const events = new Set(evidence.map((r) => r.event).filter(Boolean));
-  const cursorHeadlessAssistantUnsupported =
-    provider === "cursor" && !events.has("assistant.responded");
+  // Both Cursor Agent and OpenCode's one-shot `run` deliver the end-of-turn
+  // signal (afterAgentResponse / session.idle) through a fire-and-forget path
+  // the process does not await, so headless runs tear down before it reaches
+  // the relay. The mapping is exercised by unit tests; skip the live check.
+  const headlessAssistantUnsupported =
+    (provider === "cursor" || provider === "opencode") &&
+    !events.has("assistant.responded");
+  const headlessAssistantDetail =
+    provider === "cursor"
+      ? "Cursor Agent headless does not reliably emit afterAgentResponse"
+      : "OpenCode headless `run` does not reliably deliver session.idle";
   const hasToolFailure = events.has("tool.failed");
   const sourceAliases = SOURCE_ALIASES[provider];
   const providerChats = chats.filter((m) => sourceAliases.includes(m.source));
@@ -1909,13 +1918,13 @@ function featureChecks(provider, evidence, chats, opts = {}) {
     feature: "assistant.responded",
     status: events.has("assistant.responded")
       ? "PASS"
-      : cursorHeadlessAssistantUnsupported
+      : headlessAssistantUnsupported
         ? "SKIP"
         : "FAIL",
     detail: events.has("assistant.responded")
       ? "observed in ClickHouse hook telemetry"
-      : cursorHeadlessAssistantUnsupported
-        ? "Cursor Agent headless does not reliably emit afterAgentResponse"
+      : headlessAssistantUnsupported
+        ? headlessAssistantDetail
         : `missing from events: ${[...events].join(", ") || "(none)"}`,
   });
   checks.unshift({
