@@ -226,6 +226,7 @@ class PresidioHandler:
                 id=str(uuid.uuid7()),
                 request_id=message.request_id,
                 chat_message_id=message.chat_message_id,
+                content_part_id=message.content_part_id,
                 project_id=message.project_id,
                 organization_id=message.organization_id,
                 risk_policy_id=message.risk_policy_id,

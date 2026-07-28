@@ -42,11 +42,15 @@ func NewHandler(logger *slog.Logger, meterProvider metric.MeterProvider, realSca
 }
 
 func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis, _ gcp.MessageMetadata) error {
-	gateReason := h.gate.Decide(ctx, m.GetProjectId(), m.GetChatMessageId())
+	anchorID := m.GetChatMessageId()
+	if anchorID == "" {
+		anchorID = m.GetContentPartId()
+	}
+	gateReason := h.gate.Decide(ctx, m.GetProjectId(), anchorID)
 	engine := gateReason.Engine()
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.RiskScanRequestID(m.GetRequestId()),
-		attr.MessageID(m.GetChatMessageId()),
+		attr.MessageID(anchorID),
 		attr.AuthOrganizationID(m.GetOrganizationId()),
 		attr.RiskScanEngine(engine),
 		attr.RiskScanGateReason(gateReason),
@@ -66,6 +70,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 	_, _, err = scanners.PublishFindings(ctx, h.logger, h.findingsPub, scanners.FindingMetadata{
 		RequestID:         m.GetRequestId(),
 		ChatMessageID:     m.GetChatMessageId(),
+		ContentPartID:     m.GetContentPartId(),
 		ProjectID:         m.GetProjectId(),
 		OrganizationID:    m.GetOrganizationId(),
 		RiskPolicyID:      m.GetRiskPolicyId(),

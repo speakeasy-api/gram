@@ -57,6 +57,7 @@ func finding() *riskv1.Finding {
 		Id:                new("finding-1"),
 		RequestId:         new("req-1"),
 		ChatMessageId:     new("chat-1"),
+		ContentPartId:     nil,
 		ProjectId:         new("proj-1"),
 		OrganizationId:    new("org-1"),
 		RiskPolicyId:      new("policy-1"),
@@ -522,6 +523,68 @@ func TestFindingCHWriter_HandleBatch_ResolvesAttribution(t *testing.T) {
 	// Unresolved attribution: message_created_at falls back to the finding's
 	// own scan time.
 	require.True(t, unknownRow.CreatedAt.Equal(unknownRow.MessageCreatedAt))
+}
+
+func TestFindingCHWriter_HandleBatch_ResolvesContentPartAttribution(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	queries := riskrepo.New(ti.conn)
+	chatID, err := queries.CreateChatForTest(t.Context(), riskrepo.CreateChatForTestParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText("chat-user"),
+		ExternalUserID: conv.ToPGText("chat-user@example.com"),
+	})
+	require.NoError(t, err)
+
+	parentMessageID, err := queries.CreateChatMessageForTest(t.Context(), riskrepo.CreateChatMessageForTestParams{
+		ChatID:         chatID,
+		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		Content:        "prompt text",
+		UserID:         conv.ToPGText("parent-user"),
+		ExternalUserID: conv.ToPGText("parent-user@example.com"),
+	})
+	require.NoError(t, err)
+
+	contentPartID, err := queries.CreateChatContentPartForTest(t.Context(), riskrepo.CreateChatContentPartForTestParams{
+		ChatID:              chatID,
+		ProjectID:           uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		Kind:                "prompt_attachment",
+		ContentAssetUrl:     "file:///attachment.txt",
+		ParentChatMessageID: uuid.NullUUID{UUID: parentMessageID, Valid: true},
+	})
+	require.NoError(t, err)
+	attributionRows, err := queries.GetChatContentPartAttribution(t.Context(), []uuid.UUID{contentPartID})
+	require.NoError(t, err)
+	require.Len(t, attributionRows, 1)
+	require.Equal(t, chatID, attributionRows[0].ChatID)
+	require.Equal(t, "parent-user", attributionRows[0].UserID)
+
+	ins := &fakeCHInserter{}
+	fp, err := risk.ParsePepperKeyRing(keyRingJSON(t, testPepperVersion, map[string][]byte{testPepperVersion: testPepperKey}))
+	require.NoError(t, err)
+	w := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins, fp)
+
+	f := chFinding()
+	f.ClearChatMessageId()
+	f.SetContentPartId(contentPartID.String())
+	f.SetProjectId(authCtx.ProjectID.String())
+	f.SetRiskPolicyId(uuid.NewString())
+
+	require.NoError(t, w.HandleBatch(ctx, []*riskv1.Finding{f}, nil))
+
+	rows := chRows(t, ins)
+	require.Len(t, rows, 1)
+	require.Empty(t, rows[0].ChatMessageID)
+	require.Equal(t, contentPartID.String(), rows[0].ContentPartID)
+	require.Equal(t, chatID.String(), rows[0].ChatID)
+	require.Equal(t, "parent-user", rows[0].UserID)
+	require.Equal(t, "parent-user@example.com", rows[0].ExternalUserID)
 }
 
 // chMessagesInsertedPoint returns the single data point for the CH

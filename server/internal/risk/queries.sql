@@ -1626,6 +1626,24 @@ LEFT JOIN LATERAL (
 ) thread ON TRUE
 WHERE cm.id = ANY(@ids::uuid[]);
 
+-- name: GetChatContentPartAttribution :many
+-- Resolves denormalized attribution for a content-part finding. The parent
+-- message's user ids win over chat-level ids; both empty and NULL collapse to
+-- ''. A content part without a parent still resolves chat-level attribution.
+SELECT
+    ccp.id
+  , ccp.chat_id
+  , COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id
+  , COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
+FROM chat_content_parts ccp
+LEFT JOIN chat_messages cm
+  ON cm.id = ccp.parent_chat_message_id
+LEFT JOIN chats c
+  ON c.id = ccp.chat_id
+  AND c.deleted IS FALSE
+WHERE ccp.id = ANY(@ids::uuid[])
+  AND ccp.deleted IS FALSE;
+
 -- name: CreateChatForTest :one
 INSERT INTO chats (project_id, organization_id, user_id, external_user_id)
 VALUES (@project_id, @organization_id, @user_id, @external_user_id)
