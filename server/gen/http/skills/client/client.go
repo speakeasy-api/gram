@@ -24,11 +24,39 @@ type Client struct {
 	// endpoint.
 	AddVersionDoer goahttp.Doer
 
+	// RestoreVersion Doer is the HTTP client used to make requests to the
+	// restoreVersion endpoint.
+	RestoreVersionDoer goahttp.Doer
+
 	// Update Doer is the HTTP client used to make requests to the update endpoint.
 	UpdateDoer goahttp.Doer
 
 	// List Doer is the HTTP client used to make requests to the list endpoint.
 	ListDoer goahttp.Doer
+
+	// ListSuggestions Doer is the HTTP client used to make requests to the
+	// listSuggestions endpoint.
+	ListSuggestionsDoer goahttp.Doer
+
+	// ListFeedback Doer is the HTTP client used to make requests to the
+	// listFeedback endpoint.
+	ListFeedbackDoer goahttp.Doer
+
+	// ApproveSuggestion Doer is the HTTP client used to make requests to the
+	// approveSuggestion endpoint.
+	ApproveSuggestionDoer goahttp.Doer
+
+	// DismissSuggestion Doer is the HTTP client used to make requests to the
+	// dismissSuggestion endpoint.
+	DismissSuggestionDoer goahttp.Doer
+
+	// ListSuggestionFeedback Doer is the HTTP client used to make requests to the
+	// listSuggestionFeedback endpoint.
+	ListSuggestionFeedbackDoer goahttp.Doer
+
+	// ApproveAllSuggestions Doer is the HTTP client used to make requests to the
+	// approveAllSuggestions endpoint.
+	ApproveAllSuggestionsDoer goahttp.Doer
 
 	// Get Doer is the HTTP client used to make requests to the get endpoint.
 	GetDoer goahttp.Doer
@@ -90,8 +118,15 @@ func NewClient(
 	return &Client{
 		CreateDoer:                 doer,
 		AddVersionDoer:             doer,
+		RestoreVersionDoer:         doer,
 		UpdateDoer:                 doer,
 		ListDoer:                   doer,
+		ListSuggestionsDoer:        doer,
+		ListFeedbackDoer:           doer,
+		ApproveSuggestionDoer:      doer,
+		DismissSuggestionDoer:      doer,
+		ListSuggestionFeedbackDoer: doer,
+		ApproveAllSuggestionsDoer:  doer,
 		GetDoer:                    doer,
 		ListUnknownActivationsDoer: doer,
 		ListVersionsDoer:           doer,
@@ -158,6 +193,30 @@ func (c *Client) AddVersion() goa.Endpoint {
 	}
 }
 
+// RestoreVersion returns an endpoint that makes HTTP requests to the skills
+// service restoreVersion server.
+func (c *Client) RestoreVersion() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRestoreVersionRequest(c.encoder)
+		decodeResponse = DecodeRestoreVersionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRestoreVersionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RestoreVersionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "restoreVersion", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // Update returns an endpoint that makes HTTP requests to the skills service
 // update server.
 func (c *Client) Update() goa.Endpoint {
@@ -201,6 +260,150 @@ func (c *Client) List() goa.Endpoint {
 		resp, err := c.ListDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("skills", "list", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListSuggestions returns an endpoint that makes HTTP requests to the skills
+// service listSuggestions server.
+func (c *Client) ListSuggestions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListSuggestionsRequest(c.encoder)
+		decodeResponse = DecodeListSuggestionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListSuggestionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListSuggestionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "listSuggestions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListFeedback returns an endpoint that makes HTTP requests to the skills
+// service listFeedback server.
+func (c *Client) ListFeedback() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListFeedbackRequest(c.encoder)
+		decodeResponse = DecodeListFeedbackResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListFeedbackRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListFeedbackDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "listFeedback", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ApproveSuggestion returns an endpoint that makes HTTP requests to the skills
+// service approveSuggestion server.
+func (c *Client) ApproveSuggestion() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeApproveSuggestionRequest(c.encoder)
+		decodeResponse = DecodeApproveSuggestionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildApproveSuggestionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ApproveSuggestionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "approveSuggestion", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DismissSuggestion returns an endpoint that makes HTTP requests to the skills
+// service dismissSuggestion server.
+func (c *Client) DismissSuggestion() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDismissSuggestionRequest(c.encoder)
+		decodeResponse = DecodeDismissSuggestionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDismissSuggestionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DismissSuggestionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "dismissSuggestion", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListSuggestionFeedback returns an endpoint that makes HTTP requests to the
+// skills service listSuggestionFeedback server.
+func (c *Client) ListSuggestionFeedback() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListSuggestionFeedbackRequest(c.encoder)
+		decodeResponse = DecodeListSuggestionFeedbackResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListSuggestionFeedbackRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListSuggestionFeedbackDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "listSuggestionFeedback", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ApproveAllSuggestions returns an endpoint that makes HTTP requests to the
+// skills service approveAllSuggestions server.
+func (c *Client) ApproveAllSuggestions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeApproveAllSuggestionsRequest(c.encoder)
+		decodeResponse = DecodeApproveAllSuggestionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildApproveAllSuggestionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ApproveAllSuggestionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "approveAllSuggestions", err)
 		}
 		return decodeResponse(resp)
 	}

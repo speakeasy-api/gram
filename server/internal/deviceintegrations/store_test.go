@@ -56,6 +56,22 @@ func TestUpsertRejectsUnknownAndMisroutedFields(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestUpsertRejectsMalformedURLSetting(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	// URL-kind fields are syntax-checked at save time so a typo'd instance
+	// URL fails at the sheet, not as a deterministic sync failure an hour
+	// later.
+	for _, bad := range []string{"tenant.example.test", "http://tenant.example.test", "https://"} {
+		_, err := upsertTx(t, ctx, conn, store, orgID, validCreds(), providers.Settings{"instance_url": bad}, true)
+		require.ErrorContains(t, err, "https URL", "value %q must be rejected", bad)
+	}
+
+	mustUpsert(t, ctx, conn, store, orgID, validCreds(), validSettings(), true)
+}
+
 func TestUpsertKeepsCredentialsWhenOmitted(t *testing.T) {
 	t.Parallel()
 

@@ -89,6 +89,32 @@ func TestResolveSkillSuggestionBasePrefersLineageParent(t *testing.T) {
 	require.NotEqual(t, uuid.MustParse(second.Version.ID), resolved.PredecessorVersionID)
 }
 
+func TestResolveSkillRegressionBasesMatchesSuggestionBaseVersionPairs(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	first := createSkill(t, ctx, ti, "batch-base-first", "First.")
+	second := createSkill(t, ctx, ti, "batch-base-second", "Second.")
+	_, err := ti.service.AddVersion(ctx, &gen.AddVersionPayload{
+		ID: first.Skill.ID, Content: skillManifest("batch-base-first", "Derived.", "derived"),
+		DerivedFromVersionID: conv.PtrEmpty(first.Version.ID), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	rows, err := ti.repo.ResolveSkillRegressionBases(ctx, repo.ResolveSkillRegressionBasesParams{
+		ProjectID: ti.projectID,
+		SkillIds:  []uuid.UUID{uuid.MustParse(second.Skill.ID), uuid.MustParse(first.Skill.ID), uuid.New()},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	for _, row := range rows {
+		single, err := ti.repo.ResolveSkillSuggestionBase(ctx, repo.ResolveSkillSuggestionBaseParams{ProjectID: ti.projectID, SkillID: row.SkillID})
+		require.NoError(t, err)
+		require.Equal(t, single.BaseVersionID, row.BaseVersionID)
+		require.Equal(t, single.PredecessorVersionID, row.PredecessorVersionID)
+	}
+}
+
 func TestSkillEditSuggestionLifecycleAndTenantIsolation(t *testing.T) {
 	t.Parallel()
 

@@ -36591,6 +36591,216 @@ paths:
       x-speakeasy-name-override: addVersion
       x-speakeasy-react-hook:
         name: AddSkillVersion
+  /rpc/skills.approveAllSuggestions:
+    post:
+      description: Snapshot and independently process selected skill edit suggestions, or every open suggestion when no IDs are supplied. One conflict or failure does not stop the remaining approvals.
+      operationId: approveAllSkillSuggestions
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveAllSkillSuggestionsRequestBody'
+        required: false
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApproveAllSkillSuggestionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: approveAllSuggestions skills
+      tags:
+        - skills
+      x-speakeasy-name-override: approveAllSuggestions
+      x-speakeasy-react-hook:
+        name: ApproveAllSkillSuggestions
+  /rpc/skills.approveSuggestion:
+    post:
+      description: Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only one of its proposed changes. Stale suggestions are superseded instead.
+      operationId: approveSkillSuggestion
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveSkillSuggestionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApproveSkillSuggestionResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: approveSuggestion skills
+      tags:
+        - skills
+      x-speakeasy-name-override: approveSuggestion
+      x-speakeasy-react-hook:
+        name: ApproveSkillSuggestion
   /rpc/skills.archive:
     post:
       description: Idempotently archive a skill. The implementation requires the skills product feature and skill write scope. Repeated requests for the same skill succeed without creating another state transition.
@@ -36797,6 +37007,111 @@ paths:
       x-speakeasy-name-override: create
       x-speakeasy-react-hook:
         name: CreateSkill
+  /rpc/skills.dismissSuggestion:
+    post:
+      description: Idempotently dismiss an open skill edit suggestion. Approved and superseded suggestions conflict.
+      operationId: dismissSkillSuggestion
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DismissSkillSuggestionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillEditSuggestion'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: dismissSuggestion skills
+      tags:
+        - skills
+      x-speakeasy-name-override: dismissSuggestion
+      x-speakeasy-react-hook:
+        name: DismissSkillSuggestion
   /rpc/skills.distribute:
     post:
       description: Create or update the active distribution of a skill to exactly one plugin or assistant. Repeating the request for the same target updates the version pin or is a no-op.
@@ -37377,6 +37692,392 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: SkillDistributions
+  /rpc/skills.listFeedback:
+    get:
+      description: List all-time outcome counts and recent resolved feedback for a skill. Name-only feedback is excluded.
+      operationId: listSkillFeedback
+      parameters:
+        - allowEmptyValue: true
+          description: The skill ID.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The skill ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Cursor for the next page of feedback.
+          in: query
+          name: cursor
+          schema:
+            description: Cursor for the next page of feedback.
+            type: string
+        - allowEmptyValue: true
+          description: The number of feedback rows to return per page.
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: The number of feedback rows to return per page.
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSkillFeedbackResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listFeedback skills
+      tags:
+        - skills
+      x-speakeasy-name-override: listFeedback
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: SkillFeedback
+  /rpc/skills.listSuggestionFeedback:
+    get:
+      description: List the agent feedback cited as the reason for one proposed change, newest first.
+      operationId: listSkillSuggestionFeedback
+      parameters:
+        - allowEmptyValue: true
+          description: The proposed change ID.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The proposed change ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The number of feedback records to return.
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: The number of feedback records to return.
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSkillSuggestionFeedbackResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listSuggestionFeedback skills
+      tags:
+        - skills
+      x-speakeasy-name-override: listSuggestionFeedback
+      x-speakeasy-react-hook:
+        name: SkillSuggestionFeedback
+  /rpc/skills.listSuggestions:
+    get:
+      description: List open skill edit suggestions in the project, newest first. The implementation requires the skills product feature and skill read scope.
+      operationId: listSkillSuggestions
+      parameters:
+        - allowEmptyValue: true
+          description: Only return suggestions for this skill.
+          in: query
+          name: skill_id
+          schema:
+            description: Only return suggestions for this skill.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Cursor for the next page of suggestions.
+          in: query
+          name: cursor
+          schema:
+            description: Cursor for the next page of suggestions.
+            type: string
+        - allowEmptyValue: true
+          description: The number of suggestions to return per page.
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: The number of suggestions to return per page.
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSkillSuggestionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listSuggestions skills
+      tags:
+        - skills
+      x-speakeasy-name-override: listSuggestions
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: SkillSuggestions
   /rpc/skills.listUnknownActivations:
     get:
       description: List terminal skill activations that could not be attributed to a skill version.
@@ -37636,6 +38337,111 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: SkillVersions
+  /rpc/skills.restoreVersion:
+    post:
+      description: Restore a historical valid version as the skill's current version without changing the immutable version record or explicit distribution pins.
+      operationId: restoreSkillVersion
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestoreSkillVersionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordSkillResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: restoreVersion skills
+      tags:
+        - skills
+      x-speakeasy-name-override: restoreVersion
+      x-speakeasy-react-hook:
+        name: RestoreSkillVersion
   /rpc/skills.share:
     post:
       description: Create a public share link for a skill. Repeated requests return the existing active link, so each skill has at most one active share token.
@@ -49538,6 +50344,26 @@ components:
         - status
         - created_at
         - updated_at
+    ApproveAllSkillSuggestionsRequestBody:
+      type: object
+      properties:
+        suggestion_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Optional suggestion IDs to approve. Omitted or empty approves every currently open suggestion.
+    ApproveAllSkillSuggestionsResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillSuggestionApprovalItem'
+          description: The outcomes in snapshot order.
+      description: Per-item outcomes for the snapshotted open suggestions.
+      required:
+        - items
     ApproveShadowMCPApprovalRequestForm:
       type: object
       properties:
@@ -49577,6 +50403,40 @@ components:
         - match_breadth
         - match_value
         - display_name
+    ApproveSkillSuggestionRequestBody:
+      type: object
+      properties:
+        change_id:
+          type: string
+          description: Optional ID of the single proposed change to take. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.
+          format: uuid
+        content:
+          type: string
+          description: Optional edited complete SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.
+        id:
+          type: string
+          description: The suggestion ID.
+          format: uuid
+      required:
+        - id
+    ApproveSkillSuggestionResult:
+      type: object
+      properties:
+        outcome:
+          type: string
+          description: Whether the suggestion created a version, created one and stayed open carrying its remaining changes, or was stale.
+          enum:
+            - applied
+            - partially_applied
+            - superseded
+        suggestion:
+          $ref: '#/components/schemas/SkillEditSuggestion'
+        version:
+          $ref: '#/components/schemas/SkillVersion'
+      description: The result of approving one suggestion.
+      required:
+        - suggestion
+        - outcome
     ArchiveSkillRequestBody:
       type: object
       properties:
@@ -52334,6 +53194,12 @@ components:
           items:
             type: string
           description: Complete desired canonical URL allow set for this policy. Omit or send empty to create no URL-specific allow decisions.
+        shadow_mcp_disposition:
+          type: string
+          description: 'Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.'
+          enum:
+            - block_all
+            - allow_all
         sources:
           type: array
           items:
@@ -53525,6 +54391,15 @@ components:
           format: uuid
       required:
         - remote_mcp_server_id
+    DismissSkillSuggestionRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The suggestion ID.
+          format: uuid
+      required:
+        - id
     DistributeSkillRequestBody:
       type: object
       properties:
@@ -55397,7 +56272,7 @@ components:
           description: Daily activations in the adoption window.
         skill:
           $ref: '#/components/schemas/Skill'
-      description: An active skill and its derived latest version.
+      description: An active skill and its current version.
       required:
         - skill
         - adoption
@@ -57497,6 +58372,52 @@ components:
       description: A page of active plugin skill distributions for the current project.
       required:
         - distributions
+    ListSkillFeedbackResult:
+      type: object
+      properties:
+        counts:
+          $ref: '#/components/schemas/SkillFeedbackCounts'
+        feedback:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillFeedback'
+        next_cursor:
+          type: string
+          description: Cursor for the next page; absent when exhausted.
+      description: All-time outcome counts and a newest-first page of feedback for a skill.
+      required:
+        - counts
+        - feedback
+    ListSkillSuggestionFeedbackResult:
+      type: object
+      properties:
+        feedback:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillFeedback'
+          description: The feedback records linked to the suggestion.
+      description: The agent feedback a suggestion was generated from, newest first.
+      required:
+        - feedback
+    ListSkillSuggestionsResult:
+      type: object
+      properties:
+        next_cursor:
+          type: string
+          description: Cursor for the next page; absent when exhausted.
+        suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillEditSuggestion'
+          description: The open suggestions in this page.
+        total_open_count:
+          type: integer
+          description: The total number of matching open suggestions, independent of pagination.
+          format: int64
+      description: A page of open skill edit suggestions.
+      required:
+        - suggestions
+        - total_open_count
     ListSkillVersionsResult:
       type: object
       properties:
@@ -61371,6 +62292,20 @@ components:
         - type
         - status_codes
         - content_types
+    RestoreSkillVersionRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The skill ID.
+          format: uuid
+        version_id:
+          type: string
+          description: The historical version to restore.
+          format: uuid
+      required:
+        - id
+        - version_id
     RetryScheduleRequestBody:
       type: object
       properties:
@@ -61868,6 +62803,12 @@ components:
           format: double
           minimum: 0.1
           maximum: 10
+        shadow_mcp_disposition:
+          type: string
+          description: 'Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless it appears on the blocked-URL list. Immutable after create. Only present on policies with the shadow_mcp source and block action.'
+          enum:
+            - block_all
+            - allow_all
         sources:
           type: array
           items:
@@ -64185,7 +65126,7 @@ components:
           format: date-time
         latest_version_id:
           type: string
-          description: The derived latest version ID, selected from immutable version creation order.
+          description: The current version ID, selected by effective promotion time.
           format: uuid
         name:
           type: string
@@ -64393,11 +65334,142 @@ components:
         - on_target_machines
         - drifted_machines
         - indeterminate_machines
+    SkillEditSuggestion:
+      type: object
+      properties:
+        applies_cleanly:
+          type: boolean
+          description: Whether every proposed change still applies to the base version.
+        approved_at:
+          type: string
+          description: When the suggestion was approved, when present.
+          format: date-time
+        approved_by_user_id:
+          type: string
+          description: The user that approved the suggestion, when present.
+        base_version_id:
+          type: string
+          description: The version the suggestion was generated from.
+          format: uuid
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillEditSuggestionChange'
+          description: The separate changes proposed, each reviewable on its own.
+        created_at:
+          type: string
+          description: When the suggestion was created.
+          format: date-time
+        feedback_count:
+          type: integer
+          description: Feedback records the suggestion was generated from.
+          format: int64
+        feedback_session_count:
+          type: integer
+          description: Distinct sessions that reported the feedback behind the suggestion.
+          format: int64
+        id:
+          type: string
+          description: The suggestion ID.
+          format: uuid
+        proposed_content:
+          type: string
+          description: The complete SKILL.md content produced by taking every proposed change.
+        rationale:
+          type: string
+          description: Why the edit was proposed, covering the suggestion as a whole.
+        scored_session_count:
+          type: integer
+          description: Scored sessions considered by the suggestion.
+          format: int64
+        skill_display_name:
+          type: string
+          description: The user-facing skill name.
+        skill_id:
+          type: string
+          description: The skill targeted by the suggestion.
+          format: uuid
+        skill_name:
+          type: string
+          description: The canonical skill name.
+        status:
+          type: string
+          description: The suggestion state.
+          enum:
+            - open
+            - approved
+            - dismissed
+            - superseded
+        updated_at:
+          type: string
+          description: When the suggestion was last updated.
+          format: date-time
+      description: A proposed edit to an existing project skill.
+      required:
+        - id
+        - skill_id
+        - skill_name
+        - skill_display_name
+        - base_version_id
+        - changes
+        - proposed_content
+        - applies_cleanly
+        - rationale
+        - status
+        - feedback_count
+        - feedback_session_count
+        - scored_session_count
+        - created_at
+        - updated_at
+    SkillEditSuggestionChange:
+      type: object
+      properties:
+        applies_cleanly:
+          type: boolean
+          description: Whether the change still applies.
+        created_at:
+          type: string
+          description: When the change was recorded.
+          format: date-time
+        feedback_count:
+          type: integer
+          description: Feedback records cited as the reason for this change.
+          format: int64
+        feedback_session_count:
+          type: integer
+          description: Distinct sessions that reported the feedback behind this change.
+          format: int64
+        id:
+          type: string
+          description: The change ID.
+          format: uuid
+        proposed_diff:
+          type: string
+          description: The change as a unified diff against the content the changes before it produce.
+        rationale:
+          type: string
+          description: Why this change alone was proposed.
+        suggestion_id:
+          type: string
+          description: The suggestion the change belongs to.
+          format: uuid
+      description: One self-contained edit proposed by a suggestion, applied and reviewed on its own.
+      required:
+        - id
+        - suggestion_id
+        - proposed_diff
+        - rationale
+        - applies_cleanly
+        - feedback_count
+        - feedback_session_count
+        - created_at
     SkillEfficacyInsight:
       type: object
       properties:
         metrics:
           $ref: '#/components/schemas/SkillInsightMetrics'
+        regression_signal:
+          $ref: '#/components/schemas/SkillEfficacyRegressionSignal'
         skill_id:
           type: string
           format: uuid
@@ -64484,6 +65556,48 @@ components:
         - estimated_minutes_saved_samples
         - roi_confidence_counts
         - flag_counts
+    SkillEfficacyRegressionSignal:
+      type: object
+      properties:
+        comparable:
+          type: boolean
+        current_average_score:
+          type: number
+          format: double
+        current_scored_sessions:
+          type: integer
+          format: int64
+        current_version_id:
+          type: string
+          format: uuid
+        predecessor_average_score:
+          type: number
+          format: double
+        predecessor_scored_sessions:
+          type: integer
+          format: int64
+        predecessor_version_id:
+          type: string
+          format: uuid
+        regression:
+          type: boolean
+        window_end:
+          type: string
+          format: date-time
+        window_start:
+          type: string
+          format: date-time
+      description: The current skill version's efficacy comparison using the server suggestion policy.
+      required:
+        - comparable
+        - regression
+        - current_version_id
+        - current_average_score
+        - current_scored_sessions
+        - predecessor_average_score
+        - predecessor_scored_sessions
+        - window_start
+        - window_end
     SkillEfficacyScoredSession:
       type: object
       properties:
@@ -64579,6 +65693,75 @@ components:
         - org_daily_cap
         - new_version_burst
         - is_default
+    SkillFeedback:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the feedback was recorded.
+          format: date-time
+        id:
+          type: string
+          description: The feedback ID.
+          format: uuid
+        note:
+          type: string
+          description: An optional feedback note.
+        outcome:
+          type: string
+          description: The reported skill feedback outcome.
+          enum:
+            - helped
+            - partially_helped
+            - did_not_help
+            - misleading
+            - harmful
+        reviewed_at:
+          type: string
+          description: When automated suggestion analysis reviewed this feedback.
+          format: date-time
+        skill_version_id:
+          type: string
+          description: The attributed skill version, when known.
+          format: uuid
+        source:
+          type: string
+          description: Where skill feedback was recorded.
+      description: A privacy-minimized feedback row for a skill.
+      required:
+        - id
+        - source
+        - outcome
+        - created_at
+    SkillFeedbackCounts:
+      type: object
+      properties:
+        did_not_help:
+          type: integer
+          format: int64
+        harmful:
+          type: integer
+          format: int64
+        helped:
+          type: integer
+          format: int64
+        misleading:
+          type: integer
+          format: int64
+        partially_helped:
+          type: integer
+          format: int64
+        total:
+          type: integer
+          format: int64
+      description: All-time outcome counts for resolved feedback on a skill.
+      required:
+        - total
+        - helped
+        - partially_helped
+        - did_not_help
+        - misleading
+        - harmful
     SkillFeedbackPayload:
       type: object
       properties:
@@ -64692,6 +65875,45 @@ components:
       required:
         - bucket_start
         - activation_count
+    SkillSuggestionApprovalItem:
+      type: object
+      properties:
+        message:
+          type: string
+          description: A safe explanation for a conflict or failure.
+        outcome:
+          type: string
+          description: The item's processing outcome.
+          enum:
+            - applied
+            - superseded
+            - conflict
+            - failed
+        resulting_version_id:
+          type: string
+          description: The created version for an applied item.
+          format: uuid
+        skill_display_name:
+          type: string
+          description: The user-facing skill name.
+        skill_id:
+          type: string
+          description: The targeted skill ID.
+          format: uuid
+        skill_name:
+          type: string
+          description: The canonical skill name.
+        suggestion_id:
+          type: string
+          description: The suggestion ID.
+          format: uuid
+      description: The result of one item in a bulk suggestion approval.
+      required:
+        - suggestion_id
+        - skill_id
+        - skill_name
+        - skill_display_name
+        - outcome
     SkillSummary:
       type: object
       properties:
@@ -68229,6 +69451,12 @@ components:
           items:
             type: string
           description: Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.
+        shadow_mcp_disposition:
+          type: string
+          description: 'The policy''s shadow MCP disposition. Immutable: omit, or send the current value unchanged; any other value is rejected. Switching posture requires delete + recreate.'
+          enum:
+            - block_all
+            - allow_all
         sources:
           type: array
           items:

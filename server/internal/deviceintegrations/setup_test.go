@@ -46,6 +46,7 @@ func TestMain(m *testing.M) {
 			// behavior through settings since the registry is process-global.
 			{Key: "devices", Label: "Devices", Kind: providers.FieldKindText, Secret: false, Required: false},
 			{Key: "fail", Label: "Fail Mode", Kind: providers.FieldKindText, Secret: false, Required: false},
+			{Key: "raw_json", Label: "Raw JSON", Kind: providers.FieldKindText, Secret: false, Required: false},
 		},
 		Schedules: []providers.ScheduleSpec{
 			{Schedule: "testmdm_inventory", Capability: providers.CapabilityInventorySource, Interval: time.Hour},
@@ -115,6 +116,13 @@ func (fakeInventorySource) ListDevices(ctx context.Context, creds providers.Cred
 	case "boom":
 		return providers.DevicePage{Devices: nil, NextCursor: ""}, errors.New("vendor exploded")
 	}
+	// raw_json overrides each device's vendor record verbatim, letting tests
+	// feed the framework payloads the database may reject (e.g. jsonb
+	// refusing a Unicode NUL escape).
+	rawRecord := []byte(`{"fake":true}`)
+	if override := settings["raw_json"]; override != "" {
+		rawRecord = []byte(override)
+	}
 	var devices []providers.Device
 	if raw := settings["devices"]; raw != "" {
 		for entry := range strings.SplitSeq(raw, ",") {
@@ -127,7 +135,7 @@ func (fakeInventorySource) ListDevices(ctx context.Context, creds providers.Cred
 				OSVersion:     "15.0",
 				UserEmail:     email,
 				LastCheckInAt: time.Now().UTC(),
-				Raw:           []byte(`{"fake":true}`),
+				Raw:           rawRecord,
 			})
 		}
 	}
