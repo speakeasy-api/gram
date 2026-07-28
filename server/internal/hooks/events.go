@@ -94,7 +94,7 @@ func parseCursorHookEvent(raw string) (HookEvent, bool) {
 }
 
 // parseOpencodeHookEvent maps source.raw_event_name values to canonical
-// HookEvent names. The TS plugin is retired; these are agenthooks' native
+// HookEvent names. These are agenthooks' native
 // NativeNames (see codec_opencode.go's opencodeKind) — the OpenCode SDK's own
 // hook/event type strings, not synthesized names.
 func parseOpencodeHookEvent(raw string) (HookEvent, bool) {
