@@ -29,6 +29,14 @@ function renderSheet(onAddVariables: OnAddVariables = () => {}) {
   );
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 describe("AddVariableSheet", () => {
   it("imports variables from a selected dotenv file", async () => {
     const onAddVariables = vi.fn<OnAddVariables>();
@@ -80,5 +88,64 @@ describe("AddVariableSheet", () => {
         "No valid environment variable assignments found.",
       ),
     ).toBeTruthy();
+  });
+
+  it("ignores an older file read after a newer import finishes", async () => {
+    const firstRead = deferred<string>();
+    const firstFile = new File([""], "first.env", { type: "text/plain" });
+    vi.spyOn(firstFile, "text").mockReturnValue(firstRead.promise);
+    renderSheet();
+
+    fireEvent.change(screen.getByLabelText("Import .env file"), {
+      target: { files: [firstFile] },
+    });
+    expect(
+      screen.getByRole("button", { name: "Save" }).hasAttribute("disabled"),
+    ).toBe(true);
+
+    fireEvent.change(screen.getByLabelText("Import .env file"), {
+      target: {
+        files: [
+          new File(["LATEST_KEY=latest-value"], "latest.env", {
+            type: "text/plain",
+          }),
+        ],
+      },
+    });
+    expect(await screen.findByDisplayValue("LATEST_KEY")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Save" }).hasAttribute("disabled"),
+    ).toBe(false);
+
+    firstRead.resolve("STALE_KEY=stale-value");
+    await firstRead.promise;
+
+    await waitFor(() => {
+      expect(screen.queryByDisplayValue("STALE_KEY")).toBeNull();
+      expect(screen.getByDisplayValue("LATEST_KEY")).toBeTruthy();
+    });
+  });
+
+  it("ignores a file read that finishes after the sheet closes", async () => {
+    const fileRead = deferred<string>();
+    const file = new File([""], ".env", { type: "text/plain" });
+    vi.spyOn(file, "text").mockReturnValue(fileRead.promise);
+    renderSheet();
+
+    fireEvent.change(screen.getByLabelText("Import .env file"), {
+      target: { files: [file] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    fileRead.resolve("STALE_KEY=stale-value");
+    await fileRead.promise;
+
+    await waitFor(() => {
+      expect(screen.queryByDisplayValue("STALE_KEY")).toBeNull();
+      expect(
+        (screen.getByPlaceholderText("CLIENT_KEY...") as HTMLInputElement)
+          .value,
+      ).toBe("");
+    });
   });
 });

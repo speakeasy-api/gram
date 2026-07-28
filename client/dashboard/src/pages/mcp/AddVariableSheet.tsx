@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Button } from "@speakeasy-api/moonshine";
 import { AlertCircle, ChevronDown, Plus, X } from "lucide-react";
-import { type ClipboardEvent, useCallback, useState } from "react";
+import { type ClipboardEvent, useCallback, useRef, useState } from "react";
 import { parseDotEnvPaste } from "./dotEnvUtils";
 import { EnvVarState } from "./environmentVariableUtils";
 
@@ -63,13 +63,19 @@ export function AddVariableSheet({
     { ...EMPTY_ENTRY },
   ]);
   const [error, setError] = useState<string | null>(null);
+  const [isReadingFile, setIsReadingFile] = useState(false);
+  const fileReadSeq = useRef(0);
 
   const resetForm = useCallback(() => {
+    fileReadSeq.current += 1;
     setEntries([{ ...EMPTY_ENTRY }]);
     setError(null);
+    setIsReadingFile(false);
   }, []);
 
   const handleSave = () => {
+    if (isReadingFile) return;
+
     const keyedEntries = entries.filter((e) => e.key.trim());
     if (keyedEntries.length === 0) return;
 
@@ -157,19 +163,34 @@ export function AddVariableSheet({
       event.clipboardData.getData("text"),
       index,
     );
-    if (imported) event.preventDefault();
+    if (imported) {
+      fileReadSeq.current += 1;
+      setIsReadingFile(false);
+      event.preventDefault();
+    }
   };
 
   const handleDotEnvFile = async (file: File | undefined): Promise<void> => {
     if (!file) return;
 
+    const readSeq = ++fileReadSeq.current;
+    setIsReadingFile(true);
+
     try {
-      const imported = importDotEnvContents(await file.text(), 0);
+      const contents = await file.text();
+      if (readSeq !== fileReadSeq.current) return;
+
+      const imported = importDotEnvContents(contents, 0);
       if (!imported) {
         setError("No valid environment variable assignments found.");
       }
     } catch {
+      if (readSeq !== fileReadSeq.current) return;
       setError("The selected .env file could not be read.");
+    } finally {
+      if (readSeq === fileReadSeq.current) {
+        setIsReadingFile(false);
+      }
     }
   };
 
@@ -368,7 +389,10 @@ export function AddVariableSheet({
           <span className="text-muted-foreground text-xs">
             or paste .env contents in Key input
           </span>
-          <Button onClick={handleSave} disabled={!hasValidEntry}>
+          <Button
+            onClick={handleSave}
+            disabled={!hasValidEntry || isReadingFile}
+          >
             Save
           </Button>
         </SheetFooter>
