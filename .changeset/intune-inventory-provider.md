@@ -1,5 +1,6 @@
 ---
 "server": minor
+"dashboard": patch
 ---
 
 Add the Microsoft Intune inventory-source provider to device integrations:

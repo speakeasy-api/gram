@@ -14,13 +14,15 @@
 //	reports bad client credentials as HTTP 400 with an error code such as
 //	"invalid_client", which must classify as a credential rejection.
 //	GET  graph.microsoft.com/v1.0/deviceManagement/managedDevices —
-//	section-selected ($select) device pages.
+//	field-selected ($select) device pages.
 //
-// Pagination follows Graph's server-driven @odata.nextLink cursor. Unlike
-// offset paging, the server owns snapshot consistency; the pull ends when
-// Graph stops returning a nextLink. The cursor round-trips through the
-// framework as an opaque string, so the followed URL is validated to stay
-// on the Graph host.
+// Pagination follows Graph's server-driven @odata.nextLink cursor: the
+// client does no offset arithmetic, so there is no client-side page-shift
+// hazard — though Graph makes no snapshot-isolation promise, so mid-pull
+// churn behavior is whatever its continuation tokens provide (see the
+// snapshot-consistency note on providers.InventorySource). The cursor
+// round-trips through the framework as an opaque string, so the followed
+// URL is validated to stay on the Graph host.
 package intune
 
 import (
@@ -49,9 +51,11 @@ const (
 	userAgent = "Speakeasy-Gram/1.0"
 
 	// maxResponseBytes bounds each response body read so a misbehaving
-	// tenant cannot force unbounded allocations. Sized generously above a
-	// full field-selected page.
-	maxResponseBytes = 8 * 1024 * 1024
+	// tenant cannot force unbounded allocations. Page size is server-driven
+	// (up to 1000 records) and Intune only partially honors $select on some
+	// properties, so this is sized for full-fat records, not the selected
+	// subset.
+	maxResponseBytes = 16 * 1024 * 1024
 
 	// tokenExpirySlack renews the cached token this long before its actual
 	// expiry so in-flight requests never race the cutoff.
@@ -101,9 +105,11 @@ func init() {
 type source struct {
 	client *guardian.HTTPClient
 	// loginBaseURL/graphBaseURL are the fixed production hosts, or httptest
-	// servers in unit tests.
+	// servers in unit tests; graphHost is graphBaseURL's hostname, computed
+	// once for cursor validation.
 	loginBaseURL string
 	graphBaseURL string
+	graphHost    string
 
 	mu          sync.Mutex
 	token       string
@@ -116,10 +122,15 @@ var _ providers.InventorySource = (*source)(nil)
 // unit tests, so a future field cannot be zero-valued in tests only (test
 // files are exempt from exhaustruct).
 func newSource(client *guardian.HTTPClient, loginBaseURL string, graphBaseURL string) *source {
+	graphHost := ""
+	if parsed, err := url.Parse(graphBaseURL); err == nil {
+		graphHost = strings.ToLower(parsed.Hostname())
+	}
 	return &source{
 		client:       client,
 		loginBaseURL: loginBaseURL,
 		graphBaseURL: graphBaseURL,
+		graphHost:    graphHost,
 		mu:           sync.Mutex{},
 		token:        "",
 		tokenExpiry:  time.Time{},
@@ -133,6 +144,12 @@ func tenantID(settings providers.Settings) (string, error) {
 	id := strings.TrimSpace(settings[fieldTenantID])
 	if id == "" {
 		return "", fmt.Errorf("tenant_id is not configured")
+	}
+	switch strings.ToLower(id) {
+	case ".", "..", "common", "organizations", "consumers":
+		// Multi-tenant aliases from Entra docs (and path tricks) are not a
+		// directory: client_credentials requires a real tenant.
+		return "", fmt.Errorf("tenant_id must be your directory id or verified domain, not %q", id)
 	}
 	if strings.ContainsAny(id, "/?#%") {
 		return "", fmt.Errorf("tenant_id must be a directory id or verified domain, e.g. 00000000-0000-0000-0000-000000000000")
@@ -173,6 +190,11 @@ func (s *source) bearerToken(ctx context.Context, creds providers.Credentials, s
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
+	// Classify plain rejections by status before touching the body — an
+	// oversized error response must not mask a credential rejection.
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return "", providers.NewAuthError(fmt.Errorf("token request rejected with status %d", resp.StatusCode))
+	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		// Entra reports bad client credentials as 400 with a JSON error
 		// code, not 401 — read a bounded body to classify, or a revoked
@@ -188,11 +210,15 @@ func (s *source) bearerToken(ctx context.Context, creds providers.Credentials, s
 		switch oauthErr.Error {
 		case "invalid_client", "unauthorized_client", "invalid_grant", "access_denied":
 			return "", providers.NewAuthError(fmt.Errorf("token request rejected: %s (status %d)", oauthErr.Error, resp.StatusCode))
+		case "":
+			return "", fmt.Errorf("token request failed with status %d", resp.StatusCode)
 		}
-		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return "", providers.NewAuthError(fmt.Errorf("token request rejected with status %d", resp.StatusCode))
-		}
-		return "", fmt.Errorf("token request failed with status %d", resp.StatusCode)
+		// Name the Entra code (e.g. invalid_request for a tenant that does
+		// not exist) — a bare status 400 is undiagnosable from the
+		// dashboard. Deliberately not auth-classified: transient 400 shapes
+		// exist, and a visible named error retrying on schedule beats
+		// auto-pausing a healthy config on a transient.
+		return "", fmt.Errorf("token request failed with status %d (%s)", resp.StatusCode, oauthErr.Error)
 	}
 
 	body, err := providers.ReadBoundedBody(resp.Body, maxResponseBytes)
@@ -259,27 +285,19 @@ func (s *source) pageURL(cursor string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid intune cursor: %w", err)
 	}
-	base, err := url.Parse(s.graphBaseURL)
-	if err != nil {
-		return "", fmt.Errorf("parse graph base url: %w", err)
-	}
-	if parsed.Scheme != base.Scheme || parsed.Host != base.Host {
+	// Compare hostnames case-insensitively and ignore an explicit default
+	// port: a semantically identical nextLink (Graph.Microsoft.Com,
+	// :443) must not abort page two of every large pull.
+	if parsed.Scheme != "https" || s.graphHost == "" || strings.ToLower(parsed.Hostname()) != s.graphHost {
 		return "", fmt.Errorf("intune cursor does not point at the Graph host")
 	}
 	return cursor, nil
 }
 
-// fetchDevicesPage requests one device page.
-func (s *source) fetchDevicesPage(ctx context.Context, creds providers.Credentials, settings providers.Settings, cursor string) (devicePage, error) {
-	requestURL, err := s.pageURL(cursor)
-	if err != nil {
-		return devicePage{}, err
-	}
-	token, err := s.bearerToken(ctx, creds, settings)
-	if err != nil {
-		return devicePage{}, err
-	}
-
+// fetchPageOnce performs one authenticated page request. On 401/403 the
+// token cache is dropped before returning the auth error so the caller can
+// re-mint.
+func (s *source) fetchPageOnce(ctx context.Context, token string, requestURL string) (devicePage, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return devicePage{}, fmt.Errorf("build devices request: %w", err)
@@ -299,9 +317,6 @@ func (s *source) fetchDevicesPage(ctx context.Context, creds providers.Credentia
 	// rejection as a generic read failure.
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
-		// Reachable when the token expires mid-pull or the app permission
-		// was revoked. Drop the cache so a later call re-mints; the sync
-		// runner records this run as an auth rejection either way.
 		s.mu.Lock()
 		s.token = ""
 		s.mu.Unlock()
@@ -319,6 +334,31 @@ func (s *source) fetchDevicesPage(ctx context.Context, creds providers.Credentia
 		return devicePage{}, fmt.Errorf("decode devices response: %w", err)
 	}
 	return page, nil
+}
+
+// fetchDevicesPage requests one device page, absorbing exactly one 401/403
+// by re-minting and retrying: a token that crossed expiry during a slow or
+// throttled request must not book a spurious credential rejection toward
+// auto-pause. A second rejection is a real credential problem and surfaces
+// as the auth error it is.
+func (s *source) fetchDevicesPage(ctx context.Context, creds providers.Credentials, settings providers.Settings, cursor string) (devicePage, error) {
+	requestURL, err := s.pageURL(cursor)
+	if err != nil {
+		return devicePage{}, err
+	}
+	token, err := s.bearerToken(ctx, creds, settings)
+	if err != nil {
+		return devicePage{}, err
+	}
+	page, err := s.fetchPageOnce(ctx, token, requestURL)
+	if !providers.IsAuthError(err) {
+		return page, err
+	}
+	token, mintErr := s.bearerToken(ctx, creds, settings)
+	if mintErr != nil {
+		return devicePage{}, mintErr
+	}
+	return s.fetchPageOnce(ctx, token, requestURL)
 }
 
 // TestConnection proves the stored credentials against one field-selected

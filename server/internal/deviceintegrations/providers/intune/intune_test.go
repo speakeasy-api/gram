@@ -26,6 +26,11 @@ type fakeGraph struct {
 	clientID     string
 	clientSecret string
 	tokenMints   int
+	// expiresIn is the token lifetime the fake reports.
+	expiresIn int
+	// rejectDevices makes the devices endpoint 401 every request,
+	// simulating a revoked Graph permission.
+	rejectDevices bool
 	// serverPageSize is the server-driven page size (the client sends no
 	// $top, exactly like production Intune).
 	serverPageSize int
@@ -41,6 +46,8 @@ func newFakeGraph(t *testing.T, deviceCount int) *fakeGraph {
 		clientID:       "test-client-id",
 		clientSecret:   "test-client-secret",
 		tokenMints:     0,
+		expiresIn:      3599,
+		rejectDevices:  false,
 		serverPageSize: 1000,
 		devices:        nil,
 		server:         nil,
@@ -81,8 +88,8 @@ func newFakeGraph(t *testing.T, deviceCount int) *fakeGraph {
 		f.tokenMints++
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"access_token": "graph-token",
-			"expires_in":   3599,
+			"access_token": fmt.Sprintf("graph-token-%d", f.tokenMints),
+			"expires_in":   f.expiresIn,
 			"token_type":   "Bearer",
 		})
 	})
@@ -90,7 +97,11 @@ func newFakeGraph(t *testing.T, deviceCount int) *fakeGraph {
 		assert.Equal(t, userAgent, r.Header.Get("User-Agent"))
 		assert.NotEmpty(t, r.URL.Query().Get("$select"), "pages are field-selected")
 		assert.Empty(t, r.URL.Query().Get("$top"), "page size is server-driven — Intune's OData subset makes $top unsafe")
-		if r.Header.Get("Authorization") != "Bearer graph-token" {
+		f.mu.Lock()
+		expected := fmt.Sprintf("Bearer graph-token-%d", f.tokenMints)
+		reject := f.rejectDevices
+		f.mu.Unlock()
+		if reject || r.Header.Get("Authorization") != expected {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
@@ -255,6 +266,94 @@ func TestUnparseableLastSyncFailsLoudly(t *testing.T) {
 
 	_, err := fake.newSource().ListDevices(t.Context(), fake.creds(), fake.settings(), "")
 	require.ErrorContains(t, err, "lastSyncDateTime", "a format drift must fail loudly, not silently NULL stored check-ins")
+}
+
+func TestMidPullTokenExpiryRecoversInRun(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeGraph(t, 1)
+	s := fake.newSource()
+
+	require.NoError(t, s.TestConnection(t.Context(), fake.creds(), fake.settings()))
+
+	// The active token is invalidated (expiry crossing during a slow
+	// request, or a rotation): one re-mint retry absorbs it in-run, so no
+	// spurious credential rejection reaches the scheduler.
+	fake.mu.Lock()
+	fake.tokenMints++ // the fake now expects graph-token-N+1
+	fake.mu.Unlock()
+	devices := listAll(t, s, fake.creds(), fake.settings())
+	require.Len(t, devices, 1)
+}
+
+func TestPersistentRejectionClassifiesAsAuth(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeGraph(t, 1)
+	s := fake.newSource()
+
+	require.NoError(t, s.TestConnection(t.Context(), fake.creds(), fake.settings()))
+
+	// A revoked Graph permission rejects both the cached token and the
+	// re-minted one: after the single in-run retry, the failure surfaces
+	// as the auth error it is.
+	fake.mu.Lock()
+	fake.rejectDevices = true
+	fake.mu.Unlock()
+	_, err := s.ListDevices(t.Context(), fake.creds(), fake.settings(), "")
+	require.Error(t, err)
+	require.True(t, providers.IsAuthError(err))
+}
+
+func TestShortTokenLifetimeStillCaches(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeGraph(t, 1)
+	fake.mu.Lock()
+	fake.expiresIn = 20 // below 2x the 30s slack: the ttl/2 floor must hold
+	fake.mu.Unlock()
+	s := fake.newSource()
+
+	require.NoError(t, s.TestConnection(t.Context(), fake.creds(), fake.settings()))
+	require.NoError(t, s.TestConnection(t.Context(), fake.creds(), fake.settings()))
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	require.Equal(t, 1, fake.tokenMints, "one mint serves back-to-back probes even under a short lifetime")
+}
+
+func TestTenantAliasesRejected(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeGraph(t, 1)
+	s := fake.newSource()
+
+	for _, alias := range []string{"common", "organizations", "consumers", "..", "."} {
+		_, err := s.ListDevices(t.Context(), fake.creds(), providers.Settings{fieldTenantID: alias}, "")
+		require.ErrorContains(t, err, "directory id", "alias %q must be rejected with the friendly message", alias)
+	}
+}
+
+func TestCursorHostToleratesCaseAndDefaultPort(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeGraph(t, 1)
+	// A source pointed at a cased/ported Graph base must accept the
+	// semantically identical nextLink variants Microsoft could emit, and
+	// still refuse a genuinely different host.
+	s := newSource(fake.server.Client(), fake.server.URL, "https://Graph.Example.Test")
+
+	for _, ok := range []string{
+		"https://graph.example.test/v1.0/deviceManagement/managedDevices?$skiptoken=1",
+		"https://GRAPH.EXAMPLE.TEST/v1.0/deviceManagement/managedDevices?$skiptoken=1",
+		"https://graph.example.test:443/v1.0/deviceManagement/managedDevices?$skiptoken=1",
+	} {
+		_, err := s.pageURL(ok)
+		require.NoError(t, err, "cursor %q is the Graph host", ok)
+	}
+	_, err := s.pageURL("https://evil.example.test/v1.0/deviceManagement/managedDevices")
+	require.ErrorContains(t, err, "Graph host")
+	_, err = s.pageURL("http://graph.example.test/v1.0/deviceManagement/managedDevices")
+	require.ErrorContains(t, err, "Graph host", "https is required")
 }
 
 func TestDescriptorRegistered(t *testing.T) {
