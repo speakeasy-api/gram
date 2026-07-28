@@ -255,14 +255,22 @@ function EnvironmentPageInner() {
     setSelectedToolsetSlug("");
     if (entriesToUpdate.length === 0) return;
 
-    updateEnvironment({
-      request: {
-        slug: environment.slug,
-        updateEnvironmentRequestBody: { entriesToUpdate, entriesToRemove: [] },
+    updateEnvironment(
+      {
+        request: {
+          slug: environment.slug,
+          updateEnvironmentRequestBody: {
+            entriesToUpdate,
+            entriesToRemove: [],
+          },
+        },
       },
-    }, {
-      onSuccess: () => toast.success("Variables added"),
-    });
+      {
+        onSuccess: () => {
+          toast.success("Variables added");
+        },
+      },
+    );
   }, [selectedToolset, environment, updateEnvironment]);
 
   const handleToggleReveal = useCallback((varName: string) => {
@@ -291,7 +299,9 @@ function EnvironmentPageInner() {
           },
         },
         {
-          onSuccess: () => toast.success("Variable deleted"),
+          onSuccess: () => {
+            toast.success("Variable deleted");
+          },
         },
       );
       setDeleteConfirmDialog({ open: false, varName: "" });

@@ -388,7 +388,9 @@ export function MCPAuthenticationTab({
           },
         },
         {
-          onSuccess: () => toast.success("Variables added"),
+          onSuccess: () => {
+            toast.success("Variables added");
+          },
         },
       );
 

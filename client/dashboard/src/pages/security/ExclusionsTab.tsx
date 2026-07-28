@@ -76,8 +76,9 @@ export function ExclusionsTab({
         },
       },
       {
-        onSuccess: () =>
-          toast.success(`Exclusion ${enabled ? "enabled" : "disabled"}`),
+        onSuccess: () => {
+          toast.success(`Exclusion ${enabled ? "enabled" : "disabled"}`);
+        },
       },
     );
   };
@@ -93,7 +94,11 @@ export function ExclusionsTab({
       onClick: () => {
         deleteMutation.mutate(
           { request: { id: exclusion.id } },
-          { onSuccess: () => toast.success("Exclusion deleted") },
+          {
+            onSuccess: () => {
+              toast.success("Exclusion deleted");
+            },
+          },
         );
       },
     },

@@ -10,6 +10,7 @@ import { useListEnvironments } from "@gram/client/react-query/listEnvironments.j
 import { Badge, Stack } from "@speakeasy-api/moonshine";
 import { CheckCircle, ExternalLink, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { usePlaygroundEnvironment } from "./usePlaygroundEnvironment";
 import {
   environmentHasValue,
