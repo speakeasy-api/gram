@@ -2,7 +2,7 @@
 
 #MISE description="Kill processes listening on development ports (app services only)"
 
-# Application service ports (non-Docker)
+# Application service ports (host processes, not containers)
 PORTS=(
   "8080:gram-server"
   "8081:gram-control"

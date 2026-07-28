@@ -8,6 +8,9 @@
 
 set -euo pipefail
 
+# shellcheck source=../../local/lib/compose.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/local/lib/compose.sh"
+
 export GRAM_HOOKS_SERVER_URL=$GRAM_SERVER_URL
 
 # Provision a dev API key for the chosen project so Claude's OTEL exporter can
@@ -24,8 +27,10 @@ echo "Provisioning dev API key for project: ${project_slug}"
 # db_query <psql -v args> < SQL
 # Pipes SQL via stdin so psql's :'name' variable substitution actually fires
 # (the -c flag bypasses the psql lexer that does the interpolation).
+# Goes through compose exec (rather than a hardcoded container name) so
+# per-worktree COMPOSE_PROJECT_NAME overrides resolve the right container.
 db_query() {
-  docker exec -i gram-gram-db-1 psql -U gram -d gram -tA -v ON_ERROR_STOP=1 "$@"
+  compose exec -T gram-db psql -U gram -d gram -tA -v ON_ERROR_STOP=1 "$@"
 }
 
 project_row=$(db_query -v slug="$project_slug" <<<"SELECT id, organization_id FROM projects WHERE slug = :'slug' AND deleted IS FALSE LIMIT 1" 2>/dev/null || true)

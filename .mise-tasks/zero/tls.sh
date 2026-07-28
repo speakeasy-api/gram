@@ -188,12 +188,15 @@ cert_names() {
   server_host="$(extract_hostname "$GRAM_SERVER_URL")"
 
   # host.docker.internal lets local assistant runtime containers dial the
-  # server over TLS through Docker's host gateway alias.
+  # server over TLS through the engine's host-gateway alias (Podman supports
+  # the docker-compatible name). host.containers.internal is Podman's native
+  # auto-injected alias — included as an extra SAN for good measure.
   printf "%s\n" \
     "$site_host" \
     "$server_host" \
     "localhost" \
     "host.docker.internal" \
+    "host.containers.internal" \
     "127.0.0.1" \
     "::1" \
     | awk 'NF && !seen[$0]++'

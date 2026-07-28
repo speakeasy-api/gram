@@ -71,7 +71,7 @@ Centralise distribution of MCPs, Skills, Plugins and Assistants to your team bas
 
 Run `./zero` until it succeeds. This script is what you use to run the dashboard and services for local development. It installs dependencies, runs pending database migrations, and starts everything up.
 
-The main dependencies are [Mise](https://mise.jdx.dev/) and [Docker](https://www.docker.com/). The `./zero` script will guide you to install these if they are not found.
+The main dependency is [Mise](https://mise.jdx.dev/); container infrastructure runs on rootless [Podman](https://podman.io/), which mise installs automatically (no root required). On Linux, `./zero` may print a one-time `sudo` setup command (installing `uidmap` and adding `/etc/subuid`/`/etc/subgid` ranges) — run it once, then re-run `./zero`.
 
 Once everything is running, seed the local database with sample data:
 

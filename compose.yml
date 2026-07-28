@@ -88,8 +88,15 @@ services:
       - otel-collector
 
   clickhouse:
+    # Built out-of-band with `podman build` (see local/lib/compose.sh):
+    # docker-compose cannot build through the podman API socket (no BuildKit),
+    # so the canonical compose wrapper pre-builds and tags this image and every
+    # `up` runs with --no-build. The build block stays as documentation of the
+    # image's context.
+    image: gram-local-clickhouse:latest
     build:
       context: ./local/clickhouse
+    pull_policy: never
     restart: unless-stopped
     ports:
       - "${CLICKHOUSE_HTTP_PORT}:8123"
@@ -156,9 +163,13 @@ services:
 
   tunnel-postgres-mcp:
     profiles: [tunnel]
+    # Pre-built from the git URL below by `ensure_tunnel_image` in
+    # local/lib/compose.sh (`podman build` handles git contexts natively);
+    # compose never builds it — see the clickhouse service note.
     image: gram-postgres-mcp-streamable:07eb329c8c48
     build:
       context: https://github.com/crystaldba/postgres-mcp.git#07eb329c8c48e49640e0d1b5b35465d4d024c3ee
+    pull_policy: never
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"

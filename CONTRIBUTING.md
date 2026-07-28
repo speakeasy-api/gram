@@ -2,7 +2,7 @@
 
 Run `./zero` until it succeeds. This script is what you will use to run the dashboard and services for local development. It will also handle installing dependencies and running pending database migrations before starting everything up.
 
-The main dependencies for this project are Mise and Docker. The `./zero` script will guide you to install these if they are not found.
+The main dependency for this project is Mise; container infrastructure runs on rootless Podman, which mise installs automatically (no root required). On Linux, `./zero` may print a one-time `sudo` setup command (installing `uidmap` and adding `/etc/subuid`/`/etc/subgid` ranges) — run it once, then re-run `./zero`.
 
 ### Seeding the database
 

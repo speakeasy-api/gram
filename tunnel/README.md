@@ -69,8 +69,11 @@ The local Postgres MCP server and agent are declared in `compose.yml` under the
 `tunnel` profile:
 
 ```bash
-docker compose --profile tunnel up --build tunnel-postgres-mcp tunnel-agent
+mise run start:tunnel-postgres-mcp
 ```
+
+(The task pre-builds the Postgres MCP image with `podman build` and brings the
+`tunnel` profile up through the canonical compose helper, `local/lib/compose.sh`.)
 
 Two pitchfork daemon entries wrap the same local path:
 

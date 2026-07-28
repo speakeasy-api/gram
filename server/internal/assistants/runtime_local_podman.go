@@ -12,59 +12,49 @@ import (
 	"strings"
 )
 
-// dockerCLIEngine implements containerEngine by shelling out to the docker
+// podmanCLIEngine implements containerEngine by shelling out to the podman
 // CLI. It exists for local development only, so a contained CLI wrapper beats
-// pulling the Docker SDK into the server module.
-type dockerCLIEngine struct {
+// pulling a container-engine SDK into the server module.
+type podmanCLIEngine struct {
 	guestPort int
 }
 
-func newDockerCLIEngine(guestPort int) *dockerCLIEngine {
+func newPodmanCLIEngine(guestPort int) *podmanCLIEngine {
 	if guestPort == 0 {
 		guestPort = defaultRuntimeGuestPort
 	}
-	return &dockerCLIEngine{guestPort: guestPort}
+	return &podmanCLIEngine{guestPort: guestPort}
 }
 
-var _ containerEngine = (*dockerCLIEngine)(nil)
+var _ containerEngine = (*podmanCLIEngine)(nil)
 
-func (d *dockerCLIEngine) exec(ctx context.Context, args ...string) (string, error) {
-	out, err := exec.CommandContext(ctx, "docker", args...).Output() //nolint:gosec // fixed docker binary; args are engine-constructed, never raw user input
+func (d *podmanCLIEngine) exec(ctx context.Context, args ...string) (string, error) {
+	out, err := exec.CommandContext(ctx, "podman", args...).Output() //nolint:gosec // fixed podman binary; args are engine-constructed, never raw user input
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			return "", fmt.Errorf("docker %s: %w: %s", args[0], err, strings.TrimSpace(string(exitErr.Stderr)))
+			return "", fmt.Errorf("podman %s: %w: %s", args[0], err, strings.TrimSpace(string(exitErr.Stderr)))
 		}
-		return "", fmt.Errorf("docker %s: %w", args[0], err)
+		return "", fmt.Errorf("podman %s: %w", args[0], err)
 	}
 	return strings.TrimSpace(string(out)), nil
 }
 
-// isNotFoundOutput matches the docker CLI's not-found errors across object
-// types and CLI versions ("No such container: ...", "no such volume", "No
-// such image", "no such object").
+// isNotFoundOutput matches the podman CLI's not-found errors across object
+// types and CLI versions ("no such container: ...", "no such volume", "no
+// such object", and image lookups which surface as "... image not known").
 func isNotFoundOutput(err error) bool {
 	if err == nil {
 		return false
 	}
 	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "no such")
+	return strings.Contains(msg, "no such") || strings.Contains(msg, "not known")
 }
 
-func (d *dockerCLIEngine) ImageID(ctx context.Context, imageRef string) (string, error) {
-	out, err := d.exec(ctx, "image", "inspect", "--format", "{{.Id}}", imageRef)
-	if isNotFoundOutput(err) {
-		return "", errLocalImageNotFound
-	}
-	if err != nil {
-		return "", err
-	}
-	return out, nil
-}
-
-// dockerContainerInspect is the subset of `docker container inspect` output
-// the backend needs.
-type dockerContainerInspect struct {
+// podmanContainerInspect is the subset of `podman container inspect` output
+// the backend needs. Podman's native inspect keeps Docker-compatible key
+// casing for all of these fields.
+type podmanContainerInspect struct {
 	ID    string `json:"Id"`
 	State struct {
 		Running bool `json:"Running"`
@@ -81,7 +71,18 @@ type dockerContainerInspect struct {
 	} `json:"NetworkSettings"`
 }
 
-func (d *dockerCLIEngine) Inspect(ctx context.Context, name string) (localContainerInfo, error) {
+func (d *podmanCLIEngine) ImageID(ctx context.Context, imageRef string) (string, error) {
+	out, err := d.exec(ctx, "image", "inspect", "--format", "{{.Id}}", imageRef)
+	if isNotFoundOutput(err) {
+		return "", errLocalImageNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	return out, nil
+}
+
+func (d *podmanCLIEngine) Inspect(ctx context.Context, name string) (localContainerInfo, error) {
 	out, err := d.exec(ctx, "container", "inspect", "--format", "{{json .}}", name)
 	if isNotFoundOutput(err) {
 		return localContainerInfo{}, errLocalContainerNotFound
@@ -90,9 +91,9 @@ func (d *dockerCLIEngine) Inspect(ctx context.Context, name string) (localContai
 		return localContainerInfo{}, err
 	}
 
-	var inspect dockerContainerInspect
+	var inspect podmanContainerInspect
 	if err := json.Unmarshal([]byte(out), &inspect); err != nil {
-		return localContainerInfo{}, fmt.Errorf("decode docker inspect output for %s: %w", name, err)
+		return localContainerInfo{}, fmt.Errorf("decode podman inspect output for %s: %w", name, err)
 	}
 
 	hostPort := 0
@@ -114,15 +115,16 @@ func (d *dockerCLIEngine) Inspect(ctx context.Context, name string) (localContai
 	}, nil
 }
 
-func (d *dockerCLIEngine) Run(ctx context.Context, spec localContainerSpec) (string, error) {
+func (d *podmanCLIEngine) Run(ctx context.Context, spec localContainerSpec) (string, error) {
 	args := []string{
 		"run", "--detach",
 		"--name", spec.Name,
 		// Publish the guest port to an ephemeral loopback port; the exact port
 		// is re-resolved via Inspect after every start.
 		"--publish", "127.0.0.1::" + strconv.Itoa(d.guestPort),
-		// Docker Desktop resolves the alias natively; on native Linux engines
-		// the host-gateway mapping provides the same name.
+		// The host-gateway special value (podman >= 5.3) maps the alias to an
+		// address that routes back to the host under both rootless (pasta) and
+		// rootful networking.
 		"--add-host", LocalRuntimeHostGatewayAlias + ":host-gateway",
 		"--volume", spec.VolumeName + ":" + localRuntimeWorkdirMountPath,
 	}
@@ -147,28 +149,28 @@ func (d *dockerCLIEngine) Run(ctx context.Context, spec localContainerSpec) (str
 	return out, nil
 }
 
-func (d *dockerCLIEngine) Start(ctx context.Context, name string) error {
+func (d *podmanCLIEngine) Start(ctx context.Context, name string) error {
 	if _, err := d.exec(ctx, "start", name); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (d *dockerCLIEngine) Stop(ctx context.Context, name string) error {
+func (d *podmanCLIEngine) Stop(ctx context.Context, name string) error {
 	if _, err := d.exec(ctx, "stop", name); err != nil && !isNotFoundOutput(err) {
 		return err
 	}
 	return nil
 }
 
-func (d *dockerCLIEngine) Remove(ctx context.Context, name string) error {
+func (d *podmanCLIEngine) Remove(ctx context.Context, name string) error {
 	if _, err := d.exec(ctx, "rm", "--force", name); err != nil && !isNotFoundOutput(err) {
 		return err
 	}
 	return nil
 }
 
-func (d *dockerCLIEngine) RemoveVolume(ctx context.Context, name string) error {
+func (d *podmanCLIEngine) RemoveVolume(ctx context.Context, name string) error {
 	if _, err := d.exec(ctx, "volume", "rm", name); err != nil && !isNotFoundOutput(err) {
 		return err
 	}

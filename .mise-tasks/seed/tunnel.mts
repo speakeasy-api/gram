@@ -119,7 +119,7 @@ FROM source, endpoint, mcp_server;
 
   const result = await $({
     input: sql,
-  })`docker compose exec -T gram-db psql -q -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -v project_slug=${SEEDED_PROJECT_SLUG} -v source_name=${SEEDED_TUNNEL_SOURCE_NAME} -v key_hash=${SEEDED_TUNNEL_KEY_HASH} -v key_prefix=${SEEDED_TUNNEL_KEY_PREFIX} -tA -f -`.quiet();
+  })`bash local/lib/compose.sh exec -T gram-db psql -q -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -v project_slug=${SEEDED_PROJECT_SLUG} -v source_name=${SEEDED_TUNNEL_SOURCE_NAME} -v key_hash=${SEEDED_TUNNEL_KEY_HASH} -v key_prefix=${SEEDED_TUNNEL_KEY_PREFIX} -tA -f -`.quiet();
 
   const output = result.stdout.trim();
   if (!output) {

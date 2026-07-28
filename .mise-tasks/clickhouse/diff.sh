@@ -10,6 +10,12 @@ if [ "${usage_name:-}" = "" ]; then
   exit 1
 fi
 
+# Atlas resolves the docker:// dev-url through the Docker API; make sure the
+# rootless podman socket is up and DOCKER_HOST points at it.
+# shellcheck source=../../local/lib/compose.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/local/lib/compose.sh"
+ensure_podman_socket
+
 echo "Generating atlas migrations..."
 atlas migrate diff "${usage_name:?}" \
   --dir file://clickhouse/migrations \

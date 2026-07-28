@@ -142,8 +142,8 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 
 	// Containers cannot reach the host's loopback URL, so unless a runtime
 	// server URL was set explicitly, the local backend rewrites the host to
-	// Docker's host gateway alias (the port and scheme are preserved; the
-	// local TLS certificate covers the alias via zero:tls).
+	// the container host-gateway alias (the port and scheme are preserved;
+	// the local TLS certificate covers the alias via zero:tls).
 	localRuntimeServerURL := resolvedServerURL
 	if c.String("assistant-runtime-server-url") == "" && resolvedServerURL != nil {
 		rewritten := *resolvedServerURL

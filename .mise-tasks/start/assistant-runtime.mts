@@ -1,6 +1,6 @@
 #!/usr/bin/env -S node
 
-//MISE description="Stream assistant runtime logs from local Docker and Fly.io runtimes"
+//MISE description="Stream assistant runtime logs from local Podman and Fly.io runtimes"
 //MISE hide=true
 //USAGE flag "--poll-seconds <seconds>" default="3" help="How often to poll for active assistant runtimes."
 
@@ -147,9 +147,9 @@ function spawnFlySubscriber(runtime: RuntimeRow): LogStreamProcess {
   });
 }
 
-function spawnDockerSubscriber(runtime: RuntimeRow): LogStreamProcess {
+function spawnPodmanSubscriber(runtime: RuntimeRow): LogStreamProcess {
   return spawn(
-    "docker",
+    "podman",
     ["logs", "--follow", "--tail", "25", runtime.container_name],
     {
       env: process.env,
@@ -163,7 +163,7 @@ function spawnSubscriber(runtime: RuntimeRow): LogStreamProcess {
     case "flyio":
       return spawnFlySubscriber(runtime);
     case "local":
-      return spawnDockerSubscriber(runtime);
+      return spawnPodmanSubscriber(runtime);
     default:
       return spawn(
         "bash",
@@ -204,7 +204,7 @@ function startSubscriber(runtime: RuntimeRow) {
   writeLine(
     linePrefix(runtime),
     runtime.backend === "local"
-      ? `attached docker logs for ${runtime.container_name}`
+      ? `attached podman logs for ${runtime.container_name}`
       : `attached fly logs for ${flyAppName(runtime)}`,
   );
 
@@ -231,7 +231,7 @@ function startSubscriber(runtime: RuntimeRow) {
     }, 2000);
   };
 
-  // A missing/broken CLI (docker, flyctl) surfaces as a spawn "error" with no
+  // A missing/broken CLI (podman, flyctl) surfaces as a spawn "error" with no
   // "close"; without a handler it would crash the whole watcher.
   proc.on("error", (err) => {
     scheduleRetry(`log stream failed to start (${err.message}), retrying...`);

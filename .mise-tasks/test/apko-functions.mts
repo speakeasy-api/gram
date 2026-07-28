@@ -48,32 +48,20 @@ async function main() {
 
   const image = `${imageBase}-${arch}`;
 
-  let proc = await $`docker images --format json`;
-  const existing = proc.stdout.split("\n").find((l) => {
-    try {
-      const { Repository, Tag } = JSON.parse(l);
-      return `${Repository}:${Tag}` === image;
-    } catch (e) {
-      return false;
-    }
-  });
-
-  if (existing) {
+  // `podman image exists` exits 0/1, which beats parsing `images --format
+  // json` (podman emits a JSON array with different keys than docker did).
+  const existing = await $`podman image exists ${image}`.nothrow();
+  if (existing.exitCode === 0) {
     console.log(`Image ${image} already exists locally, deleting it.`);
-    await $`docker image rm --force ${image}`;
+    await $`podman image rm --force ${image}`;
   }
 
-  await $`docker image load -i ${tarballPath}`;
-  proc = await $`docker images --format json`;
-  const updated = proc.stdout.split("\n").find((l) => {
-    try {
-      const { Repository, Tag } = JSON.parse(l);
-      return `${Repository}:${Tag}` === image;
-    } catch (e) {
-      return false;
-    }
-  });
-  assert(updated, `Image ${image} not found after loading tarball`);
+  await $`podman image load -i ${tarballPath}`;
+  const updated = await $`podman image exists ${image}`.nothrow();
+  assert(
+    updated.exitCode === 0,
+    `Image ${image} not found after loading tarball`,
+  );
 
   const zipPath = await createTempZip();
   const codeBind = `${zipPath}:/data/code.zip`;
@@ -139,7 +127,7 @@ echo ==START==
 ${script}
 `.trim();
     const proc =
-      await $`docker run --entrypoint "" -v ${codeBind} --rm ${image} sh -c ${wrapped}`;
+      await $`podman run --entrypoint "" -v ${codeBind} --rm ${image} sh -c ${wrapped}`;
     const output = proc.stdout.split("==START==\n")[1].trim();
     return output;
   };

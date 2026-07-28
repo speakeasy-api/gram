@@ -48,6 +48,9 @@ cp -r ../server/gen .tmp-melange/server/
 cp -r ./{internal,cmd,buildinfo} .tmp-melange/functions/
 
 rm -rf ./packages
+# melange's "docker" runner speaks the Docker API and honors DOCKER_HOST,
+# which mise.toml points at the rootless podman socket — no docker CLI or
+# daemon involved.
 melange build \
   --source-dir .tmp-melange \
   --apk-cache-dir "$apk_cache_dir" \

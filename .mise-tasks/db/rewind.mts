@@ -13,6 +13,10 @@ import { $, chalk } from "zx";
 const $g = $({ stdio: ["pipe", "pipe", "inherit"] });
 
 async function main() {
+  // Atlas resolves the docker:// dev-url through the Docker API; make sure the
+  // rootless podman socket (DOCKER_HOST from mise env) is up. cwd is server/.
+  await $`bash -c ${"source ../local/lib/compose.sh && ensure_podman_socket"}`;
+
   const migs = await fs.readFile("./migrations/atlas.sum", "utf-8");
   const [hash, ...lines] = migs.split("\n");
   if (!hash.startsWith("h1:")) {

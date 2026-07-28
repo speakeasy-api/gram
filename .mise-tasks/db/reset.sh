@@ -4,9 +4,12 @@
 
 set -e
 
+# shellcheck source=../../local/lib/compose.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/local/lib/compose.sh"
+
 echo "Dropping and recreating public schema..."
 
-docker compose exec -T gram-db psql -U "${DB_USER}" -d "${DB_NAME}" \
+compose exec -T gram-db psql -U "${DB_USER}" -d "${DB_NAME}" \
   -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
 
 echo "Schema reset. Running migrations..."

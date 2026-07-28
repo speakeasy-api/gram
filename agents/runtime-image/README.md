@@ -7,7 +7,7 @@ The container image assistant runtimes run in: the Rust runner
 
 Local development uses the `local` assistant runtime provider (the default,
 `GRAM_ASSISTANT_RUNTIME_PROVIDER=local`): the Gram server starts one runtime
-container per assistant on your machine's Docker daemon, on demand. No Fly.io
+container per assistant on your machine's rootless Podman, on demand. No Fly.io
 credentials, apps, or registry pushes are involved.
 
 ### Workflow
@@ -30,13 +30,15 @@ credentials, apps, or registry pushes are involved.
    new image — a container with a turn in flight is never interrupted, it
    rolls over on the next safe opportunity.
 
-Each assistant gets a `gram-asst-work-<assistant-id>` Docker volume as its
+Each assistant gets a `gram-asst-work-<assistant-id>` Podman volume as its
 workspace. It survives container stops and replacements, and is removed when
 the assistant runtime is reaped.
 
 ### TLS
 
-Runtime containers reach the server at `https://host.docker.internal:<port>`.
+Runtime containers reach the server at `https://host.docker.internal:<port>`
+(the hostname is kept for compatibility; Podman resolves it via the
+`host-gateway` alias).
 `mise run zero:tls` includes that hostname in the local certificate and writes
 `GRAM_ASSISTANT_RUNTIME_LOCAL_CA_FILE` (the mkcert root CA) to
 `mise.local.toml`; the server mounts that CA into runtime containers so the
@@ -50,7 +52,7 @@ was added, re-run `mise run zero:tls`.
 mise run assistants:local-status
 # stream runtime logs (also part of pitchfork daemons)
 pitchfork logs --tail assistant-runtime
-docker logs -f gram-asst-<assistant-id>
+podman logs -f gram-asst-<assistant-id>
 # remove all runtime containers + volumes
 mise run assistants:local-clean
 ```

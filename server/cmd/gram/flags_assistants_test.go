@@ -76,8 +76,8 @@ func TestAssistantRuntimeConfigFromCLIAcceptsLocalProvider(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, assistants.RuntimeProviderLocal, cfg.Provider)
 	require.True(t, cfg.Local.Enabled)
-	// The container-facing URL swaps the host for Docker's host gateway alias
-	// while preserving scheme and port.
+	// The container-facing URL swaps the host for the container host-gateway
+	// alias while preserving scheme and port.
 	require.Equal(t, "https://host.docker.internal:8080", cfg.Local.ServerURL.String())
 }
 

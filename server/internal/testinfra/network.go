@@ -18,15 +18,23 @@ import (
 
 // UsePublishedPorts reports whether test containers must publish host ports
 // for tests to reach them. Published ports are the source of two recurring CI
-// flake classes: Docker's dynamic host-port allocator can pick a port already
-// held by a host process (container start fails with "address already in
-// use"), and dials through the publishing path (NAT rules, userland proxy)
+// flake classes: the engine's dynamic host-port allocator can pick a port
+// already held by a host process (container start fails with "address already
+// in use"), and dials through the publishing path (NAT rules, userland proxy)
 // can be misrouted to unrelated host listeners under heavy parallel container
 // churn. When the test process can route to container IPs directly — a local,
-// rootful Docker daemon on Linux — ports are not published at all and tests
-// dial <container IP>:<container port>. Docker Desktop and rootless daemons
-// keep containers behind a VM or user namespace where container IPs are
+// rootful engine on Linux, e.g. rootful Podman in uid-0 cloud sandboxes —
+// ports are not published at all and tests dial
+// <container IP>:<container port>. Docker Desktop and rootless engines keep
+// containers behind a VM or user namespace where container IPs are
 // unreachable, so they retain published ports.
+//
+// The probe talks docker-compat API to whatever DOCKER_HOST points at (the
+// rootless Podman socket in local dev, wired via mise env). Rootless Podman
+// reports "name=rootless" in Info.SecurityOptions just like rootless dockerd,
+// so it takes the published-ports path; and if the probe fails outright
+// (socket down), defaulting to published ports is the safe rootless-correct
+// behavior anyway.
 var UsePublishedPorts = sync.OnceValue(func() bool {
 	if runtime.GOOS != "linux" {
 		return true
@@ -56,7 +64,7 @@ var UsePublishedPorts = sync.OnceValue(func() bool {
 })
 
 // WithoutPublishedPorts strips the exposed ports declared by a container
-// module so Docker never allocates host ports for them. No-op when
+// module so the engine never allocates host ports for them. No-op when
 // UsePublishedPorts reports true.
 func WithoutPublishedPorts() testcontainers.CustomizeRequestOption {
 	return func(req *testcontainers.GenericContainerRequest) error {
@@ -79,7 +87,7 @@ func PortWait(port nat.Port) wait.Strategy {
 
 // ContainerAddr returns the address tests should dial to reach a container
 // port: the container IP itself when ports are unpublished, otherwise the
-// published endpoint on the Docker host.
+// published endpoint on the engine host.
 func ContainerAddr(ctx context.Context, container testcontainers.Container, port nat.Port) (string, error) {
 	if !UsePublishedPorts() {
 		ip, err := container.ContainerIP(ctx)
@@ -100,9 +108,10 @@ func ContainerAddr(ctx context.Context, container testcontainers.Container, port
 	}
 
 	// Avoid a DNS lookup for localhost inside synctest bubbles without
-	// changing arbitrary Docker/Testcontainers endpoints. Re-resolving the
+	// changing arbitrary engine/Testcontainers endpoints. Re-resolving the
 	// host here can pick an address that is not the actual published
-	// endpoint (for example ::1 instead of Docker's IPv4 localhost binding).
+	// endpoint (for example ::1 instead of the engine's IPv4 localhost
+	// binding — rootless Podman publishes via pasta on 127.0.0.1).
 	if host == "localhost" {
 		host = "127.0.0.1"
 	}

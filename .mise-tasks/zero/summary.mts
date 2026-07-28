@@ -64,9 +64,12 @@ function row(name: string, running: boolean, detail: string) {
   tableRows.push([name, running, detail]);
 }
 
+// Compose calls use the standalone docker-compose CLI against the rootless
+// Podman API socket (DOCKER_HOST comes from mise env). All calls are
+// .nothrow() best-effort: a missing engine/socket degrades to STOPPED rows.
 async function pokePostgreSQL() {
   const dbURL = process.env["GRAM_DATABASE_URL"] ?? "postgres://localhost/gram";
-  let result = await $`docker compose ps gram-db --format json`.nothrow();
+  let result = await $`docker-compose ps gram-db --format json`.nothrow();
   if (!result.ok) {
     return row("Database", false, dbURL);
   }
@@ -104,7 +107,7 @@ async function pokePostgreSQL() {
   }
 
   result =
-    await $`docker compose exec -T gram-db psql -U ${process.env["DB_USER"]} -d ${process.env["DB_NAME"]} -c "SELECT 1"`.nothrow();
+    await $`docker-compose exec -T gram-db psql -U ${process.env["DB_USER"]} -d ${process.env["DB_NAME"]} -c "SELECT 1"`.nothrow();
   if (!result.ok) {
     return row("Database", false, dbURL);
   }
@@ -114,13 +117,13 @@ async function pokePostgreSQL() {
 
 await pokePostgreSQL();
 
-async function pokeDockerService(
+async function pokeComposeService(
   serviceName: string,
   displayName: string,
   url: string,
 ) {
   let result =
-    await $`docker compose ps ${serviceName} --format json`.nothrow();
+    await $`docker-compose ps ${serviceName} --format json`.nothrow();
   if (!result.ok) {
     return row(displayName, false, url);
   }
@@ -155,21 +158,21 @@ async function pokeHTTPService(
 }
 
 const temporalWebPort = process.env["TEMPORAL_WEB_PORT"] ?? "8233";
-await pokeDockerService(
+await pokeComposeService(
   "gram-temporal",
   "Temporal",
   `http://localhost:${temporalWebPort}`,
 );
 
 const jaegerWebPort = process.env["JAEGER_WEB_PORT"] ?? "16686";
-await pokeDockerService(
+await pokeComposeService(
   "jaeger",
   "Jaeger",
   `http://localhost:${jaegerWebPort}`,
 );
 
 const clickhouseHTTPPort = process.env["CLICKHOUSE_HTTP_PORT"] ?? "8123";
-await pokeDockerService(
+await pokeComposeService(
   "clickhouse",
   "ClickHouse",
   `http://localhost:${clickhouseHTTPPort}`,

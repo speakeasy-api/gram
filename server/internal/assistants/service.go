@@ -584,7 +584,7 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 	// until the assistant is deleted. The local reconciliation below is the
 	// narrow exception for a row whose container no longer exists.
 	queries := assistantrepo.New(s.db)
-	// Local containers can be removed outside Gram (docker rm, daemon reset,
+	// Local containers can be removed outside Gram (podman rm, storage reset,
 	// pruning). Reconcile those rows before the age-based SQL sweep: unlike a
 	// healthy idle runtime, a definitively missing container can never make
 	// progress. Stop only the row; the next admission recreates the container

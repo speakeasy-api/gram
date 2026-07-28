@@ -9,7 +9,7 @@ publishing findings per message — without real GCP or production traffic.
 Three-step local loop:
 
     # 1. emulator up (compose.yml: pubsub-emulator on :8088)
-    docker compose up -d pubsub-emulator
+    source ./local/lib/compose.sh && compose up -d pubsub-emulator
 
     # 2. pystreams consuming against it (auto-reconciles topic + subscription)
     PUBSUB_EMULATOR_HOST=localhost:8088 mise run start:pystreams-multi
@@ -170,7 +170,8 @@ async def run(
         raise click.UsageError(
             "--pubsub-emulator-host (or PUBSUB_EMULATOR_HOST) is required: this "
             "load generator only runs against the local emulator. Start it with "
-            "'docker compose up -d pubsub-emulator'."
+            "'source ./local/lib/compose.sh && compose up -d pubsub-emulator' "
+            "from the repo root."
         )
     # The google clients auto-detect the emulator from this env var; write it back
     # unconditionally so the explicit flag wins over any stale pre-existing value.

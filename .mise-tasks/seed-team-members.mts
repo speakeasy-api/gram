@@ -59,7 +59,9 @@ function sqlString(value: string | null): string {
 async function psql(sql: string): Promise<void> {
   const dbUser = process.env.DB_USER ?? "gram";
   const dbName = process.env.DB_NAME ?? "gram";
-  await $`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -c ${sql}`.quiet();
+  // Command form of the canonical compose entrypoint (rootless Podman behind
+  // it); brings the podman API socket up idempotently. Task cwd is repo root.
+  await $`bash local/lib/compose.sh exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -c ${sql}`.quiet();
 }
 
 async function main(): Promise<void> {

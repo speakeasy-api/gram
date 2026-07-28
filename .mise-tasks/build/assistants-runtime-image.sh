@@ -18,7 +18,9 @@ arch="${arch/x86_64/amd64}"
 image="${GRAM_ASSISTANT_RUNTIME_OCI_IMAGE:-gram-assistant-runtime}:dev"
 
 echo "Building assistant runtime image for architecture(s): $arch"
-docker build --platform "linux/${arch}" -f ./agents/runtime-image/Dockerfile -t "${image}" .
+# Note: unlike docker buildx, `podman build` needs --manifest (not -t) to
+# build a comma-separated multi-arch platform list. Local use is single-arch.
+podman build --platform "linux/${arch}" -f ./agents/runtime-image/Dockerfile -t "${image}" .
 
 echo "Image available locally as:"
 echo "${image}"

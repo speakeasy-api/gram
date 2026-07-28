@@ -201,8 +201,9 @@ if [ ${#pg_files[@]} -eq 0 ]; then
 fi
 
 # Run atlas migrate lint (Postgres). ClickHouse Atlas linting requires a
-# docker://clickhouse dev database and is handled by the dedicated atlas-action
-# CI step, so it is intentionally not run here.
+# docker://clickhouse dev database (a throwaway container spun up through the
+# container engine's API) and is handled by the dedicated atlas-action CI step,
+# so it is intentionally not run here.
 echo -e "\n🔎 Running atlas migrate lint..."
 atlas migrate lint \
   --config "file://server/atlas.hcl" \

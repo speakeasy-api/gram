@@ -36,17 +36,19 @@ mise run build:functions-image \
   --tarball-name "image.tar" \
   --out "./oci/$runtime"
 
-docker rmi --force "gram-runner-$runtime:dev-$arch" "gram-runner-$runtime:dev" || true
-docker image load -i "./oci/$runtime/image.tar"
-docker tag "gram-runner-$runtime:dev-$arch" "gram-runner-$runtime:dev"
-docker rmi "gram-runner-$runtime:dev-$arch"
+podman rmi --force "gram-runner-$runtime:dev-$arch" "gram-runner-$runtime:dev" || true
+podman image load -i "./oci/$runtime/image.tar"
+podman tag "gram-runner-$runtime:dev-$arch" "gram-runner-$runtime:dev"
+podman rmi "gram-runner-$runtime:dev-$arch"
 
 if [ -n "${GRAM_FUNCTIONS_RUNNER_OCI_IMAGE:-}" ] && [ "${GRAM_FUNCTIONS_RUNNER_VERSION:-}" = "dev" ] && [ "$arch" = "amd64" ]; then
   ver="${GRAM_FUNCTIONS_RUNNER_VERSION}"
   fly_image="${GRAM_FUNCTIONS_RUNNER_OCI_IMAGE}:${ver}-${runtime}"
-  docker rmi "$fly_image" || true
-  docker tag "gram-runner-$runtime:dev" "$fly_image"
-  docker push "$fly_image"
+  podman rmi "$fly_image" || true
+  podman tag "gram-runner-$runtime:dev" "$fly_image"
+  # Registry credentials come from REGISTRY_AUTH_FILE (set in mise.toml to
+  # ~/.docker/config.json, where `flyctl auth docker` writes them).
+  podman push "$fly_image"
   echo ""
   echo "Pushed image to Fly.io registry as:"
   echo "$fly_image"

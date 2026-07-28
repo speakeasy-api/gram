@@ -36,7 +36,7 @@ mise run start   # supervisor start + stop + clean + start --all-local
 mise run stop    # pitchfork stop --all-local
 ```
 
-`mise run start` cleanly stops and restarts everything. If services fail because Docker infra (Postgres, ClickHouse, etc.) isn't up, run `./zero --agent` for full environment setup instead.
+`mise run start` cleanly stops and restarts everything. If services fail because the container infra (Postgres, ClickHouse, etc. on rootless Podman) isn't up, run `./zero --agent` for full environment setup instead.
 
 ## Individual daemons
 

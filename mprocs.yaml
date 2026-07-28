@@ -2,15 +2,26 @@
 web_port: 35294
 procs:
   otel-collector:
-    cmd: ["docker", "compose", "logs", "-f", "otel-collector"]
+    cmd:
+      [
+        "bash",
+        "-c",
+        "source ./local/lib/compose.sh && compose logs -f otel-collector",
+      ]
     stop:
       send-keys: ["<C-c>"]
   jaeger:
-    cmd: ["docker", "compose", "logs", "-f", "jaeger"]
+    cmd:
+      ["bash", "-c", "source ./local/lib/compose.sh && compose logs -f jaeger"]
     stop:
       send-keys: ["<C-c>"]
   prometheus:
-    cmd: ["docker", "compose", "logs", "-f", "prometheus"]
+    cmd:
+      [
+        "bash",
+        "-c",
+        "source ./local/lib/compose.sh && compose logs -f prometheus",
+      ]
     stop:
       send-keys: ["<C-c>"]
   dev-idp:

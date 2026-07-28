@@ -198,7 +198,7 @@ async function psql(sql: string): Promise<string> {
   const dbUser = process.env.DB_USER ?? "gram";
   const dbName = process.env.DB_NAME ?? "gram";
   const out =
-    await $`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -Atc ${sql}`.quiet();
+    await $`bash local/lib/compose.sh exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -Atc ${sql}`.quiet();
   return out.stdout.trim();
 }
 

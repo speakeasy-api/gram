@@ -25,8 +25,10 @@ import (
 const runtimeBackendLocal = "local"
 
 // LocalRuntimeHostGatewayAlias is the hostname containers reach the host on.
-// Docker Desktop resolves it natively; on native Linux engines the backend
-// adds a host-gateway alias for it on every container.
+// The backend adds a host-gateway alias for it on every container (supported
+// by podman >= 5.3 under both rootless and rootful networking). The value
+// stays "host.docker.internal" — the TLS SAN, tunnel agent, and checked-in
+// env defaults all rely on the literal name.
 const LocalRuntimeHostGatewayAlias = "host.docker.internal"
 
 const (
@@ -61,9 +63,9 @@ var (
 	errLocalImageNotFound      = errors.New("local runtime image not found")
 )
 
-// containerEngine is the narrow surface of a Docker-compatible engine the
-// local backend needs. Production shells out to the docker CLI
-// (dockerCLIEngine); tests use a fake.
+// containerEngine is the narrow surface of a container engine the local
+// backend needs. Production shells out to the podman CLI (podmanCLIEngine);
+// tests use a fake.
 type containerEngine interface {
 	// ImageID resolves an image reference to its content-addressed ID.
 	// Returns errLocalImageNotFound when the image is absent.
@@ -111,7 +113,7 @@ type localContainerSpec struct {
 	ExtraCACertFile string
 }
 
-// LocalRuntimeConfig configures the local Docker-backed assistant runtime
+// LocalRuntimeConfig configures the local podman-backed assistant runtime
 // backend used for image development on a developer machine.
 type LocalRuntimeConfig struct {
 	// Enabled controls whether the backend is constructed. It is on whenever
@@ -120,8 +122,8 @@ type LocalRuntimeConfig struct {
 	// target provider.
 	Enabled bool
 	// Environment must be "local": the backend launches containers on the
-	// host's Docker daemon and dials them over loopback, which has no place in
-	// a deployed process.
+	// host's container engine and dials them over loopback, which has no place
+	// in a deployed process.
 	Environment string
 	OCIImage    string
 	ImageTag    string
@@ -160,8 +162,8 @@ type localRuntimeMetadata struct {
 	HostPort      int    `json:"host_port"`
 }
 
-// LocalRuntimeBackend runs one Docker container per assistant on the
-// developer's machine. Containers are named deterministically per assistant
+// LocalRuntimeBackend runs one container per assistant on the developer's
+// machine via podman. Containers are named deterministically per assistant
 // and labelled with assistant/project identity, so Ensure is idempotent and a
 // restarted server rediscovers containers it launched before. The runner guest
 // port is published to an ephemeral loopback port that is re-resolved on every

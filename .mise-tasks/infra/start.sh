@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
+
 #MISE description="Start up databases, caches and so on"
 
-docker compose up -d || exit 1
+# Canonical engine entrypoint: defines the `compose` function, exports
+# GRAM_REPO_ROOT/DOCKER_HOST, and ensures the podman API socket is running.
+source "$(dirname "${BASH_SOURCE[0]}")/../../local/lib/compose.sh"
+
+# Path form of the same helper for probes run under `gum spin`, which executes
+# an argv (an external command), not a shell function.
+COMPOSE_SH="${GRAM_REPO_ROOT}/local/lib/compose.sh"
+
+compose up -d || exit 1
 
 # Maximum time (seconds) to wait for a service to accept queries before giving
 # up. Bounded so headless callers (e.g. `./zero --agent`) fail fast instead of
@@ -20,8 +29,8 @@ fi
 # run_bounded <seconds> <command...>
 # Runs the command via `gum spin` (gum is provided by mise), which aborts it
 # after <seconds> and propagates its exit code (124 on timeout). This bounds
-# each probe so a hung `docker compose exec` or Docker Engine call cannot block
-# past the deadline.
+# each probe so a hung compose exec or engine API call cannot block past the
+# deadline.
 run_bounded() {
     local secs="$1"
     shift
@@ -43,9 +52,9 @@ wait_for() {
         if ((remaining <= 0)); then
             echo "❌ Timed out after ${READINESS_TIMEOUT}s waiting for ${name} to be ready." >&2
             echo "Container status:" >&2
-            run_bounded 10 docker compose ps -a "$service" >&2 || true
+            run_bounded 10 bash "$COMPOSE_SH" ps -a "$service" >&2 || true
             echo "Recent ${service} logs:" >&2
-            run_bounded 10 docker compose logs --tail=50 "$service" >&2 || true
+            run_bounded 10 bash "$COMPOSE_SH" logs --tail=50 "$service" >&2 || true
             exit 1
         fi
 
@@ -62,10 +71,10 @@ wait_for() {
 
 # Use psql to wait for the database to be ready
 wait_for "Postgres" gram-db \
-    docker compose exec -T gram-db psql -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1"
+    bash "$COMPOSE_SH" exec -T gram-db psql -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1"
 
 # ClickHouse takes longer than Postgres to accept queries. Migrations run
 # immediately after infra starts, so without waiting here the first ClickHouse
 # migration can fail with a connection EOF.
 wait_for "ClickHouse" clickhouse \
-    docker compose exec -T clickhouse clickhouse-client --user "$CLICKHOUSE_USERNAME" --password "$CLICKHOUSE_PASSWORD" -q "SELECT 1"
+    bash "$COMPOSE_SH" exec -T clickhouse clickhouse-client --user "$CLICKHOUSE_USERNAME" --password "$CLICKHOUSE_PASSWORD" -q "SELECT 1"

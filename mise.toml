@@ -42,10 +42,42 @@ ruff = "0.15.20"
 "github:ast-grep/ast-grep" = "0.45.0"
 pitchfork = "2.19.0"
 "npm:@playwright/cli" = "0.1.17"
+## Container engine: full static rootless Podman bundle. The official podman
+## GitHub releases ship remote-client-only binaries on Linux, so we use
+## mgoltzsche/podman-static which bundles crun, conmon, netavark, aardvark-dns,
+## pasta and fuse-overlayfs. Linux-only: macOS would need `podman machine`.
+"github:mgoltzsche/podman-static" = { version = "5.8.4", strip_components = "1", bin_path = "usr/local/bin", os = ["linux"] }
+## Compose provider: the standalone docker-compose CLI pointed at the Podman
+## API socket via DOCKER_HOST. Builds never go through compose (the podman
+## socket has no BuildKit) — images are pre-built with `podman build`; see
+## local/lib/compose.sh for the canonical `compose` entrypoint.
+docker-compose = "2.40.3"
 
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.
 [env]
+###############################
+## Container engine (Podman) ##
+###############################
+## All container tooling — docker-compose, testcontainers-go, atlas docker://
+## dev databases, melange — talks to rootless Podman through its docker-compat
+## API socket. The socket path depends on uid: rootful under /run/podman in
+## uid-0 cloud sandboxes, per-user runtime dir otherwise. The socket service
+## itself is started idempotently by local/lib/compose.sh (`mise run
+## zero:podman` / any `compose` invocation) — no daemon, no systemd needed.
+DOCKER_HOST = "{{ exec(command=config_root ~ '/local/podman/socket-path.sh') }}"
+## Registry credentials for `podman push` (e.g. registry.fly.io via flyctl).
+REGISTRY_AUTH_FILE = "{{env.HOME}}/.docker/config.json"
+## `docker` resolves to a podman shim for every mise-run process (tasks,
+## pitchfork services, tests). Scripts must NOT use `docker compose` (that
+## would hit `podman compose`, a different provider) — use local/lib/compose.sh.
+_.path = ["{{config_root}}/local/podman/bin"]
+## Testcontainers: ryuk stays enabled and works against the rootless podman
+## socket. If the reaper misbehaves (most likely rootful-in-sandbox), set in
+## mise.local.toml, trying in order:
+##   TESTCONTAINERS_RYUK_CONTAINER_PRIVILEGED = "true"
+##   TESTCONTAINERS_RYUK_DISABLED = "true"
+
 ###########################
 ## Runtime configuration ##
 ###########################
@@ -252,8 +284,8 @@ GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
 ########################################
 ## Where assistant runtimes run.
 ## Allowed values: local, flyio, gke.
-## The local provider starts runtime containers on demand on this machine's
-## Docker daemon. Build the image with `mise run build:assistants-runtime-image`.
+## The local provider starts runtime containers on demand via rootless Podman
+## on this machine. Build the image with `mise run build:assistants-runtime-image`.
 GRAM_ASSISTANT_RUNTIME_PROVIDER = "local"
 GRAM_ASSISTANT_RUNTIME_OCI_IMAGE = "gram-assistant-runtime"
 

@@ -4,7 +4,7 @@
 
 //USAGE flag "--code <file>" help="Path to file containing the function code to run."
 //USAGE flag "--name <name>" default="gf-runner" required=#true help="A name for the runner container instance."
-//USAGE flag "--image <image>" default="gram-runner-nodejs22:dev" required=#true help="The Docker image to use for the runner."
+//USAGE flag "--image <image>" default="gram-runner-nodejs22:dev" required=#true help="The container image to use for the runner."
 
 import path from "node:path";
 import { $, chalk, fs } from "zx";
@@ -29,7 +29,7 @@ async function run() {
   const name = process.env["usage_name"] || "gf-runner";
   const image = process.env["usage_image"] || "gram-runner-nodejs22";
 
-  const imageExists = await $`docker images -q ${image}`.quiet();
+  const imageExists = await $`podman images -q ${image}`.quiet();
   if (!imageExists.stdout.trim()) {
     const ans = await confirm({
       message: `The image "${image}" does not exist. Build it now? (mise run build:functions-local)`,
@@ -46,7 +46,7 @@ async function run() {
   }
 
   const nameFilter = `name=${name}`;
-  const ps = await $`docker ps -q --filter ${nameFilter}`;
+  const ps = await $`podman ps -q --filter ${nameFilter}`;
   if (ps.stdout.trim()) {
     const ans = await confirm({
       message: `A container with the name "${name}" is already running. Kill it?`,
@@ -56,7 +56,7 @@ async function run() {
       return;
     }
 
-    await $`docker rm -f ${name}`;
+    await $`podman rm -f ${name}`;
   }
 
   let code = process.env["usage_code"] || null;
@@ -90,7 +90,7 @@ async function run() {
 
   await $({
     stdio: "inherit",
-  })`docker run -d --rm --name ${name} ${env} -p 8888:8888 -v ${zipPath}:/data/code.zip ${image}`;
+  })`podman run -d --rm --name ${name} ${env} -p 8888:8888 -v ${zipPath}:/data/code.zip ${image}`;
 
   console.log(
     chalk.bold("Example tool call:\n\n") +

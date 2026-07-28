@@ -15,7 +15,7 @@
 //   user.attributes.manager_email / manager_name  and  user.groups = [team]
 // so the data is ready and "Team" works today via the existing `group` axis.
 //
-// Pure Node builtins + the `docker` CLI — no workspace deps.
+// Pure Node builtins + the `podman` CLI — no workspace deps.
 //   Run:  node server/clickhouse/scripts/seed-costs.mjs
 // Idempotent: deletes all @speakeasy.com rows from telemetry_logs AND
 // attribute_metrics_summaries first (the MV only appends, so we must clear the
@@ -31,7 +31,7 @@ import { execFileSync } from "node:child_process";
 function resolveContainer(substr, fallback) {
   try {
     const out = execFileSync(
-      "docker",
+      "podman",
       ["ps", "--filter", `name=${substr}`, "--format", "{{.Names}}"],
       { encoding: "utf8" },
     )
@@ -43,8 +43,17 @@ function resolveContainer(substr, fallback) {
     return fallback;
   }
 }
-const CH_CONTAINER = resolveContainer("clickhouse", "gram-clickhouse-1");
-const PG_CONTAINER = resolveContainer("gram-gram-db", "gram-gram-db-1");
+// Compose names containers "<project>-<service>-1"; worktrees override the
+// project via COMPOSE_PROJECT_NAME (mise.local.toml), so derive it from env.
+const COMPOSE_PROJECT = process.env.COMPOSE_PROJECT_NAME || "gram";
+const CH_CONTAINER = resolveContainer(
+  `${COMPOSE_PROJECT}-clickhouse`,
+  `${COMPOSE_PROJECT}-clickhouse-1`,
+);
+const PG_CONTAINER = resolveContainer(
+  `${COMPOSE_PROJECT}-gram-db`,
+  `${COMPOSE_PROJECT}-gram-db-1`,
+);
 const EMAIL_DOMAIN = "speakeasy.com";
 const DAYS_BACK = 28; // stay under the aggregate's 30-day TTL
 const NOW = Date.now();
@@ -626,11 +635,11 @@ console.log(
 console.log(`Target org projects: ${projectIds.join(", ")}`);
 
 try {
-  execFileSync("docker", ["cp", tmp, `${CH_CONTAINER}:/tmp/seed_costs.sql`], {
+  execFileSync("podman", ["cp", tmp, `${CH_CONTAINER}:/tmp/seed_costs.sql`], {
     stdio: "inherit",
   });
   execFileSync(
-    "docker",
+    "podman",
     [
       "exec",
       CH_CONTAINER,
@@ -665,7 +674,7 @@ function discoverProjectIds() {
     "SELECT id FROM projects WHERE organization_id = " +
     "(SELECT organization_id FROM projects GROUP BY organization_id ORDER BY count(*) DESC LIMIT 1) ORDER BY id;";
   const out = execFileSync(
-    "docker",
+    "podman",
     ["exec", PG_CONTAINER, "psql", "-U", "gram", "-d", "gram", "-tA", "-c", q],
     {
       encoding: "utf8",
@@ -691,7 +700,7 @@ function discoverProjectIds() {
 function discoverOrgId(projectId) {
   const q = `SELECT organization_id FROM projects WHERE id = '${sql(projectId)}' LIMIT 1;`;
   const out = execFileSync(
-    "docker",
+    "podman",
     ["exec", PG_CONTAINER, "psql", "-U", "gram", "-d", "gram", "-tA", "-c", q],
     { encoding: "utf8" },
   );
@@ -730,12 +739,12 @@ function seedChats() {
   const tmp2 = `${os.tmpdir()}/seed_costs_chats_${process.pid}.sql`;
   fs.writeFileSync(tmp2, stmts.join("\n"));
   execFileSync(
-    "docker",
+    "podman",
     ["cp", tmp2, `${PG_CONTAINER}:/tmp/seed_costs_chats.sql`],
     { stdio: "inherit" },
   );
   execFileSync(
-    "docker",
+    "podman",
     [
       "exec",
       PG_CONTAINER,
@@ -765,7 +774,7 @@ function verify() {
     "GROUP BY division_name, department_name ORDER BY division_name, department_name " +
     "FORMAT PrettyCompactMonoBlock;";
   const out = execFileSync(
-    "docker",
+    "podman",
     ["exec", CH_CONTAINER, "clickhouse-client", "-q", q],
     { encoding: "utf8" },
   );

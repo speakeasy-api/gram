@@ -88,10 +88,18 @@ const log = {
   },
 };
 
+/**
+ * Canonical compose entrypoint (rootless Podman behind it): the command form
+ * of local/lib/compose.sh brings the podman API socket up idempotently and
+ * execs the compose provider, so stdio/exit codes pass through unchanged.
+ * Task cwd is the repo root.
+ */
+const COMPOSE = ["bash", "local/lib/compose.sh"];
+
 async function runClickHouseSQL(sql: string): Promise<void> {
   await $({
     input: sql,
-  })`docker compose exec -T clickhouse clickhouse-client --multiquery`.quiet();
+  })`${COMPOSE} exec -T clickhouse clickhouse-client --multiquery`.quiet();
 }
 
 /**
@@ -108,7 +116,7 @@ async function runSeedMarkerSQL(sql: string) {
   const dbName = process.env.DB_NAME || "gram";
   return await $({
     input: sql,
-  })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -tA -f -`.quiet();
+  })`${COMPOSE} exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -tA -f -`.quiet();
 }
 
 /**
@@ -431,7 +439,7 @@ SELECT COUNT(*) FROM upserted;
 `;
   const result = await $({
     input: sql,
-  })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -v organization_id=${organizationId} -v user_id=${userId} -tA -f -`.quiet();
+  })`${COMPOSE} exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -v organization_id=${organizationId} -v user_id=${userId} -tA -f -`.quiet();
 
   if (result.stdout.trim() !== "1") {
     abort("Failed to assign current user to seeded Admin role", {
@@ -458,7 +466,7 @@ SELECT COALESCE((SELECT id FROM updated), '');
 `;
   const result = await $({
     input: sql,
-  })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -v user_id=${userId} -tA -f -`.quiet();
+  })`${COMPOSE} exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -v user_id=${userId} -tA -f -`.quiet();
 
   if (result.stdout.trim() !== userId) {
     abort("Failed to mark current user as super admin", {
@@ -469,7 +477,7 @@ SELECT COALESCE((SELECT id FROM updated), '');
 
   try {
     const redisPassword = process.env.GRAM_REDIS_CACHE_PASSWORD || "xi9XILbY";
-    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL ${`userInfo:${userId}:`}`.quiet();
+    await $`${COMPOSE} exec -T gram-cache redis-cli -p 35299 -a ${redisPassword} DEL ${`userInfo:${userId}:`}`.quiet();
   } catch (e: unknown) {
     const err = e as { stderr?: string; message?: string };
     log.stepFailed(
@@ -2034,8 +2042,8 @@ async function seedRiskFindings(init: {
     await fs.writeFile(tmpFile, pgSQL, "utf-8");
 
     try {
-      await $`docker compose cp ${tmpFile} gram-db:/tmp/seed-risk.sql`.quiet();
-      await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -f /tmp/seed-risk.sql`.quiet();
+      await $`${COMPOSE} cp ${tmpFile} gram-db:/tmp/seed-risk.sql`.quiet();
+      await $`${COMPOSE} exec -T gram-db psql -U ${dbUser} -d ${dbName} -f /tmp/seed-risk.sql`.quiet();
       log.info(
         `Seeded ${findingRows.length} risk findings across ${RISK_FINDING_CATALOG.length} sources, ` +
           `plus ${HIGH_RISK_CHATS.length} high-risk chats (scores ${HIGH_RISK_CHATS.map(([, c]) => c).join(", ")}) for the threshold filter`,
@@ -2149,7 +2157,7 @@ async function seedRiskFindingsClickHouse(init: {
 
     const copied = await $({
       input: copySQL,
-    })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -f -`.quiet();
+    })`${COMPOSE} exec -T gram-db psql -U ${dbUser} -d ${dbName} -f -`.quiet();
 
     const rows = copied.stdout.trim();
     if (rows === "") {
@@ -2163,7 +2171,7 @@ async function seedRiskFindingsClickHouse(init: {
     // default limit of 100 daily partitions.
     await $({
       input: rows + "\n",
-    })`docker compose exec -T clickhouse clickhouse-client --date_time_input_format=best_effort --max_partitions_per_insert_block=1000 --query ${insertSQL}`.quiet();
+    })`${COMPOSE} exec -T clickhouse clickhouse-client --date_time_input_format=best_effort --max_partitions_per_insert_block=1000 --query ${insertSQL}`.quiet();
 
     log.info(
       `Mirrored ${rows.split("\n").length} risk findings into ClickHouse for the flagged Risk Overview read path`,
@@ -2275,8 +2283,8 @@ async function seedNonCorporateAccountFindings(init: {
     const tmpFile = path.join(process.cwd(), ".seed-noncorp-risk.sql");
     await fs.writeFile(tmpFile, pgSQL, "utf-8");
     try {
-      await $`docker compose cp ${tmpFile} gram-db:/tmp/seed-noncorp-risk.sql`.quiet();
-      await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -f /tmp/seed-noncorp-risk.sql`.quiet();
+      await $`${COMPOSE} cp ${tmpFile} gram-db:/tmp/seed-noncorp-risk.sql`.quiet();
+      await $`${COMPOSE} exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -f /tmp/seed-noncorp-risk.sql`.quiet();
       log.info(
         `Seeded the "${SEED_NONCORP_POLICY_NAME}" (account_identity) policy with per-session findings over the personal-account chats`,
       );
@@ -2316,7 +2324,7 @@ async function enableRBACForDevUser(init: {
   try {
     const dbUser = process.env.DB_USER || "gram";
     const dbName = process.env.DB_NAME || "gram";
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -c ${`UPDATE users SET admin = TRUE WHERE id = '${userId.replace(/'/g, "''")}';`}`.quiet();
+    await $`${COMPOSE} exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -c ${`UPDATE users SET admin = TRUE WHERE id = '${userId.replace(/'/g, "''")}';`}`.quiet();
   } catch (e: unknown) {
     const err = e as { stderr?: string; stdout?: string; message?: string };
     abort(
@@ -2370,8 +2378,8 @@ async function enableRBACForDevUser(init: {
     const tmpFile = path.join(process.cwd(), ".seed-dev-grants.sql");
     await fs.writeFile(tmpFile, pgSQL, "utf-8");
     try {
-      await $`docker compose cp ${tmpFile} gram-db:/tmp/seed-dev-grants.sql`.quiet();
-      await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -f /tmp/seed-dev-grants.sql`.quiet();
+      await $`${COMPOSE} cp ${tmpFile} gram-db:/tmp/seed-dev-grants.sql`.quiet();
+      await $`${COMPOSE} exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -f /tmp/seed-dev-grants.sql`.quiet();
     } finally {
       await fs.unlink(tmpFile).catch(() => {});
     }
@@ -2691,8 +2699,8 @@ async function seedPersonalAccounts(init: {
     const tmpFile = path.join(process.cwd(), ".seed-personal-accounts.sql");
     await fs.writeFile(tmpFile, pgSQL, "utf-8");
     try {
-      await $`docker compose cp ${tmpFile} gram-db:/tmp/seed-personal-accounts.sql`.quiet();
-      await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -f /tmp/seed-personal-accounts.sql`.quiet();
+      await $`${COMPOSE} cp ${tmpFile} gram-db:/tmp/seed-personal-accounts.sql`.quiet();
+      await $`${COMPOSE} exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -f /tmp/seed-personal-accounts.sql`.quiet();
     } finally {
       await fs.unlink(tmpFile).catch(() => {});
     }
@@ -3485,8 +3493,8 @@ async function seedObservabilityData(init: {
     await fs.writeFile(tmpFile, pgSQL, "utf-8");
 
     try {
-      await $`docker compose cp ${tmpFile} gram-db:/tmp/seed.sql`.quiet();
-      await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -f /tmp/seed.sql`.quiet();
+      await $`${COMPOSE} cp ${tmpFile} gram-db:/tmp/seed.sql`.quiet();
+      await $`${COMPOSE} exec -T gram-db psql -U ${dbUser} -d ${dbName} -f /tmp/seed.sql`.quiet();
       log.info(`Inserted ${NUM_CHATS} chats with messages into PostgreSQL`);
     } finally {
       // Clean up temp file
@@ -4085,8 +4093,8 @@ async function seedObservabilityData(init: {
       const tmpFile = path.join(process.cwd(), ".seed-history-chats.sql");
       await fs.writeFile(tmpFile, historyPgSQL, "utf-8");
       try {
-        await $`docker compose cp ${tmpFile} gram-db:/tmp/seed-history-chats.sql`.quiet();
-        await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -f /tmp/seed-history-chats.sql`.quiet();
+        await $`${COMPOSE} cp ${tmpFile} gram-db:/tmp/seed-history-chats.sql`.quiet();
+        await $`${COMPOSE} exec -T gram-db psql -U ${dbUser} -d ${dbName} -f /tmp/seed-history-chats.sql`.quiet();
         log.info(
           `Inserted ${historyChatRows.length} history chats (risk/tool messages) into PostgreSQL`,
         );
@@ -4849,7 +4857,7 @@ async function seed() {
   try {
     const dbUser = process.env.DB_USER || "gram";
     const dbName = process.env.DB_NAME || "gram";
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO mcp_registries (name, url) VALUES ('Gram Recommended', 'https://api.pulsemcp.com') ON CONFLICT (url) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
+    await $`${COMPOSE} exec -T gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO mcp_registries (name, url) VALUES ('Gram Recommended', 'https://api.pulsemcp.com') ON CONFLICT (url) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
     log.info("Seeded MCP registry 'Gram Recommended'");
   } catch (e: unknown) {
     const err = e as { stderr?: string; message?: string };
@@ -4862,7 +4870,7 @@ async function seed() {
   try {
     const dbUser = process.env.DB_USER || "gram";
     const dbName = process.env.DB_NAME || "gram";
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "UPDATE organization_metadata SET whitelisted = TRUE, gram_account_type = 'pro' WHERE id = '${activeOrgID}';"`.quiet();
+    await $`${COMPOSE} exec -T gram-db psql -U ${dbUser} -d ${dbName} -c "UPDATE organization_metadata SET whitelisted = TRUE, gram_account_type = 'pro' WHERE id = '${activeOrgID}';"`.quiet();
     log.info("Set active org as whitelisted (downgraded to pro for seeding)");
   } catch (e: unknown) {
     const err = e as { stderr?: string; message?: string };
@@ -4877,8 +4885,8 @@ async function seed() {
     const redisPassword = process.env.GRAM_REDIS_CACHE_PASSWORD || "xi9XILbY";
     // session_capture gates Claude hook chat persistence; without it,
     // hooks.ingest accepts events but silently skips writing chat_messages.
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO organization_features (organization_id, feature_name) VALUES ('${activeOrgID}', 'logs'), ('${activeOrgID}', 'tool_io_logs'), ('${activeOrgID}', 'session_capture') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
-    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL feature:${activeOrgID}:logs: feature:${activeOrgID}:tool_io_logs: feature:${activeOrgID}:session_capture:`.quiet();
+    await $`${COMPOSE} exec -T gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO organization_features (organization_id, feature_name) VALUES ('${activeOrgID}', 'logs'), ('${activeOrgID}', 'tool_io_logs'), ('${activeOrgID}', 'session_capture') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
+    await $`${COMPOSE} exec -T gram-cache redis-cli -p 35299 -a ${redisPassword} DEL feature:${activeOrgID}:logs: feature:${activeOrgID}:tool_io_logs: feature:${activeOrgID}:session_capture:`.quiet();
     log.info("Enabled local logs, tool_io_logs, and session_capture features");
   } catch (e: unknown) {
     const err = e as { stderr?: string; message?: string };
@@ -5044,7 +5052,7 @@ async function seed() {
   try {
     const dbUser = process.env.DB_USER || "gram";
     const dbName = process.env.DB_NAME || "gram";
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "UPDATE organization_metadata SET gram_account_type = 'enterprise' WHERE id = '${activeOrgID}';"`.quiet();
+    await $`${COMPOSE} exec -T gram-db psql -U ${dbUser} -d ${dbName} -c "UPDATE organization_metadata SET gram_account_type = 'enterprise' WHERE id = '${activeOrgID}';"`.quiet();
     log.info("Set active org to enterprise account type");
   } catch (e: unknown) {
     const err = e as { stderr?: string; message?: string };

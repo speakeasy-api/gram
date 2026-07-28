@@ -11,9 +11,11 @@ if pitchfork supervisor status &> /dev/null; then
     pitchfork clean || true
 fi
 
-docker compose --profile "*" down --volumes --remove-orphans
+source "$(dirname "${BASH_SOURCE[0]}")/../local/lib/compose.sh"
 
-# dev-idp's SQLite database lives outside docker -- nuke it too so a
+compose --profile "*" down --volumes --remove-orphans
+
+# dev-idp's SQLite database lives outside the containers -- nuke it too so a
 # follow-up `./zero` boots from a clean mock-workos/oauth2 state.
 rm -rf local/devidp
 

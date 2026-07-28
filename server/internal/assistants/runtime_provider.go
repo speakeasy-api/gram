@@ -117,7 +117,7 @@ func NewRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider,
 			guardian.WithDefaultRetryConfig(),
 			guardian.WithAllowedCIDRBlocks(localRuntimeLoopbackCIDRs...),
 		)
-		backends[runtimeBackendLocal] = NewLocalRuntimeBackend(logger, tracerProvider, localClient, newDockerCLIEngine(config.Local.GuestPort), config.Local)
+		backends[runtimeBackendLocal] = NewLocalRuntimeBackend(logger, tracerProvider, localClient, newPodmanCLIEngine(config.Local.GuestPort), config.Local)
 	}
 
 	router, err := newRuntimeRouter(config.Provider, backends)

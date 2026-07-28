@@ -112,6 +112,63 @@ url = "https://github.com/bufbuild/buf/releases/download/v1.72.0/buf-Windows-x86
 url_api = "https://api.github.com/repos/bufbuild/buf/releases/assets/480772631"
 provenance = "minisign"
 
+[[tools.docker-compose]]
+version = "2.40.3"
+backend = "github:docker/compose"
+
+[tools.docker-compose."platforms.linux-arm64"]
+checksum = "sha256:d26373b19e89160546d15407516cc59f453030d9bc5b43ba7faf16f7b4980137"
+url = "https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-aarch64"
+url_api = "https://api.github.com/repos/docker/compose/releases/assets/310460652"
+
+[tools.docker-compose."platforms.linux-arm64-musl"]
+checksum = "sha256:d26373b19e89160546d15407516cc59f453030d9bc5b43ba7faf16f7b4980137"
+url = "https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-aarch64"
+url_api = "https://api.github.com/repos/docker/compose/releases/assets/310460652"
+
+[tools.docker-compose."platforms.linux-arm64-musl".provenance.slsa]
+url = "https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-aarch64.provenance.json"
+
+[tools.docker-compose."platforms.linux-x64"]
+checksum = "sha256:dba9d98e1ba5bfe11d88c99b9bd32fc4a0624a30fafe68eea34d61a3e42fd372"
+url = "https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-x86_64"
+url_api = "https://api.github.com/repos/docker/compose/releases/assets/310460956"
+
+[tools.docker-compose."platforms.linux-x64".provenance.slsa]
+url = "https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-x86_64.provenance.json"
+
+[tools.docker-compose."platforms.linux-x64-musl"]
+checksum = "sha256:dba9d98e1ba5bfe11d88c99b9bd32fc4a0624a30fafe68eea34d61a3e42fd372"
+url = "https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-x86_64"
+url_api = "https://api.github.com/repos/docker/compose/releases/assets/310460956"
+
+[tools.docker-compose."platforms.linux-x64-musl".provenance.slsa]
+url = "https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-x86_64.provenance.json"
+
+[tools.docker-compose."platforms.macos-arm64"]
+checksum = "sha256:8cd7eb5f95bacb536cc407111662e2c205d67d9abfea5dcb8400be8418db60d1"
+url = "https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-darwin-aarch64"
+url_api = "https://api.github.com/repos/docker/compose/releases/assets/310460578"
+
+[tools.docker-compose."platforms.macos-arm64".provenance.slsa]
+url = "https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-darwin-aarch64.provenance.json"
+
+[tools.docker-compose."platforms.macos-x64"]
+checksum = "sha256:53528ecff0182546d92d7cc3f50dc78f9b387c3da68b4a3fd0cf2c48dab77133"
+url = "https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-darwin-x86_64"
+url_api = "https://api.github.com/repos/docker/compose/releases/assets/310460613"
+
+[tools.docker-compose."platforms.macos-x64".provenance.slsa]
+url = "https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-darwin-x86_64.provenance.json"
+
+[tools.docker-compose."platforms.windows-x64"]
+checksum = "sha256:4c864dd7f879dd40366e087e68a8a02cbcf018be0128867b13369898e67e1532"
+url = "https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-windows-x86_64.exe"
+url_api = "https://api.github.com/repos/docker/compose/releases/assets/310461048"
+
+[tools.docker-compose."platforms.windows-x64".provenance.slsa]
+url = "https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-windows-x86_64.provenance.json"
+
 [[tools.flyctl]]
 version = "0.4.74"
 backend = "aqua:superfly/flyctl"
@@ -260,6 +317,30 @@ url_api = "https://api.github.com/repos/gotestyourself/gotestsum/releases/assets
 checksum = "sha256:fd5a6dc69e46a0970593e70d85a7e75f16714e9c61d6d72ccc324eb82df5bb8a"
 url = "https://github.com/gotestyourself/gotestsum/releases/download/v1.13.0/gotestsum_1.13.0_windows_amd64.tar.gz"
 url_api = "https://api.github.com/repos/gotestyourself/gotestsum/releases/assets/291996823"
+
+[[tools."github:mgoltzsche/podman-static"]]
+version = "5.8.4"
+backend = "github:mgoltzsche/podman-static"
+
+[tools."github:mgoltzsche/podman-static"."platforms.linux-arm64"]
+checksum = "sha256:a2f6b73cc0f7018e2e8518338a4ec27db70148e1af86e16719235605aefd1df3"
+url = "https://github.com/mgoltzsche/podman-static/releases/download/v5.8.4/podman-linux-arm64.tar.gz"
+url_api = "https://api.github.com/repos/mgoltzsche/podman-static/releases/assets/459071324"
+
+[tools."github:mgoltzsche/podman-static"."platforms.linux-arm64-musl"]
+checksum = "sha256:a2f6b73cc0f7018e2e8518338a4ec27db70148e1af86e16719235605aefd1df3"
+url = "https://github.com/mgoltzsche/podman-static/releases/download/v5.8.4/podman-linux-arm64.tar.gz"
+url_api = "https://api.github.com/repos/mgoltzsche/podman-static/releases/assets/459071324"
+
+[tools."github:mgoltzsche/podman-static"."platforms.linux-x64"]
+checksum = "sha256:a58765fe8be6ab3fb79f892f1a027b4ce4a7e8eb589df1ef960c167cbde08d69"
+url = "https://github.com/mgoltzsche/podman-static/releases/download/v5.8.4/podman-linux-amd64.tar.gz"
+url_api = "https://api.github.com/repos/mgoltzsche/podman-static/releases/assets/459071361"
+
+[tools."github:mgoltzsche/podman-static"."platforms.linux-x64-musl"]
+checksum = "sha256:a58765fe8be6ab3fb79f892f1a027b4ce4a7e8eb589df1ef960c167cbde08d69"
+url = "https://github.com/mgoltzsche/podman-static/releases/download/v5.8.4/podman-linux-amd64.tar.gz"
+url_api = "https://api.github.com/repos/mgoltzsche/podman-static/releases/assets/459071361"
 
 [[tools."github:pb33f/openapi-changes"]]
 version = "0.2.10"
