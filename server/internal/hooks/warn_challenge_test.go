@@ -17,6 +17,7 @@ import (
 // result, letting the warn (challenge) branches be exercised deterministically.
 type stubResultScanner struct {
 	result            *risk.ScanResult
+	shadowPolicy      *risk.ShadowMCPPolicy
 	acknowledged      bool
 	recordedChallenge bool
 }
@@ -26,7 +27,7 @@ func (s *stubResultScanner) ScanForEnforcement(_ context.Context, _ string, _ uu
 }
 
 func (s *stubResultScanner) LookupShadowMCPBlockingPolicy(_ context.Context, _ string, _ uuid.UUID, _ string) (*risk.ShadowMCPPolicy, error) {
-	return nil, nil
+	return s.shadowPolicy, nil
 }
 
 func (s *stubResultScanner) HasEnabledShadowMCPPolicy(_ context.Context, _ uuid.UUID) (bool, error) {
@@ -300,6 +301,55 @@ func TestIngest_CanonicalWarnChallengesEveryAdapterAndEvent(t *testing.T) {
 			require.Falsef(t, scanner.recordedChallenge, "%s %s acknowledged retry", adapter, eventKind)
 		}
 	}
+}
+
+// An acknowledged permission warn clears only that risk challenge — it must
+// still flow into the shadow-MCP guard, never let the tool call skip it. This
+// is the regression guard for the fix where an acknowledged permission warn
+// returned early instead of falling through: with the bug the guard is skipped
+// and the call is allowed; with the fix the unapproved MCP server is denied.
+func TestIngest_CanonicalAcknowledgedPermissionWarn_StillRunsShadowMCPGuard(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = &stubResultScanner{
+		acknowledged: true,
+		result: &risk.ScanResult{
+			Action:          "warn",
+			PolicyID:        uuid.NewString(),
+			PolicyName:      "danger",
+			Description:     "requires review",
+			RuleID:          "dangerous-operation",
+			Entity:          "destructive",
+			MatchedValue:    "rm -rf /tmp/warn",
+			CallFingerprint: "canonical-perm-warn-shadow",
+		},
+		// A shadow-MCP blocking policy is enabled; with no bypass grant and a
+		// non-Gram-hosted server the guard must deny.
+		shadowPolicy: &risk.ShadowMCPPolicy{ID: uuid.NewString(), Name: "shadow guard"},
+	}
+
+	// tool.requested for an MCP tool that also carries a permission type, so the
+	// permission block runs first and control must still reach the MCP guard.
+	toolName := "mcp__filesystem__remove"
+	permissionType := "exec"
+	serverIdentity := "filesystem"
+	payload := canonicalIngestPayload("claude", "tool.requested", "perm-warn-shadow-"+uuid.NewString())
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			Name:           &toolName,
+			Input:          map[string]any{"command": "rm -rf /tmp/warn"},
+			PermissionType: &permissionType,
+		},
+		Mcp: &gen.HookMCPData{ServerIdentity: &serverIdentity},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "deny", result.Decision, "acknowledged permission warn must not bypass the shadow-MCP guard")
+	require.NotNil(t, result.Message)
+	require.Contains(t, *result.Message, "shadow guard")
 }
 
 func TestIngest_CanonicalWarnFallsBackToBlockWithoutAckLink(t *testing.T) {
