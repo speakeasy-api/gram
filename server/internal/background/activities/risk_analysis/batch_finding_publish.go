@@ -5,7 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
 	"github.com/speakeasy-api/gram/server/internal/scanners/destructivetool"
@@ -29,6 +29,15 @@ import (
 // read-path cutover. Their ClickHouse presence to date is entirely the ops
 // backfill's doing; anything found after a backfill run was missing until
 // this publish existed.
+//
+// Known gap, accepted for this bridge: account_identity findings that are
+// later enriched in place (RefreshAccountIdentityFindingMatch patches the
+// Postgres row's match/description once the account email arrives; the fresh
+// scan result is then dropped by the rule-scoped dedupe) are NOT republished,
+// so the ClickHouse mirror keeps the pre-enrichment match. Counts stay
+// correct — the enrichment is per-finding metadata the CH read path does not
+// aggregate on — and the mirror converges when the batch path's publishing
+// authority moves to the stream pipeline.
 var batchOnlyFindingSources = map[string]struct{}{
 	SourceAccountIdentity:  {},
 	shadowmcpscan.Source:   {},
@@ -45,8 +54,12 @@ var batchOnlyFindingSources = map[string]struct{}{
 // ids and findings are the message-aligned pair buildRows consumed, so the
 // published set matches what was written (exclusions and disabled rules
 // already applied). Dead-letter sentinels are skipped, mirroring the outbox
-// emission (findingCreatedPayloads).
+// emission (findingCreatedPayloads). Publishes are issued for the whole batch
+// first and the acks drained through drainPublishAcks, which caps each ack,
+// survives activity cancellation, and heartbeats between acks — the same
+// discipline every other publish in this activity uses.
 func (a *AnalyzeBatch) publishBatchOnlyFindings(ctx context.Context, args AnalyzeBatchArgs, ids []uuid.UUID, findings [][]scanners.Finding) {
+	var results []gcp.PublishResult
 	for i, id := range ids {
 		var toPublish []scanners.Finding
 		for _, f := range findings[i] {
@@ -67,12 +80,9 @@ func (a *AnalyzeBatch) publishBatchOnlyFindings(ctx context.Context, args Analyz
 			RiskPolicyID:      args.RiskPolicyID.String(),
 			RiskPolicyVersion: args.PolicyVersion,
 		}
-		if _, _, err := scanners.PublishFindings(ctx, a.logger, a.findingsPub, meta, toPublish, "batch-only"); err != nil {
-			a.logger.WarnContext(ctx, "failed to publish batch-only findings",
-				attr.SlogError(err),
-				attr.SlogOrganizationID(args.OrganizationID),
-				attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
-			)
-		}
+		messageResults, _ := scanners.StartPublishFindings(ctx, a.findingsPub, meta, toPublish)
+		results = append(results, messageResults...)
 	}
+
+	drainPublishAcks(ctx, a.logger, "failed to publish batch-only finding", results)
 }
