@@ -162,8 +162,8 @@ func snapshotOf(deviceCount int) providers.CoverageSnapshot {
 			SerialNumber:                fmt.Sprintf("SER%04d", i+1),
 			Hostname:                    fmt.Sprintf("mac-%04d", i+1),
 			UserEmail:                   fmt.Sprintf("user%d@example.test", i+1),
-			AssignedUserAgentActive:     i%2 == 0,
-			AssignedUserAgentLastSeenAt: time.Date(2026, 7, 28, 9, 0, 0, 0, time.UTC),
+			AgentActive:      i%2 == 0,
+			AgentLastSeenAt:  time.Date(2026, 7, 28, 9, 0, 0, 0, time.UTC),
 		})
 	}
 	return providers.CoverageSnapshot{
@@ -191,8 +191,8 @@ func TestPushCoverageFullStateReplace(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "SER0001", props["serial_number"])
 	require.Equal(t, "user1@example.test", props["assigned_user_email"])
-	require.Equal(t, true, props["assigned_user_agent_active"])
-	require.Equal(t, "2026-07-28T09:00:00Z", props["assigned_user_agent_last_seen_at"])
+	require.Equal(t, true, props["agent_active"])
+	require.Equal(t, "2026-07-28T09:00:00Z", props["agent_last_seen_at"])
 	// The attestation is per assigned user: no device-level claim may leak
 	// into the property names.
 	for key := range props {
@@ -356,8 +356,8 @@ func TestUnassignedDeviceResource(t *testing.T) {
 			SerialNumber:                "SERX",
 			Hostname:                    "",
 			UserEmail:                   "",
-			AssignedUserAgentActive:     false,
-			AssignedUserAgentLastSeenAt: time.Time{},
+			AgentActive:      false,
+			AgentLastSeenAt:  time.Time{},
 		}},
 	}
 	require.NoError(t, s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshot))
@@ -368,7 +368,7 @@ func TestUnassignedDeviceResource(t *testing.T) {
 	props, ok := resource["customProperties"].(map[string]any)
 	require.True(t, ok)
 	require.Empty(t, props["assigned_user_email"])
-	require.Equal(t, false, props["assigned_user_agent_active"])
-	_, present := props["assigned_user_agent_last_seen_at"]
+	require.Equal(t, false, props["agent_active"])
+	_, present := props["agent_last_seen_at"]
 	require.False(t, present, "a never-seen agent omits the property — null or a zero timestamp would overclaim")
 }

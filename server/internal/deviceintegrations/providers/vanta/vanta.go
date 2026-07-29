@@ -8,12 +8,16 @@
 // Vanta Developer Console with the connectors.self:write-resource scope,
 // define a Custom Resource whose schema mirrors the customProperties below,
 // copy its resource id from the Resources tab, then define a Custom Test
-// over assigned_user_agent_active mapped to the relevant controls.
+// over agent_active mapped to the relevant controls.
 //
-// Evidence precision: agent presence is attested per assigned USER, not per
-// device — the property names say exactly that (assigned_user_agent_active,
-// never "device_monitored"), and assigned_user_agent_last_seen_at is omitted
-// when the assigned user has never synced an agent. The ticket suggested
+// Evidence precision: every resource states its own attestation strength.
+// agent_attestation "device" means that machine's agent reported in (matched
+// on hardware serial); "user" means only that its assigned user runs one
+// somewhere (matched on email). Both can appear in one push — a machine whose
+// agent cannot read a serial stays user-attested even for an org on
+// device-level matching — so the strength cannot be stated once for the whole
+// resource set. agent_last_seen_at is omitted when no agent has ever synced.
+// The ticket suggested
 // Vanta's built-in Computer resource kind, but built-in kinds carry fixed
 // schemas that cannot express these properties; a Custom Resource is what
 // lets the Custom Test attest exactly what we can prove.
@@ -240,11 +244,16 @@ type coverageResource struct {
 }
 
 type coverageProperty struct {
-	SerialNumber                string  `json:"serial_number"`
-	Hostname                    string  `json:"hostname"`
-	AssignedUserEmail           string  `json:"assigned_user_email"`
-	AssignedUserAgentActive     bool    `json:"assigned_user_agent_active"`
-	AssignedUserAgentLastSeenAt *string `json:"assigned_user_agent_last_seen_at,omitempty"`
+	SerialNumber      string `json:"serial_number"`
+	Hostname          string `json:"hostname"`
+	AssignedUserEmail string `json:"assigned_user_email"`
+	AgentActive       bool   `json:"agent_active"`
+	// agent_attestation is what keeps agent_active honest per row: "device"
+	// means this machine's own agent reported in, "user" means only that its
+	// assigned user runs one somewhere. Both can appear in one push, so the
+	// strength cannot be stated once for the whole resource set.
+	AgentAttestation string  `json:"agent_attestation"`
+	AgentLastSeenAt  *string `json:"agent_last_seen_at,omitempty"`
 }
 
 func buildResources(snapshot providers.CoverageSnapshot) ([]coverageResource, error) {
@@ -262,8 +271,8 @@ func buildResources(snapshot providers.CoverageSnapshot) ([]coverageResource, er
 		}
 		seen[d.ExternalID] = true
 		var lastSeen *string
-		if !d.AssignedUserAgentLastSeenAt.IsZero() {
-			formatted := d.AssignedUserAgentLastSeenAt.UTC().Format(time.RFC3339)
+		if !d.AgentLastSeenAt.IsZero() {
+			formatted := d.AgentLastSeenAt.UTC().Format(time.RFC3339)
 			lastSeen = &formatted
 		}
 		displayName := d.Hostname
@@ -274,11 +283,12 @@ func buildResources(snapshot providers.CoverageSnapshot) ([]coverageResource, er
 			UniqueID:    d.ExternalID,
 			DisplayName: displayName,
 			CustomProperties: coverageProperty{
-				SerialNumber:                d.SerialNumber,
-				Hostname:                    d.Hostname,
-				AssignedUserEmail:           d.UserEmail,
-				AssignedUserAgentActive:     d.AssignedUserAgentActive,
-				AssignedUserAgentLastSeenAt: lastSeen,
+				SerialNumber:      d.SerialNumber,
+				Hostname:          d.Hostname,
+				AssignedUserEmail: d.UserEmail,
+				AgentActive:       d.AgentActive,
+				AgentAttestation:  string(d.AgentAttestation),
+				AgentLastSeenAt:   lastSeen,
 			},
 		})
 	}
