@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { UsageProgress } from "./usage-controls";
+import { UsageProgress } from "./usage-progress";
 
 afterEach(cleanup);
 

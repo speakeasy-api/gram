@@ -12,7 +12,6 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { type ProductTier, useProductTier } from "@/hooks/useProductTier";
 import { getServerURL } from "@/lib/utils";
 import type { TierLimits } from "@gram/client/models/components/tierlimits.js";
-import type { UsageTiers as UsageTiersModel } from "@gram/client/models/components/usagetiers.js";
 import { useGetCreditUsage } from "@gram/client/react-query/getCreditUsage.js";
 import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
 import { useGetUsageTiers } from "@gram/client/react-query/getUsageTiers.js";
@@ -21,16 +20,20 @@ import { Button, cn, Stack } from "@speakeasy-api/moonshine";
 import { Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
-import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
+import { TopUpCTA } from "@/components/billing/usage-controls";
+import { UsageProgress } from "@/components/billing/usage-progress";
 import {
   TumAdminSection,
   TumUsageSection,
 } from "@/components/billing/tum-section";
 import {
   formatBillingCurrency,
-  formatBillingQuantity,
   type BillingUnit,
 } from "@/components/billing/billing-format";
+import {
+  getChatCreditEntitlement,
+  TierIncludedItems,
+} from "./billing-entitlements";
 
 export default function Billing(): JSX.Element {
   return (
@@ -70,64 +73,6 @@ function BillingInner() {
         <UsageTiers />
       )}
     </>
-  );
-}
-
-export function getChatCreditEntitlement(
-  productTier: ProductTier,
-  usageTiers: UsageTiersModel | undefined,
-): number | undefined {
-  if (!usageTiers) {
-    return undefined;
-  }
-
-  switch (productTier) {
-    case "__deprecated__pro":
-      return usageTiers.pro.includedCredits;
-    case "enterprise":
-      return usageTiers.enterprise.includedCredits;
-    default:
-      return usageTiers.free.includedCredits;
-  }
-}
-
-export function TierIncludedItems({
-  tierLimits,
-}: {
-  tierLimits: TierLimits;
-}): JSX.Element | null {
-  const hasIncludedItems =
-    tierLimits.includedBullets.length > 0 || tierLimits.includedCredits > 0;
-  if (!hasIncludedItems) {
-    return null;
-  }
-
-  return (
-    <Stack gap={1}>
-      <Type
-        mono
-        muted
-        small
-        variant="subheading"
-        className="font-medium uppercase"
-      >
-        Included
-      </Type>
-      <ul className="list-inside space-y-1">
-        {tierLimits.includedCredits > 0 ? (
-          <li>
-            <span className="text-muted-foreground/60">✓</span>{" "}
-            {formatBillingQuantity(tierLimits.includedCredits, "chat credits")}{" "}
-            / month
-          </li>
-        ) : null}
-        {tierLimits.includedBullets.map((bullet) => (
-          <li key={bullet}>
-            <span className="text-muted-foreground/60">✓</span> {bullet}
-          </li>
-        ))}
-      </ul>
-    </Stack>
   );
 }
 
