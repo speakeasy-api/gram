@@ -241,3 +241,34 @@ func TestToolsListMCPConnectFilterInterceptor_ResolverErrorFailsClosed(t *testin
 	// surface, rather than a silently emptied or unfiltered list.
 	require.Len(t, resp.Result.Tools, 1)
 }
+
+func TestToolsListMCPConnectFilterInterceptor_KeepsUnclassifiedGrantedTool(t *testing.T) {
+	t.Parallel()
+
+	// tool_a has no cached disposition; tool_b is classified but ungranted.
+	// Filtering keys off the tool-name grant regardless of disposition state,
+	// so the unclassified-but-granted tool survives and the classified-but-
+	// ungranted one is dropped — disposition classification of a sibling does
+	// not change how an un-annotated tool is authorized.
+	engine := newAuthzEngineForTest(t)
+	ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{
+			"resource_kind": "mcp",
+			"resource_id":   testServerID,
+			"tool":          "tool_a",
+		}),
+	)
+
+	resolver := fakeToolDispositionResolver{dispositions: map[string]string{"tool_b": "destructive"}}
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, resolver, testServerID, testProjectID, testenv.NewLogger(t))
+
+	resp := newToolsListResponse(t, []*mcp.Tool{
+		{Name: "tool_a", InputSchema: map[string]any{}},
+		{Name: "tool_b", InputSchema: map[string]any{}},
+	})
+	require.NoError(t, interceptor.InterceptToolsListResponse(ctx, resp))
+
+	require.Len(t, resp.Result.Tools, 1)
+	require.Equal(t, "tool_a", resp.Result.Tools[0].Name)
+}

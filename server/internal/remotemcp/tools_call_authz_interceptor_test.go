@@ -187,3 +187,26 @@ func TestToolsCallAuthzInterceptor_ResolverErrorFailsClosed(t *testing.T) {
 	err := interceptor.InterceptToolsCallRequest(ctx, newToolsCallRequest("search_tickets"))
 	require.Error(t, err)
 }
+
+func TestToolsCallAuthzInterceptor_UnclassifiedToolAuthorizedByToolGrant(t *testing.T) {
+	t.Parallel()
+
+	// The called tool has no cached disposition — it is absent from the
+	// resolver map even though a sibling tool on the same server is classified.
+	// It must still authorize on its tool-name grant: adding disposition
+	// resolution does not regress tools that carry no metadata.
+	engine := newAuthzEngineForTest(t)
+	ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{
+			"resource_kind": "mcp",
+			"resource_id":   testServerID,
+			"tool":          "search_tickets",
+		}),
+	)
+
+	resolver := fakeToolDispositionResolver{dispositions: map[string]string{"delete_ticket": "destructive"}}
+	interceptor := remotemcp.NewToolsCallAuthzInterceptor(engine, resolver, testServerID, testProjectID, testenv.NewLogger(t))
+
+	require.NoError(t, interceptor.InterceptToolsCallRequest(ctx, newToolsCallRequest("search_tickets")))
+}
