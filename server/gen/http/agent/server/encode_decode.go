@@ -36,9 +36,11 @@ func DecodeGetPluginsRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 	return func(r *http.Request) (*agent.GetPluginsPayload, error) {
 		var payload *agent.GetPluginsPayload
 		var (
-			email       string
-			apikeyToken *string
-			err         error
+			email        string
+			apikeyToken  *string
+			serialNumber *string
+			hostname     *string
+			err          error
 		)
 		email = r.URL.Query().Get("email")
 		if email == "" {
@@ -48,10 +50,18 @@ func DecodeGetPluginsRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
 		}
+		serialNumberRaw := r.Header.Get("Gram-Device-Serial")
+		if serialNumberRaw != "" {
+			serialNumber = &serialNumberRaw
+		}
+		hostnameRaw := r.Header.Get("Gram-Device-Hostname")
+		if hostnameRaw != "" {
+			hostname = &hostnameRaw
+		}
 		if err != nil {
 			return payload, err
 		}
-		payload = NewGetPluginsPayload(email, apikeyToken)
+		payload = NewGetPluginsPayload(email, apikeyToken, serialNumber, hostname)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

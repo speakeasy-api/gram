@@ -103,6 +103,29 @@ SET last_seen_at = clock_timestamp()
   , updated_at   = clock_timestamp()
 WHERE device_agent_syncs.last_seen_at < clock_timestamp() - interval '1 minute';
 
+-- name: UpsertDeviceAgentDeviceSync :exec
+-- Best-effort record that the agent on the machine bearing @serial_number
+-- polled. Sibling of UpsertDeviceAgentSync: that one answers "does this user
+-- run the agent somewhere", this one answers "does THIS machine run it".
+-- Only called when the agent reported a serial.
+--
+-- The guard extends the sibling's once-a-minute heartbeat throttle with two
+-- change conditions. Throttling alone would be wrong here: the row carries
+-- mutable descriptive columns, and at a ~60s poll cadence last_seen_at is
+-- almost always fresh, so a reassigned machine's new user (or a rename)
+-- could go unrecorded for the entire session.
+INSERT INTO device_agent_device_syncs (organization_id, serial_number, email, hostname)
+VALUES (@organization_id, @serial_number, @email, sqlc.narg('hostname'))
+ON CONFLICT (organization_id, serial_number) DO UPDATE
+SET last_seen_at = clock_timestamp()
+  , updated_at   = clock_timestamp()
+  , email        = EXCLUDED.email
+    -- An agent that stopped reporting a hostname must not blank a known one.
+  , hostname     = COALESCE(EXCLUDED.hostname, device_agent_device_syncs.hostname)
+WHERE device_agent_device_syncs.last_seen_at < clock_timestamp() - interval '1 minute'
+   OR device_agent_device_syncs.email IS DISTINCT FROM EXCLUDED.email
+   OR (EXCLUDED.hostname IS NOT NULL AND device_agent_device_syncs.hostname IS DISTINCT FROM EXCLUDED.hostname);
+
 -- name: ListDeviceAgentSyncs :many
 -- Lists every distinct email seen polling the device agent for an org, most
 -- recently active first, for the dashboard's device-agent users view.

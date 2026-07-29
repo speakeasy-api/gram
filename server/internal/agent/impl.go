@@ -148,6 +148,27 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		)
 	}
 
+	// Agents that can read their hardware serial additionally record a
+	// per-device heartbeat, which is what lets coverage attest a specific
+	// machine rather than its assigned user. Absent or blank means the agent
+	// predates the capability, or runs on hardware with no readable serial
+	// (white-box PCs report blank or a placeholder) — either way coverage
+	// falls back to the per-user email match above, so this stays additive
+	// and never gates the sync.
+	if serial := strings.TrimSpace(conv.PtrValOr(payload.SerialNumber, "")); serial != "" {
+		if err := s.repo.UpsertDeviceAgentDeviceSync(ctx, repo.UpsertDeviceAgentDeviceSyncParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			SerialNumber:   serial,
+			Email:          email,
+			Hostname:       conv.ToPGTextEmpty(strings.TrimSpace(conv.PtrValOr(payload.Hostname, ""))),
+		}); err != nil {
+			s.logger.WarnContext(ctx, "failed to record device agent device sync",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+			)
+		}
+	}
+
 	// Assignments can target the email or the org wildcard directly; those always
 	// apply regardless of whether the email maps to an org member.
 	principals := []string{emailPrincipal.String(), urn.PrincipalWildcard}

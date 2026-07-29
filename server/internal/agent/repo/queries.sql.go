@@ -200,6 +200,47 @@ func (q *Queries) ListDeviceAgentSyncs(ctx context.Context, organizationID strin
 	return items, nil
 }
 
+const upsertDeviceAgentDeviceSync = `-- name: UpsertDeviceAgentDeviceSync :exec
+INSERT INTO device_agent_device_syncs (organization_id, serial_number, email, hostname)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (organization_id, serial_number) DO UPDATE
+SET last_seen_at = clock_timestamp()
+  , updated_at   = clock_timestamp()
+  , email        = EXCLUDED.email
+    -- An agent that stopped reporting a hostname must not blank a known one.
+  , hostname     = COALESCE(EXCLUDED.hostname, device_agent_device_syncs.hostname)
+WHERE device_agent_device_syncs.last_seen_at < clock_timestamp() - interval '1 minute'
+   OR device_agent_device_syncs.email IS DISTINCT FROM EXCLUDED.email
+   OR (EXCLUDED.hostname IS NOT NULL AND device_agent_device_syncs.hostname IS DISTINCT FROM EXCLUDED.hostname)
+`
+
+type UpsertDeviceAgentDeviceSyncParams struct {
+	OrganizationID string
+	SerialNumber   string
+	Email          string
+	Hostname       pgtype.Text
+}
+
+// Best-effort record that the agent on the machine bearing @serial_number
+// polled. Sibling of UpsertDeviceAgentSync: that one answers "does this user
+// run the agent somewhere", this one answers "does THIS machine run it".
+// Only called when the agent reported a serial.
+//
+// The guard extends the sibling's once-a-minute heartbeat throttle with two
+// change conditions. Throttling alone would be wrong here: the row carries
+// mutable descriptive columns, and at a ~60s poll cadence last_seen_at is
+// almost always fresh, so a reassigned machine's new user (or a rename)
+// could go unrecorded for the entire session.
+func (q *Queries) UpsertDeviceAgentDeviceSync(ctx context.Context, arg UpsertDeviceAgentDeviceSyncParams) error {
+	_, err := q.db.Exec(ctx, upsertDeviceAgentDeviceSync,
+		arg.OrganizationID,
+		arg.SerialNumber,
+		arg.Email,
+		arg.Hostname,
+	)
+	return err
+}
+
 const upsertDeviceAgentSync = `-- name: UpsertDeviceAgentSync :exec
 INSERT INTO device_agent_syncs (organization_id, email)
 VALUES ($1, $2)
