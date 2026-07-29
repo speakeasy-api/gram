@@ -1120,6 +1120,8 @@ const ComposerSkillContextPicker: FC = () => {
       skillContext.onSelectedSkillIdsChange(
         skillContext.selectedSkillIds.filter((id) => id !== skillID),
       );
+      setOpen(false);
+      setQuery("");
       return;
     }
     if (skillContext.selectedSkillIds.length >= maxSelected) {
@@ -1129,6 +1131,8 @@ const ComposerSkillContextPicker: FC = () => {
       ...skillContext.selectedSkillIds,
       skillID,
     ]);
+    setOpen(false);
+    setQuery("");
   };
 
   return (
