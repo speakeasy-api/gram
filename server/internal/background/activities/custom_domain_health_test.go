@@ -317,7 +317,6 @@ func TestCustomDomainHealthCheckAutoDisablesAfterProlongedFailure(t *testing.T) 
 
 	checkedAt := time.Now().UTC().Truncate(time.Microsecond)
 	unhealthySince := checkedAt.Add(-8 * 24 * time.Hour)
-	// One failure short of the threshold; this check crosses it.
 	_, err = repository.UpdateCustomDomainHealth(t.Context(), customdomainsrepo.UpdateCustomDomainHealthParams{
 		HealthStatus:         conv.ToPGText("unhealthy"),
 		HealthIssue:          conv.ToPGTextEmpty("dns_target_mismatch"),
@@ -365,7 +364,6 @@ func TestCustomDomainHealthCheckNoAutoDisableBelowFailureThreshold(t *testing.T)
 
 	checkedAt := time.Now().UTC().Truncate(time.Microsecond)
 	unhealthySince := checkedAt.Add(-8 * 24 * time.Hour)
-	// Two failures short of the threshold; this check leaves it one short.
 	_, err = repository.UpdateCustomDomainHealth(t.Context(), customdomainsrepo.UpdateCustomDomainHealthParams{
 		HealthStatus:         conv.ToPGText("unhealthy"),
 		HealthIssue:          conv.ToPGTextEmpty("dns_target_mismatch"),
@@ -407,7 +405,6 @@ func TestCustomDomainHealthCheckFailedNeverAutoDisables(t *testing.T) {
 
 	checkedAt := time.Now().UTC().Truncate(time.Microsecond)
 	unhealthySince := checkedAt.Add(-30 * 24 * time.Hour)
-	// Far past both thresholds, but the issue is Gram-side.
 	_, err = repository.UpdateCustomDomainHealth(t.Context(), customdomainsrepo.UpdateCustomDomainHealthParams{
 		HealthStatus:         conv.ToPGText("unhealthy"),
 		HealthIssue:          conv.ToPGTextEmpty("check_failed"),

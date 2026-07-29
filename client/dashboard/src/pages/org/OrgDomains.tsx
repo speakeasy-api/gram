@@ -129,9 +129,8 @@ function showCustomDomainUnhealthy(domain: {
   );
 }
 
-// A domain that carries unhealthy state but is no longer verified was
-// auto-disabled by the health sweep: its routing was torn down after a week of
-// continuous failures and it must go back through the reverify flow.
+// Unhealthy state on an unverified domain means the health sweep auto-disabled
+// it: routing was torn down and it must go back through the reverify flow.
 function showCustomDomainAutoDisabled(domain: {
   verified: boolean;
   healthStatus?: string;

@@ -103,9 +103,8 @@ type DisableCustomDomainForHealthParams struct {
 	OrganizationID string
 }
 
-// Auto-disable after prolonged unhealthiness: the Kubernetes resources are
-// torn down by the caller and the domain drops out of health sweeps
-// (activated) and back into the reverify flow (verified).
+// Clearing activated drops the domain from health sweeps; clearing verified
+// puts it back into the dashboard reverify flow. Caller tears down k8s.
 func (q *Queries) DisableCustomDomainForHealth(ctx context.Context, arg DisableCustomDomainForHealthParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, disableCustomDomainForHealth, arg.ID, arg.OrganizationID)
 	var id uuid.UUID

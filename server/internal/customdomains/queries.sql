@@ -135,9 +135,8 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE;
 
 -- name: DisableCustomDomainForHealth :one
--- Auto-disable after prolonged unhealthiness: the Kubernetes resources are
--- torn down by the caller and the domain drops out of health sweeps
--- (activated) and back into the reverify flow (verified).
+-- Clearing activated drops the domain from health sweeps; clearing verified
+-- puts it back into the dashboard reverify flow. Caller tears down k8s.
 UPDATE custom_domains
 SET
     verified = FALSE,
