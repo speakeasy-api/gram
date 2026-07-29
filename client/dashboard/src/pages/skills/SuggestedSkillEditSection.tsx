@@ -95,7 +95,7 @@ export function SuggestedSkillEditSection({
               checked={selectedChanges.has(anchor.change.id)}
               onCheckedChange={() => toggleSelected(anchor.change.id)}
               disabled={review.actionsDisabled}
-              aria-label="Select change to apply as a batch"
+              aria-label={`Select change at line ${anchor.line} to apply as a batch`}
             />
           )}
           <SkillSuggestionMarker
