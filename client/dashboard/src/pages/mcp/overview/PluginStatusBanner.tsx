@@ -88,11 +88,11 @@ export function PluginStatusBanner({
   // detail page shouldn't crash the whole page via the error boundary when
   // it does. The existing `if (!data) return null` below already degrades
   // gracefully on a failed fetch.
-  const { data } = usePlugins(undefined, undefined, { throwOnError: false });
+  const { data, isFetching: isPluginsFetching } = usePlugins(undefined, undefined, { throwOnError: false });
   const [isInstallDialogOpen, setIsInstallDialogOpen] = useState(false);
   // Polled so the banner picks up the Temporal generator-rollout schedule's
   // auto-sync without a manual refresh.
-  const { data: publishStatus } = usePublishStatus(undefined, undefined, {
+  const { data: publishStatus, isFetching: isPublishStatusFetching } = usePublishStatus(undefined, undefined, {
     refetchInterval: 5_000,
   });
   const [selectedPluginIds, setSelectedPluginIds] = useState<string[]>([]);
@@ -124,6 +124,7 @@ export function PluginStatusBanner({
   if (!data) return null;
 
   const plugins = data.plugins;
+  const isRefetching = (isPluginsFetching || isPublishStatusFetching) && !!data;
   const memberPlugins = plugins.filter((plugin) =>
     plugin.servers?.some((s) => serverMatchesRef(s, server)),
   );
@@ -265,6 +266,9 @@ export function PluginStatusBanner({
                     ? "Marketplace needs setup"
                     : "Not published to any plugin"}
               </Type>
+              {isRefetching && (
+                <Spinner className="text-muted-foreground ml-1 h-3.5 w-3.5" />
+              )}
             </div>
             <Type variant="small" className="text-muted-foreground/90">
               Plugins are the preferred way to distribute MCP servers to your

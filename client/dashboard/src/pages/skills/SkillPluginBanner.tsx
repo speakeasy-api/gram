@@ -201,6 +201,8 @@ export function SkillPluginBanner({
       ? "This skill has no recorded versions yet. Record a SKILL.md manifest before it can be distributed."
       : "None of this skill's versions pass validation. Fix the validation errors in SKILL.md before it can be distributed.";
 
+  const isRefetching = distributionsQuery.isFetching && isMembershipLoaded;
+
   let headline: JSX.Element;
   if (isBlocked) {
     headline = (
@@ -257,7 +259,12 @@ export function SkillPluginBanner({
       />
       <div className="relative flex items-center justify-between gap-8 p-6">
         <div className="flex max-w-md flex-col gap-3">
-          <div className="flex items-center gap-2">{headline}</div>
+          <div className="flex items-center gap-2">
+            {headline}
+            {isRefetching && (
+              <Spinner className="text-muted-foreground ml-1 h-3.5 w-3.5" />
+            )}
+          </div>
           <Type variant="small" className="text-muted-foreground/90">
             {isBlocked
               ? blockedReason
