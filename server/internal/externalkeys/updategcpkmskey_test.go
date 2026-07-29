@@ -83,9 +83,14 @@ func TestUpdateGcpKmsKey_ForbiddenWithoutEntitlement(t *testing.T) {
 	key := createGcpKmsKey(t, ctx, ti, "gcp-key-entitlement-update", credentialID)
 	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureCustomerManagedEncryptionKeys)
 
+	// A complete payload, so the assertion still proves the entitlement gate
+	// rather than tripping over field validation if the two are ever reordered.
 	_, err := ti.service.UpdateGcpKmsKey(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.UpdateGcpKmsKeyPayload{
 		ID:                     key.ID,
 		SessionToken:           nil,
+		ResourceName:           key.ResourceName,
+		ExternalCredentialID:   credentialID,
+		Algorithm:              key.Algorithm,
 		Name:                   "gcp-key-entitlement-update-renamed",
 		CustomerGrantReference: nil,
 	})

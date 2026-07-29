@@ -232,3 +232,35 @@ func TestVerifyGcpIamCredential_ForbiddenWithoutEntitlementUnknownID(t *testing.
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
+
+// A screening the server cannot evaluate is Gram's fault, not the customer's, so
+// verify errors rather than reporting the credential unverified.
+func TestVerifyGcpIamCredential_ErrorsWhenScreeningUnevaluatable(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	// Written through the repo rather than the API: creating through the API
+	// resolves Gram's principal successfully and memoizes it, after which the
+	// scripted failure below would never be consulted.
+	created := createGCPCredentialDirect(t, ctx, ti, "gcp-verify-screening-broken", repo.CreateGcpIamCredentialParams{
+		ExternalCredentialID:      uuid.Nil,
+		ImpersonateServiceAccount: conv.ToPGText("gram@customer.iam.gserviceaccount.com"),
+		WifPoolID:                 pgtype.Text{String: "", Valid: false},
+		WifProviderID:             pgtype.Text{String: "", Valid: false},
+		WifProjectNumber:          pgtype.Text{String: "", Valid: false},
+	})
+
+	ti.gcpResolver.SetResolve(func(_ context.Context, cred gcpauth.Credential) (gcpauth.Principal, error) {
+		// Only the ambient probe fails, which is the one the screening depends on.
+		if cred.ImpersonateServiceAccount != "" {
+			return gcpauth.Principal{Email: cred.ImpersonateServiceAccount, Source: gcpauth.SourceImpersonation}, nil
+		}
+		return gcpauth.Principal{Email: "", Source: ""}, errors.New("no application default credentials")
+	})
+
+	_, err := ti.service.VerifyGcpIamCredential(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.VerifyGcpIamCredentialPayload{
+		SessionToken: nil,
+		ID:           created.ID,
+	})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+}

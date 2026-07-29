@@ -9,7 +9,9 @@ import {
   TabsList,
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
+import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGetGcpIamCredential } from "@gram/client/react-query/getGcpIamCredential";
 import { Link, Navigate, useLocation, useParams } from "react-router";
 import { providerFromSlug, providerLabel } from "./providers";
@@ -20,6 +22,8 @@ import {
 } from "./tabs";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { SettingsTab } from "./tabs/SettingsTab";
+
+const ORG_READ_SCOPES: Scope[] = ["org:read", "org:admin"];
 
 export default function ExternalCredentialDetail(): JSX.Element {
   const { provider: providerParam = "", credentialId = "" } = useParams<{
@@ -36,12 +40,19 @@ export default function ExternalCredentialDetail(): JSX.Element {
   // query whose 404 would read as "this credential does not exist".
   const isGcp = provider === "gcp_iam";
 
+  // The read scope gates the fetch, not just the rendering: without it the
+  // request would 403 and the not-found handling below would bounce the caller
+  // back to the list, which reads as "this credential is gone" rather than "you
+  // cannot see it".
+  const { hasAnyScope, isLoading: rbacLoading } = useRBAC();
+  const canRead = hasAnyScope(ORG_READ_SCOPES);
+
   const {
     data: credential,
     isLoading,
     isError,
   } = useGetGcpIamCredential({ id: credentialId }, undefined, {
-    enabled: isGcp && credentialId !== "",
+    enabled: isGcp && credentialId !== "" && canRead,
   });
 
   const activeTab = activeDetailTab(
@@ -60,8 +71,26 @@ export default function ExternalCredentialDetail(): JSX.Element {
     return <UnsupportedProvider provider={provider} />;
   }
 
-  // The credential doesn't exist, failed to load, or the caller lacks the scope
-  // (the endpoint 403s); return to the listing.
+  // Resolve access before any not-found handling. With the fetch disabled the
+  // absence of a credential says nothing about whether it exists, so the checks
+  // below would misreport it. RequireScope renders nothing while grants load and
+  // the unauthorized panel once they deny.
+  if (rbacLoading || !canRead) {
+    return (
+      <Page>
+        <Page.Header>
+          <Page.Header.Breadcrumbs skipSegments={["credentials"]} />
+        </Page.Header>
+        <Page.Body>
+          <RequireScope scope={ORG_READ_SCOPES} level="page">
+            <Text muted>Loading…</Text>
+          </RequireScope>
+        </Page.Body>
+      </Page>
+    );
+  }
+
+  // The credential doesn't exist or failed to load; return to the listing.
   if (isError || (!isLoading && !credential)) {
     return <Navigate to={orgRoutes.externalServices.href()} replace />;
   }

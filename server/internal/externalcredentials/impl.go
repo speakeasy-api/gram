@@ -180,77 +180,101 @@ func (s *Service) resolveGramPrincipal(ctx context.Context) (string, error) {
 }
 
 // resolveOrgImpersonationTarget validates the service account an organization
-// credential wants Gram to impersonate. Beyond requiring one at all, it rejects
-// targets inside Gram's own GCP project: getGcpSetupInfo publishes Gram's
-// service account by design, so without this an organization member could walk
-// that project and use verify to discover which internal service accounts Gram
-// holds impersonation rights on.
+// credential wants Gram to impersonate, returning the trimmed target.
 func (s *Service) resolveOrgImpersonationTarget(ctx context.Context, logger *slog.Logger, raw string) (string, error) {
 	target := strings.TrimSpace(raw)
 	if target == "" {
 		return "", oops.E(oops.CodeBadRequest, nil, "impersonate_service_account is required").LogError(ctx, logger)
 	}
 
-	// A resolution failure must not become a write outage: without Gram's own
-	// identity there is no project to compare against, so the guard is skipped
-	// and the attempt logged rather than failing the request.
-	gramSA, err := s.resolveGramPrincipal(ctx)
+	reason, err := s.impersonationTargetProblem(ctx, logger, target)
 	if err != nil {
-		logger.WarnContext(ctx, "could not resolve gram's own gcp identity to screen impersonation target", attr.SlogError(err))
-		return target, nil
+		return "", oops.E(oops.CodeUnexpected, err, "cannot validate impersonate_service_account right now, try again shortly").LogError(ctx, logger)
 	}
-
-	gramProject := serviceAccountProject(gramSA)
-	if gramProject == "" {
-		// Resolving succeeded but the address is not a recognized service-account
-		// form, so there is no project to compare against and the guard is inert.
-		// Log it: a silently disabled security control is worse than an absent one.
-		logger.WarnContext(ctx, "gram's own gcp identity is not a recognizable service account, impersonation target screening is disabled")
-		return target, nil
-	}
-
-	if serviceAccountProject(target) == gramProject {
-		return "", oops.E(oops.CodeBadRequest, nil, "impersonate_service_account must be a service account in your own GCP project").LogError(ctx, logger)
+	if reason != "" {
+		return "", oops.E(oops.CodeBadRequest, nil, "%s", reason).LogError(ctx, logger)
 	}
 
 	return target, nil
 }
 
-// serviceAccountProject extracts the owning project from a GCP service account
-// email. Google uses three address forms and the legacy two must be recognized
-// too, or a caller could name a service account in Gram's own project using a
-// form this does not parse and walk straight past the screening above:
+// impersonationTargetProblem reports why a target must not be impersonated, or
+// "" when it is acceptable. A non-nil error means the policy could not be
+// evaluated at all, which callers must never treat as acceptance: the screening
+// exists because getGcpSetupInfo publishes Gram's own service account by design,
+// so without it an organization member could name an internal service account
+// and use verify to discover which ones Gram holds impersonation rights on.
 //
-//	name@PROJECT_ID.iam.gserviceaccount.com          user-managed
-//	PROJECT_NUMBER-compute@developer.gserviceaccount.com  default compute
-//	PROJECT_ID@appspot.gserviceaccount.com           default App Engine
+// Both sides of the comparison have to be a user-managed address for it to mean
+// anything. Google's default compute and App Engine service accounts identify
+// their project by number, or by an id that cannot be compared against one, so
+// they are refused rather than compared unreliably.
+func (s *Service) impersonationTargetProblem(ctx context.Context, logger *slog.Logger, target string) (string, error) {
+	if serviceAccountProject(target) == "" {
+		return "impersonate_service_account must be a user-managed service account (name@PROJECT_ID.iam.gserviceaccount.com)", nil
+	}
+
+	gramSA, err := s.resolveGramPrincipal(ctx)
+	if err != nil {
+		return "", fmt.Errorf("resolve gram's own gcp identity to screen impersonation target: %w", err)
+	}
+
+	gramProject := serviceAccountProject(gramSA)
+	if gramProject == "" {
+		// Gram is running as something this cannot place in a project — most
+		// likely a default compute service account. Refusing is deliberate: the
+		// alternative is comparing against nothing and silently accepting every
+		// target, and a loud failure here is a deployment problem to fix (give
+		// Gram a dedicated service account) rather than a hole to leave open.
+		logger.ErrorContext(ctx, "gram's own gcp identity is not a user-managed service account, cannot screen impersonation targets",
+			attr.SlogError(errors.New("unrecognized service account form")))
+		return "", fmt.Errorf("gram's own gcp identity %q is not a user-managed service account", gramSA)
+	}
+
+	if serviceAccountProject(target) == gramProject {
+		return "impersonate_service_account must be a service account in your own GCP project", nil
+	}
+
+	return "", nil
+}
+
+// verifyDetailMaxLen bounds the provider text echoed back from a failed probe.
+// The provider's own message is the whole value of verify — it names the missing
+// grant — so it is surfaced rather than replaced with something generic. Bounding
+// it keeps an unexpectedly chatty SDK error from turning the field into a channel
+// for arbitrary internal detail; the untruncated error is always in the log.
+const verifyDetailMaxLen = 300
+
+// verifyFailureDetail renders a failed probe for the caller.
+func verifyFailureDetail(err error) string {
+	detail := err.Error()
+	if len(detail) <= verifyDetailMaxLen {
+		return detail
+	}
+
+	return detail[:verifyDetailMaxLen] + "… (truncated, see Gram logs for the full error)"
+}
+
+// serviceAccountProject extracts the project id from a user-managed GCP service
+// account email of the form name@PROJECT_ID.iam.gserviceaccount.com.
 //
-// The compute form yields a project number rather than an id, so it only
-// matches another compute-form address. That is still strictly better than
-// treating it as unparseable. Returns "" for anything else, including user
-// accounts.
+// Returns "" for every other address, including user accounts and Google's
+// default compute (PROJECT_NUMBER-compute@developer.gserviceaccount.com) and App
+// Engine (PROJECT_ID@appspot.gserviceaccount.com) service accounts. Callers
+// treat "" as "cannot be placed in a project" and refuse it, so a project number
+// is never compared against a project id.
 func serviceAccountProject(email string) string {
-	local, domain, found := strings.Cut(strings.ToLower(strings.TrimSpace(email)), "@")
+	_, domain, found := strings.Cut(strings.ToLower(strings.TrimSpace(email)), "@")
 	if !found {
 		return ""
 	}
 
-	switch domain {
-	case "developer.gserviceaccount.com":
-		number, ok := strings.CutSuffix(local, "-compute")
-		if !ok {
-			return ""
-		}
-		return number
-	case "appspot.gserviceaccount.com":
-		return local
-	default:
-		project, ok := strings.CutSuffix(domain, ".iam.gserviceaccount.com")
-		if !ok {
-			return ""
-		}
-		return project
+	project, ok := strings.CutSuffix(domain, ".iam.gserviceaccount.com")
+	if !ok {
+		return ""
 	}
+
+	return project
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -743,12 +767,18 @@ func (s *Service) VerifyGcpIamCredential(ctx context.Context, payload *gen.Verif
 	// Re-screen the stored target. The write-time guard was added with this
 	// endpoint, so rows created earlier were never screened and would otherwise
 	// make verify an oracle for which service accounts in Gram's own project Gram
-	// can impersonate.
-	if _, err := s.resolveOrgImpersonationTarget(ctx, logger, target); err != nil {
+	// can impersonate. A screening the server cannot evaluate is an error rather
+	// than an unverified result: reporting "not verified" would blame the
+	// customer's configuration for a fault on Gram's side.
+	reason, err := s.impersonationTargetProblem(ctx, logger, target)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "cannot verify this credential right now, try again shortly").LogError(ctx, logger)
+	}
+	if reason != "" {
 		return &gen.VerifyCredentialResult{
 			Verified:  false,
 			Principal: conv.PtrEmpty(target),
-			Detail:    conv.PtrEmpty("this credential names a service account Gram will not impersonate; edit it to name one in your own project"),
+			Detail:    conv.PtrEmpty(reason),
 		}, nil
 	}
 
@@ -763,7 +793,7 @@ func (s *Service) VerifyGcpIamCredential(ctx context.Context, payload *gen.Verif
 		return &gen.VerifyCredentialResult{
 			Verified:  false,
 			Principal: conv.PtrEmpty(target),
-			Detail:    conv.PtrEmpty(resolveErr.Error()),
+			Detail:    conv.PtrEmpty(verifyFailureDetail(resolveErr)),
 		}, nil
 	}
 

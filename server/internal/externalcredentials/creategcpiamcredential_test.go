@@ -1,6 +1,8 @@
 package externalcredentials_test
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -11,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 )
 
 func TestCreateGcpIamCredential_Impersonation(t *testing.T) {
@@ -85,4 +88,62 @@ func TestCreateGcpIamCredential_ForbiddenWithoutEntitlement(t *testing.T) {
 		ImpersonateServiceAccount: "gram@customer.iam.gserviceaccount.com",
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// The screening exists so verify cannot become an oracle for Gram's own project.
+// If Gram's identity is unresolvable there is nothing to screen against, so the
+// write is refused rather than accepted unscreened.
+func TestCreateGcpIamCredential_FailsClosedWhenGramIdentityUnresolvable(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	ti.gcpResolver.SetResolve(func(_ context.Context, _ gcpauth.Credential) (gcpauth.Principal, error) {
+		return gcpauth.Principal{Email: "", Source: ""}, errors.New("no application default credentials")
+	})
+
+	_, err := ti.service.CreateGcpIamCredential(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.CreateGcpIamCredentialPayload{
+		SessionToken:              nil,
+		Name:                      "gcp-unresolvable-gram-identity",
+		ImpersonateServiceAccount: "gram@customer.iam.gserviceaccount.com",
+	})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+}
+
+// Likewise when Gram resolves to an address that cannot be placed in a project,
+// such as a default compute service account: comparing a project number against
+// a project id would silently accept every target.
+func TestCreateGcpIamCredential_FailsClosedWhenGramIdentityNotUserManaged(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	ti.gcpResolver.SetResolve(func(_ context.Context, _ gcpauth.Credential) (gcpauth.Principal, error) {
+		return gcpauth.Principal{Email: "123456789012-compute@developer.gserviceaccount.com", Source: gcpauth.SourceMetadataServer}, nil
+	})
+
+	_, err := ti.service.CreateGcpIamCredential(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.CreateGcpIamCredentialPayload{
+		SessionToken:              nil,
+		Name:                      "gcp-gram-default-compute",
+		ImpersonateServiceAccount: "gram@customer.iam.gserviceaccount.com",
+	})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+}
+
+// A target that is not user-managed is refused for the same reason: its address
+// identifies its project by number, so it cannot be screened against Gram's.
+func TestCreateGcpIamCredential_RejectsNonUserManagedTarget(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	for _, target := range []string{
+		"123456789012-compute@developer.gserviceaccount.com",
+		"customer@appspot.gserviceaccount.com",
+		"someone@example.com",
+	} {
+		_, err := ti.service.CreateGcpIamCredential(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.CreateGcpIamCredentialPayload{
+			SessionToken:              nil,
+			Name:                      "gcp-non-user-managed-target",
+			ImpersonateServiceAccount: target,
+		})
+		requireOopsCode(t, err, oops.CodeBadRequest)
+	}
 }
