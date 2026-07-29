@@ -1088,13 +1088,12 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 			IncludedBullets: []string{
 				fmt.Sprintf("%d MCP %s (public or private)", freeTierLimits.Servers, conv.Ternary(freeTierLimits.Servers == 1, "server", "servers")),
 				fmt.Sprintf("%d tool calls / month", freeTierLimits.ToolCalls),
-				fmt.Sprintf("%d LLM credits / month", freeTierLimits.Credits),
 				"Slack community support",
 			},
 			AddOnBullets: []string{
 				fmt.Sprintf("%s / month / additional MCP server", formatPrice(mcpServerPrice)),
 				fmt.Sprintf("%s / additional tool call", formatPrice(toolCallPrice)),
-				fmt.Sprintf("%s / 10 additional LLM credits", formatPrice(10*creditsPrice)), // 1.10 per credit in polar, but this is how we want to label from a marketing perspective
+				billing.AdditionalChatCreditsBullet(formatPrice(10*creditsPrice), 10),
 			},
 		},
 		Pro: &gen.TierLimits{
@@ -1112,13 +1111,12 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 			IncludedBullets: []string{
 				fmt.Sprintf("%d MCP %s (public or private)", proTierLimits.Servers, conv.Ternary(proTierLimits.Servers == 1, "server", "servers")),
 				fmt.Sprintf("%d tool calls / month", proTierLimits.ToolCalls),
-				fmt.Sprintf("%d LLM credits / month", proTierLimits.Credits),
 				"Email support",
 			},
 			AddOnBullets: []string{
 				fmt.Sprintf("%s / month / additional MCP server", formatPrice(mcpServerPrice)),
 				fmt.Sprintf("%s / additional tool call", formatPrice(toolCallPrice)),
-				"$11 per 10 additional LLM credits", // 1.10 per credit in polar, but this is how we want to label from a marketing perspective
+				billing.AdditionalChatCreditsBullet("$11", 10),
 			},
 		},
 		Enterprise: &gen.TierLimits{

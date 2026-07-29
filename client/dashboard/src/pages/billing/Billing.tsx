@@ -9,9 +9,10 @@ import { Type } from "@/components/ui/type";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { ProductTier, useProductTier } from "@/hooks/useProductTier";
+import { type ProductTier, useProductTier } from "@/hooks/useProductTier";
 import { getServerURL } from "@/lib/utils";
-import { TierLimits } from "@gram/client/models/components/tierlimits.js";
+import type { TierLimits } from "@gram/client/models/components/tierlimits.js";
+import type { UsageTiers as UsageTiersModel } from "@gram/client/models/components/usagetiers.js";
 import { useGetCreditUsage } from "@gram/client/react-query/getCreditUsage.js";
 import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
 import { useGetUsageTiers } from "@gram/client/react-query/getUsageTiers.js";
@@ -25,6 +26,11 @@ import {
   TumAdminSection,
   TumUsageSection,
 } from "@/components/billing/tum-section";
+import {
+  formatBillingCurrency,
+  formatBillingQuantity,
+  type BillingUnit,
+} from "@/components/billing/billing-format";
 
 export default function Billing(): JSX.Element {
   return (
@@ -67,50 +73,114 @@ function BillingInner() {
   );
 }
 
+export function getChatCreditEntitlement(
+  productTier: ProductTier,
+  usageTiers: UsageTiersModel | undefined,
+): number | undefined {
+  if (!usageTiers) {
+    return undefined;
+  }
+
+  switch (productTier) {
+    case "__deprecated__pro":
+      return usageTiers.pro.includedCredits;
+    case "enterprise":
+      return usageTiers.enterprise.includedCredits;
+    default:
+      return usageTiers.free.includedCredits;
+  }
+}
+
+export function TierIncludedItems({
+  tierLimits,
+}: {
+  tierLimits: TierLimits;
+}): JSX.Element | null {
+  const hasIncludedItems =
+    tierLimits.includedBullets.length > 0 || tierLimits.includedCredits > 0;
+  if (!hasIncludedItems) {
+    return null;
+  }
+
+  return (
+    <Stack gap={1}>
+      <Type
+        mono
+        muted
+        small
+        variant="subheading"
+        className="font-medium uppercase"
+      >
+        Included
+      </Type>
+      <ul className="list-inside space-y-1">
+        {tierLimits.includedCredits > 0 ? (
+          <li>
+            <span className="text-muted-foreground/60">✓</span>{" "}
+            {formatBillingQuantity(tierLimits.includedCredits, "chat credits")}{" "}
+            / month
+          </li>
+        ) : null}
+        {tierLimits.includedBullets.map((bullet) => (
+          <li key={bullet}>
+            <span className="text-muted-foreground/60">✓</span> {bullet}
+          </li>
+        ))}
+      </ul>
+    </Stack>
+  );
+}
+
+function UsageItem({
+  label,
+  tooltip,
+  value,
+  included,
+  overageIncrement,
+  noMax,
+  unit,
+}: {
+  label: string;
+  tooltip: string;
+  value: number;
+  included: number;
+  overageIncrement?: number;
+  noMax?: boolean;
+  unit: BillingUnit;
+}) {
+  return (
+    <Stack gap={3} className="mb-6">
+      <Stack direction="horizontal" align="center" gap={1}>
+        <Type variant="body" className="font-medium">
+          {label}
+        </Type>
+        <SimpleTooltip tooltip={tooltip}>
+          <Info className="text-muted-foreground h-4 w-4" />
+        </SimpleTooltip>
+      </Stack>
+      <UsageProgress
+        value={value}
+        included={included}
+        overageIncrement={overageIncrement}
+        noMax={noMax}
+        unit={unit}
+      />
+    </Stack>
+  );
+}
+
 const UsageSection = () => {
   const productTier = useProductTier();
 
-  const isAdmin = useIsPlatformAdmin();
-
   const { data: creditUsage } = useGetCreditUsage();
+  const { data: usageTiers } = useGetUsageTiers();
   const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
     throwOnError: !getServerURL().includes("localhost"),
   });
-
-  const UsageItem = ({
-    label,
-    tooltip,
-    value,
-    included,
-    overageIncrement,
-    noMax,
-  }: {
-    label: string;
-    tooltip: string;
-    value: number;
-    included: number;
-    overageIncrement: number;
-    noMax?: boolean;
-  }) => {
-    return (
-      <Stack gap={3} className="mb-6">
-        <Stack direction="horizontal" align="center" gap={1}>
-          <Type variant="body" className="font-medium">
-            {label}
-          </Type>
-          <SimpleTooltip tooltip={tooltip}>
-            <Info className="text-muted-foreground h-4 w-4" />
-          </SimpleTooltip>
-        </Stack>
-        <UsageProgress
-          value={value}
-          included={included}
-          overageIncrement={overageIncrement}
-          noMax={noMax}
-        />
-      </Stack>
-    );
-  };
+  const chatCreditEntitlement = getChatCreditEntitlement(
+    productTier,
+    usageTiers,
+  );
 
   return (
     <Page.Section>
@@ -133,6 +203,7 @@ const UsageSection = () => {
                 included={periodUsage.includedToolCalls || 1000}
                 overageIncrement={periodUsage.includedToolCalls}
                 noMax={productTier === "enterprise"}
+                unit="tool calls"
               />
               <UsageItem
                 label="Servers"
@@ -141,17 +212,8 @@ const UsageSection = () => {
                 included={periodUsage.includedServers || 1}
                 overageIncrement={1}
                 noMax={productTier === "enterprise"}
+                unit="servers"
               />
-              {isAdmin && (
-                <UsageItem
-                  label="Chat Based Credits (Polar) (ADMIN VIEW ONLY)"
-                  tooltip="The number of credits used this month for chat based products and other AI-powered dashboard experiences."
-                  value={periodUsage.credits}
-                  included={periodUsage.includedCredits}
-                  overageIncrement={periodUsage.includedCredits}
-                  noMax={productTier === "enterprise"}
-                />
-              )}
             </>
           ) : (
             <>
@@ -161,13 +223,13 @@ const UsageSection = () => {
               <Skeleton className="h-4 w-full" />
             </>
           )}
-          {creditUsage ? (
+          {creditUsage && chatCreditEntitlement !== undefined ? (
             <UsageItem
-              label="Chat Based Credits"
-              tooltip="The number of credits used this month for chat based products and other AI-powered dashboard experiences."
+              label="Chat credits"
+              tooltip="Chat credits consumed this month by chat-based products and other AI-powered dashboard experiences."
               value={creditUsage.creditsUsed}
-              included={creditUsage.monthlyCredits}
-              overageIncrement={creditUsage.monthlyCredits}
+              included={chatCreditEntitlement}
+              unit="chat credits"
             />
           ) : (
             <>
@@ -322,7 +384,7 @@ const UsageTiers = () => {
     const price =
       tier === "enterprise"
         ? "Tailored pricing"
-        : `$${tierLimits.basePrice.toLocaleString()}`;
+        : `${formatBillingCurrency(tierLimits.basePrice)} / month`;
 
     const ringColor = productTierColors(tier).ring;
 
@@ -358,28 +420,7 @@ const UsageTiers = () => {
                 ))}
               </ul>
             </Stack>
-            {tierLimits.includedBullets &&
-              tierLimits.includedBullets.length > 0 && (
-                <Stack gap={1}>
-                  <Type
-                    mono
-                    muted
-                    small
-                    variant="subheading"
-                    className="font-medium uppercase"
-                  >
-                    Included
-                  </Type>
-                  <ul className="list-inside space-y-1">
-                    {tierLimits.includedBullets.map((bullet) => (
-                      <li key={bullet}>
-                        <span className="text-muted-foreground/60">✓</span>{" "}
-                        {bullet}
-                      </li>
-                    ))}
-                  </ul>
-                </Stack>
-              )}
+            <TierIncludedItems tierLimits={tierLimits} />
             {tierLimits.addOnBullets && tierLimits.addOnBullets.length > 0 && (
               <Stack gap={1}>
                 <Type

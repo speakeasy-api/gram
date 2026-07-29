@@ -3,6 +3,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Button, cn } from "@speakeasy-api/moonshine";
 import { useCallback, useState } from "react";
+import { formatBillingQuantity, type BillingUnit } from "./billing-format";
 
 export const TopUpCTA = (): JSX.Element => {
   const client = useSdkClient();
@@ -30,7 +31,7 @@ export const TopUpCTA = (): JSX.Element => {
   return (
     <Page.Section.CTA>
       <Button onClick={() => void handleClick()} disabled={busy}>
-        TOP UP CREDITS
+        TOP UP CHAT CREDITS
       </Button>
     </Page.Section.CTA>
   );
@@ -41,29 +42,37 @@ export const UsageProgress = ({
   included,
   overageIncrement,
   noMax,
+  unit,
 }: {
   value: number;
   included: number;
-  overageIncrement: number;
+  overageIncrement?: number;
   noMax?: boolean;
+  unit: BillingUnit;
 }): JSX.Element => {
-  if (noMax) {
-    included = Math.max(1, value * 1.5);
+  const effectiveIncluded = noMax ? Math.max(1, value * 1.5) : included;
+
+  const anyOverage = value > effectiveIncluded;
+  const additional = Math.max(0, value - effectiveIncluded);
+  let overageMax = 0;
+  if (anyOverage) {
+    overageMax = overageIncrement
+      ? Math.ceil(additional / overageIncrement) * overageIncrement
+      : additional;
   }
+  const totalMax = Math.max(1, effectiveIncluded + overageMax);
 
-  const anyOverage = value > included;
-  const overageMax = anyOverage
-    ? Math.ceil((value - included + 1) / overageIncrement) * overageIncrement
-    : 0;
-  const totalMax = included + overageMax;
-
-  const includedWidth = (included / totalMax) * 100;
+  const includedWidth = (effectiveIncluded / totalMax) * 100;
   const overageWidth = (overageMax / totalMax) * 100;
+  const includedProgressWidth =
+    effectiveIncluded > 0
+      ? Math.min((value / effectiveIncluded) * 100, 100)
+      : 0;
 
   const includedProgress = (
     <div
       className={cn(
-        "bg-muted relative h-4 overflow-hidden rounded-md dark:bg-neutral-800",
+        "bg-muted relative h-4 overflow-hidden rounded-md",
         anyOverage && "rounded-r-none",
       )}
       style={{ width: `${includedWidth}%` }}
@@ -71,7 +80,7 @@ export const UsageProgress = ({
       <div
         className="bg-success-default h-full transition-all duration-300"
         style={{
-          width: `${Math.min((value / included) * 100, 100)}%`,
+          width: `${includedProgressWidth}%`,
         }}
       />
     </div>
@@ -79,13 +88,13 @@ export const UsageProgress = ({
 
   const overageProgress = anyOverage ? (
     <div
-      className="bg-muted relative h-4 overflow-hidden rounded-r-md dark:bg-neutral-800"
+      className="bg-muted relative h-4 overflow-hidden rounded-r-md"
       style={{ width: `${overageWidth}%` }}
     >
       <div
         className="bg-warning-default h-full transition-all duration-300"
         style={{
-          width: `${Math.min(((value - included) / overageMax) * 100, 100)}%`,
+          width: `${Math.min((additional / overageMax) * 100, 100)}%`,
         }}
       />
     </div>
@@ -97,47 +106,42 @@ export const UsageProgress = ({
         {includedProgress}
         {overageProgress}
       </div>
-      <div
-        className="text-muted-foreground absolute top-6 text-xs whitespace-nowrap"
-        style={{ right: `${101 - includedWidth}%` }}
-      >
-        {anyOverage
-          ? `Included: ${included.toLocaleString()}`
-          : `${value.toLocaleString()} / ${
-              noMax ? "No limit" : included.toLocaleString()
-            }`}
+      <div className="text-muted-foreground mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+        <span>Consumed: {formatBillingQuantity(value, unit)}</span>
+        <span>
+          Included: {noMax ? "No limit" : formatBillingQuantity(included, unit)}
+        </span>
+        {anyOverage ? (
+          <span>Additional: {formatBillingQuantity(additional, unit)}</span>
+        ) : null}
       </div>
 
-      {anyOverage && (
+      {anyOverage ? (
         <>
           <div
-            className="absolute top-0 h-8 w-[2px] bg-neutral-600"
+            className="bg-border absolute top-0 h-4 w-[2px]"
             style={{ left: `${includedWidth}%` }}
           />
-          <div
-            className="text-muted-foreground absolute top-6 text-xs whitespace-nowrap"
-            style={{ left: `${includedWidth + 1}%` }}
-          >
-            Extra: {(value - included).toLocaleString()}
-          </div>
 
-          {Array.from(
-            { length: Math.floor((value - included) / overageIncrement) },
-            (_, index) => {
-              const incrementPosition =
-                includedWidth +
-                (((index + 1) * overageIncrement) / totalMax) * 100;
-              return (
-                <div
-                  key={index}
-                  className="absolute top-0 h-5 w-[2px] bg-neutral-600"
-                  style={{ left: `${incrementPosition}%` }}
-                />
-              );
-            },
-          )}
+          {overageIncrement
+            ? Array.from(
+                { length: Math.floor(additional / overageIncrement) },
+                (_, index) => {
+                  const incrementPosition =
+                    includedWidth +
+                    (((index + 1) * overageIncrement) / totalMax) * 100;
+                  return (
+                    <div
+                      key={index}
+                      className="bg-border absolute top-0 h-4 w-[2px]"
+                      style={{ left: `${incrementPosition}%` }}
+                    />
+                  );
+                },
+              )
+            : null}
         </>
-      )}
+      ) : null}
     </div>
   );
 };

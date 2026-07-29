@@ -191,7 +191,6 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 			IncludedBullets: []string{
 				"3 MCP servers (public or private)",
 				"10000 tool calls / month",
-				"25 chat based credits / month",
 				"Slack community support",
 			},
 			AddOnBullets: []string{},
@@ -211,13 +210,12 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 			IncludedBullets: []string{
 				"50 MCP servers (public or private)",
 				"100000000 tool calls / month",
-				"25 chat based credits / month",
 				"Email support",
 			},
 			AddOnBullets: []string{
 				"$0.50 / month / additional MCP server",
 				"$0.05 / month / additional 5000 tool calls",
-				"$11 per 10 additional chat based credits",
+				AdditionalChatCreditsBullet("$11", 10),
 			},
 		},
 		Enterprise: &gen.TierLimits{
