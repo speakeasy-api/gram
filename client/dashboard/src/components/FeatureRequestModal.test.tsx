@@ -25,7 +25,9 @@ describe("FeatureRequestModal", () => {
     render(
       <FeatureRequestModal
         isOpen
-        onClose={onClose}
+        onClose={() => {
+          onClose();
+        }}
         title="Request an Observability Integration"
         description="Tell us which AI agent your team uses."
         actionType="hooks_agent_integration"
