@@ -312,7 +312,7 @@ type GetResponseBody struct {
 	LatestVersion *SkillVersionResponseBody `form:"latest_version,omitempty" json:"latest_version,omitempty" xml:"latest_version,omitempty"`
 	// Activation adoption metrics.
 	Adoption *SkillAdoptionResponseBody `form:"adoption,omitempty" json:"adoption,omitempty" xml:"adoption,omitempty"`
-	// Daily activations in the adoption window.
+	// Daily activations by attributed version in the adoption window.
 	SightingTimeline []*SkillSightingTimelinePointResponseBody `form:"sighting_timeline,omitempty" json:"sighting_timeline,omitempty" xml:"sighting_timeline,omitempty"`
 	// Active-machine version convergence.
 	Drift *SkillDriftResponseBody `form:"drift,omitempty" json:"drift,omitempty" xml:"drift,omitempty"`
@@ -4444,6 +4444,9 @@ type SkillAdoptionResponseBody struct {
 type SkillSightingTimelinePointResponseBody struct {
 	// Start of the UTC day.
 	BucketStart *string `form:"bucket_start,omitempty" json:"bucket_start,omitempty" xml:"bucket_start,omitempty"`
+	// The attributed skill version, absent when the observation could not be
+	// resolved to a version.
+	SkillVersionID *string `form:"skill_version_id,omitempty" json:"skill_version_id,omitempty" xml:"skill_version_id,omitempty"`
 	// Activations observed during the day.
 	ActivationCount *int64 `form:"activation_count,omitempty" json:"activation_count,omitempty" xml:"activation_count,omitempty"`
 }
@@ -14061,6 +14064,9 @@ func ValidateSkillSightingTimelinePointResponseBody(body *SkillSightingTimelineP
 	}
 	if body.BucketStart != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.bucket_start", *body.BucketStart, goa.FormatDateTime))
+	}
+	if body.SkillVersionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.skill_version_id", *body.SkillVersionID, goa.FormatUUID))
 	}
 	return
 }

@@ -37,7 +37,7 @@ export type GetSkillResult = {
    */
   latestVersion?: SkillVersion | undefined;
   /**
-   * Daily activations in the adoption window.
+   * Daily activations by attributed version in the adoption window.
    */
   sightingTimeline: Array<SkillSightingTimelinePoint>;
   /**

@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
+import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { Markdown } from "@/elements/components/Markdown";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { isNotFoundError } from "@/lib/route-errors";
@@ -186,6 +187,27 @@ function SkillDetailSections({
   useScrollToSectionHash();
 
   const { skill, latestVersion } = skillQueryData;
+  const versionsQuery = useSkillVersionsInfinite({ id: skill.id }, undefined, {
+    throwOnError: false,
+  });
+  useDrainInfiniteQuery(versionsQuery);
+  const versionsLoading =
+    !versionsQuery.error &&
+    (versionsQuery.isPending ||
+      versionsQuery.hasNextPage ||
+      versionsQuery.isFetchingNextPage);
+  const versions =
+    versionsQuery.data?.pages.flatMap((page) => page.result.versions) ?? [];
+  const versionLabels = new Map(
+    [...versions]
+      .sort(
+        (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
+      )
+      .map((version, index) => [
+        version.id,
+        `v${skill.versionCount - versions.length + index + 1} (${version.canonicalSha256.slice(0, 8)})`,
+      ]),
+  );
   const body = latestVersion
     ? stripSkillFrontmatter(latestVersion.content)
     : "";
@@ -242,7 +264,11 @@ function SkillDetailSections({
         </SettingsSection.Panel>
       </SettingsSection>
 
-      <SkillActivitySections data={skillQueryData} />
+      <SkillActivitySections
+        data={skillQueryData}
+        versionLabels={versionLabels}
+        versionsLoading={versionsLoading}
+      />
 
       {latestVersion && (
         <SuggestedSkillEditSection
@@ -251,7 +277,12 @@ function SkillDetailSections({
         />
       )}
 
-      <SkillInsightsSection data={skillQueryData} />
+      <SkillInsightsSection
+        data={skillQueryData}
+        versionLabels={versionLabels}
+        versionsLoading={versionsLoading}
+        versionsError={versionsQuery.error}
+      />
 
       <SettingsSection id={SKILL_MANIFEST_SECTION_ID}>
         <SettingsSection.Header>

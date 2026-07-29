@@ -14,7 +14,6 @@ import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { Markdown } from "@/elements/components/Markdown";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
 import { useRoutes } from "@/routes";
@@ -25,7 +24,6 @@ import type { SkillInsightPoint } from "@gram/client/models/components/skillinsi
 import type { SkillVersionInsight } from "@gram/client/models/components/skillversioninsight.js";
 import type { GetSkillResult } from "@gram/client/models/components/getskillresult.js";
 import { useSkillEfficacyInsights } from "@gram/client/react-query/skillEfficacyInsights.js";
-import { useSkillVersionsInfinite } from "@gram/client/react-query/skillVersions.js";
 import { Badge, type Column, Icon, Table } from "@speakeasy-api/moonshine";
 import {
   CategoryScale,
@@ -102,8 +100,14 @@ function formatChartValue(value: number, metric: TrendMetric): string {
 
 export function SkillInsightsSection({
   data,
+  versionLabels,
+  versionsLoading,
+  versionsError,
 }: {
   data: GetSkillResult;
+  versionLabels: Map<string, string>;
+  versionsLoading: boolean;
+  versionsError: Error | null;
 }): JSX.Element {
   const project = useProject();
   const { hasScope, isLoading: isRBACLoading, isRbacEnabled } = useRBAC();
@@ -118,29 +122,6 @@ export function SkillInsightsSection({
     undefined,
     { throwOnError: false, enabled: !isRBACLoading },
   );
-  const versionsQuery = useSkillVersionsInfinite(
-    { id: data.skill.id },
-    undefined,
-    { throwOnError: false },
-  );
-  useDrainInfiniteQuery(versionsQuery);
-  const versionsLoading =
-    versionsQuery.isPending ||
-    versionsQuery.hasNextPage ||
-    versionsQuery.isFetchingNextPage;
-  const versions =
-    versionsQuery.data?.pages.flatMap((page) => page.result.versions) ?? [];
-  const versionLabels = new Map(
-    [...versions]
-      .sort(
-        (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
-      )
-      .map((version, index) => [
-        version.id,
-        `v${data.skill.versionCount - versions.length + index + 1} (${version.canonicalSha256.slice(0, 8)})`,
-      ]),
-  );
-
   return (
     <SettingsSection id={SKILL_INSIGHTS_SECTION_ID}>
       <SettingsSection.Header>
@@ -158,16 +139,16 @@ export function SkillInsightsSection({
               error={query.error}
             />
           )}
-          {versionsQuery.error && (
+          {versionsError && (
             <ErrorAlert
               title="Unable to load skill versions"
-              error={versionsQuery.error}
+              error={versionsError}
             />
           )}
           {(query.isPending || (query.data && versionsLoading)) && (
             <InsightsLoading />
           )}
-          {query.data && !versionsLoading && !versionsQuery.error && (
+          {query.data && !versionsLoading && !versionsError && (
             <InsightsContent
               insight={query.data.insights[0]}
               skillId={data.skill.id}

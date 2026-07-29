@@ -56271,7 +56271,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SkillSightingTimelinePoint'
-          description: Daily activations in the adoption window.
+          description: Daily activations by attributed version in the adoption window.
         skill:
           $ref: '#/components/schemas/Skill'
       description: An active skill and its current version.
@@ -65922,7 +65922,11 @@ components:
           type: string
           description: Start of the UTC day.
           format: date-time
-      description: A UTC-day activation bucket for a skill.
+        skill_version_id:
+          type: string
+          description: The attributed skill version, absent when the observation could not be resolved to a version.
+          format: uuid
+      description: A UTC-day activation bucket for one attributed skill version.
       required:
         - bucket_start
         - activation_count
