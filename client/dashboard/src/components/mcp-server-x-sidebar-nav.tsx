@@ -15,6 +15,7 @@ import {
   tunneledMcpRouteParam,
 } from "@/lib/sources";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
+import { useRBAC } from "@/hooks/useRBAC";
 import { MCPServerStatusDropdown } from "@/pages/mcp/x/MCPServerDetails";
 import {
   activeTabFromPath,
@@ -44,6 +45,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const routes = useRoutes();
   const location = useLocation();
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
+  const { hasScope } = useRBAC();
 
   const idOrSlug = mcpServerSlug ?? "";
   const { data: mcpServer } = useGetMcpServer(
@@ -99,6 +101,8 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const isRemoteBacked = !!mcpServer?.remoteMcpServerId;
   const isTunneledBacked = !!mcpServer?.tunneledMcpServerId;
   const isSourceBacked = isRemoteBacked || isTunneledBacked;
+  const canViewTeamAccess =
+    !!mcpServer && hasScope("org:read") && hasScope("mcp:read", mcpServer.id);
 
   let authenticationDescription =
     "Attach a remote identity provider so users can access the upstream service.";
@@ -182,13 +186,17 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       href: mcpServerTabHref(routes, idOrSlug, "tools"),
       active: activeTab === "tools",
     },
-    {
-      key: "team-access",
-      title: "Team Access",
-      Icon: Users,
-      href: mcpServerTabHref(routes, idOrSlug, "team-access"),
-      active: activeTab === "team-access",
-    },
+    ...(canViewTeamAccess
+      ? [
+          {
+            key: "team-access",
+            title: "Team Access",
+            Icon: Users,
+            href: mcpServerTabHref(routes, idOrSlug, "team-access"),
+            active: activeTab === "team-access",
+          },
+        ]
+      : []),
     {
       key: "settings",
       title: "Settings",

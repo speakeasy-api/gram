@@ -142,8 +142,10 @@ func initSessionCtx(t *testing.T, ti *chatTestInstance) context.Context {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	authCtx.ProjectID = &ti.projectID
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
-	return authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)})
+	return authztest.WithAdminGrants(
+		contextvalues.SetAuthContext(ctx, authCtx),
+		authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource),
+	)
 }
 
 // grantOrgAdminWithChatRead returns a context for an org admin who has ALSO been granted an

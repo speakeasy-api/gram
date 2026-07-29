@@ -8,6 +8,7 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { Type } from "@/components/ui/type";
 import { useToolset } from "@/hooks/toolTypes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import {
   MCPStatusDropdown,
@@ -42,6 +43,7 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
   const { toolsetSlug } = useParams<{ toolsetSlug: string }>();
 
   const { data: toolset } = useToolset(toolsetSlug);
+  const { hasScope } = useRBAC();
   const { url: mcpUrl, installPageUrl } = useMcpUrl(toolset);
   const { data: environmentsData } = useListEnvironments();
   const { data: mcpMetadataData } = useGetMcpMetadata(
@@ -61,6 +63,8 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
   if (!toolsetSlug) return null;
 
   const activeTab = activeTabFromPath(location.pathname, toolsetSlug);
+  const canViewTeamAccess =
+    !!toolset && hasScope("org:read") && hasScope("mcp:read", toolset.id);
 
   const items: McpSidebarNavItem[] = [
     {
@@ -99,13 +103,17 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
       href: mcpDetailTabHref(routes, toolsetSlug, "performance"),
       active: activeTab === "performance",
     },
-    {
-      key: "team-access",
-      title: "Team Access",
-      Icon: Users,
-      href: mcpDetailTabHref(routes, toolsetSlug, "team-access"),
-      active: activeTab === "team-access",
-    },
+    ...(canViewTeamAccess
+      ? [
+          {
+            key: "team-access",
+            title: "Team Access",
+            Icon: Users,
+            href: mcpDetailTabHref(routes, toolsetSlug, "team-access"),
+            active: activeTab === "team-access",
+          },
+        ]
+      : []),
     {
       key: "resources",
       title: "Resources",

@@ -194,9 +194,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
-	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)})
-
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	sig := &signalerStub{}
 
 	chConn, err := infra.NewClickhouseClient(t)

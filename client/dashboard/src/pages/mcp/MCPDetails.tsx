@@ -242,8 +242,10 @@ function renderMcpDetailTabContent(
       );
     case "team-access":
       return (
-        <RequireScope scope="mcp:read" level="page">
-          <MCPTeamAccessTab resourceId={toolset.id} tools={toolset.tools} />
+        <RequireScope scope="org:read" level="page">
+          <RequireScope scope="mcp:read" resourceId={toolset.id} level="page">
+            <MCPTeamAccessTab resourceId={toolset.id} tools={toolset.tools} />
+          </RequireScope>
         </RequireScope>
       );
     case "settings":

@@ -127,14 +127,20 @@ export default function MCPServerDetails(): JSX.Element {
       case "team-access":
         return (
           mcpServer && (
-            <RequireScope scope="mcp:read" level="page">
-              {/* mcp_servers-backed servers grant under the same `mcp:*`
-                scope kind as toolset-backed ones (see selector.go), so
-                MCPTeamAccessTab is reused as-is with the mcp_server's
-                id as the resource id. No `tools` prop because the
-                Remote MCP backend doesn't expose a Gram-side tool
-                catalog. */}
-              <MCPTeamAccessTab resourceId={mcpServer.id} />
+            <RequireScope scope="org:read" level="page">
+              <RequireScope
+                scope="mcp:read"
+                resourceId={mcpServer.id}
+                level="page"
+              >
+                {/* mcp_servers-backed servers grant under the same `mcp:*`
+                  scope kind as toolset-backed ones (see selector.go), so
+                  MCPTeamAccessTab is reused as-is with the mcp_server's
+                  id as the resource id. No `tools` prop because the
+                  Remote MCP backend doesn't expose a Gram-side tool
+                  catalog. */}
+                <MCPTeamAccessTab resourceId={mcpServer.id} />
+              </RequireScope>
             </RequireScope>
           )
         );
