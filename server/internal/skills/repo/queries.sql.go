@@ -4499,7 +4499,27 @@ SELECT
   EXISTS (
     SELECT 1 FROM skill_versions sv
     WHERE sv.skill_id = s.id AND sv.spec_valid IS TRUE
-  )::boolean AS has_valid_version
+  )::boolean AS has_valid_version,
+  (
+    SELECT COUNT(*)
+    FROM skills counted
+    WHERE counted.project_id = $1
+      AND counted.archived_at IS NULL
+      AND (
+        $2::text IS NULL
+        OR counted.name ILIKE '%' || $2::text || '%'
+        OR counted.display_name ILIKE '%' || $2::text || '%'
+        OR COALESCE(counted.summary, '') ILIKE '%' || $2::text || '%'
+      )
+      AND (
+        COALESCE(cardinality($3::text[]), 0) = 0
+        OR counted.source_kind = ANY($3::text[])
+      )
+      AND (
+        COALESCE(cardinality($4::text[]), 0) = 0
+        OR counted.classification = ANY($4::text[])
+      )
+  )::bigint AS total_count
 FROM skills s
 LEFT JOIN LATERAL (
   SELECT
@@ -4517,16 +4537,54 @@ WHERE s.project_id = $1
   AND s.archived_at IS NULL
   AND (
     $2::text IS NULL
-    OR s.name > $2::text
+    OR s.name ILIKE '%' || $2::text || '%'
+    OR s.display_name ILIKE '%' || $2::text || '%'
+    OR COALESCE(s.summary, '') ILIKE '%' || $2::text || '%'
   )
-ORDER BY s.name ASC
-LIMIT $3
+  AND (
+    COALESCE(cardinality($3::text[]), 0) = 0
+    OR s.source_kind = ANY($3::text[])
+  )
+  AND (
+    COALESCE(cardinality($4::text[]), 0) = 0
+    OR s.classification = ANY($4::text[])
+  )
+  AND (
+    (
+      COALESCE(NULLIF($5::text, ''), 'name') = 'name'
+      AND (
+        $6::text IS NULL
+        OR s.name > $6::text
+      )
+    )
+    OR (
+      COALESCE(NULLIF($5::text, ''), 'name') = 'updated'
+      AND (
+        $7::timestamptz IS NULL
+        OR (s.updated_at, s.id) < (
+          $7::timestamptz,
+          $8::uuid
+        )
+      )
+    )
+  )
+ORDER BY
+  CASE WHEN COALESCE(NULLIF($5::text, ''), 'name') = 'name' THEN s.name END ASC,
+  CASE WHEN COALESCE(NULLIF($5::text, ''), 'name') = 'updated' THEN s.updated_at END DESC,
+  CASE WHEN COALESCE(NULLIF($5::text, ''), 'name') = 'updated' THEN s.id END DESC
+LIMIT $9
 `
 
 type ListSkillsParams struct {
-	ProjectID  uuid.UUID
-	CursorName pgtype.Text
-	PageLimit  int32
+	ProjectID       uuid.UUID
+	Search          pgtype.Text
+	SourceKinds     []string
+	Classifications []string
+	SortOrder       string
+	CursorName      pgtype.Text
+	CursorUpdatedAt pgtype.Timestamptz
+	CursorID        uuid.NullUUID
+	PageLimit       int32
 }
 
 type ListSkillsRow struct {
@@ -4535,10 +4593,21 @@ type ListSkillsRow struct {
 	LatestVersionID uuid.UUID
 	VersionCount    int64
 	HasValidVersion bool
+	TotalCount      int64
 }
 
 func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListSkillsRow, error) {
-	rows, err := q.db.Query(ctx, listSkills, arg.ProjectID, arg.CursorName, arg.PageLimit)
+	rows, err := q.db.Query(ctx, listSkills,
+		arg.ProjectID,
+		arg.Search,
+		arg.SourceKinds,
+		arg.Classifications,
+		arg.SortOrder,
+		arg.CursorName,
+		arg.CursorUpdatedAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -4564,6 +4633,7 @@ func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListS
 			&i.LatestVersionID,
 			&i.VersionCount,
 			&i.HasValidVersion,
+			&i.TotalCount,
 		); err != nil {
 			return nil, err
 		}

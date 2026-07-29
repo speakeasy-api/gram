@@ -141,6 +141,13 @@ var _ = Service("skills", func() {
 				Minimum(1)
 				Maximum(200)
 			})
+			Attribute("search", String, "Search skill names, display names, and summaries.", func() { MaxLength(256) })
+			Attribute("source_kinds", ArrayOf(String, func() { Enum("manual", "captured") }), "Only return skills from these sources.")
+			Attribute("classifications", ArrayOf(String, func() { Enum("custom", "built_in") }), "Only return skills with these classifications.")
+			Attribute("sort", String, "How to order skills.", func() {
+				Enum("name", "updated")
+				Default("name")
+			})
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
@@ -152,6 +159,10 @@ var _ = Service("skills", func() {
 			GET("/rpc/skills.list")
 			Param("cursor")
 			Param("limit")
+			Param("search")
+			Param("source_kinds")
+			Param("classifications")
+			Param("sort")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
@@ -1113,8 +1124,9 @@ var ListSkillsResult = Type("ListSkillsResult", func() {
 	Description("A page of active project skills.")
 
 	Attribute("skills", ArrayOf(Skill), "The active skills in this page.")
+	Attribute("total_count", Int64, "The total number of active skills matching the filters.")
 	Attribute("next_cursor", String, "Cursor for the next page; absent when exhausted.")
-	Required("skills")
+	Required("skills", "total_count")
 })
 
 var ListSkillVersionsResult = Type("ListSkillVersionsResult", func() {

@@ -122,7 +122,9 @@ func (s *Service) QueryInsights(ctx context.Context, payload *gen.QueryInsightsP
 	responseSkillIDs := skillIDs
 	if len(responseSkillIDs) == 0 {
 		activeSkills, err := skillsrepo.New(s.db).ListSkills(ctx, skillsrepo.ListSkillsParams{
-			ProjectID: *authCtx.ProjectID, CursorName: pgtype.Text{String: "", Valid: false}, PageLimit: math.MaxInt32,
+			ProjectID: *authCtx.ProjectID, Search: pgtype.Text{String: "", Valid: false}, SourceKinds: nil, Classifications: nil, SortOrder: "name",
+			CursorName: pgtype.Text{String: "", Valid: false}, CursorUpdatedAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+			CursorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, PageLimit: math.MaxInt32,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "list active project skills").LogError(ctx, logger)

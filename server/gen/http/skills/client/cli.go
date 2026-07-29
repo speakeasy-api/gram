@@ -208,7 +208,7 @@ func BuildUpdatePayload(skillsUpdateBody string, skillsUpdateSessionToken string
 
 // BuildListPayload builds the payload for the skills list endpoint from CLI
 // flags.
-func BuildListPayload(skillsListCursor string, skillsListLimit string, skillsListSessionToken string, skillsListApikeyToken string, skillsListProjectSlugInput string) (*skills.ListPayload, error) {
+func BuildListPayload(skillsListCursor string, skillsListLimit string, skillsListSearch string, skillsListSourceKinds string, skillsListClassifications string, skillsListSort string, skillsListSessionToken string, skillsListApikeyToken string, skillsListProjectSlugInput string) (*skills.ListPayload, error) {
 	var err error
 	var cursor *string
 	{
@@ -236,6 +236,64 @@ func BuildListPayload(skillsListCursor string, skillsListLimit string, skillsLis
 			}
 		}
 	}
+	var search *string
+	{
+		if skillsListSearch != "" {
+			search = &skillsListSearch
+			if utf8.RuneCountInString(*search) > 256 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("search", *search, utf8.RuneCountInString(*search), 256, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sourceKinds []string
+	{
+		if skillsListSourceKinds != "" {
+			err = json.Unmarshal([]byte(skillsListSourceKinds), &sourceKinds)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for sourceKinds, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"captured\"\n   ]'")
+			}
+			for _, e := range sourceKinds {
+				if !(e == "manual" || e == "captured") {
+					err = goa.MergeErrors(err, goa.InvalidEnumValueError("source_kinds[*]", e, []any{"manual", "captured"}))
+				}
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var classifications []string
+	{
+		if skillsListClassifications != "" {
+			err = json.Unmarshal([]byte(skillsListClassifications), &classifications)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for classifications, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"built_in\"\n   ]'")
+			}
+			for _, e := range classifications {
+				if !(e == "custom" || e == "built_in") {
+					err = goa.MergeErrors(err, goa.InvalidEnumValueError("classifications[*]", e, []any{"custom", "built_in"}))
+				}
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sort string
+	{
+		if skillsListSort != "" {
+			sort = skillsListSort
+			if !(sort == "name" || sort == "updated") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"name", "updated"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if skillsListSessionToken != "" {
@@ -257,6 +315,10 @@ func BuildListPayload(skillsListCursor string, skillsListLimit string, skillsLis
 	v := &skills.ListPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.Search = search
+	v.SourceKinds = sourceKinds
+	v.Classifications = classifications
+	v.Sort = sort
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

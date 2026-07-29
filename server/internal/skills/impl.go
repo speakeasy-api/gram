@@ -762,19 +762,40 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		return nil, err
 	}
 
+	sortOrder := payload.Sort
+	if sortOrder == "" {
+		sortOrder = "name"
+	}
 	cursorName := pgtype.Text{String: "", Valid: false}
+	cursorUpdatedAt := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+	cursorID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	if payload.Cursor != nil {
-		name, decodeErr := decodeSkillCursor(*payload.Cursor)
-		if decodeErr != nil {
-			return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill cursor")
+		if sortOrder == "updated" {
+			updatedAt, id, decodeErr := decodeCreatedAtIDCursor(*payload.Cursor)
+			if decodeErr != nil {
+				return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill cursor")
+			}
+			cursorUpdatedAt = conv.ToPGTimestamptz(updatedAt)
+			cursorID = uuid.NullUUID{UUID: id, Valid: true}
+		} else {
+			name, decodeErr := decodeSkillCursor(*payload.Cursor)
+			if decodeErr != nil {
+				return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill cursor")
+			}
+			cursorName = conv.ToPGText(name)
 		}
-		cursorName = conv.ToPGText(name)
 	}
 
 	rows, err := repo.New(s.db).ListSkills(ctx, repo.ListSkillsParams{
-		ProjectID:  *authCtx.ProjectID,
-		CursorName: cursorName,
-		PageLimit:  conv.SafeInt32(payload.Limit + 1),
+		ProjectID:       *authCtx.ProjectID,
+		Search:          conv.PtrToPGTextEmpty(payload.Search),
+		SourceKinds:     payload.SourceKinds,
+		Classifications: payload.Classifications,
+		SortOrder:       sortOrder,
+		CursorName:      cursorName,
+		CursorUpdatedAt: cursorUpdatedAt,
+		CursorID:        cursorID,
+		PageLimit:       conv.SafeInt32(payload.Limit + 1),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list skills").LogError(ctx, logger)
@@ -786,12 +807,21 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	}
 	var nextCursor *string
 	if hasMore {
-		encoded := encodeSkillCursor(rows[len(rows)-1].Skill.Name)
+		last := rows[len(rows)-1].Skill
+		encoded := encodeSkillCursor(last.Name)
+		if sortOrder == "updated" {
+			encoded = encodeCreatedAtIDCursor(last.UpdatedAt.Time, last.ID)
+		}
 		nextCursor = &encoded
+	}
+	totalCount := int64(0)
+	if len(rows) > 0 {
+		totalCount = rows[0].TotalCount
 	}
 
 	return &gen.ListSkillsResult{
 		Skills:     mv.BuildSkillListView(rows),
+		TotalCount: totalCount,
 		NextCursor: nextCursor,
 	}, nil
 }

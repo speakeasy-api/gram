@@ -37086,6 +37086,49 @@ paths:
                     minimum: 1
                     type: integer
                 - allowEmptyValue: true
+                  description: Search skill names, display names, and summaries.
+                  in: query
+                  name: search
+                  schema:
+                    description: Search skill names, display names, and summaries.
+                    maxLength: 256
+                    type: string
+                - allowEmptyValue: true
+                  description: Only return skills from these sources.
+                  in: query
+                  name: source_kinds
+                  schema:
+                    description: Only return skills from these sources.
+                    items:
+                        enum:
+                            - manual
+                            - captured
+                        type: string
+                    type: array
+                - allowEmptyValue: true
+                  description: Only return skills with these classifications.
+                  in: query
+                  name: classifications
+                  schema:
+                    description: Only return skills with these classifications.
+                    items:
+                        enum:
+                            - custom
+                            - built_in
+                        type: string
+                    type: array
+                - allowEmptyValue: true
+                  description: How to order skills.
+                  in: query
+                  name: sort
+                  schema:
+                    default: name
+                    description: How to order skills.
+                    enum:
+                        - name
+                        - updated
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -57866,9 +57909,14 @@ components:
                     items:
                         $ref: '#/components/schemas/Skill'
                     description: The active skills in this page.
+                total_count:
+                    type: integer
+                    description: The total number of active skills matching the filters.
+                    format: int64
             description: A page of active project skills.
             required:
                 - skills
+                - total_count
         ListSourcesResult:
             type: object
             properties:

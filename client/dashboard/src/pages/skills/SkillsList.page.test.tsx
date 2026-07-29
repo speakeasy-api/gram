@@ -20,6 +20,9 @@ const testState = vi.hoisted(() => ({
   insightsError: null as Error | null,
   insightsData: { insights: [] } as { insights: unknown[] } | undefined,
   insightsRefetch: vi.fn().mockResolvedValue(undefined),
+  skillRequests: [] as unknown[],
+  metricSkillRequests: [] as unknown[],
+  searchValue: "example",
   skills: [] as Array<Record<string, unknown>>,
   unknownActivations: [] as Array<Record<string, unknown>>,
   suggestionFetchNextPage: vi.fn().mockResolvedValue(undefined),
@@ -71,17 +74,62 @@ vi.mock("@/routes", () => ({
   }),
 }));
 vi.mock("@gram/client/react-query/skills.js", () => ({
-  useSkillsInfinite: () => ({
-    data: { pages: [{ result: { skills: testState.skills } }] },
-    isPending: false,
-    isFetching: false,
-    isFetchingNextPage: false,
-    isFetchNextPageError: testState.isFetchNextPageError,
-    hasNextPage: testState.hasNextPage,
-    error: testState.error,
-    fetchNextPage: testState.fetchNextPage,
-    refetch: vi.fn(),
-  }),
+  useSkills: (request: {
+    cursor?: string;
+    limit?: number;
+    search?: string;
+  }) => {
+    testState.skillRequests.push(request);
+    const matchingSkills = request.search
+      ? testState.skills.filter((skill) =>
+          String(skill.displayName).toLowerCase().includes(request.search!),
+        )
+      : testState.skills;
+    const start = Number(request.cursor ?? 0);
+    const limit = request.limit ?? 50;
+    const next = start + limit;
+    return {
+      data: {
+        result: {
+          skills: matchingSkills.slice(start, next),
+          totalCount: matchingSkills.length,
+          nextCursor: next < matchingSkills.length ? String(next) : undefined,
+        },
+      },
+      isPending: false,
+      isFetching: false,
+      error: testState.error,
+      refetch: vi.fn(),
+    };
+  },
+  useSkillsInfinite: (request: { search?: string }) => {
+    testState.metricSkillRequests.push(request);
+    const matchingSkills = request.search
+      ? testState.skills.filter((skill) =>
+          String(skill.displayName).toLowerCase().includes(request.search!),
+        )
+      : testState.skills;
+    return {
+      data: {
+        pages: [
+          {
+            result: {
+              skills: matchingSkills,
+              totalCount: matchingSkills.length,
+            },
+          },
+        ],
+      },
+      isPending: false,
+      isFetching: false,
+      isFetchingNextPage: false,
+      isFetchNextPageError: testState.isFetchNextPageError,
+      hasNextPage: testState.hasNextPage,
+      error: testState.error,
+      fetchNextPage: testState.fetchNextPage,
+      refetch: vi.fn(),
+    };
+  },
   invalidateAllSkills: testState.invalidateSkills,
 }));
 vi.mock("@gram/client/react-query/skillSuggestions.js", () => ({
@@ -164,12 +212,17 @@ vi.mock("@/components/page-layout", () => {
     <div>{children}</div>
   );
   const Search = ({ onChange }: { onChange: (value: string) => void }) => (
-    <button onClick={() => onChange("example")}>Apply search</button>
+    <button onClick={() => onChange(testState.searchValue)}>
+      Apply search
+    </button>
+  );
+  const SortBy = ({ onChange }: { onChange: (value: string) => void }) => (
+    <button onClick={() => onChange("activations")}>Apply metric sort</button>
   );
   const Toolbar = Object.assign(Wrapper, {
     Search,
     Filters: () => null,
-    SortBy: () => null,
+    SortBy,
     Count: Wrapper,
     Actions: Wrapper,
     Refresh: () => null,
@@ -254,6 +307,9 @@ beforeEach(() => {
   testState.insightsData = { insights: [] };
   testState.insightsRefetch.mockReset();
   testState.insightsRefetch.mockResolvedValue(undefined);
+  testState.skillRequests = [];
+  testState.metricSkillRequests = [];
+  testState.searchValue = "example";
   testState.skills = makeSkills(250);
   testState.unknownActivations = [];
   testState.suggestionFetchNextPage.mockReset().mockResolvedValue(undefined);
@@ -284,14 +340,16 @@ describe("SkillsList pagination surfaces", () => {
     expect(testState.suggestionRequests[0]).toEqual({ limit: 50 });
   });
 
-  it("bounds rendered rows and resets the bound when search changes", async () => {
+  it("pages rendered rows and resets to the first page when search changes", async () => {
     render(<SkillsList />);
-    expect(screen.getAllByTestId("skill-row")).toHaveLength(200);
-    fireEvent.click(screen.getByRole("button", { name: "Show more results" }));
-    expect(screen.getAllByTestId("skill-row")).toHaveLength(250);
+    expect(screen.getAllByTestId("skill-row")).toHaveLength(50);
+    expect(screen.getByText("Example 0")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getAllByTestId("skill-row")).toHaveLength(50);
+    expect(screen.getByText("Example 50")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Apply search" }));
     await waitFor(() => {
-      expect(screen.getAllByTestId("skill-row")).toHaveLength(200);
+      expect(screen.getByText("Example 0")).toBeTruthy();
     });
   });
 
@@ -300,19 +358,22 @@ describe("SkillsList pagination surfaces", () => {
     testState.isFetchNextPageError = true;
     testState.error = new Error("next page failed");
     render(<SkillsList />);
+    fireEvent.click(screen.getByRole("button", { name: "Apply metric sort" }));
 
-    expect(screen.getAllByTestId("skill-row")).toHaveLength(200);
+    expect(screen.getAllByTestId("skill-row")).toHaveLength(50);
     expect(screen.getByText("Unable to load more skills.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(testState.fetchNextPage).toHaveBeenCalledOnce();
   });
 
   it("does not claim an incomplete failed search has no matches", () => {
-    testState.skills = [];
+    testState.searchValue = "missing";
     testState.hasNextPage = true;
     testState.isFetchNextPageError = true;
     testState.error = new Error("next page failed");
     render(<SkillsList />);
+    fireEvent.click(screen.getByRole("button", { name: "Apply search" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply metric sort" }));
 
     expect(
       screen.getByText("Search incomplete. Retry to check remaining skills."),
@@ -348,10 +409,13 @@ describe("SkillsList pagination surfaces", () => {
     expect(screen.getByText("unmatched-skill")).toBeTruthy();
   });
 
-  it("loads every skill page before presenting a sorted view", async () => {
+  it("only drains skill pages when a metric sort is selected", async () => {
     testState.hasNextPage = true;
     render(<SkillsList />);
 
+    expect(testState.fetchNextPage).not.toHaveBeenCalled();
+    expect(screen.getAllByTestId("skill-row")).toHaveLength(50);
+    fireEvent.click(screen.getByRole("button", { name: "Apply metric sort" }));
     await waitFor(() => expect(testState.fetchNextPage).toHaveBeenCalledOnce());
     expect(
       screen.getByText("Loading all skills to finish this view..."),
@@ -365,7 +429,7 @@ describe("SkillsList pagination surfaces", () => {
     render(<SkillsList />);
 
     expect(screen.getByText("Unable to load skill insights")).toBeTruthy();
-    expect(screen.getAllByTestId("skill-row")).toHaveLength(200);
+    expect(screen.getAllByTestId("skill-row")).toHaveLength(50);
     fireEvent.click(screen.getByRole("button", { name: "Retry insights" }));
     expect(testState.insightsRefetch).toHaveBeenCalledOnce();
   });

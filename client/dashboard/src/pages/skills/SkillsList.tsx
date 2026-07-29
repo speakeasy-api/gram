@@ -10,8 +10,15 @@ import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import type { Skill } from "@gram/client/models/components/skill.js";
+import type {
+  Classifications,
+  SourceKinds,
+} from "@gram/client/models/operations/listskills.js";
 import { useSkillEfficacyInsights } from "@gram/client/react-query/skillEfficacyInsights.js";
-import { useSkillsInfinite } from "@gram/client/react-query/skills.js";
+import {
+  useSkills,
+  useSkillsInfinite,
+} from "@gram/client/react-query/skills.js";
 import { Badge, type Column, Icon, Table } from "@speakeasy-api/moonshine";
 import { useRoutes } from "@/routes";
 import { useQueryState } from "nuqs";
@@ -26,12 +33,7 @@ import {
   SKILL_SOURCE_OPTIONS,
 } from "./skill-badge-options";
 import { SkillClassificationBadge, SkillSourceBadge } from "./skill-badges";
-import {
-  filterSkills,
-  skillCountLabel,
-  type SkillSort,
-  sortSkills,
-} from "./skills-list-helpers";
+import { type SkillSort, sortSkills } from "./skills-list-helpers";
 import { UnknownSkillActivationsSection } from "./UnknownSkillActivationsSection";
 import { useDrainSkillPages } from "./use-drain-skill-pages";
 import { useOpenSkillSuggestions } from "./use-open-skill-suggestions";
@@ -51,7 +53,9 @@ const FILTER_OPTIONS = {
   classification: SKILL_CLASSIFICATION_OPTIONS,
 };
 
-const RESULT_PAGE_SIZE = 200;
+const RESULT_PAGE_SIZE = 50;
+const METRIC_SORT_BATCH_SIZE = 200;
+const EMPTY_SKILLS: Skill[] = [];
 const INSIGHT_SORT_OPTIONS = [
   { value: "updated", label: "Recently updated" },
   { value: "activations", label: "Most activated" },
@@ -68,12 +72,7 @@ function formatSavings(minutes: number): string {
   return `${(minutes / 60).toFixed(1)} hr`;
 }
 
-function noResultsMessage(
-  draining: boolean,
-  active: boolean,
-  incomplete: boolean,
-): string {
-  if (draining) return "Loading remaining skills...";
+function noResultsMessage(active: boolean, incomplete: boolean): string {
   if (incomplete) return "Search incomplete. Retry to check remaining skills.";
   if (active) return "No matching skills.";
   return "No skills yet.";
@@ -90,18 +89,56 @@ export default function SkillsList(): JSX.Element {
   // Legacy deep links opened the skill as a sheet via ?skill=<id>; redirect
   // them to the dedicated detail page.
   const [legacySkillId] = useQueryState("skill");
-  const [displayCount, setDisplayCount] = useState(RESULT_PAGE_SIZE);
-  const query = useSkillsInfinite({ limit: 200 }, undefined, {
-    throwOnError: false,
-  });
-  const skills = useMemo(
-    () => query.data?.pages.flatMap((page) => page.result.skills) ?? [],
-    [query.data?.pages],
+  const [page, setPage] = useState(0);
+  const [pageCursors, setPageCursors] = useState<(string | undefined)[]>([
+    undefined,
+  ]);
+  const metricSort = sort !== "updated";
+  const searchQuery = deferredSearch.trim() || undefined;
+  const sourceKinds = filters.values.sourceKind as SourceKinds[];
+  const classifications = filters.values.classification as Classifications[];
+  const pageQuery = useSkills(
+    {
+      cursor: pageCursors[page],
+      limit: RESULT_PAGE_SIZE,
+      search: searchQuery,
+      sourceKinds,
+      classifications,
+      sort: "updated",
+    },
+    undefined,
+    { throwOnError: false, enabled: !metricSort },
   );
-  const insightsQuery = useSkillEfficacyInsights({}, undefined, {
-    throwOnError: false,
-    enabled: skills.length > 0,
-  });
+  const metricQuery = useSkillsInfinite(
+    {
+      limit: METRIC_SORT_BATCH_SIZE,
+      search: searchQuery,
+      sourceKinds,
+      classifications,
+    },
+    undefined,
+    {
+      throwOnError: false,
+      enabled: metricSort,
+    },
+  );
+  const metricSkills = useMemo(
+    () =>
+      metricQuery.data?.pages.flatMap((skillPage) => skillPage.result.skills) ??
+      [],
+    [metricQuery.data?.pages],
+  );
+  const skills = metricSort
+    ? metricSkills
+    : (pageQuery.data?.result.skills ?? EMPTY_SKILLS);
+  const insightsQuery = useSkillEfficacyInsights(
+    metricSort ? {} : { skillIds: skills.map((skill) => skill.id) },
+    undefined,
+    {
+      throwOnError: false,
+      enabled: skills.length > 0,
+    },
+  );
   const openSuggestions = useOpenSkillSuggestions();
   const metricsBySkill = useMemo(
     () =>
@@ -121,37 +158,47 @@ export default function SkillsList(): JSX.Element {
   const effectiveSort = insightsUnavailable ? "updated" : sort;
   const visibleSkills = useMemo(
     () =>
-      sortSkills(
-        filterSkills(
-          skills,
-          deferredSearch,
-          filters.values.sourceKind,
-          filters.values.classification,
-        ),
-        metricsBySkill,
-        effectiveSort,
-      ),
-    [
-      deferredSearch,
-      filters.values.classification,
-      filters.values.sourceKind,
-      metricsBySkill,
-      skills,
-      effectiveSort,
-    ],
+      metricSort ? sortSkills(skills, metricsBySkill, effectiveSort) : skills,
+    [effectiveSort, metricSort, metricsBySkill, skills],
   );
 
   useDrainSkillPages({
-    active: true,
-    hasNextPage: query.hasNextPage,
-    isFetchingNextPage: query.isFetchingNextPage,
-    isFetchNextPageError: query.isFetchNextPageError,
-    fetchNextPage: query.fetchNextPage,
+    active: metricSort,
+    hasNextPage: metricQuery.hasNextPage,
+    isFetchingNextPage: metricQuery.isFetchingNextPage,
+    isFetchNextPageError: metricQuery.isFetchNextPageError,
+    fetchNextPage: metricQuery.fetchNextPage,
   });
 
-  const displayedSkills = visibleSkills.slice(0, displayCount);
+  const displayedSkills = metricSort
+    ? visibleSkills.slice(
+        page * RESULT_PAGE_SIZE,
+        (page + 1) * RESULT_PAGE_SIZE,
+      )
+    : visibleSkills;
+  const totalCount = metricSort
+    ? (metricQuery.data?.pages[0]?.result.totalCount ?? 0)
+    : (pageQuery.data?.result.totalCount ?? 0);
+  const totalPages = Math.ceil(totalCount / RESULT_PAGE_SIZE);
+  const query = metricSort ? metricQuery : pageQuery;
   const isEmptyProject =
-    !!query.data && skills.length === 0 && !active && !query.hasNextPage;
+    !!query.data && totalCount === 0 && !active && !query.isFetching;
+  const draining =
+    metricSort && metricQuery.hasNextPage && !metricQuery.isFetchNextPageError;
+  const resetPage = () => {
+    setPage(0);
+    setPageCursors([undefined]);
+  };
+  const nextPage = () => {
+    if (metricSort) {
+      setPage((current) => current + 1);
+      return;
+    }
+    const nextCursor = pageQuery.data?.result.nextCursor;
+    if (!nextCursor) return;
+    setPageCursors((current) => [...current.slice(0, page + 1), nextCursor]);
+    setPage((current) => current + 1);
+  };
 
   const columns: Column<Skill>[] = [
     {
@@ -299,14 +346,7 @@ export default function SkillsList(): JSX.Element {
     },
   ];
 
-  const countLabel = skillCountLabel({
-    active,
-    hasNextPage: query.hasNextPage,
-    incomplete: query.isFetchNextPageError,
-    loadedCount: skills.length,
-    resultCount: visibleSkills.length,
-  });
-  const draining = query.hasNextPage && !query.isFetchNextPageError;
+  const countLabel = `${totalCount} skill${totalCount === 1 ? "" : "s"}`;
 
   if (legacySkillId) {
     return <Navigate to={routes.skills.detail.href(legacySkillId)} replace />;
@@ -334,7 +374,7 @@ export default function SkillsList(): JSX.Element {
                     value={search}
                     onChange={(value) => {
                       setSearch(value);
-                      setDisplayCount(RESULT_PAGE_SIZE);
+                      resetPage();
                     }}
                     debounceMs={150}
                     placeholder="Search skills"
@@ -350,15 +390,15 @@ export default function SkillsList(): JSX.Element {
                           value: FilterValue,
                         ) => void
                       )(id, value);
-                      setDisplayCount(RESULT_PAGE_SIZE);
+                      resetPage();
                     }}
                     onClear={(id) => {
                       (filters.clearValue as (id: string) => void)(id);
-                      setDisplayCount(RESULT_PAGE_SIZE);
+                      resetPage();
                     }}
                     onClearAll={() => {
                       filters.clearAll();
-                      setDisplayCount(RESULT_PAGE_SIZE);
+                      resetPage();
                     }}
                   />
                   <Page.Toolbar.Count>{countLabel}</Page.Toolbar.Count>
@@ -366,7 +406,7 @@ export default function SkillsList(): JSX.Element {
                     value={effectiveSort}
                     onChange={(value) => {
                       setSort(value as SkillSort);
-                      setDisplayCount(RESULT_PAGE_SIZE);
+                      resetPage();
                     }}
                     options={INSIGHT_SORT_OPTIONS}
                   />
@@ -380,13 +420,16 @@ export default function SkillsList(): JSX.Element {
                   <Page.Toolbar.Refresh
                     onRefresh={() => {
                       void Promise.all([
-                        query.refetch(),
+                        metricSort
+                          ? metricQuery.refetch()
+                          : pageQuery.refetch(),
                         insightsQuery.refetch(),
                         openSuggestions.query.refetch(),
                       ]);
                     }}
                     isRefreshing={
-                      (query.isFetching && !query.isFetchingNextPage) ||
+                      pageQuery.isFetching ||
+                      metricQuery.isFetching ||
                       insightsQuery.isFetching ||
                       openSuggestions.query.isFetching
                     }
@@ -463,28 +506,44 @@ export default function SkillsList(): JSX.Element {
                     }
                     className="min-w-[1100px]"
                     noResultsMessage={noResultsMessage(
-                      draining,
                       active,
-                      query.isFetchNextPageError,
+                      metricSort && metricQuery.isFetchNextPageError,
                     )}
                   />
                 </div>
               )}
 
-              {query.isFetchNextPageError && (
-                <LoadMoreError onRetry={() => void query.fetchNextPage()} />
+              {metricSort && metricQuery.isFetchNextPageError && (
+                <LoadMoreError
+                  onRetry={() => void metricQuery.fetchNextPage()}
+                />
               )}
 
-              {!draining && displayedSkills.length < visibleSkills.length && (
-                <div className="flex justify-center">
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      setDisplayCount((count) => count + RESULT_PAGE_SIZE)
-                    }
-                  >
-                    Show more results
-                  </Button>
+              {!draining && totalPages > 1 && (
+                <div className="flex items-center justify-between border-t px-4 py-3">
+                  <Type small muted>
+                    {page * RESULT_PAGE_SIZE + 1}-
+                    {Math.min((page + 1) * RESULT_PAGE_SIZE, totalCount)} of{" "}
+                    {totalCount}
+                  </Type>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setPage((current) => current - 1)}
+                      disabled={page === 0}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={nextPage}
+                      disabled={page >= totalPages - 1}
+                    >
+                      Next
+                    </Button>
+                  </div>
                 </div>
               )}
 
