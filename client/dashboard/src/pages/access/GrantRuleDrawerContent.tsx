@@ -706,7 +706,7 @@ function ToolSelectionPanel({
             `${b.projectName}/${b.name}`,
           ),
         ),
-    [mcpServers],
+    [mcpServers, projectSlugById],
   );
 
   const [search, setSearch] = useState("");
