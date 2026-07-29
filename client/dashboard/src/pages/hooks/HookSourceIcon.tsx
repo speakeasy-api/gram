@@ -282,7 +282,7 @@ export function GeminiIcon({ className }: { className?: string }): JSX.Element {
 }
 
 // Glean logo
-export function GleanIcon({ className }: { className?: string }): JSX.Element {
+function GleanIcon({ className }: { className?: string }): JSX.Element {
   return (
     <svg
       className={className}
@@ -300,11 +300,7 @@ export function GleanIcon({ className }: { className?: string }): JSX.Element {
 }
 
 // AWS Bedrock logo
-export function BedrockIcon({
-  className,
-}: {
-  className?: string;
-}): JSX.Element {
+function BedrockIcon({ className }: { className?: string }): JSX.Element {
   return (
     <svg
       className={className}
