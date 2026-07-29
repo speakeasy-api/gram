@@ -445,7 +445,7 @@ function VersionHistory({
   const diffVersions = selectDiffVersions(
     versions,
     selectedVersions,
-    currentVersion.id,
+    currentVersion,
   );
   const comparable = versions.length > 1;
   useEffect(() => {

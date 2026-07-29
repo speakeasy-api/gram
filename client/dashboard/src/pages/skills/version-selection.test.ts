@@ -55,22 +55,29 @@ describe("selectDiffVersions", () => {
 
   it("uses API newest-first order when timestamps tie", () => {
     expect(
-      selectDiffVersions(newestFirst, new Set(["newest", "oldest"]), "newest"),
+      selectDiffVersions(newestFirst, new Set(["newest", "oldest"]), newest),
     ).toEqual([oldest, newest]);
     expect(
-      selectDiffVersions(newestFirst, new Set(["middle", "oldest"]), "newest"),
+      selectDiffVersions(newestFirst, new Set(["middle", "oldest"]), newest),
     ).toEqual([oldest, middle]);
   });
 
   it("compares one selected older version with current", () => {
     expect(
-      selectDiffVersions(newestFirst, new Set(["middle"]), "newest"),
+      selectDiffVersions(newestFirst, new Set(["middle"]), newest),
     ).toEqual([middle, newest]);
   });
 
   it("compares one selected newer version with current", () => {
     expect(
-      selectDiffVersions(newestFirst, new Set(["newest"]), "middle"),
+      selectDiffVersions(newestFirst, new Set(["newest"]), middle),
     ).toEqual([middle, newest]);
+  });
+
+  it("compares with a current version outside the loaded page", () => {
+    expect(selectDiffVersions([newest], new Set(["newest"]), middle)).toEqual([
+      middle,
+      newest,
+    ]);
   });
 });

@@ -19,22 +19,21 @@ export function versionChangeDirection(
 export function selectDiffVersions(
   versionsNewestFirst: SkillVersion[],
   selectedIds: Set<string>,
-  currentVersionId: string,
+  currentVersion: SkillVersion,
 ): [older: SkillVersion, newer: SkillVersion] | null {
   const selected = versionsNewestFirst.filter((version) =>
     selectedIds.has(version.id),
   );
   const selectedVersion = selected[0];
-  if (selected.length === 1 && selectedVersion?.id !== currentVersionId) {
-    const current = versionsNewestFirst.find(
-      (version) => version.id === currentVersionId,
-    );
-    if (!current || !selectedVersion) return null;
-    const selectedIndex = versionsNewestFirst.indexOf(selectedVersion);
-    const currentIndex = versionsNewestFirst.indexOf(current);
-    return selectedIndex < currentIndex
-      ? [current, selectedVersion]
-      : [selectedVersion, current];
+  if (
+    selected.length === 1 &&
+    selectedVersion &&
+    selectedVersion.id !== currentVersion.id
+  ) {
+    const direction = versionChangeDirection(selectedVersion, currentVersion);
+    return direction === "forward"
+      ? [currentVersion, selectedVersion]
+      : [selectedVersion, currentVersion];
   }
   if (selected.length !== 2) return null;
 
