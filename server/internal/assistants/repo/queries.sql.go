@@ -1925,7 +1925,6 @@ FROM skills s
 JOIN skill_versions sv
   ON sv.id = $1
   AND sv.skill_id = s.id
-  AND sv.project_id = s.project_id
 WHERE s.id = $2
   AND s.project_id = $3
   AND s.name = $4

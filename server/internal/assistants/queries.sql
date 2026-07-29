@@ -261,7 +261,6 @@ FROM skills s
 JOIN skill_versions sv
   ON sv.id = @skill_version_id
   AND sv.skill_id = s.id
-  AND sv.project_id = s.project_id
 WHERE s.id = @skill_id
   AND s.project_id = @project_id
   AND s.name = @name;

@@ -110,7 +110,12 @@ func (t *Load) Call(ctx context.Context, env toolconfig.ToolCallEnv, payload io.
 		VersionID uuid.UUID
 		Name      string
 		Content   string
-	}{}
+	}{
+		ID:        uuid.Nil,
+		VersionID: uuid.Nil,
+		Name:      "",
+		Content:   "",
+	}
 	switch {
 	case err == nil:
 		loadedSkill.ID = attachedSkill.SkillID

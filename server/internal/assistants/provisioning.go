@@ -352,7 +352,7 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 		for _, row := range rows {
 			skills = append(skills, assistantSkillRow{
 				SkillID:           row.SkillID,
-				PinnedVersionID:   uuid.NullUUID{},
+				PinnedVersionID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 				Name:              row.Name,
 				ResolvedVersionID: row.ResolvedVersionID,
 				Description:       conv.FromPGTextOrEmpty[string](row.Description),
