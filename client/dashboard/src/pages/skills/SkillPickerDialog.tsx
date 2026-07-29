@@ -131,7 +131,10 @@ export function SkillPickerDialog({
   };
 
   let pickerContent: JSX.Element;
-  if (skillsQuery.error) {
+  if (
+    skillsQuery.error &&
+    (!skillsQuery.data || skillsQuery.isFetchNextPageError)
+  ) {
     pickerContent = (
       <ErrorAlert title="Unable to load skills" error={skillsQuery.error} />
     );
