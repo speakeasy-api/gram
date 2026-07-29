@@ -7,7 +7,7 @@ requires-python = ">=3.14"
 dependencies = [
   "aiocop>=1.1.4",
   "anyio>=4.14.1",
-  "asyncer>=0.0.17",
+  "asyncer>=0.0.18",
   "click>=8.4.2",
   "en-core-web-lg",
   "gram-infra",
