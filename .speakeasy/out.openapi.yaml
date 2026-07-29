@@ -2712,7 +2712,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateGcpIamCredentialForm'
+              $ref: '#/components/schemas/CreatePlatformGcpIamCredentialForm'
         required: true
       responses:
         "200":
@@ -3070,7 +3070,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateGcpIamCredentialRequestBody'
+              $ref: '#/components/schemas/UpdateGcpIamPlatformCredentialRequestBody'
         required: true
       responses:
         "200":
@@ -14993,6 +14993,88 @@ paths:
       x-speakeasy-name-override: getGcpIam
       x-speakeasy-react-hook:
         name: GetGcpIamCredential
+  /rpc/externalCredentials.getGcpSetupInfo:
+    get:
+      description: Report what the customer must grant in their own GCP project before Gram can impersonate a service account there. Readable before any credential exists, since impersonation is a precondition of creating one. Requires org:read.
+      operationId: getGcpSetupInfo
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GcpSetupInfo'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getGcpSetupInfo externalCredentials
+      tags:
+        - externalCredentials
+      x-speakeasy-name-override: getGcpSetupInfo
+      x-speakeasy-react-hook:
+        name: GcpSetupInfo
   /rpc/externalCredentials.list:
     get:
       description: List the organization's external credentials (provider-independent summary). Optionally filter by provider. Requires org:read.
@@ -15425,6 +15507,97 @@ paths:
       x-speakeasy-name-override: updateGcpIam
       x-speakeasy-react-hook:
         name: UpdateGcpIamCredential
+  /rpc/externalCredentials.verifyGcpIam:
+    post:
+      description: 'Probe that Gram can impersonate the service account a GCP IAM credential names, and report the principal it resolves to. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.'
+      operationId: verifyGcpIamCredential
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the credential to verify.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the credential to verify.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyCredentialResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: verifyGcpIamCredential externalCredentials
+      tags:
+        - externalCredentials
+      x-speakeasy-name-override: verifyGcpIam
+      x-speakeasy-react-hook:
+        name: VerifyGcpIamCredential
   /rpc/externalKeys.createAwsKms:
     post:
       description: Create an AWS KMS external key. Requires org:admin.
@@ -53655,21 +53828,13 @@ components:
       properties:
         impersonate_service_account:
           type: string
-          description: The service account Gram impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.
+          description: The service account in your project that Gram impersonates. Grant Gram's own service account roles/iam.serviceAccountTokenCreator on it — see externalCredentials.getGcpSetupInfo.
         name:
           type: string
           description: A human-readable name for the credential.
-        wif_pool_id:
-          type: string
-          description: Workload Identity Federation pool ID. Set together with the other wif_* fields.
-        wif_project_number:
-          type: string
-          description: GCP project number backing the WIF pool. Set together with the other wif_* fields.
-        wif_provider_id:
-          type: string
-          description: Workload Identity Federation provider ID. Set together with the other wif_* fields.
       required:
         - name
+        - impersonate_service_account
     CreateGcpKmsKeyForm:
       type: object
       properties:
@@ -53979,6 +54144,26 @@ components:
           $ref: '#/components/schemas/Package'
       required:
         - package
+    CreatePlatformGcpIamCredentialForm:
+      type: object
+      properties:
+        impersonate_service_account:
+          type: string
+          description: The service account Gram impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.
+        name:
+          type: string
+          description: A human-readable name for the credential.
+        wif_pool_id:
+          type: string
+          description: Workload Identity Federation pool ID. Set together with the other wif_* fields.
+        wif_project_number:
+          type: string
+          description: GCP project number backing the WIF pool. Set together with the other wif_* fields.
+        wif_provider_id:
+          type: string
+          description: Workload Identity Federation provider ID. Set together with the other wif_* fields.
+      required:
+        - name
     CreatePluginForm:
       type: object
       properties:
@@ -56702,6 +56887,18 @@ components:
         - name
         - created_at
         - updated_at
+    GcpSetupInfo:
+      type: object
+      properties:
+        required_role:
+          type: string
+          description: The IAM role to grant Gram's service account on the target service account.
+        service_account_email:
+          type: string
+          description: Gram's own service account. Grant it roles/iam.serviceAccountTokenCreator on the service account you want Gram to impersonate. Empty when the running environment cannot report one (local development backed by a user login rather than a service-account key).
+      description: What the customer must grant in their own GCP project before Gram can impersonate a service account there.
+      required:
+        - required_role
     GenerateTitleRequestBody:
       type: object
       properties:
@@ -57281,6 +57478,9 @@ components:
         custom_model_keys_enabled:
           type: boolean
           description: Whether the organization can supply its own model provider API keys (BYOK)
+        customer_managed_encryption_keys_enabled:
+          type: boolean
+          description: Whether the organization can manage the external credentials and cloud KMS keys backing customer-managed encryption
         device_agent:
           type: boolean
           description: Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.
@@ -57328,6 +57528,7 @@ components:
         - skills_enabled
         - skill_capture_metadata_only
         - ai_platform_push_integrations_enabled
+        - customer_managed_encryption_keys_enabled
         - device_agent
     GetProjectForm:
       type: object
@@ -66166,6 +66367,7 @@ components:
             - skills
             - skill_capture_metadata_only
             - ai_platform_push_integrations
+            - customer_managed_encryption_keys
           maxLength: 60
       required:
         - feature_name
@@ -70412,6 +70614,23 @@ components:
           format: uuid
         impersonate_service_account:
           type: string
+          description: The service account in your project that Gram impersonates. Grant Gram's own service account roles/iam.serviceAccountTokenCreator on it — see externalCredentials.getGcpSetupInfo.
+        name:
+          type: string
+          description: A human-readable name for the credential.
+      required:
+        - id
+        - name
+        - impersonate_service_account
+    UpdateGcpIamPlatformCredentialRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the credential to update.
+          format: uuid
+        impersonate_service_account:
+          type: string
           description: The service account Gram impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.
         name:
           type: string
@@ -72133,6 +72352,21 @@ components:
         - organization
         - projects
         - scopes
+    VerifyCredentialResult:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: Human-readable detail about the probe outcome, including the failure reason when it did not verify.
+        principal:
+          type: string
+          description: The principal the credential resolves to — the impersonated service account.
+        verified:
+          type: boolean
+          description: Whether Gram could assume the credential's identity.
+      description: Result of a live probe that Gram can assume the identity the credential names.
+      required:
+        - verified
     VerifyOnboardingHooksSetupResult:
       type: object
       properties:

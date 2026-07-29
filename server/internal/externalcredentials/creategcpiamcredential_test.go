@@ -9,6 +9,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 )
 
 func TestCreateGcpIamCredential_Impersonation(t *testing.T) {
@@ -18,67 +20,43 @@ func TestCreateGcpIamCredential_Impersonation(t *testing.T) {
 	cred, err := ti.service.CreateGcpIamCredential(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.CreateGcpIamCredentialPayload{
 		SessionToken:              nil,
 		Name:                      "gcp-impersonation",
-		ImpersonateServiceAccount: new("gram@customer.iam.gserviceaccount.com"),
-		WifPoolID:                 nil,
-		WifProviderID:             nil,
-		WifProjectNumber:          nil,
+		ImpersonateServiceAccount: "gram@customer.iam.gserviceaccount.com",
 	})
 	require.NoError(t, err)
 
 	require.Equal(t, "gcp_iam", cred.Provider)
 	require.Equal(t, "gram@customer.iam.gserviceaccount.com", *cred.ImpersonateServiceAccount)
-	require.Nil(t, cred.WifPoolID)
+	require.Nil(t, cred.WifPoolID, "the organization tier never writes WIF columns")
+	require.Nil(t, cred.WifProviderID)
+	require.Nil(t, cred.WifProjectNumber)
 }
 
-func TestCreateGcpIamCredential_WorkloadIdentityFederation(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestService(t)
-
-	cred, err := ti.service.CreateGcpIamCredential(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.CreateGcpIamCredentialPayload{
-		SessionToken:              nil,
-		Name:                      "gcp-wif",
-		ImpersonateServiceAccount: new("gram@customer.iam.gserviceaccount.com"),
-		WifPoolID:                 new("gram-pool"),
-		WifProviderID:             new("gram-provider"),
-		WifProjectNumber:          new("123456789012"),
-	})
-	require.NoError(t, err)
-
-	require.Equal(t, "gram-pool", *cred.WifPoolID)
-	require.Equal(t, "gram-provider", *cred.WifProviderID)
-	require.Equal(t, "123456789012", *cred.WifProjectNumber)
-	require.Equal(t, "gram@customer.iam.gserviceaccount.com", *cred.ImpersonateServiceAccount, "impersonate_service_account is allowed as the WIF hop")
-}
-
-func TestCreateGcpIamCredential_Ambient(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestService(t)
-
-	cred, err := ti.service.CreateGcpIamCredential(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.CreateGcpIamCredentialPayload{
-		SessionToken:              nil,
-		Name:                      "gcp-ambient",
-		ImpersonateServiceAccount: nil,
-		WifPoolID:                 nil,
-		WifProviderID:             nil,
-		WifProjectNumber:          nil,
-	})
-	require.NoError(t, err)
-
-	require.Nil(t, cred.ImpersonateServiceAccount)
-	require.Nil(t, cred.WifPoolID)
-}
-
-func TestCreateGcpIamCredential_PartialWifRejected(t *testing.T) {
+// The organization tier is impersonation-only: ambient mode would resolve Gram's
+// own identity, which says nothing about the customer's configuration, so a
+// blank target is rejected rather than silently recorded as ambient.
+func TestCreateGcpIamCredential_BlankImpersonationRejected(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
 	_, err := ti.service.CreateGcpIamCredential(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.CreateGcpIamCredentialPayload{
 		SessionToken:              nil,
-		Name:                      "gcp-wif-incomplete",
-		ImpersonateServiceAccount: nil,
-		WifPoolID:                 new("gram-pool"),
-		WifProviderID:             new("gram-provider"),
-		WifProjectNumber:          nil,
+		Name:                      "gcp-blank-target",
+		ImpersonateServiceAccount: "   ",
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// getGcpSetupInfo publishes Gram's own service account by design, so without
+// this guard an organization member could point a credential at an internal
+// service account and use verify to probe Gram's own project.
+func TestCreateGcpIamCredential_TargetInGramProjectRejected(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	_, err := ti.service.CreateGcpIamCredential(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.CreateGcpIamCredentialPayload{
+		SessionToken:              nil,
+		Name:                      "gcp-self-project",
+		ImpersonateServiceAccount: gramProjectServiceAccount("someone-else"),
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
@@ -90,10 +68,21 @@ func TestCreateGcpIamCredential_ForbiddenForReadOnly(t *testing.T) {
 	_, err := ti.service.CreateGcpIamCredential(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, authz.WildcardResource)), &gen.CreateGcpIamCredentialPayload{
 		SessionToken:              nil,
 		Name:                      "gcp-forbidden",
-		ImpersonateServiceAccount: nil,
-		WifPoolID:                 nil,
-		WifProviderID:             nil,
-		WifProjectNumber:          nil,
+		ImpersonateServiceAccount: "gram@customer.iam.gserviceaccount.com",
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestCreateGcpIamCredential_ForbiddenWithoutEntitlement(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureCustomerManagedEncryptionKeys)
+
+	_, err := ti.service.CreateGcpIamCredential(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.CreateGcpIamCredentialPayload{
+		SessionToken:              nil,
+		Name:                      "gcp-no-entitlement",
+		ImpersonateServiceAccount: "gram@customer.iam.gserviceaccount.com",
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }

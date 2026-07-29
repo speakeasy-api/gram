@@ -10,6 +10,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 )
 
 func TestUpdateGcpKmsKey_Success(t *testing.T) {
@@ -68,6 +70,23 @@ func TestUpdateGcpKmsKey_ForbiddenForReadOnly(t *testing.T) {
 		ExternalCredentialID:   credID,
 		Algorithm:              "RS256",
 		Name:                   "forbidden",
+		CustomerGrantReference: nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestUpdateGcpKmsKey_ForbiddenWithoutEntitlement(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	credentialID := createGcpIamCredential(t, ctx, ti, "gcp-cred-entitlement-update")
+	key := createGcpKmsKey(t, ctx, ti, "gcp-key-entitlement-update", credentialID)
+	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureCustomerManagedEncryptionKeys)
+
+	_, err := ti.service.UpdateGcpKmsKey(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.UpdateGcpKmsKeyPayload{
+		ID:                     key.ID,
+		SessionToken:           nil,
+		Name:                   "gcp-key-entitlement-update-renamed",
 		CustomerGrantReference: nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
