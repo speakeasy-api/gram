@@ -15,6 +15,16 @@ import (
 // column is NOT NULL), and a judge with no row is off.
 const DefaultJudgeDailyCap int32 = 100
 
+// projectOnlyOrgs confines an organization's chat analysis to a single
+// project: every other project resolves with no judges enabled, so nothing is
+// enqueued and no budget is reserved for it. Hardcoded rather than configured
+// — this is a one-off carve-out for Speakeasy's own organization, whose
+// hundreds of internal projects would otherwise spend judge budget on noise.
+var projectOnlyOrgs = map[string]uuid.UUID{
+	// speakeasy-team → its "default" project.
+	"5a25158b-24dc-4d49-b03d-e85acfbea59c": uuid.MustParse("0196cbd1-9328-74e7-b7bb-6e5357565573"),
+}
+
 // Settings are the effective per-organization budgets: the daily cap for each
 // enabled judge. A judge absent from the map is off for the organization.
 type Settings struct {
@@ -42,6 +52,9 @@ func settingsForProject(ctx context.Context, queries *repo.Queries, judges *Judg
 	settings := Settings{OrganizationID: "", JudgeDailyCaps: make(map[string]int32)}
 	for _, row := range rows {
 		settings.OrganizationID = row.OrganizationID
+		if only, ok := projectOnlyOrgs[row.OrganizationID]; ok && only != projectID {
+			continue
+		}
 		if !row.Judge.Valid || !row.Enabled.Valid || !row.Enabled.Bool {
 			continue
 		}
