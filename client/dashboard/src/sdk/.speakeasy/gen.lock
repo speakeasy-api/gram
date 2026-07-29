@@ -7015,7 +7015,7 @@ examples:
   setRootMcpEndpoint:
     speakeasy-default-set-root-mcp-endpoint:
       requestBody:
-        application/json: {}
+        application/json: {"custom_domain_id": "2f37b873-89cb-4988-9a5a-e7b92c99216d"}
       responses:
         "200":
           application/json: {"activated": true, "created_at": "2026-12-27T02:21:52.016Z", "domain": "early-jungle.net", "id": "<id>", "ip_allowlist": ["<value 1>", "<value 2>"], "is_updating": true, "organization_id": "<id>", "updated_at": "2024-08-03T17:45:58.593Z", "verified": false}

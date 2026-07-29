@@ -291,10 +291,13 @@ func (s *Service) SetRootMcpEndpoint(ctx context.Context, payload *gen.SetRootMc
 		return nil, err
 	}
 
+	customDomainID, err := uuid.Parse(payload.CustomDomainID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid custom_domain_id").LogError(ctx, s.logger)
+	}
 	var targetID uuid.UUID
 	targetValid := payload.McpEndpointID != nil
 	if targetValid {
-		var err error
 		targetID, err = uuid.Parse(*payload.McpEndpointID)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp_endpoint_id").LogError(ctx, s.logger)
@@ -308,9 +311,15 @@ func (s *Service) SetRootMcpEndpoint(ctx context.Context, payload *gen.SetRootMc
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	repository := repo.New(dbtx)
-	domain, err := repository.LockCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+	domain, err := repository.LockCustomDomainByIDAndOrganization(ctx, repo.LockCustomDomainByIDAndOrganizationParams{
+		ID:             customDomainID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeNotFound, err, "custom domain not found").LogError(ctx, s.logger)
+	}
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "lock custom domain for root endpoint update").LogError(ctx, s.logger)
 	}
 	beforeRoute, err := repository.GetCustomDomainRouteConfig(ctx, domain.ID)
 	if err != nil {

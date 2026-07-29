@@ -9984,7 +9984,7 @@ func domainsUsage() {
 	fmt.Fprintln(os.Stderr, `    list-domains: List the custom domains for an organization. The result is empty when no custom domain has been configured.`)
 	fmt.Fprintln(os.Stderr, `    create-domain: Create a custom domain for an organization`)
 	fmt.Fprintln(os.Stderr, `    update-domain: Update settings for the organization's custom domain`)
-	fmt.Fprintln(os.Stderr, `    set-root-mcp-endpoint: Set or clear the MCP endpoint mapped to the organization's custom-domain root`)
+	fmt.Fprintln(os.Stderr, `    set-root-mcp-endpoint: Set or clear the MCP endpoint mapped to a custom domain's root`)
 	fmt.Fprintln(os.Stderr, `    check-health: Check the routing and certificate health of the organization's custom domain`)
 	fmt.Fprintln(os.Stderr, `    delete-domain: Delete a custom domain`)
 	fmt.Fprintln(os.Stderr, `    list-mcp-endpoints: List the MCP endpoints registered under the organization's custom domain across every project. Returns enriched rows that include the parent MCP server and project so callers can preview what a custom-domain deletion would cascade through.`)
@@ -10077,7 +10077,7 @@ func domainsSetRootMcpEndpointUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Set or clear the MCP endpoint mapped to the organization's custom-domain root`)
+	fmt.Fprintln(os.Stderr, `Set or clear the MCP endpoint mapped to a custom domain's root`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -10085,7 +10085,7 @@ func domainsSetRootMcpEndpointUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "domains set-root-mcp-endpoint --body '{\n      \"mcp_endpoint_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "domains set-root-mcp-endpoint --body '{\n      \"custom_domain_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_endpoint_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 func domainsCheckHealthUsage() {

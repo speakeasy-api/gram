@@ -208,7 +208,10 @@ SELECT slug
 FROM organization_metadata
 WHERE id = @organization_id;
 
--- name: GetCustomDomainByIDAndOrganizationForHealthUpdate :one
+-- name: LockCustomDomainByIDAndOrganization :one
+-- Org-scoped row lock for mutations that target one custom domain by id
+-- (root-mapping updates, health writes). Domain lock comes before any
+-- endpoint/server locks.
 SELECT *
 FROM custom_domains
 WHERE id = @id

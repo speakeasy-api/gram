@@ -12573,7 +12573,7 @@ paths:
         name: registerDomain
   /rpc/domain.setRootMcpEndpoint:
     post:
-      description: Set or clear the MCP endpoint mapped to the organization's custom-domain root
+      description: Set or clear the MCP endpoint mapped to a custom domain's root
       operationId: setRootMcpEndpoint
       parameters:
         - allowEmptyValue: true
@@ -64158,10 +64158,16 @@ components:
     SetRootMcpEndpointRequestBody:
       type: object
       properties:
+        custom_domain_id:
+          type: string
+          description: The custom domain whose root mapping to change
+          format: uuid
         mcp_endpoint_id:
           type: string
           description: The MCP endpoint to map to the domain root. Omit to clear the mapping.
           format: uuid
+      required:
+        - custom_domain_id
     SetScheduleEnabledRequestBody:
       type: object
       properties:

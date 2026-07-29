@@ -34,6 +34,8 @@ type UpdateDomainRequestBody struct {
 // SetRootMcpEndpointRequestBody is the type of the "domains" service
 // "setRootMcpEndpoint" endpoint HTTP request body.
 type SetRootMcpEndpointRequestBody struct {
+	// The custom domain whose root mapping to change
+	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The MCP endpoint to map to the domain root. Omit to clear the mapping.
 	McpEndpointID *string `form:"mcp_endpoint_id,omitempty" json:"mcp_endpoint_id,omitempty" xml:"mcp_endpoint_id,omitempty"`
 }
@@ -3101,7 +3103,8 @@ func NewUpdateDomainPayload(body *UpdateDomainRequestBody, sessionToken *string)
 // endpoint payload.
 func NewSetRootMcpEndpointPayload(body *SetRootMcpEndpointRequestBody, sessionToken *string) *domains.SetRootMcpEndpointPayload {
 	v := &domains.SetRootMcpEndpointPayload{
-		McpEndpointID: body.McpEndpointID,
+		CustomDomainID: *body.CustomDomainID,
+		McpEndpointID:  body.McpEndpointID,
 	}
 	v.SessionToken = sessionToken
 
@@ -3146,6 +3149,12 @@ func ValidateCreateDomainRequestBody(body *CreateDomainRequestBody) (err error) 
 // ValidateSetRootMcpEndpointRequestBody runs the validations defined on
 // SetRootMcpEndpointRequestBody
 func ValidateSetRootMcpEndpointRequestBody(body *SetRootMcpEndpointRequestBody) (err error) {
+	if body.CustomDomainID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("custom_domain_id", "body"))
+	}
+	if body.CustomDomainID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.custom_domain_id", *body.CustomDomainID, goa.FormatUUID))
+	}
 	if body.McpEndpointID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_endpoint_id", *body.McpEndpointID, goa.FormatUUID))
 	}

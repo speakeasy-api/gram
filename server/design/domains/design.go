@@ -135,13 +135,17 @@ var _ = Service("domains", func() {
 	})
 
 	Method("setRootMcpEndpoint", func() {
-		Description("Set or clear the MCP endpoint mapped to the organization's custom-domain root")
+		Description("Set or clear the MCP endpoint mapped to a custom domain's root")
 
 		Payload(func() {
 			security.SessionPayload()
+			Attribute("custom_domain_id", String, "The custom domain whose root mapping to change", func() {
+				Format(FormatUUID)
+			})
 			Attribute("mcp_endpoint_id", String, "The MCP endpoint to map to the domain root. Omit to clear the mapping.", func() {
 				Format(FormatUUID)
 			})
+			Required("custom_domain_id")
 		})
 
 		Result(CustomDomain)

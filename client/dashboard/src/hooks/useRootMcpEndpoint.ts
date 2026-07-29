@@ -23,7 +23,7 @@ export async function invalidateRootMcpEndpointQueries(
 
 export function useRootMcpEndpointMutation(): {
   isPending: boolean;
-  setRootMcpEndpoint: (mcpEndpointId?: string) => void;
+  setRootMcpEndpoint: (customDomainId: string, mcpEndpointId?: string) => void;
 } {
   const queryClient = useQueryClient();
   const retryMutation = useRef<
@@ -54,11 +54,12 @@ export function useRootMcpEndpointMutation(): {
 
   const { mutate } = mutation;
   const setRootMcpEndpoint = useCallback(
-    (mcpEndpointId?: string) => {
+    (customDomainId: string, mcpEndpointId?: string) => {
       mutate({
         security: { sessionHeaderGramSession: "" },
         request: {
           setRootMcpEndpointRequestBody: {
+            customDomainId,
             mcpEndpointId,
           },
         },

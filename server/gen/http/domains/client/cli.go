@@ -12,6 +12,7 @@ import (
 	"fmt"
 
 	domains "github.com/speakeasy-api/gram/server/gen/domains"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildGetDomainPayload builds the payload for the domains getDomain endpoint
@@ -114,7 +115,14 @@ func BuildSetRootMcpEndpointPayload(domainsSetRootMcpEndpointBody string, domain
 	{
 		err = json.Unmarshal([]byte(domainsSetRootMcpEndpointBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_endpoint_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_endpoint_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.custom_domain_id", body.CustomDomainID, goa.FormatUUID))
+		if body.McpEndpointID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_endpoint_id", *body.McpEndpointID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var sessionToken *string
@@ -124,7 +132,8 @@ func BuildSetRootMcpEndpointPayload(domainsSetRootMcpEndpointBody string, domain
 		}
 	}
 	v := &domains.SetRootMcpEndpointPayload{
-		McpEndpointID: body.McpEndpointID,
+		CustomDomainID: body.CustomDomainID,
+		McpEndpointID:  body.McpEndpointID,
 	}
 	v.SessionToken = sessionToken
 

@@ -258,48 +258,6 @@ func (q *Queries) GetCustomDomainByIDAndOrganization(ctx context.Context, arg Ge
 	return i, err
 }
 
-const getCustomDomainByIDAndOrganizationForHealthUpdate = `-- name: GetCustomDomainByIDAndOrganizationForHealthUpdate :one
-SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
-FROM custom_domains
-WHERE id = $1
-  AND organization_id = $2
-  AND deleted IS FALSE
-FOR UPDATE
-`
-
-type GetCustomDomainByIDAndOrganizationForHealthUpdateParams struct {
-	ID             uuid.UUID
-	OrganizationID string
-}
-
-func (q *Queries) GetCustomDomainByIDAndOrganizationForHealthUpdate(ctx context.Context, arg GetCustomDomainByIDAndOrganizationForHealthUpdateParams) (CustomDomain, error) {
-	row := q.db.QueryRow(ctx, getCustomDomainByIDAndOrganizationForHealthUpdate, arg.ID, arg.OrganizationID)
-	var i CustomDomain
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.Domain,
-		&i.Verified,
-		&i.Activated,
-		&i.IngressName,
-		&i.CertSecretName,
-		&i.ProvisionerKind,
-		&i.IpAllowlist,
-		&i.OpenaiAppsChallengeToken,
-		&i.HealthStatus,
-		&i.HealthIssue,
-		&i.HealthCheckedAt,
-		&i.UnhealthySince,
-		&i.CertificateExpiresAt,
-		&i.ConsecutiveFailures,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
 const getCustomDomainByOrganization = `-- name: GetCustomDomainByOrganization :one
 SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
@@ -654,6 +612,51 @@ func (q *Queries) LockCustomDomainByID(ctx context.Context, id uuid.UUID) (uuid.
 	var id_2 uuid.UUID
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const lockCustomDomainByIDAndOrganization = `-- name: LockCustomDomainByIDAndOrganization :one
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+FROM custom_domains
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockCustomDomainByIDAndOrganizationParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Org-scoped row lock for mutations that target one custom domain by id
+// (root-mapping updates, health writes). Domain lock comes before any
+// endpoint/server locks.
+func (q *Queries) LockCustomDomainByIDAndOrganization(ctx context.Context, arg LockCustomDomainByIDAndOrganizationParams) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, lockCustomDomainByIDAndOrganization, arg.ID, arg.OrganizationID)
+	var i CustomDomain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Domain,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.ProvisionerKind,
+		&i.IpAllowlist,
+		&i.OpenaiAppsChallengeToken,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const lockCustomDomainByOrganization = `-- name: LockCustomDomainByOrganization :one

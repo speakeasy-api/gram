@@ -25,7 +25,7 @@ type Service interface {
 	CreateDomain(context.Context, *CreateDomainPayload) (err error)
 	// Update settings for the organization's custom domain
 	UpdateDomain(context.Context, *UpdateDomainPayload) (res *CustomDomain, err error)
-	// Set or clear the MCP endpoint mapped to the organization's custom-domain root
+	// Set or clear the MCP endpoint mapped to a custom domain's root
 	SetRootMcpEndpoint(context.Context, *SetRootMcpEndpointPayload) (res *CustomDomain, err error)
 	// Check the routing and certificate health of the organization's custom domain
 	CheckHealth(context.Context, *CheckHealthPayload) (res *CustomDomain, err error)
@@ -184,6 +184,8 @@ type ListMcpEndpointsPayload struct {
 // setRootMcpEndpoint method.
 type SetRootMcpEndpointPayload struct {
 	SessionToken *string
+	// The custom domain whose root mapping to change
+	CustomDomainID string
 	// The MCP endpoint to map to the domain root. Omit to clear the mapping.
 	McpEndpointID *string
 }

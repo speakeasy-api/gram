@@ -54,7 +54,7 @@ export type SetRootMcpEndpointMutationError =
  * setRootMcpEndpoint domains
  *
  * @remarks
- * Set or clear the MCP endpoint mapped to the organization's custom-domain root
+ * Set or clear the MCP endpoint mapped to a custom domain's root
  */
 export function useSetRootMcpEndpointMutation(
   options?: MutationHookOptions<

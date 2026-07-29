@@ -383,7 +383,9 @@ function AddressRow({
                 : "Organization admin permission is required"
             }
             onClick={() =>
+              endpoint.customDomainId &&
               rootMutation.setRootMcpEndpoint(
+                endpoint.customDomainId,
                 endpoint.isDomainRoot ? undefined : endpoint.id,
               )
             }

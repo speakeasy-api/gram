@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type SetRootMcpEndpointRequestBody = {
   /**
+   * The custom domain whose root mapping to change
+   */
+  customDomainId: string;
+  /**
    * The MCP endpoint to map to the domain root. Omit to clear the mapping.
    */
   mcpEndpointId?: string | undefined;
@@ -14,6 +18,7 @@ export type SetRootMcpEndpointRequestBody = {
 
 /** @internal */
 export type SetRootMcpEndpointRequestBody$Outbound = {
+  custom_domain_id: string;
   mcp_endpoint_id?: string | undefined;
 };
 
@@ -23,10 +28,12 @@ export const SetRootMcpEndpointRequestBody$outboundSchema: z.ZodMiniType<
   SetRootMcpEndpointRequestBody
 > = z.pipe(
   z.object({
+    customDomainId: z.string(),
     mcpEndpointId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      customDomainId: "custom_domain_id",
       mcpEndpointId: "mcp_endpoint_id",
     });
   }),

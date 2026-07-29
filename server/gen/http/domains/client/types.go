@@ -34,6 +34,8 @@ type UpdateDomainRequestBody struct {
 // SetRootMcpEndpointRequestBody is the type of the "domains" service
 // "setRootMcpEndpoint" endpoint HTTP request body.
 type SetRootMcpEndpointRequestBody struct {
+	// The custom domain whose root mapping to change
+	CustomDomainID string `form:"custom_domain_id" json:"custom_domain_id" xml:"custom_domain_id"`
 	// The MCP endpoint to map to the domain root. Omit to clear the mapping.
 	McpEndpointID *string `form:"mcp_endpoint_id,omitempty" json:"mcp_endpoint_id,omitempty" xml:"mcp_endpoint_id,omitempty"`
 }
@@ -1786,7 +1788,8 @@ func NewUpdateDomainRequestBody(p *domains.UpdateDomainPayload) *UpdateDomainReq
 // payload of the "setRootMcpEndpoint" endpoint of the "domains" service.
 func NewSetRootMcpEndpointRequestBody(p *domains.SetRootMcpEndpointPayload) *SetRootMcpEndpointRequestBody {
 	body := &SetRootMcpEndpointRequestBody{
-		McpEndpointID: p.McpEndpointID,
+		CustomDomainID: p.CustomDomainID,
+		McpEndpointID:  p.McpEndpointID,
 	}
 	return body
 }

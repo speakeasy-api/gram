@@ -372,6 +372,7 @@ function DefaultMcpServerControl({
           disabled={!canManage || rootMutation.isPending}
           onValueChange={(value) =>
             rootMutation.setRootMcpEndpoint(
+              domain.id,
               value === NO_ROOT_MCP_ENDPOINT ? undefined : value,
             )
           }

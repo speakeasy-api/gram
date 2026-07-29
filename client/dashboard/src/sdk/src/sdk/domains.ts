@@ -167,7 +167,7 @@ export class Domains extends ClientSDK {
    * setRootMcpEndpoint domains
    *
    * @remarks
-   * Set or clear the MCP endpoint mapped to the organization's custom-domain root
+   * Set or clear the MCP endpoint mapped to a custom domain's root
    */
   async setRootMcpEndpoint(
     request: SetRootMcpEndpointRequest,

@@ -46,7 +46,8 @@ func TestSetRootMcpEndpoint_SetReplaceReapplyAndClear(t *testing.T) {
 	require.NoError(t, err)
 
 	result, err := ti.service.SetRootMcpEndpoint(ctx, &gen.SetRootMcpEndpointPayload{
-		McpEndpointID: new(firstID.String()),
+		CustomDomainID: domain.ID.String(),
+		McpEndpointID:  new(firstID.String()),
 	})
 	require.NoError(t, err)
 	require.Equal(t, firstID.String(), requireValue(t, result.RootMcpEndpointID))
@@ -62,7 +63,8 @@ func TestSetRootMcpEndpoint_SetReplaceReapplyAndClear(t *testing.T) {
 	require.Equal(t, 1, countRootEndpoints(endpoints.McpEndpoints))
 
 	result, err = ti.service.SetRootMcpEndpoint(ctx, &gen.SetRootMcpEndpointPayload{
-		McpEndpointID: new(secondID.String()),
+		CustomDomainID: domain.ID.String(),
+		McpEndpointID:  new(secondID.String()),
 	})
 	require.NoError(t, err)
 	require.Equal(t, secondID.String(), requireValue(t, result.RootMcpEndpointID))
@@ -72,12 +74,15 @@ func TestSetRootMcpEndpoint_SetReplaceReapplyAndClear(t *testing.T) {
 
 	// Idempotent re-apply still reconciles desired state.
 	_, err = ti.service.SetRootMcpEndpoint(ctx, &gen.SetRootMcpEndpointPayload{
-		McpEndpointID: new(secondID.String()),
+		CustomDomainID: domain.ID.String(),
+		McpEndpointID:  new(secondID.String()),
 	})
 	require.NoError(t, err)
 	requireLatestRootAuditTransition(t, ctx, ti, new(secondID.String()), new(secondID.String()))
 
-	result, err = ti.service.SetRootMcpEndpoint(ctx, &gen.SetRootMcpEndpointPayload{})
+	result, err = ti.service.SetRootMcpEndpoint(ctx, &gen.SetRootMcpEndpointPayload{
+		CustomDomainID: domain.ID.String(),
+	})
 	require.NoError(t, err)
 	require.Nil(t, result.RootMcpEndpointID)
 	requireRootSelection(t, ctx, ti, secondID, false)
@@ -109,14 +114,16 @@ func TestSetRootMcpEndpoint_ReconcileFailureRetainsDesiredStateForRetry(t *testi
 
 	ti.temporal.reconcileErr = errors.New("apply failed")
 	_, err = ti.service.SetRootMcpEndpoint(ctx, &gen.SetRootMcpEndpointPayload{
-		McpEndpointID: new(endpointID.String()),
+		CustomDomainID: domain.ID.String(),
+		McpEndpointID:  new(endpointID.String()),
 	})
 	require.Error(t, err)
 	requireRootSelection(t, ctx, ti, endpointID, true)
 
 	ti.temporal.reconcileErr = nil
 	result, err := ti.service.SetRootMcpEndpoint(ctx, &gen.SetRootMcpEndpointPayload{
-		McpEndpointID: new(endpointID.String()),
+		CustomDomainID: domain.ID.String(),
+		McpEndpointID:  new(endpointID.String()),
 	})
 	require.NoError(t, err)
 	require.Equal(t, endpointID.String(), requireValue(t, result.RootMcpEndpointID))
@@ -146,7 +153,8 @@ func TestSetRootMcpEndpoint_RejectsDeletedEndpoint(t *testing.T) {
 	})
 
 	_, err = ti.service.SetRootMcpEndpoint(ctx, &gen.SetRootMcpEndpointPayload{
-		McpEndpointID: new(endpointID.String()),
+		CustomDomainID: domain.ID.String(),
+		McpEndpointID:  new(endpointID.String()),
 	})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -170,7 +178,8 @@ func TestSetRootMcpEndpoint_RejectsForeignOrganizationEndpoint(t *testing.T) {
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
 
 	_, err = ti.service.SetRootMcpEndpoint(ctx, &gen.SetRootMcpEndpointPayload{
-		McpEndpointID: new(endpointID.String()),
+		CustomDomainID: domain.ID.String(),
+		McpEndpointID:  new(endpointID.String()),
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.Zero(t, ti.temporal.reconcileCalls)
@@ -181,7 +190,7 @@ func TestSetRootMcpEndpoint_RejectsWrongDomainEndpoint(t *testing.T) {
 
 	ctx, ti := newTestCustomDomainsService(t)
 	authCtx := testAuthContext(t, ctx)
-	_, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
+	ownedDomain, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		Domain:         "root-owned-domain.example.com",
 		IpAllowlist:    []string{},
@@ -197,7 +206,8 @@ func TestSetRootMcpEndpoint_RejectsWrongDomainEndpoint(t *testing.T) {
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
 
 	_, err = ti.service.SetRootMcpEndpoint(ctx, &gen.SetRootMcpEndpointPayload{
-		McpEndpointID: new(endpointID.String()),
+		CustomDomainID: ownedDomain.ID.String(),
+		McpEndpointID:  new(endpointID.String()),
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.Zero(t, ti.temporal.reconcileCalls)
@@ -225,7 +235,8 @@ func TestSetRootMcpEndpoint_RejectsDisabledParentServer(t *testing.T) {
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
 
 	_, err = ti.service.SetRootMcpEndpoint(ctx, &gen.SetRootMcpEndpointPayload{
-		McpEndpointID: new(endpoint.ID.String()),
+		CustomDomainID: domain.ID.String(),
+		McpEndpointID:  new(endpoint.ID.String()),
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.Zero(t, ti.temporal.reconcileCalls)
@@ -256,7 +267,8 @@ func TestSetRootMcpEndpoint_TranslatesUniqueConflict(t *testing.T) {
 	result := make(chan error, 1)
 	go func() {
 		_, setErr := ti.service.SetRootMcpEndpoint(ctx, &gen.SetRootMcpEndpointPayload{
-			McpEndpointID: new(targetID.String()),
+			CustomDomainID: domain.ID.String(),
+			McpEndpointID:  new(targetID.String()),
 		})
 		result <- setErr
 		finished.Store(true)
@@ -309,6 +321,56 @@ func TestSetRootMcpEndpoint_RequiresOrgAdmin(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestSetRootMcpEndpoint_MalformedDomainIDBadRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
+
+	_, err := ti.service.SetRootMcpEndpoint(ctx, &gen.SetRootMcpEndpointPayload{
+		CustomDomainID: "not-a-uuid",
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.Zero(t, ti.temporal.reconcileCalls)
+}
+
+func TestSetRootMcpEndpoint_UnknownDomainNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
+
+	_, err := ti.service.SetRootMcpEndpoint(ctx, &gen.SetRootMcpEndpointPayload{
+		CustomDomainID: uuid.NewString(),
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	require.Zero(t, ti.temporal.reconcileCalls)
+}
+
+func TestSetRootMcpEndpoint_ForeignOrganizationDomainNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	foreignDomain, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
+		OrganizationID: "foreign-organization",
+		Domain:         "root-foreign-domain.example.com",
+		IpAllowlist:    []string{},
+	})
+	require.NoError(t, err)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
+
+	// Foreign-owned ids collapse to the same NotFound as unknown ids so
+	// existence is not disclosed across organizations.
+	_, err = ti.service.SetRootMcpEndpoint(ctx, &gen.SetRootMcpEndpointPayload{
+		CustomDomainID: foreignDomain.ID.String(),
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	require.Zero(t, ti.temporal.reconcileCalls)
 }
 
 func requireRootSelection(t *testing.T, ctx context.Context, ti *serviceTestInstance, endpointID uuid.UUID, expected bool) {

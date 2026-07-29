@@ -219,7 +219,7 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 	autoDisabled := false
 	if err := pgx.BeginFunc(ctx, c.db, func(tx pgx.Tx) error {
 		repository := customdomainsrepo.New(tx)
-		lockedDomain, err := repository.GetCustomDomainByIDAndOrganizationForHealthUpdate(ctx, customdomainsrepo.GetCustomDomainByIDAndOrganizationForHealthUpdateParams{
+		lockedDomain, err := repository.LockCustomDomainByIDAndOrganization(ctx, customdomainsrepo.LockCustomDomainByIDAndOrganizationParams{
 			ID:             domain.ID,
 			OrganizationID: args.OrganizationID,
 		})
