@@ -32,7 +32,7 @@ func TestPrepareContext_loadsUserGrants(t *testing.T) {
 
 	seedOrganization(t, ctx, conn, authCtx.ActiveOrganizationID)
 	seedConnectedUser(t, ctx, conn, authCtx.ActiveOrganizationID, authCtx.UserID, "test@example.com", "Test User", "user_workos_test", "membership_test")
-	seedGrant(t, ctx, conn, authCtx.ActiveOrganizationID, AllUsersPrincipal(), ScopeProjectRead, WildcardResource)
+	seedGrant(t, ctx, conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ScopeProjectRead, WildcardResource)
 
 	ctx, err = engine.PrepareContext(ctx)
 	require.NoError(t, err)
