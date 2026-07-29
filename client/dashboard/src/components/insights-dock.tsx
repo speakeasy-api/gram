@@ -766,10 +766,14 @@ export function InsightsProvider({
     onSkillIdsSent: handleSkillIdsSent,
   });
 
-  const skillsQuery = useSkillsInfinite({ limit: 200 }, undefined, {
-    enabled: assistantReady,
-    throwOnError: false,
-  });
+  const skillsQuery = useSkillsInfinite(
+    { limit: 200, gramProject: mcpConfig.projectSlug },
+    undefined,
+    {
+      enabled: assistantReady,
+      throwOnError: false,
+    },
+  );
   useDrainInfiniteQuery(skillsQuery, assistantReady);
   const composerSkills = useMemo(
     () =>
@@ -995,10 +999,7 @@ export function InsightsProvider({
           skills: composerSkills,
           selectedSkillIds,
           onSelectedSkillIdsChange: setSelectedSkillIds,
-          loading:
-            skillsQuery.isPending ||
-            skillsQuery.hasNextPage ||
-            skillsQuery.isFetchingNextPage,
+          loading: skillsQuery.isPending || skillsQuery.isFetchingNextPage,
           error: !!skillsQuery.error && !skillsQuery.data,
           maxSelected: 10,
         },
@@ -1023,7 +1024,6 @@ export function InsightsProvider({
       composerSkills,
       selectedSkillIds,
       skillsQuery.isPending,
-      skillsQuery.hasNextPage,
       skillsQuery.isFetchingNextPage,
       skillsQuery.error,
       skillsQuery.data,

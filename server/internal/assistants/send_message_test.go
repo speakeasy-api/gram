@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
+	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -115,7 +116,7 @@ func TestSendMessageAllowedWithProjectReadOnly(t *testing.T) {
 	require.True(t, res.Accepted)
 }
 
-func TestSendMessageIncludesSelectedSkillSnapshot(t *testing.T) {
+func TestSendMessageIncludesSelectedSkillContent(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_send_message_skills")
@@ -137,11 +138,14 @@ func TestSendMessageIncludesSelectedSkillSnapshot(t *testing.T) {
 
 	var payload dashboardIngestPayload
 	require.NoError(t, json.Unmarshal(ingestor.lastPayload, &payload))
-	snapshot, err := decodeAssistantSkillSetSnapshot(payload.SkillSetSnapshot)
+	require.Len(t, payload.SkillContext, 1)
+	require.Equal(t, skill.ID, payload.SkillContext[0].SkillID)
+	require.Equal(t, version.ID, payload.SkillContext[0].ResolvedVersionID)
+	require.Equal(t, version.Content, payload.SkillContext[0].Content)
+	observations, err := hooksrepo.New(conn).ListSkillObservations(ctx, projectID)
 	require.NoError(t, err)
-	require.Len(t, snapshot.Skills, 1)
-	require.Equal(t, skill.ID, snapshot.Skills[0].SkillID)
-	require.Equal(t, version.ID, snapshot.Skills[0].ResolvedVersionID)
+	require.Len(t, observations, 1)
+	require.Equal(t, version.ID, observations[0].SkillVersionID.UUID)
 }
 
 func TestSendMessageRejectsUnavailableSelectedSkill(t *testing.T) {

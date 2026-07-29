@@ -219,10 +219,11 @@ SELECT
   s.id AS skill_id,
   s.name,
   resolved.id AS resolved_version_id,
-  resolved.description
+  resolved.description,
+  resolved.content
 FROM skills s
 JOIN LATERAL (
-  SELECT sv.id, sv.description
+  SELECT sv.id, sv.description, sv.content
   FROM skill_versions sv
   LEFT JOIN skill_version_origins svo
     ON svo.project_id = s.project_id
@@ -237,33 +238,6 @@ WHERE s.project_id = @project_id
   AND s.id = ANY(@skill_ids::uuid[])
   AND s.archived_at IS NULL
 ORDER BY s.name ASC, s.id ASC;
-
--- name: LoadProcessingAssistantTurnPayload :one
-SELECT event.normalized_payload_json
-FROM assistant_thread_events event
-WHERE event.project_id = @project_id
-  AND event.assistant_id = @assistant_id
-  AND event.assistant_thread_id = @thread_id
-  AND event.status = @processing_status
-  AND event.deleted IS FALSE
-ORDER BY event.created_at ASC
-LIMIT 1;
-
--- name: LoadAssistantSkillVersion :one
-SELECT
-  s.id AS skill_id,
-  s.name,
-  sv.id AS skill_version_id,
-  sv.content,
-  sv.canonical_sha256,
-  sv.raw_sha256
-FROM skills s
-JOIN skill_versions sv
-  ON sv.id = @skill_version_id
-  AND sv.skill_id = s.id
-WHERE s.id = @skill_id
-  AND s.project_id = @project_id
-  AND s.name = @name;
 
 -- name: RecordAssistantSkillObservation :execrows
 WITH observed AS (

@@ -17,9 +17,9 @@ type dashboardSourceRef struct {
 }
 
 type dashboardEventPayload struct {
-	Text             string          `json:"text"`
-	UserID           string          `json:"user_id,omitempty"`
-	SkillSetSnapshot json.RawMessage `json:"skill_set_snapshot,omitempty"`
+	Text         string                      `json:"text"`
+	UserID       string                      `json:"user_id,omitempty"`
+	SkillContext []dashboardTurnSkillContext `json:"skill_context,omitempty"`
 }
 
 type dashboardAdapter struct{}
@@ -93,17 +93,27 @@ func (dashboardAdapter) DecodeTurn(event assistantThreadEventRecord) (string, er
 	if payload.UserID != "" {
 		fmt.Fprintf(&b, "UserID: %s\n", payload.UserID)
 	}
-	if len(payload.SkillSetSnapshot) > 0 {
-		snapshot, err := decodeAssistantSkillSetSnapshot(payload.SkillSetSnapshot)
-		if err != nil {
-			return "", fmt.Errorf("decode dashboard turn skill snapshot: %w", err)
+	b.WriteString("</message-context>\n")
+	for _, skill := range payload.SkillContext {
+		if skill.SkillID == uuid.Nil || skill.ResolvedVersionID == uuid.Nil || skill.Name == "" || skill.Content == "" {
+			return "", fmt.Errorf("dashboard turn contains invalid skill context")
 		}
-		if notice := renderAssistantTurnSkills(snapshot); notice != "" {
-			b.WriteString(notice)
+		name, description := safeSkillMetadata(assistantSkillSnapshot{
+			SkillID:           skill.SkillID,
+			Name:              skill.Name,
+			Description:       skill.Description,
+			ResolvedVersionID: skill.ResolvedVersionID,
+		})
+		b.WriteString("\n<skill-context>\n")
+		fmt.Fprintf(&b, "Name: %s\nDescription: %s\n", name, description)
+		b.WriteString("<skill-content>\n")
+		b.WriteString(skill.Content)
+		if !bytes.HasSuffix([]byte(skill.Content), []byte("\n")) {
 			b.WriteByte('\n')
 		}
+		b.WriteString("</skill-content>\n</skill-context>\n")
 	}
-	b.WriteString("</message-context>\n\n")
+	b.WriteByte('\n')
 	b.WriteString(payload.Text)
 	return b.String(), nil
 }

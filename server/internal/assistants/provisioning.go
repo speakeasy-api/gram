@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
@@ -49,6 +50,12 @@ var ErrManagedAssistantNameTaken = errors.New("an assistant with the managed ass
 // ErrAssistantTurnSkillUnavailable means at least one skill selected for a
 // dashboard turn is not an active project skill with a valid version.
 var ErrAssistantTurnSkillUnavailable = errors.New("one or more selected skills are unavailable")
+
+// ErrAssistantTurnSkillContextTooLarge prevents selected skill contents from
+// overwhelming the model context or the trigger event payload.
+var ErrAssistantTurnSkillContextTooLarge = errors.New("selected skill context is too large")
+
+const maxAssistantTurnSkillContextBytes = 256 * 1024
 
 // managedAssistantName composes a project's managed-assistant display name. The
 // project name is embedded so the per-project assistants stay distinguishable
@@ -306,11 +313,19 @@ func assistantRecordFromManagedRow(row assistantrepo.GetManagedAssistantByProjec
 // dashboardIngestPayload is the wire shape the dashboard trigger definition
 // decodes in BuildDirectEvent.
 type dashboardIngestPayload struct {
-	Text             string          `json:"text"`
-	UserID           string          `json:"user_id"`
-	CorrelationID    string          `json:"correlation_id"`
-	IdempotencyKey   string          `json:"idempotency_key"`
-	SkillSetSnapshot json.RawMessage `json:"skill_set_snapshot,omitempty"`
+	Text           string                      `json:"text"`
+	UserID         string                      `json:"user_id"`
+	CorrelationID  string                      `json:"correlation_id"`
+	IdempotencyKey string                      `json:"idempotency_key"`
+	SkillContext   []dashboardTurnSkillContext `json:"skill_context,omitempty"`
+}
+
+type dashboardTurnSkillContext struct {
+	SkillID           uuid.UUID `json:"skill_id"`
+	Name              string    `json:"name"`
+	Description       string    `json:"description"`
+	ResolvedVersionID uuid.UUID `json:"resolved_version_id"`
+	Content           string    `json:"content"`
 }
 
 // DashboardSendResult is what the sendMessage endpoint returns to the dashboard.
@@ -336,7 +351,7 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 		return DashboardSendResult{}, err
 	}
 
-	var skillSetSnapshot json.RawMessage
+	skillContext := make([]dashboardTurnSkillContext, 0, len(skillIDs))
 	if len(skillIDs) > 0 {
 		rows, err := assistantrepo.New(s.db).ResolveAssistantTurnSkills(ctx, assistantrepo.ResolveAssistantTurnSkillsParams{
 			ProjectID: projectID,
@@ -348,21 +363,20 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 		if len(rows) != len(skillIDs) {
 			return DashboardSendResult{}, ErrAssistantTurnSkillUnavailable
 		}
-		skills := make([]assistantSkillRow, 0, len(rows))
+		totalContentBytes := 0
 		for _, row := range rows {
-			skills = append(skills, assistantSkillRow{
+			totalContentBytes += len(row.Content)
+			skillContext = append(skillContext, dashboardTurnSkillContext{
 				SkillID:           row.SkillID,
-				PinnedVersionID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 				Name:              row.Name,
 				ResolvedVersionID: row.ResolvedVersionID,
 				Description:       conv.FromPGTextOrEmpty[string](row.Description),
+				Content:           row.Content,
 			})
 		}
-		snapshot, err := marshalAssistantSkillSetSnapshot(newAssistantSkillSetSnapshot(skills))
-		if err != nil {
-			return DashboardSendResult{}, err
+		if totalContentBytes > maxAssistantTurnSkillContextBytes {
+			return DashboardSendResult{}, ErrAssistantTurnSkillContextTooLarge
 		}
-		skillSetSnapshot = snapshot
 	}
 
 	if chatID == uuid.Nil {
@@ -383,11 +397,11 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 		idempotencyKey = uuid.NewString()
 	}
 	payload, err := json.Marshal(dashboardIngestPayload{
-		Text:             text,
-		UserID:           userID,
-		CorrelationID:    correlationID,
-		IdempotencyKey:   idempotencyKey,
-		SkillSetSnapshot: skillSetSnapshot,
+		Text:           text,
+		UserID:         userID,
+		CorrelationID:  correlationID,
+		IdempotencyKey: idempotencyKey,
+		SkillContext:   skillContext,
 	})
 	if err != nil {
 		return DashboardSendResult{}, fmt.Errorf("marshal dashboard message: %w", err)
@@ -407,7 +421,26 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 		return result, nil
 	}
 
-	threadID, err := assistantrepo.New(s.db).GetAssistantThreadIDByCorrelation(ctx, assistantrepo.GetAssistantThreadIDByCorrelationParams{
+	queries := assistantrepo.New(s.db)
+	for _, skill := range skillContext {
+		if _, err := queries.RecordAssistantSkillObservation(ctx, assistantrepo.RecordAssistantSkillObservationParams{
+			AssistantID:    assistant.ID,
+			SessionID:      chatID.String(),
+			SkillVersionID: skill.ResolvedVersionID,
+			ProjectID:      projectID,
+			SkillID:        skill.SkillID,
+		}); err != nil {
+			s.logger.ErrorContext(ctx, "record selected assistant skill observation",
+				attr.SlogError(err),
+				attr.SlogProjectID(projectID.String()),
+				attr.SlogAssistantID(assistant.ID.String()),
+				attr.SlogChatID(chatID.String()),
+				attr.SlogName(skill.Name),
+			)
+		}
+	}
+
+	threadID, err := queries.GetAssistantThreadIDByCorrelation(ctx, assistantrepo.GetAssistantThreadIDByCorrelationParams{
 		ProjectID:     projectID,
 		AssistantID:   assistant.ID,
 		CorrelationID: correlationID,

@@ -144,11 +144,11 @@ type dashboardTriggerConfig struct{}
 func (dashboardTriggerConfig) Filter(_ any) (bool, error) { return true, nil }
 
 type dashboardTriggerEvent struct {
-	Text             string          `json:"text" cel:"text"`
-	UserID           string          `json:"user_id,omitempty" cel:"user_id"`
-	CorrelationID    string          `json:"correlation_id,omitempty" cel:"correlation_id"`
-	IdempotencyKey   string          `json:"idempotency_key,omitempty" cel:"idempotency_key"`
-	SkillSetSnapshot json.RawMessage `json:"skill_set_snapshot,omitempty"`
+	Text           string          `json:"text" cel:"text"`
+	UserID         string          `json:"user_id,omitempty" cel:"user_id"`
+	CorrelationID  string          `json:"correlation_id,omitempty" cel:"correlation_id"`
+	IdempotencyKey string          `json:"idempotency_key,omitempty" cel:"idempotency_key"`
+	SkillContext   json.RawMessage `json:"skill_context,omitempty"`
 }
 
 type cronTriggerEvent struct {

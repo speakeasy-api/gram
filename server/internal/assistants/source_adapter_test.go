@@ -115,22 +115,21 @@ func TestDashboardAdapterDecodeTurnIncludesSelectedSkills(t *testing.T) {
 		NormalizedPayloadJSON: []byte(`{
 			"text":"Use the project conventions",
 			"user_id":"user-test",
-			"skill_set_snapshot":{
-				"version":1,
-				"skills":[{
-					"skill_id":"` + skillID.String() + `",
-					"name":"project-conventions",
-					"description":"Project coding conventions",
-					"resolved_version_id":"` + versionID.String() + `"
-				}]
-			}
+			"skill_context":[{
+				"skill_id":"` + skillID.String() + `",
+				"name":"project-conventions",
+				"description":"Project coding conventions",
+				"resolved_version_id":"` + versionID.String() + `",
+				"content":"---\nname: project-conventions\ndescription: Project coding conventions\n---\n\nFollow the repository conventions exactly."
+			}]
 		}`),
 	})
 	require.NoError(t, err)
-	require.Contains(t, got, "EventType: assistant_turn_skills_selected")
-	require.Contains(t, got, `Name: "project-conventions"`)
-	require.Contains(t, got, `Call skills_load with name "project-conventions" before answering.`)
-	require.Contains(t, got, "</assistant-environment-change>\n</message-context>\n\nUse the project conventions")
+	require.Contains(t, got, "<skill-context>\nName: project-conventions")
+	require.Contains(t, got, "<skill-content>\n---\nname: project-conventions")
+	require.Contains(t, got, "Follow the repository conventions exactly.\n</skill-content>")
+	require.Contains(t, got, "</skill-context>\n\nUse the project conventions")
+	require.NotContains(t, got, "skills_load")
 }
 
 func TestComposeInstructions_SanitizesAndCapsSkillMetadata(t *testing.T) {

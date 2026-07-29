@@ -300,6 +300,9 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 
 	result, err := s.core.SendDashboardMessage(ctx, *authCtx.ProjectID, assistantID, authCtx.UserID, chatID, payload.Message, idempotencyKey, skillIDs)
 	if err != nil {
+		if errors.Is(err, ErrAssistantTurnSkillContextTooLarge) {
+			return nil, oops.E(oops.CodeBadRequest, err, "selected skill context is too large").LogError(ctx, s.logger)
+		}
 		if errors.Is(err, ErrAssistantTurnSkillUnavailable) {
 			return nil, oops.E(oops.CodeBadRequest, err, "one or more selected skills are unavailable").LogError(ctx, s.logger)
 		}

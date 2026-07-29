@@ -1913,58 +1913,6 @@ func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistant
 	return items, nil
 }
 
-const loadAssistantSkillVersion = `-- name: LoadAssistantSkillVersion :one
-SELECT
-  s.id AS skill_id,
-  s.name,
-  sv.id AS skill_version_id,
-  sv.content,
-  sv.canonical_sha256,
-  sv.raw_sha256
-FROM skills s
-JOIN skill_versions sv
-  ON sv.id = $1
-  AND sv.skill_id = s.id
-WHERE s.id = $2
-  AND s.project_id = $3
-  AND s.name = $4
-`
-
-type LoadAssistantSkillVersionParams struct {
-	SkillVersionID uuid.UUID
-	SkillID        uuid.UUID
-	ProjectID      uuid.UUID
-	Name           string
-}
-
-type LoadAssistantSkillVersionRow struct {
-	SkillID         uuid.UUID
-	Name            string
-	SkillVersionID  uuid.UUID
-	Content         string
-	CanonicalSha256 string
-	RawSha256       string
-}
-
-func (q *Queries) LoadAssistantSkillVersion(ctx context.Context, arg LoadAssistantSkillVersionParams) (LoadAssistantSkillVersionRow, error) {
-	row := q.db.QueryRow(ctx, loadAssistantSkillVersion,
-		arg.SkillVersionID,
-		arg.SkillID,
-		arg.ProjectID,
-		arg.Name,
-	)
-	var i LoadAssistantSkillVersionRow
-	err := row.Scan(
-		&i.SkillID,
-		&i.Name,
-		&i.SkillVersionID,
-		&i.Content,
-		&i.CanonicalSha256,
-		&i.RawSha256,
-	)
-	return i, err
-}
-
 const loadAssistantSkills = `-- name: LoadAssistantSkills :many
 SELECT
   sd.assistant_id,
@@ -2258,37 +2206,6 @@ func (q *Queries) LoadAttachedAssistantSkill(ctx context.Context, arg LoadAttach
 		&i.RawSha256,
 	)
 	return i, err
-}
-
-const loadProcessingAssistantTurnPayload = `-- name: LoadProcessingAssistantTurnPayload :one
-SELECT event.normalized_payload_json
-FROM assistant_thread_events event
-WHERE event.project_id = $1
-  AND event.assistant_id = $2
-  AND event.assistant_thread_id = $3
-  AND event.status = $4
-  AND event.deleted IS FALSE
-ORDER BY event.created_at ASC
-LIMIT 1
-`
-
-type LoadProcessingAssistantTurnPayloadParams struct {
-	ProjectID        uuid.UUID
-	AssistantID      uuid.UUID
-	ThreadID         uuid.UUID
-	ProcessingStatus string
-}
-
-func (q *Queries) LoadProcessingAssistantTurnPayload(ctx context.Context, arg LoadProcessingAssistantTurnPayloadParams) ([]byte, error) {
-	row := q.db.QueryRow(ctx, loadProcessingAssistantTurnPayload,
-		arg.ProjectID,
-		arg.AssistantID,
-		arg.ThreadID,
-		arg.ProcessingStatus,
-	)
-	var normalized_payload_json []byte
-	err := row.Scan(&normalized_payload_json)
-	return normalized_payload_json, err
 }
 
 const loadThreadContext = `-- name: LoadThreadContext :one
@@ -2936,10 +2853,11 @@ SELECT
   s.id AS skill_id,
   s.name,
   resolved.id AS resolved_version_id,
-  resolved.description
+  resolved.description,
+  resolved.content
 FROM skills s
 JOIN LATERAL (
-  SELECT sv.id, sv.description
+  SELECT sv.id, sv.description, sv.content
   FROM skill_versions sv
   LEFT JOIN skill_version_origins svo
     ON svo.project_id = s.project_id
@@ -2966,6 +2884,7 @@ type ResolveAssistantTurnSkillsRow struct {
 	Name              string
 	ResolvedVersionID uuid.UUID
 	Description       pgtype.Text
+	Content           string
 }
 
 func (q *Queries) ResolveAssistantTurnSkills(ctx context.Context, arg ResolveAssistantTurnSkillsParams) ([]ResolveAssistantTurnSkillsRow, error) {
@@ -2982,6 +2901,7 @@ func (q *Queries) ResolveAssistantTurnSkills(ctx context.Context, arg ResolveAss
 			&i.Name,
 			&i.ResolvedVersionID,
 			&i.Description,
+			&i.Content,
 		); err != nil {
 			return nil, err
 		}

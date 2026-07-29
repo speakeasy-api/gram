@@ -1226,6 +1226,7 @@ function SkillContextPickerResults({
             type="button"
             onClick={() => onToggle(skill.id)}
             disabled={atLimit && !selected}
+            aria-pressed={selected}
             className="flex w-full items-start gap-2 rounded px-2 py-2 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border border-input">

@@ -186,31 +186,6 @@ func renderAssistantSkillSetChange(previous, current assistantSkillSetSnapshot) 
 	return b.String()
 }
 
-func renderAssistantTurnSkills(snapshot assistantSkillSetSnapshot) string {
-	if len(snapshot.Skills) == 0 {
-		return ""
-	}
-
-	skills := append([]assistantSkillSnapshot(nil), snapshot.Skills...)
-	sort.Slice(skills, func(i, j int) bool {
-		if skills[i].Name == skills[j].Name {
-			return skills[i].SkillID.String() < skills[j].SkillID.String()
-		}
-		return skills[i].Name < skills[j].Name
-	})
-
-	var b strings.Builder
-	b.WriteString("<assistant-environment-change>\n")
-	b.WriteString("EventType: assistant_turn_skills_selected\n")
-	b.WriteString("The user selected these skills as additional context for this turn:\n")
-	for _, skill := range skills {
-		name, description := safeSkillMetadata(skill)
-		fmt.Fprintf(&b, "- Name: %s; description: %s. Call skills_load with name %s before answering.\n", strconv.Quote(name), strconv.Quote(description), strconv.Quote(name))
-	}
-	b.WriteString("</assistant-environment-change>")
-	return b.String()
-}
-
 func safeSkillMetadata(skill assistantSkillSnapshot) (string, string) {
 	replacer := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
 	name := conv.TruncateString(strings.Join(strings.Fields(skill.Name), " "), 200)
