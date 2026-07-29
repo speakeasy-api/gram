@@ -11,7 +11,7 @@ import { useDistributeSkillMutation } from "@gram/client/react-query/distributeS
 import { useSkillsInfinite } from "@gram/client/react-query/skills.js";
 import { Button, cn } from "@speakeasy-api/moonshine";
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { filterSkills, prioritizeAddableSkills } from "./skills-list-helpers";
 
@@ -50,6 +50,11 @@ export function SkillPickerDialog({
   const [search, setSearch] = useState("");
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
   const [isBatchAdding, setIsBatchAdding] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    setSearch("");
+    setSelectedSkillIds([]);
+  }, [open, target.assistantId, target.pluginId]);
   const skillsQuery = useSkillsInfinite({ limit: 200 }, undefined, {
     throwOnError: false,
     enabled: open,
@@ -87,10 +92,6 @@ export function SkillPickerDialog({
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen && isBatchAdding) return;
     onOpenChange(nextOpen);
-    if (nextOpen) {
-      setSearch("");
-      setSelectedSkillIds([]);
-    }
   };
 
   const toggleSkill = (skillId: string) => {
@@ -130,7 +131,7 @@ export function SkillPickerDialog({
   };
 
   let pickerContent: JSX.Element;
-  if (skillsQuery.error && !skillsQuery.data) {
+  if (skillsQuery.error) {
     pickerContent = (
       <ErrorAlert title="Unable to load skills" error={skillsQuery.error} />
     );
