@@ -179,11 +179,11 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       active: activeTab === "overview",
     },
     {
-      key: "tools",
-      title: "Tools",
+      key: "inspect",
+      title: "Inspect",
       Icon: Wrench,
-      href: mcpServerTabHref(routes, idOrSlug, "tools"),
-      active: activeTab === "tools",
+      href: mcpServerTabHref(routes, idOrSlug, "inspect"),
+      active: activeTab === "inspect",
     },
     ...(isRbacEnabled
       ? [

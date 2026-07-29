@@ -1,7 +1,7 @@
 import { toolSupportsAnnotations, type Tool } from "@/lib/toolTypes";
 import { Badge } from "@speakeasy-api/moonshine";
 
-export interface ResolvedToolAnnotations {
+interface ResolvedToolAnnotations {
   readOnly: boolean;
   destructive: boolean;
   idempotent: boolean;
@@ -37,14 +37,13 @@ export function AnnotationBadges({ tool }: { tool: Tool }): JSX.Element | null {
 
 /**
  * Presentational annotation-hint labels, decoupled from the Gram `Tool` model so
- * other tool sources (e.g. remote MCP servers) can render the same badges from
- * their own resolved hints. Returns null when no hint is set.
+ * they render from already-resolved hints. Returns null when no hint is set.
  *
  * Renders the same text labels and variants as the Connect → Catalog → MCP tool
  * cards (`CatalogDetail`), so the permission labels read identically wherever a
  * tool is surfaced — including Distribute → MCP → Tools.
  */
-export function AnnotationBadgeIcons({
+function AnnotationBadgeIcons({
   readOnly,
   destructive,
   idempotent,
