@@ -154,16 +154,26 @@ done < <(collect_pg_modified)
 #                                       Sharing a transaction holds the ACCESS
 #                                       EXCLUSIVE lock taken by the ADD through the
 #                                       validation scan, so the split gains nothing.
+#
+executable_sql() {
+  # Drop line comments, then fold the file to one whitespace-normalized line so a
+  # statement split across lines still matches. Block comments, string literals
+  # and dollar-quoted bodies are not parsed; a statement named inside one is
+  # matched as if it were executable, which asks for a directive that is not
+  # needed. Real DDL never hits that, and Atlas does not generate it.
+  sed 's/--.*$//' "$1" | tr '\n' ' ' | tr -s ' '
+}
+
 if [ ${#pg_files[@]} -gt 0 ]; then
   missing_txmode=false
   echo -e "\n🔎 Checking for statements requiring -- atlas:txmode none..."
   for file in "${pg_files[@]}"; do
-    # Matched on the raw file, so a comment quoting one of these statements is
-    # enough to require the directive. Adding it to such a file is harmless.
+    sql=$(executable_sql "$file")
+
     statement=""
-    if grep -i -q "CREATE INDEX CONCURRENTLY" "$file" || grep -i -q "CREATE UNIQUE INDEX CONCURRENTLY" "$file"; then
+    if echo "$sql" | grep -i -q "CREATE INDEX CONCURRENTLY" || echo "$sql" | grep -i -q "CREATE UNIQUE INDEX CONCURRENTLY"; then
       statement="CREATE [UNIQUE] INDEX CONCURRENTLY"
-    elif grep -i -q "VALIDATE CONSTRAINT" "$file"; then
+    elif echo "$sql" | grep -i -q "VALIDATE CONSTRAINT"; then
       statement="VALIDATE CONSTRAINT"
     fi
 
