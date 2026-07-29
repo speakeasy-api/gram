@@ -29,7 +29,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { sessionStatus, subjectLabel } from "@/lib/user-session-status";
 import { useUserSessionFacets } from "@gram/client/react-query/userSessionFacets.js";
 import { useUserSessionsInfinite } from "@gram/client/react-query/userSessions.js";
-import type { ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
+import type { QueryParamStatus as ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
 
 const USER_SESSION_FILTERS = defineFilters([
   { id: "status", label: "Status", kind: "select", pinned: true },

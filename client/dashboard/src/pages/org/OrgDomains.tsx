@@ -25,7 +25,7 @@ import { cn, getCustomDomainCNAME } from "@/lib/utils";
 import { useCustomDomainMcpEndpoints } from "@gram/client/react-query/customDomainMcpEndpoints";
 import { useCheckDomainHealthMutation } from "@gram/client/react-query/checkDomainHealth";
 import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
-import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
+import { invalidateAllListDomains } from "@gram/client/react-query/listDomains";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
 import { useUpdateDomainMutation } from "@gram/client/react-query/updateDomain";
 import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
@@ -316,14 +316,14 @@ function OrgDomainsInner() {
     onSuccess: async () => {
       setIsDeleteDomainDialogOpen(false);
       setDomainInput("");
-      await invalidateAllGetDomain(queryClient);
+      await invalidateAllListDomains(queryClient);
     },
   });
 
   const updateDomainMutation = useUpdateDomainMutation({
     onSuccess: async () => {
       setIsEditAllowlistOpen(false);
-      await invalidateAllGetDomain(queryClient);
+      await invalidateAllListDomains(queryClient);
     },
     onError: (error) => {
       setUpdateAllowlistError(error.message || "Failed to save allowlist");
@@ -332,7 +332,7 @@ function OrgDomainsInner() {
 
   const checkDomainHealthMutation = useCheckDomainHealthMutation({
     onSuccess: async () => {
-      await invalidateAllGetDomain(queryClient);
+      await invalidateAllListDomains(queryClient);
       toast.success("Custom domain health check completed");
     },
     onError: (error) => {

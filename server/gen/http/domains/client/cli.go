@@ -30,6 +30,21 @@ func BuildGetDomainPayload(domainsGetDomainSessionToken string) (*domains.GetDom
 	return v, nil
 }
 
+// BuildListDomainsPayload builds the payload for the domains listDomains
+// endpoint from CLI flags.
+func BuildListDomainsPayload(domainsListDomainsSessionToken string) (*domains.ListDomainsPayload, error) {
+	var sessionToken *string
+	{
+		if domainsListDomainsSessionToken != "" {
+			sessionToken = &domainsListDomainsSessionToken
+		}
+	}
+	v := &domains.ListDomainsPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCreateDomainPayload builds the payload for the domains createDomain
 // endpoint from CLI flags.
 func BuildCreateDomainPayload(domainsCreateDomainBody string, domainsCreateDomainSessionToken string) (*domains.CreateDomainPayload, error) {

@@ -1,5 +1,5 @@
 import type { DeviceIntegrationProvider } from "@gram/client/models/components/deviceintegrationprovider.js";
-import { Apple, MonitorSmartphone, ShieldCheck } from "lucide-react";
+import { Apple, Laptop, MonitorSmartphone, ShieldCheck } from "lucide-react";
 
 // Presentation extras the backend registry doesn't carry: an icon, a richer
 // description, and optional setup guidance for the configure sheet. Provider
@@ -15,6 +15,16 @@ export type ProviderUI = {
 };
 
 const PROVIDER_UI: Record<string, ProviderUI> = {
+  intune: {
+    icon: Laptop,
+    description:
+      "Pulls the managed-device inventory from Microsoft Intune via Microsoft Graph so agent coverage can be computed across your fleet.",
+    setupSteps: [
+      "In Entra ID, create an app registration and grant it only the DeviceManagementManagedDevices.Read.All application permission, then grant admin consent.",
+      "Create a client secret for the app and copy the directory (tenant) ID, application (client) ID, and the secret value.",
+      "Enter all three, save, then test the connection.",
+    ],
+  },
   iru: {
     icon: Apple,
     description:

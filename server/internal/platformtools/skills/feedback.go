@@ -39,7 +39,7 @@ type Feedback struct {
 
 func NewAssistantFeedbackTool(db *pgxpool.Pool, recorder *feedbackrecorder.Recorder) *Feedback {
 	readOnly, destructive, idempotent, openWorld := false, false, false, false
-	minSkillLength, maxSkillLength, maxNoteLength := 1, 64, 4000
+	minSkillLength, maxSkillLength, maxNoteLength := 1, 64, domainskills.MaxFeedbackNoteRunes
 	return &Feedback{
 		db:       db,
 		recorder: recorder,
@@ -101,8 +101,8 @@ func (t *Feedback) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 		return oops.E(oops.CodeBadRequest, nil, "skill must be a canonical 1-64 character skill name")
 	case !input.Outcome.Valid():
 		return oops.E(oops.CodeBadRequest, nil, "invalid feedback outcome")
-	case utf8.RuneCountInString(note) > 4000:
-		return oops.E(oops.CodeBadRequest, nil, "feedback note must be at most 4000 Unicode characters")
+	case utf8.RuneCountInString(note) > domainskills.MaxFeedbackNoteRunes:
+		return oops.E(oops.CodeBadRequest, nil, "feedback note must be at most %d Unicode characters", domainskills.MaxFeedbackNoteRunes)
 	}
 
 	principal, ok := contextvalues.GetAssistantPrincipal(ctx)

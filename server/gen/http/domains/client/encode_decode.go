@@ -248,6 +248,236 @@ func DecodeGetDomainResponse(decoder func(*http.Response) goahttp.Decoder, resto
 	}
 }
 
+// BuildListDomainsRequest instantiates a HTTP request object with method and
+// path set to call the "domains" service "listDomains" endpoint
+func (c *Client) BuildListDomainsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListDomainsDomainsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("domains", "listDomains", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListDomainsRequest returns an encoder for requests sent to the domains
+// listDomains server.
+func EncodeListDomainsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*domains.ListDomainsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("domains", "listDomains", "*domains.ListDomainsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListDomainsResponse returns a decoder for responses returned by the
+// domains listDomains endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeListDomainsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListDomainsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListDomainsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listDomains", err)
+			}
+			err = ValidateListDomainsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listDomains", err)
+			}
+			res := NewListDomainsListCustomDomainsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListDomainsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listDomains", err)
+			}
+			err = ValidateListDomainsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listDomains", err)
+			}
+			return nil, NewListDomainsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListDomainsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listDomains", err)
+			}
+			err = ValidateListDomainsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listDomains", err)
+			}
+			return nil, NewListDomainsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListDomainsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listDomains", err)
+			}
+			err = ValidateListDomainsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listDomains", err)
+			}
+			return nil, NewListDomainsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListDomainsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listDomains", err)
+			}
+			err = ValidateListDomainsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listDomains", err)
+			}
+			return nil, NewListDomainsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListDomainsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listDomains", err)
+			}
+			err = ValidateListDomainsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listDomains", err)
+			}
+			return nil, NewListDomainsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListDomainsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listDomains", err)
+			}
+			err = ValidateListDomainsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listDomains", err)
+			}
+			return nil, NewListDomainsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListDomainsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listDomains", err)
+			}
+			err = ValidateListDomainsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listDomains", err)
+			}
+			return nil, NewListDomainsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListDomainsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("domains", "listDomains", err)
+				}
+				err = ValidateListDomainsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("domains", "listDomains", err)
+				}
+				return nil, NewListDomainsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListDomainsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("domains", "listDomains", err)
+				}
+				err = ValidateListDomainsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("domains", "listDomains", err)
+				}
+				return nil, NewListDomainsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("domains", "listDomains", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListDomainsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listDomains", err)
+			}
+			err = ValidateListDomainsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listDomains", err)
+			}
+			return nil, NewListDomainsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("domains", "listDomains", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildCreateDomainRequest instantiates a HTTP request object with method and
 // path set to call the "domains" service "createDomain" endpoint
 func (c *Client) BuildCreateDomainRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1378,6 +1608,33 @@ func DecodeListMcpEndpointsResponse(decoder func(*http.Response) goahttp.Decoder
 			return nil, goahttp.ErrInvalidResponse("domains", "listMcpEndpoints", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// unmarshalCustomDomainResponseBodyToDomainsCustomDomain builds a value of
+// type *domains.CustomDomain from a value of type *CustomDomainResponseBody.
+func unmarshalCustomDomainResponseBodyToDomainsCustomDomain(v *CustomDomainResponseBody) *domains.CustomDomain {
+	res := &domains.CustomDomain{
+		ID:                   *v.ID,
+		OrganizationID:       *v.OrganizationID,
+		Domain:               *v.Domain,
+		Verified:             *v.Verified,
+		Activated:            *v.Activated,
+		CreatedAt:            *v.CreatedAt,
+		UpdatedAt:            *v.UpdatedAt,
+		IsUpdating:           *v.IsUpdating,
+		HealthStatus:         v.HealthStatus,
+		HealthIssue:          v.HealthIssue,
+		HealthCheckedAt:      v.HealthCheckedAt,
+		UnhealthySince:       v.UnhealthySince,
+		CertificateExpiresAt: v.CertificateExpiresAt,
+		ConsecutiveFailures:  v.ConsecutiveFailures,
+	}
+	res.IPAllowlist = make([]string, len(v.IPAllowlist))
+	for i, val := range v.IPAllowlist {
+		res.IPAllowlist[i] = val
+	}
+
+	return res
 }
 
 // unmarshalCustomDomainMcpEndpointResponseBodyToDomainsCustomDomainMcpEndpoint

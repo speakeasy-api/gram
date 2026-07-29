@@ -67,6 +67,26 @@ var _ = Service("domains", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getDomain"}`)
 	})
 
+	Method("listDomains", func() {
+		Description("List the custom domains for an organization. The result is empty when no custom domain has been configured.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(ListCustomDomainsResult)
+
+		HTTP(func() {
+			GET("/rpc/domain.list")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listDomains")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDomains")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "listDomains"}`)
+	})
+
 	Method("createDomain", func() {
 		Description("Create a custom domain for an organization")
 
@@ -195,4 +215,11 @@ var ListCustomDomainMcpEndpointsResult = Type("ListCustomDomainMcpEndpointsResul
 
 	Attribute("mcp_endpoints", ArrayOf(CustomDomainMcpEndpoint))
 	Required("mcp_endpoints")
+})
+
+var ListCustomDomainsResult = Type("ListCustomDomainsResult", func() {
+	Description("Result of listing an organization's custom domains.")
+
+	Attribute("domains", ArrayOf(CustomDomain))
+	Required("domains")
 })
