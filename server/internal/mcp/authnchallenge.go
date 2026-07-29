@@ -197,12 +197,10 @@ var errIssuerGateOrgLookup = errors.New("describe organization for issuer-gated 
 // path reads org/project off the resolved endpoint directly, the same
 // way it does for unauthenticated public-endpoint traffic.
 //
-// SessionID and AccountType are populated for non-anonymous subjects so
-// authz.Engine.ShouldEnforce / PrepareContext treat the request as a
-// real authenticated session — without them the mcp:connect RBAC check
-// silently bypasses on enterprise endpoints (ShouldEnforce returns false
-// when AccountType != "enterprise"; PrepareContext skips when SessionID
-// is nil).
+// SessionID is populated for non-anonymous subjects so
+// authz.Engine.ShouldEnforce / PrepareContext treat the request as a real
+// authenticated session. AccountType is retained as session metadata but does
+// not control RBAC enforcement.
 func (s *Service) validateUserSessionToken(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint) (context.Context, *urn.SessionSubject, error) {
 	if token == "" {
 		return ctx, nil, nil

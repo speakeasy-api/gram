@@ -168,14 +168,14 @@ const SESSIONS_VIEW_OPTIONS: {
   },
 ];
 
-// Shown when RBAC is on and the caller lacks chat:read: the list is scoped to
-// their own sessions, so explain why and (for admins) point at the roles page
-// where chat:read is granted.
+// Shown when the caller lacks chat:read: the list is scoped to their own
+// sessions, so explain why and (for admins) point at the roles page where
+// chat:read is granted.
 function OwnSessionsNotice(): JSX.Element | null {
   const orgRoutes = useOrgRoutes();
-  const { hasScope, isRbacEnabled, isLoading } = useRBAC();
+  const { hasScope, isLoading } = useRBAC();
 
-  if (isLoading || !isRbacEnabled || hasScope("chat:read")) return null;
+  if (isLoading || hasScope("chat:read")) return null;
 
   return (
     <Alert variant="info" dismissible={false} className="text-sm">

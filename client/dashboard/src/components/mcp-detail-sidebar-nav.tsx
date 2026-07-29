@@ -6,7 +6,6 @@ import {
 import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Type } from "@/components/ui/type";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useToolset } from "@/hooks/toolTypes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
@@ -39,10 +38,8 @@ import { useLocation, useParams } from "react-router";
 
 export function McpDetailSidebarNav(): React.JSX.Element | null {
   const routes = useRoutes();
-  const telemetry = useTelemetry();
   const location = useLocation();
   const { toolsetSlug } = useParams<{ toolsetSlug: string }>();
-  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
 
   const { data: toolset } = useToolset(toolsetSlug);
   const { url: mcpUrl, installPageUrl } = useMcpUrl(toolset);
@@ -102,17 +99,13 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
       href: mcpDetailTabHref(routes, toolsetSlug, "performance"),
       active: activeTab === "performance",
     },
-    ...(isRbacEnabled
-      ? [
-          {
-            key: "team-access",
-            title: "Team Access",
-            Icon: Users,
-            href: mcpDetailTabHref(routes, toolsetSlug, "team-access"),
-            active: activeTab === "team-access",
-          },
-        ]
-      : []),
+    {
+      key: "team-access",
+      title: "Team Access",
+      Icon: Users,
+      href: mcpDetailTabHref(routes, toolsetSlug, "team-access"),
+      active: activeTab === "team-access",
+    },
     {
       key: "resources",
       title: "Resources",

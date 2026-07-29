@@ -4,21 +4,13 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
-// WithExactGrants marks the context as enterprise and loads the given grants
-// directly into the context. Pass no grants to simulate RBAC active with no permissions.
+// WithExactGrants loads the given grants directly into the context. Pass no
+// grants to simulate RBAC active with no permissions.
 func WithExactGrants(t *testing.T, ctx context.Context, grants ...authz.Grant) context.Context {
 	t.Helper()
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	authCtx.AccountType = "enterprise"
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	normalized := append([]authz.Grant(nil), grants...)
 	for i := range normalized {

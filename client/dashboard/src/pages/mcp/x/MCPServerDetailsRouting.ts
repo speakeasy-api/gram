@@ -57,14 +57,10 @@ export function isLegacyAuthenticationTabPath(
   );
 }
 
-export function initialTabFromHash(
-  hash: string,
-  isRbacEnabled: boolean,
-): TabValue {
+export function initialTabFromHash(hash: string): TabValue {
   const hashValue = hash.replace("#", "");
   if (hashValue === LEGACY_AUTHENTICATION_TAB) return "settings";
   if (!isValidTab(hashValue)) return "overview";
-  if (hashValue === "team-access" && !isRbacEnabled) return "overview";
   return hashValue;
 }
 

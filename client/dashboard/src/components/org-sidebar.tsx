@@ -68,7 +68,7 @@ export function OrgSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>): React.JSX.Element {
   const orgRoutes = useOrgRoutes();
-  const { isRbacEnabled, isLoading: rbacLoading } = useRBAC();
+  const { isLoading: rbacLoading } = useRBAC();
   const telemetry = useTelemetry();
   const { data: productFeatures } = useProductFeatures(undefined, undefined, {
     staleTime: 30_000,
@@ -232,12 +232,10 @@ export function OrgSidebar({
                     scope={["org:read", "org:admin"]}
                   />
                 )}
-                {isRbacEnabled && (
-                  <ScopeGatedNavItem
-                    item={orgRoutes.access}
-                    scope={["org:read", "org:admin"]}
-                  />
-                )}
+                <ScopeGatedNavItem
+                  item={orgRoutes.access}
+                  scope={["org:read", "org:admin"]}
+                />
               </CollapsibleNavGroup>
 
               {/* Identity group */}

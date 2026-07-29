@@ -32,7 +32,7 @@ func TestPrepareContext_loadsUserGrants(t *testing.T) {
 
 	seedOrganization(t, ctx, conn, authCtx.ActiveOrganizationID)
 	seedConnectedUser(t, ctx, conn, authCtx.ActiveOrganizationID, authCtx.UserID, "test@example.com", "Test User", "user_workos_test", "membership_test")
-	seedGrant(t, ctx, conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ScopeProjectRead, WildcardResource)
+	seedGrant(t, ctx, conn, authCtx.ActiveOrganizationID, AllUsersPrincipal(), ScopeProjectRead, WildcardResource)
 
 	ctx, err = engine.PrepareContext(ctx)
 	require.NoError(t, err)
@@ -140,7 +140,7 @@ func TestShouldEnforce_assistantPrincipalOnEnterpriseOrgEnforces(t *testing.T) {
 	require.True(t, enforce)
 }
 
-func TestShouldEnforce_assistantPrincipalOnNonEnterpriseSkips(t *testing.T) {
+func TestShouldEnforce_assistantPrincipalOnNonEnterpriseOrgEnforces(t *testing.T) {
 	t.Parallel()
 
 	ctx := enterpriseTestCtx(t.Context())
@@ -161,10 +161,10 @@ func TestShouldEnforce_assistantPrincipalOnNonEnterpriseSkips(t *testing.T) {
 
 	enforce, err := engine.ShouldEnforce(ctx)
 	require.NoError(t, err)
-	require.False(t, enforce)
+	require.True(t, enforce)
 }
 
-func TestPrepareContext_skipsNonEnterpriseOrgs(t *testing.T) {
+func TestPrepareContext_loadsGrantsForNonEnterpriseOrgs(t *testing.T) {
 	t.Parallel()
 
 	ctx := enterpriseTestCtx(t.Context())
@@ -179,11 +179,14 @@ func TestPrepareContext_skipsNonEnterpriseOrgs(t *testing.T) {
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	seedOrganization(t, ctx, conn, authCtx.ActiveOrganizationID)
+	seedActiveOrganizationUser(t, ctx, conn, authCtx.ActiveOrganizationID, authCtx.UserID)
 	seedGrant(t, ctx, conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ScopeProjectRead, WildcardResource)
 
 	ctx, err = engine.PrepareContext(ctx)
 	require.NoError(t, err)
 
-	_, ok = GrantsFromContext(ctx)
-	require.False(t, ok)
+	grants, ok := GrantsFromContext(ctx)
+	require.True(t, ok)
+	require.Len(t, grants, 1)
+	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project_non_enterprise"}))
 }

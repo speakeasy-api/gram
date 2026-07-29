@@ -20,7 +20,6 @@ import {
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { useProjectFavorites } from "@/hooks/useProjectFavorites";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -103,9 +102,7 @@ function OrgHomeInner() {
   const { orgSlug } = useSlugs();
   const client = useSdkClient();
   const navigate = useNavigate();
-  const telemetry = useTelemetry();
   const { hasScope } = useRBAC();
-  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
   const canAdmin = hasScope("org:admin");
   const orgRoutes = useOrgRoutes();
 
@@ -390,7 +387,7 @@ function OrgHomeInner() {
           </main>
 
           <aside className="flex flex-col gap-8 xl:sticky xl:top-4 xl:self-start">
-            {isRbacEnabled && <RecentChallengesCompact />}
+            <RecentChallengesCompact />
             <RecentActivityCompact logs={auditLogs} />
           </aside>
         </div>

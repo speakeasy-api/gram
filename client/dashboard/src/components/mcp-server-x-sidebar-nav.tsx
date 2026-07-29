@@ -9,7 +9,6 @@ import {
 } from "@/components/mcp-server-readiness-bar";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Type } from "@/components/ui/type";
-import { useTelemetry } from "@/contexts/Telemetry";
 import {
   getMcpServerArgs,
   remoteMcpRouteParam,
@@ -43,10 +42,8 @@ import { useLocation, useParams } from "react-router";
 
 export function McpServerXSidebarNav(): React.JSX.Element | null {
   const routes = useRoutes();
-  const telemetry = useTelemetry();
   const location = useLocation();
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
-  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
 
   const idOrSlug = mcpServerSlug ?? "";
   const { data: mcpServer } = useGetMcpServer(
@@ -185,17 +182,13 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       href: mcpServerTabHref(routes, idOrSlug, "tools"),
       active: activeTab === "tools",
     },
-    ...(isRbacEnabled
-      ? [
-          {
-            key: "team-access",
-            title: "Team Access",
-            Icon: Users,
-            href: mcpServerTabHref(routes, idOrSlug, "team-access"),
-            active: activeTab === "team-access",
-          },
-        ]
-      : []),
+    {
+      key: "team-access",
+      title: "Team Access",
+      Icon: Users,
+      href: mcpServerTabHref(routes, idOrSlug, "team-access"),
+      active: activeTab === "team-access",
+    },
     {
       key: "settings",
       title: "Settings",

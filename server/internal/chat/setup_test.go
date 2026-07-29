@@ -66,7 +66,7 @@ func newTestChatService(t *testing.T) *chatTestInstance {
 }
 
 // newTestChatServiceRBACDisabled builds a chat service whose org has the RBAC
-// feature flag off, so ShouldEnforce returns false even for enterprise callers.
+// feature flag off, so ShouldEnforce returns false for session callers.
 func newTestChatServiceRBACDisabled(t *testing.T) *chatTestInstance {
 	t.Helper()
 	return newTestChatServiceWithRBAC(t, authztest.RBACAlwaysDisabled)

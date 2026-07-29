@@ -263,14 +263,12 @@ function MCPDetailPageContent({
   toolsetSlug: string;
 }) {
   const routes = useRoutes();
-  const telemetry = useTelemetry();
   const location = useLocation();
-  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
 
   const activeTab = activeTabFromPath(location.pathname, toolsetSlug);
 
   if (!activeTab) {
-    const initialTab = initialTabFromHash(window.location.hash, isRbacEnabled);
+    const initialTab = initialTabFromHash(window.location.hash);
     return (
       <Navigate
         to={mcpDetailTabHref(routes, toolsetSlug, initialTab)}
@@ -278,15 +276,6 @@ function MCPDetailPageContent({
       />
     );
   }
-  if (activeTab === "team-access" && !isRbacEnabled) {
-    return (
-      <Navigate
-        to={mcpDetailTabHref(routes, toolsetSlug, "overview")}
-        replace
-      />
-    );
-  }
-
   return (
     <Page>
       <Page.Header>

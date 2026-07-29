@@ -1,7 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { cn } from "@/lib/utils";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { getMcpServerArgs } from "@/lib/sources";
 import { useRoutes } from "@/routes";
@@ -46,8 +45,6 @@ export default function MCPServerDetails(): JSX.Element {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
   const location = useLocation();
   const routes = useRoutes();
-  const telemetry = useTelemetry();
-  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
   const idOrSlug = mcpServerSlug ?? "";
   const activeTab = activeTabFromPath(location.pathname, idOrSlug);
   const legacyAuthenticationPath = isLegacyAuthenticationTabPath(
@@ -86,7 +83,7 @@ export default function MCPServerDetails(): JSX.Element {
     );
   }
   if (!activeTab) {
-    const initialTab = initialTabFromHash(location.hash, isRbacEnabled);
+    const initialTab = initialTabFromHash(location.hash);
     const hash =
       location.hash === `#${MCP_AUTHENTICATION_SECTION_ID}`
         ? `#${MCP_AUTHENTICATION_SECTION_ID}`
@@ -99,12 +96,6 @@ export default function MCPServerDetails(): JSX.Element {
       />
     );
   }
-  if (activeTab === "team-access" && !isRbacEnabled) {
-    return (
-      <Navigate to={mcpServerTabHref(routes, idOrSlug, "overview")} replace />
-    );
-  }
-
   const renderTabContent = () => {
     switch (activeTab) {
       case "overview":
@@ -133,7 +124,6 @@ export default function MCPServerDetails(): JSX.Element {
         );
       case "team-access":
         return (
-          isRbacEnabled &&
           mcpServer && (
             <RequireScope scope="mcp:read" level="page">
               {/* mcp_servers-backed servers grant under the same `mcp:*`

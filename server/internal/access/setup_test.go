@@ -105,6 +105,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	accessStore := accesscontrol.NewRedisStore(accessCache, accesscontrol.AlphaTTL)
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)})
 	roleManager := NewRoleManager(logger, conn, roles, auditLogger)
 	noopEmailSvc := email.NewService(logger, loops.New(ctx, logger, nil, ""))
 	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, noopProductFeatures{}, auditLogger, "test-jwt-secret", accessStore, noopEmailSvc, url.URL{})
