@@ -25,7 +25,7 @@ import { useUndistributeSkillMutation } from "@gram/client/react-query/undistrib
 import { Badge, Button, cn, Icon } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sparkles, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 import {
@@ -126,6 +126,10 @@ export function PluginSkillsSection({
   const distribute = useDistributeSkillMutation();
   const undistribute = useUndistributeSkillMutation();
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
+  useEffect(() => {
+    setSkillSearch("");
+    setSelectedSkillIds([]);
+  }, [pluginId]);
   // Shared mutation observers only reflect their latest call, so a local flag
   // covers the whole allSettled batch to keep the dialog locked until it ends.
   const [isBatchAdding, setIsBatchAdding] = useState(false);
