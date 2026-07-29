@@ -52,7 +52,6 @@ const actions = {
   disabled: false,
   approving: false,
   onApply: vi.fn(),
-  onApplyAll: vi.fn(),
 };
 
 describe("SkillSuggestionComment", () => {
@@ -63,13 +62,7 @@ describe("SkillSuggestionComment", () => {
   });
 
   it("leads with the session count the suggestion was built from", () => {
-    render(
-      <SkillSuggestionComment
-        change={change()}
-        changeCount={1}
-        actions={actions}
-      />,
-    );
+    render(<SkillSuggestionComment change={change()} actions={actions} />);
 
     expect(screen.getByText(/Requested in 11 sessions\./)).toBeTruthy();
     expect(
@@ -81,7 +74,6 @@ describe("SkillSuggestionComment", () => {
     render(
       <SkillSuggestionComment
         change={change({ feedbackSessionCount: 0 })}
-        changeCount={1}
         actions={actions}
       />,
     );
@@ -98,13 +90,7 @@ describe("SkillSuggestionComment", () => {
         createdAt: new Date("2026-07-01T00:00:00Z"),
       },
     ];
-    render(
-      <SkillSuggestionComment
-        change={change()}
-        changeCount={1}
-        actions={actions}
-      />,
-    );
+    render(<SkillSuggestionComment change={change()} actions={actions} />);
 
     expect(testState.enabled).toBe(false);
     fireEvent.click(
@@ -118,7 +104,6 @@ describe("SkillSuggestionComment", () => {
     render(
       <SkillSuggestionComment
         change={change({ feedbackCount: 0 })}
-        changeCount={1}
         actions={actions}
       />,
     );
@@ -130,43 +115,17 @@ describe("SkillSuggestionComment", () => {
 describe("SkillSuggestionComment actions", () => {
   afterEach(cleanup);
 
-  it("offers applying everything only when more than one change is proposed", () => {
-    const { rerender } = render(
-      <SkillSuggestionComment
-        change={change()}
-        changeCount={1}
-        actions={actions}
-      />,
-    );
-    expect(screen.queryByRole("button", { name: "Apply all" })).toBeNull();
-
-    rerender(
-      <SkillSuggestionComment
-        change={change()}
-        changeCount={3}
-        actions={actions}
-      />,
-    );
-    expect(screen.getByRole("button", { name: "Apply all" })).toBeTruthy();
-  });
-
-  it("keeps applying one change separate from applying them all", () => {
+  it("applies only the change the comment is attached to", () => {
     const onApply = vi.fn<() => void>();
-    const onApplyAll = vi.fn<() => void>();
     render(
       <SkillSuggestionComment
         change={change()}
-        changeCount={2}
-        actions={{ ...actions, onApply, onApplyAll }}
+        actions={{ ...actions, onApply }}
       />,
     );
 
+    expect(screen.queryByRole("button", { name: "Apply all" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
-    expect(onApply).toHaveBeenCalledTimes(1);
-    expect(onApplyAll).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Apply all" }));
-    expect(onApplyAll).toHaveBeenCalledTimes(1);
     expect(onApply).toHaveBeenCalledTimes(1);
   });
 });

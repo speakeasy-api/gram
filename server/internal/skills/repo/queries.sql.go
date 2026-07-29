@@ -1295,6 +1295,22 @@ func (q *Queries) DeleteSkillEditSuggestionChanges(ctx context.Context, arg Dele
 	return err
 }
 
+const deleteSkillEditSuggestionChangesByIDs = `-- name: DeleteSkillEditSuggestionChangesByIDs :exec
+DELETE FROM skill_edit_suggestion_changes
+WHERE project_id = $1
+  AND id = ANY ($2::uuid[])
+`
+
+type DeleteSkillEditSuggestionChangesByIDsParams struct {
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
+
+func (q *Queries) DeleteSkillEditSuggestionChangesByIDs(ctx context.Context, arg DeleteSkillEditSuggestionChangesByIDsParams) error {
+	_, err := q.db.Exec(ctx, deleteSkillEditSuggestionChangesByIDs, arg.ProjectID, arg.Ids)
+	return err
+}
+
 const deleteSkillVersionOrigin = `-- name: DeleteSkillVersionOrigin :exec
 DELETE FROM skill_version_origins
 WHERE project_id = $1

@@ -408,11 +408,11 @@ func BuildApproveSuggestionPayload(skillsApproveSuggestionBody string, skillsApp
 	{
 		err = json.Unmarshal([]byte(skillsApproveSuggestionBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"change_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"content\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"change_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"content\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
-		if body.ChangeID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.change_id", *body.ChangeID, goa.FormatUUID))
+		for _, e := range body.ChangeIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.change_ids[*]", e, goa.FormatUUID))
 		}
 		if err != nil {
 			return nil, err
@@ -437,9 +437,14 @@ func BuildApproveSuggestionPayload(skillsApproveSuggestionBody string, skillsApp
 		}
 	}
 	v := &skills.ApproveSuggestionPayload{
-		ID:       body.ID,
-		Content:  body.Content,
-		ChangeID: body.ChangeID,
+		ID:      body.ID,
+		Content: body.Content,
+	}
+	if body.ChangeIds != nil {
+		v.ChangeIds = make([]string, len(body.ChangeIds))
+		for i, val := range body.ChangeIds {
+			v.ChangeIds[i] = val
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

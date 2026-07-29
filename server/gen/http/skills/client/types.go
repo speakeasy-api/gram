@@ -63,9 +63,10 @@ type ApproveSuggestionRequestBody struct {
 	// Optional edited complete SKILL.md content. Handlers enforce a maximum size
 	// of 65,536 UTF-8 bytes.
 	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
-	// Optional ID of the single proposed change to take. The suggestion stays open
-	// carrying whatever is left. Cannot be combined with edited content.
-	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
+	// Optional IDs of the proposed changes to take together as one new version.
+	// The suggestion stays open carrying whatever is left. Cannot be combined with
+	// edited content.
+	ChangeIds []string `form:"change_ids,omitempty" json:"change_ids,omitempty" xml:"change_ids,omitempty"`
 }
 
 // DismissSuggestionRequestBody is the type of the "skills" service
@@ -4564,9 +4565,14 @@ func NewUpdateRequestBody(p *skills.UpdatePayload) *UpdateRequestBody {
 // payload of the "approveSuggestion" endpoint of the "skills" service.
 func NewApproveSuggestionRequestBody(p *skills.ApproveSuggestionPayload) *ApproveSuggestionRequestBody {
 	body := &ApproveSuggestionRequestBody{
-		ID:       p.ID,
-		Content:  p.Content,
-		ChangeID: p.ChangeID,
+		ID:      p.ID,
+		Content: p.Content,
+	}
+	if p.ChangeIds != nil {
+		body.ChangeIds = make([]string, len(p.ChangeIds))
+		for i, val := range p.ChangeIds {
+			body.ChangeIds[i] = val
+		}
 	}
 	return body
 }
