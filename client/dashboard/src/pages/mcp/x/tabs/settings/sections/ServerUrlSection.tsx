@@ -294,6 +294,7 @@ function AddressRow({
 
   const dirty = fullSlug !== endpoint.slug;
   const rootMutation = useRootMcpEndpointMutation();
+  const [confirmRootOpen, setConfirmRootOpen] = useState(false);
 
   const customDomainLabel =
     endpoint.customDomainId &&
@@ -382,13 +383,7 @@ function AddressRow({
                 ? undefined
                 : "Organization admin permission is required"
             }
-            onClick={() =>
-              endpoint.customDomainId &&
-              rootMutation.setRootMcpEndpoint(
-                endpoint.customDomainId,
-                endpoint.isDomainRoot ? undefined : endpoint.id,
-              )
-            }
+            onClick={() => setConfirmRootOpen(true)}
           >
             <Button.Text>
               {endpoint.isDomainRoot ? "Clear root" : "Set as domain root"}
@@ -396,6 +391,21 @@ function AddressRow({
           </Button>
         </div>
       )}
+      <ConfirmDomainRootDialog
+        isOpen={confirmRootOpen}
+        isClear={!!endpoint.isDomainRoot}
+        domainLabel={customDomainLabel || "your custom domain"}
+        onClose={() => setConfirmRootOpen(false)}
+        onConfirm={() => {
+          setConfirmRootOpen(false);
+          if (endpoint.customDomainId) {
+            rootMutation.setRootMcpEndpoint(
+              endpoint.customDomainId,
+              endpoint.isDomainRoot ? undefined : endpoint.id,
+            );
+          }
+        }}
+      />
       <RemoveLastAddressDialog
         isOpen={confirmRemoveOpen}
         isLoading={remove.isPending}
@@ -403,6 +413,53 @@ function AddressRow({
         onConfirm={() => remove.mutate({ request: { id: endpoint.id } })}
       />
     </Field>
+  );
+}
+
+// Root mapping changes reroute live traffic on the custom domain, so both
+// setting (which replaces any existing root mapping) and clearing require
+// explicit confirmation, mirroring the last-address removal dialog.
+function ConfirmDomainRootDialog({
+  isOpen,
+  isClear,
+  domainLabel,
+  onClose,
+  onConfirm,
+}: {
+  isOpen: boolean;
+  isClear: boolean;
+  domainLabel: string;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <Dialog.Content className="max-w-md">
+        <Dialog.Header>
+          <Dialog.Title>
+            {isClear
+              ? "Clear the domain root mapping?"
+              : "Route the domain root to this server?"}
+          </Dialog.Title>
+          <Dialog.Description>
+            {isClear
+              ? `Requests to https://${domainLabel}/ will stop routing to this MCP server. Its /mcp/ addresses keep working.`
+              : `Requests to https://${domainLabel}/ will be served by this MCP server, replacing any existing root mapping on the domain.`}
+          </Dialog.Description>
+        </Dialog.Header>
+        <Dialog.Footer>
+          <Button variant="secondary" onClick={onClose}>
+            <Button.Text>Cancel</Button.Text>
+          </Button>
+          <Button
+            variant={isClear ? "destructive-primary" : "primary"}
+            onClick={onConfirm}
+          >
+            <Button.Text>{isClear ? "Clear root" : "Set as root"}</Button.Text>
+          </Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
   );
 }
 

@@ -705,14 +705,6 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
 
-	affectedDomainIDs, err := mcpendpointsrepo.New(s.db).ListCustomDomainIDsByMCPServerID(ctx, mcpendpointsrepo.ListCustomDomainIDsByMCPServerIDParams{
-		McpServerID: serverID,
-		ProjectID:   *authCtx.ProjectID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list custom domains for mcp server").LogError(ctx, logger)
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -721,15 +713,22 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 
 	txRepo := repo.New(dbtx)
 
-	if err := lockMcpServerCustomDomains(ctx, dbtx, affectedDomainIDs); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "lock custom domains").LogError(ctx, logger)
-	}
-	rootEndpoints, err := mcpendpointsrepo.New(dbtx).LockRootMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockRootMCPEndpointsByMCPServerIDParams{
+	affectedDomainIDs, err := mcpendpointsrepo.New(dbtx).ListCustomDomainIDsByMCPServerID(ctx, mcpendpointsrepo.ListCustomDomainIDsByMCPServerIDParams{
 		McpServerID: serverID,
 		ProjectID:   *authCtx.ProjectID,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "lock root mcp endpoints").LogError(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "list custom domains for mcp server").LogError(ctx, logger)
+	}
+
+	if err := lockMcpServerCustomDomains(ctx, dbtx, affectedDomainIDs); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock custom domains").LogError(ctx, logger)
+	}
+	if _, err := mcpendpointsrepo.New(dbtx).LockMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockMCPEndpointsByMCPServerIDParams{
+		McpServerID: serverID,
+		ProjectID:   *authCtx.ProjectID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock mcp endpoints").LogError(ctx, logger)
 	}
 	if _, err := txRepo.LockMCPServerByIDAndProjectID(ctx, repo.LockMCPServerByIDAndProjectIDParams{
 		ID:        serverID,
@@ -740,6 +739,17 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		}
 		return oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
 	}
+	// Post-server-lock read is the authoritative root set: the server FOR SHARE in root selection means no new root can commit past this point, and rows here carry pre-delete is_domain_root.
+	rootEndpoints, err := mcpendpointsrepo.New(dbtx).LockMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockMCPEndpointsByMCPServerIDParams{
+		McpServerID: serverID,
+		ProjectID:   *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock root mcp endpoints").LogError(ctx, logger)
+	}
+	rootEndpoints = slices.DeleteFunc(rootEndpoints, func(endpoint mcpendpointsrepo.McpEndpoint) bool {
+		return !endpoint.IsDomainRoot.Valid || !endpoint.IsDomainRoot.Bool
+	})
 
 	deleted, err := txRepo.DeleteMCPServer(ctx, repo.DeleteMCPServerParams{
 		ID:        serverID,

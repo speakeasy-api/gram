@@ -270,11 +270,14 @@ func TestEnsureCustomDomainResourceNames_NeverRepopulatesTombstone(t *testing.T)
 	// A stale deletion request must not resurrect a cleaned tombstone's
 	// identity: the derived names may now belong to a successor domain
 	// reusing the hostname.
-	require.NoError(t, ti.repo.EnsureCustomDomainResourceNames(ctx, cdrepo.EnsureCustomDomainResourceNamesParams{
+	rows, err := ti.repo.EnsureCustomDomainResourceNames(ctx, cdrepo.EnsureCustomDomainResourceNamesParams{
 		IngressName:    pgTextValid("tombstone-guard-example-com"),
 		CertSecretName: pgTextValid("tombstone-guard-example-com-tls"),
 		ID:             domain.ID,
-	}))
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	require.Zero(t, rows)
 	route, err := ti.repo.GetCustomDomainRouteConfig(ctx, domain.ID)
 	require.NoError(t, err)
 	require.False(t, route.IngressName.Valid)

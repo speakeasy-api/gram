@@ -540,6 +540,56 @@ func (q *Queries) LockMCPEndpointByID(ctx context.Context, arg LockMCPEndpointBy
 	return i, err
 }
 
+const lockMCPEndpointsByMCPServerID = `-- name: LockMCPEndpointsByMCPServerID :many
+SELECT id, project_id, custom_domain_id, mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
+FROM mcp_endpoints
+WHERE mcp_server_id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+ORDER BY id
+FOR UPDATE
+`
+
+type LockMCPEndpointsByMCPServerIDParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+// Lock every live endpoint (not only current roots) before the server row
+// lock: root selection holds endpoint locks while waiting on the server row,
+// so writing an unlocked endpoint after taking the server lock can deadlock.
+// Re-run after the server lock for the authoritative pre-delete root set.
+func (q *Queries) LockMCPEndpointsByMCPServerID(ctx context.Context, arg LockMCPEndpointsByMCPServerIDParams) ([]McpEndpoint, error) {
+	rows, err := q.db.Query(ctx, lockMCPEndpointsByMCPServerID, arg.McpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpEndpoint
+	for rows.Next() {
+		var i McpEndpoint
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.CustomDomainID,
+			&i.McpServerID,
+			&i.Slug,
+			&i.IsDomainRoot,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockRootMCPEndpointsByMCPServerID = `-- name: LockRootMCPEndpointsByMCPServerID :many
 SELECT id, project_id, custom_domain_id, mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
 FROM mcp_endpoints

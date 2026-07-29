@@ -26,7 +26,7 @@ func SanitizeDomainForK8sName(domain string) (string, error) {
 // Apply and the DeleteDomain identity checkpoint share it so every tombstone
 // carries a cleanable identity even when Apply never persisted one.
 func TLSSecretNameForDomain(domain string) string {
-	return strings.ReplaceAll(domain, ".", "-") + "-tls"
+	return strings.ToLower(strings.ReplaceAll(domain, ".", "-")) + "-tls"
 }
 
 // RootIngressName derives the secondary root-ingress name from the primary

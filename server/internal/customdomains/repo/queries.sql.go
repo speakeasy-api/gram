@@ -117,13 +117,14 @@ func (q *Queries) DeleteCustomDomain(ctx context.Context, organizationID string)
 	return err
 }
 
-const ensureCustomDomainResourceNames = `-- name: EnsureCustomDomainResourceNames :exec
+const ensureCustomDomainResourceNames = `-- name: EnsureCustomDomainResourceNames :execrows
 UPDATE custom_domains
 SET
     ingress_name = COALESCE(NULLIF(ingress_name, ''), $1),
     cert_secret_name = COALESCE(NULLIF(cert_secret_name, ''), $2),
     updated_at = clock_timestamp()
 WHERE id = $3
+  AND organization_id = $4
   AND deleted IS FALSE
 `
 
@@ -131,16 +132,25 @@ type EnsureCustomDomainResourceNamesParams struct {
 	IngressName    pgtype.Text
 	CertSecretName pgtype.Text
 	ID             uuid.UUID
+	OrganizationID string
 }
 
 // Deletion checkpoint: fill derived resource identity when Apply never
 // persisted one, so the tombstone stays discoverable for cleanup retries.
 // COALESCE keeps identity persisted by a real Apply. Active rows only — a
 // cleaned tombstone must never be repopulated (its derived names may belong
-// to a successor domain reusing the hostname). Caller is org-scoped.
-func (q *Queries) EnsureCustomDomainResourceNames(ctx context.Context, arg EnsureCustomDomainResourceNamesParams) error {
-	_, err := q.db.Exec(ctx, ensureCustomDomainResourceNames, arg.IngressName, arg.CertSecretName, arg.ID)
-	return err
+// to a successor domain reusing the hostname).
+func (q *Queries) EnsureCustomDomainResourceNames(ctx context.Context, arg EnsureCustomDomainResourceNamesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, ensureCustomDomainResourceNames,
+		arg.IngressName,
+		arg.CertSecretName,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getCustomDomainByDomain = `-- name: GetCustomDomainByDomain :one

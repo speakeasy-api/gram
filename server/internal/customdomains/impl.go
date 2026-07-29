@@ -3,6 +3,7 @@ package customdomains
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
@@ -510,12 +511,15 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 		resourceName, nameErr := k8s.SanitizeDomainForK8sName(domain.Domain)
 		if nameErr != nil {
 			s.logger.WarnContext(ctx, "skipping custom domain resource identity checkpoint", attr.SlogError(nameErr), attr.SlogURLDomain(domain.Domain))
-		} else if err := repo.New(dbtx).EnsureCustomDomainResourceNames(ctx, repo.EnsureCustomDomainResourceNamesParams{
+		} else if rows, err := repo.New(dbtx).EnsureCustomDomainResourceNames(ctx, repo.EnsureCustomDomainResourceNamesParams{
 			IngressName:    conv.ToPGText(resourceName),
 			CertSecretName: conv.ToPGText(k8s.TLSSecretNameForDomain(domain.Domain)),
 			ID:             domain.ID,
+			OrganizationID: authCtx.ActiveOrganizationID,
 		}); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "checkpoint custom domain resource identity").LogError(ctx, s.logger)
+		} else if rows != 1 {
+			return oops.E(oops.CodeUnexpected, fmt.Errorf("expected 1 row, updated %d", rows), "checkpoint custom domain resource identity").LogError(ctx, s.logger)
 		}
 	}
 

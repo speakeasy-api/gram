@@ -260,18 +260,19 @@ SET
 WHERE id = @id
 RETURNING *;
 
--- name: EnsureCustomDomainResourceNames :exec
+-- name: EnsureCustomDomainResourceNames :execrows
 -- Deletion checkpoint: fill derived resource identity when Apply never
 -- persisted one, so the tombstone stays discoverable for cleanup retries.
 -- COALESCE keeps identity persisted by a real Apply. Active rows only — a
 -- cleaned tombstone must never be repopulated (its derived names may belong
--- to a successor domain reusing the hostname). Caller is org-scoped.
+-- to a successor domain reusing the hostname).
 UPDATE custom_domains
 SET
     ingress_name = COALESCE(NULLIF(ingress_name, ''), @ingress_name),
     cert_secret_name = COALESCE(NULLIF(cert_secret_name, ''), @cert_secret_name),
     updated_at = clock_timestamp()
 WHERE id = @id
+  AND organization_id = @organization_id
   AND deleted IS FALSE;
 
 -- name: ClearDeletedCustomDomainResourceNames :exec

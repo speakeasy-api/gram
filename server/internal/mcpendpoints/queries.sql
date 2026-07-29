@@ -187,6 +187,19 @@ WHERE mcp_server_id = @mcp_server_id
 ORDER BY id
 FOR UPDATE;
 
+-- name: LockMCPEndpointsByMCPServerID :many
+-- Lock every live endpoint (not only current roots) before the server row
+-- lock: root selection holds endpoint locks while waiting on the server row,
+-- so writing an unlocked endpoint after taking the server lock can deadlock.
+-- Re-run after the server lock for the authoritative pre-delete root set.
+SELECT *
+FROM mcp_endpoints
+WHERE mcp_server_id = @mcp_server_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+ORDER BY id
+FOR UPDATE;
+
 -- name: ClearRootMCPEndpointsByMCPServerID :many
 UPDATE mcp_endpoints
 SET

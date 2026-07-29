@@ -7,6 +7,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestTLSSecretNameForDomainLowercasesLikeSanitizedNames(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "example-com-tls", TLSSecretNameForDomain("Example.Com"))
+	require.Equal(t, "mcp-example-com-tls", TLSSecretNameForDomain("mcp.example.com"))
+}
+
 func TestWellKnownRootIngressNameIsDeterministicAndLengthSafe(t *testing.T) {
 	t.Parallel()
 
