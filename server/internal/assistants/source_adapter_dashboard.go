@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -108,7 +109,7 @@ func (dashboardAdapter) DecodeTurn(event assistantThreadEventRecord) (string, er
 		fmt.Fprintf(&b, "Name: %s\nDescription: %s\n", name, description)
 		b.WriteString("<skill-content>\n")
 		b.WriteString(skill.Content)
-		if !bytes.HasSuffix([]byte(skill.Content), []byte("\n")) {
+		if !strings.HasSuffix(skill.Content, "\n") {
 			b.WriteByte('\n')
 		}
 		b.WriteString("</skill-content>\n</skill-context>\n")
