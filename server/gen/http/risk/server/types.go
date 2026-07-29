@@ -68,6 +68,11 @@ type CreateRiskPolicyRequestBody struct {
 	// Complete desired canonical URL allow set for this policy. Omit or send empty
 	// to create no URL-specific allow decisions.
 	ShadowMcpAllowedUrls []string `json:"shadow_mcp_allowed_urls"`
+	// Default disposition for shadow MCP blocking policies: block_all (default)
+	// blocks every non-Gram-hosted server unless allowed, allow_all permits every
+	// server unless blocked. Only valid with the shadow_mcp source and block
+	// action. Immutable after create — switching requires delete + recreate.
+	ShadowMcpDisposition *string `form:"shadow_mcp_disposition,omitempty" json:"shadow_mcp_disposition,omitempty" xml:"shadow_mcp_disposition,omitempty"`
 	// Whether the policy name should be auto-generated.
 	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
 	// Optional message shown to end users when this policy blocks an action or
@@ -135,6 +140,10 @@ type UpdateRiskPolicyRequestBody struct {
 	// Complete desired canonical URL allow set for this policy. Omit to preserve;
 	// send empty to clear.
 	ShadowMcpAllowedUrls []string `json:"shadow_mcp_allowed_urls"`
+	// The policy's shadow MCP disposition. Immutable: omit, or send the current
+	// value unchanged; any other value is rejected. Switching posture requires
+	// delete + recreate.
+	ShadowMcpDisposition *string `form:"shadow_mcp_disposition,omitempty" json:"shadow_mcp_disposition,omitempty" xml:"shadow_mcp_disposition,omitempty"`
 	// Whether the policy name should be auto-generated.
 	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
 	// Optional message shown to end users when this policy blocks an action or
@@ -438,6 +447,11 @@ type CreateRiskPolicyResponseBody struct {
 	// Principal URNs the policy applies to. Contains user:all when audience_type
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns" json:"audience_principal_urns" xml:"audience_principal_urns"`
+	// Default disposition for shadow MCP blocking policies: block_all blocks every
+	// non-Gram-hosted server unless allowed, allow_all permits every server unless
+	// it appears on the blocked-URL list. Immutable after create. Only present on
+	// policies with the shadow_mcp source and block action.
+	ShadowMcpDisposition *string `form:"shadow_mcp_disposition,omitempty" json:"shadow_mcp_disposition,omitempty" xml:"shadow_mcp_disposition,omitempty"`
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
 	AutoName bool `form:"auto_name" json:"auto_name" xml:"auto_name"`
@@ -544,6 +558,11 @@ type GetRiskPolicyResponseBody struct {
 	// Principal URNs the policy applies to. Contains user:all when audience_type
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns" json:"audience_principal_urns" xml:"audience_principal_urns"`
+	// Default disposition for shadow MCP blocking policies: block_all blocks every
+	// non-Gram-hosted server unless allowed, allow_all permits every server unless
+	// it appears on the blocked-URL list. Immutable after create. Only present on
+	// policies with the shadow_mcp source and block action.
+	ShadowMcpDisposition *string `form:"shadow_mcp_disposition,omitempty" json:"shadow_mcp_disposition,omitempty" xml:"shadow_mcp_disposition,omitempty"`
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
 	AutoName bool `form:"auto_name" json:"auto_name" xml:"auto_name"`
@@ -634,6 +653,11 @@ type UpdateRiskPolicyResponseBody struct {
 	// Principal URNs the policy applies to. Contains user:all when audience_type
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns" json:"audience_principal_urns" xml:"audience_principal_urns"`
+	// Default disposition for shadow MCP blocking policies: block_all blocks every
+	// non-Gram-hosted server unless allowed, allow_all permits every server unless
+	// it appears on the blocked-URL list. Immutable after create. Only present on
+	// policies with the shadow_mcp source and block action.
+	ShadowMcpDisposition *string `form:"shadow_mcp_disposition,omitempty" json:"shadow_mcp_disposition,omitempty" xml:"shadow_mcp_disposition,omitempty"`
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
 	AutoName bool `form:"auto_name" json:"auto_name" xml:"auto_name"`
@@ -9353,6 +9377,11 @@ type RiskPolicyResponseBody struct {
 	// Principal URNs the policy applies to. Contains user:all when audience_type
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns" json:"audience_principal_urns" xml:"audience_principal_urns"`
+	// Default disposition for shadow MCP blocking policies: block_all blocks every
+	// non-Gram-hosted server unless allowed, allow_all permits every server unless
+	// it appears on the blocked-URL list. Immutable after create. Only present on
+	// policies with the shadow_mcp source and block action.
+	ShadowMcpDisposition *string `form:"shadow_mcp_disposition,omitempty" json:"shadow_mcp_disposition,omitempty" xml:"shadow_mcp_disposition,omitempty"`
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
 	AutoName bool `form:"auto_name" json:"auto_name" xml:"auto_name"`
@@ -9831,6 +9860,7 @@ func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyRes
 		Enabled:                res.Enabled,
 		Action:                 res.Action,
 		AudienceType:           res.AudienceType,
+		ShadowMcpDisposition:   res.ShadowMcpDisposition,
 		AutoName:               res.AutoName,
 		UserMessage:            res.UserMessage,
 		Prompt:                 res.Prompt,
@@ -9963,6 +9993,7 @@ func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseB
 		Enabled:                res.Enabled,
 		Action:                 res.Action,
 		AudienceType:           res.AudienceType,
+		ShadowMcpDisposition:   res.ShadowMcpDisposition,
 		AutoName:               res.AutoName,
 		UserMessage:            res.UserMessage,
 		Prompt:                 res.Prompt,
@@ -10055,6 +10086,7 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 		Enabled:                res.Enabled,
 		Action:                 res.Action,
 		AudienceType:           res.AudienceType,
+		ShadowMcpDisposition:   res.ShadowMcpDisposition,
 		AutoName:               res.AutoName,
 		UserMessage:            res.UserMessage,
 		Prompt:                 res.Prompt,
@@ -17110,6 +17142,7 @@ func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *
 		ScopeInclude:           body.ScopeInclude,
 		ScopeExempt:            body.ScopeExempt,
 		Enabled:                body.Enabled,
+		ShadowMcpDisposition:   body.ShadowMcpDisposition,
 		AutoName:               body.AutoName,
 		UserMessage:            body.UserMessage,
 		Prompt:                 body.Prompt,
@@ -17257,6 +17290,7 @@ func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, apikeyToken *
 		Enabled:                body.Enabled,
 		Action:                 body.Action,
 		AudienceType:           body.AudienceType,
+		ShadowMcpDisposition:   body.ShadowMcpDisposition,
 		AutoName:               body.AutoName,
 		UserMessage:            body.UserMessage,
 		Prompt:                 body.Prompt,
@@ -17953,6 +17987,11 @@ func ValidateCreateRiskPolicyRequestBody(body *CreateRiskPolicyRequestBody) (err
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
 		}
 	}
+	if body.ShadowMcpDisposition != nil {
+		if !(*body.ShadowMcpDisposition == "block_all" || *body.ShadowMcpDisposition == "allow_all") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.shadow_mcp_disposition", *body.ShadowMcpDisposition, []any{"block_all", "allow_all"}))
+		}
+	}
 	if body.Score != nil {
 		if *body.Score < 0.1 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.score", *body.Score, 0.1, true))
@@ -18003,6 +18042,11 @@ func ValidateUpdateRiskPolicyRequestBody(body *UpdateRiskPolicyRequestBody) (err
 	if body.AudienceType != nil {
 		if !(*body.AudienceType == "everyone" || *body.AudienceType == "targeted") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
+		}
+	}
+	if body.ShadowMcpDisposition != nil {
+		if !(*body.ShadowMcpDisposition == "block_all" || *body.ShadowMcpDisposition == "allow_all") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.shadow_mcp_disposition", *body.ShadowMcpDisposition, []any{"block_all", "allow_all"}))
 		}
 	}
 	if body.Score != nil {

@@ -51,3 +51,13 @@ func GetIssuerMigratePreflightOrganizationRemoteSessionIssuersPath() string {
 func MigrateIssuerOrganizationRemoteSessionIssuersPath() string {
 	return "/rpc/organizationRemoteSessionIssuers.migrate"
 }
+
+// FetchIssuerMetadataOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service fetchIssuerMetadata HTTP endpoint.
+func FetchIssuerMetadataOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.fetchMetadata"
+}
+
+// RefreshIssuerMetadataOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service refreshIssuerMetadata HTTP endpoint.
+func RefreshIssuerMetadataOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.refreshMetadata"
+}

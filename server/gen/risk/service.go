@@ -348,6 +348,11 @@ type CreateRiskPolicyPayload struct {
 	// Complete desired canonical URL allow set for this policy. Omit or send empty
 	// to create no URL-specific allow decisions.
 	ShadowMcpAllowedUrls []string `json:"shadow_mcp_allowed_urls"`
+	// Default disposition for shadow MCP blocking policies: block_all (default)
+	// blocks every non-Gram-hosted server unless allowed, allow_all permits every
+	// server unless blocked. Only valid with the shadow_mcp source and block
+	// action. Immutable after create — switching requires delete + recreate.
+	ShadowMcpDisposition *string
 	// Whether the policy name should be auto-generated.
 	AutoName *bool
 	// Optional message shown to end users when this policy blocks an action or
@@ -1306,6 +1311,10 @@ type UpdateRiskPolicyPayload struct {
 	// Complete desired canonical URL allow set for this policy. Omit to preserve;
 	// send empty to clear.
 	ShadowMcpAllowedUrls []string `json:"shadow_mcp_allowed_urls"`
+	// The policy's shadow MCP disposition. Immutable: omit, or send the current
+	// value unchanged; any other value is rejected. Switching posture requires
+	// delete + recreate.
+	ShadowMcpDisposition *string
 	// Whether the policy name should be auto-generated.
 	AutoName *bool
 	// Optional message shown to end users when this policy blocks an action or

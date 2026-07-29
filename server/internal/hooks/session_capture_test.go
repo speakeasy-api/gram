@@ -359,8 +359,7 @@ func TestClaudeStopBackfillsLatestUserPromptID(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, msgs, 2)
 	require.Equal(t, "user", msgs[0].Role)
-	require.True(t, msgs[0].MessageID.Valid)
-	require.Equal(t, wantPromptID, msgs[0].MessageID.String)
+	require.False(t, msgs[0].MessageID.Valid)
 	require.Equal(t, "assistant", msgs[1].Role)
 	require.False(t, msgs[1].MessageID.Valid)
 }

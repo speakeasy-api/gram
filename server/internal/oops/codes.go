@@ -5,18 +5,22 @@ import "net/http"
 type Code string
 
 const (
-	CodeUnauthorized        Code = "unauthorized"
-	CodeForbidden           Code = "forbidden"
-	CodeBadRequest          Code = "bad_request"
-	CodeNotFound            Code = "not_found"
-	CodeConflict            Code = "conflict"
-	CodeUnsupportedMedia    Code = "unsupported_media"
-	CodeMethodNotAllowed    Code = "method_not_allowed"
-	CodeRequestTooLarge     Code = "request_too_large"
-	CodeInvalid             Code = "invalid"
-	CodeUnexpected          Code = "unexpected"
-	CodeInvariantViolation  Code = "invariant_violation"
-	CodeGatewayError        Code = "gateway_error"
+	CodeUnauthorized       Code = "unauthorized"
+	CodeForbidden          Code = "forbidden"
+	CodeBadRequest         Code = "bad_request"
+	CodeNotFound           Code = "not_found"
+	CodeConflict           Code = "conflict"
+	CodeUnsupportedMedia   Code = "unsupported_media"
+	CodeMethodNotAllowed   Code = "method_not_allowed"
+	CodeRequestTooLarge    Code = "request_too_large"
+	CodeInvalid            Code = "invalid"
+	CodeUnexpected         Code = "unexpected"
+	CodeInvariantViolation Code = "invariant_violation"
+	CodeGatewayError       Code = "gateway_error"
+	// CodeUnavailable is a temporary, retryable inability to serve caused by
+	// a Gram-side dependency being down (e.g. Redis unreachable), distinct
+	// from CodeGatewayError (502, an upstream/tunnel failure). Maps to 503.
+	CodeUnavailable         Code = "unavailable"
 	CodeNotImplemented      Code = "not_implemented"
 	CodeInsufficientCredits Code = "insufficient_credits"
 	CodeRateLimitExceeded   Code = "rate_limit_exceeded"
@@ -43,6 +47,7 @@ var StatusCodes = map[Code]int{
 	CodeUnexpected:          http.StatusInternalServerError,
 	CodeInvariantViolation:  http.StatusUnprocessableEntity,
 	CodeGatewayError:        http.StatusBadGateway,
+	CodeUnavailable:         http.StatusServiceUnavailable,
 	CodeNotImplemented:      http.StatusNotImplemented,
 	CodeInsufficientCredits: http.StatusPaymentRequired,
 	CodeRateLimitExceeded:   http.StatusTooManyRequests,
@@ -77,6 +82,8 @@ func (c Code) UserMessage() string {
 		return "token balance exhausted"
 	case CodeRateLimitExceeded:
 		return "rate limit exceeded"
+	case CodeUnavailable:
+		return "service temporarily unavailable"
 	case CodeCanceled:
 		return "request was canceled"
 	default:
@@ -86,7 +93,7 @@ func (c Code) UserMessage() string {
 
 func (c Code) IsTemporary() bool {
 	switch c {
-	case CodeUnexpected, CodeGatewayError:
+	case CodeUnexpected, CodeGatewayError, CodeUnavailable:
 		return true
 	default:
 		return false

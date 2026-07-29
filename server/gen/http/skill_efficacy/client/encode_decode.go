@@ -758,6 +758,9 @@ func unmarshalSkillEfficacyInsightResponseBodyToSkillefficacySkillEfficacyInsigh
 		}
 		res.Versions[i] = unmarshalSkillVersionInsightResponseBodyToSkillefficacySkillVersionInsight(val)
 	}
+	if v.RegressionSignal != nil {
+		res.RegressionSignal = unmarshalSkillEfficacyRegressionSignalResponseBodyToSkillefficacySkillEfficacyRegressionSignal(v.RegressionSignal)
+	}
 
 	return res
 }
@@ -844,6 +847,29 @@ func unmarshalSkillInsightPointResponseBodyToSkillefficacySkillInsightPoint(v *S
 		ScoredSessions:        *v.ScoredSessions,
 		AverageScore:          v.AverageScore,
 		EstimatedMinutesSaved: *v.EstimatedMinutesSaved,
+	}
+
+	return res
+}
+
+// unmarshalSkillEfficacyRegressionSignalResponseBodyToSkillefficacySkillEfficacyRegressionSignal
+// builds a value of type *skillefficacy.SkillEfficacyRegressionSignal from a
+// value of type *SkillEfficacyRegressionSignalResponseBody.
+func unmarshalSkillEfficacyRegressionSignalResponseBodyToSkillefficacySkillEfficacyRegressionSignal(v *SkillEfficacyRegressionSignalResponseBody) *skillefficacy.SkillEfficacyRegressionSignal {
+	if v == nil {
+		return nil
+	}
+	res := &skillefficacy.SkillEfficacyRegressionSignal{
+		Comparable:                *v.Comparable,
+		Regression:                *v.Regression,
+		CurrentVersionID:          *v.CurrentVersionID,
+		PredecessorVersionID:      v.PredecessorVersionID,
+		CurrentAverageScore:       *v.CurrentAverageScore,
+		CurrentScoredSessions:     *v.CurrentScoredSessions,
+		PredecessorAverageScore:   *v.PredecessorAverageScore,
+		PredecessorScoredSessions: *v.PredecessorScoredSessions,
+		WindowStart:               *v.WindowStart,
+		WindowEnd:                 *v.WindowEnd,
 	}
 
 	return res

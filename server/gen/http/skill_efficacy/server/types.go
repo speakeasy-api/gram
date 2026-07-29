@@ -641,6 +641,8 @@ type SkillEfficacyInsightResponseBody struct {
 	SkillID  string                             `form:"skill_id" json:"skill_id" xml:"skill_id"`
 	Metrics  *SkillInsightMetricsResponseBody   `form:"metrics" json:"metrics" xml:"metrics"`
 	Versions []*SkillVersionInsightResponseBody `form:"versions" json:"versions" xml:"versions"`
+	// Absent when the skill has no valid current version.
+	RegressionSignal *SkillEfficacyRegressionSignalResponseBody `form:"regression_signal,omitempty" json:"regression_signal,omitempty" xml:"regression_signal,omitempty"`
 }
 
 // SkillInsightMetricsResponseBody is used to define fields on response body
@@ -687,6 +689,21 @@ type SkillInsightPointResponseBody struct {
 	ScoredSessions        uint64   `form:"scored_sessions" json:"scored_sessions" xml:"scored_sessions"`
 	AverageScore          *float64 `form:"average_score,omitempty" json:"average_score,omitempty" xml:"average_score,omitempty"`
 	EstimatedMinutesSaved float64  `form:"estimated_minutes_saved" json:"estimated_minutes_saved" xml:"estimated_minutes_saved"`
+}
+
+// SkillEfficacyRegressionSignalResponseBody is used to define fields on
+// response body types.
+type SkillEfficacyRegressionSignalResponseBody struct {
+	Comparable                bool    `form:"comparable" json:"comparable" xml:"comparable"`
+	Regression                bool    `form:"regression" json:"regression" xml:"regression"`
+	CurrentVersionID          string  `form:"current_version_id" json:"current_version_id" xml:"current_version_id"`
+	PredecessorVersionID      *string `form:"predecessor_version_id,omitempty" json:"predecessor_version_id,omitempty" xml:"predecessor_version_id,omitempty"`
+	CurrentAverageScore       float64 `form:"current_average_score" json:"current_average_score" xml:"current_average_score"`
+	CurrentScoredSessions     uint64  `form:"current_scored_sessions" json:"current_scored_sessions" xml:"current_scored_sessions"`
+	PredecessorAverageScore   float64 `form:"predecessor_average_score" json:"predecessor_average_score" xml:"predecessor_average_score"`
+	PredecessorScoredSessions uint64  `form:"predecessor_scored_sessions" json:"predecessor_scored_sessions" xml:"predecessor_scored_sessions"`
+	WindowStart               string  `form:"window_start" json:"window_start" xml:"window_start"`
+	WindowEnd                 string  `form:"window_end" json:"window_end" xml:"window_end"`
 }
 
 // SkillEfficacyScoredSessionResponseBody is used to define fields on response

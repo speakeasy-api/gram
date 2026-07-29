@@ -9,6 +9,7 @@ import {
   TabsList,
 } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
+import { remoteSessionScopeTier } from "@/lib/sources";
 import { useOrgRoutes } from "@/routes";
 import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { Link, Navigate, useLocation, useParams } from "react-router";
@@ -37,6 +38,11 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
 
   const label = issuer ? issuerDisplayName(issuer) : "Remote Identity Provider";
 
+  // Platform issuers are read-only to tenants. The Settings tab holds the only
+  // issuer mutation controls (edit + delete), both refused by the backend, so it
+  // is hidden for a platform issuer; client management on the Clients tab stays.
+  const isPlatform = !!issuer && remoteSessionScopeTier(issuer) === "platform";
+
   // The issuer doesn't exist (or failed to load); return to the listing.
   if (isError || (!isLoading && !issuer)) {
     return <Navigate to={orgRoutes.remoteIdentityProviders.href()} replace />;
@@ -44,6 +50,12 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
 
   // The bare /:issuerId URL has no tab; canonicalize to the Overview tab.
   if (!activeTab) {
+    return <Navigate to={tabHref("overview")} replace />;
+  }
+
+  // A direct Settings URL on a platform issuer has no editable surface; send it
+  // back to Overview.
+  if (isPlatform && activeTab === "settings") {
     return <Navigate to={tabHref("overview")} replace />;
   }
 
@@ -58,7 +70,12 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
             <Type small muted>
               Remote Identity Provider
             </Type>
-            {issuer && <ScopeBadge projectScoped={Boolean(issuer.projectId)} />}
+            {issuer && (
+              <ScopeBadge
+                projectId={issuer.projectId}
+                organizationId={issuer.organizationId}
+              />
+            )}
           </div>
           <Heading variant="h1" className="break-all normal-case">
             {label}
@@ -76,9 +93,11 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
                   <PageTabsTrigger value="clients" asChild>
                     <Link to={tabHref("clients")}>Clients</Link>
                   </PageTabsTrigger>
-                  <PageTabsTrigger value="settings" asChild>
-                    <Link to={tabHref("settings")}>Settings</Link>
-                  </PageTabsTrigger>
+                  {!isPlatform && (
+                    <PageTabsTrigger value="settings" asChild>
+                      <Link to={tabHref("settings")}>Settings</Link>
+                    </PageTabsTrigger>
+                  )}
                 </TabsList>
               </div>
             </div>
@@ -91,10 +110,12 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
                 {issuer && <ClientsTab issuer={issuer} />}
                 {isLoading && <Type muted>Loading…</Type>}
               </TabsContent>
-              <TabsContent value="settings" className="mt-0">
-                {issuer && <SettingsTab key={issuer.id} issuer={issuer} />}
-                {isLoading && <Type muted>Loading…</Type>}
-              </TabsContent>
+              {!isPlatform && (
+                <TabsContent value="settings" className="mt-0">
+                  {issuer && <SettingsTab key={issuer.id} issuer={issuer} />}
+                  {isLoading && <Type muted>Loading…</Type>}
+                </TabsContent>
+              )}
             </div>
           </Tabs>
         </RequireScope>

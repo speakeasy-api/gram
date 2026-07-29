@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -32,6 +33,8 @@ import (
 // can never collide with a user-toolset slug; keep it in lockstep with
 // platformtools.PlatformToolsetURL.
 const PlatformToolsetRoute = "/platform/mcp/{toolsetSlug}"
+
+const platformToolsetMaxBodyBytes = 1 << 20
 
 // ServePlatformToolset is the runtime-only entrypoint for platform toolsets:
 // only the assistant token is accepted, so user OAuth/API keys/chat sessions
@@ -72,10 +75,15 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 		return err
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, platformToolsetMaxBodyBytes)
+
 	bodyBytes, err := io.ReadAll(r.Body)
+	var maxBytesErr *http.MaxBytesError
 	switch {
 	case errors.Is(err, io.EOF) || len(bodyBytes) == 0:
 		return nil
+	case errors.As(err, &maxBytesErr):
+		return oops.E(oops.CodeRequestTooLarge, err, "platform toolset request body exceeds 1 MiB").LogError(ctx, s.logger)
 	case err != nil:
 		return oops.E(oops.CodeBadRequest, err, "failed to read request body").LogError(ctx, s.logger)
 	}
@@ -402,6 +410,10 @@ func (s *Service) callPlatformToolsetTool(
 	}()
 
 	if err := s.toolProxy.Do(ctx, rw, bytes.NewReader(requestBodyBytes), toolCallEnv, plan, logAttrs); err != nil {
+		var shareableErr *oops.ShareableError
+		if errors.As(err, &shareableErr) {
+			return nil, fmt.Errorf("execute platform tool: %w", err)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute platform tool call").LogError(ctx, logger, attr.SlogToolName(params.Name))
 	}
 	outputBytes = int64(rw.body.Len())

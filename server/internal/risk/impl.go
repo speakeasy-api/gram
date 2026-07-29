@@ -364,6 +364,11 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		}
 	}
 
+	shadowMCPDisposition := conv.PtrValOr(payload.ShadowMcpDisposition, "")
+	if err := validateShadowMCPDisposition(shadowMCPDisposition, sources, action); err != nil {
+		return nil, err
+	}
+
 	// Auto-generate a name when the caller opted in (explicit auto_name=true
 	// or omitted both auto_name and name). Setting auto_name=false with an
 	// empty name surfaces a validation error below rather than silently
@@ -376,6 +381,8 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		}
 		if policyType == ra.PolicyTypePromptBased {
 			name = s.generatePromptPolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), prompt.String, existingNames)
+		} else if shadowName := shadowMCPPolicyAutoName(sources, action, existingNames); shadowName != "" {
+			name = shadowName
 		} else {
 			customRuleTitles := s.customRuleTitlesForIDs(ctx, *authCtx.ProjectID, payload.CustomRuleIds)
 			name = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, payload.PresidioEntities, customRuleTitles, action, existingNames)
@@ -449,6 +456,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		Enabled:              enabled,
 		Action:               action,
 		AudienceType:         audienceType,
+		ShadowMcpDisposition: conv.ToPGTextEmpty(shadowMCPDisposition),
 		AutoName:             autoName,
 		UserMessage:          conv.PtrToPGTextEmpty(payload.UserMessage),
 		Prompt:               prompt,
@@ -777,6 +785,25 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	}
 	audiencePrincipalURNs = principalStrings(audiencePrincipals)
 
+	// The disposition is immutable: accept only the policy's current effective
+	// value (so form round-trips stay valid); anything else is a posture
+	// switch, which requires delete + recreate. A policy with an explicitly
+	// stored disposition also cannot morph away from being a blocking shadow
+	// MCP policy via a sources/action change — that would silently drop the
+	// posture and orphan the blocked-URL list.
+	effectiveDisposition := effectiveShadowMCPDisposition(current.ShadowMcpDisposition, sources, action)
+	if current.ShadowMcpDisposition.Valid && current.ShadowMcpDisposition.String != "" && effectiveDisposition == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "cannot change the sources or action of a shadow mcp policy with a disposition; delete and recreate the policy instead")
+	}
+	if payload.ShadowMcpDisposition != nil {
+		if effectiveDisposition == "" {
+			return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp disposition requires a blocking shadow mcp policy")
+		}
+		if *payload.ShadowMcpDisposition != effectiveDisposition {
+			return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp disposition is immutable; delete and recreate the policy to switch posture")
+		}
+	}
+
 	var shadowMCPAllowedURLs []string
 	audienceUpdateRequested := payload.AudienceType != nil || payload.AudiencePrincipalUrns != nil
 	if payload.ShadowMcpAllowedUrls != nil {
@@ -835,6 +862,8 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		}
 		if current.PolicyType == ra.PolicyTypePromptBased {
 			name = s.generatePromptPolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), prompt.String, existingNames)
+		} else if shadowName := shadowMCPPolicyAutoName(sources, action, existingNames); shadowName != "" {
+			name = shadowName
 		} else {
 			customRuleTitles := s.customRuleTitlesForIDs(ctx, *authCtx.ProjectID, customRuleIds)
 			name = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, presidioEntities, customRuleTitles, action, existingNames)
@@ -1712,7 +1741,7 @@ func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, ra
 	var nextCursor *riskResultsCursor
 	for i, row := range rows {
 		cid := row.ChatID.String()
-		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, &cid, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt, row.Replayed))
+		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID.UUID, &cid, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt, row.Replayed))
 		if i == pageSize {
 			nextCursor = &riskResultsCursor{MessageCreatedAt: row.MessageCreatedAt.Time, ID: row.ID}
 		}
@@ -1744,7 +1773,7 @@ func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID,
 	var nextCursor *riskResultsCursor
 	for i, row := range rows {
 		chatID := row.ChatID.String()
-		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt, row.Replayed))
+		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID.UUID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt, row.Replayed))
 		if i == pageSize {
 			nextCursor = &riskResultsCursor{MessageCreatedAt: row.MessageCreatedAt.Time, ID: row.ID}
 		}
@@ -2574,6 +2603,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		UserEmail:      userEmail,
 		HTTPMetadata:   nil,
 		JSONSchema:     &jsonSchema,
+		Reasoning:      nil,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("openrouter object completion: %w", err)
@@ -2709,6 +2739,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		UserEmail:      userEmail,
 		HTTPMetadata:   nil,
 		JSONSchema:     &jsonSchema,
+		Reasoning:      nil,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("openrouter object completion: %w", err)
@@ -3317,6 +3348,7 @@ func buildRiskPolicyType(row repo.RiskPolicy, totalMessages, analyzedMessages *i
 		Action:                 row.Action,
 		AudienceType:           row.AudienceType,
 		AudiencePrincipalUrns:  audiencePrincipalURNs,
+		ShadowMcpDisposition:   conv.PtrEmpty(effectiveShadowMCPDisposition(row.ShadowMcpDisposition, row.Sources, row.Action)),
 		AutoName:               row.AutoName,
 		UserMessage:            conv.FromPGText[string](row.UserMessage),
 		Prompt:                 conv.FromPGText[string](row.Prompt),
@@ -3354,6 +3386,7 @@ func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []
 		Action:                 row.Action,
 		AudienceType:           row.AudienceType,
 		AudiencePrincipalUrns:  audiencePrincipalURNs,
+		ShadowMcpDisposition:   conv.PtrEmpty(effectiveShadowMCPDisposition(row.ShadowMcpDisposition, row.Sources, row.Action)),
 		AutoName:               row.AutoName,
 		UserMessage:            conv.FromPGText[string](row.UserMessage),
 		Prompt:                 conv.FromPGText[string](row.Prompt),

@@ -149,3 +149,72 @@ WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 -- create.
 INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
 VALUES (@plugin_id, @organization_id, @principal_urn);
+
+-- name: InsertUserFixture :exec
+INSERT INTO users (id, email, display_name)
+VALUES (@id, @email, @display_name);
+
+-- name: InsertDeviceAgentSyncFixture :exec
+INSERT INTO device_agent_syncs (organization_id, email, first_seen_at, last_seen_at)
+VALUES (@organization_id, @email, @seen_at, @seen_at);
+
+-- name: InsertMdmDeviceFixture :exec
+INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, missing_since)
+VALUES (@device_integration_config_id, @organization_id, @external_id, NULLIF(@user_email::text, ''), sqlc.narg('user_id')::text, sqlc.narg('missing_since')::timestamptz);
+
+-- name: PauseDeviceIntegrationSyncsFixture :exec
+UPDATE device_integration_syncs s
+SET auto_paused_at = clock_timestamp(),
+    consecutive_failures = 5
+FROM device_integration_schedules sch
+WHERE s.device_integration_schedule_id = sch.id
+  AND sch.device_integration_config_id = @device_integration_config_id;
+
+-- name: DisableDeviceIntegrationSchedulesFixture :exec
+UPDATE device_integration_schedules
+SET disabled_at = clock_timestamp()
+WHERE device_integration_config_id = @device_integration_config_id;
+
+-- Pushes every sync's next poll an hour out, simulating a config whose
+-- schedules already ran this interval.
+-- name: DeferDeviceIntegrationSyncsFixture :exec
+UPDATE device_integration_syncs s
+SET next_poll_after = clock_timestamp() + interval '1 hour'
+FROM device_integration_schedules sch
+WHERE s.device_integration_schedule_id = sch.id
+  AND sch.device_integration_config_id = @device_integration_config_id;
+
+-- name: GetDeviceIntegrationCredentialsCiphertext :one
+SELECT credentials_encrypted
+FROM device_integration_configs
+WHERE id = @id;
+
+-- name: FailDeviceIntegrationSyncsFixture :exec
+UPDATE device_integration_syncs s
+SET last_poll_error = @error_message,
+    last_poll_failed_at = clock_timestamp(),
+    last_push_digest = @last_push_digest,
+    auto_paused_at = clock_timestamp(),
+    consecutive_failures = 3
+FROM device_integration_schedules sch
+WHERE s.device_integration_schedule_id = sch.id
+  AND sch.device_integration_config_id = @device_integration_config_id;
+
+-- name: GetDeviceIntegrationSyncPushDigests :many
+SELECT s.last_push_digest
+FROM device_integration_syncs s
+JOIN device_integration_schedules sch
+  ON s.device_integration_schedule_id = sch.id
+WHERE sch.device_integration_config_id = @device_integration_config_id;
+
+-- name: SetDeviceIntegrationSyncPushDigestFixture :exec
+UPDATE device_integration_syncs s
+SET last_push_digest = @last_push_digest
+FROM device_integration_schedules sch
+WHERE s.device_integration_schedule_id = sch.id
+  AND sch.device_integration_config_id = @device_integration_config_id;
+
+-- name: CorruptDeviceIntegrationCredentialsFixture :exec
+UPDATE device_integration_configs
+SET credentials_encrypted = 'not-a-valid-ciphertext'
+WHERE id = @id;

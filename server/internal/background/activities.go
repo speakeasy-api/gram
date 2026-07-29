@@ -33,6 +33,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/deviceintegrations"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
@@ -44,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
@@ -51,6 +54,7 @@ import (
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	"github.com/speakeasy-api/gram/server/internal/skills/suggest"
 	spendrulesch "github.com/speakeasy-api/gram/server/internal/spendrules/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -78,6 +82,8 @@ type Activities struct {
 	collectPlatformUsageMetrics     *activities.CollectPlatformUsageMetrics
 	getAIIntegrationsCandidates     *activities.GetAIIntegrationsCandidates
 	pollAIData                      *activities.PollAIData
+	getDeviceIntegrationCandidates  *activities.GetDeviceIntegrationSyncCandidates
+	runDeviceIntegrationSync        *activities.RunDeviceIntegrationSync
 	customDomainIngress             *activities.CustomDomainIngress
 	customDomainHealth              *activities.CustomDomainHealth
 	fireOpenRouterCreditsMetrics    *activities.FireOpenRouterCreditsMetrics
@@ -136,6 +142,7 @@ type Activities struct {
 	listSpendRuleOrgs               *spend_rules.ListOrgs
 	evaluateOrgSpendRules           *spend_rules.EvaluateOrg
 	skillEfficacyScorer             *activities.SkillEfficacyScorer
+	skillSuggestionAnalyzer         *activities.SkillSuggestionAnalyzer
 	chatAnalysisScorer              *activities.ChatAnalysisScorer
 }
 
@@ -211,6 +218,9 @@ func NewActivities(
 		customRuleScanner,
 		celEng,
 		builtinPresets,
+		&shadowMCPPolicyBypassChecker{
+			evaluator: risk.NewPolicyBypassEvaluator(logger, db),
+		},
 	)
 	if err != nil {
 		panic(fmt.Errorf("new analyze batch: %w", err))
@@ -228,11 +238,22 @@ func NewActivities(
 		panic(fmt.Errorf("new chat analysis judges: %w", err))
 	}
 
+	var skillSuggestionAnalyzer *activities.SkillSuggestionAnalyzer
+	if db != nil && telemetryRepo != nil && chatClient != nil && temporalEnv != nil && judgeRateLimiter != nil {
+		engine, err := suggest.NewEngine(suggest.DefaultConfig(), logger, db, telemetryRepo, chatrepo.New(db), chatClient, judgeRateLimiter)
+		if err != nil {
+			panic(fmt.Errorf("new skill suggestion engine: %w", err))
+		}
+		skillSuggestionAnalyzer = activities.NewSkillSuggestionAnalyzer(db, engine, &TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0})
+	}
+
 	return &Activities{
 		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
 		getAIIntegrationsCandidates:     activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
 		pollAIData:                      activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
+		getDeviceIntegrationCandidates:  activities.NewGetDeviceIntegrationSyncCandidates(logger, db, encryption, guardianPolicy),
+		runDeviceIntegrationSync:        activities.NewRunDeviceIntegrationSync(logger, db, encryption, guardianPolicy),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
 		customDomainHealth:              activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, emailService, siteURL, guardianPolicy),
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
@@ -301,6 +322,7 @@ func NewActivities(
 			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter)),
 			&TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
 		),
+		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
 		// The judges draw on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so chat analysis
 		// cannot outspend the org's key behind their backs.
@@ -418,6 +440,18 @@ func (a *Activities) GetAIIntegrationsCandidates(ctx context.Context, input acti
 
 func (a *Activities) PollAIData(ctx context.Context, input string) error {
 	return a.pollAIData.Do(ctx, input)
+}
+
+func (a *Activities) GetDeviceIntegrationSyncCandidates(ctx context.Context, input activities.GetDeviceIntegrationSyncCandidatesInput) ([]deviceintegrations.SyncCandidate, error) {
+	candidates, err := a.getDeviceIntegrationCandidates.Do(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("get device integration sync candidates: %w", err)
+	}
+	return candidates, nil
+}
+
+func (a *Activities) RunDeviceIntegrationSync(ctx context.Context, input string) error {
+	return a.runDeviceIntegrationSync.Do(ctx, input)
 }
 
 func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) error {

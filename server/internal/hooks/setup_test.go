@@ -19,6 +19,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -68,6 +70,7 @@ type testInstance struct {
 	spendGateCache  cache.Cache
 	accessStore     accesscontrol.Store
 	sessionManager  *sessions.Manager
+	assetStorage    assets.BlobStore
 	efficacySignals *recordingEfficacySignaler
 }
 
@@ -173,7 +176,8 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, nil)
+	assetStorage := assetstest.NewTestBlobStore(t)
+	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetStorage)
 	t.Cleanup(func() { _ = chatWriterShutdown(t.Context()) })
 	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
 	siteURL, err := url.Parse("https://app.example.test")
@@ -206,6 +210,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		shadowMCPClient,
 		chatWriter,
 		efficacySignals,
+		nil,
 		serverURL,
 		siteURL,
 		"test-jwt-secret",
@@ -219,6 +224,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		spendGateCache:  spendGateCache,
 		accessStore:     accessStore,
 		sessionManager:  sessionManager,
+		assetStorage:    assetStorage,
 		efficacySignals: efficacySignals,
 	}
 }

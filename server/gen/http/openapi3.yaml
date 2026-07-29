@@ -4801,6 +4801,93 @@ paths:
             x-speakeasy-name-override: deleteGlobalIssuer
             x-speakeasy-react-hook:
                 name: DeleteGlobalRemoteSessionIssuer
+    /rpc/adminRemoteSessions.fetchGlobalIssuerMetadata:
+        post:
+            description: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createGlobalIssuer. Keyed by issuer URL; no record need exist and nothing is persisted. Requires platform admin.
+            operationId: fetchGlobalRemoteSessionIssuerMetadata
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/FetchIssuerMetadataRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteSessionIssuerDraft'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: fetchGlobalIssuerMetadata adminRemoteSessions
+            tags:
+                - adminRemoteSessions
+            x-speakeasy-name-override: fetchGlobalIssuerMetadata
+            x-speakeasy-react-hook:
+                name: FetchGlobalRemoteSessionIssuerMetadata
     /rpc/adminRemoteSessions.getGlobalClient:
         get:
             description: Get a global remote_session_client by id. Requires platform admin.
@@ -5198,6 +5285,93 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: GlobalRemoteSessionIssuers
+    /rpc/adminRemoteSessions.refreshGlobalIssuerMetadata:
+        post:
+            description: Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.
+            operationId: refreshGlobalRemoteSessionIssuerMetadata
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RiskIDRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteSessionIssuerRefresh'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: refreshGlobalIssuerMetadata adminRemoteSessions
+            tags:
+                - adminRemoteSessions
+            x-speakeasy-name-override: refreshGlobalIssuerMetadata
+            x-speakeasy-react-hook:
+                name: RefreshGlobalRemoteSessionIssuerMetadata
     /rpc/adminRemoteSessions.updateGlobalClient:
         post:
             description: Rotate the client_secret or change non-issuer settings on a global remote_session_client. Requires platform admin.
@@ -12299,6 +12473,992 @@ paths:
             x-speakeasy-name-override: redeployDeployment
             x-speakeasy-react-hook:
                 name: RedeployDeployment
+    /rpc/deviceIntegrations.deleteConfig:
+        post:
+            description: Disconnect the org-wide device integration for a provider. Synced inventory becomes invisible to coverage; reconnecting starts fresh.
+            operationId: deleteDeviceIntegrationConfig
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteConfigRequestBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: deleteConfig deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: deleteConfig
+            x-speakeasy-react-hook:
+                name: DeleteDeviceIntegrationConfig
+    /rpc/deviceIntegrations.getConfig:
+        get:
+            description: Get the org-wide device integration config for a provider. Returns an empty config (enabled=false, has_credentials=false) when none is set.
+            operationId: getDeviceIntegrationConfig
+            parameters:
+                - allowEmptyValue: true
+                  description: Provider identifier (e.g. jamf, kandji, drata, vanta).
+                  in: query
+                  name: provider
+                  required: true
+                  schema:
+                    description: Provider identifier (e.g. jamf, kandji, drata, vanta).
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DeviceIntegrationConfig'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: getConfig deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: getConfig
+            x-speakeasy-react-hook:
+                name: DeviceIntegrationConfig
+    /rpc/deviceIntegrations.getCoverage:
+        get:
+            description: Summarize agent coverage across the org's connected MDM inventories, optionally scoped to one provider.
+            operationId: getDeviceIntegrationCoverage
+            parameters:
+                - allowEmptyValue: true
+                  description: Optionally scope coverage to one provider (e.g. jamf).
+                  in: query
+                  name: provider
+                  schema:
+                    description: Optionally scope coverage to one provider (e.g. jamf).
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DeviceIntegrationCoverage'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: getCoverage deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: getCoverage
+            x-speakeasy-react-hook:
+                name: DeviceIntegrationCoverage
+    /rpc/deviceIntegrations.listManagedDevices:
+        get:
+            description: Page through the org's synced MDM device inventory, newest first, with each device's coverage bucket.
+            operationId: listManagedDevices
+            parameters:
+                - allowEmptyValue: true
+                  description: Only devices synced from this provider.
+                  in: query
+                  name: provider
+                  schema:
+                    description: Only devices synced from this provider.
+                    type: string
+                - allowEmptyValue: true
+                  description: Only devices in this coverage bucket.
+                  in: query
+                  name: coverage_bucket
+                  schema:
+                    description: Only devices in this coverage bucket.
+                    enum:
+                        - agent_active
+                        - agent_stale
+                        - no_agent
+                        - no_email
+                        - unresolved_email
+                        - missing
+                    type: string
+                - allowEmptyValue: true
+                  description: Pagination cursor from a previous page.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Pagination cursor from a previous page.
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size. Defaults to 50, maximum 200.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: Page size. Defaults to 50, maximum 200.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListManagedDevicesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: listManagedDevices deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: listManagedDevices
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: ManagedDevices
+    /rpc/deviceIntegrations.listProviders:
+        get:
+            description: List the providers the device integrations framework supports, including the credential fields each needs.
+            operationId: listDeviceIntegrationProviders
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListDeviceIntegrationProvidersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: listProviders deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: listProviders
+            x-speakeasy-react-hook:
+                name: DeviceIntegrationProviders
+    /rpc/deviceIntegrations.listSchedules:
+        get:
+            description: List the sync schedules and their state for a provider's org-wide device integration config. Returns an empty list when no config is set.
+            operationId: listDeviceIntegrationSchedules
+            parameters:
+                - allowEmptyValue: true
+                  description: Provider identifier (e.g. jamf, kandji, drata, vanta).
+                  in: query
+                  name: provider
+                  required: true
+                  schema:
+                    description: Provider identifier (e.g. jamf, kandji, drata, vanta).
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListDeviceIntegrationSchedulesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: listSchedules deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: listSchedules
+            x-speakeasy-react-hook:
+                name: DeviceIntegrationSchedules
+    /rpc/deviceIntegrations.retrySchedule:
+        post:
+            description: Make one sync schedule due immediately, lifting any automatic pause and resetting its failure streak.
+            operationId: retryDeviceIntegrationSchedule
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RetryScheduleRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DeviceIntegrationScheduleState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: retrySchedule deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: retrySchedule
+            x-speakeasy-react-hook:
+                name: RetryDeviceIntegrationSchedule
+    /rpc/deviceIntegrations.setScheduleEnabled:
+        post:
+            description: Enable or disable one sync schedule of a provider's device integration. Disabling records user intent on the schedule; only re-enabling clears it — config saves do not.
+            operationId: setDeviceIntegrationScheduleEnabled
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetScheduleEnabledRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DeviceIntegrationScheduleState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: setScheduleEnabled deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: setScheduleEnabled
+            x-speakeasy-react-hook:
+                name: SetDeviceIntegrationScheduleEnabled
+    /rpc/deviceIntegrations.testConnection:
+        post:
+            description: Probe the provider with the stored credentials to verify they work. Save the config first; this tests what is stored, so secrets never round-trip.
+            operationId: testDeviceIntegrationConnection
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteConfigRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DeviceIntegrationTestConnectionResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: testConnection deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: testConnection
+            x-speakeasy-react-hook:
+                name: TestDeviceIntegrationConnection
+    /rpc/deviceIntegrations.upsertConfig:
+        post:
+            description: 'Create or update the org-wide device integration config for a provider. Omit credentials to keep the stored secrets; supplying credentials rotates them in place and resets the schedules'' sync state. Settings merge per key: an omitted key keeps its stored value, a supplied key overwrites it.'
+            operationId: upsertDeviceIntegrationConfig
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpsertConfigRequestBody2'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DeviceIntegrationConfig'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: upsertConfig deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: upsertConfig
+            x-speakeasy-react-hook:
+                name: UpsertDeviceIntegrationConfig
     /rpc/domain.checkHealth:
         post:
             description: Check the routing and certificate health of the organization's custom domain
@@ -16590,6 +17750,95 @@ paths:
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
+    /rpc/hooks.skillFeedback:
+        post:
+            description: Records agent-volunteered feedback about a distributed skill.
+            operationId: skillFeedback
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SkillFeedbackPayload'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: skillFeedback hooks
+            tags:
+                - hooks
+            x-speakeasy-name-override: skillFeedback
     /rpc/hooks.uploadSkillContent:
         post:
             description: Uploads skill manifest content requested by the unified hook ingest endpoint.
@@ -21600,6 +22849,101 @@ paths:
             x-speakeasy-name-override: delete
             x-speakeasy-react-hook:
                 name: DeleteOrganizationRemoteSessionIssuer
+    /rpc/organizationRemoteSessionIssuers.fetchMetadata:
+        post:
+            description: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for organizationRemoteSessionIssuers.create. Keyed by issuer URL; no record need exist and nothing is persisted. The organization-scoped counterpart of remoteSessionIssuers.fetchMetadata, so creating an organization-level issuer no longer has to borrow an unrelated project's scope. Requires org:admin.
+            operationId: fetchOrganizationRemoteSessionIssuerMetadata
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/FetchIssuerMetadataRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteSessionIssuerDraft'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: fetchIssuerMetadata organizationRemoteSessionIssuers
+            tags:
+                - organizationRemoteSessionIssuers
+            x-speakeasy-name-override: fetchMetadata
+            x-speakeasy-react-hook:
+                name: FetchOrganizationRemoteSessionIssuerMetadata
     /rpc/organizationRemoteSessionIssuers.get:
         get:
             description: Get any remote_session_issuer (organizational or project-specific) in the caller's organization by id. Requires org:read.
@@ -22205,6 +23549,101 @@ paths:
             x-speakeasy-name-override: move
             x-speakeasy-react-hook:
                 name: MoveOrganizationRemoteSessionIssuer
+    /rpc/organizationRemoteSessionIssuers.refreshMetadata:
+        post:
+            description: Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id; serves both organizational and project-specific issuers in the caller's organization. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires org:admin.
+            operationId: refreshOrganizationRemoteSessionIssuerMetadata
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RiskIDRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteSessionIssuerRefresh'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: refreshIssuerMetadata organizationRemoteSessionIssuers
+            tags:
+                - organizationRemoteSessionIssuers
+            x-speakeasy-name-override: refreshMetadata
+            x-speakeasy-react-hook:
+                name: RefreshOrganizationRemoteSessionIssuerMetadata
     /rpc/organizationRemoteSessionIssuers.update:
         post:
             description: Update any remote_session_issuer (organizational or project-specific) in the caller's organization. Requires org:admin.
@@ -24073,7 +25512,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/UpsertConfigRequestBody2'
+                            $ref: '#/components/schemas/UpsertConfigRequestBody3'
                 required: true
             responses:
                 "200":
@@ -29572,10 +31011,10 @@ paths:
             x-speakeasy-name-override: delete
             x-speakeasy-react-hook:
                 name: DeleteRemoteSessionIssuer
-    /rpc/remoteSessionIssuers.discover:
+    /rpc/remoteSessionIssuers.fetchMetadata:
         post:
-            description: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. No persistence.
-            operationId: discoverRemoteSessionIssuer
+            description: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. Keyed by issuer URL; no record need exist and nothing is persisted. Use refreshMetadata to re-discover and persist against an existing issuer.
+            operationId: fetchRemoteSessionIssuerMetadata
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -29602,7 +31041,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/DiscoverRemoteSessionIssuerRequestBody'
+                            $ref: '#/components/schemas/FetchIssuerMetadataRequestBody'
                 required: true
             responses:
                 "200":
@@ -29670,12 +31109,12 @@ paths:
                   session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-            summary: discoverRemoteSessionIssuer remoteSessionIssuers
+            summary: fetchRemoteSessionIssuerMetadata remoteSessionIssuers
             tags:
                 - remoteSessionIssuers
-            x-speakeasy-name-override: discover
+            x-speakeasy-name-override: fetchMetadata
             x-speakeasy-react-hook:
-                name: DiscoverRemoteSessionIssuer
+                name: FetchRemoteSessionIssuerMetadata
     /rpc/remoteSessionIssuers.get:
         get:
             description: Get a remote_session_issuer by id or by slug. Provide exactly one.
@@ -29910,6 +31349,110 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: RemoteSessionIssuers
+    /rpc/remoteSessionIssuers.refreshMetadata:
+        post:
+            description: Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires project:write.
+            operationId: refreshRemoteSessionIssuerMetadata
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RiskIDRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteSessionIssuerRefresh'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: refreshRemoteSessionIssuerMetadata remoteSessionIssuers
+            tags:
+                - remoteSessionIssuers
+            x-speakeasy-name-override: refreshMetadata
+            x-speakeasy-react-hook:
+                name: RefreshRemoteSessionIssuerMetadata
     /rpc/remoteSessionIssuers.update:
         post:
             description: Update fields on an existing remote_session_issuer.
@@ -35447,6 +36990,214 @@ paths:
             x-speakeasy-name-override: addVersion
             x-speakeasy-react-hook:
                 name: AddSkillVersion
+    /rpc/skills.approveAllSuggestions:
+        post:
+            description: Snapshot and independently process selected skill edit suggestions, or every open suggestion when no IDs are supplied. One conflict or failure does not stop the remaining approvals.
+            operationId: approveAllSkillSuggestions
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ApproveAllSkillSuggestionsRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApproveAllSkillSuggestionsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: approveAllSuggestions skills
+            tags:
+                - skills
+            x-speakeasy-name-override: approveAllSuggestions
+            x-speakeasy-react-hook:
+                name: ApproveAllSkillSuggestions
+    /rpc/skills.approveSuggestion:
+        post:
+            description: Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only one of its proposed changes. Stale suggestions are superseded instead.
+            operationId: approveSkillSuggestion
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ApproveSkillSuggestionRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApproveSkillSuggestionResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: approveSuggestion skills
+            tags:
+                - skills
+            x-speakeasy-name-override: approveSuggestion
+            x-speakeasy-react-hook:
+                name: ApproveSkillSuggestion
     /rpc/skills.archive:
         post:
             description: Idempotently archive a skill. The implementation requires the skills product feature and skill write scope. Repeated requests for the same skill succeed without creating another state transition.
@@ -35651,6 +37402,110 @@ paths:
             x-speakeasy-name-override: create
             x-speakeasy-react-hook:
                 name: CreateSkill
+    /rpc/skills.dismissSuggestion:
+        post:
+            description: Idempotently dismiss an open skill edit suggestion. Approved and superseded suggestions conflict.
+            operationId: dismissSkillSuggestion
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DismissSkillSuggestionRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillEditSuggestion'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: dismissSuggestion skills
+            tags:
+                - skills
+            x-speakeasy-name-override: dismissSuggestion
+            x-speakeasy-react-hook:
+                name: DismissSkillSuggestion
     /rpc/skills.distribute:
         post:
             description: Create or update the active distribution of a skill to exactly one plugin or assistant. Repeating the request for the same target updates the version pin or is a no-op.
@@ -36227,6 +38082,389 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: SkillDistributions
+    /rpc/skills.listFeedback:
+        get:
+            description: List all-time outcome counts and recent resolved feedback for a skill. Name-only feedback is excluded.
+            operationId: listSkillFeedback
+            parameters:
+                - allowEmptyValue: true
+                  description: The skill ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The skill ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Cursor for the next page of feedback.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor for the next page of feedback.
+                    type: string
+                - allowEmptyValue: true
+                  description: The number of feedback rows to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 20
+                    description: The number of feedback rows to return per page.
+                    format: int64
+                    maximum: 50
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSkillFeedbackResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listFeedback skills
+            tags:
+                - skills
+            x-speakeasy-name-override: listFeedback
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: SkillFeedback
+    /rpc/skills.listSuggestionFeedback:
+        get:
+            description: List the agent feedback cited as the reason for one proposed change, newest first.
+            operationId: listSkillSuggestionFeedback
+            parameters:
+                - allowEmptyValue: true
+                  description: The proposed change ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The proposed change ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: The number of feedback records to return.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: The number of feedback records to return.
+                    format: int64
+                    maximum: 50
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSkillSuggestionFeedbackResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listSuggestionFeedback skills
+            tags:
+                - skills
+            x-speakeasy-name-override: listSuggestionFeedback
+            x-speakeasy-react-hook:
+                name: SkillSuggestionFeedback
+    /rpc/skills.listSuggestions:
+        get:
+            description: List open skill edit suggestions in the project, newest first. The implementation requires the skills product feature and skill read scope.
+            operationId: listSkillSuggestions
+            parameters:
+                - allowEmptyValue: true
+                  description: Only return suggestions for this skill.
+                  in: query
+                  name: skill_id
+                  schema:
+                    description: Only return suggestions for this skill.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Cursor for the next page of suggestions.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor for the next page of suggestions.
+                    type: string
+                - allowEmptyValue: true
+                  description: The number of suggestions to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 20
+                    description: The number of suggestions to return per page.
+                    format: int64
+                    maximum: 50
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSkillSuggestionsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listSuggestions skills
+            tags:
+                - skills
+            x-speakeasy-name-override: listSuggestions
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: SkillSuggestions
     /rpc/skills.listUnknownActivations:
         get:
             description: List terminal skill activations that could not be attributed to a skill version.
@@ -36484,6 +38722,110 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: SkillVersions
+    /rpc/skills.restoreVersion:
+        post:
+            description: Restore a historical valid version as the skill's current version without changing the immutable version record or explicit distribution pins.
+            operationId: restoreSkillVersion
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RestoreSkillVersionRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RecordSkillResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: restoreVersion skills
+            tags:
+                - skills
+            x-speakeasy-name-override: restoreVersion
+            x-speakeasy-react-hook:
+                name: RestoreSkillVersion
     /rpc/skills.share:
         post:
             description: Create a public share link for a skill. Repeated requests return the existing active link, so each skill has at most one active share token.
@@ -48280,6 +50622,26 @@ components:
                 - status
                 - created_at
                 - updated_at
+        ApproveAllSkillSuggestionsRequestBody:
+            type: object
+            properties:
+                suggestion_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    description: Optional suggestion IDs to approve. Omitted or empty approves every currently open suggestion.
+        ApproveAllSkillSuggestionsResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillSuggestionApprovalItem'
+                    description: The outcomes in snapshot order.
+            description: Per-item outcomes for the snapshotted open suggestions.
+            required:
+                - items
         ApproveShadowMCPApprovalRequestForm:
             type: object
             properties:
@@ -48319,6 +50681,40 @@ components:
                 - match_breadth
                 - match_value
                 - display_name
+        ApproveSkillSuggestionRequestBody:
+            type: object
+            properties:
+                change_id:
+                    type: string
+                    description: Optional ID of the single proposed change to take. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.
+                    format: uuid
+                content:
+                    type: string
+                    description: Optional edited complete SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.
+                id:
+                    type: string
+                    description: The suggestion ID.
+                    format: uuid
+            required:
+                - id
+        ApproveSkillSuggestionResult:
+            type: object
+            properties:
+                outcome:
+                    type: string
+                    description: Whether the suggestion created a version, created one and stayed open carrying its remaining changes, or was stale.
+                    enum:
+                        - applied
+                        - partially_applied
+                        - superseded
+                suggestion:
+                    $ref: '#/components/schemas/SkillEditSuggestion'
+                version:
+                    $ref: '#/components/schemas/SkillVersion'
+            description: The result of approving one suggestion.
+            required:
+                - suggestion
+                - outcome
         ArchiveSkillRequestBody:
             type: object
             properties:
@@ -51076,6 +53472,12 @@ components:
                     items:
                         type: string
                     description: Complete desired canonical URL allow set for this policy. Omit or send empty to create no URL-specific allow decisions.
+                shadow_mcp_disposition:
+                    type: string
+                    description: 'Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.'
+                    enum:
+                        - block_all
+                        - allow_all
                 sources:
                     type: array
                     items:
@@ -52034,6 +54436,230 @@ components:
             required:
                 - id
                 - user_session_issuer_id
+        DeviceIntegrationConfig:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: ISO 8601 timestamp when the config was created. Omitted when no config is set.
+                    format: date-time
+                enabled:
+                    type: boolean
+                    description: Whether the provider integration is active.
+                has_credentials:
+                    type: boolean
+                    description: Whether secret credentials are currently stored. The values themselves are never returned.
+                id:
+                    type: string
+                    description: Config ID. Omitted when no config is set for the provider.
+                organization_id:
+                    type: string
+                    description: Organization the config belongs to.
+                provider:
+                    type: string
+                    description: Provider identifier (e.g. jamf, kandji, drata, vanta).
+                settings:
+                    type: object
+                    description: Non-secret provider settings (e.g. instance URL), keyed by field key.
+                    additionalProperties:
+                        type: string
+                updated_at:
+                    type: string
+                    description: ISO 8601 timestamp of the most recent change. Omitted when no config is set.
+                    format: date-time
+            description: Per-organization device integration config for one provider. Secret credentials are write-only; reads only expose whether credentials are configured.
+            required:
+                - organization_id
+                - provider
+                - enabled
+                - has_credentials
+                - settings
+        DeviceIntegrationCoverage:
+            type: object
+            properties:
+                active_window_minutes:
+                    type: integer
+                    description: 'Freshness window: an assigned user counts as active when their agent heartbeat is within this many minutes.'
+                    format: int64
+                agent_active:
+                    type: integer
+                    description: Devices whose assigned user has an agent heartbeat within the window.
+                    format: int64
+                agent_stale:
+                    type: integer
+                    description: Devices whose assigned user has an agent that went quiet — the drift/disable case.
+                    format: int64
+                missing:
+                    type: integer
+                    description: Devices absent from the latest completed MDM snapshot.
+                    format: int64
+                no_agent:
+                    type: integer
+                    description: Devices whose assigned email resolves to an org member with no agent at all.
+                    format: int64
+                no_email:
+                    type: integer
+                    description: Devices the MDM reports with no assigned-user email.
+                    format: int64
+                organization_id:
+                    type: string
+                    description: Organization the coverage describes.
+                total_devices:
+                    type: integer
+                    description: All synced devices, including missing ones.
+                    format: int64
+                unmanaged_agent_users:
+                    type: integer
+                    description: Agent users with no matching device in any connected MDM inventory — shadow devices or fleets outside MDM.
+                    format: int64
+                unresolved_email:
+                    type: integer
+                    description: Devices whose assigned email matches neither an agent user nor an org member.
+                    format: int64
+            description: 'Agent-coverage summary across the org''s connected MDM inventories. Buckets attest the assigned user''s agent (the heartbeat is per user), not the device itself: agent_active means the device''s assigned user has a fresh agent heartbeat somewhere.'
+            required:
+                - organization_id
+                - active_window_minutes
+                - agent_active
+                - agent_stale
+                - no_agent
+                - no_email
+                - unresolved_email
+                - missing
+                - total_devices
+                - unmanaged_agent_users
+        DeviceIntegrationProvider:
+            type: object
+            properties:
+                capabilities:
+                    type: array
+                    items:
+                        type: string
+                    description: 'Integration directions the provider supports: inventory_source (pull the managed-device fleet) and/or evidence_sink (push agent-coverage evidence).'
+                display_name:
+                    type: string
+                    description: Human-readable vendor name.
+                fields:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DeviceIntegrationProviderField'
+                    description: Credential and settings inputs the provider needs, in render order.
+                id:
+                    type: string
+                    description: Provider identifier (e.g. jamf, kandji, drata, vanta).
+                schedules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DeviceIntegrationProviderSchedule'
+                    description: Sync pipelines the provider runs.
+            description: A vendor the device integrations framework can connect to.
+            required:
+                - id
+                - display_name
+                - capabilities
+                - fields
+                - schedules
+        DeviceIntegrationProviderField:
+            type: object
+            properties:
+                key:
+                    type: string
+                    description: Field identifier in the credentials or settings document.
+                kind:
+                    type: string
+                    description: Input kind hint.
+                    enum:
+                        - text
+                        - url
+                label:
+                    type: string
+                    description: Human-readable name to render for the field.
+                required:
+                    type: boolean
+                    description: Whether the field must be supplied to connect the provider.
+                secret:
+                    type: boolean
+                    description: 'Whether the value is secret: stored encrypted, write-only, and masked in the UI.'
+            description: One credential or settings input a provider needs to connect. Secret fields are stored encrypted and are write-only; non-secret fields are readable settings.
+            required:
+                - key
+                - label
+                - kind
+                - secret
+                - required
+        DeviceIntegrationProviderSchedule:
+            type: object
+            properties:
+                interval_minutes:
+                    type: integer
+                    description: Target minutes between successful runs. Declared in code by the provider, not configurable per org.
+                    format: int64
+                schedule:
+                    type: string
+                    description: Schedule identifier (e.g. jamf_inventory).
+            description: One sync pipeline a provider runs on a cadence.
+            required:
+                - schedule
+                - interval_minutes
+        DeviceIntegrationScheduleState:
+            type: object
+            properties:
+                auto_paused_at:
+                    type: string
+                    description: ISO 8601 timestamp when the scheduler auto-paused the schedule after repeated provider rejections. Omitted unless auto-paused.
+                    format: date-time
+                consecutive_failures:
+                    type: integer
+                    description: Number of consecutive failed syncs. Resets to zero on success or retry.
+                    format: int64
+                enabled:
+                    type: boolean
+                    description: Whether the user has this schedule enabled. Disabled schedules are skipped by the scheduler until re-enabled.
+                last_sync_error:
+                    type: string
+                    description: Stored error from the schedule's latest failed sync. Omitted unless the latest sync failed.
+                last_sync_failed_at:
+                    type: string
+                    description: ISO 8601 timestamp for the schedule's latest failed sync. Omitted unless a sync has failed.
+                    format: date-time
+                last_sync_success_at:
+                    type: string
+                    description: ISO 8601 timestamp for the schedule's last successful sync. Omitted until a sync succeeds.
+                    format: date-time
+                next_sync_after:
+                    type: string
+                    description: ISO 8601 timestamp for the schedule's next scheduled sync.
+                    format: date-time
+                schedule:
+                    type: string
+                    description: Schedule identifier (e.g. jamf_inventory).
+                status:
+                    type: string
+                    description: Derived status for the schedule's latest sync state.
+                    enum:
+                        - pending
+                        - success
+                        - failed
+                        - auto_paused
+                        - disabled
+            description: 'State of one sync schedule of a provider integration: the user''s intent (enabled) plus the scheduler''s execution state.'
+            required:
+                - schedule
+                - enabled
+                - status
+                - consecutive_failures
+        DeviceIntegrationTestConnectionResult:
+            type: object
+            properties:
+                message:
+                    type: string
+                    description: Human-readable failure detail. Omitted on success.
+                ok:
+                    type: boolean
+                    description: Whether the provider accepted the stored credentials.
+            description: Outcome of probing the provider with the stored credentials.
+            required:
+                - ok
         DiscoverProtectedResourceMetadataRequestBody:
             type: object
             properties:
@@ -52043,14 +54669,15 @@ components:
                     format: uuid
             required:
                 - remote_mcp_server_id
-        DiscoverRemoteSessionIssuerRequestBody:
+        DismissSkillSuggestionRequestBody:
             type: object
             properties:
-                issuer:
+                id:
                     type: string
-                    description: Issuer URL to discover (e.g. https://login.linear.com).
+                    description: The suggestion ID.
+                    format: uuid
             required:
-                - issuer
+                - id
         DistributeSkillRequestBody:
             type: object
             properties:
@@ -52850,6 +55477,14 @@ components:
             required:
                 - slug
                 - metadata
+        FetchIssuerMetadataRequestBody:
+            type: object
+            properties:
+                issuer:
+                    type: string
+                    description: Issuer URL to fetch metadata for (e.g. https://login.linear.com).
+            required:
+                - issuer
         FetchOpenAPIv3FromURLForm:
             type: object
             properties:
@@ -53914,7 +56549,7 @@ components:
                     description: Daily activations in the adoption window.
                 skill:
                     $ref: '#/components/schemas/Skill'
-            description: An active skill and its derived latest version.
+            description: An active skill and its current version.
             required:
                 - skill
                 - adoption
@@ -54309,6 +56944,11 @@ components:
                     $ref: '#/components/schemas/HookNotificationData'
                 prompt:
                     $ref: '#/components/schemas/HookPromptData'
+                prompt_attachments:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/HookPromptAttachmentEntry'
+                    description: Transcript-derived prompt attachment content (Claude Stop/SubagentStop/SessionEnd).
                 skill:
                     $ref: '#/components/schemas/HookSkillData'
                 tool_call:
@@ -54440,6 +57080,50 @@ components:
                     type: string
                     description: Notification type.
             description: Local agent notification payload.
+        HookPromptAttachmentEntry:
+            type: object
+            properties:
+                attachment_kind:
+                    type: string
+                    description: Provider attachment kind, such as file or directory.
+                content:
+                    type: string
+                    description: Attachment text visible to the model.
+                display_path:
+                    type: string
+                    description: Provider display path for the attachment, when available.
+                entry_uuid:
+                    type: string
+                    description: Provider transcript entry UUID. Used as the stable attachment identifier.
+                file_path:
+                    type: string
+                    description: Absolute provider-reported file or directory path, when available.
+                num_lines:
+                    type: integer
+                    description: Number of lines included in the attachment window, when reported.
+                    format: int64
+                prompt_id:
+                    type: string
+                    description: Prompt identifier of the user turn this attachment belongs to, when the transcript parent chain resolves.
+                prompt_sha256:
+                    type: string
+                    description: Lowercase hex SHA-256 of the trimmed prompt text stored for the parent user message, when available.
+                start_line:
+                    type: integer
+                    description: First one-based source line included in the attachment window, when reported.
+                    format: int64
+                timestamp:
+                    type: string
+                    description: Provider transcript timestamp for this attachment, when available.
+                total_lines:
+                    type: integer
+                    description: Total source file lines, when reported.
+                    format: int64
+            description: Transcript-derived content that a provider attached to a submitted prompt, such as Claude Code @file and @directory mentions.
+            required:
+                - entry_uuid
+                - attachment_kind
+                - content
         HookPromptData:
             type: object
             properties:
@@ -55259,6 +57943,35 @@ components:
                     example: 01jp3f054qc02gbcmpp0qmyzed
             required:
                 - items
+        ListDeviceIntegrationProvidersResult:
+            type: object
+            properties:
+                providers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DeviceIntegrationProvider'
+                    description: Every available provider, sorted by id.
+            required:
+                - providers
+        ListDeviceIntegrationSchedulesResult:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                    description: Organization the schedules belong to.
+                provider:
+                    type: string
+                    description: Provider identifier.
+                schedules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DeviceIntegrationScheduleState'
+                    description: State for each of the provider's sync schedules.
+            description: Sync schedules for one provider integration. Empty when no config is set for the provider.
+            required:
+                - organization_id
+                - provider
+                - schedules
         ListEnvironmentsResult:
             type: object
             properties:
@@ -55440,6 +58153,19 @@ components:
                         $ref: '#/components/schemas/Key'
             required:
                 - keys
+        ListManagedDevicesResult:
+            type: object
+            properties:
+                devices:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ManagedDevice'
+                    description: Devices, newest first.
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page. Omitted on the last page.
+            required:
+                - devices
         ListMcpEndpointsResult:
             type: object
             properties:
@@ -55972,6 +58698,52 @@ components:
             description: A page of active plugin skill distributions for the current project.
             required:
                 - distributions
+        ListSkillFeedbackResult:
+            type: object
+            properties:
+                counts:
+                    $ref: '#/components/schemas/SkillFeedbackCounts'
+                feedback:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillFeedback'
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; absent when exhausted.
+            description: All-time outcome counts and a newest-first page of feedback for a skill.
+            required:
+                - counts
+                - feedback
+        ListSkillSuggestionFeedbackResult:
+            type: object
+            properties:
+                feedback:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillFeedback'
+                    description: The feedback records linked to the suggestion.
+            description: The agent feedback a suggestion was generated from, newest first.
+            required:
+                - feedback
+        ListSkillSuggestionsResult:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; absent when exhausted.
+                suggestions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillEditSuggestion'
+                    description: The open suggestions in this page.
+                total_open_count:
+                    type: integer
+                    description: The total number of matching open suggestions, independent of pagination.
+                    format: int64
+            description: A page of open skill edit suggestions.
+            required:
+                - suggestions
+                - total_open_count
         ListSkillVersionsResult:
             type: object
             properties:
@@ -56472,6 +59244,72 @@ components:
                 - id
                 - name
                 - url
+        ManagedDevice:
+            type: object
+            properties:
+                agent_last_seen_at:
+                    type: string
+                    description: The assigned user's latest device-agent heartbeat. Omitted when the user has never synced an agent.
+                    format: date-time
+                coverage_bucket:
+                    type: string
+                    description: Coverage classification for the device.
+                    enum:
+                        - agent_active
+                        - agent_stale
+                        - no_agent
+                        - no_email
+                        - unresolved_email
+                        - missing
+                external_id:
+                    type: string
+                    description: The MDM's identifier for the device.
+                first_seen_at:
+                    type: string
+                    format: date-time
+                hostname:
+                    type: string
+                    description: Device hostname.
+                id:
+                    type: string
+                    description: Device row ID.
+                last_seen_at:
+                    type: string
+                    format: date-time
+                mdm_last_check_in_at:
+                    type: string
+                    description: Last device check-in as reported by the MDM.
+                    format: date-time
+                missing_since:
+                    type: string
+                    description: When the device went absent from the MDM inventory. Omitted while present.
+                    format: date-time
+                os_name:
+                    type: string
+                    description: Operating system name.
+                os_version:
+                    type: string
+                    description: Operating system version.
+                provider:
+                    type: string
+                    description: Provider the device was synced from.
+                serial_number:
+                    type: string
+                    description: Hardware serial number as reported by the MDM.
+                user_email:
+                    type: string
+                    description: Assigned user's email exactly as the MDM reported it. Omitted when the MDM has no assignment.
+                user_id:
+                    type: string
+                    description: Resolved Gram user for the assigned email. Omitted when the email is missing or does not resolve to an org member.
+            description: One device from a connected MDM's inventory, annotated with its agent-coverage bucket. Agent presence is attested per assigned user (the agent heartbeat is keyed by user email), not per device.
+            required:
+                - id
+                - provider
+                - external_id
+                - coverage_bucket
+                - first_seen_at
+                - last_seen_at
         MarketplaceSettingsResult:
             type: object
             properties:
@@ -59589,6 +62427,20 @@ components:
                 - passthrough
                 - client_id_metadata_document_supported
                 - discovery_warnings
+        RemoteSessionIssuerRefresh:
+            type: object
+            properties:
+                discovery_warnings:
+                    type: array
+                    items:
+                        type: string
+                    description: Warnings describing any RFC 8414 deviations encountered while re-reading the issuer's metadata document. A refresh that returns warnings still persisted its result; deviations severe enough to distrust the document abort the refresh with an error instead.
+                issuer:
+                    $ref: '#/components/schemas/RemoteSessionIssuer'
+            description: 'Result of refreshMetadata: the stored remote_session_issuer as it now stands, plus any warnings raised while re-reading the upstream RFC 8414 document. Distinct from RemoteSessionIssuerDraft, which describes an issuer that may not exist yet and is never persisted.'
+            required:
+                - issuer
+                - discovery_warnings
         RemoveClientFromMcpServerRequestBody:
             type: object
             properties:
@@ -59766,6 +62618,20 @@ components:
                 - type
                 - status_codes
                 - content_types
+        RestoreSkillVersionRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The skill ID.
+                    format: uuid
+                version_id:
+                    type: string
+                    description: The historical version to restore.
+                    format: uuid
+            required:
+                - id
+                - version_id
         RetryScheduleRequestBody:
             type: object
             properties:
@@ -60263,6 +63129,12 @@ components:
                     format: double
                     minimum: 0.1
                     maximum: 10
+                shadow_mcp_disposition:
+                    type: string
+                    description: 'Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless it appears on the blocked-URL list. Immutable after create. Only present on policies with the shadow_mcp source and block action.'
+                    enum:
+                        - block_all
+                        - allow_all
                 sources:
                     type: array
                     items:
@@ -62580,7 +65452,7 @@ components:
                     format: date-time
                 latest_version_id:
                     type: string
-                    description: The derived latest version ID, selected from immutable version creation order.
+                    description: The current version ID, selected by effective promotion time.
                     format: uuid
                 name:
                     type: string
@@ -62788,11 +65660,142 @@ components:
                 - on_target_machines
                 - drifted_machines
                 - indeterminate_machines
+        SkillEditSuggestion:
+            type: object
+            properties:
+                applies_cleanly:
+                    type: boolean
+                    description: Whether every proposed change still applies to the base version.
+                approved_at:
+                    type: string
+                    description: When the suggestion was approved, when present.
+                    format: date-time
+                approved_by_user_id:
+                    type: string
+                    description: The user that approved the suggestion, when present.
+                base_version_id:
+                    type: string
+                    description: The version the suggestion was generated from.
+                    format: uuid
+                changes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillEditSuggestionChange'
+                    description: The separate changes proposed, each reviewable on its own.
+                created_at:
+                    type: string
+                    description: When the suggestion was created.
+                    format: date-time
+                feedback_count:
+                    type: integer
+                    description: Feedback records the suggestion was generated from.
+                    format: int64
+                feedback_session_count:
+                    type: integer
+                    description: Distinct sessions that reported the feedback behind the suggestion.
+                    format: int64
+                id:
+                    type: string
+                    description: The suggestion ID.
+                    format: uuid
+                proposed_content:
+                    type: string
+                    description: The complete SKILL.md content produced by taking every proposed change.
+                rationale:
+                    type: string
+                    description: Why the edit was proposed, covering the suggestion as a whole.
+                scored_session_count:
+                    type: integer
+                    description: Scored sessions considered by the suggestion.
+                    format: int64
+                skill_display_name:
+                    type: string
+                    description: The user-facing skill name.
+                skill_id:
+                    type: string
+                    description: The skill targeted by the suggestion.
+                    format: uuid
+                skill_name:
+                    type: string
+                    description: The canonical skill name.
+                status:
+                    type: string
+                    description: The suggestion state.
+                    enum:
+                        - open
+                        - approved
+                        - dismissed
+                        - superseded
+                updated_at:
+                    type: string
+                    description: When the suggestion was last updated.
+                    format: date-time
+            description: A proposed edit to an existing project skill.
+            required:
+                - id
+                - skill_id
+                - skill_name
+                - skill_display_name
+                - base_version_id
+                - changes
+                - proposed_content
+                - applies_cleanly
+                - rationale
+                - status
+                - feedback_count
+                - feedback_session_count
+                - scored_session_count
+                - created_at
+                - updated_at
+        SkillEditSuggestionChange:
+            type: object
+            properties:
+                applies_cleanly:
+                    type: boolean
+                    description: Whether the change still applies.
+                created_at:
+                    type: string
+                    description: When the change was recorded.
+                    format: date-time
+                feedback_count:
+                    type: integer
+                    description: Feedback records cited as the reason for this change.
+                    format: int64
+                feedback_session_count:
+                    type: integer
+                    description: Distinct sessions that reported the feedback behind this change.
+                    format: int64
+                id:
+                    type: string
+                    description: The change ID.
+                    format: uuid
+                proposed_diff:
+                    type: string
+                    description: The change as a unified diff against the content the changes before it produce.
+                rationale:
+                    type: string
+                    description: Why this change alone was proposed.
+                suggestion_id:
+                    type: string
+                    description: The suggestion the change belongs to.
+                    format: uuid
+            description: One self-contained edit proposed by a suggestion, applied and reviewed on its own.
+            required:
+                - id
+                - suggestion_id
+                - proposed_diff
+                - rationale
+                - applies_cleanly
+                - feedback_count
+                - feedback_session_count
+                - created_at
         SkillEfficacyInsight:
             type: object
             properties:
                 metrics:
                     $ref: '#/components/schemas/SkillInsightMetrics'
+                regression_signal:
+                    $ref: '#/components/schemas/SkillEfficacyRegressionSignal'
                 skill_id:
                     type: string
                     format: uuid
@@ -62879,6 +65882,48 @@ components:
                 - estimated_minutes_saved_samples
                 - roi_confidence_counts
                 - flag_counts
+        SkillEfficacyRegressionSignal:
+            type: object
+            properties:
+                comparable:
+                    type: boolean
+                current_average_score:
+                    type: number
+                    format: double
+                current_scored_sessions:
+                    type: integer
+                    format: int64
+                current_version_id:
+                    type: string
+                    format: uuid
+                predecessor_average_score:
+                    type: number
+                    format: double
+                predecessor_scored_sessions:
+                    type: integer
+                    format: int64
+                predecessor_version_id:
+                    type: string
+                    format: uuid
+                regression:
+                    type: boolean
+                window_end:
+                    type: string
+                    format: date-time
+                window_start:
+                    type: string
+                    format: date-time
+            description: The current skill version's efficacy comparison using the server suggestion policy.
+            required:
+                - comparable
+                - regression
+                - current_version_id
+                - current_average_score
+                - current_scored_sessions
+                - predecessor_average_score
+                - predecessor_scored_sessions
+                - window_start
+                - window_end
         SkillEfficacyScoredSession:
             type: object
             properties:
@@ -62974,6 +66019,107 @@ components:
                 - org_daily_cap
                 - new_version_burst
                 - is_default
+        SkillFeedback:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the feedback was recorded.
+                    format: date-time
+                id:
+                    type: string
+                    description: The feedback ID.
+                    format: uuid
+                note:
+                    type: string
+                    description: An optional feedback note.
+                outcome:
+                    type: string
+                    description: The reported skill feedback outcome.
+                    enum:
+                        - helped
+                        - partially_helped
+                        - did_not_help
+                        - misleading
+                        - harmful
+                reviewed_at:
+                    type: string
+                    description: When automated suggestion analysis reviewed this feedback.
+                    format: date-time
+                skill_version_id:
+                    type: string
+                    description: The attributed skill version, when known.
+                    format: uuid
+                source:
+                    type: string
+                    description: Where skill feedback was recorded.
+            description: A privacy-minimized feedback row for a skill.
+            required:
+                - id
+                - source
+                - outcome
+                - created_at
+        SkillFeedbackCounts:
+            type: object
+            properties:
+                did_not_help:
+                    type: integer
+                    format: int64
+                harmful:
+                    type: integer
+                    format: int64
+                helped:
+                    type: integer
+                    format: int64
+                misleading:
+                    type: integer
+                    format: int64
+                partially_helped:
+                    type: integer
+                    format: int64
+                total:
+                    type: integer
+                    format: int64
+            description: All-time outcome counts for resolved feedback on a skill.
+            required:
+                - total
+                - helped
+                - partially_helped
+                - did_not_help
+                - misleading
+                - harmful
+        SkillFeedbackPayload:
+            type: object
+            properties:
+                note:
+                    type: string
+                    description: Optional concise context about the outcome.
+                    maxLength: 4000
+                outcome:
+                    type: string
+                    description: How the skill affected the task.
+                    enum:
+                        - helped
+                        - partially_helped
+                        - did_not_help
+                        - misleading
+                        - harmful
+                schema_version:
+                    type: string
+                    description: Contract version.
+                    enum:
+                        - hook.skill-feedback.v1
+                skill:
+                    type: string
+                    description: Canonical name of the skill that was used.
+                    pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+                    minLength: 1
+                    maxLength: 64
+            description: Agent-volunteered feedback about a distributed skill.
+            required:
+                - schema_version
+                - skill
+                - outcome
         SkillInsightMetrics:
             type: object
             properties:
@@ -63055,6 +66201,45 @@ components:
             required:
                 - bucket_start
                 - activation_count
+        SkillSuggestionApprovalItem:
+            type: object
+            properties:
+                message:
+                    type: string
+                    description: A safe explanation for a conflict or failure.
+                outcome:
+                    type: string
+                    description: The item's processing outcome.
+                    enum:
+                        - applied
+                        - superseded
+                        - conflict
+                        - failed
+                resulting_version_id:
+                    type: string
+                    description: The created version for an applied item.
+                    format: uuid
+                skill_display_name:
+                    type: string
+                    description: The user-facing skill name.
+                skill_id:
+                    type: string
+                    description: The targeted skill ID.
+                    format: uuid
+                skill_name:
+                    type: string
+                    description: The canonical skill name.
+                suggestion_id:
+                    type: string
+                    description: The suggestion ID.
+                    format: uuid
+            description: The result of one item in a bulk suggestion approval.
+            required:
+                - suggestion_id
+                - skill_id
+                - skill_name
+                - skill_display_name
+                - outcome
         SkillSummary:
             type: object
             properties:
@@ -65652,6 +68837,9 @@ components:
                 agent_version:
                     type: string
                     description: Most recent agent version reported by the tunnel
+                allow_public:
+                    type: boolean
+                    description: Whether the owner has consented to serving this source through a public, anonymous MCP endpoint
                 connection_status:
                     type: string
                     description: Derived live connection status for a tunneled MCP server source
@@ -65700,6 +68888,7 @@ components:
                 - key_prefix
                 - status
                 - connection_status
+                - allow_public
                 - active_connection_count
                 - active_consumer_session_count
                 - created_at
@@ -66588,6 +69777,12 @@ components:
                     items:
                         type: string
                     description: Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.
+                shadow_mcp_disposition:
+                    type: string
+                    description: 'The policy''s shadow MCP disposition. Immutable: omit, or send the current value unchanged; any other value is rejected. Switching posture requires delete + recreate.'
+                    enum:
+                        - block_all
+                        - allow_all
                 sources:
                     type: array
                     items:
@@ -66966,6 +70161,9 @@ components:
         UpdateTunneledMcpServerForm:
             type: object
             properties:
+                allow_public:
+                    type: boolean
+                    description: Consent to serve this source through a public, anonymous MCP endpoint. Disabling revokes all live anonymous sessions. Omit to leave unchanged.
                 id:
                     type: string
                     description: The ID of the tunneled MCP server to update
@@ -67169,6 +70367,28 @@ components:
                 - api_key
                 - enabled
         UpsertConfigRequestBody2:
+            type: object
+            properties:
+                credentials:
+                    type: object
+                    description: Secret credential values keyed by field key. Stored encrypted; never returned on reads. Omit to keep the existing secrets.
+                    additionalProperties:
+                        type: string
+                enabled:
+                    type: boolean
+                    description: Whether the integration should be active.
+                provider:
+                    type: string
+                    description: Provider identifier (e.g. jamf, kandji, drata, vanta).
+                settings:
+                    type: object
+                    description: 'Non-secret settings values keyed by field key. Merged per key with the stored settings: omitted keys keep their stored values.'
+                    additionalProperties:
+                        type: string
+            required:
+                - provider
+                - enabled
+        UpsertConfigRequestBody3:
             type: object
             properties:
                 enabled:
@@ -67911,6 +71131,8 @@ tags:
       description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.
     - name: deployments
       description: Manages deployments of tools from upstream sources.
+    - name: deviceIntegrations
+      description: 'Manage organization-level device integrations: MDM inventory sources and compliance evidence sinks.'
     - name: domains
       description: Manage custom domains for gram.
     - name: environments

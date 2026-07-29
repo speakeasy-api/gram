@@ -108,7 +108,7 @@ export function OtelForwardingSection(): JSX.Element {
   const handleSave = () => {
     upsert({
       request: {
-        upsertConfigRequestBody2: {
+        upsertConfigRequestBody3: {
           endpointUrl: trimmedUrl,
           enabled,
           headers: headers

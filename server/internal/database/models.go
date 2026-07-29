@@ -351,6 +351,24 @@ type ChatAnalysisSetting struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
+type ChatContentPart struct {
+	ID                  uuid.UUID
+	ChatID              uuid.UUID
+	ProjectID           uuid.NullUUID
+	Kind                string
+	ContentAssetUrl     string
+	ExternalID          pgtype.Text
+	ParentChatMessageID uuid.NullUUID
+	Version             pgtype.Int4
+	Source              pgtype.Text
+	Metadata            []byte
+	RiskAnalyzedAt      pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+}
+
 type ChatMessage struct {
 	ID                uuid.UUID
 	Seq               int64
@@ -1626,6 +1644,7 @@ type RiskPolicy struct {
 	ScopeExempt          pgtype.Text
 	Action               string
 	AudienceType         string
+	ShadowMcpDisposition pgtype.Text
 	AutoName             bool
 	UserMessage          pgtype.Text
 	Prompt               pgtype.Text
@@ -1707,7 +1726,8 @@ type RiskResult struct {
 	OrganizationID      string
 	RiskPolicyID        uuid.UUID
 	RiskPolicyVersion   int64
-	ChatMessageID       uuid.UUID
+	ChatMessageID       uuid.NullUUID
+	ChatContentPartID   uuid.NullUUID
 	Source              string
 	Found               bool
 	RuleID              pgtype.Text
@@ -1756,6 +1776,38 @@ type SkillDistribution struct {
 	UpdatedAt       pgtype.Timestamptz
 }
 
+type SkillEditSuggestion struct {
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	SkillID            uuid.UUID
+	BaseVersionID      uuid.UUID
+	Rationale          string
+	Status             string
+	ScoredSessionCount int64
+	ApprovedByUserID   pgtype.Text
+	ApprovedAt         pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+}
+
+type SkillEditSuggestionChange struct {
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+	SuggestionID uuid.UUID
+	ProposedDiff string
+	Rationale    string
+	Position     int32
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type SkillEditSuggestionFeedback struct {
+	ProjectID  uuid.UUID
+	ChangeID   uuid.UUID
+	FeedbackID uuid.UUID
+	CreatedAt  pgtype.Timestamptz
+}
+
 type SkillEfficacyEvaluation struct {
 	ID              uuid.UUID
 	OrganizationID  string
@@ -1786,6 +1838,22 @@ type SkillEfficacySetting struct {
 	NewVersionBurst  int32
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
+}
+
+type SkillFeedback struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	SkillID        uuid.NullUUID
+	SkillVersionID uuid.NullUUID
+	SkillName      string
+	Source         string
+	Outcome        string
+	Note           pgtype.Text
+	SessionID      pgtype.Text
+	UserID         pgtype.Text
+	UserEmail      pgtype.Text
+	ReviewedAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
 }
 
 type SkillObservation struct {
@@ -1854,6 +1922,7 @@ type SkillVersion struct {
 	SpecValid        bool
 	ValidationErrors []byte
 	CreatedAt        pgtype.Timestamptz
+	PromotedAt       pgtype.Timestamptz
 	CreatedByUserID  string
 }
 

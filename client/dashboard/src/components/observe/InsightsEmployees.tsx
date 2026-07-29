@@ -63,6 +63,17 @@ import { HooksSetupDialog } from "@/pages/hooks/HooksSetupDialog";
 type EmployeeView = "employees" | "unattributed";
 
 const VIEW_SEARCH_PARAM = "view";
+const SORT_SEARCH_PARAM = "sort";
+
+// `?sort=tokenCount:desc` seeds the table's initial sort so links into this page
+// (e.g. the Top Users card on the project home) land on the same ordering the
+// card showed. Sorting stays table-local afterwards; the param is read once.
+function parseSortParam(raw: string | null): SortDescriptor | null {
+  if (!raw) return null;
+  const [id, direction] = raw.split(":");
+  if (!id) return null;
+  return { id, direction: direction === "asc" ? "asc" : "desc" };
+}
 
 const EMPLOYEE_VIEWS: EmployeeView[] = ["employees", "unattributed"];
 const VIEW_LABELS: Record<EmployeeView, string> = {
@@ -261,6 +272,7 @@ export function InsightsEmployeesContent(): JSX.Element {
       ? "unattributed"
       : "employees";
   const isUnattributedView = view === "unattributed";
+  const initialSort = parseSortParam(searchParams.get(SORT_SEARCH_PARAM));
 
   const selectedStatuses = values.status;
   const selectedRoleId = values.role;
@@ -562,6 +574,7 @@ export function InsightsEmployeesContent(): JSX.Element {
                 key={view}
                 employees={employees}
                 search={search}
+                initialSort={initialSort}
                 onSelectUser={openUser}
                 deviceSyncByEmail={deviceSyncByEmail}
                 deviceStatus={deviceStatus}
@@ -580,19 +593,21 @@ const PAGE_SIZE = 10;
 function EmployeeTable({
   employees,
   search,
+  initialSort,
   onSelectUser,
   deviceSyncByEmail,
   deviceStatus,
 }: {
   employees: Employee[];
   search: string;
+  initialSort: SortDescriptor | null;
   onSelectUser: (employee: Employee) => void;
   deviceSyncByEmail: Map<string, Date>;
   deviceStatus: DeviceAgentColumnStatus;
 }) {
   const showDeviceAgent = deviceStatus !== "hidden";
   const [page, setPage] = useState(0);
-  const [sort, setSort] = useState<SortDescriptor | null>(null);
+  const [sort, setSort] = useState<SortDescriptor | null>(initialSort);
   // Only ticks once statuses are actually resolvable; disabled (0) otherwise so
   // the memo stays stable (deviceAgentState is only called when "ready").
   const now = useNow(deviceStatus === "ready" ? AGENT_STATUS_TICK_MS : 0);
@@ -788,7 +803,7 @@ function EmployeeTable({
 
   const NoResultsMessage = () => {
     return (
-      <div className="flex h-full items-center justify-center">
+      <div className="flex h-full items-center justify-center py-10">
         <p className="text-muted-foreground text-sm">
           {search
             ? `No employees matching "${search}".`
