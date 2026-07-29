@@ -4847,11 +4847,27 @@ async function seedSkillEditSuggestion(init: {
     (change, position) =>
       `(${position}, $seedskill$${change.diff}$seedskill$, $seedskill$${change.rationale}$seedskill$)`,
   ).join(",\n    ");
+  // The change diffs are anchored to the seeded content, so a suggestion is
+  // only inserted while that version is still the one approvals resolve as
+  // the base (mirroring ResolveSkillSuggestionBase). Once the skill advances
+  // — e.g. edits were applied while demoing — re-seeding leaves it alone
+  // instead of planting a stale suggestion.
   const sql = `
 INSERT INTO skill_edit_suggestions (project_id, skill_id, base_version_id, rationale, scored_session_count)
 SELECT s.project_id, s.id, '${baseVersionId}', 'Recurring friction in refund sessions points at the same missing steps.', 7
 FROM skills s
 WHERE s.id = '${skillId}'
+  AND '${baseVersionId}' = (
+    SELECT sv.id
+    FROM skill_versions sv
+    LEFT JOIN skill_version_origins svo
+      ON svo.project_id = s.project_id
+      AND svo.skill_id = sv.skill_id
+      AND svo.skill_version_id = sv.id
+    WHERE sv.skill_id = s.id AND sv.spec_valid IS TRUE
+    ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
+    LIMIT 1
+  )
   AND NOT EXISTS (
     SELECT 1 FROM skill_edit_suggestions e
     WHERE e.skill_id = s.id AND e.status = 'open'
@@ -4878,7 +4894,7 @@ WHERE e.skill_id = '${skillId}'
   })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -tA -f -`.quiet();
 
   log.info(
-    `Seeded skill 'support-refunds' with an open edit suggestion (${SEED_SKILL_SUGGESTION_CHANGES.length} changes) in '${projectSlug}'`,
+    `Seeded skill 'support-refunds' in '${projectSlug}' (an open edit suggestion with ${SEED_SKILL_SUGGESTION_CHANGES.length} changes is added while the skill is at its seeded base version)`,
   );
 }
 
