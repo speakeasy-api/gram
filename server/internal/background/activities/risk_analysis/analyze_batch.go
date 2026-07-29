@@ -53,6 +53,7 @@ type AnalyzeBatch struct {
 	promptInjectionPub     gcp.Publisher[*riskv1.PromptInjectionAnalysis]
 	promptPolicyPub        gcp.Publisher[*riskv1.PromptPolicyAnalysis]
 	customRulesPub         gcp.Publisher[*riskv1.CustomRulesAnalysis]
+	findingsPub            gcp.Publisher[*riskv1.Finding]
 	customRuleScanner      *customruleanalyzer.Scanner
 	cliDestructiveScanner  *clidestructive.Scanner
 	destructiveToolScanner *destructivetool.Scanner
@@ -77,6 +78,7 @@ func NewAnalyzeBatch(
 	promptInjectionPub gcp.Publisher[*riskv1.PromptInjectionAnalysis],
 	promptPolicyPub gcp.Publisher[*riskv1.PromptPolicyAnalysis],
 	customRulesPub gcp.Publisher[*riskv1.CustomRulesAnalysis],
+	findingsPub gcp.Publisher[*riskv1.Finding],
 	customRuleScanner *customruleanalyzer.Scanner,
 	celEng *celenv.Engine,
 	builtinPresets *presetlib.Library,
@@ -89,6 +91,9 @@ func NewAnalyzeBatch(
 	}
 	if promptInjectionScanner == nil {
 		promptInjectionScanner = promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
+	}
+	if findingsPub == nil {
+		findingsPub = gcp.NewNoopPublisher[*riskv1.Finding]()
 	}
 	recommended, err := CompileRecommended(celEng)
 	if err != nil {
@@ -120,6 +125,7 @@ func NewAnalyzeBatch(
 		promptInjectionPub:     promptInjectionPub,
 		promptPolicyPub:        promptPolicyPub,
 		customRulesPub:         customRulesPub,
+		findingsPub:            findingsPub,
 		customRuleScanner:      customRuleScanner,
 		cliDestructiveScanner:  clidestructive.NewScanner(),
 		destructiveToolScanner: destructivetool.NewScanner(shadowMCPClient),
@@ -244,7 +250,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	}
 
 	if len(messages) == 0 && len(session) == 0 {
-		if err := a.writeResults(ctx, args, nil); err != nil {
+		if _, err := a.writeResults(ctx, args, nil); err != nil {
 			return nil, err
 		}
 		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
@@ -288,8 +294,18 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	}
 
 	rowsToWrite, findingsCount := a.buildRows(ctx, args, ids, findings)
-	if err := a.writeResults(ctx, args, rowsToWrite); err != nil {
+	written, err := a.writeResults(ctx, args, rowsToWrite)
+	if err != nil {
 		return nil, err
+	}
+	// Mirror the stream scanners onto the shared findings topic for sources
+	// that have no stream publisher (ClickHouse would otherwise never see
+	// them). Only after a committed write: a batch dropped because its policy
+	// was deleted mid-analysis must not leak findings into ClickHouse that
+	// Postgres never stored. Best-effort — a publish failure logs and never
+	// fails the activity.
+	if written {
+		a.publishBatchOnlyFindings(ctx, args, ids, findings)
 	}
 
 	span.SetAttributes(
