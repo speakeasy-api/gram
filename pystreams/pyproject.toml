@@ -20,7 +20,7 @@ dependencies = [
   "presidio-analyzer>=2.2.363",
   "starlette>=0.40.0",
   "structlog>=26.1.0",
-  "uvicorn>=0.30.0",
+  "uvicorn>=0.51.0",
 ]
 
 [dependency-groups]
