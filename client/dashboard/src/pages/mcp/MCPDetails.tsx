@@ -532,6 +532,10 @@ export function MCPStatusDropdown({
       : "private";
 
   const applyStatus = (status: ServerStatus) => {
+    // Disabling intentionally leaves mcpIsPublic untouched: flipping it
+    // would trigger UpdateToolset's visibility-flip OAuth cleanup and
+    // destroy an attached OAuth configuration. Serving is gated on
+    // mcpEnabled alone, and re-enabling sets mcpIsPublic explicitly.
     const updates =
       status === "disabled"
         ? { mcpEnabled: false }

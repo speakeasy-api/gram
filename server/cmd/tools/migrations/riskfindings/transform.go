@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 )
 
 // FindingRow is one risk_findings row ready to insert into ClickHouse. The ch
@@ -35,6 +36,10 @@ type FindingRow struct {
 	StartPos                 int32      `ch:"start_pos"`
 	EndPos                   int32      `ch:"end_pos"`
 	DeadLetterReason         string     `ch:"dead_letter_reason"`
+	ChatID                   string     `ch:"chat_id"`
+	UserID                   string     `ch:"user_id"`
+	ExternalUserID           string     `ch:"external_user_id"`
+	Category                 string     `ch:"category"`
 	MatchLen                 uint32     `ch:"match_len"`
 	MatchRedacted            string     `ch:"match_redacted"`
 	FingerprintPepperVersion string     `ch:"fingerprint_pepper_version"`
@@ -42,6 +47,7 @@ type FindingRow struct {
 	FingerprintTenantHS256   string     `ch:"fingerprint_tenant_hs256"`
 	ExcludedAt               *time.Time `ch:"excluded_at"`
 	ExclusionID              *uuid.UUID `ch:"exclusion_id"`
+	FalsePositiveAt          *time.Time `ch:"false_positive_at"`
 }
 
 // Transformer maps a Postgres SourceRow to a ClickHouse FindingRow, mirroring the
@@ -108,6 +114,11 @@ func (t *Transformer) Transform(_ context.Context, in SourceRow) ([]FindingRow, 
 		tags = []string{}
 	}
 
+	// Rows surviving the found/rule guard above are never dead-letter
+	// sentinels, so classification always applies — same canonical
+	// (source, rule_id) mapping the live writer stamps at ingest.
+	category := string(categories.Classify(in.Source, conv.PtrValOr(in.RuleID, "")))
+
 	return []FindingRow{{
 		ID:                in.ID,
 		CreatedAt:         in.CreatedAt,
@@ -125,6 +136,10 @@ func (t *Transformer) Transform(_ context.Context, in SourceRow) ([]FindingRow, 
 		StartPos:          conv.PtrValOr(in.StartPos, 0),
 		EndPos:            conv.PtrValOr(in.EndPos, 0),
 		DeadLetterReason:  conv.PtrValOr(in.DeadLetterReason, ""),
+		ChatID:            in.ChatID,
+		UserID:            in.UserID,
+		ExternalUserID:    in.ExternalUserID,
+		Category:          category,
 		MatchLen:          uint32(len(match)), //nolint:gosec // match length cannot exceed uint32 in practice
 		// Redact every source (no shadow_mcp/account_identity passthrough) via the
 		// shared helper, so backfilled match_redacted stays byte-identical to what
@@ -135,5 +150,6 @@ func (t *Transformer) Transform(_ context.Context, in SourceRow) ([]FindingRow, 
 		FingerprintTenantHS256:   tenantFP,
 		ExcludedAt:               in.ExcludedAt,
 		ExclusionID:              in.ExclusionID,
+		FalsePositiveAt:          in.FalsePositiveAt,
 	}}, nil
 }

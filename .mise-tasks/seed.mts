@@ -2625,6 +2625,15 @@ async function seedPersonalAccounts(init: {
     ${usersValues.join(",\n")}
     ON CONFLICT (email) DO UPDATE SET display_name = EXCLUDED.display_name, workos_id = EXCLUDED.workos_id;
 
+    -- workos_membership_id is derived from the employee email only, but the row
+    -- also carries organization_id, which ./zero flips between runs. A prior
+    -- run can therefore leave a row with the same membership id under a
+    -- different org, which collides on the global
+    -- organization_user_relationships_workos_membership_id_key partial unique
+    -- index (not the (organization_id, user_id) arbiter below). Clear any prior
+    -- seeded rows for these users by their stable uid first, matching the
+    -- by-uid cleanup used for user_accounts/chats below.
+    DELETE FROM organization_user_relationships WHERE user_id IN (${uidList});
     INSERT INTO organization_user_relationships (organization_id, user_id, workos_user_id, workos_membership_id) VALUES
     ${orgRelValues.join(",\n")}
     ON CONFLICT (organization_id, user_id) DO NOTHING;
@@ -2634,14 +2643,26 @@ async function seedPersonalAccounts(init: {
     ON CONFLICT (organization_id, provider, device_id) WHERE deleted_at IS NULL
     DO UPDATE SET linked_user_id = EXCLUDED.linked_user_id, last_seen_at = clock_timestamp();
 
-    DELETE FROM user_accounts WHERE organization_id = ${sqlStr(organizationId)} AND user_id IN (${uidList});
+    -- Account ids derive from (provider, email) and are org-independent, but
+    -- ./zero flips organization_id between runs. Scoping this cleanup to the
+    -- current org would strand a prior run's row (same id, old org) that then
+    -- collides on user_accounts_pkey (id) — which the (org, provider,
+    -- external_account_uuid) arbiter below does not cover. Delete by uid across
+    -- every org so re-seeds are idempotent regardless of the active org.
+    DELETE FROM user_accounts WHERE user_id IN (${uidList});
     INSERT INTO user_accounts (id, organization_id, user_id, provider, external_org_id, external_account_uuid, external_account_id, email, account_type) VALUES
     ${accountValues.join(",\n")}
     ON CONFLICT (organization_id, provider, external_account_uuid) WHERE deleted_at IS NULL
     DO UPDATE SET user_id = EXCLUDED.user_id, account_type = EXCLUDED.account_type, email = EXCLUDED.email, external_org_id = EXCLUDED.external_org_id, last_seen_at = clock_timestamp();
 
-    DELETE FROM chat_messages WHERE chat_id IN (SELECT id FROM chats WHERE project_id = ${sqlStr(projectId)} AND user_id IN (${uidList}));
-    DELETE FROM chats WHERE project_id = ${sqlStr(projectId)} AND user_id IN (${uidList});
+    -- Chat ids derive from the account key and are project/org-independent, but
+    -- projectId (like organizationId) flips between ./zero runs. Scoping this
+    -- cleanup to the current project would strand a prior run's chats (same id,
+    -- old project) that then collide on chats_pkey (id) — the chats INSERT below
+    -- has no ON CONFLICT. Delete by uid across every project so re-seeds are
+    -- idempotent. Restricted to the seed employee uids, so no real chats match.
+    DELETE FROM chat_messages WHERE chat_id IN (SELECT id FROM chats WHERE user_id IN (${uidList}));
+    DELETE FROM chats WHERE user_id IN (${uidList});
     INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, user_account_id, title, created_at, updated_at) VALUES
     ${chatValues.join(",\n")};
     INSERT INTO chat_messages (chat_id, project_id, role, content, model, created_at) VALUES
@@ -4620,13 +4641,18 @@ function chatSessionBackfillSQL(
         ) AS is_claude_tool_result,
         (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
         (
-            hook_source IN ('codex', 'cursor')
+            hook_source = 'opencode'
+            AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
+            AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
+        ) AS is_opencode_usage_row,
+        (
+            hook_source IN ('codex', 'cursor', 'opencode')
             AND toString(attributes.gram.tool.name) != ''
             AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
             AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
         ) AS is_agent_tool_call,
         (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
-        (is_claude_api_request OR is_agent_usage_row) AS is_usage_row,
+        (is_claude_api_request OR is_agent_usage_row OR is_opencode_usage_row) AS is_usage_row,
         (
             (is_claude_tool_result AND toString(attributes.success) = 'false')
             OR (is_agent_tool_call AND (toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400))
@@ -4636,7 +4662,7 @@ function chatSessionBackfillSQL(
             toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id),
             toString(id)
         ) AS tool_call_dedup_id,
-        if(is_claude_api_request, toString(attributes.prompt.id), toString(attributes.gen_ai.response.id)) AS session_message_id,
+        multiIf(is_claude_api_request, toString(attributes.prompt.id), is_opencode_usage_row, toString(id), toString(attributes.gen_ai.response.id)) AS session_message_id,
         multiIf(
             is_claude_api_request AND toString(attributes.model) != '', toString(attributes.model),
             is_claude_api_request AND toString(attributes.gen_ai.request.model) != '', toString(attributes.gen_ai.request.model),
@@ -4679,7 +4705,7 @@ function chatSessionBackfillSQL(
     WHERE gram_project_id = '${projectId}'
       AND (${timePredicate})
       AND chat_id != ''
-      AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_agent_tool_call)
+      AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_opencode_usage_row OR is_agent_tool_call)
     GROUP BY gram_project_id, time_bucket, chat_id;
   `;
 }

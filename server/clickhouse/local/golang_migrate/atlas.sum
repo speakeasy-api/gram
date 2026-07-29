@@ -1,4 +1,4 @@
-h1:WmouPGNGILBfSDOT/o4hto14T1dmJnSRaZI1N/OQTFw=
+h1:q/tHtGzDAdFruZXOQZrxlGCBaXj3cRWVEw5wzfuWcXk=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -77,3 +77,5 @@ h1:WmouPGNGILBfSDOT/o4hto14T1dmJnSRaZI1N/OQTFw=
 20260723231517_work_delivered_efficiency.up.sql h1:+NibDX4zQXROmNmB3tVaLTZX8FQBHeIquu301CGGiY8=
 20260724083855_risk_findings_attribution.up.sql h1:1Tj5SJUC43cC2Lyh61nD+N5LVAROpQ9FyUxqEQjJYE4=
 20260724165737_spend-rule-usage-summaries.up.sql h1:0hpnDtMVkWrzc5CYJ9etO5fHvAH+M5OO+fu9943Yh8g=
+20260727130630_opencode-usage-rows.up.sql h1:nlG5b7iOxB2b0GB57u9gN4p5ib9hDwxe1DUVjPZ9TLA=
+20260727130935_chat-content-parts.up.sql h1:goqEijpfHvVUVMTpMhGxGvSmxO2+jbe/pJ70k6bPLhY=

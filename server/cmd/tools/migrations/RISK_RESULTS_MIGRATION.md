@@ -26,13 +26,15 @@ rule_id IS NOT NULL`, mirroring the live outbox emission
 through the live path — are excluded, and the backfill cannot inflate risk-event
 counts with non-findings.
 
-**False positives are excluded** (`false_positive_at IS NULL`). Rows the Presidio
+**False positives are migrated with their mark.** Rows the Presidio
 false-positive sweep has classified as noise (reserved IPs, placeholder emails,
-…) are dropped. ClickHouse is becoming the source of truth for risk findings and
-has no false-positive column, so importing known noise would leave permanently
-unannotated junk in the store — we keep the backfilled set clean instead. If
-false-positive tracking is needed later, a dedicated column can be added to
-`risk_findings` and this filter revisited.
+…) are written to ClickHouse with their `false_positive_at` timestamp preserved
+in the matching Nullable column. Every read query filters
+`false_positive_at IS NULL`, so these rows never inflate counts — but the
+pre-cutover marks survive the migration, which matters while the live
+false-positive mutation path (PR 3) is deferred. When validating row counts
+after a run, compare against Postgres **without** a `false_positive_at IS NULL`
+filter (or apply it on both sides).
 
 The Postgres and ClickHouse shapes differ — this is **not** a column-for-column
 copy:
@@ -47,9 +49,15 @@ copy:
   HKDF key. Dead-letter sentinels and empty matches are left un-fingerprinted.
 - **Derived / dropped columns.** `request_id` is not recorded in `risk_results`
   and is left empty; `inserted_at` is stamped by ClickHouse's `DEFAULT now64(9)`.
-  Postgres-only columns without a ClickHouse home (`found`, `spans`,
-  `false_positive_*`) are dropped. Postgres `excluded_exclusion_id` maps to
-  ClickHouse `exclusion_id`.
+  Postgres-only columns without a ClickHouse home (`found`, `spans`) are
+  dropped. Postgres `excluded_exclusion_id` maps to ClickHouse `exclusion_id`;
+  `false_positive_at` carries over as-is.
+- **Denormalized attribution and category.** The source LEFT JOINs
+  `chat_messages`/`chats` to stamp `chat_id`, `user_id`, and `external_user_id`
+  (message-level user ids win over chat-level, everything collapsing to `''`
+  when the message or chat is gone), mirroring the live writer's
+  `GetChatMessageAttribution` lookup. `category` is computed from
+  `(source, rule_id)` via `internal/risk/categories`, same as the live writer.
 
 ## Flags
 

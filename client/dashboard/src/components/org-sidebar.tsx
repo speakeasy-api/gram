@@ -1,10 +1,6 @@
-import {
-  CollapsibleNavGroup,
-  CollapsibleNavItem,
-  NavButton,
-  NavGroupProvider,
-} from "@/components/nav-menu";
+import { NavButton, NavGroupProvider } from "@/components/nav-menu";
 import { RequireScope } from "@/components/require-scope";
+import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
 import {
   Sidebar,
   SidebarContent,
@@ -29,19 +25,8 @@ import { OnboardingResumeButton } from "./onboarding-resume-button";
 import { SidebarUserMenu } from "./sidebar-user-menu";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
-function ScopeGatedNavItem({
-  item,
-  scope,
-}: {
-  item: AppRoute;
-  scope: Scope | Scope[];
-}) {
-  return (
-    <RequireScope scope={scope} level="section">
-      <CollapsibleNavItem item={item} />
-    </RequireScope>
-  );
-}
+/** Scopes that make an org-level nav item visible. */
+const orgReadOrAdmin: Scope[] = ["org:read", "org:admin"];
 
 function ScopeGatedTopLevelItem({
   item,
@@ -58,6 +43,7 @@ function ScopeGatedTopLevelItem({
           href={item.href()}
           active={item.active}
           Icon={item.Icon}
+          stage={item.stage}
         />
       </SidebarMenuItem>
     </RequireScope>
@@ -176,89 +162,56 @@ export function OrgSidebar({
               />
 
               {/* Settings group */}
-              <CollapsibleNavGroup
+              <ScopeGatedNavGroup
                 label="Settings"
                 Icon={(p) => <Icon {...p} name="settings" />}
-                defaultHref={orgRoutes.billing.href()}
-              >
-                <ScopeGatedNavItem
-                  item={orgRoutes.billing}
-                  scope={["org:read", "org:admin"]}
-                />
-                <ScopeGatedNavItem item={orgRoutes.apiKeys} scope="org:admin" />
-                <ScopeGatedNavItem
-                  item={orgRoutes.domains}
-                  scope={["org:read", "org:admin"]}
-                />
-                <ScopeGatedNavItem
-                  item={orgRoutes.logs}
-                  scope={["org:read", "org:admin"]}
-                />
-                {productFeatures?.skillsEnabled === true && (
-                  <ScopeGatedNavItem
-                    item={orgRoutes.skills}
-                    scope="org:admin"
-                  />
-                )}
-                <ScopeGatedNavItem
-                  item={orgRoutes.aiIntegrations}
-                  scope={["org:read", "org:admin"]}
-                />
-                <ScopeGatedNavItem
-                  item={orgRoutes.webhooks}
-                  scope={["org:read", "org:admin"]}
-                />
-                {/* Platform-admin only for now; gated on the platform-admin
-                    flag rather than an org RBAC scope. Later expands to org
-                    admins managing their own external credentials. */}
-                {isPlatformAdmin && (
-                  <CollapsibleNavItem item={orgRoutes.externalServices} />
-                )}
-              </CollapsibleNavGroup>
+                items={[
+                  { item: orgRoutes.billing, scope: orgReadOrAdmin },
+                  { item: orgRoutes.apiKeys, scope: "org:admin" },
+                  { item: orgRoutes.domains, scope: orgReadOrAdmin },
+                  { item: orgRoutes.logs, scope: orgReadOrAdmin },
+                  ...(productFeatures?.skillsEnabled === true
+                    ? [{ item: orgRoutes.skills, scope: "org:admin" as Scope }]
+                    : []),
+                  { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },
+                  { item: orgRoutes.webhooks, scope: orgReadOrAdmin },
+                  // Platform-admin only for now; gated on the platform-admin
+                  // flag rather than an org RBAC scope. Later expands to org
+                  // admins managing their own external credentials.
+                  ...(isPlatformAdmin
+                    ? [{ item: orgRoutes.externalServices }]
+                    : []),
+                ]}
+              />
 
               {/* Secure group */}
-              <CollapsibleNavGroup
+              <ScopeGatedNavGroup
                 label="Secure"
                 Icon={(p) => <Icon {...p} name="shield-check" />}
-                defaultHref={orgRoutes.auditLogs.href()}
-              >
-                <ScopeGatedNavItem
-                  item={orgRoutes.auditLogs}
-                  scope={["org:read", "org:admin"]}
-                />
-                {isDeviceAgentEnabled && (
-                  <ScopeGatedNavItem
-                    item={orgRoutes.deviceAgent}
-                    scope={["org:read", "org:admin"]}
-                  />
-                )}
-                <ScopeGatedNavItem
-                  item={orgRoutes.access}
-                  scope={["org:read", "org:admin"]}
-                />
-              </CollapsibleNavGroup>
+                items={[
+                  { item: orgRoutes.auditLogs, scope: orgReadOrAdmin },
+                  ...(isDeviceAgentEnabled
+                    ? [{ item: orgRoutes.deviceAgent, scope: orgReadOrAdmin }]
+                    : []),
+                  { item: orgRoutes.access, scope: orgReadOrAdmin },
+                ]}
+              />
 
               {/* Identity group */}
-              <CollapsibleNavGroup
+              <ScopeGatedNavGroup
                 label="Identity"
                 Icon={(p) => <Icon {...p} name="fingerprint" />}
-                defaultHref={orgRoutes.identity.href()}
-              >
-                {isUserSessionsEnabled && (
-                  <ScopeGatedNavItem
-                    item={orgRoutes.userSessions}
-                    scope={["org:read", "org:admin"]}
-                  />
-                )}
-                <ScopeGatedNavItem
-                  item={orgRoutes.identity}
-                  scope={["org:read", "org:admin"]}
-                />
-                <ScopeGatedNavItem
-                  item={orgRoutes.remoteIdentityProviders}
-                  scope={["org:read", "org:admin"]}
-                />
-              </CollapsibleNavGroup>
+                items={[
+                  ...(isUserSessionsEnabled
+                    ? [{ item: orgRoutes.userSessions, scope: orgReadOrAdmin }]
+                    : []),
+                  { item: orgRoutes.identity, scope: orgReadOrAdmin },
+                  {
+                    item: orgRoutes.remoteIdentityProviders,
+                    scope: orgReadOrAdmin,
+                  },
+                ]}
+              />
             </SidebarMenu>
           </NavGroupProvider>
         )}

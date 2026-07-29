@@ -1,7 +1,13 @@
 import { ChartCard } from "@/components/chart/ChartCard";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { CHART_COLORS } from "@/components/stacked-time-series";
-import { ErrorAlert } from "@/components/ui/alert";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  ErrorAlert,
+} from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
@@ -12,12 +18,13 @@ import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
 import { useRoutes } from "@/routes";
 import type { SkillEfficacyInsight } from "@gram/client/models/components/skillefficacyinsight.js";
 import type { SkillEfficacyScoredSession } from "@gram/client/models/components/skillefficacyscoredsession.js";
+import type { SkillEfficacyRegressionSignal } from "@gram/client/models/components/skillefficacyregressionsignal.js";
 import type { SkillInsightPoint } from "@gram/client/models/components/skillinsightpoint.js";
 import type { SkillVersionInsight } from "@gram/client/models/components/skillversioninsight.js";
 import type { GetSkillResult } from "@gram/client/models/components/getskillresult.js";
 import { useSkillEfficacyInsights } from "@gram/client/react-query/skillEfficacyInsights.js";
 import { useSkillVersionsInfinite } from "@gram/client/react-query/skillVersions.js";
-import { Badge, type Column, Table } from "@speakeasy-api/moonshine";
+import { Badge, type Column, Icon, Table } from "@speakeasy-api/moonshine";
 import {
   CategoryScale,
   Chart as ChartJS,
@@ -161,6 +168,7 @@ export function SkillInsightsSection({
           {query.data && !versionsLoading && !versionsQuery.error && (
             <InsightsContent
               insight={query.data.insights[0]}
+              skillId={data.skill.id}
               scoredSessions={query.data.scoredSessions}
               canReadChats={canReadChats}
               versionLabels={versionLabels}
@@ -181,11 +189,13 @@ export function SkillInsightsSection({
 
 function InsightsContent({
   insight,
+  skillId,
   scoredSessions,
   canReadChats,
   versionLabels,
 }: {
   insight: SkillEfficacyInsight | undefined;
+  skillId: string;
   scoredSessions: SkillEfficacyScoredSession[];
   canReadChats: boolean;
   versionLabels: Map<string, string>;
@@ -206,6 +216,12 @@ function InsightsContent({
 
   return (
     <div className="space-y-6">
+      {insight.regressionSignal?.regression && (
+        <RegressionWarning
+          skillId={skillId}
+          signal={insight.regressionSignal}
+        />
+      )}
       <dl className="grid gap-px overflow-hidden rounded-lg border sm:grid-cols-2 xl:grid-cols-4">
         <InsightMetric
           label="30-day activations"
@@ -301,6 +317,39 @@ function InsightsContent({
         )}
       </div>
     </div>
+  );
+}
+
+export function RegressionWarning({
+  skillId,
+  signal,
+}: {
+  skillId: string;
+  signal: SkillEfficacyRegressionSignal;
+}): JSX.Element {
+  const routes = useRoutes();
+  return (
+    <Alert variant="warning">
+      <Icon name="circle-alert" className="h-4 w-4" />
+      <AlertTitle>Current version shows an efficacy regression</AlertTitle>
+      <AlertDescription className="space-y-3">
+        <p>
+          Current: {formatPercent(signal.currentAverageScore)} across{" "}
+          {formatCount(signal.currentScoredSessions)} scored sessions. Previous:{" "}
+          {formatPercent(signal.predecessorAverageScore)} across{" "}
+          {formatCount(signal.predecessorScoredSessions)} scored sessions.
+        </p>
+        {signal.predecessorVersionId && (
+          <Button size="sm" variant="outline" asChild>
+            <Link
+              to={`${routes.skills.detail.href(skillId)}#version-${signal.predecessorVersionId}`}
+            >
+              Review version to restore
+            </Link>
+          </Button>
+        )}
+      </AlertDescription>
+    </Alert>
   );
 }
 

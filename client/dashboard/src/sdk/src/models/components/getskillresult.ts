@@ -17,7 +17,7 @@ import {
 import { SkillVersion, SkillVersion$inboundSchema } from "./skillversion.js";
 
 /**
- * An active skill and its derived latest version.
+ * An active skill and its current version.
  */
 export type GetSkillResult = {
   /**

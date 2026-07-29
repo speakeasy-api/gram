@@ -173,6 +173,25 @@ const SHARED_TOOLTIP = {
   boxPadding: 4,
 } satisfies _BarTooltip;
 
+// Category-axis labels are mostly emails. Keep the domain — it's how you tell
+// internal from external users — and spend the character budget on the local
+// part instead. Full label is still available in the tooltip title.
+const MAX_AXIS_LABEL_CHARS = 26;
+
+function truncateAxisLabel(label: string): string {
+  if (label.length <= MAX_AXIS_LABEL_CHARS) return label;
+
+  const at = label.lastIndexOf("@");
+  if (at > 0) {
+    const domain = label.slice(at);
+    if (domain.length <= MAX_AXIS_LABEL_CHARS - 4) {
+      return `${label.slice(0, MAX_AXIS_LABEL_CHARS - 1 - domain.length)}…${domain}`;
+    }
+  }
+
+  return `${label.slice(0, MAX_AXIS_LABEL_CHARS - 1)}…`;
+}
+
 const SHARED_BAR_SCALES = {
   x: {
     stacked: true,
@@ -191,11 +210,7 @@ const SHARED_BAR_SCALES = {
       padding: 2,
       font: { size: 12 },
       callback(value) {
-        const label = this.getLabelForValue(value as number);
-        const display = label.includes("@")
-          ? label.split("@")[0]!.slice(0, 14) + "@…"
-          : label.slice(0, 14) + (label.length > 14 ? "…" : "");
-        return display;
+        return truncateAxisLabel(this.getLabelForValue(value as number));
       },
     },
   },
@@ -1121,7 +1136,7 @@ function UserEventCountsChart({
     const color = USER_SOURCE_COLORS[0]!;
     const chartDatasets = [
       {
-        label: "Events",
+        label: "Tool calls",
         barThickness: 24,
         data: sortedUsers.map((user) => user.eventCount),
         backgroundColor: color,
@@ -2096,7 +2111,7 @@ function HooksAnalytics({
         <UserEventCountsChart
           loading={sectionStatus.users.pending}
           error={sectionStatus.users.error}
-          title="User Event Counts"
+          title="Tool Calls by User"
           users={users}
           handleFilter={makeFilterHandler({ user: "row" })}
           expandedChart={expandedChart}

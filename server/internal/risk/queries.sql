@@ -17,6 +17,7 @@ INSERT INTO risk_policies (
   , enabled
   , action
   , audience_type
+  , shadow_mcp_disposition
   , auto_name
   , user_message
   , prompt
@@ -42,6 +43,7 @@ VALUES (
   , @enabled
   , @action
   , @audience_type
+  , sqlc.narg(shadow_mcp_disposition)::text
   , @auto_name
   , @user_message
   , sqlc.narg(prompt)::text

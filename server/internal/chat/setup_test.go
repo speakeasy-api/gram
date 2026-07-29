@@ -12,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -55,6 +57,7 @@ type chatTestInstance struct {
 	conn      *pgxpool.Pool
 	projectID uuid.UUID
 	orgID     string
+	assets    assets.BlobStore
 }
 
 // newTestChatService builds a chat service with RBAC enforcement enabled for
@@ -126,7 +129,8 @@ func newTestChatServiceWithOptions(t *testing.T, isRBACEnabled authz.IsRBACEnabl
 	mgr := testenv.NewTestManager(t, logger, tp, conn, redisClient, suffix, billingClient)
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, isRBACEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := chat.NewService(logger, tp, conn, mgr, nil, nil, completionClient, nil, nil, nil, nil, authzEngine, nil, billingClient, audit.NewLogger())
+	assetStorage := assetstest.NewTestBlobStore(t)
+	svc := chat.NewService(logger, tp, conn, mgr, nil, nil, completionClient, nil, nil, nil, assetStorage, authzEngine, nil, billingClient, audit.NewLogger())
 
 	return &chatTestInstance{
 		service:   svc,
@@ -134,5 +138,6 @@ func newTestChatServiceWithOptions(t *testing.T, isRBACEnabled authz.IsRBACEnabl
 		conn:      conn,
 		projectID: project.ID,
 		orgID:     orgID,
+		assets:    assetStorage,
 	}
 }

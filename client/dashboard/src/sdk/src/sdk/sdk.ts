@@ -19,6 +19,7 @@ import { ChatSessions } from "./chatsessions.js";
 import { CliAuth } from "./cliauth.js";
 import { Collections } from "./collections.js";
 import { Deployments } from "./deployments.js";
+import { DeviceIntegrations } from "./deviceintegrations.js";
 import { Domains } from "./domains.js";
 import { Environments } from "./environments.js";
 import { External } from "./external.js";
@@ -149,6 +150,11 @@ export class Gram extends ClientSDK {
   private _deployments?: Deployments;
   get deployments(): Deployments {
     return (this._deployments ??= new Deployments(this._options));
+  }
+
+  private _deviceIntegrations?: DeviceIntegrations;
+  get deviceIntegrations(): DeviceIntegrations {
+    return (this._deviceIntegrations ??= new DeviceIntegrations(this._options));
   }
 
   private _domains?: Domains;

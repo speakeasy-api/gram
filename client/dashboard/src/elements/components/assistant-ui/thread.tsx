@@ -121,7 +121,7 @@ const useChatResolution = () => useContext(ChatResolutionContext);
 
 const DangerousApiKeyWarning = () => (
   <div className="m-2 rounded-md border border-red-500 bg-red-100 px-4 py-3 text-sm text-red-800 dark:border-red-600 dark:bg-red-900/30 dark:text-red-200">
-    <strong>Danger:</strong> You are using a Gram API key directly in the
+    <strong>Danger:</strong> You are using a Speakeasy API key directly in the
     browser. This exposes your key to anyone who inspects this page. Do NOT use
     this in production.
   </div>
