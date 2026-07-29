@@ -36,12 +36,23 @@ type fakeDrata struct {
 	mu sync.Mutex
 	// sessions accumulates uploaded records per session id.
 	sessions map[string][]map[string]any
+	// sessionStatus tracks each session's state so the one-IN_PROGRESS-at-a-
+	// time rule and the cancel path can be exercised.
+	sessionStatus map[string]string
+	// ignoreStatusFilter makes the list endpoint return every session
+	// regardless of ?status=, standing in for an API that silently drops an
+	// unknown query param.
+	ignoreStatusFilter bool
+	// failComplete rejects the completing action, stranding the session
+	// mid-push the way a crashed or timed-out run does.
+	failComplete bool
 	// records is the authoritative dataset: replaced wholesale when a
 	// session completes, exactly like the real API.
 	records []map[string]any
 	// uploadRequests counts record-upload posts, for batching assertions.
 	uploadRequests int
 	completed      []string
+	canceled       []string
 
 	server *httptest.Server
 }
@@ -49,21 +60,45 @@ type fakeDrata struct {
 func newFakeDrata(t *testing.T) *fakeDrata {
 	t.Helper()
 	f := &fakeDrata{
-		t:              t,
-		apiKey:         "test-api-key",
-		resourceIDs:    []string{testResourceID},
-		mu:             sync.Mutex{},
-		sessions:       map[string][]map[string]any{},
-		records:        nil,
-		uploadRequests: 0,
-		completed:      nil,
-		server:         nil,
+		t:                  t,
+		apiKey:             "test-api-key",
+		resourceIDs:        []string{testResourceID},
+		mu:                 sync.Mutex{},
+		sessions:           map[string][]map[string]any{},
+		sessionStatus:      map[string]string{},
+		ignoreStatusFilter: false,
+		failComplete:       false,
+		records:            nil,
+		uploadRequests:     0,
+		completed:          nil,
+		canceled:           nil,
+		server:             nil,
 	}
 
 	connBase := "/public/v2/custom-connections/" + testConnectionID
-	sessionsBase := connBase + "/resources/" + testResourceID + "/sessions/"
+	sessionsList := connBase + "/resources/" + testResourceID + "/sessions"
+	sessionsBase := sessionsList + "/"
 
 	mux := http.NewServeMux()
+	// Registered without the trailing slash so the list read does not fall
+	// into ServeMux's subtree redirect onto the upload handler.
+	mux.HandleFunc(sessionsList, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(f.t, http.MethodGet, r.Method)
+		if !f.authorized(w, r) {
+			return
+		}
+		wanted := r.URL.Query().Get("status")
+		f.mu.Lock()
+		listed := make([]string, 0, len(f.sessionStatus))
+		for id, status := range f.sessionStatus {
+			if f.ignoreStatusFilter || wanted == "" || status == wanted {
+				listed = append(listed, fmt.Sprintf(`{"sessionId": %q, "status": %q}`, id, status))
+			}
+		}
+		f.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"data": [%s]}`, strings.Join(listed, ","))
+	})
 	mux.HandleFunc(connBase, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(f.t, http.MethodGet, r.Method)
 		assert.Equal(f.t, userAgent, r.Header.Get("User-Agent"), "every request carries the integration User-Agent")
@@ -92,7 +127,7 @@ func newFakeDrata(t *testing.T) *fakeDrata {
 				Action string `json:"action"`
 			}
 			assert.NoError(f.t, json.NewDecoder(r.Body).Decode(&action))
-			assert.Equal(f.t, "complete", action.Action)
+			assert.Contains(f.t, []string{"complete", "cancel"}, action.Action)
 			f.mu.Lock()
 			defer f.mu.Unlock()
 			// Sessions exist only once an upload created them; completing an
@@ -104,8 +139,24 @@ func newFakeDrata(t *testing.T) *fakeDrata {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}
+			if action.Action == "cancel" {
+				// Cancelling discards the staged records and leaves the live
+				// dataset untouched.
+				delete(f.sessions, sessionID)
+				f.sessionStatus[sessionID] = "CANCELLED"
+				f.canceled = append(f.canceled, sessionID)
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			if f.failComplete {
+				// The session stays IN_PROGRESS, which is precisely what
+				// strands it for every later push.
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
 			// Completion makes the session the authoritative dataset.
 			f.records = uploaded
+			f.sessionStatus[sessionID] = "ACTIVE"
 			f.completed = append(f.completed, sessionID)
 			w.WriteHeader(http.StatusOK)
 			return
@@ -120,9 +171,24 @@ func newFakeDrata(t *testing.T) *fakeDrata {
 		assert.NoError(f.t, json.NewDecoder(r.Body).Decode(&payload))
 		assert.LessOrEqual(f.t, len(payload.Data), recordBatchSize, "uploads must respect the batch cap")
 		f.mu.Lock()
+		// "Only one session can be IN_PROGRESS at a time per
+		// connection/resource." Enforcing it here is what makes a stranded
+		// session bite: without recovery, one partial push wedges every
+		// later one. Drata documents no status for the collision, so the
+		// provider must not depend on this particular code.
+		for id, status := range f.sessionStatus {
+			if id != rest && status == "IN_PROGRESS" {
+				f.mu.Unlock()
+				w.WriteHeader(http.StatusConflict)
+				return
+			}
+		}
 		// Assignment (not just append) so an empty first upload still
 		// creates the session, mirroring implicit session creation.
 		f.sessions[rest] = append(f.sessions[rest], payload.Data...)
+		if _, seen := f.sessionStatus[rest]; !seen {
+			f.sessionStatus[rest] = "IN_PROGRESS"
+		}
 		f.uploadRequests++
 		f.mu.Unlock()
 		w.WriteHeader(http.StatusCreated)
@@ -332,4 +398,68 @@ func TestUnassignedDeviceRecord(t *testing.T) {
 	require.Equal(t, false, record["assignedUserAgentActive"])
 	_, present := record["assignedUserAgentLastSeenAt"]
 	require.False(t, present, "a never-seen agent omits the field entirely — the schema types it as a plain string, so null or a zero timestamp would overclaim")
+}
+
+func TestPushCancelsStrandedSession(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeDrata(t)
+	s := fake.newSink(t)
+
+	// A crashed earlier run: records staged into a session that was never
+	// completed. Drata allows only one IN_PROGRESS session per resource, so
+	// without recovery every later push collides with this one forever.
+	fake.mu.Lock()
+	fake.sessions["gram-stranded"] = []map[string]any{{"id": "dev-old"}}
+	fake.sessionStatus["gram-stranded"] = "IN_PROGRESS"
+	fake.mu.Unlock()
+
+	require.NoError(t, s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(2)))
+
+	require.Equal(t, []string{"gram-stranded"}, fake.canceled, "the stranded session is cancelled, not completed: completing it would publish a partial fleet as authoritative")
+	require.Len(t, fake.completed, 1)
+	require.NotContains(t, fake.completed, "gram-stranded")
+	require.Len(t, fake.records, 2, "the live dataset is the new snapshot alone")
+}
+
+func TestPushRecoversAfterPartialFailure(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeDrata(t)
+	s := fake.newSink(t)
+
+	// Fail the completing action so the first attempt strands its session
+	// mid-push, exactly as a crashed or timed-out run would.
+	fake.mu.Lock()
+	fake.failComplete = true
+	fake.mu.Unlock()
+	require.Error(t, s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(3)))
+
+	fake.mu.Lock()
+	fake.failComplete = false
+	fake.mu.Unlock()
+
+	// The retry must clear the strand and publish cleanly rather than wedge.
+	require.NoError(t, s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(3)))
+	require.Len(t, fake.canceled, 1, "the first attempt's session is reclaimed")
+	require.Len(t, fake.records, 3)
+}
+
+func TestStrandedSweepNeverCancelsActiveSession(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeDrata(t)
+	s := fake.newSink(t)
+
+	// Publish a real dataset, then make the list endpoint ignore ?status=.
+	// An API that drops the filter would hand back the ACTIVE session, and
+	// cancelling that would destroy the live evidence.
+	require.NoError(t, s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(2)))
+	fake.mu.Lock()
+	fake.ignoreStatusFilter = true
+	fake.mu.Unlock()
+
+	require.NoError(t, s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(4)))
+	require.Empty(t, fake.canceled, "only IN_PROGRESS sessions may be cancelled, whatever the listing returns")
+	require.Len(t, fake.records, 4)
 }
