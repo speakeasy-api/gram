@@ -4385,8 +4385,8 @@ func (q *Queries) ListSkillFeedbackByID(ctx context.Context, arg ListSkillFeedba
 const listSkillFeedbackTimeline = `-- name: ListSkillFeedbackTimeline :many
 WITH buckets AS (
   SELECT generate_series(
-    date_trunc('day', $4::timestamptz) - interval '29 days',
-    date_trunc('day', $4::timestamptz),
+    date_trunc('day', $3::timestamptz, 'UTC'),
+    date_trunc('day', $4::timestamptz, 'UTC'),
     interval '1 day'
   )::timestamptz AS bucket_start
 )

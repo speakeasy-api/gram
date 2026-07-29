@@ -85,6 +85,7 @@ func TestListSkillFeedbackCountsPagesAndSurvivesRename(t *testing.T) {
 	require.Equal(t, int64(5), first.Metrics.Unreviewed)
 	require.Equal(t, int64(0), first.Metrics.Converted)
 	require.Len(t, first.Timeline, 30)
+	require.Equal(t, first.Metrics.WindowStart, first.Timeline[0].BucketStart)
 	var timelineTotal int64
 	for _, point := range first.Timeline {
 		timelineTotal += point.FeedbackCount

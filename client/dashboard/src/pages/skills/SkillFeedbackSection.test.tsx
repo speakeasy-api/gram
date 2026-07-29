@@ -7,6 +7,8 @@ const testState = vi.hoisted(() => ({
   error: null as Error | null,
   enabled: true,
   refetch: vi.fn(),
+  fetchNextPage: vi.fn(),
+  hasNextPage: false,
   trigger: vi.fn(),
   triggerError: null as Error | null,
   feedback: [
@@ -35,9 +37,9 @@ vi.mock("@gram/client/react-query/skillFeedback.js", () => ({
       isPending: false,
       error: testState.error,
       refetch: testState.refetch,
-      hasNextPage: false,
+      hasNextPage: testState.hasNextPage,
       isFetchingNextPage: false,
-      fetchNextPage: vi.fn(),
+      fetchNextPage: testState.fetchNextPage,
       data: testState.error
         ? undefined
         : {
@@ -88,6 +90,8 @@ beforeEach(() => {
   testState.error = null;
   testState.enabled = true;
   testState.refetch.mockReset();
+  testState.fetchNextPage.mockReset();
+  testState.hasNextPage = false;
   testState.trigger.mockReset();
   testState.trigger.mockResolvedValue(undefined);
   testState.triggerError = null;
@@ -141,7 +145,7 @@ describe("SkillFeedbackSection", () => {
     expect(screen.getByText("No notes among recent feedback.")).toBeTruthy();
   });
 
-  it("groups notes that differ only by case and punctuation", () => {
+  it("groups wording-level note variants", () => {
     testState.feedback = [
       ...testState.feedback,
       {
@@ -151,6 +155,13 @@ describe("SkillFeedbackSection", () => {
         createdAt: new Date("2026-07-19T00:00:00Z"),
         source: "dev",
       },
+      {
+        id: "feedback_c",
+        outcome: "helped",
+        note: "The final verification step needs clarification.",
+        createdAt: new Date("2026-07-18T00:00:00Z"),
+        source: "agent",
+      },
     ];
     const { container } = render(
       <SkillFeedbackSection skillId="skill_a" projectId="project_a" />,
@@ -158,6 +169,23 @@ describe("SkillFeedbackSection", () => {
     fireEvent.click(screen.getByRole("button", { name: /All agent reviews/ }));
 
     expect(container.querySelectorAll("details")).toHaveLength(1);
+  });
+
+  it("can load older reviews when the current page has no notes", () => {
+    testState.feedback = [
+      {
+        id: "feedback_without_note",
+        outcome: "helped",
+        createdAt: new Date("2026-07-20T00:00:00Z"),
+        source: "agent",
+      },
+    ];
+    testState.hasNextPage = true;
+    render(<SkillFeedbackSection skillId="skill_a" projectId="project_a" />);
+    fireEvent.click(screen.getByRole("button", { name: /All agent reviews/ }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more reviews" }));
+    expect(testState.fetchNextPage).toHaveBeenCalledOnce();
   });
 
   it("queues a manual suggestion run", async () => {

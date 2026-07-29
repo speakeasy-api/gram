@@ -53,21 +53,31 @@ function percentage(part: number, total: number): number {
 }
 
 function groupFeedback(feedback: SkillFeedback[]): FeedbackGroup[] {
-  const groups = new Map<string, FeedbackGroup>();
+  const groups: Array<FeedbackGroup & { tokens: Set<string> }> = [];
   for (const item of feedback) {
     if (!item.note) continue;
     const key = item.note
       .toLocaleLowerCase()
       .replace(/[^\p{L}\p{N}]+/gu, " ")
       .trim();
-    const group = groups.get(key);
+    const tokens = new Set(key.split(" "));
+    const group = groups.find((candidate) => {
+      if (candidate.key === key) return true;
+      const shared = [...tokens].filter((token) =>
+        candidate.tokens.has(token),
+      ).length;
+      return (
+        shared >= 2 &&
+        (2 * shared) / (tokens.size + candidate.tokens.size) >= 0.7
+      );
+    });
     if (group) {
       group.items.push(item);
     } else {
-      groups.set(key, { key, note: item.note, items: [item] });
+      groups.push({ key, note: item.note, items: [item], tokens });
     }
   }
-  return [...groups.values()];
+  return groups;
 }
 
 export function SkillFeedbackSection({
@@ -432,18 +442,18 @@ function GroupedFindings({
               </div>
             </details>
           ))}
-          {hasMore && (
-            <div className="flex justify-center p-3">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={loadingMore}
-                onClick={onLoadMore}
-              >
-                {loadingMore ? "Loading..." : "Load more reviews"}
-              </Button>
-            </div>
-          )}
+        </div>
+      )}
+      {hasMore && (
+        <div className="flex justify-center">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={loadingMore}
+            onClick={onLoadMore}
+          >
+            {loadingMore ? "Loading..." : "Load more reviews"}
+          </Button>
         </div>
       )}
     </section>

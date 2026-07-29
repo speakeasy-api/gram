@@ -833,7 +833,7 @@ func (s *Service) ListFeedback(ctx context.Context, payload *gen.ListFeedbackPay
 		return nil, oops.E(oops.CodeUnexpected, err, "count skill feedback").LogError(ctx, logger)
 	}
 	windowEnd := time.Now().UTC()
-	windowStart := windowEnd.Add(-30 * 24 * time.Hour)
+	windowStart := windowEnd.Truncate(24 * time.Hour).Add(-29 * 24 * time.Hour)
 	metrics, err := queries.GetSkillFeedbackMetrics(ctx, repo.GetSkillFeedbackMetricsParams{
 		ProjectID: *authCtx.ProjectID, SkillID: uuid.NullUUID{UUID: skillID, Valid: true},
 		WindowStart: conv.ToPGTimestamptz(windowStart), WindowEnd: conv.ToPGTimestamptz(windowEnd),

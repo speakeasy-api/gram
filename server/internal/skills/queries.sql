@@ -117,8 +117,8 @@ WHERE feedback.project_id = @project_id
 -- name: ListSkillFeedbackTimeline :many
 WITH buckets AS (
   SELECT generate_series(
-    date_trunc('day', @window_end::timestamptz) - interval '29 days',
-    date_trunc('day', @window_end::timestamptz),
+    date_trunc('day', @window_start::timestamptz, 'UTC'),
+    date_trunc('day', @window_end::timestamptz, 'UTC'),
     interval '1 day'
   )::timestamptz AS bucket_start
 )

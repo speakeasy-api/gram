@@ -78,7 +78,7 @@ func debounce[Params any, Result any](
 
 		res, err := wrapped(ctx, runParams)
 		if err != nil {
-			nextParams, received := receiveDebounceSignals(signalCh, params, coalesce)
+			nextParams, received := receiveDebounceSignals(signalCh, runParams, coalesce)
 			if received > 0 {
 				return res, workflow.NewContinueAsNewError(ctx, continueAsSelf, nextParams)
 			}
@@ -89,7 +89,7 @@ func debounce[Params any, Result any](
 		if reenqueue(runParams, res) {
 			recv++
 		}
-		nextParams, received := receiveDebounceSignals(signalCh, params, coalesce)
+		nextParams, received := receiveDebounceSignals(signalCh, runParams, coalesce)
 		recv += received
 
 		if recv == 0 {
