@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -17,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -709,6 +712,16 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 			attr.SlogProjectID(authCtx.ProjectID.String()),
 		)
 	}
+	if err := s.persistPromptAttachments(ctx, payload, authCtx, &metadata, timestamp); err != nil {
+		s.logger.WarnContext(ctx, "failed to persist prompt attachments",
+			attr.SlogEvent("hooks_ingest_prompt_attachment_persist_failed"),
+			attr.SlogError(err),
+			attr.SlogHookSource(payload.Source.Adapter),
+			attr.SlogHookEvent(payload.Event.Type),
+			attr.SlogGenAIConversationID(canonicalSessionID(payload)),
+			attr.SlogProjectID(authCtx.ProjectID.String()),
+		)
+	}
 }
 
 // canonicalSessionMetadata builds the session identity for a canonical hook
@@ -1082,6 +1095,189 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	}
 
 	return s.insertMessageWithFallbackUpsert(ctx, metadata, msg.ChatID, *authCtx.ProjectID, msg, canonicalChatTitle(payload, titleContent))
+}
+
+func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, occurredAt time.Time) error {
+	if payload.Data == nil || len(payload.Data.PromptAttachments) == 0 || authCtx.ProjectID == nil {
+		return nil
+	}
+	sessionID := canonicalSessionID(payload)
+	if sessionID == "" {
+		return nil
+	}
+	if s.productFeatures == nil {
+		return nil
+	}
+	// A flag lookup failure defaults to off rather than failing the hook: the
+	// capture is best effort, and the next turn re-ships anything skipped
+	// because the high-water mark only advances on a successful read.
+	enabled, err := s.productFeatures.IsFeatureEnabled(ctx, metadata.GramOrgID, productfeatures.FeatureSessionCapture)
+	if err != nil {
+		s.logger.WarnContext(ctx, "could not resolve session capture feature flag, skipping prompt attachments",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(metadata.GramOrgID),
+		)
+		return nil
+	}
+	if !enabled {
+		return nil
+	}
+
+	chatID := sessionIDToUUID(sessionID)
+	projectID := *authCtx.ProjectID
+	queries := chatRepo.New(s.db)
+
+	parentResolver, err := newPromptAttachmentParentResolver(ctx, queries, chatID, projectID)
+	if err != nil {
+		return err
+	}
+
+	type pendingPromptAttachment struct {
+		attachment *gen.HookPromptAttachmentEntry
+		content    []byte
+		parentID   uuid.NullUUID
+		metadata   []byte
+		createdAt  time.Time
+	}
+	pending := make([]pendingPromptAttachment, 0, len(payload.Data.PromptAttachments))
+	for _, attachment := range payload.Data.PromptAttachments {
+		if attachment == nil || strings.TrimSpace(attachment.EntryUUID) == "" || strings.TrimSpace(attachment.Content) == "" {
+			continue
+		}
+		promptSHA256 := strings.ToLower(strings.TrimSpace(conv.PtrValOr(attachment.PromptSha256, "")))
+		createdAt := occurredAt
+		if ts := strings.TrimSpace(conv.PtrValOr(attachment.Timestamp, "")); ts != "" {
+			if parsed, err := time.Parse(time.RFC3339Nano, ts); err == nil {
+				createdAt = parsed
+			}
+		}
+		attachmentMetadata, err := promptAttachmentMetadata(attachment)
+		if err != nil {
+			return fmt.Errorf("marshal prompt attachment metadata: %w", err)
+		}
+		parentID := parentResolver.resolve(promptSHA256)
+		pending = append(pending, pendingPromptAttachment{
+			attachment: attachment,
+			content:    []byte(attachment.Content),
+			parentID:   parentID,
+			metadata:   attachmentMetadata,
+			createdAt:  createdAt,
+		})
+	}
+	if len(pending) == 0 {
+		return nil
+	}
+
+	contents := make([][]byte, len(pending))
+	for i := range pending {
+		contents[i] = pending[i].content
+	}
+	assetURLs, err := s.writer.WriteContentPartAssets(ctx, projectID, chatID, contents)
+	if err != nil {
+		return fmt.Errorf("store prompt attachment content assets: %w", err)
+	}
+
+	rows := make([]chatRepo.CreateChatContentPartParams, 0, len(pending))
+	for i, pendingAttachment := range pending {
+		rows = append(rows, chatRepo.CreateChatContentPartParams{
+			ChatID:              chatID,
+			ProjectID:           projectID,
+			Kind:                message.PromptAttachment,
+			ContentAssetUrl:     assetURLs[i],
+			ExternalID:          conv.ToPGTextEmpty(strings.TrimSpace(pendingAttachment.attachment.EntryUUID)),
+			ParentChatMessageID: pendingAttachment.parentID,
+			Version:             pgtype.Int4{Int32: 0, Valid: false},
+			Source:              conv.ToPGTextEmpty(strings.TrimSpace(payload.Source.Adapter)),
+			Metadata:            pendingAttachment.metadata,
+			RiskAnalyzedAt:      conv.PtrToPGTimestamptz(nil),
+			CreatedAt:           conv.ToPGTimestamptz(pendingAttachment.createdAt),
+		})
+	}
+	if _, err := queries.CreateChatContentPart(ctx, rows); err == nil {
+		return nil
+	} else if !isForeignKeyViolation(err) {
+		return fmt.Errorf("insert prompt attachment content parts: %w", err)
+	}
+	_, upsertErr := s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+		ID:             chatID,
+		ProjectID:      projectID,
+		OrganizationID: metadata.GramOrgID,
+		UserID:         conv.ToPGTextEmpty(metadata.UserID),
+		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
+		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
+		Title:          conv.ToPGText(canonicalChatTitle(payload, "")),
+	})
+	if upsertErr != nil {
+		return fmt.Errorf("upsert claude code session for prompt attachments: %w", upsertErr)
+	}
+	if _, err := queries.CreateChatContentPart(ctx, rows); err != nil {
+		return fmt.Errorf("insert prompt attachment content parts after creating chat: %w", err)
+	}
+	return nil
+}
+
+type promptAttachmentParentResolver struct {
+	latest uuid.NullUUID
+	byHash map[string]uuid.NullUUID
+}
+
+func newPromptAttachmentParentResolver(ctx context.Context, queries *chatRepo.Queries, chatID uuid.UUID, projectID uuid.UUID) (*promptAttachmentParentResolver, error) {
+	candidates, err := queries.ListClaudeUserMessagesForPromptAttachmentParent(ctx, chatRepo.ListClaudeUserMessagesForPromptAttachmentParentParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list prompt attachment parent candidates: %w", err)
+	}
+	resolver := &promptAttachmentParentResolver{
+		latest: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		byHash: make(map[string]uuid.NullUUID, len(candidates)),
+	}
+	for i, candidate := range candidates {
+		id := uuid.NullUUID{UUID: candidate.ID, Valid: true}
+		if i == 0 {
+			resolver.latest = id
+		}
+		sum := sha256.Sum256([]byte(strings.TrimSpace(candidate.Content)))
+		hash := hex.EncodeToString(sum[:])
+		if _, ok := resolver.byHash[hash]; !ok {
+			resolver.byHash[hash] = id
+		}
+	}
+	return resolver, nil
+}
+
+func (r *promptAttachmentParentResolver) resolve(promptSHA256 string) uuid.NullUUID {
+	if r == nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+	if promptSHA256 == "" {
+		return r.latest
+	}
+	if id, ok := r.byHash[promptSHA256]; ok {
+		return id
+	}
+	return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+}
+
+// promptAttachmentMetadata packs the attachment's sparse descriptive fields
+// into the attachment_metadata JSONB payload, or nil when there are none.
+func promptAttachmentMetadata(attachment *gen.HookPromptAttachmentEntry) ([]byte, error) {
+	metadata := map[string]string{}
+	if displayPath := strings.TrimSpace(conv.PtrValOr(attachment.DisplayPath, "")); displayPath != "" {
+		metadata["display_path"] = displayPath
+	}
+	if kind := strings.TrimSpace(attachment.AttachmentKind); kind != "" {
+		metadata["kind"] = kind
+	}
+	if len(metadata) == 0 {
+		return nil, nil
+	}
+	encoded, err := json.Marshal(metadata)
+	if err != nil {
+		return nil, fmt.Errorf("marshal attachment metadata: %w", err)
+	}
+	return encoded, nil
 }
 
 func canonicalToolCallsJSON(payload *gen.IngestPayload) ([]byte, error) {
