@@ -57,6 +57,13 @@ type UpdateRequestBody struct {
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 }
 
+// TriggerSuggestionRequestBody is the type of the "skills" service
+// "triggerSuggestion" endpoint HTTP request body.
+type TriggerSuggestionRequestBody struct {
+	// The skill ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+}
+
 // ApproveSuggestionRequestBody is the type of the "skills" service
 // "approveSuggestion" endpoint HTTP request body.
 type ApproveSuggestionRequestBody struct {
@@ -234,8 +241,10 @@ type ListSuggestionsResponseBody struct {
 // ListFeedbackResponseBody is the type of the "skills" service "listFeedback"
 // endpoint HTTP response body.
 type ListFeedbackResponseBody struct {
-	Counts   *SkillFeedbackCountsResponseBody `form:"counts" json:"counts" xml:"counts"`
-	Feedback []*SkillFeedbackResponseBody     `form:"feedback" json:"feedback" xml:"feedback"`
+	Counts   *SkillFeedbackCountsResponseBody          `form:"counts" json:"counts" xml:"counts"`
+	Metrics  *SkillFeedbackMetricsResponseBody         `form:"metrics" json:"metrics" xml:"metrics"`
+	Timeline []*SkillFeedbackTimelinePointResponseBody `form:"timeline" json:"timeline" xml:"timeline"`
+	Feedback []*SkillFeedbackResponseBody              `form:"feedback" json:"feedback" xml:"feedback"`
 	// Cursor for the next page; absent when exhausted.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
@@ -1658,6 +1667,190 @@ type ListFeedbackUnexpectedResponseBody struct {
 // ListFeedbackGatewayErrorResponseBody is the type of the "skills" service
 // "listFeedback" endpoint HTTP response body for the "gateway_error" error.
 type ListFeedbackGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TriggerSuggestionUnauthorizedResponseBody is the type of the "skills"
+// service "triggerSuggestion" endpoint HTTP response body for the
+// "unauthorized" error.
+type TriggerSuggestionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TriggerSuggestionForbiddenResponseBody is the type of the "skills" service
+// "triggerSuggestion" endpoint HTTP response body for the "forbidden" error.
+type TriggerSuggestionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TriggerSuggestionBadRequestResponseBody is the type of the "skills" service
+// "triggerSuggestion" endpoint HTTP response body for the "bad_request" error.
+type TriggerSuggestionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TriggerSuggestionNotFoundResponseBody is the type of the "skills" service
+// "triggerSuggestion" endpoint HTTP response body for the "not_found" error.
+type TriggerSuggestionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TriggerSuggestionConflictResponseBody is the type of the "skills" service
+// "triggerSuggestion" endpoint HTTP response body for the "conflict" error.
+type TriggerSuggestionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TriggerSuggestionUnsupportedMediaResponseBody is the type of the "skills"
+// service "triggerSuggestion" endpoint HTTP response body for the
+// "unsupported_media" error.
+type TriggerSuggestionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TriggerSuggestionInvalidResponseBody is the type of the "skills" service
+// "triggerSuggestion" endpoint HTTP response body for the "invalid" error.
+type TriggerSuggestionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TriggerSuggestionInvariantViolationResponseBody is the type of the "skills"
+// service "triggerSuggestion" endpoint HTTP response body for the
+// "invariant_violation" error.
+type TriggerSuggestionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TriggerSuggestionUnexpectedResponseBody is the type of the "skills" service
+// "triggerSuggestion" endpoint HTTP response body for the "unexpected" error.
+type TriggerSuggestionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TriggerSuggestionGatewayErrorResponseBody is the type of the "skills"
+// service "triggerSuggestion" endpoint HTTP response body for the
+// "gateway_error" error.
+type TriggerSuggestionGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -4391,6 +4584,33 @@ type SkillFeedbackCountsResponseBody struct {
 	Harmful         int64 `form:"harmful" json:"harmful" xml:"harmful"`
 }
 
+// SkillFeedbackMetricsResponseBody is used to define fields on response body
+// types.
+type SkillFeedbackMetricsResponseBody struct {
+	// The start of the rolling collection window.
+	WindowStart string `form:"window_start" json:"window_start" xml:"window_start"`
+	// The end of the rolling collection window.
+	WindowEnd string `form:"window_end" json:"window_end" xml:"window_end"`
+	// Feedback recorded during the collection window.
+	FeedbackInWindow int64 `form:"feedback_in_window" json:"feedback_in_window" xml:"feedback_in_window"`
+	// Resolved skill activations during the collection window.
+	ActivationsInWindow int64 `form:"activations_in_window" json:"activations_in_window" xml:"activations_in_window"`
+	// Resolved activations paired to feedback during the collection window.
+	FeedbackActivationsInWindow int64 `form:"feedback_activations_in_window" json:"feedback_activations_in_window" xml:"feedback_activations_in_window"`
+	// Feedback not yet reviewed by suggestion analysis.
+	Unreviewed int64 `form:"unreviewed" json:"unreviewed" xml:"unreviewed"`
+	// All-time feedback linked to a generated suggestion.
+	Converted int64 `form:"converted" json:"converted" xml:"converted"`
+}
+
+// SkillFeedbackTimelinePointResponseBody is used to define fields on response
+// body types.
+type SkillFeedbackTimelinePointResponseBody struct {
+	// The start of the UTC day.
+	BucketStart   string `form:"bucket_start" json:"bucket_start" xml:"bucket_start"`
+	FeedbackCount int64  `form:"feedback_count" json:"feedback_count" xml:"feedback_count"`
+}
+
 // SkillFeedbackResponseBody is used to define fields on response body types.
 type SkillFeedbackResponseBody struct {
 	// The feedback ID.
@@ -4644,6 +4864,21 @@ func NewListFeedbackResponseBody(res *skills.ListSkillFeedbackResult) *ListFeedb
 	}
 	if res.Counts != nil {
 		body.Counts = marshalSkillsSkillFeedbackCountsToSkillFeedbackCountsResponseBody(res.Counts)
+	}
+	if res.Metrics != nil {
+		body.Metrics = marshalSkillsSkillFeedbackMetricsToSkillFeedbackMetricsResponseBody(res.Metrics)
+	}
+	if res.Timeline != nil {
+		body.Timeline = make([]*SkillFeedbackTimelinePointResponseBody, len(res.Timeline))
+		for i, val := range res.Timeline {
+			if val == nil {
+				body.Timeline[i] = nil
+				continue
+			}
+			body.Timeline[i] = marshalSkillsSkillFeedbackTimelinePointToSkillFeedbackTimelinePointResponseBody(val)
+		}
+	} else {
+		body.Timeline = []*SkillFeedbackTimelinePointResponseBody{}
 	}
 	if res.Feedback != nil {
 		body.Feedback = make([]*SkillFeedbackResponseBody, len(res.Feedback))
@@ -5863,6 +6098,148 @@ func NewListFeedbackUnexpectedResponseBody(res *goa.ServiceError) *ListFeedbackU
 // the result of the "listFeedback" endpoint of the "skills" service.
 func NewListFeedbackGatewayErrorResponseBody(res *goa.ServiceError) *ListFeedbackGatewayErrorResponseBody {
 	body := &ListFeedbackGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTriggerSuggestionUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "triggerSuggestion" endpoint of the "skills" service.
+func NewTriggerSuggestionUnauthorizedResponseBody(res *goa.ServiceError) *TriggerSuggestionUnauthorizedResponseBody {
+	body := &TriggerSuggestionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTriggerSuggestionForbiddenResponseBody builds the HTTP response body from
+// the result of the "triggerSuggestion" endpoint of the "skills" service.
+func NewTriggerSuggestionForbiddenResponseBody(res *goa.ServiceError) *TriggerSuggestionForbiddenResponseBody {
+	body := &TriggerSuggestionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTriggerSuggestionBadRequestResponseBody builds the HTTP response body
+// from the result of the "triggerSuggestion" endpoint of the "skills" service.
+func NewTriggerSuggestionBadRequestResponseBody(res *goa.ServiceError) *TriggerSuggestionBadRequestResponseBody {
+	body := &TriggerSuggestionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTriggerSuggestionNotFoundResponseBody builds the HTTP response body from
+// the result of the "triggerSuggestion" endpoint of the "skills" service.
+func NewTriggerSuggestionNotFoundResponseBody(res *goa.ServiceError) *TriggerSuggestionNotFoundResponseBody {
+	body := &TriggerSuggestionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTriggerSuggestionConflictResponseBody builds the HTTP response body from
+// the result of the "triggerSuggestion" endpoint of the "skills" service.
+func NewTriggerSuggestionConflictResponseBody(res *goa.ServiceError) *TriggerSuggestionConflictResponseBody {
+	body := &TriggerSuggestionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTriggerSuggestionUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "triggerSuggestion" endpoint of the "skills"
+// service.
+func NewTriggerSuggestionUnsupportedMediaResponseBody(res *goa.ServiceError) *TriggerSuggestionUnsupportedMediaResponseBody {
+	body := &TriggerSuggestionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTriggerSuggestionInvalidResponseBody builds the HTTP response body from
+// the result of the "triggerSuggestion" endpoint of the "skills" service.
+func NewTriggerSuggestionInvalidResponseBody(res *goa.ServiceError) *TriggerSuggestionInvalidResponseBody {
+	body := &TriggerSuggestionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTriggerSuggestionInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "triggerSuggestion" endpoint of the "skills"
+// service.
+func NewTriggerSuggestionInvariantViolationResponseBody(res *goa.ServiceError) *TriggerSuggestionInvariantViolationResponseBody {
+	body := &TriggerSuggestionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTriggerSuggestionUnexpectedResponseBody builds the HTTP response body
+// from the result of the "triggerSuggestion" endpoint of the "skills" service.
+func NewTriggerSuggestionUnexpectedResponseBody(res *goa.ServiceError) *TriggerSuggestionUnexpectedResponseBody {
+	body := &TriggerSuggestionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTriggerSuggestionGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "triggerSuggestion" endpoint of the "skills" service.
+func NewTriggerSuggestionGatewayErrorResponseBody(res *goa.ServiceError) *TriggerSuggestionGatewayErrorResponseBody {
+	body := &TriggerSuggestionGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -7963,6 +8340,19 @@ func NewListFeedbackPayload(id string, cursor *string, limit int, sessionToken *
 	return v
 }
 
+// NewTriggerSuggestionPayload builds a skills service triggerSuggestion
+// endpoint payload.
+func NewTriggerSuggestionPayload(body *TriggerSuggestionRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.TriggerSuggestionPayload {
+	v := &skills.TriggerSuggestionPayload{
+		ID: *body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewApproveSuggestionPayload builds a skills service approveSuggestion
 // endpoint payload.
 func NewApproveSuggestionPayload(body *ApproveSuggestionRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.ApproveSuggestionPayload {
@@ -8223,6 +8613,18 @@ func ValidateUpdateRequestBody(body *UpdateRequestBody) (err error) {
 		if utf8.RuneCountInString(*body.Summary) > 1024 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.summary", *body.Summary, utf8.RuneCountInString(*body.Summary), 1024, false))
 		}
+	}
+	return
+}
+
+// ValidateTriggerSuggestionRequestBody runs the validations defined on
+// TriggerSuggestionRequestBody
+func ValidateTriggerSuggestionRequestBody(body *TriggerSuggestionRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	return
 }

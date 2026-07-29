@@ -2441,6 +2441,97 @@ func (q *Queries) GetSkillEfficacySettingsForProject(ctx context.Context, projec
 	return i, err
 }
 
+const getSkillFeedbackMetrics = `-- name: GetSkillFeedbackMetrics :one
+SELECT
+  COUNT(*) FILTER (
+    WHERE feedback.created_at >= $1
+      AND feedback.created_at < $2
+  )::bigint AS feedback_in_window,
+  COUNT(*) FILTER (WHERE feedback.reviewed_at IS NULL)::bigint AS unreviewed,
+  (
+    SELECT COUNT(*)::bigint
+    FROM skill_observations observation
+    WHERE observation.project_id = $3
+      AND observation.skill_id = $4
+      AND observation.reconciled_at IS NOT NULL
+      AND observation.reconcile_error_code IS NULL
+      AND observation.seen_at >= $1
+      AND observation.seen_at < $2
+  ) AS activations_in_window,
+  (
+    SELECT COUNT(*)::bigint
+    FROM skill_observations observation
+    WHERE observation.project_id = $3
+      AND observation.skill_id = $4
+      AND observation.reconciled_at IS NOT NULL
+      AND observation.reconcile_error_code IS NULL
+      AND observation.session_id IS NOT NULL
+      AND observation.seen_at >= $1
+      AND observation.seen_at < $2
+      AND EXISTS (
+        SELECT 1
+        FROM skill_feedback paired
+        WHERE paired.project_id = observation.project_id
+          AND paired.skill_id = observation.skill_id
+          AND paired.session_id = observation.session_id
+          AND paired.created_at >= $1
+          AND paired.created_at < $2
+      )
+  ) AS feedback_activations_in_window,
+  (
+    SELECT COUNT(DISTINCT converted.id)::bigint
+    FROM skill_feedback converted
+    JOIN skill_edit_suggestion_feedback link
+      ON link.project_id = converted.project_id
+      AND link.feedback_id = converted.id
+    JOIN skill_edit_suggestion_changes change
+      ON change.project_id = link.project_id
+      AND change.id = link.change_id
+    JOIN skill_edit_suggestions suggestion
+      ON suggestion.project_id = change.project_id
+      AND suggestion.id = change.suggestion_id
+    WHERE converted.project_id = $3
+      AND converted.skill_id = $4
+      AND suggestion.skill_id = $4
+  ) AS converted
+FROM skill_feedback feedback
+WHERE feedback.project_id = $3
+  AND feedback.skill_id = $4
+`
+
+type GetSkillFeedbackMetricsParams struct {
+	WindowStart pgtype.Timestamptz
+	WindowEnd   pgtype.Timestamptz
+	ProjectID   uuid.UUID
+	SkillID     uuid.NullUUID
+}
+
+type GetSkillFeedbackMetricsRow struct {
+	FeedbackInWindow            int64
+	Unreviewed                  int64
+	ActivationsInWindow         int64
+	FeedbackActivationsInWindow int64
+	Converted                   int64
+}
+
+func (q *Queries) GetSkillFeedbackMetrics(ctx context.Context, arg GetSkillFeedbackMetricsParams) (GetSkillFeedbackMetricsRow, error) {
+	row := q.db.QueryRow(ctx, getSkillFeedbackMetrics,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.ProjectID,
+		arg.SkillID,
+	)
+	var i GetSkillFeedbackMetricsRow
+	err := row.Scan(
+		&i.FeedbackInWindow,
+		&i.Unreviewed,
+		&i.ActivationsInWindow,
+		&i.FeedbackActivationsInWindow,
+		&i.Converted,
+	)
+	return i, err
+}
+
 const getSkillForUpdate = `-- name: GetSkillForUpdate :one
 SELECT id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 FROM skills
@@ -4281,6 +4372,66 @@ func (q *Queries) ListSkillFeedbackByID(ctx context.Context, arg ListSkillFeedba
 			&i.ReviewedAt,
 			&i.CreatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSkillFeedbackTimeline = `-- name: ListSkillFeedbackTimeline :many
+WITH buckets AS (
+  SELECT generate_series(
+    date_trunc('day', $4::timestamptz) - interval '29 days',
+    date_trunc('day', $4::timestamptz),
+    interval '1 day'
+  )::timestamptz AS bucket_start
+)
+SELECT
+  buckets.bucket_start,
+  COUNT(feedback.id)::bigint AS feedback_count
+FROM buckets
+LEFT JOIN skill_feedback feedback
+  ON feedback.project_id = $1
+  AND feedback.skill_id = $2
+  AND feedback.created_at >= buckets.bucket_start
+  AND feedback.created_at < buckets.bucket_start + interval '1 day'
+  AND feedback.created_at >= $3
+  AND feedback.created_at < $4
+GROUP BY buckets.bucket_start
+ORDER BY buckets.bucket_start
+`
+
+type ListSkillFeedbackTimelineParams struct {
+	ProjectID   uuid.UUID
+	SkillID     uuid.NullUUID
+	WindowStart pgtype.Timestamptz
+	WindowEnd   pgtype.Timestamptz
+}
+
+type ListSkillFeedbackTimelineRow struct {
+	BucketStart   pgtype.Timestamptz
+	FeedbackCount int64
+}
+
+func (q *Queries) ListSkillFeedbackTimeline(ctx context.Context, arg ListSkillFeedbackTimelineParams) ([]ListSkillFeedbackTimelineRow, error) {
+	rows, err := q.db.Query(ctx, listSkillFeedbackTimeline,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.WindowStart,
+		arg.WindowEnd,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSkillFeedbackTimelineRow
+	for rows.Next() {
+		var i ListSkillFeedbackTimelineRow
+		if err := rows.Scan(&i.BucketStart, &i.FeedbackCount); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

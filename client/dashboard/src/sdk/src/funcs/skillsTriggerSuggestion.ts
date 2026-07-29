@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -27,47 +27,36 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  ListSkillFeedbackRequest,
-  ListSkillFeedbackRequest$outboundSchema,
-  ListSkillFeedbackResponse,
-  ListSkillFeedbackResponse$inboundSchema,
-  ListSkillFeedbackSecurity,
-} from "../models/operations/listskillfeedback.js";
+  TriggerSkillSuggestionRequest,
+  TriggerSkillSuggestionRequest$outboundSchema,
+  TriggerSkillSuggestionSecurity,
+} from "../models/operations/triggerskillsuggestion.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
-import {
-  createPageIterator,
-  haltIterator,
-  PageIterator,
-  Paginator,
-} from "../types/operations.js";
 
 /**
- * listFeedback skills
+ * triggerSuggestion skills
  *
  * @remarks
- * List outcome counts, collection metrics, volume, and recent resolved feedback for a skill. Name-only feedback is excluded.
+ * Manually run suggestion analysis for a skill, bypassing automatic feedback and efficacy thresholds while preserving the one-open-suggestion invariant.
  */
-export function skillsListFeedback(
+export function skillsTriggerSuggestion(
   client: GramCore,
-  request: ListSkillFeedbackRequest,
-  security?: ListSkillFeedbackSecurity | undefined,
+  request: TriggerSkillSuggestionRequest,
+  security?: TriggerSkillSuggestionSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
-  PageIterator<
-    Result<
-      ListSkillFeedbackResponse,
-      | ServiceError
-      | GramError
-      | ResponseValidationError
-      | ConnectionError
-      | RequestAbortedError
-      | RequestTimeoutError
-      | InvalidRequestError
-      | UnexpectedClientError
-      | SDKValidationError
-    >,
-    { cursor: string }
+  Result<
+    void,
+    | ServiceError
+    | GramError
+    | ResponseValidationError
+    | ConnectionError
+    | RequestAbortedError
+    | RequestTimeoutError
+    | InvalidRequestError
+    | UnexpectedClientError
+    | SDKValidationError
   >
 > {
   return new APIPromise($do(
@@ -80,49 +69,43 @@ export function skillsListFeedback(
 
 async function $do(
   client: GramCore,
-  request: ListSkillFeedbackRequest,
-  security?: ListSkillFeedbackSecurity | undefined,
+  request: TriggerSkillSuggestionRequest,
+  security?: TriggerSkillSuggestionSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
-    PageIterator<
-      Result<
-        ListSkillFeedbackResponse,
-        | ServiceError
-        | GramError
-        | ResponseValidationError
-        | ConnectionError
-        | RequestAbortedError
-        | RequestTimeoutError
-        | InvalidRequestError
-        | UnexpectedClientError
-        | SDKValidationError
-      >,
-      { cursor: string }
+    Result<
+      void,
+      | ServiceError
+      | GramError
+      | ResponseValidationError
+      | ConnectionError
+      | RequestAbortedError
+      | RequestTimeoutError
+      | InvalidRequestError
+      | UnexpectedClientError
+      | SDKValidationError
     >,
     APICall,
   ]
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(ListSkillFeedbackRequest$outboundSchema, value),
+    (value) => z.parse(TriggerSkillSuggestionRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
-    return [haltIterator(parsed), { status: "invalid" }];
+    return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
-
-  const path = pathToFunc("/rpc/skills.listFeedback")();
-
-  const query = encodeFormQuery({
-    "cursor": payload.cursor,
-    "id": payload.id,
-    "limit": payload.limit,
+  const body = encodeJSON("body", payload.TriggerSkillSuggestionRequestBody, {
+    explode: true,
   });
 
+  const path = pathToFunc("/rpc/skills.triggerSuggestion")();
+
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
     "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
       explode: false,
@@ -168,7 +151,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listSkillFeedback",
+    operationID: "triggerSkillSuggestion",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -182,17 +165,16 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "GET",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
   }, options);
   if (!requestRes.ok) {
-    return [haltIterator(requestRes), { status: "invalid" }];
+    return [requestRes, { status: "invalid" }];
   }
   const req = requestRes.value;
 
@@ -204,7 +186,7 @@ async function $do(
     retryCodes: context.retryCodes,
   });
   if (!doResult.ok) {
-    return [haltIterator(doResult), { status: "request-error", request: req }];
+    return [doResult, { status: "request-error", request: req }];
   }
   const response = doResult.value;
 
@@ -212,8 +194,8 @@ async function $do(
     HttpMeta: { Response: response, Request: req },
   };
 
-  const [result, raw] = await M.match<
-    ListSkillFeedbackResponse,
+  const [result] = await M.match<
+    void,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -224,65 +206,15 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, ListSkillFeedbackResponse$inboundSchema, { key: "Result" }),
+    M.nil(202, z.void()),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });
   if (!result.ok) {
-    return [haltIterator(result), {
-      status: "complete",
-      request: req,
-      response,
-    }];
+    return [result, { status: "complete", request: req, response }];
   }
 
-  const nextFunc = (
-    responseData: unknown,
-  ): {
-    next: Paginator<
-      Result<
-        ListSkillFeedbackResponse,
-        | ServiceError
-        | GramError
-        | ResponseValidationError
-        | ConnectionError
-        | RequestAbortedError
-        | RequestTimeoutError
-        | InvalidRequestError
-        | UnexpectedClientError
-        | SDKValidationError
-      >
-    >;
-    "~next"?: { cursor: string };
-  } => {
-    const nextCursor = (responseData as { next_cursor?: unknown }).next_cursor;
-    if (typeof nextCursor !== "string") {
-      return { next: () => null };
-    }
-    if (nextCursor.trim() === "") {
-      return { next: () => null };
-    }
-
-    const nextVal = () =>
-      skillsListFeedback(
-        client,
-        {
-          ...request,
-          cursor: nextCursor,
-        },
-        security,
-        options,
-      );
-
-    return { next: nextVal, "~next": { cursor: nextCursor } };
-  };
-
-  const page = { ...result, ...nextFunc(raw) };
-  return [{ ...page, ...createPageIterator(page, (v) => !v.ok) }, {
-    status: "complete",
-    request: req,
-    response,
-  }];
+  return [result, { status: "complete", request: req, response }];
 }

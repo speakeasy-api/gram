@@ -108,6 +108,15 @@ type suggestionSnapshot struct {
 }
 
 func (e *Engine) Run(ctx context.Context, in RunInput) (Result, error) {
+	return e.run(ctx, in, false)
+}
+
+// RunForced bypasses automatic activity, feedback, and efficacy thresholds.
+func (e *Engine) RunForced(ctx context.Context, in RunInput) (Result, error) {
+	return e.run(ctx, in, true)
+}
+
+func (e *Engine) run(ctx context.Context, in RunInput, force bool) (Result, error) {
 	now := in.Now.UTC()
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -120,7 +129,7 @@ func (e *Engine) Run(ctx context.Context, in RunInput) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("get suggestion skill: %w", err)
 	}
-	if !skill.LastSeenAt.Valid || skill.LastSeenAt.Time.Before(now.Add(-e.config.ActivityWindow)) {
+	if !force && (!skill.LastSeenAt.Valid || skill.LastSeenAt.Time.Before(now.Add(-e.config.ActivityWindow))) {
 		return Result{Kind: ResultSkipped, Reenqueue: false, FeedbackConsumed: 0, SuggestionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}, nil
 	}
 
@@ -199,7 +208,7 @@ func (e *Engine) Run(ctx context.Context, in RunInput) (Result, error) {
 		baseVersionID: base.BaseVersionID, latest: latest, unreviewedCount: unreviewedCount,
 		newScoredSessions: newScoredSessions, trend: computedTrend,
 	})
-	if !wake {
+	if !force && !wake {
 		return Result{Kind: ResultSkipped, Reenqueue: false, FeedbackConsumed: 0, SuggestionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}, nil
 	}
 

@@ -38,9 +38,12 @@ type Service interface {
 	// List open skill edit suggestions in the project, newest first. The
 	// implementation requires the skills product feature and skill read scope.
 	ListSuggestions(context.Context, *ListSuggestionsPayload) (res *ListSkillSuggestionsResult, err error)
-	// List all-time outcome counts and recent resolved feedback for a skill.
-	// Name-only feedback is excluded.
+	// List outcome counts, collection metrics, volume, and recent resolved
+	// feedback for a skill. Name-only feedback is excluded.
 	ListFeedback(context.Context, *ListFeedbackPayload) (res *ListSkillFeedbackResult, err error)
+	// Manually run suggestion analysis for a skill, bypassing automatic feedback
+	// and efficacy thresholds while preserving the one-open-suggestion invariant.
+	TriggerSuggestion(context.Context, *TriggerSuggestionPayload) (err error)
 	// Approve an open skill edit suggestion, optionally replacing its proposed
 	// SKILL.md content or taking only a subset of its proposed changes. Stale
 	// suggestions are superseded instead.
@@ -108,7 +111,7 @@ const ServiceName = "skills"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [21]string{"create", "addVersion", "restoreVersion", "update", "list", "listSuggestions", "listFeedback", "approveSuggestion", "dismissSuggestion", "listSuggestionFeedback", "approveAllSuggestions", "get", "listUnknownActivations", "listVersions", "archive", "distribute", "undistribute", "share", "unshare", "getShared", "listDistributions"}
+var MethodNames = [22]string{"create", "addVersion", "restoreVersion", "update", "list", "listSuggestions", "listFeedback", "triggerSuggestion", "approveSuggestion", "dismissSuggestion", "listSuggestionFeedback", "approveAllSuggestions", "get", "listUnknownActivations", "listVersions", "archive", "distribute", "undistribute", "share", "unshare", "getShared", "listDistributions"}
 
 // AddVersionPayload is the payload type of the skills service addVersion
 // method.
@@ -303,6 +306,8 @@ type ListSkillDistributionsResult struct {
 // listFeedback method.
 type ListSkillFeedbackResult struct {
 	Counts   *SkillFeedbackCounts
+	Metrics  *SkillFeedbackMetrics
+	Timeline []*SkillFeedbackTimelinePoint
 	Feedback []*SkillFeedback
 	// Cursor for the next page; absent when exhausted.
 	NextCursor *string
@@ -520,11 +525,36 @@ type SkillFeedbackCounts struct {
 	Harmful         int64
 }
 
+// Feedback collection and suggestion conversion metrics for a skill.
+type SkillFeedbackMetrics struct {
+	// The start of the rolling collection window.
+	WindowStart string
+	// The end of the rolling collection window.
+	WindowEnd string
+	// Feedback recorded during the collection window.
+	FeedbackInWindow int64
+	// Resolved skill activations during the collection window.
+	ActivationsInWindow int64
+	// Resolved activations paired to feedback during the collection window.
+	FeedbackActivationsInWindow int64
+	// Feedback not yet reviewed by suggestion analysis.
+	Unreviewed int64
+	// All-time feedback linked to a generated suggestion.
+	Converted int64
+}
+
 // The reported skill feedback outcome.
 type SkillFeedbackOutcome string
 
 // Where skill feedback was recorded.
 type SkillFeedbackSource string
+
+// Feedback volume for one UTC day.
+type SkillFeedbackTimelinePoint struct {
+	// The start of the UTC day.
+	BucketStart   string
+	FeedbackCount int64
+}
 
 // A UTC-day activation bucket for a skill.
 type SkillSightingTimelinePoint struct {
@@ -550,6 +580,16 @@ type SkillSuggestionApprovalItem struct {
 	ResultingVersionID *string
 	// A safe explanation for a conflict or failure.
 	Message *string
+}
+
+// TriggerSuggestionPayload is the payload type of the skills service
+// triggerSuggestion method.
+type TriggerSuggestionPayload struct {
+	// The skill ID.
+	ID               string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // UndistributePayload is the payload type of the skills service undistribute

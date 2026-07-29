@@ -38084,7 +38084,7 @@ paths:
                 name: SkillDistributions
     /rpc/skills.listFeedback:
         get:
-            description: List all-time outcome counts and recent resolved feedback for a skill. Name-only feedback is excluded.
+            description: List outcome counts, collection metrics, volume, and recent resolved feedback for a skill. Name-only feedback is excluded.
             operationId: listSkillFeedback
             parameters:
                 - allowEmptyValue: true
@@ -38930,6 +38930,107 @@ paths:
             x-speakeasy-name-override: share
             x-speakeasy-react-hook:
                 name: ShareSkill
+    /rpc/skills.triggerSuggestion:
+        post:
+            description: Manually run suggestion analysis for a skill, bypassing automatic feedback and efficacy thresholds while preserving the one-open-suggestion invariant.
+            operationId: triggerSkillSuggestion
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/TriggerSkillSuggestionRequestBody'
+                required: true
+            responses:
+                "202":
+                    description: Accepted response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: triggerSuggestion skills
+            tags:
+                - skills
+            x-speakeasy-name-override: triggerSuggestion
+            x-speakeasy-react-hook:
+                name: TriggerSkillSuggestion
+                type: mutation
     /rpc/skills.undistribute:
         post:
             description: Revoke a skill's active distribution to exactly one plugin or assistant. Repeated requests are a no-op.
@@ -58709,12 +58810,20 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/SkillFeedback'
+                metrics:
+                    $ref: '#/components/schemas/SkillFeedbackMetrics'
                 next_cursor:
                     type: string
                     description: Cursor for the next page; absent when exhausted.
-            description: All-time outcome counts and a newest-first page of feedback for a skill.
+                timeline:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillFeedbackTimelinePoint'
+            description: Outcome counts, collection metrics, a 30-day timeline, and a newest-first page of feedback for a skill.
             required:
                 - counts
+                - metrics
+                - timeline
                 - feedback
         ListSkillSuggestionFeedbackResult:
             type: object
@@ -66090,6 +66199,46 @@ components:
                 - did_not_help
                 - misleading
                 - harmful
+        SkillFeedbackMetrics:
+            type: object
+            properties:
+                activations_in_window:
+                    type: integer
+                    description: Resolved skill activations during the collection window.
+                    format: int64
+                converted:
+                    type: integer
+                    description: All-time feedback linked to a generated suggestion.
+                    format: int64
+                feedback_activations_in_window:
+                    type: integer
+                    description: Resolved activations paired to feedback during the collection window.
+                    format: int64
+                feedback_in_window:
+                    type: integer
+                    description: Feedback recorded during the collection window.
+                    format: int64
+                unreviewed:
+                    type: integer
+                    description: Feedback not yet reviewed by suggestion analysis.
+                    format: int64
+                window_end:
+                    type: string
+                    description: The end of the rolling collection window.
+                    format: date-time
+                window_start:
+                    type: string
+                    description: The start of the rolling collection window.
+                    format: date-time
+            description: Feedback collection and suggestion conversion metrics for a skill.
+            required:
+                - window_start
+                - window_end
+                - feedback_in_window
+                - activations_in_window
+                - feedback_activations_in_window
+                - unreviewed
+                - converted
         SkillFeedbackPayload:
             type: object
             properties:
@@ -66122,6 +66271,20 @@ components:
                 - schema_version
                 - skill
                 - outcome
+        SkillFeedbackTimelinePoint:
+            type: object
+            properties:
+                bucket_start:
+                    type: string
+                    description: The start of the UTC day.
+                    format: date-time
+                feedback_count:
+                    type: integer
+                    format: int64
+            description: Feedback volume for one UTC day.
+            required:
+                - bucket_start
+                - feedback_count
         SkillInsightMetrics:
             type: object
             properties:
@@ -68664,6 +68827,15 @@ components:
                     default: 100
                     format: int32
                     minimum: 0
+            required:
+                - id
+        TriggerSkillSuggestionRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The skill ID.
+                    format: uuid
             required:
                 - id
         TumDetailsBreakdown:

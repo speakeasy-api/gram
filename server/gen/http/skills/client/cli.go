@@ -400,6 +400,49 @@ func BuildListFeedbackPayload(skillsListFeedbackID string, skillsListFeedbackCur
 	return v, nil
 }
 
+// BuildTriggerSuggestionPayload builds the payload for the skills
+// triggerSuggestion endpoint from CLI flags.
+func BuildTriggerSuggestionPayload(skillsTriggerSuggestionBody string, skillsTriggerSuggestionSessionToken string, skillsTriggerSuggestionApikeyToken string, skillsTriggerSuggestionProjectSlugInput string) (*skills.TriggerSuggestionPayload, error) {
+	var err error
+	var body TriggerSuggestionRequestBody
+	{
+		err = json.Unmarshal([]byte(skillsTriggerSuggestionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsTriggerSuggestionSessionToken != "" {
+			sessionToken = &skillsTriggerSuggestionSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsTriggerSuggestionApikeyToken != "" {
+			apikeyToken = &skillsTriggerSuggestionApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsTriggerSuggestionProjectSlugInput != "" {
+			projectSlugInput = &skillsTriggerSuggestionProjectSlugInput
+		}
+	}
+	v := &skills.TriggerSuggestionPayload{
+		ID: body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildApproveSuggestionPayload builds the payload for the skills
 // approveSuggestion endpoint from CLI flags.
 func BuildApproveSuggestionPayload(skillsApproveSuggestionBody string, skillsApproveSuggestionSessionToken string, skillsApproveSuggestionApikeyToken string, skillsApproveSuggestionProjectSlugInput string) (*skills.ApproveSuggestionPayload, error) {

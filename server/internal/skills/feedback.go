@@ -1,5 +1,16 @@
 package skills
 
+import (
+	"context"
+
+	"github.com/google/uuid"
+)
+
+// ManualSuggestionSignaler starts or wakes analysis while bypassing automatic thresholds.
+type ManualSuggestionSignaler interface {
+	SignalManual(ctx context.Context, projectID, skillID uuid.UUID) error
+}
+
 type FeedbackOutcome string
 
 const (

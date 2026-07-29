@@ -57,6 +57,7 @@ type Service struct {
 	authz    *authz.Engine
 	features *productfeatures.Client
 	audit    *audit.Logger
+	signaler ManualSuggestionSignaler
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -70,6 +71,7 @@ func NewService(
 	authzEngine *authz.Engine,
 	features *productfeatures.Client,
 	auditLogger *audit.Logger,
+	signaler ManualSuggestionSignaler,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("skills"))
 
@@ -81,6 +83,7 @@ func NewService(
 		authz:    authzEngine,
 		features: features,
 		audit:    auditLogger,
+		signaler: signaler,
 	}
 }
 
@@ -829,6 +832,22 @@ func (s *Service) ListFeedback(ctx context.Context, payload *gen.ListFeedbackPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count skill feedback").LogError(ctx, logger)
 	}
+	windowEnd := time.Now().UTC()
+	windowStart := windowEnd.Add(-30 * 24 * time.Hour)
+	metrics, err := queries.GetSkillFeedbackMetrics(ctx, repo.GetSkillFeedbackMetricsParams{
+		ProjectID: *authCtx.ProjectID, SkillID: uuid.NullUUID{UUID: skillID, Valid: true},
+		WindowStart: conv.ToPGTimestamptz(windowStart), WindowEnd: conv.ToPGTimestamptz(windowEnd),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get skill feedback metrics").LogError(ctx, logger)
+	}
+	timelineRows, err := queries.ListSkillFeedbackTimeline(ctx, repo.ListSkillFeedbackTimelineParams{
+		ProjectID: *authCtx.ProjectID, SkillID: uuid.NullUUID{UUID: skillID, Valid: true},
+		WindowStart: conv.ToPGTimestamptz(windowStart), WindowEnd: conv.ToPGTimestamptz(windowEnd),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list skill feedback timeline").LogError(ctx, logger)
+	}
 	rows, err := queries.ListSkillFeedbackByID(ctx, repo.ListSkillFeedbackByIDParams{
 		ProjectID: *authCtx.ProjectID, SkillID: uuid.NullUUID{UUID: skillID, Valid: true},
 		CursorCreatedAt: cursorCreatedAt, CursorID: cursorID, PageLimit: conv.SafeInt32(payload.Limit + 1),
@@ -846,13 +865,48 @@ func (s *Service) ListFeedback(ctx context.Context, payload *gen.ListFeedbackPay
 		encoded := encodeCreatedAtIDCursor(last.CreatedAt.Time, last.ID)
 		nextCursor = &encoded
 	}
+	timeline := make([]*gen.SkillFeedbackTimelinePoint, len(timelineRows))
+	for i, point := range timelineRows {
+		timeline[i] = &gen.SkillFeedbackTimelinePoint{
+			BucketStart:   conv.FromPGTimestamptz(point.BucketStart),
+			FeedbackCount: point.FeedbackCount,
+		}
+	}
 	return &gen.ListSkillFeedbackResult{
 		Counts: &gen.SkillFeedbackCounts{
 			Total: counts.Total, Helped: counts.Helped, PartiallyHelped: counts.PartiallyHelped,
 			DidNotHelp: counts.DidNotHelp, Misleading: counts.Misleading, Harmful: counts.Harmful,
 		},
-		Feedback: mv.BuildSkillFeedbackListView(rows), NextCursor: nextCursor,
+		Metrics: &gen.SkillFeedbackMetrics{
+			WindowStart: windowStart.Format(time.RFC3339), WindowEnd: windowEnd.Format(time.RFC3339),
+			FeedbackInWindow: metrics.FeedbackInWindow, ActivationsInWindow: metrics.ActivationsInWindow,
+			FeedbackActivationsInWindow: metrics.FeedbackActivationsInWindow,
+			Unreviewed:                  metrics.Unreviewed,
+			Converted:                   metrics.Converted,
+		},
+		Timeline: timeline, Feedback: mv.BuildSkillFeedbackListView(rows), NextCursor: nextCursor,
 	}, nil
+}
+
+func (s *Service) TriggerSuggestion(ctx context.Context, payload *gen.TriggerSuggestionPayload) error {
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	if err != nil {
+		return err
+	}
+	skillID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid skill id")
+	}
+	if _, err := repo.New(s.db).GetSkill(ctx, repo.GetSkillParams{ProjectID: *authCtx.ProjectID, ID: skillID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "skill not found")
+		}
+		return oops.E(oops.CodeUnexpected, err, "get skill for suggestion analysis").LogError(ctx, logger)
+	}
+	if err := s.signaler.SignalManual(ctx, *authCtx.ProjectID, skillID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "trigger skill suggestion analysis").LogError(ctx, logger)
+	}
+	return nil
 }
 
 func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSkillResult, error) {

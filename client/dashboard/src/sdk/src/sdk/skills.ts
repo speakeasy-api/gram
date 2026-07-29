@@ -20,6 +20,7 @@ import { skillsListUnknownActivations } from "../funcs/skillsListUnknownActivati
 import { skillsListVersions } from "../funcs/skillsListVersions.js";
 import { skillsRestoreVersion } from "../funcs/skillsRestoreVersion.js";
 import { skillsShare } from "../funcs/skillsShare.js";
+import { skillsTriggerSuggestion } from "../funcs/skillsTriggerSuggestion.js";
 import { skillsUndistribute } from "../funcs/skillsUndistribute.js";
 import { skillsUnshare } from "../funcs/skillsUnshare.js";
 import { skillsUpdate } from "../funcs/skillsUpdate.js";
@@ -111,6 +112,10 @@ import {
   ShareSkillRequest,
   ShareSkillSecurity,
 } from "../models/operations/shareskill.js";
+import {
+  TriggerSkillSuggestionRequest,
+  TriggerSkillSuggestionSecurity,
+} from "../models/operations/triggerskillsuggestion.js";
 import {
   UndistributeSkillRequest,
   UndistributeSkillSecurity,
@@ -338,7 +343,7 @@ export class Skills extends ClientSDK {
    * listFeedback skills
    *
    * @remarks
-   * List all-time outcome counts and recent resolved feedback for a skill. Name-only feedback is excluded.
+   * List outcome counts, collection metrics, volume, and recent resolved feedback for a skill. Name-only feedback is excluded.
    */
   async listFeedback(
     request: ListSkillFeedbackRequest,
@@ -462,6 +467,25 @@ export class Skills extends ClientSDK {
     options?: RequestOptions,
   ): Promise<SkillShareLink> {
     return unwrapAsync(skillsShare(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * triggerSuggestion skills
+   *
+   * @remarks
+   * Manually run suggestion analysis for a skill, bypassing automatic feedback and efficacy thresholds while preserving the one-open-suggestion invariant.
+   */
+  async triggerSuggestion(
+    request: TriggerSkillSuggestionRequest,
+    security?: TriggerSkillSuggestionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(skillsTriggerSuggestion(
       this,
       request,
       security,

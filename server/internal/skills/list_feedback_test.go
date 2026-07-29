@@ -3,6 +3,7 @@ package skills_test
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -12,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	skillservice "github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
@@ -52,7 +54,17 @@ func TestListSkillFeedbackCountsPagesAndSurvivesRename(t *testing.T) {
 		}
 		rows = append(rows, recordResolvedFeedback(t, ti, ti.projectID, skillID, versionID, created.Skill.Name, outcome, note))
 	}
-	_, err := ti.repo.CreateSkillFeedback(ctx, repo.CreateSkillFeedbackParams{
+	_, err := hooksrepo.New(ti.conn).InsertSkillObservation(ctx, hooksrepo.InsertSkillObservationParams{
+		ProjectID: ti.projectID, IdempotencyKey: conv.ToPGText(uuid.NewString()), Provider: "test",
+		UserID: pgtype.Text{}, UserEmail: pgtype.Text{}, Hostname: conv.ToPGText("machine"),
+		SessionID: conv.ToPGText("private-session"), SkillName: created.Skill.Name, Source: conv.ToPGText("workspace"),
+		SourceLevel: conv.ToPGText("project"), SourcePath: pgtype.Text{}, RawSha256: pgtype.Text{},
+		SeenAt: conv.ToPGTimestamptz(time.Now().UTC()),
+	})
+	require.NoError(t, err)
+	_, err = skillservice.ReconcileSkillObservations(ctx, ti.conn, ti.projectID, 10)
+	require.NoError(t, err)
+	_, err = ti.repo.CreateSkillFeedback(ctx, repo.CreateSkillFeedbackParams{
 		ProjectID: ti.projectID, SkillID: uuid.NullUUID{}, SkillVersionID: uuid.NullUUID{}, SkillName: created.Skill.Name,
 		Source: string(skillservice.FeedbackSourceDev), Outcome: string(skillservice.FeedbackOutcomeHarmful), Note: pgtype.Text{},
 		SessionID: pgtype.Text{}, UserID: pgtype.Text{}, UserEmail: pgtype.Text{},
@@ -67,6 +79,17 @@ func TestListSkillFeedbackCountsPagesAndSurvivesRename(t *testing.T) {
 	first, err := ti.service.ListFeedback(ctx, &gen.ListFeedbackPayload{ID: created.Skill.ID, Limit: 2, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Equal(t, &gen.SkillFeedbackCounts{Total: 5, Helped: 1, PartiallyHelped: 1, DidNotHelp: 1, Misleading: 1, Harmful: 1}, first.Counts)
+	require.Equal(t, int64(5), first.Metrics.FeedbackInWindow)
+	require.Equal(t, int64(1), first.Metrics.ActivationsInWindow)
+	require.Equal(t, int64(1), first.Metrics.FeedbackActivationsInWindow)
+	require.Equal(t, int64(5), first.Metrics.Unreviewed)
+	require.Equal(t, int64(0), first.Metrics.Converted)
+	require.Len(t, first.Timeline, 30)
+	var timelineTotal int64
+	for _, point := range first.Timeline {
+		timelineTotal += point.FeedbackCount
+	}
+	require.Equal(t, first.Metrics.FeedbackInWindow, timelineTotal)
 	require.Len(t, first.Feedback, 2)
 	require.NotNil(t, first.NextCursor)
 	require.Equal(t, rows[4].ID.String(), first.Feedback[0].ID)

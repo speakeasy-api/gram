@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SkillFeedbackSection } from "./SkillFeedbackSection";
 
@@ -6,6 +7,8 @@ const testState = vi.hoisted(() => ({
   error: null as Error | null,
   enabled: true,
   refetch: vi.fn(),
+  trigger: vi.fn(),
+  triggerError: null as Error | null,
   feedback: [
     {
       id: "feedback_a",
@@ -17,8 +20,12 @@ const testState = vi.hoisted(() => ({
   ] as Array<Record<string, unknown>>,
 }));
 
+vi.mock("@/components/require-scope", () => ({
+  RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+
 vi.mock("@gram/client/react-query/skillFeedback.js", () => ({
-  useSkillFeedback: (
+  useSkillFeedbackInfinite: (
     _request: unknown,
     _security: unknown,
     options: { enabled: boolean },
@@ -28,29 +35,62 @@ vi.mock("@gram/client/react-query/skillFeedback.js", () => ({
       isPending: false,
       error: testState.error,
       refetch: testState.refetch,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
       data: testState.error
         ? undefined
         : {
-            result: {
-              counts: {
-                total: 15,
-                helped: 5,
-                partiallyHelped: 4,
-                didNotHelp: 3,
-                misleading: 2,
-                harmful: 1,
+            pages: [
+              {
+                result: {
+                  counts: {
+                    total: 15,
+                    helped: 5,
+                    partiallyHelped: 4,
+                    didNotHelp: 3,
+                    misleading: 2,
+                    harmful: 1,
+                  },
+                  metrics: {
+                    feedbackInWindow: 6,
+                    activationsInWindow: 24,
+                    feedbackActivationsInWindow: 6,
+                    unreviewed: 2,
+                    converted: 3,
+                    windowStart: new Date("2026-06-20T00:00:00Z"),
+                    windowEnd: new Date("2026-07-20T00:00:00Z"),
+                  },
+                  timeline: Array.from({ length: 30 }, (_, index) => ({
+                    bucketStart: new Date(
+                      Date.UTC(2026, 5, 21 + index, 0, 0, 0),
+                    ),
+                    feedbackCount: index === 29 ? 6 : 0,
+                  })),
+                  feedback: testState.feedback,
+                },
               },
-              feedback: testState.feedback,
-            },
+            ],
           },
     };
   },
+}));
+
+vi.mock("@gram/client/react-query/triggerSkillSuggestion.js", () => ({
+  useTriggerSkillSuggestionMutation: () => ({
+    mutateAsync: testState.trigger,
+    isPending: false,
+    error: testState.triggerError,
+  }),
 }));
 
 beforeEach(() => {
   testState.error = null;
   testState.enabled = true;
   testState.refetch.mockReset();
+  testState.trigger.mockReset();
+  testState.trigger.mockResolvedValue(undefined);
+  testState.triggerError = null;
   testState.feedback = [
     {
       id: "feedback_a",
@@ -66,33 +106,27 @@ afterEach(cleanup);
 
 describe("SkillFeedbackSection", () => {
   it("starts collapsed, explains the pool, then shows counts and notes", () => {
-    render(<SkillFeedbackSection skillId="skill_a" />);
+    render(<SkillFeedbackSection skillId="skill_a" projectId="project_a" />);
     expect(testState.enabled).toBe(false);
-    expect(
-      screen.getByText(/Every report agents filed against this skill/),
-    ).toBeTruthy();
-    expect(screen.queryByText("Helped: 5")).toBeNull();
+    expect(screen.getByText(/See collection health/)).toBeTruthy();
+    expect(screen.queryByText("Outcome distribution")).toBeNull();
 
     const trigger = screen.getByRole("button", { name: /All agent reviews/ });
     expect(trigger.querySelector("p")).toBeNull();
     fireEvent.click(trigger);
     expect(testState.enabled).toBe(true);
+    expect(screen.getByText("Outcome distribution")).toBeTruthy();
+    expect(screen.getByText("Partially helped")).toBeTruthy();
+    expect(screen.getByText("25.0%")).toBeTruthy();
+    expect(screen.getByText("20.0%")).toBeTruthy();
     expect(
-      screen.getByText((_, element) => element?.textContent === "Helped: 5"),
-    ).toBeTruthy();
-    expect(
-      screen.getByText(
-        (_, element) => element?.textContent === "Partially helped: 4",
-      ),
-    ).toBeTruthy();
-    expect(
-      screen.getByText("Clarify the final verification step."),
-    ).toBeTruthy();
+      screen.getAllByText("Clarify the final verification step."),
+    ).toHaveLength(2);
   });
 
   it("shows an error and retries", () => {
     testState.error = new Error("feedback unavailable");
-    render(<SkillFeedbackSection skillId="skill_a" />);
+    render(<SkillFeedbackSection skillId="skill_a" projectId="project_a" />);
     fireEvent.click(screen.getByRole("button", { name: /All agent reviews/ }));
     expect(screen.getByText("feedback unavailable")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
@@ -101,9 +135,44 @@ describe("SkillFeedbackSection", () => {
 
   it("describes an empty recent page without implying all feedback was searched", () => {
     testState.feedback = [];
-    render(<SkillFeedbackSection skillId="skill_a" />);
+    render(<SkillFeedbackSection skillId="skill_a" projectId="project_a" />);
     fireEvent.click(screen.getByRole("button", { name: /All agent reviews/ }));
 
     expect(screen.getByText("No notes among recent feedback.")).toBeTruthy();
+  });
+
+  it("groups notes that differ only by case and punctuation", () => {
+    testState.feedback = [
+      ...testState.feedback,
+      {
+        id: "feedback_b",
+        outcome: "did_not_help",
+        note: "clarify the final verification step!",
+        createdAt: new Date("2026-07-19T00:00:00Z"),
+        source: "dev",
+      },
+    ];
+    const { container } = render(
+      <SkillFeedbackSection skillId="skill_a" projectId="project_a" />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /All agent reviews/ }));
+
+    expect(container.querySelectorAll("details")).toHaveLength(1);
+  });
+
+  it("queues a manual suggestion run", async () => {
+    render(<SkillFeedbackSection skillId="skill_a" projectId="project_a" />);
+    fireEvent.click(screen.getByRole("button", { name: /All agent reviews/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Generate suggestion" }),
+    );
+
+    await vi.waitFor(() => {
+      expect(testState.trigger).toHaveBeenCalledWith({
+        request: {
+          triggerSkillSuggestionRequestBody: { id: "skill_a" },
+        },
+      });
+    });
   });
 });

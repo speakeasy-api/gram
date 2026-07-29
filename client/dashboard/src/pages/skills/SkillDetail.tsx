@@ -359,7 +359,7 @@ function SkillDetailSections({
         </SettingsSection>
       )}
 
-      <SkillFeedbackSection skillId={skillId} />
+      <SkillFeedbackSection skillId={skillId} projectId={project.id} />
 
       <DangerSettingsSection id={SKILL_DANGER_SECTION_ID}>
         <DangerSettingsSection.Header>
