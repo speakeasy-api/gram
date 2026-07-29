@@ -32,7 +32,7 @@ import {
  */
 interface AnimationConfig {
   /** Badge animation type */
-  badgeAnimation?: "bounce" | "pulse" | "wiggle" | "fade" | "slide" | "none";
+  badgeAnimation?: "lift" | "pulse" | "wiggle" | "fade" | "slide" | "none";
   /** Popover animation type */
   popoverAnimation?: "scale" | "slide" | "fade" | "flip" | "none";
   /** Option hover animation type */
@@ -58,7 +58,7 @@ const multiSelectVariants = cva("m-1 transition-all duration-300 ease-in-out", {
       inverted: "inverted",
     },
     badgeAnimation: {
-      bounce: "hover:-translate-y-1 hover:scale-110",
+      lift: "hover:-translate-y-1 hover:scale-110",
       pulse: "hover:animate-pulse",
       wiggle: "hover:animate-wiggle",
       fade: "hover:opacity-80",
@@ -68,7 +68,7 @@ const multiSelectVariants = cva("m-1 transition-all duration-300 ease-in-out", {
   },
   defaultVariants: {
     variant: "default",
-    badgeAnimation: "bounce",
+    badgeAnimation: "lift",
   },
 });
 
@@ -512,9 +512,9 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
     const getBadgeAnimationClass = () => {
       if (animationConfig?.badgeAnimation) {
         switch (animationConfig.badgeAnimation) {
-          case "bounce":
+          case "lift":
             return isAnimating
-              ? "animate-bounce"
+              ? "animate-pulse"
               : "hover:-translate-y-1 hover:scale-110";
           case "pulse":
             return "hover:animate-pulse";
@@ -530,7 +530,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
             return "";
         }
       }
-      return isAnimating ? "animate-bounce" : "";
+      return isAnimating ? "animate-pulse" : "";
     };
 
     const getPopoverAnimationClass = () => {
