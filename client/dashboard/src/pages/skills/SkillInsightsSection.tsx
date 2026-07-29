@@ -8,9 +8,11 @@ import {
   ErrorAlert,
 } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
+import { Markdown } from "@/elements/components/Markdown";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
@@ -38,6 +40,7 @@ import {
 import { Line } from "react-chartjs-2";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
+import skillEfficacyMethodology from "../../../../../docs/skills/measuring-skill-efficacy.md?raw";
 
 ChartJS.register(
   CategoryScale,
@@ -50,8 +53,6 @@ ChartJS.register(
 
 export const SKILL_INSIGHTS_SECTION_ID = "insights";
 
-const METHODOLOGY_URL =
-  "https://github.com/speakeasy-api/gram/blob/main/docs/skills/measuring-skill-efficacy.md";
 type TrendMetric = "efficacy" | "activations" | "sessionCost";
 
 function formatCount(value: number): string {
@@ -255,16 +256,7 @@ function InsightsContent({
               ? `${formatMinutes(efficacy.estimatedMinutesSavedTotal)} saved`
               : "Not estimated"
           }
-          detail={
-            <a
-              href={METHODOLOGY_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline underline-offset-2"
-            >
-              View methodology
-            </a>
-          }
+          detail={<MethodologyDialog />}
         />
       </dl>
 
@@ -318,6 +310,26 @@ function InsightsContent({
         )}
       </div>
     </div>
+  );
+}
+
+function MethodologyDialog(): JSX.Element {
+  return (
+    <Dialog>
+      <Dialog.Trigger asChild>
+        <Button variant="link" size="inline" className="h-auto p-0">
+          View methodology
+        </Button>
+      </Dialog.Trigger>
+      <Dialog.Content className="max-h-[calc(100vh-2rem)] grid-rows-[minmax(0,1fr)] sm:max-w-3xl">
+        <Dialog.Title className="sr-only">
+          Measuring skill efficacy
+        </Dialog.Title>
+        <div className="min-h-0 overflow-y-auto pr-1">
+          <Markdown className="text-sm">{skillEfficacyMethodology}</Markdown>
+        </div>
+      </Dialog.Content>
+    </Dialog>
   );
 }
 
