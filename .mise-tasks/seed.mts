@@ -2291,14 +2291,11 @@ async function seedNonCorporateAccountFindings(init: {
   }
 }
 
-// enableRBACForDevUser turns on RBAC for the org and grants the local dev user
-// the admin scope set plus chat:read. The Agent Sessions page only shows every
-// member's sessions to a caller holding an unrestricted chat:read grant under
-// RBAC enforcement; without it the list is scoped to the caller's own sessions.
-// We grant the full admin scope set too so existing admin actions keep working
-// once enforcement is on (locally the dev user has no WorkOS-synced role
-// assignment to inherit those from). Idempotent: enableRBAC no-ops if already
-// enabled and the grant insert is ON CONFLICT DO NOTHING.
+// enableRBACForDevUser turns on RBAC, reconciles the built-in system-role grants,
+// and gives the local dev user unrestricted chat:read. The Admin role assigned
+// during early seed setup supplies the normal admin scopes; chat:read is a direct
+// grant because it is intentionally not part of any system role. Idempotent:
+// enableRBAC no-ops if already enabled and the grant insert uses ON CONFLICT.
 async function enableRBACForDevUser(init: {
   sessionId: string;
   organizationId: string;
@@ -2332,22 +2329,10 @@ async function enableRBACForDevUser(init: {
     abort("Failed to enable RBAC", res.error);
   }
 
-  // The admin system role intentionally omits chat:read, and the dev user has
-  // no role assignment locally anyway, so grant the scopes directly to the user
-  // principal. Selectors mirror authz.NewSelector: one
-  // {resource_kind, resource_id:"*"} object per scope, effect NULL = allow.
+  // The Admin system role intentionally omits chat:read, so grant it directly to
+  // the user principal. The selector mirrors authz.NewSelector and effect NULL
+  // means allow.
   const SCOPES: { scope: string; kind: string }[] = [
-    { scope: "org:read", kind: "org" },
-    { scope: "org:admin", kind: "org" },
-    { scope: "project:read", kind: "project" },
-    { scope: "project:write", kind: "project" },
-    { scope: "mcp:read", kind: "mcp" },
-    { scope: "mcp:write", kind: "mcp" },
-    { scope: "mcp:connect", kind: "mcp" },
-    { scope: "environment:read", kind: "environment" },
-    { scope: "environment:write", kind: "environment" },
-    { scope: "skill:read", kind: "skill" },
-    { scope: "skill:write", kind: "skill" },
     { scope: "chat:read", kind: "chat" },
   ];
   const sqlStr = (v: string) => `'${v.replace(/'/g, "''")}'`;
@@ -2376,7 +2361,7 @@ async function enableRBACForDevUser(init: {
       await fs.unlink(tmpFile).catch(() => {});
     }
     log.info(
-      `Enabled RBAC and granted dev user ${SCOPES.length} scopes (admin + chat:read); Agent Sessions now shows all org sessions.`,
+      "Enabled RBAC and granted the dev user chat:read; Agent Sessions now shows all org sessions.",
     );
   } catch (e: unknown) {
     const err = e as { stderr?: string; stdout?: string; message?: string };
@@ -4866,6 +4851,22 @@ async function seed() {
     );
   }
 
+  // RBAC may already be enabled from an earlier seed. Establish the user's
+  // organization-level authorization before the first protected API call:
+  // platform super-admin status does not bypass ordinary org RBAC. Assigning
+  // Admin first lets enableRBAC reconcile system grants safely, and both steps
+  // are idempotent for clean and previously seeded databases.
+  await seedCurrentUserAdminRole({
+    organizationId: activeOrgID,
+    userId: activeUserID,
+  });
+  await enableRBACForDevUser({
+    sessionId,
+    organizationId: activeOrgID,
+    userId: activeUserID,
+    gram,
+  });
+
   // oxlint-disable-next-line no-unused-vars
   const key = await initAPIKey({
     gram,
@@ -5005,21 +5006,9 @@ async function seed() {
     await seedRiskFindingsClickHouse({ projectId: firstProject.id });
   }
 
-  // Give the local dev user the "see all org sessions" admin view that the
-  // Agent Sessions page promises. That view is gated behind RBAC enforcement
-  // plus a chat:read grant, so enable RBAC and grant the dev user the admin
-  // scope set (chat:read is intentionally not part of any system role). Runs
-  // after asset/toolset seeding so those admin API calls aren't gated, and
-  // before the enterprise-account-type flip below (enforcement only activates
-  // once the org is enterprise).
-  await enableRBACForDevUser({
-    sessionId,
-    organizationId: activeOrgID,
-    userId: sessionInfo.result.userId,
-    gram,
-  });
-
-  // Set enterprise account type last so RBAC enforcement doesn't block seeding.
+  // Keep the fully seeded local organization on the enterprise tier so local
+  // development can exercise other enterprise capabilities. Billing tier no
+  // longer controls RBAC enforcement.
   try {
     const dbUser = process.env.DB_USER || "gram";
     const dbName = process.env.DB_NAME || "gram";
@@ -5031,19 +5020,6 @@ async function seed() {
       `Failed to set enterprise account type: ${err.message || err.stderr || JSON.stringify(e)}`,
     );
   }
-
-  const enableRBACRes = await accessEnableRBAC(gram, undefined, {
-    sessionHeaderGramSession: sessionId,
-  });
-  if (!enableRBACRes.ok) {
-    abort("Failed to enable RBAC and seed system roles", enableRBACRes.error);
-  }
-  log.info("Enabled RBAC and seeded system roles");
-
-  await seedCurrentUserAdminRole({
-    organizationId: activeOrgID,
-    userId: activeUserID,
-  });
 
   if (seedStepFailures.length > 0) {
     log.warn(
