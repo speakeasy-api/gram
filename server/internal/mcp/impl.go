@@ -98,6 +98,7 @@ type Service struct {
 	auth                   *auth.Auth
 	env                    toolconfig.EnvironmentLoader
 	serverURL              *url.URL
+	siteURL                *url.URL
 	posthog                *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	toolProxy              *gateway.ToolProxy
 	oauthService           OAuthService
@@ -239,6 +240,7 @@ func NewService(
 	env toolconfig.EnvironmentLoader,
 	posthog *posthog.Posthog,
 	serverURL *url.URL,
+	siteURL *url.URL,
 	enc *encryption.Client,
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
@@ -298,6 +300,7 @@ func NewService(
 		auth:            auth.New(logger, db, sessions, authzEngine),
 		env:             env,
 		serverURL:       serverURL,
+		siteURL:         siteURL,
 		posthog:         posthog,
 		toolProxy: gateway.NewToolProxy(
 			logger,
@@ -345,6 +348,16 @@ func NewService(
 		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
 		tunnelPublic:       newTunnelPublicRuntime(redisClient, tunnelPublicConfig),
 	}
+}
+
+func (s *Service) serverPermissionDenied(ctx context.Context, err error) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return mcpaccess.ServerPermissionDenied(err, "")
+	}
+
+	requestAccessURL := mcpaccess.AuthorizationChallengesURL(s.siteURL, authCtx.OrganizationSlug)
+	return mcpaccess.ServerPermissionDenied(err, requestAccessURL)
 }
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
@@ -775,7 +788,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 				return oops.E(oops.CodeUnexpected, err, "failed to load access grants").LogError(ctx, s.logger)
 			}
 			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())); err != nil {
-				return fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err))
+				return fmt.Errorf("authorize MCP server access: %w", s.serverPermissionDenied(ctx, err))
 			}
 		}
 
