@@ -135,14 +135,12 @@ describe("RestoreSkillVersionDialog", () => {
         onClose={onClose}
       />,
     );
-    expect(
-      screen.getByText("Roll forward to this skill version?"),
-    ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Roll forward" }));
+    expect(screen.getByText("Promote to this skill version?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Promote" }));
     await waitFor(() => expect(testState.invalidate).toHaveBeenCalled());
     expect(
       screen
-        .getByRole("button", { name: "Roll forward..." })
+        .getByRole("button", { name: "Promote..." })
         .hasAttribute("disabled"),
     ).toBe(true);
     expect(

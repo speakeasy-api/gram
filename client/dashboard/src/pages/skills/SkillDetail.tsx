@@ -80,7 +80,8 @@ function versionAnchorLabel(
     return `Version ${hash}, current version`;
   if (!version.specValid) return `Version ${hash}, invalid version`;
   const direction = versionChangeDirection(version, currentVersion);
-  return `Version ${hash}, roll ${direction === "backward" ? "back" : "forward"} target`;
+  if (direction === "backward") return `Version ${hash}, roll back target`;
+  return `Version ${hash}, promotion target`;
 }
 
 function useScrollToSectionHash(): void {
@@ -493,7 +494,7 @@ function VersionHistory({
                 variant="outline"
                 onClick={() => setRestoreTarget({ version, direction })}
               >
-                {direction === "backward" ? "Roll back" : "Roll forward"}
+                {direction === "backward" ? "Roll back" : "Promote"}
               </Button>
             </RequireScope>
           )}

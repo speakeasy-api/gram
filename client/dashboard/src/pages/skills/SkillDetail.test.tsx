@@ -344,7 +344,7 @@ describe("SkillDetail", () => {
     ];
     render(<SkillDetail />);
 
-    expect(screen.getByRole("button", { name: "Roll forward" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Promote" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Roll back" })).toBeTruthy();
     expect(screen.getByText("Current")).toBeTruthy();
     expect(
@@ -354,7 +354,7 @@ describe("SkillDetail", () => {
     ).toBeTruthy();
     expect(
       screen.getByRole("group", {
-        name: "Version newvalid, roll forward target",
+        name: "Version newvalid, promotion target",
       }),
     ).toBeTruthy();
     expect(

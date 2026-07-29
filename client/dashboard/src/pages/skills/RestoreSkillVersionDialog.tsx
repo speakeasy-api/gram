@@ -69,7 +69,7 @@ export function RestoreSkillVersionDialog({
     );
   };
 
-  const actionLabel = direction === "backward" ? "Roll back" : "Roll forward";
+  const actionLabel = direction === "backward" ? "Roll back" : "Promote";
 
   return (
     <Dialog
