@@ -33,6 +33,11 @@ import {
 } from "./types";
 import { computePanelState, type CollectionGroup } from "./computePanelState";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   mergeMcpServersIntoGroups,
   type Server,
   type ServerGroup,
@@ -118,6 +123,7 @@ function useMCPServers(enabled: boolean) {
         mcpSlug: t.mcpSlug ?? undefined,
         tools,
         dynamicTools: false,
+        remoteBacked: false,
       });
     }
     // Fold in mcp_servers rows (remote/tunneled and toolset-backed servers
@@ -298,10 +304,11 @@ export function GrantRuleDrawerContent({
   }, [scopedMcpServers, resourceSearch]);
 
   // The "Specific tools" picker shows servers with enumerable deploy-time tools
-  // plus remote/tunneled (dynamic-tools) servers, whose tools it resolves from
-  // the stored metadata table on expand. Proxy servers (no tools/list at deploy
-  // time) appear in the "Specific servers" picker for server-level grants but
-  // must not render a zero-tools row here.
+  // plus remote/tunneled (dynamic-tools) servers. Remote-backed ones resolve
+  // their tools from the stored metadata table on expand; tunneled ones stay a
+  // non-selectable row. Proxy servers (no tools/list at deploy time) appear in
+  // the "Specific servers" picker for server-level grants but must not render a
+  // zero-tools row here.
   const toolPanelMcpServers = useMemo(
     () =>
       scopedMcpServers
@@ -934,10 +941,12 @@ type PanelServer = Server & { projectName: string; projectSlug?: string };
  * One MCP server row in the "Specific tools" picker.
  *
  * Toolset-backed servers render their enumerable deploy-time tools directly.
- * Remote/tunneled servers (`dynamicTools`) have no such list, so on expand this
- * fetches their stored tool metadata and renders it as selectable rows. When a
- * remote server has never been synced its table is empty, and the row points
- * the admin at the Inspect tab (which materializes it from the live session).
+ * Remote-backed servers (`dynamicTools` + `remoteBacked`) have no such list, so
+ * on expand this fetches their stored tool metadata and renders it as
+ * selectable rows — with distinct loading, load-error (retry), and never-synced
+ * states; the never-synced state points the admin at the Inspect tab (which
+ * materializes the table from the live session). Tunneled dynamic servers carry
+ * no metadata table, so they render as a disabled, non-selectable row.
  */
 function ServerToolRow({
   server,
@@ -965,22 +974,29 @@ function ServerToolRow({
   onClearAnnotations?: () => void;
 }) {
   const routes = useRoutes();
-  const isRemote = server.dynamicTools;
+  // Only remote-MCP-backed servers carry stored tool metadata — the endpoint
+  // rejects everything else. Tunneled dynamic servers resolve their tools at
+  // call time with no metadata table, so they stay non-selectable.
+  const isRemoteBacked = server.dynamicTools && server.remoteBacked;
+  const isTunneled = server.dynamicTools && !server.remoteBacked;
 
-  // Fetch lazily, only for the remote rows the admin actually opens, so the
-  // picker issues at most one metadata request per expanded server. The
+  // Fetch lazily, only for the remote-backed rows the admin actually opens, so
+  // the picker issues at most one metadata request per expanded server. The
   // project slug scopes the (project-scoped) request to this server's project.
-  const { metadataByTool, isLoading } = useToolMetadata(server.id, {
-    enabled: isRemote && isExpanded,
-    projectSlug: server.projectSlug,
-  });
+  const { metadataByTool, isLoading, isError, refetch } = useToolMetadata(
+    server.id,
+    {
+      enabled: isRemoteBacked && isExpanded,
+      projectSlug: server.projectSlug,
+    },
+  );
 
   const serverTools = useMemo(() => {
-    const base = isRemote
+    const base = isRemoteBacked
       ? toolMetadataToServerTools(server.id, Object.values(metadataByTool))
       : server.tools;
     return base.slice().sort((a, b) => a.name.localeCompare(b.name));
-  }, [isRemote, server.id, server.tools, metadataByTool]);
+  }, [isRemoteBacked, server.id, server.tools, metadataByTool]);
 
   const q = query.toLowerCase();
 
@@ -997,21 +1013,62 @@ function ServerToolRow({
     );
   const someSelected = selectedCount > 0 && !allSelected;
 
-  const toolsLoaded = !isRemote || (isExpanded && !isLoading);
-  const isEmptyRemote = isRemote && toolsLoaded && total === 0;
+  const toolsLoaded = !isRemoteBacked || (isExpanded && !isLoading);
+  // A failed request is distinct from a genuinely empty (never-synced) table:
+  // only the latter should point the admin at the Inspect tab.
+  const showConnectPrompt =
+    isRemoteBacked && toolsLoaded && !isError && total === 0;
 
   const countLabel =
-    isRemote && !isExpanded
+    isRemoteBacked && !isExpanded
       ? selectedCount > 0
         ? `${selectedCount} selected`
         : "Expand to load tools"
       : isLoading
         ? "Loading…"
-        : isEmptyRemote
-          ? "Not synced"
-          : selectedCount > 0
-            ? `${selectedCount} of ${total} selected`
-            : `${total} ${total === 1 ? "tool" : "tools"} available`;
+        : isError
+          ? "Couldn't load"
+          : showConnectPrompt
+            ? "Not synced"
+            : selectedCount > 0
+              ? `${selectedCount} of ${total} selected`
+              : `${total} ${total === 1 ? "tool" : "tools"} available`;
+
+  // Tunneled dynamic servers can't be individually permissioned — keep them as
+  // a disabled, non-expandable row that explains why.
+  if (isTunneled) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div
+            tabIndex={0}
+            aria-disabled="true"
+            className="border-border focus-visible:ring-ring flex cursor-not-allowed items-center border-b px-3 py-2.5 text-sm opacity-50 focus-visible:ring-1 focus-visible:outline-none last:border-b-0"
+          >
+            <span className="min-w-0 flex-1 truncate">
+              <HighlightMatch
+                text={`${server.projectName.toLowerCase()}/`}
+                query={q}
+                className="text-muted-foreground/60"
+              />
+              <HighlightMatch
+                text={server.name}
+                query={q}
+                className="font-medium"
+              />
+            </span>
+            <span className="text-muted-foreground shrink-0 text-xs">
+              dynamic tools
+            </span>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="max-w-xs">
+          Tools are dynamically resolved for this server and cannot be
+          individually permissioned.
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
 
   return (
     <div className="border-border border-b last:border-b-0">
@@ -1073,11 +1130,25 @@ function ServerToolRow({
       {/* Expanded tool list */}
       {isExpanded && (
         <div className="bg-muted/30 border-border max-h-[300px] overflow-y-auto border-t">
-          {isRemote && isLoading ? (
+          {isRemoteBacked && isLoading ? (
             <div className="text-muted-foreground px-8 py-3 text-sm">
               Loading tools…
             </div>
-          ) : isEmptyRemote ? (
+          ) : isError ? (
+            <div className="text-muted-foreground space-y-1 px-8 py-3 text-sm">
+              <p className="flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                Couldn&apos;t load this server&apos;s tools.
+              </p>
+              <button
+                type="button"
+                onClick={() => refetch()}
+                className="text-primary hover:underline"
+              >
+                Retry
+              </button>
+            </div>
+          ) : showConnectPrompt ? (
             <div className="text-muted-foreground space-y-1 px-8 py-3 text-sm">
               <p>This server&apos;s tools haven&apos;t been synced yet.</p>
               <p>

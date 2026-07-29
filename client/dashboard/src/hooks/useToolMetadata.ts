@@ -8,6 +8,10 @@ export type ToolMetadataByName = Record<string, ToolMetadata>;
 export interface UseToolMetadataResult {
   metadataByTool: ToolMetadataByName;
   isLoading: boolean;
+  /** The metadata request failed (network, 5xx, or an RBAC 403). */
+  isError: boolean;
+  /** Retry the request; used to recover from a transient load failure. */
+  refetch: () => void;
 }
 
 /**
@@ -29,22 +33,23 @@ export function useToolMetadata(
 ): UseToolMetadataResult {
   const enabled = (options?.enabled ?? true) && !!mcpServerId;
 
-  const { data, isLoading, fetchStatus } = useListMcpServerToolMetadata(
-    // `gramProject` sets the per-call `Gram-Project` header. On project-scoped
-    // pages callers omit it and inherit the ambient project; the org-level
-    // access role editor lists servers across every project, so it must name
-    // each server's project explicitly or the request resolves against the
-    // wrong one (the endpoint hard-scopes tool metadata to the header project).
-    { mcpServerId: mcpServerId ?? "", gramProject: options?.projectSlug },
-    undefined,
-    {
-      enabled,
-      // Stored metadata is supplementary to the live tool listing. A failure
-      // here shouldn't take down the tools list, so keep it inline — the rows
-      // simply fall back to the annotations the server advertised.
-      throwOnError: false,
-    },
-  );
+  const { data, isLoading, isError, fetchStatus, refetch } =
+    useListMcpServerToolMetadata(
+      // `gramProject` sets the per-call `Gram-Project` header. On project-scoped
+      // pages callers omit it and inherit the ambient project; the org-level
+      // access role editor lists servers across every project, so it must name
+      // each server's project explicitly or the request resolves against the
+      // wrong one (the endpoint hard-scopes tool metadata to the header project).
+      { mcpServerId: mcpServerId ?? "", gramProject: options?.projectSlug },
+      undefined,
+      {
+        enabled,
+        // Stored metadata is supplementary to the live tool listing. A failure
+        // here shouldn't take down the tools list, so keep it inline — the rows
+        // simply fall back to the annotations the server advertised.
+        throwOnError: false,
+      },
+    );
 
   const metadataByTool = useMemo(() => {
     // Null-prototype: tool names come from the remote server, so a tool called
@@ -62,5 +67,9 @@ export function useToolMetadata(
     // `isLoading` stays true for a disabled query; pair it with fetchStatus so
     // a gated server doesn't hold the section in a permanent skeleton.
     isLoading: isLoading && fetchStatus !== "idle",
+    isError,
+    refetch: () => {
+      void refetch();
+    },
   };
 }
