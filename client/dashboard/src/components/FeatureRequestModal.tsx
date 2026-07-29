@@ -3,7 +3,7 @@ import { InputField } from "@/components/moon/input-field";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Button } from "@speakeasy-api/moonshine";
 import { LucideIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useOrgRoutes } from "@/routes";
 
@@ -39,6 +39,12 @@ export function FeatureRequestModal({
   const telemetry = useTelemetry();
   const routes = useOrgRoutes();
   const [requestInputValue, setRequestInputValue] = useState("");
+
+  useEffect(() => {
+    if (!isOpen) {
+      setRequestInputValue("");
+    }
+  }, [isOpen]);
 
   const handleClose = () => {
     setRequestInputValue("");

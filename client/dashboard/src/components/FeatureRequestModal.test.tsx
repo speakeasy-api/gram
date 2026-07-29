@@ -56,4 +56,41 @@ describe("FeatureRequestModal", () => {
     });
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it("clears request input when its parent closes the modal", () => {
+    const onClose = vi.fn<() => void>();
+    const modal = (isOpen: boolean) => (
+      <FeatureRequestModal
+        isOpen={isOpen}
+        onClose={onClose}
+        title="Request an Observability Integration"
+        description="Tell us which AI agent your team uses."
+        actionType="hooks_agent_integration"
+        requestInput={{
+          label: "AI agent",
+          placeholder: "e.g. GitHub Copilot",
+          telemetryField: "requested_agent",
+        }}
+      />
+    );
+    const { rerender } = render(modal(true));
+
+    fireEvent.change(screen.getByLabelText("AI agent"), {
+      target: { value: "GitHub Copilot" },
+    });
+
+    rerender(modal(false));
+    rerender(modal(true));
+
+    expect((screen.getByLabelText("AI agent") as HTMLInputElement).value).toBe(
+      "",
+    );
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "REQUEST FEATURE",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
 });
