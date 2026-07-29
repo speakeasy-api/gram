@@ -26,6 +26,7 @@ const testState = vi.hoisted(() => ({
   toastError: vi.fn(),
   fetchNextPage: vi.fn(),
   isFetchNextPageError: false,
+  hasNextPage: false,
   versionError: null as Error | null,
   versions: [] as Array<Record<string, unknown>>,
   sightingTimeline: [] as Array<{
@@ -135,9 +136,10 @@ vi.mock("@gram/client/react-query/skill.js", () => ({
 vi.mock("@gram/client/react-query/skillVersions.js", () => ({
   useSkillVersionsInfinite: () => ({
     isPending: false,
+    isError: testState.versionError !== null,
     error: testState.versionError,
     data: { pages: [{ result: { versions: testState.versions } }] },
-    hasNextPage: false,
+    hasNextPage: testState.hasNextPage,
     isFetchingNextPage: false,
     isFetchNextPageError: testState.isFetchNextPageError,
     fetchNextPage: testState.fetchNextPage,
@@ -268,6 +270,7 @@ beforeEach(() => {
   testState.toastError.mockReset();
   testState.fetchNextPage.mockReset();
   testState.isFetchNextPageError = false;
+  testState.hasNextPage = false;
   testState.versionError = null;
   testState.versions = [testState.version];
   testState.sightingTimeline = [];
@@ -354,10 +357,19 @@ describe("SkillDetail", () => {
 
   it("keeps loaded versions visible and retries a next-page failure explicitly", () => {
     testState.isFetchNextPageError = true;
+    testState.hasNextPage = true;
     testState.versionError = new Error("next page failed");
+    testState.sightingTimeline = [
+      {
+        bucketStart: new Date("2026-07-15T00:00:00Z"),
+        skillVersionId: "version_latest",
+        activationCount: 3,
+      },
+    ];
     render(<SkillDetail />);
 
     expect(screen.getAllByText("Version table").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("activation-chart")).toBeTruthy();
     expect(screen.getByText("Unable to load more versions.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(testState.fetchNextPage).toHaveBeenCalledOnce();

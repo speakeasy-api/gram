@@ -192,9 +192,10 @@ function SkillDetailSections({
   });
   useDrainInfiniteQuery(versionsQuery);
   const versionsLoading =
-    versionsQuery.isPending ||
-    versionsQuery.hasNextPage ||
-    versionsQuery.isFetchingNextPage;
+    !versionsQuery.error &&
+    (versionsQuery.isPending ||
+      versionsQuery.hasNextPage ||
+      versionsQuery.isFetchingNextPage);
   const versions =
     versionsQuery.data?.pages.flatMap((page) => page.result.versions) ?? [];
   const versionLabels = new Map(
