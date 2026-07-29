@@ -323,7 +323,7 @@ type GetResponseBody struct {
 	LatestVersion *SkillVersionResponseBody `form:"latest_version,omitempty" json:"latest_version,omitempty" xml:"latest_version,omitempty"`
 	// Activation adoption metrics.
 	Adoption *SkillAdoptionResponseBody `form:"adoption" json:"adoption" xml:"adoption"`
-	// Daily activations in the adoption window.
+	// Daily activations by attributed version in the adoption window.
 	SightingTimeline []*SkillSightingTimelinePointResponseBody `form:"sighting_timeline" json:"sighting_timeline" xml:"sighting_timeline"`
 	// Active-machine version convergence.
 	Drift *SkillDriftResponseBody `form:"drift" json:"drift" xml:"drift"`
@@ -4666,6 +4666,9 @@ type SkillAdoptionResponseBody struct {
 type SkillSightingTimelinePointResponseBody struct {
 	// Start of the UTC day.
 	BucketStart string `form:"bucket_start" json:"bucket_start" xml:"bucket_start"`
+	// The attributed skill version, absent when the observation could not be
+	// resolved to a version.
+	SkillVersionID *string `form:"skill_version_id,omitempty" json:"skill_version_id,omitempty" xml:"skill_version_id,omitempty"`
 	// Activations observed during the day.
 	ActivationCount int64 `form:"activation_count" json:"activation_count" xml:"activation_count"`
 }

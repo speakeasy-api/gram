@@ -248,6 +248,36 @@ func TestCredentialRotationResetsSyncState(t *testing.T) {
 	require.False(t, digests[0].Valid, "rotation clears last_push_digest so a repointed sink gets its first push")
 }
 
+func TestSettingsRepointResetsSyncState(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	created := mustUpsert(t, ctx, conn, store, orgID, validCreds(), validSettings(), true)
+
+	// Simulate a previously pushed snapshot digest.
+	require.NoError(t, testrepo.New(conn).FailDeviceIntegrationSyncsFixture(ctx, testrepo.FailDeviceIntegrationSyncsFixtureParams{
+		ErrorMessage:              conv.ToPGText("unauthorized"),
+		LastPushDigest:            conv.ToPGText("stale-digest"),
+		DeviceIntegrationConfigID: created.Config.ID,
+	}))
+
+	// A settings change without credentials is how the dashboard repoints a
+	// push destination (secrets are write-only and not resupplied). The
+	// coverage digest hashes only the fleet, so the stored digest MUST clear
+	// or the newly pointed-at account receives nothing until the fleet
+	// changes.
+	repointed := mustUpsert(t, ctx, conn, store, orgID, nil, providers.Settings{"instance_url": "https://repointed.test"}, true)
+	require.True(t, repointed.SyncsMadeDue, "a repoint resets sync state, so the caller must kick a sync rather than wait out the interval")
+	digests, err := testrepo.New(conn).GetDeviceIntegrationSyncPushDigests(ctx, created.Config.ID)
+	require.NoError(t, err)
+	require.Len(t, digests, 1)
+	require.False(t, digests[0].Valid, "a settings repoint clears last_push_digest so the new destination gets its first push")
+	rows, err := store.repo.ListSchedulesWithSync(ctx, created.Config.ID)
+	require.NoError(t, err)
+	require.False(t, rows[0].LastPollFailedAt.Valid, "a repoint is a fresh start like a rotation")
+}
+
 func TestUpsertReturnsTransactionObservedBefore(t *testing.T) {
 	t.Parallel()
 

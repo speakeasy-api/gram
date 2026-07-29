@@ -244,7 +244,7 @@ type GetSkillResult struct {
 	LatestVersion *types.SkillVersion
 	// Activation adoption metrics.
 	Adoption *SkillAdoption
-	// Daily activations in the adoption window.
+	// Daily activations by attributed version in the adoption window.
 	SightingTimeline []*SkillSightingTimelinePoint
 	// Active-machine version convergence.
 	Drift *SkillDrift
@@ -556,10 +556,13 @@ type SkillFeedbackTimelinePoint struct {
 	FeedbackCount int64
 }
 
-// A UTC-day activation bucket for a skill.
+// A UTC-day activation bucket for one attributed skill version.
 type SkillSightingTimelinePoint struct {
 	// Start of the UTC day.
 	BucketStart string
+	// The attributed skill version, absent when the observation could not be
+	// resolved to a version.
+	SkillVersionID *string
 	// Activations observed during the day.
 	ActivationCount int64
 }

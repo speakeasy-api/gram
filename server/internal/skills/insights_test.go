@@ -68,8 +68,20 @@ func TestSkillInsightsReportsVersionAdoptionAndDrift(t *testing.T) {
 	require.Equal(t, int64(1), details.Drift.OnTargetMachines)
 	require.Equal(t, int64(1), details.Drift.DriftedMachines)
 	require.Equal(t, int64(1), details.Drift.IndeterminateMachines)
-	require.Len(t, details.SightingTimeline, 1)
-	require.Equal(t, int64(4), details.SightingTimeline[0].ActivationCount)
+	require.Len(t, details.SightingTimeline, 3)
+	timelineCounts := make(map[string]int64, len(details.SightingTimeline))
+	for _, point := range details.SightingTimeline {
+		versionID := "unknown"
+		if point.SkillVersionID != nil {
+			versionID = *point.SkillVersionID
+		}
+		timelineCounts[versionID] = point.ActivationCount
+	}
+	require.Equal(t, map[string]int64{
+		oldVersion.SkillVersionID.String(): 2,
+		newVersion.SkillVersionID.String(): 1,
+		"unknown":                          1,
+	}, timelineCounts)
 
 	versions, err := ti.service.ListVersions(ctx, &gen.ListVersionsPayload{
 		ID: newVersion.SkillID.String(), Limit: 20, Cursor: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,

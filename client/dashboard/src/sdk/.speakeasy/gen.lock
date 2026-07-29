@@ -5953,7 +5953,7 @@ examples:
           limit: 20
       responses:
         "200":
-          application/json: {"counts": {"did_not_help": 9166, "harmful": 958057, "helped": 233517, "misleading": 284907, "partially_helped": 732301, "total": 162598}, "feedback": [], "metrics": {"activations_in_window": 912003, "converted": 26011, "feedback_activations_in_window": 912003, "feedback_in_window": 139631, "unreviewed": 742679, "window_end": "2025-07-21T20:29:50.430Z", "window_start": "2024-09-26T14:24:20.465Z"}, "timeline": []}
+          application/json: {"counts": {"did_not_help": 9166, "harmful": 958057, "helped": 233517, "misleading": 284907, "partially_helped": 732301, "total": 162598}, "feedback": [], "metrics": {"activations_in_window": 912003, "converted": 26011, "feedback_activations_in_window": 139631, "feedback_in_window": 742679, "unreviewed": 518115, "window_end": "2024-09-26T14:24:20.465Z", "window_start": "2024-03-16T01:50:19.355Z"}, "timeline": [{"bucket_start": "2025-09-15T08:08:59.146Z", "feedback_count": 496980}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

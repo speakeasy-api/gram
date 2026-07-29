@@ -1054,8 +1054,9 @@ var SkillAdoption = Type("SkillAdoption", func() {
 })
 
 var SkillSightingTimelinePoint = Type("SkillSightingTimelinePoint", func() {
-	Description("A UTC-day activation bucket for a skill.")
+	Description("A UTC-day activation bucket for one attributed skill version.")
 	Attribute("bucket_start", String, "Start of the UTC day.", func() { Format(FormatDateTime) })
+	Attribute("skill_version_id", String, "The attributed skill version, absent when the observation could not be resolved to a version.", func() { Format(FormatUUID) })
 	Attribute("activation_count", Int64, "Activations observed during the day.")
 	Required("bucket_start", "activation_count")
 })
@@ -1157,7 +1158,7 @@ var GetSkillResult = Type("GetSkillResult", func() {
 	Attribute("skill", Skill, "The skill.")
 	Attribute("latest_version", SkillVersion, "The current immutable version by effective promotion time.")
 	Attribute("adoption", SkillAdoption, "Activation adoption metrics.")
-	Attribute("sighting_timeline", ArrayOf(SkillSightingTimelinePoint), "Daily activations in the adoption window.")
+	Attribute("sighting_timeline", ArrayOf(SkillSightingTimelinePoint), "Daily activations by attributed version in the adoption window.")
 	Attribute("drift", SkillDrift, "Active-machine version convergence.")
 	Attribute("assistant_count", Int64, "The number of active, non-deleted assistants using the skill.")
 	Required("skill", "adoption", "sighting_timeline", "drift", "assistant_count")
