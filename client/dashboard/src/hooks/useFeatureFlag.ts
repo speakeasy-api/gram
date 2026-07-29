@@ -10,8 +10,6 @@ export type FeatureFlagResult =
   | { status: "missing" }
   | { status: "error" };
 
-export type FeatureFlagStatus = FeatureFlagResult["status"];
-
 const LOADING_RESULT = { status: "loading" } as const;
 const ENABLED_RESULT = { status: "enabled" } as const;
 const DISABLED_RESULT = { status: "disabled" } as const;

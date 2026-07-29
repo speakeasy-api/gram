@@ -63,9 +63,9 @@ export const testTelemetry: Telemetry = {
   },
 };
 
-export type FeatureFlagsStatus = "loading" | "ready" | "error";
+type FeatureFlagsStatus = "loading" | "ready" | "error";
 
-export type FeatureFlagsSnapshot = {
+type FeatureFlagsSnapshot = {
   status: FeatureFlagsStatus;
   revision: number;
 };
@@ -77,7 +77,7 @@ export type TelemetryContextValue = {
 
 const defaultTelemetry = import.meta.env.DEV ? devTelemetry : nullTelemetry;
 
-export const TelemetryContext = createContext<TelemetryContextValue>({
+const TelemetryContext = createContext<TelemetryContextValue>({
   telemetry: defaultTelemetry,
   featureFlags: { status: "ready", revision: 0 },
 });
