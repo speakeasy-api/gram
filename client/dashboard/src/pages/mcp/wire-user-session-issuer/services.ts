@@ -12,6 +12,7 @@ import { buildMigrateLegacyGramRegistrationsMutation } from "@gram/client/react-
 import { buildSetToolsetUserSessionIssuerMutation } from "@gram/client/react-query/setToolsetUserSessionIssuer.js";
 import { fromPromise } from "xstate";
 
+import { isNotFoundError } from "@/lib/errors";
 import {
   type AuthedFetch,
   proxyRegisterUpstreamClient,
@@ -71,7 +72,7 @@ function createMigrationServicesImpl(
           fetchOptions({ signal }).options,
         );
       } catch (error) {
-        if (isNotFound(error)) return null;
+        if (isNotFoundError(error)) return null;
         throw error;
       }
     },
@@ -94,7 +95,7 @@ function createMigrationServicesImpl(
           fetchOptions({ signal }).options,
         );
       } catch (error) {
-        if (isNotFound(error)) return null;
+        if (isNotFoundError(error)) return null;
         throw error;
       }
     },
@@ -155,6 +156,22 @@ function createMigrationServicesImpl(
       const discoverMutation =
         buildFetchRemoteSessionIssuerMetadataMutation(client);
       const createMutation = buildCreateRemoteSessionIssuerMutation(client);
+
+      // Look for an identity provider that already describes this upstream — in
+      // the project, inherited from the organization, or in the platform catalog
+      // — before creating one. This is an automatic setup path, so a duplicate
+      // here is unwanted; the manual attach form is the surface where a
+      // deliberate duplicate is legitimate, and it still creates unconditionally.
+      try {
+        const existing = await client.remoteSessionIssuers.get(
+          { issuer: input.issuerUrl },
+          undefined,
+          fetchOptions({ signal }).options,
+        );
+        return existing;
+      } catch (error) {
+        if (!isNotFoundError(error)) throw error;
+      }
 
       let draft: {
         authorizationEndpoint?: string;
@@ -360,9 +377,4 @@ export function createMigrationServices(
   authedFetch: AuthedFetch,
 ): ReturnType<typeof createMigrationServicesImpl> {
   return createMigrationServicesImpl(client, authedFetch);
-}
-
-function isNotFound(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  return "statusCode" in error && error.statusCode === 404;
 }

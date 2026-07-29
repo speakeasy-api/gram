@@ -353,6 +353,31 @@ func seedGlobalRemoteIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Poo
 	return issuer.ID
 }
 
+// seedRemoteIssuerWithURL creates a remote session issuer at a chosen tenancy
+// tier carrying a specific upstream URL. The tier-specific seeders above all
+// hardcode their issuer URL, which is exactly the column resolveRemoteSessionIssuer
+// matches on, so resolution tests need to set it per row.
+//
+// Pass a valid projectID for the project tier, a zero projectID plus an
+// organizationID for the organization tier, and neither for the platform tier.
+func seedRemoteIssuerWithURL(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.NullUUID, organizationID pgtype.Text, slug, issuerURL string) uuid.UUID {
+	t.Helper()
+	issuer, err := repo.New(conn).CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         projectID,
+		OrganizationID:                    organizationID,
+		Slug:                              slug,
+		Issuer:                            issuerURL,
+		AuthorizationEndpoint:             conv.ToPGText(issuerURL + "/authorize"),
+		TokenEndpoint:                     conv.ToPGText(issuerURL + "/token"),
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
+	})
+	require.NoError(t, err)
+	return issuer.ID
+}
+
 // seedOrgLevelRemoteClient creates an organization-level (project_id IS NULL,
 // organization_id set) remote_session_client referencing remoteIssuerID and
 // attaches it to each userSessionIssuerID through the join table. Org-level

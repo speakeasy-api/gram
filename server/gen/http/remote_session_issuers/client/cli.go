@@ -320,7 +320,7 @@ func BuildListRemoteSessionIssuersPayload(remoteSessionIssuersListRemoteSessionI
 
 // BuildGetRemoteSessionIssuerPayload builds the payload for the
 // remoteSessionIssuers getRemoteSessionIssuer endpoint from CLI flags.
-func BuildGetRemoteSessionIssuerPayload(remoteSessionIssuersGetRemoteSessionIssuerID string, remoteSessionIssuersGetRemoteSessionIssuerSlug string, remoteSessionIssuersGetRemoteSessionIssuerSessionToken string, remoteSessionIssuersGetRemoteSessionIssuerApikeyToken string, remoteSessionIssuersGetRemoteSessionIssuerProjectSlugInput string) (*remotesessionissuers.GetRemoteSessionIssuerPayload, error) {
+func BuildGetRemoteSessionIssuerPayload(remoteSessionIssuersGetRemoteSessionIssuerID string, remoteSessionIssuersGetRemoteSessionIssuerSlug string, remoteSessionIssuersGetRemoteSessionIssuerIssuer string, remoteSessionIssuersGetRemoteSessionIssuerSessionToken string, remoteSessionIssuersGetRemoteSessionIssuerApikeyToken string, remoteSessionIssuersGetRemoteSessionIssuerProjectSlugInput string) (*remotesessionissuers.GetRemoteSessionIssuerPayload, error) {
 	var err error
 	var id *string
 	{
@@ -336,6 +336,12 @@ func BuildGetRemoteSessionIssuerPayload(remoteSessionIssuersGetRemoteSessionIssu
 	{
 		if remoteSessionIssuersGetRemoteSessionIssuerSlug != "" {
 			slug = &remoteSessionIssuersGetRemoteSessionIssuerSlug
+		}
+	}
+	var issuer *string
+	{
+		if remoteSessionIssuersGetRemoteSessionIssuerIssuer != "" {
+			issuer = &remoteSessionIssuersGetRemoteSessionIssuerIssuer
 		}
 	}
 	var sessionToken *string
@@ -359,6 +365,7 @@ func BuildGetRemoteSessionIssuerPayload(remoteSessionIssuersGetRemoteSessionIssu
 	v := &remotesessionissuers.GetRemoteSessionIssuerPayload{}
 	v.ID = id
 	v.Slug = slug
+	v.Issuer = issuer
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

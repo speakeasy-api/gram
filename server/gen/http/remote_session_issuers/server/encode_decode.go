@@ -1233,6 +1233,7 @@ func DecodeGetRemoteSessionIssuerRequest(mux goahttp.Muxer, decoder func(*http.R
 		var (
 			id               *string
 			slug             *string
+			issuer           *string
 			sessionToken     *string
 			apikeyToken      *string
 			projectSlugInput *string
@@ -1250,6 +1251,10 @@ func DecodeGetRemoteSessionIssuerRequest(mux goahttp.Muxer, decoder func(*http.R
 		if slugRaw != "" {
 			slug = &slugRaw
 		}
+		issuerRaw := qp.Get("issuer")
+		if issuerRaw != "" {
+			issuer = &issuerRaw
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -1265,7 +1270,7 @@ func DecodeGetRemoteSessionIssuerRequest(mux goahttp.Muxer, decoder func(*http.R
 		if err != nil {
 			return payload, err
 		}
-		payload = NewGetRemoteSessionIssuerPayload(id, slug, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewGetRemoteSessionIssuerPayload(id, slug, issuer, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
