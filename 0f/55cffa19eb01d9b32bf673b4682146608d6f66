@@ -1,0 +1,138 @@
+server/internal/usersessions/setup_test.go
+  s_fc571f39c642e8::t_7c1bc522f444d9 88
+server/internal/risk/setup_test.go
+  s_fc571f39c642e8::t_f8d6cf3c514770 197
+server/internal/assets/setup_test.go
+  s_fc571f39c642e8::t_366c9393873401 83
+server/internal/externalmcp/setup_test.go
+  s_fc571f39c642e8::t_b92f64620240d4 68
+server/internal/collections/setup_test.go
+  s_fc571f39c642e8::t_366c9393873401 81
+server/internal/skills/setup_test.go
+  s_fc571f39c642e8::t_7c1bc522f444d9 78
+server/internal/organizations/setup_test.go
+  s_fc571f39c642e8::t_f8d6cf3c514770 120,176,232
+server/internal/tools/setup_test.go
+  s_fc571f39c642e8::t_7c1bc522f444d9 100
+server/internal/agent/setup_test.go
+  s_fc571f39c642e8::t_b92f64620240d4 75
+server/internal/keys/setup_test.go
+  s_fc571f39c642e8::t_f8d6cf3c514770 75
+server/internal/resources/setup_test.go
+  s_fc571f39c642e8::t_504e7063044fdb 67
+server/internal/mcpendpoints/setup_test.go
+  s_fc571f39c642e8::t_504e7063044fdb 88,182
+server/internal/xmcp/setup_test.go
+  s_fc571f39c642e8::t_b92f64620240d4 125
+server/internal/packages/setup_test.go
+  s_fc571f39c642e8::t_504e7063044fdb 68
+server/internal/mcpservers/setup_test.go
+  s_fc571f39c642e8::t_366c9393873401 75
+server/internal/chat/setup_test.go
+  s_fc571f39c642e8::t_a6134d741f86b5 63
+server/internal/deployments/getdeployment_test.go
+  s_fc571f39c642e8::t_9f21fa58fca09b 15,93
+client/dashboard/src/components/mcp-detail-sidebar-nav.tsx
+  s_fc571f39c642e8::t_467a6365629d30 11,46,66-67,106-116
+server/internal/modelkeys/setup_test.go
+  s_fc571f39c642e8::t_b92f64620240d4 123
+server/internal/access/setup_test.go
+  s_fc571f39c642e8::t_b92f64620240d4 88
+client/dashboard/src/components/mcp-server-x-sidebar-nav.tsx
+  s_fc571f39c642e8::t_467a6365629d30 18,48,104-105,189-199
+server/internal/plugins/setup_test.go
+  s_fc571f39c642e8::t_7c1bc522f444d9 87,139
+server/internal/deployments/evolve_test.go
+  s_fc571f39c642e8::t_d5afdc79720053 20
+  s_fc571f39c642e8::t_9f21fa58fca09b 679,776-777,1165
+server/internal/deployments/redeploy_test.go
+  s_fc571f39c642e8::t_9f21fa58fca09b 185,457
+  s_fc571f39c642e8::t_d5afdc79720053 20
+server/internal/authztest/helpers_test.go
+  s_fc571f39c642e8::t_36f645039150bd 29,31-32,38
+  s_fc571f39c642e8::t_a6134d741f86b5 30,33-37
+server/internal/auth/setup_test.go
+  s_fc571f39c642e8::t_9f21fa58fca09b 125,175
+server/internal/mcp/setup_test.go
+  s_fc571f39c642e8::t_a6134d741f86b5 163
+server/internal/variations/setup_test.go
+  s_fc571f39c642e8::t_b92f64620240d4 68
+server/internal/functions/setup_test.go
+  s_fc571f39c642e8::t_504e7063044fdb 112
+server/internal/remotesessions/setup_test.go
+  s_fc571f39c642e8::t_504e7063044fdb 104
+  s_fc571f39c642e8::t_252be5e2c002a1 459
+docs/rbac.md
+  s_fc571f39c642e8::t_467a6365629d30 526
+server/internal/skillefficacy/setup_test.go
+  s_fc571f39c642e8::t_366c9393873401 71
+server/internal/customdomains/setup_test.go
+  s_fc571f39c642e8::t_b92f64620240d4 97
+server/internal/triggers/setup_test.go
+  s_fc571f39c642e8::t_f8d6cf3c514770 80
+server/internal/auditapi/setup_test.go
+  s_fc571f39c642e8::t_7c1bc522f444d9 65
+server/internal/remotemcp/setup_test.go
+  s_fc571f39c642e8::t_b92f64620240d4 109
+server/internal/chat/list_chats_test.go
+  s_fc571f39c642e8::t_565a94935c8d05 145-148
+server/internal/authztest/helpers.go
+  s_fc571f39c642e8::t_a6134d741f86b5 7-9,11,14-20,25-30,33-34
+  s_fc571f39c642e8::t_565a94935c8d05 22-24,31-32
+  s_fc571f39c642e8::t_1abad2806d2539 21
+server/internal/telemetry/setup_test.go
+  s_fc571f39c642e8::t_b92f64620240d4 92
+server/internal/templates/setup_test.go
+  s_fc571f39c642e8::t_f8d6cf3c514770 72
+server/internal/mcpmetadata/setup_test.go
+  s_fc571f39c642e8::t_504e7063044fdb 87
+server/internal/externalcredentials/setup_test.go
+  s_fc571f39c642e8::t_7c1bc522f444d9 93
+  s_fc571f39c642e8::t_252be5e2c002a1 66
+server/internal/tunneledmcp/setup_test.go
+  s_fc571f39c642e8::t_7c1bc522f444d9 67
+server/internal/spendrules/setup_test.go
+  s_fc571f39c642e8::t_366c9393873401 80
+client/dashboard/src/pages/mcp/x/MCPServerDetails.tsx
+  s_fc571f39c642e8::t_467a6365629d30 130-143
+server/internal/deployments/setup_test.go
+  s_fc571f39c642e8::t_7c1bc522f444d9 102
+server/internal/toolsets/setup_test.go
+  s_fc571f39c642e8::t_f8d6cf3c514770 124,228
+server/internal/auth/e2e_test.go
+  s_fc571f39c642e8::t_9f21fa58fca09b 124
+server/internal/externalkeys/setup_test.go
+  s_fc571f39c642e8::t_504e7063044fdb 72
+server/internal/environments/setup_test.go
+  s_fc571f39c642e8::t_f8d6cf3c514770 69
+server/internal/functions/getsignedasseturl_test.go
+  s_fc571f39c642e8::t_efdbebe28ef6af 10,256
+server/internal/chatanalysis/setup_test.go
+  s_fc571f39c642e8::t_b92f64620240d4 88
+  s_fc571f39c642e8::t_252be5e2c002a1 102
+server/internal/hooks/setup_test.go
+  s_fc571f39c642e8::t_504e7063044fdb 163
+client/dashboard/src/pages/mcp/MCPDetails.tsx
+  s_fc571f39c642e8::t_467a6365629d30 245-248
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "0f55cffa19eb01d9b32bf673b4682146608d6f66",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_fc571f39c642e8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa7d1-17b5-7831-ad39-8403c6daa46c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
