@@ -2,7 +2,7 @@ import type { ProxiedMcpTool } from "@/hooks/useProxiedMcpTools";
 import type { ToolMetadata } from "@gram/client/models/components/toolmetadata.js";
 import { describe, expect, it } from "vitest";
 import { computeDrift, fullSyncBatch, newToolsBatch } from "./toolMetadataSync";
-import type { ToolMetadataByName } from "./useToolMetadata";
+import type { ToolMetadataByName } from "@/hooks/useToolMetadata";
 
 function live(
   ...tools: Array<[string, ProxiedMcpTool["annotations"]]>
