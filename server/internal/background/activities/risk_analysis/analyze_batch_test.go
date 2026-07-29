@@ -18,7 +18,6 @@ import (
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
-	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -912,8 +911,7 @@ func TestAnalyzeBatch_PolicyDeletedMidAnalysisPublishesNothing(t *testing.T) {
 	msgID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{"command": "rm -rf *"})
 
 	pub, published := capturingFindingsPub(t)
-	accessStore := accesscontrol.NewRedisStore(cache.NoopCache, accesscontrol.AlphaTTL)
-	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(t), conn, cache.NoopCache, accessStore, nil)
+	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(t), conn, cache.NoopCache, nil)
 	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
@@ -1500,8 +1498,7 @@ func (stubProvenanceLookup) LookupMCPProvenanceByToolCallID(_ context.Context, _
 func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageIDs []uuid.UUID, sources []string, findingsPub gcp.Publisher[*riskv1.Finding]) risk_analysis.AnalyzeBatchResult {
 	t.Helper()
 
-	accessStore := accesscontrol.NewRedisStore(cache.NoopCache, accesscontrol.AlphaTTL)
-	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(t), conn, cache.NoopCache, accessStore, nil)
+	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(t), conn, cache.NoopCache, nil)
 	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),

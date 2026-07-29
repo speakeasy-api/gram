@@ -159,7 +159,7 @@ describe("ShadowMCPRequestAccessContent", () => {
     await waitFor(() => {
       expect(mocks.createApprovalRequest).toHaveBeenCalledWith({
         request: {
-          createShadowMCPApprovalRequestForm: {
+          createRiskPolicyBypassRequestRequestBody: {
             requestToken: "rpbr1.stored-token",
           },
         },
