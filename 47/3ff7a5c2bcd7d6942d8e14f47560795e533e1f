@@ -1,0 +1,114 @@
+client/dashboard/src/pages/org/OrgHome.tsx
+  s_fc571f39c642e8::t_bd32a7f3926691 390
+client/dashboard/src/components/observe/LogsAgents.tsx
+  s_fc571f39c642e8::t_bd32a7f3926691 171-173,176,178
+server/internal/risk/setup_test.go
+  s_fc571f39c642e8::t_d2d6a6e59a937d 198
+client/dashboard/src/pages/mcp/x/MCPServerDetails.tsx
+  s_fc571f39c642e8::t_a8f8e502e5d8d0 86
+server/internal/authztest/helpers.go
+  s_fc571f39c642e8::t_02fed4ebad9469 10-11
+client/dashboard/src/components/mcp-server-x-sidebar-nav.tsx
+  s_fc571f39c642e8::t_94da2c7e1d917e 185-191
+server/internal/mcp/authnchallenge.go
+  s_fc571f39c642e8::t_4bb390af6e7827 200-203
+server/internal/auth/chatsessions/manager.go
+  s_fc571f39c642e8::t_4bb390af6e7827 126
+server/internal/auth/chatsessions/jwt.go
+  s_fc571f39c642e8::t_4bb390af6e7827 27
+server/internal/agent/syncedusers_test.go
+  s_fc571f39c642e8::t_d167a961dfb4a6 99
+  s_fc571f39c642e8::t_02fed4ebad9469 18-19,31
+server/internal/chat/impl.go
+  s_fc571f39c642e8::t_d167a961dfb4a6 726
+server/internal/authz/context_test.go
+  s_fc571f39c642e8::t_02fed4ebad9469 143,164,167,188-191
+  s_fc571f39c642e8::t_bfb5238603815b 182
+  s_fc571f39c642e8::t_a020eb647cf00c 35
+client/dashboard/src/pages/mcp/x/MCPServerDetailsRouting.ts
+  s_fc571f39c642e8::t_09973955c6d780 60
+client/dashboard/src/pages/mcp/MCPDetailsRouting.ts
+  s_fc571f39c642e8::t_09973955c6d780 59
+client/dashboard/src/pages/mcp/MCPDetailsRouting.test.ts
+  s_fc571f39c642e8::t_09973955c6d780 59,62-63,67
+server/internal/chat/setup_test.go
+  s_fc571f39c642e8::t_a8ef388ec313a3 69
+client/dashboard/src/pages/skills/SkillInsightsSection.tsx
+  s_fc571f39c642e8::t_13e65a049c6020 102
+  s_fc571f39c642e8::t_bd32a7f3926691 101
+server/internal/risk/createpolicy_test.go
+  s_fc571f39c642e8::t_02fed4ebad9469 155
+server/internal/usersessions/setup_test.go
+  s_fc571f39c642e8::t_d2d6a6e59a937d 89
+  s_fc571f39c642e8::t_02fed4ebad9469 148-150
+client/dashboard/src/pages/home/Home.tsx
+  s_fc571f39c642e8::t_bd32a7f3926691 11
+client/dashboard/src/hooks/useRBAC.ts
+  s_fc571f39c642e8::t_c13c6c35d48c4a 167
+  s_fc571f39c642e8::t_bd32a7f3926691 159-161,188,216,221
+client/dashboard/src/components/mcp-detail-sidebar-nav.tsx
+  s_fc571f39c642e8::t_94da2c7e1d917e 102-108
+.changeset/enable-rbac-all-tiers.md
+  s_fc571f39c642e8::t_c7fddb36abc202 1-4
+  s_fc571f39c642e8::t_bd32a7f3926691 5
+client/dashboard/src/pages/team/Team.tsx
+  s_fc571f39c642e8::t_a1641d9c5fcb00 172-173,315,479,589,623,735,768,1116,1239
+  s_fc571f39c642e8::t_13e65a049c6020 590-622,736-747,749-767
+client/dashboard/src/pages/mcp/x/MCPServerDetailsRouting.test.ts
+  s_fc571f39c642e8::t_09973955c6d780 87,90-91
+client/dashboard/src/pages/mcp/MCPDetails.tsx
+  s_fc571f39c642e8::t_a8f8e502e5d8d0 271
+docs/rbac.md
+  s_fc571f39c642e8::t_4bb390af6e7827 548,552
+server/internal/authz/engine_test.go
+  s_fc571f39c642e8::t_d167a961dfb4a6 773
+  s_fc571f39c642e8::t_02fed4ebad9469 696,719,725,796
+server/internal/productfeatures/setup_test.go
+  s_fc571f39c642e8::t_02fed4ebad9469 83-85,107
+client/dashboard/src/components/org-sidebar.tsx
+  s_fc571f39c642e8::t_bd32a7f3926691 71,235-238
+server/internal/access/setup_test.go
+  s_fc571f39c642e8::t_a020eb647cf00c 108
+client/dashboard/src/hooks/useAgentToken.ts
+  s_fc571f39c642e8::t_bd32a7f3926691 50
+server/internal/access/listusergrants_test.go
+  s_fc571f39c642e8::t_02fed4ebad9469 163,173,177-180
+  s_fc571f39c642e8::t_9720f7b272e820 141-142,208
+server/internal/mcp/servepublic_credentialsvalid_test.go
+  s_fc571f39c642e8::t_3753be910f1d55 20
+  s_fc571f39c642e8::t_bfc64013891ae4 215,627-628
+server/internal/chat/list_chats_test.go
+  s_fc571f39c642e8::t_d2d6a6e59a937d 145-146
+  s_fc571f39c642e8::t_02fed4ebad9469 150,325,350-351
+  s_fc571f39c642e8::t_bfc64013891ae4 261
+server/internal/mcp/servepublic_mcpendpoint_test.go
+  s_fc571f39c642e8::t_f523b3109846cc 638
+.agents/skills/gram-rbac/SKILL.md
+  s_fc571f39c642e8::t_bd32a7f3926691 132
+  s_fc571f39c642e8::t_9347146f8c8ebd 60
+server/internal/authz/engine.go
+  s_fc571f39c642e8::t_4bb390af6e7827 607
+server/internal/mcp/setup_test.go
+  s_fc571f39c642e8::t_d2d6a6e59a937d 149
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "473ff7a5c2bcd7d6942d8e14f47560795e533e1f",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_fc571f39c642e8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa7d1-17b5-7831-ad39-8403c6daa46c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
