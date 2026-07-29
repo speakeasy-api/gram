@@ -32,18 +32,21 @@
 // Endpoints used (all under the region's public API base URL):
 //
 //	GET  /public/v2/custom-connections/{id}?expand[]=customResources — connection test + resource discovery
+//	GET  /public/v2/custom-connections/{id}/resources/{rid}/sessions?status=IN_PROGRESS — stranded-session sweep
 //	POST /public/v2/custom-connections/{id}/resources/{rid}/sessions/{sid} — batched record upload
-//	POST /public/v2/custom-connections/{id}/resources/{rid}/sessions/{sid}/actions — complete the session
+//	POST /public/v2/custom-connections/{id}/resources/{rid}/sessions/{sid}/actions — cancel a strand, then complete the session
 //
 // Sessions give true snapshot-replace semantics: completing a session makes
 // it the authoritative dataset and Drata deletes every record not in it, so
 // retries can never duplicate records and departed devices never linger as
-// stale evidence. An abandoned (never-completed) session from a failed push
-// changes nothing. Known limitation: completions are last-writer-wins with
-// no fencing token, so a zombie push attempt (a worker partitioned from
-// Temporal but not from Drata) that completes its session after a newer
-// attempt briefly reverts evidence to the older snapshot until the next
-// fleet change re-pushes.
+// stale evidence. An abandoned session is NOT inert, however: Drata permits
+// only one IN_PROGRESS session per connection/resource, so a push that dies
+// mid-upload would wedge every later push. Each push therefore cancels any
+// stranded session before opening its own. Known limitation: completions are
+// last-writer-wins with no fencing token, so a zombie push attempt (a worker
+// partitioned from Temporal but not from Drata) that completes its session
+// after a newer attempt briefly reverts evidence to the older snapshot until
+// the next fleet change re-pushes.
 package drata
 
 import (
@@ -82,6 +85,10 @@ const (
 	// maxResponseBytes bounds each response body read. Drata responses here
 	// are small envelopes (a connection object, upload acknowledgements).
 	maxResponseBytes = 1 * 1024 * 1024
+
+	// sessionStatusInProgress is the only session state that blocks a new
+	// push: Drata permits one such session per connection/resource.
+	sessionStatusInProgress = "IN_PROGRESS"
 
 	fieldRegion       = "region"
 	fieldConnectionID = "connection_id"
@@ -251,6 +258,67 @@ func (s *sink) resolveResourceID(ctx context.Context, creds providers.Credential
 	return id, nil
 }
 
+// sessionRef is one entry of the session list. Drata documents neither the
+// envelope nor the item shape for this endpoint, so both are decoded
+// permissively: the id is read from "sessionId" (the field the documented
+// action response carries) or "id", and the status is required rather than
+// assumed.
+type sessionRef struct {
+	SessionID string `json:"sessionId"`
+	ID        string `json:"id"`
+	Status    string `json:"status"`
+}
+
+func (r sessionRef) identifier() string {
+	if r.SessionID != "" {
+		return r.SessionID
+	}
+	return r.ID
+}
+
+// cancelStrandedSessions cancels every IN_PROGRESS session on the resource,
+// which is how a crashed earlier run is cleaned up: Drata allows only one
+// such session per connection/resource and documents no recovery path.
+//
+// A listing failure is fatal rather than ignored. Without the listing we
+// cannot know whether a stranded session exists, and the error Drata returns
+// for colliding with one is undocumented — so proceeding would trade a clear
+// failure here for an unattributable one downstream.
+func (s *sink) cancelStrandedSessions(ctx context.Context, creds providers.Credentials, resourcePath string) error {
+	body, err := s.doJSON(ctx, creds, http.MethodGet, resourcePath+"/sessions?status=IN_PROGRESS", nil)
+	if err != nil {
+		return err
+	}
+
+	var envelope struct {
+		Data []sessionRef `json:"data"`
+	}
+	var sessions []sessionRef
+	if err := json.Unmarshal(body, &envelope); err == nil && envelope.Data != nil {
+		sessions = envelope.Data
+	} else if err := json.Unmarshal(body, &sessions); err != nil {
+		return fmt.Errorf("decode session list: %w", err)
+	}
+
+	for _, sess := range sessions {
+		// The status filter is re-checked here rather than trusted. An API
+		// that ignored an unknown query param would hand back ACTIVE
+		// sessions too, and cancelling one of those would destroy the live
+		// evidence this integration exists to publish.
+		if sess.Status != sessionStatusInProgress {
+			continue
+		}
+		id := sess.identifier()
+		if id == "" {
+			return fmt.Errorf("session listed with status %s carried no id", sess.Status)
+		}
+		if _, err := s.doJSON(ctx, creds, http.MethodPost, resourcePath+"/sessions/"+url.PathEscape(id)+"/actions", map[string]any{"action": "cancel"}); err != nil {
+			return fmt.Errorf("cancel stranded session: %w", err)
+		}
+	}
+	return nil
+}
+
 // TestConnection proves the stored credentials with the same read the push
 // path depends on: fetching the connection and discovering its resource.
 func (s *sink) TestConnection(ctx context.Context, creds providers.Credentials, settings providers.Settings) error {
@@ -311,14 +379,26 @@ func (s *sink) PushCoverage(ctx context.Context, creds providers.Credentials, se
 		return fmt.Errorf("resolve drata resource: %w", err)
 	}
 
+	resourcePath := tgt.base + tgt.connPath + "/resources/" + url.PathEscape(resource)
+
+	// Drata permits only one IN_PROGRESS session per connection/resource, so
+	// a run that died mid-upload leaves one stranded and every later push
+	// collides with it forever. Clearing first makes the push self-healing
+	// rather than needing a human to cancel the session by hand. Cancelling
+	// (not completing) the stranded session is what discards its partial
+	// records: completing would publish half a fleet as authoritative.
+	if err := s.cancelStrandedSessions(ctx, creds, resourcePath); err != nil {
+		return fmt.Errorf("clear stranded drata session: %w", err)
+	}
+
 	// One fresh session per push attempt (Drata allows 3-64
 	// alphanumeric/hyphen/underscore chars). Uniqueness per attempt — not
 	// per snapshot — matters: a retry must never touch a session an earlier
-	// attempt may already have completed. A failed attempt abandons its
-	// session harmlessly, and because completion replaces wholesale, two
-	// attempts pushing the same snapshot converge to the same dataset.
+	// attempt may already have completed. Because completion replaces
+	// wholesale, two attempts pushing the same snapshot converge to the same
+	// dataset.
 	sessionID := "gram-" + strconv.FormatInt(time.Now().UnixNano(), 36)
-	sessionPath := tgt.base + tgt.connPath + "/resources/" + url.PathEscape(resource) + "/sessions/" + sessionID
+	sessionPath := resourcePath + "/sessions/" + sessionID
 
 	// Transport-level retries (the shared client resends a batch on 429/5xx
 	// whose response was lost) are safe here: Drata matches records by
