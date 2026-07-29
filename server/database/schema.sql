@@ -497,6 +497,12 @@ CREATE INDEX IF NOT EXISTS skill_observations_pending_reconciliation_idx
 ON skill_observations (project_id, seen_at, id)
 WHERE reconciled_at IS NULL;
 
+CREATE INDEX IF NOT EXISTS skill_observations_scoped_invalid_reconciliation_idx
+ON skill_observations (project_id, seen_at, id)
+WHERE reconcile_error_code = 'invalid_name'
+  AND btrim(skill_name) ~ '^[^:]+:[[:space:]]*[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$'
+  AND char_length(btrim(substring(btrim(skill_name) from '[^:]+$'))) <= 64;
+
 CREATE INDEX IF NOT EXISTS skill_observations_pending_metrics_sync_idx
 ON skill_observations (project_id, seen_at, id)
 WHERE reconciled_at IS NOT NULL AND metrics_synced_at IS NULL AND session_id IS NOT NULL AND skill_version_id IS NOT NULL;
