@@ -37096,7 +37096,7 @@ paths:
                 name: ApproveAllSkillSuggestions
     /rpc/skills.approveSuggestion:
         post:
-            description: Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only one of its proposed changes. Stale suggestions are superseded instead.
+            description: Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only a subset of its proposed changes. Stale suggestions are superseded instead.
             operationId: approveSkillSuggestion
             parameters:
                 - allowEmptyValue: true
@@ -50684,10 +50684,12 @@ components:
         ApproveSkillSuggestionRequestBody:
             type: object
             properties:
-                change_id:
-                    type: string
-                    description: Optional ID of the single proposed change to take. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.
-                    format: uuid
+                change_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    description: Optional IDs of the proposed changes to take together as one new version. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.
                 content:
                     type: string
                     description: Optional edited complete SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.
@@ -56944,6 +56946,11 @@ components:
                     $ref: '#/components/schemas/HookNotificationData'
                 prompt:
                     $ref: '#/components/schemas/HookPromptData'
+                prompt_attachments:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/HookPromptAttachmentEntry'
+                    description: Transcript-derived prompt attachment content (Claude Stop/SubagentStop/SessionEnd).
                 skill:
                     $ref: '#/components/schemas/HookSkillData'
                 tool_call:
@@ -57075,6 +57082,50 @@ components:
                     type: string
                     description: Notification type.
             description: Local agent notification payload.
+        HookPromptAttachmentEntry:
+            type: object
+            properties:
+                attachment_kind:
+                    type: string
+                    description: Provider attachment kind, such as file or directory.
+                content:
+                    type: string
+                    description: Attachment text visible to the model.
+                display_path:
+                    type: string
+                    description: Provider display path for the attachment, when available.
+                entry_uuid:
+                    type: string
+                    description: Provider transcript entry UUID. Used as the stable attachment identifier.
+                file_path:
+                    type: string
+                    description: Absolute provider-reported file or directory path, when available.
+                num_lines:
+                    type: integer
+                    description: Number of lines included in the attachment window, when reported.
+                    format: int64
+                prompt_id:
+                    type: string
+                    description: Prompt identifier of the user turn this attachment belongs to, when the transcript parent chain resolves.
+                prompt_sha256:
+                    type: string
+                    description: Lowercase hex SHA-256 of the trimmed prompt text stored for the parent user message, when available.
+                start_line:
+                    type: integer
+                    description: First one-based source line included in the attachment window, when reported.
+                    format: int64
+                timestamp:
+                    type: string
+                    description: Provider transcript timestamp for this attachment, when available.
+                total_lines:
+                    type: integer
+                    description: Total source file lines, when reported.
+                    format: int64
+            description: Transcript-derived content that a provider attached to a submitted prompt, such as Claude Code @file and @directory mentions.
+            required:
+                - entry_uuid
+                - attachment_kind
+                - content
         HookPromptData:
             type: object
             properties:

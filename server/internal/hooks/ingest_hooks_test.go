@@ -2,8 +2,12 @@ package hooks
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -655,7 +660,8 @@ func TestIngest_InferredSkillEmitsDerivedTelemetryRow(t *testing.T) {
 	require.Contains(t, skillRow.Attributes, "repo-review")
 	require.Contains(t, skillRow.Attributes, `"Skill"`)
 	require.NotNil(t, skillRow.GramChatID)
-	require.Equal(t, "codex-skill-session", *skillRow.GramChatID)
+	require.Equal(t, sessionIDToUUID("codex-skill-session").String(), *skillRow.GramChatID,
+		"telemetry carries the resolved chat id, not the raw session id")
 
 	// trace_summaries resolves tool_name with any(): on a shared trace the
 	// Bash sibling could win the summary and hide the activation from
@@ -939,6 +945,64 @@ func TestIngest_ThoughtEventsExcludedFromTranscript(t *testing.T) {
 	require.Equal(t, "assistant", msgs[0].Role)
 }
 
+// TestIngest_NonUUIDSessionIDStampsResolvedChatID pins the cross-store identity
+// invariant: telemetry_logs.chat_id (gen_ai.conversation.id) must be the chats
+// row id, not the raw agent session id. Claude/Codex/Cursor session ids are
+// themselves UUIDs so the two coincided by accident; opencode's ("ses_...") are
+// not, and stamping the raw string sent a malformed UUID to every consumer that
+// loads a chat by the telemetry id — the costs page session drill-in among them.
+func TestIngest_NonUUIDSessionIDStampsResolvedChatID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	// The chats row only exists when session capture is on — this test compares
+	// the two stores, so it needs the transcript side written.
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	const sessionID = "ses_05c47a44fffeCPIAOSNROITwrf"
+	_, err := uuid.Parse(sessionID)
+	require.Error(t, err, "the fixture must be a non-UUID session id for this test to mean anything")
+
+	chatID := sessionIDToUUID(sessionID)
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+
+	prompt := "hello from opencode"
+	payload := canonicalIngestPayload("opencode", "prompt.submitted", sessionID)
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+	res, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	// The transcript lands under the mapped UUID.
+	persisted, err := chatRepo.New(ti.conn).GetChat(ctx, chatID)
+	require.NoError(t, err)
+
+	var logs []telemetryrepo.TelemetryLog
+	require.Eventually(t, func() bool {
+		logs, err = chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+			GramProjectID: authCtx.ProjectID.String(),
+			TimeStart:     timestamp.Add(-2 * time.Minute).UnixNano(),
+			TimeEnd:       time.Now().Add(time.Minute).UnixNano(),
+			GramURNs:      nil,
+			SortOrder:     "desc",
+			Cursor:        "",
+			Limit:         10,
+		})
+		return err == nil && len(logs) == 1
+	}, 2*time.Second, 50*time.Millisecond, "expected the ingested prompt row")
+
+	require.NotNil(t, logs[0].GramChatID)
+	require.NotEqual(t, sessionID, *logs[0].GramChatID, "the raw agent session id must not reach telemetry as the chat id")
+	require.Equal(t, persisted.ID.String(), *logs[0].GramChatID,
+		"telemetry chat_id must resolve to the same chats row the transcript was stored under")
+
+	// The costs page hands this value straight to a uuid-typed endpoint.
+	_, err = uuid.Parse(*logs[0].GramChatID)
+	require.NoError(t, err, "telemetry chat_id must be a parseable UUID")
+}
+
 // TestIngest_LinksChatToUserAccount confirms the canonical ingest path adopts
 // the account attribution the OTEL path cached for the session, so a chat
 // created here is linked to its user_accounts row — the join the
@@ -1007,6 +1071,136 @@ func TestIngest_LinksChatToUserAccount(t *testing.T) {
 	require.Len(t, msgs, 1)
 	require.Equal(t, chat.UserID.String, msgs[0].UserID.String)
 	require.Equal(t, chat.ExternalUserID.String, msgs[0].ExternalUserID.String)
+}
+
+func TestIngest_PersistsPromptAttachmentsAsScannableToolRows(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "prompt-attachment-" + uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	promptID := "prompt-" + uuid.NewString()
+	entryUUID := "attachment-" + uuid.NewString()
+	displayPath := "marker.txt"
+	filePath := "/repo/marker.txt"
+	content := strings.Repeat("safe prefix\n", 500) + "MARKER_abc123\n"
+	timestamp := "2026-07-22T09:38:49.652Z"
+	numLines := 1
+	totalLines := 1
+	startLine := 1
+
+	promptText := "Summarize @marker.txt"
+	promptPayload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	promptPayload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &promptText},
+	}
+	res, err := ti.service.Ingest(ctx, promptPayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	secondPromptText := "Unrelated follow-up prompt"
+	secondPromptPayload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	secondPromptPayload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &secondPromptText},
+	}
+	res, err = ti.service.Ingest(ctx, secondPromptPayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	promptSHA256 := testPromptSHA256(promptText)
+	payload := canonicalIngestPayload("claude", "assistant.responded", sessionID)
+	payload.Data = &gen.HookIngestData{
+		PromptAttachments: []*gen.HookPromptAttachmentEntry{{
+			EntryUUID:      entryUUID,
+			PromptID:       &promptID,
+			PromptSha256:   &promptSHA256,
+			FilePath:       &filePath,
+			DisplayPath:    &displayPath,
+			AttachmentKind: "file",
+			Content:        content,
+			NumLines:       &numLines,
+			TotalLines:     &totalLines,
+			StartLine:      &startLine,
+			Timestamp:      &timestamp,
+		}},
+	}
+
+	res, err = ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 2)
+	var promptRow, secondPromptRow *chatRepo.ChatMessage
+	for i := range msgs {
+		if msgs[i].Role == "user" && msgs[i].Content == promptText {
+			promptRow = &msgs[i]
+		}
+		if msgs[i].Role == "user" && msgs[i].Content == secondPromptText {
+			secondPromptRow = &msgs[i]
+		}
+	}
+	require.NotNil(t, promptRow)
+	require.NotNil(t, secondPromptRow)
+	require.Equal(t, promptText, promptRow.Content)
+	require.False(t, promptRow.MessageID.Valid)
+	require.False(t, secondPromptRow.MessageID.Valid, "hash match must not stamp the newer unrelated prompt")
+
+	parts, err := chatRepo.New(ti.conn).ListChatContentPartsByChatID(ctx, chatRepo.ListChatContentPartsByChatIDParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, parts, 1)
+	attachmentRow := parts[0]
+	require.Equal(t, message.PromptAttachment, attachmentRow.Kind)
+	require.NotEmpty(t, attachmentRow.ContentAssetUrl)
+	assetURL, err := url.Parse(attachmentRow.ContentAssetUrl)
+	require.NoError(t, err)
+	reader, err := ti.assetStorage.Read(ctx, assetURL)
+	require.NoError(t, err)
+	assetContent, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	require.NoError(t, reader.Close())
+	require.Equal(t, content, string(assetContent))
+	require.Equal(t, entryUUID, attachmentRow.ExternalID.String)
+	require.Equal(t, promptRow.ID, attachmentRow.ParentChatMessageID.UUID)
+	require.JSONEq(t, `{"display_path": "marker.txt", "kind": "file"}`, string(attachmentRow.Metadata))
+	require.True(t, attachmentRow.CreatedAt.Valid)
+	require.Equal(t, int64(2026), int64(attachmentRow.CreatedAt.Time.Year()))
+
+	// A redelivered attachment event must not stamp an unrelated prompt row.
+	redelivery := canonicalIngestPayload("claude", "assistant.responded", sessionID)
+	redelivery.Data = payload.Data
+	res, err = ti.service.Ingest(ctx, redelivery)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	msgs, err = chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	for i := range msgs {
+		if msgs[i].Role == "user" && msgs[i].Content == secondPromptText {
+			require.Empty(t, msgs[i].MessageID.String, "redelivered attachments must not stamp unrelated prompt rows")
+		}
+	}
+}
+
+func testPromptSHA256(text string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(text)))
+	return hex.EncodeToString(sum[:])
 }
 
 // TestIngest_StampsAccountAttributionOnTelemetry confirms canonical hook rows
@@ -1309,6 +1503,14 @@ func TestTelemetryHookEventName_TranslatesCanonicalVocabulary(t *testing.T) {
 
 	// Unrecognized raw names for known adapters fall back to the canonical map.
 	require.Equal(t, "PreToolUse", telemetryHookEventName(withRaw("cursor", "tool.requested", "beforeReadFile")))
+
+	// OpenCode's message.part.updated carries every streaming part update, not
+	// just failures; agenthooks decides whether it is a real tool failure, so the
+	// raw name must defer to the canonical Event.Type instead of forcing a
+	// failure. session.idle likewise defers (canonical assistant.responded).
+	require.Equal(t, "PostToolUseFailure", telemetryHookEventName(withRaw("opencode", "tool.failed", "message.part.updated")))
+	require.Equal(t, "session.updated", telemetryHookEventName(withRaw("opencode", "session.updated", "message.part.updated")))
+	require.Equal(t, "AfterAgentResponse", telemetryHookEventName(withRaw("opencode", "assistant.responded", "session.idle")))
 
 	// Custom adapters have no raw vocabulary: canonical types map to their
 	// provider-style equivalents so summaries still count them.

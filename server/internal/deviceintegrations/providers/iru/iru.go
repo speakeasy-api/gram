@@ -102,7 +102,36 @@ func instanceBaseURL(settings providers.Settings) (string, error) {
 	if parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
 		return "", fmt.Errorf("instance_url must be the tenant API root, e.g. https://yourtenant.api.iru.com")
 	}
+	// The single most common paste mistake is the web-console URL
+	// (yourtenant.iru.com) instead of the API root (yourtenant.api.iru.com);
+	// dropping the tenant label (api.iru.com) is the runner-up. On the
+	// vendor's own domains, require the <tenant>.api.<...> shape and say
+	// exactly what to paste — the console host never serves the API, and a
+	// generic request failure at test time diagnoses neither mistake.
+	host := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
+	if vendorHost(host) && !vendorAPIHost(host) {
+		return "", fmt.Errorf("instance_url must be the tenant API root shown in the console under Settings → Access, e.g. https://yourtenant.api.iru.com — not the console URL")
+	}
 	return "https://" + parsed.Host, nil
+}
+
+// vendorHost reports whether the host belongs to the vendor's domains
+// (including their apexes), where the tenant-API-root shape is enforceable.
+func vendorHost(host string) bool {
+	for _, domain := range []string{"iru.com", "kandji.io"} {
+		if host == domain || strings.HasSuffix(host, "."+domain) {
+			return true
+		}
+	}
+	return false
+}
+
+// vendorAPIHost reports the <tenant>.api.<...> shape: at least one tenant
+// label followed by the literal "api" label (covers regional forms like
+// tenant.api.eu.kandji.io).
+func vendorAPIHost(host string) bool {
+	labels := strings.Split(host, ".")
+	return len(labels) >= 4 && labels[1] == "api"
 }
 
 // deviceRecord mirrors the fields we map from GET /api/v1/devices.

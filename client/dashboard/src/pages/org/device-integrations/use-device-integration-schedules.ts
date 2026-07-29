@@ -55,7 +55,7 @@ export function useDeviceScheduleRuntimes(
   const { mutate: mutateRetry } = useRetryDeviceIntegrationScheduleMutation({
     onSuccess: () => {
       refresh();
-      toast.success("Retry scheduled. The next sync runs within minutes.");
+      toast.success("Sync started. Fresh results should appear shortly.");
     },
     onError: (err) => {
       refresh();

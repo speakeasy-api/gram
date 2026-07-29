@@ -2603,6 +2603,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		UserEmail:      userEmail,
 		HTTPMetadata:   nil,
 		JSONSchema:     &jsonSchema,
+		Reasoning:      nil,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("openrouter object completion: %w", err)
@@ -2738,6 +2739,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		UserEmail:      userEmail,
 		HTTPMetadata:   nil,
 		JSONSchema:     &jsonSchema,
+		Reasoning:      nil,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("openrouter object completion: %w", err)

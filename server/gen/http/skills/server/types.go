@@ -65,9 +65,10 @@ type ApproveSuggestionRequestBody struct {
 	// Optional edited complete SKILL.md content. Handlers enforce a maximum size
 	// of 65,536 UTF-8 bytes.
 	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
-	// Optional ID of the single proposed change to take. The suggestion stays open
-	// carrying whatever is left. Cannot be combined with edited content.
-	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
+	// Optional IDs of the proposed changes to take together as one new version.
+	// The suggestion stays open carrying whatever is left. Cannot be combined with
+	// edited content.
+	ChangeIds []string `form:"change_ids,omitempty" json:"change_ids,omitempty" xml:"change_ids,omitempty"`
 }
 
 // DismissSuggestionRequestBody is the type of the "skills" service
@@ -7966,9 +7967,14 @@ func NewListFeedbackPayload(id string, cursor *string, limit int, sessionToken *
 // endpoint payload.
 func NewApproveSuggestionPayload(body *ApproveSuggestionRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.ApproveSuggestionPayload {
 	v := &skills.ApproveSuggestionPayload{
-		ID:       *body.ID,
-		Content:  body.Content,
-		ChangeID: body.ChangeID,
+		ID:      *body.ID,
+		Content: body.Content,
+	}
+	if body.ChangeIds != nil {
+		v.ChangeIds = make([]string, len(body.ChangeIds))
+		for i, val := range body.ChangeIds {
+			v.ChangeIds[i] = val
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -8230,8 +8236,8 @@ func ValidateApproveSuggestionRequestBody(body *ApproveSuggestionRequestBody) (e
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
-	if body.ChangeID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.change_id", *body.ChangeID, goa.FormatUUID))
+	for _, e := range body.ChangeIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.change_ids[*]", e, goa.FormatUUID))
 	}
 	return
 }

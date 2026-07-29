@@ -331,6 +331,7 @@ If there are no tool calls, return an empty array.`, userPromptText)
 			ExternalUserID: "",
 			UserEmail:      "",
 			HTTPMetadata:   nil,
+			Reasoning:      nil,
 		},
 	)
 	if err != nil {

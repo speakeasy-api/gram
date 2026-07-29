@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -30,8 +31,7 @@ var ErrChatNotFound = errors.New("chat not found")
 func isForeignKeyViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
-		// 23503 is PostgreSQL's foreign_key_violation error code
-		return pgErr.Code == "23503"
+		return pgErr.Code == pgerrcode.ForeignKeyViolation
 	}
 	return false
 }
@@ -398,13 +398,6 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		role = "user"
 		content = conv.PtrValOr(payload.Prompt, "")
 	case "Stop":
-		if err := s.backfillLastUserPromptID(ctx, chatID, projectID, payload); err != nil {
-			s.logger.WarnContext(ctx, "failed to backfill Claude user prompt ID",
-				attr.SlogError(err),
-				attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
-				attr.SlogProjectID(metadata.ProjectID),
-			)
-		}
 		role = "assistant"
 		content = conv.PtrValOr(payload.LastAssistantMessage, "")
 		model = conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, ""))
@@ -467,33 +460,6 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 	}
 
 	return nil
-}
-
-func (s *Service) backfillLastUserPromptID(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID, payload *gen.ClaudePayload) error {
-	lastUserPromptID := claudeLastUserPromptIDFromAdditionalData(payload.AdditionalData)
-	if lastUserPromptID == "" {
-		return nil
-	}
-
-	_, err := s.repo.BackfillLatestClaudeUserMessagePromptID(ctx, repo.BackfillLatestClaudeUserMessagePromptIDParams{
-		ChatID:    chatID,
-		ProjectID: projectID,
-		MessageID: conv.ToPGText(lastUserPromptID),
-	})
-	if err != nil {
-		return fmt.Errorf("backfill latest Claude user message prompt ID: %w", err)
-	}
-	return nil
-}
-
-func claudeLastUserPromptIDFromAdditionalData(additionalData map[string]any) string {
-	if additionalData == nil {
-		return ""
-	}
-	if v, ok := additionalData["LastUserPromptID"].(string); ok {
-		return v
-	}
-	return ""
 }
 
 // writeToolCallRequestToPG writes an assistant message with tool_calls to PostgreSQL.

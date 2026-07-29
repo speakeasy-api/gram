@@ -5,17 +5,17 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { RemoteMcpToolsSection } from "./RemoteMcpToolsSection";
 import { MCP_AUTHENTICATION_SECTION_ID } from "./settings/sections/authentication/AuthenticationSection";
 
-type ToolsTabProps = {
+type InspectTabProps = {
   mcpServer: McpServer;
   endpoints: McpEndpoint[];
   isLoadingEndpoints: boolean;
 };
 
-export function ToolsTab({
+export function InspectTab({
   mcpServer,
   endpoints,
   isLoadingEndpoints,
-}: ToolsTabProps): JSX.Element {
+}: InspectTabProps): JSX.Element {
   const routes = useRoutes();
   const { mcpUrl, loading } = useResolvedMcpServerUrl(
     endpoints,
@@ -35,6 +35,7 @@ export function ToolsTab({
         isResolvingUrl={loading}
         mcpServerId={mcpServer.id}
         userSessionIssuerId={mcpServer.userSessionIssuerId}
+        remoteMcpServerId={mcpServer.remoteMcpServerId ?? undefined}
         isDisabled={mcpServer.visibility === "disabled"}
         authSettingsHref={authSettingsHref}
       />

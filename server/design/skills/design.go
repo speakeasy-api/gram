@@ -236,12 +236,12 @@ var _ = Service("skills", func() {
 	})
 
 	Method("approveSuggestion", func() {
-		Description("Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only one of its proposed changes. Stale suggestions are superseded instead.")
+		Description("Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only a subset of its proposed changes. Stale suggestions are superseded instead.")
 
 		Payload(func() {
 			Attribute("id", String, "The suggestion ID.", func() { Format(FormatUUID) })
 			Attribute("content", String, "Optional edited complete SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
-			Attribute("change_id", String, "Optional ID of the single proposed change to take. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.", func() { Format(FormatUUID) })
+			Attribute("change_ids", ArrayOf(String, func() { Format(FormatUUID) }), "Optional IDs of the proposed changes to take together as one new version. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.")
 			Required("id")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -688,7 +688,7 @@ var ApproveSkillSuggestionRequestBody = Type("ApproveSkillSuggestionRequestBody"
 
 	Attribute("id", String, "The suggestion ID.", func() { Format(FormatUUID) })
 	Attribute("content", String, "Optional edited complete SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
-	Attribute("change_id", String, "Optional ID of the single proposed change to take. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.", func() { Format(FormatUUID) })
+	Attribute("change_ids", ArrayOf(String, func() { Format(FormatUUID) }), "Optional IDs of the proposed changes to take together as one new version. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.")
 	Required("id")
 })
 

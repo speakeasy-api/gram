@@ -222,6 +222,7 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResul
 		UserEmail:      "",
 		HTTPMetadata:   nil,
 		JSONSchema:     &jsonSchema,
+		Reasoning:      nil,
 	})
 	if err != nil {
 		return judgeCallResult{}, fmt.Errorf("openrouter object completion: %w", err)

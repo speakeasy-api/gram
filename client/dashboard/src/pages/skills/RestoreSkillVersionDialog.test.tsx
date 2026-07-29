@@ -44,6 +44,7 @@ function RestoreHarness(): JSX.Element {
       <RestoreSkillVersionDialog
         skillId="skill_a"
         version={target}
+        direction="backward"
         onClose={() => setTarget(null)}
       />
     </>
@@ -66,6 +67,7 @@ describe("RestoreSkillVersionDialog", () => {
       <RestoreSkillVersionDialog
         skillId="skill_a"
         version={version}
+        direction="backward"
         onClose={onClose}
       />,
     );
@@ -74,7 +76,8 @@ describe("RestoreSkillVersionDialog", () => {
         /Explicit distribution pins for plugins and assistants stay unchanged/,
       ),
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Restore version" }));
+    expect(screen.getByText("Roll back to this skill version?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Roll back" }));
 
     await waitFor(() =>
       expect(testState.restore.mutateAsync).toHaveBeenCalledWith({
@@ -95,15 +98,15 @@ describe("RestoreSkillVersionDialog", () => {
       new Error("restore failed"),
     );
     render(<RestoreHarness />);
-    fireEvent.click(screen.getByRole("button", { name: "Restore version" }));
+    fireEvent.click(screen.getByRole("button", { name: "Roll back" }));
     expect(await screen.findByText(/restore failed/)).toBeTruthy();
-    expect(screen.getByText(/Restore status may be unknown/)).toBeTruthy();
+    expect(screen.getByText(/current version may be unknown/)).toBeTruthy();
     expect(
       screen
-        .getByRole("button", { name: "Restore version" })
+        .getByRole("button", { name: "Roll back" })
         .hasAttribute("disabled"),
     ).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Restore version" }));
+    fireEvent.click(screen.getByRole("button", { name: "Roll back" }));
     expect(testState.restore.mutateAsync).toHaveBeenCalledOnce();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -111,7 +114,7 @@ describe("RestoreSkillVersionDialog", () => {
     expect(screen.queryByText(/restore failed/)).toBeNull();
     expect(
       screen
-        .getByRole("button", { name: "Restore version" })
+        .getByRole("button", { name: "Roll back" })
         .hasAttribute("disabled"),
     ).toBe(false);
   });
@@ -128,14 +131,16 @@ describe("RestoreSkillVersionDialog", () => {
       <RestoreSkillVersionDialog
         skillId="skill_a"
         version={version}
+        direction="forward"
         onClose={onClose}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Restore version" }));
+    expect(screen.getByText("Promote to this skill version?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Promote" }));
     await waitFor(() => expect(testState.invalidate).toHaveBeenCalled());
     expect(
       screen
-        .getByRole("button", { name: "Restoring..." })
+        .getByRole("button", { name: "Promote..." })
         .hasAttribute("disabled"),
     ).toBe(true);
     expect(
@@ -155,10 +160,11 @@ describe("RestoreSkillVersionDialog", () => {
       <RestoreSkillVersionDialog
         skillId="skill_a"
         version={version}
+        direction="backward"
         onClose={onClose}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Restore version" }));
+    fireEvent.click(screen.getByRole("button", { name: "Roll back" }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
     expect(testState.toastSuccess).toHaveBeenCalledOnce();

@@ -7,14 +7,17 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { invalidateSkillQueries } from "./invalidate-skill-queries";
+import type { VersionChangeDirection } from "./version-selection";
 
 export function RestoreSkillVersionDialog({
   skillId,
   version,
+  direction,
   onClose,
 }: {
   skillId: string;
   version: SkillVersion | null;
+  direction: VersionChangeDirection | null;
   onClose: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
@@ -48,9 +51,9 @@ export function RestoreSkillVersionDialog({
       const message =
         restoreError instanceof Error
           ? restoreError.message
-          : "Unable to restore version.";
+          : "Unable to change the current version.";
       setError(
-        `${message} Restore status may be unknown. Review the refreshed state before retrying.`,
+        `${message} The current version may be unknown. Review the refreshed state before retrying.`,
       );
       setUncertain(true);
     } finally {
@@ -61,26 +64,32 @@ export function RestoreSkillVersionDialog({
     setError(null);
     setUncertain(false);
     onClose();
-    toast.success(`Version ${target.canonicalSha256.slice(0, 8)} restored`);
+    toast.success(
+      `Version ${target.canonicalSha256.slice(0, 8)} is now current`,
+    );
   };
+
+  const actionLabel = direction === "backward" ? "Roll back" : "Promote";
 
   return (
     <Dialog
-      open={version !== null}
+      open={version !== null && direction !== null}
       onOpenChange={(open) => {
         if (!open) closeDialog();
       }}
     >
       <Dialog.Content>
         <Dialog.Header>
-          <Dialog.Title>Restore this skill version?</Dialog.Title>
+          <Dialog.Title>{actionLabel} to this skill version?</Dialog.Title>
           <Dialog.Description>
             This makes version {version?.canonicalSha256.slice(0, 8)} current.
             Explicit distribution pins for plugins and assistants stay
             unchanged.
           </Dialog.Description>
         </Dialog.Header>
-        {error && <ErrorAlert title="Restore status unknown" error={error} />}
+        {error && (
+          <ErrorAlert title="Version change status unknown" error={error} />
+        )}
         <Dialog.Footer>
           <Button
             variant="outline"
@@ -90,12 +99,14 @@ export function RestoreSkillVersionDialog({
             Cancel
           </Button>
           <Button
-            disabled={reconciling || uncertain || version === null}
+            disabled={
+              reconciling || uncertain || version === null || direction === null
+            }
             onClick={() => {
               if (version) void restoreVersion(version);
             }}
           >
-            {reconciling ? "Restoring..." : "Restore version"}
+            {reconciling ? `${actionLabel}...` : actionLabel}
           </Button>
         </Dialog.Footer>
       </Dialog.Content>
