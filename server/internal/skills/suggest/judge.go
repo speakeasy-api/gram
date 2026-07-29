@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -27,10 +28,7 @@ var (
 	ErrModelFailure = efficacy.ErrModelFailure
 )
 
-const (
-	maxFeedbackNoteRunes = 1000
-	maxPromptRunes       = 240000
-)
+const maxPromptRunes = 240000
 
 const SystemPrompt = `You improve an authored skill using evidence from its recent use.
 
@@ -122,8 +120,8 @@ func BuildPrompt(config Config, in GenerateInput) ([]byte, error) {
 	feedback := make([]promptFeedback, len(in.Feedback))
 	for i, item := range in.Feedback {
 		note := []rune(item.Note.String)
-		if len(note) > maxFeedbackNoteRunes {
-			note = note[:maxFeedbackNoteRunes]
+		if len(note) > skills.MaxFeedbackNoteRunes {
+			note = note[:skills.MaxFeedbackNoteRunes]
 		}
 		feedback[i] = promptFeedback{
 			Ref:       i + 1,

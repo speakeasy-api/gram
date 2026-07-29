@@ -90,7 +90,7 @@ func UsageCommands() []string {
 	return []string{
 		"external receive-work-os-webhook",
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-approval-requests|create-shadow-mcp-approval-request|approve-shadow-mcp-approval-request|deny-shadow-mcp-approval-request|list-shadow-mcp-access-rules|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|upsert-shadow-mcp-inventory-policy-bypass|delete-shadow-mcp-inventory-policy-bypass|resolve-shadow-mcp-inventory-request|create-shadow-mcp-access-rule|update-shadow-mcp-access-rule|delete-shadow-mcp-access-rule|get-rbac-status|enable-rbac|disable-rbac|list-challenges|list-challenge-buckets|resolve-challenge)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|upsert-shadow-mcp-inventory-policy-bypass|delete-shadow-mcp-inventory-policy-bypass|resolve-shadow-mcp-inventory-request|get-rbac-status|enable-rbac|disable-rbac|list-challenges|list-challenge-buckets|resolve-challenge)",
 		"admin (login|callback|logout|get-project|update-organization|get-organization|list-organization-members|list-organization-projects|list-organizations)",
 		"agent (get-plugins|list-synced-users)",
 		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
@@ -104,7 +104,7 @@ func UsageCommands() []string {
 		"cli-auth (authorize|redeem)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
 		"device-integrations (list-providers|get-config|upsert-config|delete-config|test-connection|list-schedules|set-schedule-enabled|retry-schedule|list-managed-devices|get-coverage)",
-		"domains (get-domain|create-domain|update-domain|check-health|delete-domain|list-mcp-endpoints)",
+		"domains (get-domain|list-domains|create-domain|update-domain|check-health|delete-domain|list-mcp-endpoints)",
 		"environments (create-environment|list-environments|update-environment|clone-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
 		"external-credentials (create-aws-iam-credential|update-aws-iam-credential|create-gcp-iam-credential|update-gcp-iam-credential|list-external-credentials|list-aws-iam-credentials|list-gcp-iam-credentials|get-aws-iam-credential|get-gcp-iam-credential|delete-aws-iam-credential|delete-gcp-iam-credential)",
 		"external-keys (create-aws-kms-key|update-aws-kms-key|create-gcp-kms-key|update-gcp-kms-key|list-external-keys|list-aws-kms-keys|list-gcp-kms-keys|get-aws-kms-key|get-gcp-kms-key|delete-aws-kms-key|delete-gcp-kms-key)",
@@ -230,33 +230,6 @@ func ParseEndpoint(
 		accessUpdateMemberRolesApikeyTokenFlag  = accessUpdateMemberRolesFlags.String("apikey-token", "", "")
 		accessUpdateMemberRolesSessionTokenFlag = accessUpdateMemberRolesFlags.String("session-token", "", "")
 
-		accessListShadowMCPApprovalRequestsFlags            = flag.NewFlagSet("list-shadow-mcp-approval-requests", flag.ExitOnError)
-		accessListShadowMCPApprovalRequestsStatusFlag       = accessListShadowMCPApprovalRequestsFlags.String("status", "", "")
-		accessListShadowMCPApprovalRequestsProjectIDFlag    = accessListShadowMCPApprovalRequestsFlags.String("project-id", "", "")
-		accessListShadowMCPApprovalRequestsLimitFlag        = accessListShadowMCPApprovalRequestsFlags.String("limit", "50", "")
-		accessListShadowMCPApprovalRequestsCursorFlag       = accessListShadowMCPApprovalRequestsFlags.String("cursor", "", "")
-		accessListShadowMCPApprovalRequestsSessionTokenFlag = accessListShadowMCPApprovalRequestsFlags.String("session-token", "", "")
-
-		accessCreateShadowMCPApprovalRequestFlags            = flag.NewFlagSet("create-shadow-mcp-approval-request", flag.ExitOnError)
-		accessCreateShadowMCPApprovalRequestBodyFlag         = accessCreateShadowMCPApprovalRequestFlags.String("body", "REQUIRED", "")
-		accessCreateShadowMCPApprovalRequestSessionTokenFlag = accessCreateShadowMCPApprovalRequestFlags.String("session-token", "", "")
-
-		accessApproveShadowMCPApprovalRequestFlags            = flag.NewFlagSet("approve-shadow-mcp-approval-request", flag.ExitOnError)
-		accessApproveShadowMCPApprovalRequestBodyFlag         = accessApproveShadowMCPApprovalRequestFlags.String("body", "REQUIRED", "")
-		accessApproveShadowMCPApprovalRequestSessionTokenFlag = accessApproveShadowMCPApprovalRequestFlags.String("session-token", "", "")
-
-		accessDenyShadowMCPApprovalRequestFlags            = flag.NewFlagSet("deny-shadow-mcp-approval-request", flag.ExitOnError)
-		accessDenyShadowMCPApprovalRequestBodyFlag         = accessDenyShadowMCPApprovalRequestFlags.String("body", "REQUIRED", "")
-		accessDenyShadowMCPApprovalRequestSessionTokenFlag = accessDenyShadowMCPApprovalRequestFlags.String("session-token", "", "")
-
-		accessListShadowMCPAccessRulesFlags            = flag.NewFlagSet("list-shadow-mcp-access-rules", flag.ExitOnError)
-		accessListShadowMCPAccessRulesDispositionFlag  = accessListShadowMCPAccessRulesFlags.String("disposition", "", "")
-		accessListShadowMCPAccessRulesAccessScopeFlag  = accessListShadowMCPAccessRulesFlags.String("access-scope", "", "")
-		accessListShadowMCPAccessRulesProjectIDFlag    = accessListShadowMCPAccessRulesFlags.String("project-id", "", "")
-		accessListShadowMCPAccessRulesLimitFlag        = accessListShadowMCPAccessRulesFlags.String("limit", "50", "")
-		accessListShadowMCPAccessRulesCursorFlag       = accessListShadowMCPAccessRulesFlags.String("cursor", "", "")
-		accessListShadowMCPAccessRulesSessionTokenFlag = accessListShadowMCPAccessRulesFlags.String("session-token", "", "")
-
 		accessListShadowMCPInventoryFlags            = flag.NewFlagSet("list-shadow-mcp-inventory", flag.ExitOnError)
 		accessListShadowMCPInventoryProjectIDFlag    = accessListShadowMCPInventoryFlags.String("project-id", "REQUIRED", "")
 		accessListShadowMCPInventoryLimitFlag        = accessListShadowMCPInventoryFlags.String("limit", "50", "")
@@ -291,18 +264,6 @@ func ParseEndpoint(
 		accessResolveShadowMCPInventoryRequestFlags            = flag.NewFlagSet("resolve-shadow-mcp-inventory-request", flag.ExitOnError)
 		accessResolveShadowMCPInventoryRequestBodyFlag         = accessResolveShadowMCPInventoryRequestFlags.String("body", "REQUIRED", "")
 		accessResolveShadowMCPInventoryRequestSessionTokenFlag = accessResolveShadowMCPInventoryRequestFlags.String("session-token", "", "")
-
-		accessCreateShadowMCPAccessRuleFlags            = flag.NewFlagSet("create-shadow-mcp-access-rule", flag.ExitOnError)
-		accessCreateShadowMCPAccessRuleBodyFlag         = accessCreateShadowMCPAccessRuleFlags.String("body", "REQUIRED", "")
-		accessCreateShadowMCPAccessRuleSessionTokenFlag = accessCreateShadowMCPAccessRuleFlags.String("session-token", "", "")
-
-		accessUpdateShadowMCPAccessRuleFlags            = flag.NewFlagSet("update-shadow-mcp-access-rule", flag.ExitOnError)
-		accessUpdateShadowMCPAccessRuleBodyFlag         = accessUpdateShadowMCPAccessRuleFlags.String("body", "REQUIRED", "")
-		accessUpdateShadowMCPAccessRuleSessionTokenFlag = accessUpdateShadowMCPAccessRuleFlags.String("session-token", "", "")
-
-		accessDeleteShadowMCPAccessRuleFlags            = flag.NewFlagSet("delete-shadow-mcp-access-rule", flag.ExitOnError)
-		accessDeleteShadowMCPAccessRuleIDFlag           = accessDeleteShadowMCPAccessRuleFlags.String("id", "REQUIRED", "")
-		accessDeleteShadowMCPAccessRuleSessionTokenFlag = accessDeleteShadowMCPAccessRuleFlags.String("session-token", "", "")
 
 		accessGetRBACStatusFlags            = flag.NewFlagSet("get-rbac-status", flag.ExitOnError)
 		accessGetRBACStatusSessionTokenFlag = accessGetRBACStatusFlags.String("session-token", "", "")
@@ -814,6 +775,9 @@ func ParseEndpoint(
 
 		domainsGetDomainFlags            = flag.NewFlagSet("get-domain", flag.ExitOnError)
 		domainsGetDomainSessionTokenFlag = domainsGetDomainFlags.String("session-token", "", "")
+
+		domainsListDomainsFlags            = flag.NewFlagSet("list-domains", flag.ExitOnError)
+		domainsListDomainsSessionTokenFlag = domainsListDomainsFlags.String("session-token", "", "")
 
 		domainsCreateDomainFlags            = flag.NewFlagSet("create-domain", flag.ExitOnError)
 		domainsCreateDomainBodyFlag         = domainsCreateDomainFlags.String("body", "REQUIRED", "")
@@ -3050,11 +3014,6 @@ func ParseEndpoint(
 	accessListMembersFlags.Usage = accessListMembersUsage
 	accessListGrantsFlags.Usage = accessListGrantsUsage
 	accessUpdateMemberRolesFlags.Usage = accessUpdateMemberRolesUsage
-	accessListShadowMCPApprovalRequestsFlags.Usage = accessListShadowMCPApprovalRequestsUsage
-	accessCreateShadowMCPApprovalRequestFlags.Usage = accessCreateShadowMCPApprovalRequestUsage
-	accessApproveShadowMCPApprovalRequestFlags.Usage = accessApproveShadowMCPApprovalRequestUsage
-	accessDenyShadowMCPApprovalRequestFlags.Usage = accessDenyShadowMCPApprovalRequestUsage
-	accessListShadowMCPAccessRulesFlags.Usage = accessListShadowMCPAccessRulesUsage
 	accessListShadowMCPInventoryFlags.Usage = accessListShadowMCPInventoryUsage
 	accessGetShadowMCPInventoryServerFlags.Usage = accessGetShadowMCPInventoryServerUsage
 	accessUpdateShadowMCPInventoryServerNameFlags.Usage = accessUpdateShadowMCPInventoryServerNameUsage
@@ -3062,9 +3021,6 @@ func ParseEndpoint(
 	accessUpsertShadowMCPInventoryPolicyBypassFlags.Usage = accessUpsertShadowMCPInventoryPolicyBypassUsage
 	accessDeleteShadowMCPInventoryPolicyBypassFlags.Usage = accessDeleteShadowMCPInventoryPolicyBypassUsage
 	accessResolveShadowMCPInventoryRequestFlags.Usage = accessResolveShadowMCPInventoryRequestUsage
-	accessCreateShadowMCPAccessRuleFlags.Usage = accessCreateShadowMCPAccessRuleUsage
-	accessUpdateShadowMCPAccessRuleFlags.Usage = accessUpdateShadowMCPAccessRuleUsage
-	accessDeleteShadowMCPAccessRuleFlags.Usage = accessDeleteShadowMCPAccessRuleUsage
 	accessGetRBACStatusFlags.Usage = accessGetRBACStatusUsage
 	accessEnableRBACFlags.Usage = accessEnableRBACUsage
 	accessDisableRBACFlags.Usage = accessDisableRBACUsage
@@ -3180,6 +3136,7 @@ func ParseEndpoint(
 
 	domainsFlags.Usage = domainsUsage
 	domainsGetDomainFlags.Usage = domainsGetDomainUsage
+	domainsListDomainsFlags.Usage = domainsListDomainsUsage
 	domainsCreateDomainFlags.Usage = domainsCreateDomainUsage
 	domainsUpdateDomainFlags.Usage = domainsUpdateDomainUsage
 	domainsCheckHealthFlags.Usage = domainsCheckHealthUsage
@@ -3871,21 +3828,6 @@ func ParseEndpoint(
 			case "update-member-roles":
 				epf = accessUpdateMemberRolesFlags
 
-			case "list-shadow-mcp-approval-requests":
-				epf = accessListShadowMCPApprovalRequestsFlags
-
-			case "create-shadow-mcp-approval-request":
-				epf = accessCreateShadowMCPApprovalRequestFlags
-
-			case "approve-shadow-mcp-approval-request":
-				epf = accessApproveShadowMCPApprovalRequestFlags
-
-			case "deny-shadow-mcp-approval-request":
-				epf = accessDenyShadowMCPApprovalRequestFlags
-
-			case "list-shadow-mcp-access-rules":
-				epf = accessListShadowMCPAccessRulesFlags
-
 			case "list-shadow-mcp-inventory":
 				epf = accessListShadowMCPInventoryFlags
 
@@ -3906,15 +3848,6 @@ func ParseEndpoint(
 
 			case "resolve-shadow-mcp-inventory-request":
 				epf = accessResolveShadowMCPInventoryRequestFlags
-
-			case "create-shadow-mcp-access-rule":
-				epf = accessCreateShadowMCPAccessRuleFlags
-
-			case "update-shadow-mcp-access-rule":
-				epf = accessUpdateShadowMCPAccessRuleFlags
-
-			case "delete-shadow-mcp-access-rule":
-				epf = accessDeleteShadowMCPAccessRuleFlags
 
 			case "get-rbac-status":
 				epf = accessGetRBACStatusFlags
@@ -4232,6 +4165,9 @@ func ParseEndpoint(
 			switch epn {
 			case "get-domain":
 				epf = domainsGetDomainFlags
+
+			case "list-domains":
+				epf = domainsListDomainsFlags
 
 			case "create-domain":
 				epf = domainsCreateDomainFlags
@@ -5658,21 +5594,6 @@ func ParseEndpoint(
 			case "update-member-roles":
 				endpoint = c.UpdateMemberRoles()
 				data, err = accessc.BuildUpdateMemberRolesPayload(*accessUpdateMemberRolesBodyFlag, *accessUpdateMemberRolesApikeyTokenFlag, *accessUpdateMemberRolesSessionTokenFlag)
-			case "list-shadow-mcp-approval-requests":
-				endpoint = c.ListShadowMCPApprovalRequests()
-				data, err = accessc.BuildListShadowMCPApprovalRequestsPayload(*accessListShadowMCPApprovalRequestsStatusFlag, *accessListShadowMCPApprovalRequestsProjectIDFlag, *accessListShadowMCPApprovalRequestsLimitFlag, *accessListShadowMCPApprovalRequestsCursorFlag, *accessListShadowMCPApprovalRequestsSessionTokenFlag)
-			case "create-shadow-mcp-approval-request":
-				endpoint = c.CreateShadowMCPApprovalRequest()
-				data, err = accessc.BuildCreateShadowMCPApprovalRequestPayload(*accessCreateShadowMCPApprovalRequestBodyFlag, *accessCreateShadowMCPApprovalRequestSessionTokenFlag)
-			case "approve-shadow-mcp-approval-request":
-				endpoint = c.ApproveShadowMCPApprovalRequest()
-				data, err = accessc.BuildApproveShadowMCPApprovalRequestPayload(*accessApproveShadowMCPApprovalRequestBodyFlag, *accessApproveShadowMCPApprovalRequestSessionTokenFlag)
-			case "deny-shadow-mcp-approval-request":
-				endpoint = c.DenyShadowMCPApprovalRequest()
-				data, err = accessc.BuildDenyShadowMCPApprovalRequestPayload(*accessDenyShadowMCPApprovalRequestBodyFlag, *accessDenyShadowMCPApprovalRequestSessionTokenFlag)
-			case "list-shadow-mcp-access-rules":
-				endpoint = c.ListShadowMCPAccessRules()
-				data, err = accessc.BuildListShadowMCPAccessRulesPayload(*accessListShadowMCPAccessRulesDispositionFlag, *accessListShadowMCPAccessRulesAccessScopeFlag, *accessListShadowMCPAccessRulesProjectIDFlag, *accessListShadowMCPAccessRulesLimitFlag, *accessListShadowMCPAccessRulesCursorFlag, *accessListShadowMCPAccessRulesSessionTokenFlag)
 			case "list-shadow-mcp-inventory":
 				endpoint = c.ListShadowMCPInventory()
 				data, err = accessc.BuildListShadowMCPInventoryPayload(*accessListShadowMCPInventoryProjectIDFlag, *accessListShadowMCPInventoryLimitFlag, *accessListShadowMCPInventoryCursorFlag, *accessListShadowMCPInventorySessionTokenFlag)
@@ -5694,15 +5615,6 @@ func ParseEndpoint(
 			case "resolve-shadow-mcp-inventory-request":
 				endpoint = c.ResolveShadowMCPInventoryRequest()
 				data, err = accessc.BuildResolveShadowMCPInventoryRequestPayload(*accessResolveShadowMCPInventoryRequestBodyFlag, *accessResolveShadowMCPInventoryRequestSessionTokenFlag)
-			case "create-shadow-mcp-access-rule":
-				endpoint = c.CreateShadowMCPAccessRule()
-				data, err = accessc.BuildCreateShadowMCPAccessRulePayload(*accessCreateShadowMCPAccessRuleBodyFlag, *accessCreateShadowMCPAccessRuleSessionTokenFlag)
-			case "update-shadow-mcp-access-rule":
-				endpoint = c.UpdateShadowMCPAccessRule()
-				data, err = accessc.BuildUpdateShadowMCPAccessRulePayload(*accessUpdateShadowMCPAccessRuleBodyFlag, *accessUpdateShadowMCPAccessRuleSessionTokenFlag)
-			case "delete-shadow-mcp-access-rule":
-				endpoint = c.DeleteShadowMCPAccessRule()
-				data, err = accessc.BuildDeleteShadowMCPAccessRulePayload(*accessDeleteShadowMCPAccessRuleIDFlag, *accessDeleteShadowMCPAccessRuleSessionTokenFlag)
 			case "get-rbac-status":
 				endpoint = c.GetRBACStatus()
 				data, err = accessc.BuildGetRBACStatusPayload(*accessGetRBACStatusSessionTokenFlag)
@@ -6032,6 +5944,9 @@ func ParseEndpoint(
 			case "get-domain":
 				endpoint = c.GetDomain()
 				data, err = domainsc.BuildGetDomainPayload(*domainsGetDomainSessionTokenFlag)
+			case "list-domains":
+				endpoint = c.ListDomains()
+				data, err = domainsc.BuildListDomainsPayload(*domainsListDomainsSessionTokenFlag)
 			case "create-domain":
 				endpoint = c.CreateDomain()
 				data, err = domainsc.BuildCreateDomainPayload(*domainsCreateDomainBodyFlag, *domainsCreateDomainSessionTokenFlag)
@@ -7468,11 +7383,6 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    list-members: List all team members with their role assignments.`)
 	fmt.Fprintln(os.Stderr, `    list-grants: List the current user's effective grants, including inherited role grants.`)
 	fmt.Fprintln(os.Stderr, `    update-member-roles: Update a team member's role assignments.`)
-	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-approval-requests: List Shadow MCP approval requests for the current organization. Requires organization admin access because requests include requester and block details.`)
-	fmt.Fprintln(os.Stderr, `    create-shadow-mcp-approval-request: Create or return an active Shadow MCP approval request.`)
-	fmt.Fprintln(os.Stderr, `    approve-shadow-mcp-approval-request: Approve a Shadow MCP request, creating an allow rule scoped to the organization or project.`)
-	fmt.Fprintln(os.Stderr, `    deny-shadow-mcp-approval-request: Deny a Shadow MCP request and optionally create a deny rule.`)
-	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-access-rules: List managed Shadow MCP allow and deny rules.`)
 	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory: List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.`)
 	fmt.Fprintln(os.Stderr, `    get-shadow-mcp-inventory-server: Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.`)
 	fmt.Fprintln(os.Stderr, `    update-shadow-mcp-inventory-server-name: Update or clear the administrator-defined display name for one project-scoped Shadow MCP inventory server URL.`)
@@ -7480,9 +7390,6 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    upsert-shadow-mcp-inventory-policy-bypass: Create or modify a Shadow MCP URL allow decision for selected blocking policies.`)
 	fmt.Fprintln(os.Stderr, `    delete-shadow-mcp-inventory-policy-bypass: Remove a Shadow MCP URL allow decision.`)
 	fmt.Fprintln(os.Stderr, `    resolve-shadow-mcp-inventory-request: Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.`)
-	fmt.Fprintln(os.Stderr, `    create-shadow-mcp-access-rule: Create a managed Shadow MCP access rule.`)
-	fmt.Fprintln(os.Stderr, `    update-shadow-mcp-access-rule: Update a managed Shadow MCP access rule.`)
-	fmt.Fprintln(os.Stderr, `    delete-shadow-mcp-access-rule: Delete a managed Shadow MCP access rule.`)
 	fmt.Fprintln(os.Stderr, `    get-rbac-status: Returns whether RBAC is currently enabled for the current organization.`)
 	fmt.Fprintln(os.Stderr, `    enable-rbac: Enable RBAC for the current organization. Seeds default grants for system roles.`)
 	fmt.Fprintln(os.Stderr, `    disable-rbac: Disable RBAC enforcement for the current organization.`)
@@ -7683,120 +7590,6 @@ func accessUpdateMemberRolesUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-member-roles --body '{\n      \"role_ids\": [\n         \"abc123\"\n      ],\n      \"user_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
-func accessListShadowMCPApprovalRequestsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-shadow-mcp-approval-requests", os.Args[0])
-	fmt.Fprint(os.Stderr, " -status STRING")
-	fmt.Fprint(os.Stderr, " -project-id STRING")
-	fmt.Fprint(os.Stderr, " -limit INT")
-	fmt.Fprint(os.Stderr, " -cursor STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List Shadow MCP approval requests for the current organization. Requires organization admin access because requests include requester and block details.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -status STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -limit INT: `)
-	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-shadow-mcp-approval-requests --status \"approved\" --project-id \"550e8400-e29b-41d4-a716-446655440000\" --limit 2 --cursor \"abc123\" --session-token \"abc123\"")
-}
-
-func accessCreateShadowMCPApprovalRequestUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access create-shadow-mcp-approval-request", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create or return an active Shadow MCP approval request.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access create-shadow-mcp-approval-request --body '{\n      \"request_token\": \"abc123\"\n   }' --session-token \"abc123\"")
-}
-
-func accessApproveShadowMCPApprovalRequestUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access approve-shadow-mcp-approval-request", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Approve a Shadow MCP request, creating an allow rule scoped to the organization or project.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access approve-shadow-mcp-approval-request --body '{\n      \"access_scope\": \"project\",\n      \"display_name\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_breadth\": \"url_host\",\n      \"match_value\": \"abc123\",\n      \"observed_full_url\": \"abc123\",\n      \"observed_server_identity\": \"abc123\",\n      \"observed_url_host\": \"abc123\",\n      \"project_ids\": [\n         \"abc123\"\n      ],\n      \"reason\": \"abc123\"\n   }' --session-token \"abc123\"")
-}
-
-func accessDenyShadowMCPApprovalRequestUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access deny-shadow-mcp-approval-request", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Deny a Shadow MCP request and optionally create a deny rule.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access deny-shadow-mcp-approval-request --body '{\n      \"create_deny_rule\": false,\n      \"display_name\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_breadth\": \"url_host\",\n      \"match_value\": \"abc123\",\n      \"observed_full_url\": \"abc123\",\n      \"observed_server_identity\": \"abc123\",\n      \"observed_url_host\": \"abc123\",\n      \"project_ids\": [\n         \"abc123\"\n      ],\n      \"reason\": \"abc123\"\n   }' --session-token \"abc123\"")
-}
-
-func accessListShadowMCPAccessRulesUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-shadow-mcp-access-rules", os.Args[0])
-	fmt.Fprint(os.Stderr, " -disposition STRING")
-	fmt.Fprint(os.Stderr, " -access-scope STRING")
-	fmt.Fprint(os.Stderr, " -project-id STRING")
-	fmt.Fprint(os.Stderr, " -limit INT")
-	fmt.Fprint(os.Stderr, " -cursor STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List managed Shadow MCP allow and deny rules.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -disposition STRING: `)
-	fmt.Fprintln(os.Stderr, `    -access-scope STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -limit INT: `)
-	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-shadow-mcp-access-rules --disposition \"denied\" --access-scope \"project\" --project-id \"550e8400-e29b-41d4-a716-446655440000\" --limit 2 --cursor \"abc123\" --session-token \"abc123\"")
-}
-
 func accessListShadowMCPInventoryUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] access list-shadow-mcp-inventory", os.Args[0])
@@ -7949,66 +7742,6 @@ func accessResolveShadowMCPInventoryRequestUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access resolve-shadow-mcp-inventory-request --body '{\n      \"decision\": \"deny\",\n      \"policy_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\"")
-}
-
-func accessCreateShadowMCPAccessRuleUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access create-shadow-mcp-access-rule", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create a managed Shadow MCP access rule.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access create-shadow-mcp-access-rule --body '{\n      \"access_scope\": \"project\",\n      \"display_name\": \"abc123\",\n      \"disposition\": \"denied\",\n      \"match_breadth\": \"url_host\",\n      \"match_value\": \"abc123\",\n      \"observed_full_url\": \"abc123\",\n      \"observed_server_identity\": \"abc123\",\n      \"observed_url_host\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_ids\": [\n         \"abc123\"\n      ],\n      \"reason\": \"abc123\"\n   }' --session-token \"abc123\"")
-}
-
-func accessUpdateShadowMCPAccessRuleUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access update-shadow-mcp-access-rule", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Update a managed Shadow MCP access rule.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-shadow-mcp-access-rule --body '{\n      \"access_scope\": \"project\",\n      \"display_name\": \"abc123\",\n      \"disposition\": \"denied\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_breadth\": \"url_host\",\n      \"match_value\": \"abc123\",\n      \"observed_full_url\": \"abc123\",\n      \"observed_server_identity\": \"abc123\",\n      \"observed_url_host\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"reason\": \"abc123\"\n   }' --session-token \"abc123\"")
-}
-
-func accessDeleteShadowMCPAccessRuleUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access delete-shadow-mcp-access-rule", os.Args[0])
-	fmt.Fprint(os.Stderr, " -id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Delete a managed Shadow MCP access rule.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access delete-shadow-mcp-access-rule --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 func accessGetRBACStatusUsage() {
@@ -10213,6 +9946,7 @@ func domainsUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] domains COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-domain: Get the custom domain for an organization`)
+	fmt.Fprintln(os.Stderr, `    list-domains: List the custom domains for an organization. The result is empty when no custom domain has been configured.`)
 	fmt.Fprintln(os.Stderr, `    create-domain: Create a custom domain for an organization`)
 	fmt.Fprintln(os.Stderr, `    update-domain: Update the IP allowlist for the organization's custom domain`)
 	fmt.Fprintln(os.Stderr, `    check-health: Check the routing and certificate health of the organization's custom domain`)
@@ -10238,6 +9972,24 @@ func domainsGetDomainUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "domains get-domain --session-token \"abc123\"")
+}
+
+func domainsListDomainsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] domains list-domains", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the custom domains for an organization. The result is empty when no custom domain has been configured.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "domains list-domains --session-token \"abc123\"")
 }
 
 func domainsCreateDomainUsage() {
@@ -16781,7 +16533,7 @@ func skillsUsage() {
 	fmt.Fprintln(os.Stderr, `    list: List active skills in the project. The implementation requires the skills product feature and skill read scope.`)
 	fmt.Fprintln(os.Stderr, `    list-suggestions: List open skill edit suggestions in the project, newest first. The implementation requires the skills product feature and skill read scope.`)
 	fmt.Fprintln(os.Stderr, `    list-feedback: List all-time outcome counts and recent resolved feedback for a skill. Name-only feedback is excluded.`)
-	fmt.Fprintln(os.Stderr, `    approve-suggestion: Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only one of its proposed changes. Stale suggestions are superseded instead.`)
+	fmt.Fprintln(os.Stderr, `    approve-suggestion: Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only a subset of its proposed changes. Stale suggestions are superseded instead.`)
 	fmt.Fprintln(os.Stderr, `    dismiss-suggestion: Idempotently dismiss an open skill edit suggestion. Approved and superseded suggestions conflict.`)
 	fmt.Fprintln(os.Stderr, `    list-suggestion-feedback: List the agent feedback cited as the reason for one proposed change, newest first.`)
 	fmt.Fprintln(os.Stderr, `    approve-all-suggestions: Snapshot and independently process selected skill edit suggestions, or every open suggestion when no IDs are supplied. One conflict or failure does not stop the remaining approvals.`)
@@ -16988,7 +16740,7 @@ func skillsApproveSuggestionUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only one of its proposed changes. Stale suggestions are superseded instead.`)
+	fmt.Fprintln(os.Stderr, `Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only a subset of its proposed changes. Stale suggestions are superseded instead.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -16998,7 +16750,7 @@ func skillsApproveSuggestionUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills approve-suggestion --body '{\n      \"change_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"content\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills approve-suggestion --body '{\n      \"change_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"content\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func skillsDismissSuggestionUsage() {

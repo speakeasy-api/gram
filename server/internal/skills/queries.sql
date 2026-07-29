@@ -543,6 +543,11 @@ DELETE FROM skill_edit_suggestion_changes
 WHERE project_id = @project_id
   AND id = @id;
 
+-- name: DeleteSkillEditSuggestionChangesByIDs :exec
+DELETE FROM skill_edit_suggestion_changes
+WHERE project_id = @project_id
+  AND id = ANY (@ids::uuid[]);
+
 -- name: RebaseSkillEditSuggestionChange :exec
 UPDATE skill_edit_suggestion_changes
 SET proposed_diff = @proposed_diff,
@@ -1358,6 +1363,7 @@ WHERE so.project_id = @project_id
 -- name: ListSkillSightingTimeline :many
 SELECT
   (date_trunc('day', so.seen_at AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')::timestamptz AS bucket_start,
+  so.skill_version_id,
   COUNT(*)::bigint AS activation_count
 FROM skill_observations so
 WHERE so.project_id = @project_id
@@ -1366,8 +1372,8 @@ WHERE so.project_id = @project_id
   AND so.reconcile_error_code IS NULL
   AND so.seen_at >= @window_start
   AND so.seen_at < @window_end
-GROUP BY bucket_start
-ORDER BY bucket_start ASC;
+GROUP BY bucket_start, so.skill_version_id
+ORDER BY bucket_start ASC, so.skill_version_id ASC NULLS LAST;
 
 -- name: ListActiveMachineLatestVersions :many
 WITH latest AS (

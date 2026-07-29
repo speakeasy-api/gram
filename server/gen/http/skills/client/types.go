@@ -63,9 +63,10 @@ type ApproveSuggestionRequestBody struct {
 	// Optional edited complete SKILL.md content. Handlers enforce a maximum size
 	// of 65,536 UTF-8 bytes.
 	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
-	// Optional ID of the single proposed change to take. The suggestion stays open
-	// carrying whatever is left. Cannot be combined with edited content.
-	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
+	// Optional IDs of the proposed changes to take together as one new version.
+	// The suggestion stays open carrying whatever is left. Cannot be combined with
+	// edited content.
+	ChangeIds []string `form:"change_ids,omitempty" json:"change_ids,omitempty" xml:"change_ids,omitempty"`
 }
 
 // DismissSuggestionRequestBody is the type of the "skills" service
@@ -311,7 +312,7 @@ type GetResponseBody struct {
 	LatestVersion *SkillVersionResponseBody `form:"latest_version,omitempty" json:"latest_version,omitempty" xml:"latest_version,omitempty"`
 	// Activation adoption metrics.
 	Adoption *SkillAdoptionResponseBody `form:"adoption,omitempty" json:"adoption,omitempty" xml:"adoption,omitempty"`
-	// Daily activations in the adoption window.
+	// Daily activations by attributed version in the adoption window.
 	SightingTimeline []*SkillSightingTimelinePointResponseBody `form:"sighting_timeline,omitempty" json:"sighting_timeline,omitempty" xml:"sighting_timeline,omitempty"`
 	// Active-machine version convergence.
 	Drift *SkillDriftResponseBody `form:"drift,omitempty" json:"drift,omitempty" xml:"drift,omitempty"`
@@ -4443,6 +4444,9 @@ type SkillAdoptionResponseBody struct {
 type SkillSightingTimelinePointResponseBody struct {
 	// Start of the UTC day.
 	BucketStart *string `form:"bucket_start,omitempty" json:"bucket_start,omitempty" xml:"bucket_start,omitempty"`
+	// The attributed skill version, absent when the observation could not be
+	// resolved to a version.
+	SkillVersionID *string `form:"skill_version_id,omitempty" json:"skill_version_id,omitempty" xml:"skill_version_id,omitempty"`
 	// Activations observed during the day.
 	ActivationCount *int64 `form:"activation_count,omitempty" json:"activation_count,omitempty" xml:"activation_count,omitempty"`
 }
@@ -4564,9 +4568,14 @@ func NewUpdateRequestBody(p *skills.UpdatePayload) *UpdateRequestBody {
 // payload of the "approveSuggestion" endpoint of the "skills" service.
 func NewApproveSuggestionRequestBody(p *skills.ApproveSuggestionPayload) *ApproveSuggestionRequestBody {
 	body := &ApproveSuggestionRequestBody{
-		ID:       p.ID,
-		Content:  p.Content,
-		ChangeID: p.ChangeID,
+		ID:      p.ID,
+		Content: p.Content,
+	}
+	if p.ChangeIds != nil {
+		body.ChangeIds = make([]string, len(p.ChangeIds))
+		for i, val := range p.ChangeIds {
+			body.ChangeIds[i] = val
+		}
 	}
 	return body
 }
@@ -14055,6 +14064,9 @@ func ValidateSkillSightingTimelinePointResponseBody(body *SkillSightingTimelineP
 	}
 	if body.BucketStart != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.bucket_start", *body.BucketStart, goa.FormatDateTime))
+	}
+	if body.SkillVersionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.skill_version_id", *body.SkillVersionID, goa.FormatUUID))
 	}
 	return
 }

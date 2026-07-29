@@ -42,7 +42,7 @@ type Service interface {
 	// Name-only feedback is excluded.
 	ListFeedback(context.Context, *ListFeedbackPayload) (res *ListSkillFeedbackResult, err error)
 	// Approve an open skill edit suggestion, optionally replacing its proposed
-	// SKILL.md content or taking only one of its proposed changes. Stale
+	// SKILL.md content or taking only a subset of its proposed changes. Stale
 	// suggestions are superseded instead.
 	ApproveSuggestion(context.Context, *ApproveSuggestionPayload) (res *ApproveSkillSuggestionResult, err error)
 	// Idempotently dismiss an open skill edit suggestion. Approved and superseded
@@ -163,9 +163,10 @@ type ApproveSuggestionPayload struct {
 	// Optional edited complete SKILL.md content. Handlers enforce a maximum size
 	// of 65,536 UTF-8 bytes.
 	Content *string
-	// Optional ID of the single proposed change to take. The suggestion stays open
-	// carrying whatever is left. Cannot be combined with edited content.
-	ChangeID         *string
+	// Optional IDs of the proposed changes to take together as one new version.
+	// The suggestion stays open carrying whatever is left. Cannot be combined with
+	// edited content.
+	ChangeIds        []string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -240,7 +241,7 @@ type GetSkillResult struct {
 	LatestVersion *types.SkillVersion
 	// Activation adoption metrics.
 	Adoption *SkillAdoption
-	// Daily activations in the adoption window.
+	// Daily activations by attributed version in the adoption window.
 	SightingTimeline []*SkillSightingTimelinePoint
 	// Active-machine version convergence.
 	Drift *SkillDrift
@@ -525,10 +526,13 @@ type SkillFeedbackOutcome string
 // Where skill feedback was recorded.
 type SkillFeedbackSource string
 
-// A UTC-day activation bucket for a skill.
+// A UTC-day activation bucket for one attributed skill version.
 type SkillSightingTimelinePoint struct {
 	// Start of the UTC day.
 	BucketStart string
+	// The attributed skill version, absent when the observation could not be
+	// resolved to a version.
+	SkillVersionID *string
 	// Activations observed during the day.
 	ActivationCount int64
 }

@@ -16,8 +16,6 @@ export type SkillSuggestionActions = {
   approving: boolean;
   /** Applies just the change this comment is attached to. */
   onApply: () => void;
-  /** Opens the review of every change the suggestion still proposes. */
-  onApplyAll: () => void;
 };
 
 /** Collapsed marker for one proposed change in the diff. */
@@ -46,12 +44,9 @@ export function SkillSuggestionMarker({
 
 export function SkillSuggestionComment({
   change,
-  changeCount,
   actions,
 }: {
   change: SkillEditSuggestionChange;
-  /** How many changes the suggestion still proposes across the manifest. */
-  changeCount: number;
   actions: SkillSuggestionActions;
 }): JSX.Element {
   const project = useProject();
@@ -91,25 +86,13 @@ export function SkillSuggestionComment({
           level="component"
           reason="You need write access to review suggested edits."
         >
-          <div className="flex flex-wrap gap-2">
-            {changeCount > 1 && (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={actions.disabled}
-                onClick={actions.onApplyAll}
-              >
-                Apply all
-              </Button>
-            )}
-            <Button
-              size="sm"
-              disabled={actions.disabled}
-              onClick={actions.onApply}
-            >
-              {actions.approving ? "Applying..." : "Apply"}
-            </Button>
-          </div>
+          <Button
+            size="sm"
+            disabled={actions.disabled}
+            onClick={actions.onApply}
+          >
+            {actions.approving ? "Applying..." : "Apply"}
+          </Button>
         </RequireScope>
       </div>
     </div>

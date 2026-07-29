@@ -13,11 +13,12 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Dialog } from "@/components/ui/dialog";
 import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
+import { Markdown } from "@/elements/components/Markdown";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
 import { useRoutes } from "@/routes";
@@ -29,7 +30,6 @@ import type { SkillInsightPoint } from "@gram/client/models/components/skillinsi
 import type { SkillVersionInsight } from "@gram/client/models/components/skillversioninsight.js";
 import type { GetSkillResult } from "@gram/client/models/components/getskillresult.js";
 import { useSkillEfficacyInsights } from "@gram/client/react-query/skillEfficacyInsights.js";
-import { useSkillVersionsInfinite } from "@gram/client/react-query/skillVersions.js";
 import { Badge, type Column, Icon, Table } from "@speakeasy-api/moonshine";
 import {
   CategoryScale,
@@ -44,6 +44,7 @@ import {
 import { Line } from "react-chartjs-2";
 import { type ReactNode, useState } from "react";
 import { Link } from "react-router";
+import skillEfficacyMethodology from "../../../../../docs/skills/measuring-skill-efficacy.md?raw";
 
 ChartJS.register(
   CategoryScale,
@@ -56,8 +57,6 @@ ChartJS.register(
 
 export const SKILL_INSIGHTS_SECTION_ID = "insights";
 
-const METHODOLOGY_URL =
-  "https://github.com/speakeasy-api/gram/blob/main/docs/skills/measuring-skill-efficacy.md";
 const SCORED_SESSIONS_PAGE_SIZE = 20;
 type TrendMetric = "efficacy" | "activations" | "sessionCost";
 
@@ -108,8 +107,14 @@ function formatChartValue(value: number, metric: TrendMetric): string {
 
 export function SkillInsightsSection({
   data,
+  versionLabels,
+  versionsLoading,
+  versionsError,
 }: {
   data: GetSkillResult;
+  versionLabels: Map<string, string>;
+  versionsLoading: boolean;
+  versionsError: Error | null;
 }): JSX.Element {
   const project = useProject();
   const { hasScope, isLoading: isRBACLoading, isRbacEnabled } = useRBAC();
@@ -123,29 +128,6 @@ export function SkillInsightsSection({
     undefined,
     { throwOnError: false, enabled: !isRBACLoading },
   );
-  const versionsQuery = useSkillVersionsInfinite(
-    { id: data.skill.id },
-    undefined,
-    { throwOnError: false },
-  );
-  useDrainInfiniteQuery(versionsQuery);
-  const versionsLoading =
-    versionsQuery.isPending ||
-    versionsQuery.hasNextPage ||
-    versionsQuery.isFetchingNextPage;
-  const versions =
-    versionsQuery.data?.pages.flatMap((page) => page.result.versions) ?? [];
-  const versionLabels = new Map(
-    [...versions]
-      .sort(
-        (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
-      )
-      .map((version, index) => [
-        version.id,
-        `v${data.skill.versionCount - versions.length + index + 1} (${version.canonicalSha256.slice(0, 8)})`,
-      ]),
-  );
-
   return (
     <SettingsSection id={SKILL_INSIGHTS_SECTION_ID}>
       <SettingsSection.Header>
@@ -163,16 +145,16 @@ export function SkillInsightsSection({
               error={query.error}
             />
           )}
-          {versionsQuery.error && (
+          {versionsError && (
             <ErrorAlert
               title="Unable to load skill versions"
-              error={versionsQuery.error}
+              error={versionsError}
             />
           )}
           {(query.isPending || (query.data && versionsLoading)) && (
             <InsightsLoading />
           )}
-          {query.data && !versionsLoading && !versionsQuery.error && (
+          {query.data && !versionsLoading && !versionsError && (
             <InsightsContent
               insight={query.data.result.insights[0]}
               skillId={data.skill.id}
@@ -249,16 +231,7 @@ function InsightsContent({
               ? `${formatMinutes(efficacy.estimatedMinutesSavedTotal)} saved`
               : "Not estimated"
           }
-          detail={
-            <a
-              href={METHODOLOGY_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline underline-offset-2"
-            >
-              View methodology
-            </a>
-          }
+          detail={<MethodologyDialog />}
         />
       </dl>
 
@@ -424,6 +397,26 @@ function ScoredSessions({
         </div>
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+function MethodologyDialog(): JSX.Element {
+  return (
+    <Dialog>
+      <Dialog.Trigger asChild>
+        <Button variant="link" size="inline" className="h-auto p-0">
+          View methodology
+        </Button>
+      </Dialog.Trigger>
+      <Dialog.Content className="max-h-[calc(100vh-2rem)] grid-rows-[minmax(0,1fr)] sm:max-w-3xl">
+        <Dialog.Title className="sr-only">
+          Measuring skill efficacy
+        </Dialog.Title>
+        <div className="min-h-0 overflow-y-auto pr-1">
+          <Markdown className="text-sm">{skillEfficacyMethodology}</Markdown>
+        </div>
+      </Dialog.Content>
+    </Dialog>
   );
 }
 

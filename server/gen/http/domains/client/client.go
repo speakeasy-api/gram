@@ -21,6 +21,10 @@ type Client struct {
 	// endpoint.
 	GetDomainDoer goahttp.Doer
 
+	// ListDomains Doer is the HTTP client used to make requests to the listDomains
+	// endpoint.
+	ListDomainsDoer goahttp.Doer
+
 	// CreateDomain Doer is the HTTP client used to make requests to the
 	// createDomain endpoint.
 	CreateDomainDoer goahttp.Doer
@@ -62,6 +66,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		GetDomainDoer:        doer,
+		ListDomainsDoer:      doer,
 		CreateDomainDoer:     doer,
 		UpdateDomainDoer:     doer,
 		CheckHealthDoer:      doer,
@@ -94,6 +99,30 @@ func (c *Client) GetDomain() goa.Endpoint {
 		resp, err := c.GetDomainDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("domains", "getDomain", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListDomains returns an endpoint that makes HTTP requests to the domains
+// service listDomains server.
+func (c *Client) ListDomains() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListDomainsRequest(c.encoder)
+		decodeResponse = DecodeListDomainsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListDomainsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListDomainsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("domains", "listDomains", err)
 		}
 		return decodeResponse(resp)
 	}

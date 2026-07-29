@@ -926,7 +926,9 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 	timeline := make([]*gen.SkillSightingTimelinePoint, len(timelineRows))
 	for i, row := range timelineRows {
 		timeline[i] = &gen.SkillSightingTimelinePoint{
-			BucketStart: conv.FromPGTimestamptz(row.BucketStart), ActivationCount: row.ActivationCount,
+			BucketStart:     conv.FromPGTimestamptz(row.BucketStart),
+			SkillVersionID:  conv.FromNullableUUID(row.SkillVersionID),
+			ActivationCount: row.ActivationCount,
 		}
 	}
 	targetVersionIDs := make([]string, len(targetVersions))
