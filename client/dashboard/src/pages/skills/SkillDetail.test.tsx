@@ -320,13 +320,20 @@ describe("SkillDetail", () => {
     expect(testState.fetchNextPage).toHaveBeenCalledOnce();
   });
 
-  it("offers restore only for valid non-current versions", () => {
+  it("labels valid non-current version actions by direction", () => {
     testState.versions = [
+      {
+        ...testState.version,
+        id: "version_new",
+        canonicalSha256: "newvalid12345678",
+        createdAt: new Date("2026-07-17T00:00:00Z"),
+      },
       testState.version,
       {
         ...testState.version,
         id: "version_old",
         canonicalSha256: "oldvalid12345678",
+        createdAt: new Date("2026-07-15T00:00:00Z"),
       },
       {
         ...testState.version,
@@ -337,16 +344,23 @@ describe("SkillDetail", () => {
     ];
     render(<SkillDetail />);
 
-    expect(
-      screen.getAllByRole("button", { name: "Restore this version" }),
-    ).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Roll forward" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Roll back" })).toBeTruthy();
+    expect(screen.getByText("Current")).toBeTruthy();
     expect(
       screen.getByRole("group", {
         name: "Version 12345678, current version",
       }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("group", { name: "Version oldvalid restore target" }),
+      screen.getByRole("group", {
+        name: "Version newvalid, roll forward target",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("group", {
+        name: "Version oldvalid, roll back target",
+      }),
     ).toBeTruthy();
     expect(
       screen.getByRole("group", { name: "Version invalid1, invalid version" }),

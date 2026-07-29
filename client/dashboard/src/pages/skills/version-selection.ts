@@ -1,19 +1,40 @@
 import type { SkillVersion } from "@gram/client/models/components/skillversion.js";
 
+export type VersionChangeDirection = "backward" | "forward";
+
+export function versionChangeDirection(
+  target: SkillVersion,
+  current: SkillVersion,
+): VersionChangeDirection | null {
+  if (target.id === current.id) return null;
+
+  const targetCreatedAt = target.createdAt.getTime();
+  const currentCreatedAt = current.createdAt.getTime();
+  if (targetCreatedAt === currentCreatedAt) {
+    return target.id < current.id ? "backward" : "forward";
+  }
+  return targetCreatedAt < currentCreatedAt ? "backward" : "forward";
+}
+
 export function selectDiffVersions(
   versionsNewestFirst: SkillVersion[],
   selectedIds: Set<string>,
-  latestVersionId: string,
+  currentVersionId: string,
 ): [older: SkillVersion, newer: SkillVersion] | null {
   const selected = versionsNewestFirst.filter((version) =>
     selectedIds.has(version.id),
   );
   const selectedVersion = selected[0];
-  if (selected.length === 1 && selectedVersion?.id !== latestVersionId) {
-    const latest = versionsNewestFirst.find(
-      (version) => version.id === latestVersionId,
+  if (selected.length === 1 && selectedVersion?.id !== currentVersionId) {
+    const current = versionsNewestFirst.find(
+      (version) => version.id === currentVersionId,
     );
-    return latest && selectedVersion ? [selectedVersion, latest] : null;
+    if (!current || !selectedVersion) return null;
+    const selectedIndex = versionsNewestFirst.indexOf(selectedVersion);
+    const currentIndex = versionsNewestFirst.indexOf(current);
+    return selectedIndex < currentIndex
+      ? [current, selectedVersion]
+      : [selectedVersion, current];
   }
   if (selected.length !== 2) return null;
 

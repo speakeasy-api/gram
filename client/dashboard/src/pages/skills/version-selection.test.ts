@@ -1,6 +1,9 @@
 import type { SkillVersion } from "@gram/client/models/components/skillversion.js";
 import { describe, expect, it } from "vitest";
-import { selectDiffVersions } from "./version-selection";
+import {
+  selectDiffVersions,
+  versionChangeDirection,
+} from "./version-selection";
 
 function version(id: string): SkillVersion {
   return {
@@ -19,6 +22,31 @@ function version(id: string): SkillVersion {
   };
 }
 
+describe("versionChangeDirection", () => {
+  const current = version("middle");
+
+  it("uses creation order to distinguish rollbacks from roll-forwards", () => {
+    expect(
+      versionChangeDirection(
+        { ...version("older"), createdAt: new Date("2026-07-15T00:00:00Z") },
+        current,
+      ),
+    ).toBe("backward");
+    expect(
+      versionChangeDirection(
+        { ...version("newer"), createdAt: new Date("2026-07-17T00:00:00Z") },
+        current,
+      ),
+    ).toBe("forward");
+  });
+
+  it("matches the API id ordering when creation times tie", () => {
+    expect(versionChangeDirection(version("lower"), current)).toBe("backward");
+    expect(versionChangeDirection(version("newer"), current)).toBe("forward");
+    expect(versionChangeDirection(current, current)).toBeNull();
+  });
+});
+
 describe("selectDiffVersions", () => {
   const newest = version("newest");
   const middle = version("middle");
@@ -34,9 +62,15 @@ describe("selectDiffVersions", () => {
     ).toEqual([oldest, middle]);
   });
 
-  it("compares one selected older version with latest", () => {
+  it("compares one selected older version with current", () => {
     expect(
       selectDiffVersions(newestFirst, new Set(["middle"]), "newest"),
+    ).toEqual([middle, newest]);
+  });
+
+  it("compares one selected newer version with current", () => {
+    expect(
+      selectDiffVersions(newestFirst, new Set(["newest"]), "middle"),
     ).toEqual([middle, newest]);
   });
 });
