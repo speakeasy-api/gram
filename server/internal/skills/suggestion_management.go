@@ -110,10 +110,10 @@ func (s *Service) approveSuggestion(
 	logger *slog.Logger,
 	suggestionID uuid.UUID,
 	editedContent *string,
-	changeID *uuid.UUID,
+	changeIDs []uuid.UUID,
 ) (approval suggestionApproval, err error) {
-	if changeID != nil && editedContent != nil {
-		return approval, oops.E(oops.CodeBadRequest, nil, "cannot take a single proposed change and edited content together")
+	if len(changeIDs) > 0 && editedContent != nil {
+		return approval, oops.E(oops.CodeBadRequest, nil, "cannot take a subset of proposed changes and edited content together")
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -161,7 +161,7 @@ func (s *Service) approveSuggestion(
 			return approval, oops.E(oops.CodeUnexpected, listErr, "load skill suggestion changes for approval").LogError(ctx, logger)
 		}
 		approval.evidence.Changes = changes
-		content, _, err = approvalContent(details.BaseContent, changes, changeID)
+		content, _, err = approvalContent(details.BaseContent, changes, changeIDs)
 		if err != nil {
 			return approval, err
 		}
@@ -246,7 +246,7 @@ func (s *Service) approveSuggestion(
 	approval.evidence.Changes = changes
 	var remaining []repo.ListSkillEditSuggestionChangesRow
 	if editedContent == nil {
-		content, remaining, err = approvalContent(base.BaseContent, changes, changeID)
+		content, remaining, err = approvalContent(base.BaseContent, changes, changeIDs)
 		if err != nil {
 			return approval, err
 		}
@@ -265,19 +265,19 @@ func (s *Service) approveSuggestion(
 		return approval, oops.E(oops.CodeUnexpected, err, "parse validated skill suggestion").LogError(ctx, logger)
 	}
 
-	// Taking one change leaves the suggestion open carrying the rest. Writing
+	// Taking a subset leaves the suggestion open carrying the rest. Writing
 	// the remainder before the version exists lets recordVersion's replay
 	// repoint it at the version this creates; closing it first, as a whole
 	// approval does, is what keeps that replay off an approval's own work.
 	var approved repo.SkillEditSuggestion
 	if len(remaining) > 0 {
-		// Drop only the change being taken. The rest keep their own rationale
+		// Drop only the changes being taken. The rest keep their own rationale
 		// and evidence, and recordVersion's replay rebases them onto the
 		// version this creates.
-		if err := queries.DeleteSkillEditSuggestionChange(ctx, repo.DeleteSkillEditSuggestionChangeParams{
-			ProjectID: *authCtx.ProjectID, ID: *changeID,
+		if err := queries.DeleteSkillEditSuggestionChangesByIDs(ctx, repo.DeleteSkillEditSuggestionChangesByIDsParams{
+			ProjectID: *authCtx.ProjectID, Ids: changeIDs,
 		}); err != nil {
-			return approval, oops.E(oops.CodeUnexpected, err, "drop the approved skill suggestion change").LogError(ctx, logger)
+			return approval, oops.E(oops.CodeUnexpected, err, "drop the approved skill suggestion changes").LogError(ctx, logger)
 		}
 		approved = suggestion
 	} else {
@@ -362,47 +362,51 @@ func (s *Service) approveSuggestion(
 }
 
 // approvalContent resolves what a reviewer is taking from a suggestion: every
-// proposed change, or a single one with the rest left to propose. Each change
-// applies to what the changes before it produce, so taking one on its own
-// replays only that edit onto the current manifest.
+// proposed change, or a subset with the rest left to propose. Each change
+// applies to what the changes before it produce, so a subset replays only the
+// taken edits, in their proposed order, onto the current manifest.
 func approvalContent(
 	baseContent string,
 	changes []repo.ListSkillEditSuggestionChangesRow,
-	changeID *uuid.UUID,
+	changeIDs []uuid.UUID,
 ) (string, []repo.ListSkillEditSuggestionChangesRow, error) {
 	if len(changes) == 0 {
 		return "", nil, oops.E(oops.CodeConflict, nil, "skill suggestion no longer proposes any changes")
 	}
 
-	if changeID == nil {
-		content := baseContent
+	requested := make(map[uuid.UUID]struct{}, len(changeIDs))
+	for _, id := range changeIDs {
+		requested[id] = struct{}{}
+	}
+
+	taken := changes
+	var remaining []repo.ListSkillEditSuggestionChangesRow
+	if len(changeIDs) > 0 {
+		taken = make([]repo.ListSkillEditSuggestionChangesRow, 0, len(requested))
+		remaining = make([]repo.ListSkillEditSuggestionChangesRow, 0, len(changes))
 		for _, change := range changes {
-			applied, err := skilldiff.Apply(content, change.ProposedDiff)
-			if err != nil {
-				return "", nil, oops.E(oops.CodeConflict, nil, "skill suggestion no longer applies to its base version")
+			if _, ok := requested[change.ID]; ok {
+				taken = append(taken, change)
+				delete(requested, change.ID)
+				continue
 			}
-			content = applied
+			remaining = append(remaining, change)
 		}
-
-		return content, nil, nil
-	}
-
-	var taken *repo.ListSkillEditSuggestionChangesRow
-	remaining := make([]repo.ListSkillEditSuggestionChangesRow, 0, len(changes))
-	for i, change := range changes {
-		if change.ID == *changeID {
-			taken = &changes[i]
-			continue
+		if len(requested) > 0 {
+			return "", nil, oops.E(oops.CodeConflict, nil, "a selected proposed change is no longer part of this suggestion")
 		}
-		remaining = append(remaining, change)
-	}
-	if taken == nil {
-		return "", nil, oops.E(oops.CodeConflict, nil, "that proposed change is no longer part of this suggestion")
 	}
 
-	content, err := skilldiff.Apply(baseContent, taken.ProposedDiff)
-	if err != nil {
-		return "", nil, oops.E(oops.CodeConflict, nil, "that proposed change no longer applies to the current skill")
+	content := baseContent
+	for _, change := range taken {
+		applied, err := skilldiff.Apply(content, change.ProposedDiff)
+		if err != nil {
+			if len(changeIDs) > 0 {
+				return "", nil, oops.E(oops.CodeConflict, nil, "a selected proposed change no longer applies to the current skill")
+			}
+			return "", nil, oops.E(oops.CodeConflict, nil, "skill suggestion no longer applies to its base version")
+		}
+		content = applied
 	}
 
 	return content, remaining, nil
@@ -418,16 +422,18 @@ func (s *Service) ApproveSuggestion(ctx context.Context, payload *gen.ApproveSug
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill suggestion id")
 	}
 
-	var changeID *uuid.UUID
-	if payload.ChangeID != nil {
-		parsed, parseErr := uuid.Parse(*payload.ChangeID)
+	// Duplicates are harmless: approvalContent resolves membership through a
+	// set and the taken changes are deleted with an ANY match.
+	changeIDs := make([]uuid.UUID, 0, len(payload.ChangeIds))
+	for _, value := range payload.ChangeIds {
+		parsed, parseErr := uuid.Parse(value)
 		if parseErr != nil {
 			return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill suggestion change id")
 		}
-		changeID = &parsed
+		changeIDs = append(changeIDs, parsed)
 	}
 
-	approval, err := s.approveSuggestion(ctx, authCtx, logger, suggestionID, payload.Content, changeID)
+	approval, err := s.approveSuggestion(ctx, authCtx, logger, suggestionID, payload.Content, changeIDs)
 	if err != nil {
 		return nil, err
 	}
