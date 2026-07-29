@@ -110,6 +110,11 @@ export function HooksEmptyState({
         description="Tell us which AI agent your team uses. We'll use your feedback to prioritize new integrations."
         actionType="hooks_agent_integration"
         icon={Workflow}
+        requestInput={{
+          label: "AI agent",
+          placeholder: "e.g. GitHub Copilot",
+          telemetryField: "requested_agent",
+        }}
       />
     </>
   );
