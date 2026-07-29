@@ -284,6 +284,7 @@ function InsightsContent({
       </div>
 
       <ScoredSessions
+        key={skillId}
         skillId={skillId}
         efficacy={efficacy}
         canReadChats={canReadChats}
