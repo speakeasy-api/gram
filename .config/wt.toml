@@ -45,6 +45,12 @@ nuke = "mise run nuke"
 [list]
 url = "https://localhost:{{ vars.siteport | default('5173') }}"
 
+# `wt status` — one line per worktree: is its stack up, and where. The built-in
+# table can't express this: liveness is only in `url_active` in the JSON, not
+# in any column template.
+[aliases]
+status = "mise run git:workstatus"
+
 #
 # ## Dev server URL
 #
