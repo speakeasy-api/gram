@@ -80,6 +80,19 @@ describe("DemoBookingFlow", () => {
     expect(embed.getAttribute("data-cal-company")).toBe("");
   });
 
+  it("footnotes the details it handed the embed", () => {
+    render(<DemoBookingFlow />);
+    expect(
+      screen.getByText(/jane@acme\.com · Acme Inc/, { exact: false }),
+    ).toBeTruthy();
+  });
+
+  it("drops the footnote when the session has nothing to prefill", () => {
+    sessionHolder.current = null;
+    render(<DemoBookingFlow />);
+    expect(screen.queryByText(/Details prefilled/)).toBeNull();
+  });
+
   it("fires booked_demo on a Cal bookingSuccessful message", () => {
     render(<DemoBookingFlow />);
 
