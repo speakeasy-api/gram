@@ -45,7 +45,6 @@ type CustomDomainHealth struct {
 	expectedTarget string
 	emails         *email.Service
 	siteURL        *url.URL
-	dryRun         bool
 }
 
 type ListCustomDomainsForHealthCheckArgs struct {
@@ -72,6 +71,33 @@ type NotifyCustomDomainUnhealthyArgs struct {
 	CheckedAt      time.Time
 }
 
+type AutoDisableCustomDomainArgs struct {
+	CustomDomainID  uuid.UUID
+	OrganizationID  string
+	Domain          string
+	Issue           customdomains.HealthIssue
+	CheckedAt       time.Time
+	IngressName     string
+	CertSecretName  string
+	ProvisionerKind k8s.ProvisionerKind
+}
+
+type CustomDomainHealthCheckResult struct {
+	UnhealthyNotification NotifyCustomDomainUnhealthyArgs
+	AutoDisable           AutoDisableCustomDomainArgs
+}
+
+type customDomainAdminNotification struct {
+	CustomDomainID uuid.UUID
+	OrganizationID string
+	Domain         string
+	Issue          customdomains.HealthIssue
+	IssueMessage   string
+	CheckedAt      time.Time
+	IdempotencyKey string
+	Disabled       bool
+}
+
 func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure CustomDomainInfrastructureChecker, expectedTarget string, emails *email.Service, siteURL *url.URL, guardianPolicy *guardian.Policy) *CustomDomainHealth {
 	probe := func(ctx context.Context, domain string) error {
 		return errors.New("custom domain https probe is not configured")
@@ -90,12 +116,6 @@ func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure
 		expectedTarget: expectedTarget,
 		emails:         emails,
 		siteURL:        siteURL,
-		// The first release observes only: checks run and log their findings,
-		// including the admin notifications that would be sent, but no health
-		// state is persisted and no email goes out. Because dry run leaves no
-		// trace in the database, flipping this to false later lets the next
-		// sweep re-derive state and notify as if it were the first ever check.
-		dryRun: true,
 	}
 }
 
@@ -106,11 +126,6 @@ func (c *CustomDomainHealth) SetResolver(resolver dns.Resolver) {
 // SetProbe replaces the HTTPS probe. Intended for testing.
 func (c *CustomDomainHealth) SetProbe(probe func(ctx context.Context, domain string) error) {
 	c.probe = probe
-}
-
-// SetDryRun toggles observation-only mode. Intended for testing.
-func (c *CustomDomainHealth) SetDryRun(dryRun bool) {
-	c.dryRun = dryRun
 }
 
 func (c *CustomDomainHealth) List(ctx context.Context, args ListCustomDomainsForHealthCheckArgs) ([]CustomDomainHealthCheckTarget, error) {
@@ -131,12 +146,12 @@ func (c *CustomDomainHealth) List(ctx context.Context, args ListCustomDomainsFor
 	return targets, nil
 }
 
-func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHealthArgs) (NotifyCustomDomainUnhealthyArgs, error) {
-	var noNotification NotifyCustomDomainUnhealthyArgs
+func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHealthArgs) (CustomDomainHealthCheckResult, error) {
+	var result CustomDomainHealthCheckResult
 
 	if c.expectedTarget == "" {
 		c.logger.WarnContext(ctx, "skipping custom domain health check: expected target CNAME not configured")
-		return noNotification, nil
+		return result, nil
 	}
 
 	repository := customdomainsrepo.New(c.db)
@@ -145,10 +160,10 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		OrganizationID: args.OrganizationID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return noNotification, nil
+		return result, nil
 	}
 	if err != nil {
-		return noNotification, fmt.Errorf("get custom domain for health check: %w", err)
+		return result, fmt.Errorf("get custom domain for health check: %w", err)
 	}
 
 	preserveCertificateExpiry := false
@@ -172,7 +187,7 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 	switch {
 	case routingErr != nil:
 		if !isFinalHealthCheckAttempt(ctx) {
-			return noNotification, fmt.Errorf("check custom domain routing: %w", routingErr)
+			return result, fmt.Errorf("check custom domain routing: %w", routingErr)
 		}
 		c.logger.WarnContext(ctx, "custom domain routing health check failed", attr.SlogURLDomain(domain.Domain), attr.SlogError(routingErr))
 		observation.Status = customdomains.HealthStatusUnhealthy
@@ -191,7 +206,7 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		})
 		if infrastructureErr != nil {
 			if !isFinalHealthCheckAttempt(ctx) {
-				return noNotification, fmt.Errorf("check custom domain infrastructure: %w", infrastructureErr)
+				return result, fmt.Errorf("check custom domain infrastructure: %w", infrastructureErr)
 			}
 			c.logger.WarnContext(ctx, "custom domain infrastructure health check failed", attr.SlogURLDomain(domain.Domain), attr.SlogError(infrastructureErr))
 			observation.Status = customdomains.HealthStatusUnhealthy
@@ -206,36 +221,7 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		}
 	}
 
-	if c.dryRun {
-		// Observation-only release: report what a live check would have done
-		// without flipping status, bumping consecutive_failures, or touching
-		// checked_at. Since nothing persists, an unhealthy domain re-reports a
-		// would-be transition on every sweep — that recurring log line is the
-		// point of the dry run.
-		current := customDomainHealthState(domain)
-		if preserveCertificateExpiry {
-			observation.CertificateExpiresAt = current.CertificateExpiresAt
-		}
-		next := customdomains.ReconcileHealthState(current, observation, args.CheckedAt)
-		c.logger.InfoContext(ctx, "dry run: observed custom domain health",
-			attr.SlogURLDomain(domain.Domain),
-			attr.SlogOrganizationID(args.OrganizationID),
-			attr.SlogCustomDomainHealthStatus(string(next.Status)),
-			attr.SlogCustomDomainHealthIssue(string(next.Issue)),
-		)
-		if customdomains.ShouldNotifyUnhealthyTransition(current, next) {
-			return NotifyCustomDomainUnhealthyArgs{
-				CustomDomainID: domain.ID,
-				OrganizationID: args.OrganizationID,
-				Domain:         domain.Domain,
-				Issue:          next.Issue,
-				CheckedAt:      args.CheckedAt,
-			}, nil
-		}
-		return noNotification, nil
-	}
-
-	var notification NotifyCustomDomainUnhealthyArgs
+	var next customdomains.HealthState
 	if err := pgx.BeginFunc(ctx, c.db, func(tx pgx.Tx) error {
 		repository := customdomainsrepo.New(tx)
 		lockedDomain, err := repository.GetCustomDomainByIDAndOrganizationForHealthUpdate(ctx, customdomainsrepo.GetCustomDomainByIDAndOrganizationForHealthUpdateParams{
@@ -252,10 +238,10 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		if preserveCertificateExpiry {
 			observation.CertificateExpiresAt = current.CertificateExpiresAt
 		}
-		next := customdomains.ReconcileHealthState(current, observation, args.CheckedAt)
+		next = customdomains.ReconcileHealthState(current, observation, args.CheckedAt)
 		switch {
 		case customdomains.ShouldNotifyUnhealthyTransition(current, next):
-			notification = NotifyCustomDomainUnhealthyArgs{
+			result.UnhealthyNotification = NotifyCustomDomainUnhealthyArgs{
 				CustomDomainID: domain.ID,
 				OrganizationID: args.OrganizationID,
 				Domain:         domain.Domain,
@@ -267,12 +253,24 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 			// reporting it; re-emit the same args so the retry returns the same
 			// answer. The notify workflow ID and the email idempotency key both
 			// derive from CheckedAt, so nothing is delivered twice.
-			notification = NotifyCustomDomainUnhealthyArgs{
+			result.UnhealthyNotification = NotifyCustomDomainUnhealthyArgs{
 				CustomDomainID: domain.ID,
 				OrganizationID: args.OrganizationID,
 				Domain:         domain.Domain,
 				Issue:          current.Issue,
 				CheckedAt:      args.CheckedAt,
+			}
+		}
+		if lockedDomain.Activated && customdomains.ShouldAutoDisable(next) {
+			result.AutoDisable = AutoDisableCustomDomainArgs{
+				CustomDomainID:  domain.ID,
+				OrganizationID:  args.OrganizationID,
+				Domain:          domain.Domain,
+				Issue:           next.Issue,
+				CheckedAt:       args.CheckedAt,
+				IngressName:     lockedDomain.IngressName.String,
+				CertSecretName:  lockedDomain.CertSecretName.String,
+				ProvisionerKind: k8s.ProvisionerKind(lockedDomain.ProvisionerKind),
 			}
 		}
 		_, err = repository.UpdateCustomDomainHealth(ctx, customdomainsrepo.UpdateCustomDomainHealthParams{
@@ -290,15 +288,101 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		}
 		return nil
 	}); err != nil {
-		return noNotification, fmt.Errorf("save custom domain health: %w", err)
+		return result, fmt.Errorf("save custom domain health: %w", err)
 	}
 
-	return notification, nil
+	// One line per check keeps the production health breakdown established
+	// during the observation-only rollout.
+	if next.CheckedAt != nil {
+		c.logger.InfoContext(ctx, "observed custom domain health",
+			attr.SlogURLDomain(domain.Domain),
+			attr.SlogOrganizationID(args.OrganizationID),
+			attr.SlogCustomDomainHealthStatus(string(next.Status)),
+			attr.SlogCustomDomainHealthIssue(string(next.Issue)),
+		)
+	}
+
+	return result, nil
+}
+
+// Deactivate marks a domain inactive after its Kubernetes resources have been
+// removed. It is idempotent so Temporal can safely retry after a committed
+// update whose completion was not recorded.
+func (c *CustomDomainHealth) Deactivate(ctx context.Context, args AutoDisableCustomDomainArgs) (bool, error) {
+	repository := customdomainsrepo.New(c.db)
+	domain, err := repository.GetCustomDomainByIDAndOrganization(ctx, customdomainsrepo.GetCustomDomainByIDAndOrganizationParams{
+		ID:             args.CustomDomainID,
+		OrganizationID: args.OrganizationID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("get custom domain for automatic deactivation: %w", err)
+	}
+	state := customDomainHealthState(domain)
+	if !customdomains.ShouldAutoDisable(state) ||
+		state.CheckedAt == nil ||
+		!state.CheckedAt.Equal(args.CheckedAt) {
+		return false, nil
+	}
+	if !domain.Activated {
+		return true, nil
+	}
+
+	if _, err := repository.DeactivateCustomDomainAfterHealthFailures(ctx, customdomainsrepo.DeactivateCustomDomainAfterHealthFailuresParams{
+		ID:             args.CustomDomainID,
+		OrganizationID: args.OrganizationID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("deactivate unhealthy custom domain: %w", err)
+	}
+
+	c.logger.InfoContext(ctx, "disabled custom domain after prolonged health failure",
+		attr.SlogURLDomain(args.Domain),
+		attr.SlogOrganizationID(args.OrganizationID),
+		attr.SlogCustomDomainHealthIssue(string(args.Issue)),
+	)
+	return true, nil
 }
 
 // NotifyOrgAdmins returns delivery failures for Temporal retry; recipient keys make retries idempotent.
 func (c *CustomDomainHealth) NotifyOrgAdmins(ctx context.Context, args NotifyCustomDomainUnhealthyArgs) error {
-	organizationID := args.OrganizationID
+	return c.notifyOrgAdmins(ctx, customDomainAdminNotification{
+		CustomDomainID: args.CustomDomainID,
+		OrganizationID: args.OrganizationID,
+		Domain:         args.Domain,
+		Issue:          args.Issue,
+		IssueMessage:   customdomains.HealthIssueMessage(args.Issue),
+		CheckedAt:      args.CheckedAt,
+		IdempotencyKey: "custom-domain-unhealthy",
+		Disabled:       false,
+	})
+}
+
+// NotifyDisabledOrgAdmins sends the final deactivation notice. Delivery
+// failures are returned for Temporal retry; recipient keys make retries
+// idempotent.
+func (c *CustomDomainHealth) NotifyDisabledOrgAdmins(ctx context.Context, args AutoDisableCustomDomainArgs) error {
+	return c.notifyOrgAdmins(ctx, customDomainAdminNotification{
+		CustomDomainID: args.CustomDomainID,
+		OrganizationID: args.OrganizationID,
+		Domain:         args.Domain,
+		Issue:          args.Issue,
+		IssueMessage: fmt.Sprintf(
+			"This custom domain stayed unhealthy for %d consecutive checks and was disabled. Fix its DNS or certificate configuration, then reverify it to reactivate.",
+			customdomains.CustomDomainAutoDisableFailureThreshold,
+		),
+		CheckedAt:      args.CheckedAt,
+		IdempotencyKey: "custom-domain-disabled",
+		Disabled:       true,
+	})
+}
+
+func (c *CustomDomainHealth) notifyOrgAdmins(ctx context.Context, notification customDomainAdminNotification) error {
+	organizationID := notification.OrganizationID
 	repository := customdomainsrepo.New(c.db)
 
 	users, err := repository.ListOrganizationUsersForHealthNotification(ctx, organizationID)
@@ -344,17 +428,14 @@ func (c *CustomDomainHealth) NotifyOrgAdmins(ctx context.Context, args NotifyCus
 			continue
 		}
 		seen[emailKey] = struct{}{}
-		if c.dryRun {
-			continue
-		}
 		tmpl := email.CustomDomainUnhealthy{
 			Email:        user.Email,
-			Domain:       args.Domain,
-			IssueMessage: customdomains.HealthIssueMessage(args.Issue),
+			Domain:       notification.Domain,
+			IssueMessage: notification.IssueMessage,
 			DomainLink:   domainLink,
 		}
 		// CheckedAt is stable across retries; hashing satisfies Loops's 100-character key limit.
-		digest := sha256.Sum256(fmt.Appendf(nil, "custom-domain-unhealthy:%s:%d:%s", args.CustomDomainID, args.CheckedAt.UnixMicro(), emailKey))
+		digest := sha256.Sum256(fmt.Appendf(nil, "%s:%s:%d:%s", notification.IdempotencyKey, notification.CustomDomainID, notification.CheckedAt.UnixMicro(), emailKey))
 		if err := c.emails.SendIdempotent(ctx, user.Email, hex.EncodeToString(digest[:]), tmpl); err != nil {
 			notificationErrors = append(notificationErrors, fmt.Errorf("send custom domain health notification: %w", err))
 		}
@@ -363,17 +444,19 @@ func (c *CustomDomainHealth) NotifyOrgAdmins(ctx context.Context, args NotifyCus
 	if err := errors.Join(notificationErrors...); err != nil {
 		return err
 	}
-	if c.dryRun {
-		// Aggregate line only after every recipient resolved cleanly, so a
-		// retried activity cannot log a misleading partial count. Addresses
-		// stay out of the logs.
-		c.logger.InfoContext(ctx, "dry run: would email org admins about unhealthy custom domain",
-			attr.SlogURLDomain(args.Domain),
-			attr.SlogOrganizationID(organizationID),
-			attr.SlogCustomDomainHealthIssue(string(args.Issue)),
-			attr.SlogCustomDomainNotifyRecipientCount(len(seen)),
-		)
+	// Aggregate only after every recipient resolved cleanly. A zero count is
+	// intentionally logged: it identifies organizations with no reachable
+	// administrators without exposing addresses.
+	message := "emailed org admins about unhealthy custom domain"
+	if notification.Disabled {
+		message = "emailed org admins about disabled custom domain"
 	}
+	c.logger.InfoContext(ctx, message,
+		attr.SlogURLDomain(notification.Domain),
+		attr.SlogOrganizationID(organizationID),
+		attr.SlogCustomDomainHealthIssue(string(notification.Issue)),
+		attr.SlogCustomDomainNotifyRecipientCount(len(seen)),
+	)
 	return nil
 }
 

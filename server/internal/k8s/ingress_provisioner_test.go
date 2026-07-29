@@ -154,4 +154,8 @@ func TestIngressProvisioner_Delete(t *testing.T) {
 
 	_, err = cs.CoreV1().Secrets(ingressTestNamespace).Get(ctx, result.SecretName, metav1.GetOptions{})
 	require.True(t, k8serrors.IsNotFound(err))
+
+	// Temporal may retry after a successful deletion whose completion was not
+	// recorded. The deletion path must remain idempotent.
+	require.NoError(t, p.Delete(ctx, result.ResourceName, result.SecretName))
 }

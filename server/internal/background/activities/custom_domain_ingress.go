@@ -143,10 +143,8 @@ func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressAr
 			return oops.E(oops.CodeUnexpected, err, "failed to verify custom domain resource exists").LogError(ctx, c.logger)
 		}
 
-		_, err = c.domains.UpdateCustomDomain(ctx, customdomainsRepo.UpdateCustomDomainParams{
+		_, err = c.domains.ActivateCustomDomain(ctx, customdomainsRepo.ActivateCustomDomainParams{
 			ID:              customDomain.ID,
-			Verified:        true,
-			Activated:       true,
 			IngressName:     conv.ToPGText(result.ResourceName),
 			CertSecretName:  conv.PtrToPGText(conv.PtrEmpty(result.SecretName)),
 			ProvisionerKind: string(kind),

@@ -12,6 +12,10 @@ const (
 	HealthStatusUnknown   HealthStatus = "unknown"
 	HealthStatusHealthy   HealthStatus = "healthy"
 	HealthStatusUnhealthy HealthStatus = "unhealthy"
+
+	// CustomDomainAutoDisableFailureThreshold is the number of consecutive,
+	// customer-actionable daily failures allowed before routing is disabled.
+	CustomDomainAutoDisableFailureThreshold int32 = 14
 )
 
 type HealthIssue string
@@ -74,6 +78,12 @@ func ShouldNotifyUnhealthyTransition(current, next HealthState) bool {
 	return current.Issue == HealthIssueCheckFailed
 }
 
+func ShouldAutoDisable(state HealthState) bool {
+	return state.Status == HealthStatusUnhealthy &&
+		state.Issue != HealthIssueCheckFailed &&
+		state.ConsecutiveFailures >= CustomDomainAutoDisableFailureThreshold
+}
+
 // IsRetryOfUnhealthyTransition reports whether the persisted state shows that
 // an unhealthy transition was already committed by a check at exactly
 // checkedAt. The check activity can commit its transition and then die before
@@ -121,6 +131,9 @@ func ReconcileHealthState(current HealthState, observation HealthObservation, ch
 		// IsRetryOfUnhealthyTransition recognize a retried commit of this
 		// (notifying) transition.
 		if current.Issue == HealthIssueCheckFailed && next.Issue != HealthIssueCheckFailed {
+			// Gram-side probe failures do not count toward the customer-actionable
+			// failure threshold.
+			next.ConsecutiveFailures = 1
 			next.UnhealthySince = &checkedAt
 		}
 		if next.UnhealthySince == nil {

@@ -109,7 +109,7 @@ func TestReconcileHealthStateAnchorsUnhealthySinceWhenCheckFailedResolves(t *tes
 	}, secondCheck)
 
 	require.Equal(t, HealthIssueDNSNotFound, state.Issue)
-	require.Equal(t, int32(2), state.ConsecutiveFailures)
+	require.Equal(t, int32(1), state.ConsecutiveFailures)
 	require.Equal(t, &secondCheck, state.UnhealthySince)
 	require.True(t, IsRetryOfUnhealthyTransition(state, secondCheck),
 		"a retried commit of this transition must be recognizable")
@@ -245,6 +245,36 @@ func TestIsRetryOfUnhealthyTransition(t *testing.T) {
 		Status:    HealthStatusHealthy,
 		CheckedAt: &checkedAt,
 	}, checkedAt))
+}
+
+func TestShouldAutoDisableAtActionableFailureThreshold(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, ShouldAutoDisable(HealthState{
+		Status:              HealthStatusUnhealthy,
+		Issue:               HealthIssueDNSNotFound,
+		ConsecutiveFailures: CustomDomainAutoDisableFailureThreshold,
+	}))
+}
+
+func TestShouldAutoDisableBelowThresholdStaysActive(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, ShouldAutoDisable(HealthState{
+		Status:              HealthStatusUnhealthy,
+		Issue:               HealthIssueCertificateExpired,
+		ConsecutiveFailures: CustomDomainAutoDisableFailureThreshold - 1,
+	}))
+}
+
+func TestShouldAutoDisableExcludesCheckFailed(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, ShouldAutoDisable(HealthState{
+		Status:              HealthStatusUnhealthy,
+		Issue:               HealthIssueCheckFailed,
+		ConsecutiveFailures: CustomDomainAutoDisableFailureThreshold + 10,
+	}))
 }
 
 func TestHealthIssueMessageCertificateProblemsAreManagedByGram(t *testing.T) {

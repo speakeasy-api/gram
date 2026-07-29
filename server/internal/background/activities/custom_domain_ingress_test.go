@@ -2,11 +2,14 @@ package activities_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -110,11 +113,23 @@ func TestCustomDomainIngress_Setup_Ingress_UpdatesDB(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = customdomainsRepo.New(conn).CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
+	created, err := customdomainsRepo.New(conn).CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
 		OrganizationID:  orgID,
 		Domain:          domain,
 		ProvisionerKind: "ingress",
 		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+	checkedAt := time.Now().UTC()
+	_, err = customdomainsRepo.New(conn).UpdateCustomDomainHealth(ctx, customdomainsRepo.UpdateCustomDomainHealthParams{
+		HealthStatus:         conv.ToPGText(string(customdomains.HealthStatusUnhealthy)),
+		HealthIssue:          conv.ToPGText(string(customdomains.HealthIssueDNSNotFound)),
+		CheckedAt:            conv.ToPGTimestamptz(checkedAt),
+		UnhealthySince:       conv.PtrToPGTimestamptz(&checkedAt),
+		CertificateExpiresAt: conv.PtrToPGTimestamptz(nil),
+		ConsecutiveFailures:  pgtype.Int4{Int32: customdomains.CustomDomainAutoDisableFailureThreshold, Valid: true},
+		ID:                   created.ID,
+		OrganizationID:       orgID,
 	})
 	require.NoError(t, err)
 
@@ -142,6 +157,11 @@ func TestCustomDomainIngress_Setup_Ingress_UpdatesDB(t *testing.T) {
 	require.True(t, row.Verified)
 	require.Equal(t, "ingress", row.ProvisionerKind)
 	require.True(t, row.IngressName.Valid, "IngressName must be set after setup")
+	require.Equal(t, string(customdomains.HealthStatusUnknown), row.HealthStatus.String)
+	require.False(t, row.HealthIssue.Valid)
+	require.False(t, row.HealthCheckedAt.Valid)
+	require.False(t, row.UnhealthySince.Valid)
+	require.Equal(t, int32(0), row.ConsecutiveFailures.Int32)
 }
 
 func TestCustomDomainIngress_Reapply_AppliesAllowlist(t *testing.T) {
