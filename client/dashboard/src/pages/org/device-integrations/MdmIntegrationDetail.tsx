@@ -224,11 +224,17 @@ function MdmIntegrationDetailInner({
   );
 }
 
-// The headline number an admin acts on: of the devices this vendor manages,
-// how many have an assigned user with a live agent heartbeat. Floors so the
-// headline never claims 100% while any device is uncovered.
+// The headline number an admin acts on. The sentence follows the server's
+// attestation mode rather than guessing: under device-level matching the
+// active bucket really does mean the machine ran the agent, but under
+// user-level matching it only means its assigned user did somewhere, and
+// stating the stronger claim there would overclaim. Floors so the headline
+// never claims 100% while any device is uncovered.
 function coverageHeadlineCopy(coverage: DeviceIntegrationCoverage): string {
   const noun = coverage.totalDevices === 1 ? "device" : "devices";
+  if (coverage.attestation === "device") {
+    return `of ${coverage.totalDevices} managed ${noun} are running the agent`;
+  }
   return `of ${coverage.totalDevices} managed ${noun} have an assigned user with an active agent`;
 }
 

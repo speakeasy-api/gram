@@ -30,10 +30,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -69,6 +71,50 @@ type Service struct {
 	repo        *repo.Queries
 	guardian    *guardian.Policy
 	syncTrigger SyncTrigger
+	features    feature.Provider
+}
+
+// deviceLevelCoverage reports whether this org matches coverage on hardware
+// serials rather than assigned-user emails. Resolved once per request and
+// passed to every coverage query in it, so the counts, the device list, and
+// its bucket filter can never disagree about which mode they are in.
+//
+// Degrades to user-level on any provider error: showing the pre-existing,
+// weaker-but-correct attestation beats failing an org's coverage page.
+func (s *Service) deviceLevelCoverage(ctx context.Context, orgID string) bool {
+	if s.features == nil {
+		return false
+	}
+	// Targeted by PostHog organization group (org slug), the same way the
+	// dashboard evaluates it and matching the FlagBudgets rollout.
+	var groups map[string]string
+	if org, err := orgRepo.New(s.db).GetOrganizationMetadata(ctx, orgID); err != nil {
+		s.logger.WarnContext(ctx, "resolve organization slug for device-level coverage flag",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(orgID),
+		)
+	} else {
+		groups = feature.OrgProjectGroups(org.Slug, "")
+	}
+
+	enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagDeviceLevelCoverage, orgID, groups)
+	if err != nil {
+		s.logger.WarnContext(ctx, "device-level coverage flag lookup failed, falling back to user-level",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(orgID),
+		)
+		return false
+	}
+	return enabled
+}
+
+// attestationMode names the claim the returned counts support, so clients do
+// not have to infer it from the bucket values.
+func attestationMode(deviceLevel bool) string {
+	if deviceLevel {
+		return "device"
+	}
+	return "user"
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -84,6 +130,7 @@ func NewService(
 	encryptionClient *encryption.Client,
 	guardianPolicy *guardian.Policy,
 	syncTrigger SyncTrigger,
+	features feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("deviceintegrations.api"))
 	return &Service{
@@ -97,6 +144,7 @@ func NewService(
 		repo:        repo.New(db),
 		guardian:    guardianPolicy,
 		syncTrigger: syncTrigger,
+		features:    features,
 	}
 }
 
@@ -605,6 +653,7 @@ func (s *Service) ListManagedDevices(ctx context.Context, payload *gen.ListManag
 
 	rows, err := s.repo.ListManagedDevices(ctx, repo.ListManagedDevicesParams{
 		ActiveCutoff:   conv.ToPGTimestamptz(time.Now().UTC().Add(-activeWindow)),
+		DeviceLevel:    s.deviceLevelCoverage(ctx, authCtx.ActiveOrganizationID),
 		OrganizationID: authCtx.ActiveOrganizationID,
 		Provider:       conv.PtrToPGTextEmpty(payload.Provider),
 		CursorID:       cursor,
@@ -639,8 +688,14 @@ func (s *Service) GetCoverage(ctx context.Context, payload *gen.GetCoveragePaylo
 		return nil, err
 	}
 
+	// Resolved once and shared: the bucket counts and the unmanaged-users tile
+	// sit side by side on the same page, so evaluating the flag twice could
+	// render a device as covered next to a tile calling its user unmanaged.
+	deviceLevel := s.deviceLevelCoverage(ctx, authCtx.ActiveOrganizationID)
+
 	counts, err := s.repo.GetCoverageCounts(ctx, repo.GetCoverageCountsParams{
 		ActiveCutoff:   conv.ToPGTimestamptz(time.Now().UTC().Add(-activeWindow)),
+		DeviceLevel:    deviceLevel,
 		OrganizationID: authCtx.ActiveOrganizationID,
 		Provider:       conv.PtrToPGTextEmpty(payload.Provider),
 	})
@@ -648,6 +703,7 @@ func (s *Service) GetCoverage(ctx context.Context, payload *gen.GetCoveragePaylo
 		return nil, oops.E(oops.CodeUnexpected, err, "compute device integration coverage")
 	}
 	unmanaged, err := s.repo.CountUnmanagedAgentUsers(ctx, repo.CountUnmanagedAgentUsersParams{
+		DeviceLevel:    deviceLevel,
 		OrganizationID: authCtx.ActiveOrganizationID,
 		Provider:       conv.PtrToPGTextEmpty(payload.Provider),
 	})
@@ -658,8 +714,10 @@ func (s *Service) GetCoverage(ctx context.Context, payload *gen.GetCoveragePaylo
 	return &gen.DeviceIntegrationCoverage{
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		ActiveWindowMinutes: int(activeWindow / time.Minute),
+		Attestation:         attestationMode(deviceLevel),
 		AgentActive:         counts.AgentActive,
 		AgentStale:          counts.AgentStale,
+		AgentOtherDevice:    counts.AgentOtherDevice,
 		NoAgent:             counts.NoAgent,
 		NoEmail:             counts.NoEmail,
 		UnresolvedEmail:     counts.UnresolvedEmail,

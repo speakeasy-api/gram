@@ -204,14 +204,22 @@ type ListManagedDevicesResponseBody struct {
 type GetCoverageResponseBody struct {
 	// Organization the coverage describes.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// Freshness window: an assigned user counts as active when their agent
-	// heartbeat is within this many minutes.
+	// Freshness window: an agent counts as active when its heartbeat is within
+	// this many minutes.
 	ActiveWindowMinutes int `form:"active_window_minutes" json:"active_window_minutes" xml:"active_window_minutes"`
+	// Which claim this org's coverage supports. "device": matched on hardware
+	// serial, so an active bucket means THIS machine ran the agent. "user":
+	// matched on assigned-user email, so it means only that the device's assigned
+	// user ran the agent somewhere.
+	Attestation string `form:"attestation" json:"attestation" xml:"attestation"`
 	// Devices whose assigned user has an agent heartbeat within the window.
 	AgentActive int64 `form:"agent_active" json:"agent_active" xml:"agent_active"`
-	// Devices whose assigned user has an agent that went quiet — the drift/disable
-	// case.
+	// Devices with a known agent that went quiet — the drift/disable case.
 	AgentStale int64 `form:"agent_stale" json:"agent_stale" xml:"agent_stale"`
+	// Device-level matching only: devices whose assigned user runs the agent, but
+	// not on this machine. Always 0 under user-level matching, which cannot
+	// distinguish this from agent_active.
+	AgentOtherDevice int64 `form:"agent_other_device" json:"agent_other_device" xml:"agent_other_device"`
 	// Devices whose assigned email resolves to an org member with no agent at all.
 	NoAgent int64 `form:"no_agent" json:"no_agent" xml:"no_agent"`
 	// Devices the MDM reports with no assigned-user email.
@@ -2194,8 +2202,9 @@ type ManagedDeviceResponseBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// Last device check-in as reported by the MDM.
 	MdmLastCheckInAt *string `form:"mdm_last_check_in_at,omitempty" json:"mdm_last_check_in_at,omitempty" xml:"mdm_last_check_in_at,omitempty"`
-	// The assigned user's latest device-agent heartbeat. Omitted when the user has
-	// never synced an agent.
+	// The device-agent heartbeat that classified this device: the machine's own
+	// under device-level matching, otherwise its assigned user's. Omitted when no
+	// agent has ever synced.
 	AgentLastSeenAt *string `form:"agent_last_seen_at,omitempty" json:"agent_last_seen_at,omitempty" xml:"agent_last_seen_at,omitempty"`
 	// Coverage classification for the device.
 	CoverageBucket string `form:"coverage_bucket" json:"coverage_bucket" xml:"coverage_bucket"`
@@ -2365,8 +2374,10 @@ func NewGetCoverageResponseBody(res *deviceintegrations.DeviceIntegrationCoverag
 	body := &GetCoverageResponseBody{
 		OrganizationID:      res.OrganizationID,
 		ActiveWindowMinutes: res.ActiveWindowMinutes,
+		Attestation:         res.Attestation,
 		AgentActive:         res.AgentActive,
 		AgentStale:          res.AgentStale,
+		AgentOtherDevice:    res.AgentOtherDevice,
 		NoAgent:             res.NoAgent,
 		NoEmail:             res.NoEmail,
 		UnresolvedEmail:     res.UnresolvedEmail,

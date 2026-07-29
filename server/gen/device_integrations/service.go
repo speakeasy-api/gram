@@ -111,14 +111,22 @@ type DeviceIntegrationConfig struct {
 type DeviceIntegrationCoverage struct {
 	// Organization the coverage describes.
 	OrganizationID string
-	// Freshness window: an assigned user counts as active when their agent
-	// heartbeat is within this many minutes.
+	// Freshness window: an agent counts as active when its heartbeat is within
+	// this many minutes.
 	ActiveWindowMinutes int
+	// Which claim this org's coverage supports. "device": matched on hardware
+	// serial, so an active bucket means THIS machine ran the agent. "user":
+	// matched on assigned-user email, so it means only that the device's assigned
+	// user ran the agent somewhere.
+	Attestation string
 	// Devices whose assigned user has an agent heartbeat within the window.
 	AgentActive int64
-	// Devices whose assigned user has an agent that went quiet — the drift/disable
-	// case.
+	// Devices with a known agent that went quiet — the drift/disable case.
 	AgentStale int64
+	// Device-level matching only: devices whose assigned user runs the agent, but
+	// not on this machine. Always 0 under user-level matching, which cannot
+	// distinguish this from agent_active.
+	AgentOtherDevice int64
 	// Devices whose assigned email resolves to an org member with no agent at all.
 	NoAgent int64
 	// Devices the MDM reports with no assigned-user email.
@@ -314,8 +322,9 @@ type ManagedDevice struct {
 	UserID *string
 	// Last device check-in as reported by the MDM.
 	MdmLastCheckInAt *string
-	// The assigned user's latest device-agent heartbeat. Omitted when the user has
-	// never synced an agent.
+	// The device-agent heartbeat that classified this device: the machine's own
+	// under device-level matching, otherwise its assigned user's. Omitted when no
+	// agent has ever synced.
 	AgentLastSeenAt *string
 	// Coverage classification for the device.
 	CoverageBucket string

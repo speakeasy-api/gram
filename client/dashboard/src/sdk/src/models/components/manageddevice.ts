@@ -15,6 +15,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 export const CoverageBucket = {
   AgentActive: "agent_active",
   AgentStale: "agent_stale",
+  AgentOtherDevice: "agent_other_device",
   NoAgent: "no_agent",
   NoEmail: "no_email",
   UnresolvedEmail: "unresolved_email",
@@ -30,7 +31,7 @@ export type CoverageBucket = ClosedEnum<typeof CoverageBucket>;
  */
 export type ManagedDevice = {
   /**
-   * The assigned user's latest device-agent heartbeat. Omitted when the user has never synced an agent.
+   * The device-agent heartbeat that classified this device: the machine's own under device-level matching, otherwise its assigned user's. Omitted when no agent has ever synced.
    */
   agentLastSeenAt?: Date | undefined;
   /**

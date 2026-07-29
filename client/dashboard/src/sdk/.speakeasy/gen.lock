@@ -4207,7 +4207,7 @@ examples:
     speakeasy-default-get-device-integration-coverage:
       responses:
         "200":
-          application/json: {"active_window_minutes": 656966, "agent_active": 936181, "agent_stale": 628953, "missing": 482460, "no_agent": 978251, "no_email": 639554, "organization_id": "<id>", "total_devices": 639009, "unmanaged_agent_users": 235041, "unresolved_email": 11818}
+          application/json: {"active_window_minutes": 656966, "agent_active": 936181, "agent_other_device": 656966, "agent_stale": 628953, "attestation": "user", "missing": 482460, "no_agent": 978251, "no_email": 639554, "organization_id": "<id>", "total_devices": 639009, "unmanaged_agent_users": 235041, "unresolved_email": 11818}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

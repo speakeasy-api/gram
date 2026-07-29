@@ -112,11 +112,11 @@ var ManagedDevice = Type("ManagedDevice", func() {
 	Attribute("mdm_last_check_in_at", String, "Last device check-in as reported by the MDM.", func() {
 		Format(FormatDateTime)
 	})
-	Attribute("agent_last_seen_at", String, "The assigned user's latest device-agent heartbeat. Omitted when the user has never synced an agent.", func() {
+	Attribute("agent_last_seen_at", String, "The device-agent heartbeat that classified this device: the machine's own under device-level matching, otherwise its assigned user's. Omitted when no agent has ever synced.", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("coverage_bucket", String, "Coverage classification for the device.", func() {
-		Enum("agent_active", "agent_stale", "no_agent", "no_email", "unresolved_email", "missing")
+		Enum("agent_active", "agent_stale", "agent_other_device", "no_agent", "no_email", "unresolved_email", "missing")
 	})
 	Attribute("missing_since", String, "When the device went absent from the MDM inventory. Omitted while present.", func() {
 		Format(FormatDateTime)
@@ -136,12 +136,20 @@ var ListManagedDevicesResult = Type("ListManagedDevicesResult", func() {
 })
 
 var Coverage = Type("DeviceIntegrationCoverage", func() {
-	Description("Agent-coverage summary across the org's connected MDM inventories. Buckets attest the assigned user's agent (the heartbeat is per user), not the device itself: agent_active means the device's assigned user has a fresh agent heartbeat somewhere.")
-	Required("organization_id", "active_window_minutes", "agent_active", "agent_stale", "no_agent", "no_email", "unresolved_email", "missing", "total_devices", "unmanaged_agent_users")
+	Description("Agent-coverage summary across the org's connected MDM inventories. What a bucket attests depends on the org's matching mode: under device-level matching (hardware serial) agent_active means THIS machine reported in, while under user-level matching it means only that the device's assigned user has a fresh heartbeat somewhere.")
+	Required("organization_id", "active_window_minutes", "attestation", "agent_active", "agent_stale", "agent_other_device", "no_agent", "no_email", "unresolved_email", "missing", "total_devices", "unmanaged_agent_users")
 	Attribute("organization_id", String, "Organization the coverage describes.")
-	Attribute("active_window_minutes", Int, "Freshness window: an assigned user counts as active when their agent heartbeat is within this many minutes.")
+	Attribute("active_window_minutes", Int, "Freshness window: an agent counts as active when its heartbeat is within this many minutes.")
+	// Clients render the coverage percentage as a sentence, and the sentence
+	// that is true depends on the matching mode. Without this they would have
+	// to infer it (agent_other_device > 0 only implies device-level, never
+	// rules it out) and would eventually claim more than the data supports.
+	Attribute("attestation", String, "Which claim this org's coverage supports. \"device\": matched on hardware serial, so an active bucket means THIS machine ran the agent. \"user\": matched on assigned-user email, so it means only that the device's assigned user ran the agent somewhere.", func() {
+		Enum("device", "user")
+	})
 	Attribute("agent_active", Int64, "Devices whose assigned user has an agent heartbeat within the window.")
-	Attribute("agent_stale", Int64, "Devices whose assigned user has an agent that went quiet — the drift/disable case.")
+	Attribute("agent_stale", Int64, "Devices with a known agent that went quiet — the drift/disable case.")
+	Attribute("agent_other_device", Int64, "Device-level matching only: devices whose assigned user runs the agent, but not on this machine. Always 0 under user-level matching, which cannot distinguish this from agent_active.")
 	Attribute("no_agent", Int64, "Devices whose assigned email resolves to an org member with no agent at all.")
 	Attribute("no_email", Int64, "Devices the MDM reports with no assigned-user email.")
 	Attribute("unresolved_email", Int64, "Devices whose assigned email matches neither an agent user nor an org member.")
@@ -406,7 +414,7 @@ var _ = Service("deviceIntegrations", func() {
 			security.SessionPayload()
 			Attribute("provider", String, "Only devices synced from this provider.")
 			Attribute("coverage_bucket", String, "Only devices in this coverage bucket.", func() {
-				Enum("agent_active", "agent_stale", "no_agent", "no_email", "unresolved_email", "missing")
+				Enum("agent_active", "agent_stale", "agent_other_device", "no_agent", "no_email", "unresolved_email", "missing")
 			})
 			Attribute("cursor", String, "Pagination cursor from a previous page.")
 			Attribute("limit", Int, "Page size. Defaults to 50, maximum 200.", func() {
