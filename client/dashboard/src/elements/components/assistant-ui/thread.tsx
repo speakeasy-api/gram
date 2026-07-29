@@ -1156,6 +1156,12 @@ const ComposerSkillContextPicker: FC = () => {
         side="top"
         align="start"
         className="aui-composer-skill-context-popover w-[360px] overflow-hidden p-0"
+        onEscapeKeyDown={(event) => {
+          if (query !== "") {
+            event.preventDefault();
+            setQuery("");
+          }
+        }}
       >
         <div className="flex items-center gap-2 border-b border-input px-3 py-2">
           <Search className="size-4 shrink-0 text-muted-foreground" />
@@ -1163,13 +1169,6 @@ const ComposerSkillContextPicker: FC = () => {
             autoFocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape" && query !== "") {
-                event.preventDefault();
-                event.stopPropagation();
-                setQuery("");
-              }
-            }}
             placeholder="Search skills…"
             className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
             aria-label="Search skills"
