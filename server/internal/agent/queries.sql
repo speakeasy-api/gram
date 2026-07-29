@@ -116,7 +116,10 @@ WHERE device_agent_syncs.last_seen_at < clock_timestamp() - interval '1 minute';
 -- could go unrecorded for the entire session.
 INSERT INTO device_agent_device_syncs (organization_id, serial_number, email, hostname)
 VALUES (@organization_id, @serial_number, @email, sqlc.narg('hostname'))
-ON CONFLICT (organization_id, serial_number) DO UPDATE
+-- Infers device_agent_device_syncs_org_lower_serial_key, the unique
+-- expression index that is this table's dedup key. Matching the readers'
+-- LOWER() comparison is what stops one machine from holding two rows.
+ON CONFLICT (organization_id, LOWER(serial_number)) DO UPDATE
 SET last_seen_at = clock_timestamp()
   , updated_at   = clock_timestamp()
   , email        = EXCLUDED.email

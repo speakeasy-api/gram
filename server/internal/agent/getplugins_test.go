@@ -15,7 +15,9 @@ import (
 
 // ptr takes the address of a literal. conv.PtrEmpty collapses the zero value
 // to nil, which is exactly what the blank-serial cases below need to send.
-func ptr[T any](v T) *T { return &v }
+//
+//go:fix inline
+func ptr[T any](v T) *T { return new(v) }
 
 // wantMarketplace / wantObservability derive the expected names from the same
 // helpers the publish path uses, so the test pins the actual cross-surface
@@ -364,15 +366,16 @@ func TestGetPlugins_RecordsDeviceSync(t *testing.T) {
 
 	_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
 		Email:        mockidp.MockUserEmail,
-		SerialNumber: ptr("C02XK1ABCDEF"),
-		Hostname:     ptr("dev-macbook-pro"),
+		SerialNumber: new("C02XK1ABCDEF"),
+		Hostname:     new("dev-macbook-pro"),
 	})
 	require.NoError(t, err)
 
 	rows, err := testrepo.New(ti.conn).ListDeviceAgentDeviceSyncsFixture(ctx, ti.orgID)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	require.Equal(t, "C02XK1ABCDEF", rows[0].SerialNumber)
+	require.Equal(t, "c02xk1abcdef", rows[0].SerialNumber,
+		"stored lowercased so the value agrees with its own LOWER() dedup key and the coverage joins")
 	require.Equal(t, conv.NormalizeEmail(mockidp.MockUserEmail), rows[0].Email)
 	require.Equal(t, "dev-macbook-pro", rows[0].Hostname.String)
 }
@@ -386,7 +389,7 @@ func TestGetPlugins_DeviceSyncSkippedWithoutSerial(t *testing.T) {
 
 	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
 
-	for _, serial := range []*string{nil, ptr(""), ptr("   ")} {
+	for _, serial := range []*string{nil, new(""), new("   ")} {
 		_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
 			Email:        mockidp.MockUserEmail,
 			SerialNumber: serial,
@@ -419,7 +422,7 @@ func TestGetPlugins_DeviceSyncReassignmentBeatsThrottle(t *testing.T) {
 	_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
 		Email:        mockidp.MockUserEmail,
 		SerialNumber: ptr(serial),
-		Hostname:     ptr("old-name"),
+		Hostname:     new("old-name"),
 	})
 	require.NoError(t, err)
 
@@ -432,7 +435,7 @@ func TestGetPlugins_DeviceSyncReassignmentBeatsThrottle(t *testing.T) {
 	_, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
 		Email:        mockidp.MockUserEmail,
 		SerialNumber: ptr(serial),
-		Hostname:     ptr("old-name"),
+		Hostname:     new("old-name"),
 	})
 	require.NoError(t, err)
 	rows, err = testrepo.New(ti.conn).ListDeviceAgentDeviceSyncsFixture(ctx, ti.orgID)
@@ -445,7 +448,7 @@ func TestGetPlugins_DeviceSyncReassignmentBeatsThrottle(t *testing.T) {
 	_, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
 		Email:        mockidp.MockUserEmail,
 		SerialNumber: ptr(serial),
-		Hostname:     ptr("new-name"),
+		Hostname:     new("new-name"),
 	})
 	require.NoError(t, err)
 	rows, err = testrepo.New(ti.conn).ListDeviceAgentDeviceSyncsFixture(ctx, ti.orgID)
@@ -465,4 +468,66 @@ func TestGetPlugins_DeviceSyncReassignmentBeatsThrottle(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "new-name", rows[0].Hostname.String,
 		"an agent that stops reporting a hostname must not erase the stored one")
+}
+
+// TestGetPlugins_DeviceSyncNormalizesSerialCase pins the write-side
+// normalization. The dedup key and every coverage reader compare
+// LOWER(serial_number), so a machine reporting two casings must resolve to ONE
+// row — otherwise both would match its device and fan out its coverage.
+func TestGetPlugins_DeviceSyncNormalizesSerialCase(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+
+	for _, reported := range []string{"C02XK1ABCDEF", "c02xk1abcdef", "  C02xk1AbCdEf  "} {
+		_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
+			Email:        mockidp.MockUserEmail,
+			SerialNumber: new(reported),
+			Hostname:     nil,
+		})
+		require.NoError(t, err)
+	}
+
+	rows, err := testrepo.New(ti.conn).ListDeviceAgentDeviceSyncsFixture(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "casing variants of one machine's serial must collapse to a single row")
+	require.Equal(t, "c02xk1abcdef", rows[0].SerialNumber, "stored canonically, matching the LOWER() dedup key")
+}
+
+// TestGetPlugins_DeviceSyncRejectsPlaceholderSerials guards the compliance
+// claim: white-box hardware reports SMBIOS defaults verbatim, so many DIFFERENT
+// machines can share one "serial". Storing a heartbeat under it would let one
+// agent install attest all of them as device-verified.
+func TestGetPlugins_DeviceSyncRejectsPlaceholderSerials(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+
+	for _, placeholder := range []string{
+		"To Be Filled By O.E.M.",
+		"Default string",
+		"System Serial Number",
+		"0",
+		"none",
+		"N/A",
+	} {
+		_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
+			Email:        mockidp.MockUserEmail,
+			SerialNumber: new(placeholder),
+			Hostname:     nil,
+		})
+		require.NoError(t, err, "a placeholder serial must never fail the sync")
+	}
+
+	rows, err := testrepo.New(ti.conn).ListDeviceAgentDeviceSyncsFixture(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Empty(t, rows, "placeholder serials are not device identities; coverage falls back to the email match")
+
+	// The user-level heartbeat still lands, so these devices stay covered at
+	// the weaker attestation rather than dropping out entirely.
+	userRows, err := agentrepo.New(ti.conn).ListDeviceAgentSyncs(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Len(t, userRows, 1)
 }

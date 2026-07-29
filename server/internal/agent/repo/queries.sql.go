@@ -203,7 +203,7 @@ func (q *Queries) ListDeviceAgentSyncs(ctx context.Context, organizationID strin
 const upsertDeviceAgentDeviceSync = `-- name: UpsertDeviceAgentDeviceSync :exec
 INSERT INTO device_agent_device_syncs (organization_id, serial_number, email, hostname)
 VALUES ($1, $2, $3, $4)
-ON CONFLICT (organization_id, serial_number) DO UPDATE
+ON CONFLICT (organization_id, LOWER(serial_number)) DO UPDATE
 SET last_seen_at = clock_timestamp()
   , updated_at   = clock_timestamp()
   , email        = EXCLUDED.email
@@ -231,6 +231,9 @@ type UpsertDeviceAgentDeviceSyncParams struct {
 // mutable descriptive columns, and at a ~60s poll cadence last_seen_at is
 // almost always fresh, so a reassigned machine's new user (or a rename)
 // could go unrecorded for the entire session.
+// Infers device_agent_device_syncs_org_lower_serial_key, the unique
+// expression index that is this table's dedup key. Matching the readers'
+// LOWER() comparison is what stops one machine from holding two rows.
 func (q *Queries) UpsertDeviceAgentDeviceSync(ctx context.Context, arg UpsertDeviceAgentDeviceSyncParams) error {
 	_, err := q.db.Exec(ctx, upsertDeviceAgentDeviceSync,
 		arg.OrganizationID,
