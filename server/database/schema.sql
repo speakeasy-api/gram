@@ -785,6 +785,22 @@ CREATE TABLE IF NOT EXISTS device_agent_syncs (
 CREATE INDEX IF NOT EXISTS device_agent_syncs_organization_id_lower_email_idx
 ON device_agent_syncs (organization_id, LOWER(email));
 
+-- Stores the organization-wide, non-secret configuration delivered to enrolled
+-- device agents. The schema version is separate from the JSON document so the
+-- control plane can evolve validation and delivery without coupling it to a
+-- database migration for every additive setting.
+CREATE TABLE IF NOT EXISTS device_agent_configurations (
+  organization_id TEXT NOT NULL,
+  schema_version integer NOT NULL DEFAULT 1,
+  config jsonb NOT NULL DEFAULT '{}'::jsonb,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT device_agent_configurations_pkey PRIMARY KEY (organization_id),
+  CONSTRAINT device_agent_configurations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   deployment_id uuid NOT NULL,
