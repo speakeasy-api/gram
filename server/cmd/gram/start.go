@@ -859,6 +859,7 @@ func newStartCommand() *cli.Command {
 				env,
 				posthogClient,
 				serverURL,
+				siteURL,
 				encryptionClient,
 				cache.NewRedisCacheAdapter(redisClient),
 				guardianPolicy,
