@@ -607,7 +607,11 @@ function EmployeeTable({
 }) {
   const showDeviceAgent = deviceStatus !== "hidden";
   const [page, setPage] = useState(0);
-  const [sort, setSort] = useState<SortDescriptor | null>(initialSort);
+  // Default to enrolled-first when no explicit sort was seeded via URL. Status
+  // labels sort "Enrolled" before "Not Enrolled" ascending.
+  const [sort, setSort] = useState<SortDescriptor | null>(
+    initialSort ?? { id: "status", direction: "asc" },
+  );
   // Only ticks once statuses are actually resolvable; disabled (0) otherwise so
   // the memo stays stable (deviceAgentState is only called when "ready").
   const now = useNow(deviceStatus === "ready" ? AGENT_STATUS_TICK_MS : 0);
