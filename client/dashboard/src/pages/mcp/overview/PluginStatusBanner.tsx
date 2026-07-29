@@ -88,13 +88,18 @@ export function PluginStatusBanner({
   // detail page shouldn't crash the whole page via the error boundary when
   // it does. The existing `if (!data) return null` below already degrades
   // gracefully on a failed fetch.
-  const { data, isFetching: isPluginsFetching } = usePlugins(undefined, undefined, { throwOnError: false });
+  const { data, isFetching: isPluginsFetching } = usePlugins(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
   const [isInstallDialogOpen, setIsInstallDialogOpen] = useState(false);
   // Polled so the banner picks up the Temporal generator-rollout schedule's
   // auto-sync without a manual refresh.
-  const { data: publishStatus, isFetching: isPublishStatusFetching } = usePublishStatus(undefined, undefined, {
-    refetchInterval: 5_000,
-  });
+  const { data: publishStatus, isFetching: isPublishStatusFetching } =
+    usePublishStatus(undefined, undefined, {
+      refetchInterval: 5_000,
+    });
   const [selectedPluginIds, setSelectedPluginIds] = useState<string[]>([]);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
 
