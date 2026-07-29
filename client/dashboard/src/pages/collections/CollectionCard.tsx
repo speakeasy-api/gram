@@ -106,7 +106,7 @@ export function CollectionCard({
       <SimpleTooltip tooltip={installDisabledReason}>
         <span
           aria-label={`Install unavailable: ${installDisabledReason}`}
-          className="inline-flex"
+          className="focus-visible:ring-ring inline-flex rounded-xs focus-visible:ring-2 focus-visible:outline-none"
           onClick={(event) => event.stopPropagation()}
           tabIndex={0}
         >

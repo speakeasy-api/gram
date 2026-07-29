@@ -351,7 +351,7 @@ function CollectionDetailInner() {
       <SimpleTooltip tooltip={installDisabledReason}>
         <span
           aria-label={`Install unavailable: ${installDisabledReason}`}
-          className="inline-flex w-full sm:w-auto"
+          className="focus-visible:ring-ring inline-flex w-full rounded-xs focus-visible:ring-2 focus-visible:outline-none sm:w-auto"
           tabIndex={0}
         >
           {bulkInstallButton}
