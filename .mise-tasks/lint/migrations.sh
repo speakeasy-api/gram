@@ -145,32 +145,55 @@ while IFS= read -r line; do
   [ -n "$line" ] && pg_files+=("$line")
 done < <(collect_pg_modified)
 
-# Check for concurrent index creation statements without -- atlas:txmode none.
-# Postgres-only: ClickHouse has no CREATE INDEX CONCURRENTLY.
+# Check for statements that must not run inside a transaction but are missing the
+# -- atlas:txmode none directive. Postgres-only: ClickHouse has neither statement.
+#
+#   CREATE [UNIQUE] INDEX CONCURRENTLY  Postgres rejects it inside a transaction.
+#   VALIDATE CONSTRAINT                 Only useful once the preceding
+#                                       ADD CONSTRAINT ... NOT VALID has committed.
+#                                       Sharing a transaction holds the ACCESS
+#                                       EXCLUSIVE lock taken by the ADD through the
+#                                       validation scan, so the split gains nothing.
 if [ ${#pg_files[@]} -gt 0 ]; then
-  invalid_indexes=false
-  echo -e "\n🔎 Checking for concurrent index creation statements without -- atlas:txmode none..."
+  missing_txmode=false
+  echo -e "\n🔎 Checking for statements requiring -- atlas:txmode none..."
   for file in "${pg_files[@]}"; do
+    # Matched on the raw file, so a comment quoting one of these statements is
+    # enough to require the directive. Adding it to such a file is harmless.
+    statement=""
     if grep -i -q "CREATE INDEX CONCURRENTLY" "$file" || grep -i -q "CREATE UNIQUE INDEX CONCURRENTLY" "$file"; then
-      # Check if the first line contains --atlas:txmode none
-      first_line=$(head -n 1 "$file")
-      if [ "$first_line" != "-- atlas:txmode none" ]; then
-        invalid_indexes=true
-        echo "❌ $file"
-        gh_error "$file" "Migration uses CREATE [UNIQUE] INDEX CONCURRENTLY but does not have '-- atlas:txmode none' as the first line."
-      else
-        echo "✅ $file"
-      fi
+      statement="CREATE [UNIQUE] INDEX CONCURRENTLY"
+    elif grep -i -q "VALIDATE CONSTRAINT" "$file"; then
+      statement="VALIDATE CONSTRAINT"
+    fi
+
+    if [ -z "$statement" ]; then
+      continue
+    fi
+
+    # Check if the first line contains --atlas:txmode none
+    first_line=$(head -n 1 "$file")
+    if [ "$first_line" != "-- atlas:txmode none" ]; then
+      missing_txmode=true
+      echo "❌ $file ($statement)"
+      gh_error "$file" "Migration uses $statement but does not have '-- atlas:txmode none' as the first line."
+    else
+      echo "✅ $file ($statement)"
     fi
   done
 
-  if [ "$invalid_indexes" = true ]; then
+  if [ "$missing_txmode" = true ]; then
     echo "
-🚨 Migration files contain CREATE [UNIQUE] INDEX CONCURRENTLY statements but do
-🚨 not have -- atlas:txmode none as the first line.
+🚨 Migration files contain statements that must not run inside a transaction but
+🚨 do not have -- atlas:txmode none as the first line.
 🚨
 🚨 If you are creating migrations to add/remove indexes then ensure these are
 🚨 are isolated to their own files and disable transaction mode.
+🚨
+🚨 If you are adding a CHECK or FOREIGN KEY constraint as ADD CONSTRAINT ... NOT
+🚨 VALID followed by VALIDATE CONSTRAINT, the two statements must commit
+🚨 separately, otherwise the validation scan runs under the ACCESS EXCLUSIVE lock
+🚨 taken by the ADD and the split gains nothing.
 "
     exit 1
   fi
