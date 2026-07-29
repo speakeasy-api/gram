@@ -17,8 +17,9 @@ type dashboardSourceRef struct {
 }
 
 type dashboardEventPayload struct {
-	Text   string `json:"text"`
-	UserID string `json:"user_id,omitempty"`
+	Text             string          `json:"text"`
+	UserID           string          `json:"user_id,omitempty"`
+	SkillSetSnapshot json.RawMessage `json:"skill_set_snapshot,omitempty"`
 }
 
 type dashboardAdapter struct{}
@@ -91,6 +92,16 @@ func (dashboardAdapter) DecodeTurn(event assistantThreadEventRecord) (string, er
 	}
 	if payload.UserID != "" {
 		fmt.Fprintf(&b, "UserID: %s\n", payload.UserID)
+	}
+	if len(payload.SkillSetSnapshot) > 0 {
+		snapshot, err := decodeAssistantSkillSetSnapshot(payload.SkillSetSnapshot)
+		if err != nil {
+			return "", fmt.Errorf("decode dashboard turn skill snapshot: %w", err)
+		}
+		if notice := renderAssistantTurnSkills(snapshot); notice != "" {
+			b.WriteString(notice)
+			b.WriteByte('\n')
+		}
 	}
 	b.WriteString("</message-context>\n\n")
 	b.WriteString(payload.Text)

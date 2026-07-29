@@ -104,6 +104,35 @@ func TestComposeInstructions_DashboardIncludesElementsPrompts(t *testing.T) {
 	require.Contains(t, instructions, "```ui code blocks")
 }
 
+func TestDashboardAdapterDecodeTurnIncludesSelectedSkills(t *testing.T) {
+	t.Parallel()
+
+	skillID := uuid.New()
+	versionID := uuid.New()
+	got, err := dashboardAdapter{}.DecodeTurn(assistantThreadEventRecord{
+		EventID:   "evt-selected-skills",
+		CreatedAt: time.Date(2026, 7, 29, 12, 0, 0, 0, time.UTC),
+		NormalizedPayloadJSON: []byte(`{
+			"text":"Use the project conventions",
+			"user_id":"user-test",
+			"skill_set_snapshot":{
+				"version":1,
+				"skills":[{
+					"skill_id":"` + skillID.String() + `",
+					"name":"project-conventions",
+					"description":"Project coding conventions",
+					"resolved_version_id":"` + versionID.String() + `"
+				}]
+			}
+		}`),
+	})
+	require.NoError(t, err)
+	require.Contains(t, got, "EventType: assistant_turn_skills_selected")
+	require.Contains(t, got, `Name: "project-conventions"`)
+	require.Contains(t, got, `Call skills_load with name "project-conventions" before answering.`)
+	require.Contains(t, got, "</assistant-environment-change>\n</message-context>\n\nUse the project conventions")
+}
+
 func TestComposeInstructions_SanitizesAndCapsSkillMetadata(t *testing.T) {
 	t.Parallel()
 

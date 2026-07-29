@@ -134,8 +134,10 @@ WHERE at.assistant_id = ANY(@assistant_ids::UUID[])
   AND at.project_id = @project_id
 ORDER BY at.created_at;
 
--- The active/resolvable predicates in LoadAssistantSkills and
--- LoadAttachedAssistantSkill must stay identical.
+-- The active/resolvable distribution predicates in LoadAssistantSkills and
+-- LoadAttachedAssistantSkill must stay identical. ResolveAssistantTurnSkills
+-- intentionally omits distribution and pinning because turn-selected skills
+-- resolve directly from the project registry.
 -- name: LoadAssistantSkills :many
 SELECT
   sd.assistant_id,
@@ -210,6 +212,58 @@ WHERE sd.assistant_id = @assistant_id
   AND sd.plugin_id IS NULL
   AND sd.assistant_id IS NOT NULL
   AND sd.revoked_at IS NULL
+  AND s.name = @name;
+
+-- name: ResolveAssistantTurnSkills :many
+SELECT
+  s.id AS skill_id,
+  s.name,
+  resolved.id AS resolved_version_id,
+  resolved.description
+FROM skills s
+JOIN LATERAL (
+  SELECT sv.id, sv.description
+  FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = s.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
+  WHERE sv.skill_id = s.id
+    AND sv.spec_valid IS TRUE
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE s.project_id = @project_id
+  AND s.id = ANY(@skill_ids::uuid[])
+  AND s.archived_at IS NULL
+ORDER BY s.name ASC, s.id ASC;
+
+-- name: LoadProcessingAssistantTurnPayload :one
+SELECT event.normalized_payload_json
+FROM assistant_thread_events event
+WHERE event.project_id = @project_id
+  AND event.assistant_id = @assistant_id
+  AND event.assistant_thread_id = @thread_id
+  AND event.status = @processing_status
+  AND event.deleted IS FALSE
+ORDER BY event.created_at ASC
+LIMIT 1;
+
+-- name: LoadAssistantSkillVersion :one
+SELECT
+  s.id AS skill_id,
+  s.name,
+  sv.id AS skill_version_id,
+  sv.content,
+  sv.canonical_sha256,
+  sv.raw_sha256
+FROM skills s
+JOIN skill_versions sv
+  ON sv.id = @skill_version_id
+  AND sv.skill_id = s.id
+  AND sv.project_id = s.project_id
+WHERE s.id = @skill_id
+  AND s.project_id = @project_id
   AND s.name = @name;
 
 -- name: RecordAssistantSkillObservation :execrows

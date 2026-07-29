@@ -25,6 +25,10 @@ func projectReadGrant(projectID uuid.UUID) authz.Grant {
 	return authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, projectID.String())}
 }
 
+func skillReadGrant(projectID uuid.UUID) authz.Grant {
+	return authz.NewGrant(authz.ScopeSkillRead, projectID.String())
+}
+
 // fakeDashboardIngestor stands in for the triggers App: it records the call and
 // reproduces IngestDirect's observable effect by enqueuing the dashboard turn
 // through the same EnqueueTriggerTask path the real dispatcher uses, so the
@@ -109,6 +113,52 @@ func TestSendMessageAllowedWithProjectReadOnly(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, res.Accepted)
+}
+
+func TestSendMessageIncludesSelectedSkillSnapshot(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_send_message_skills")
+	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID), skillReadGrant(projectID))
+
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	require.NoError(t, err)
+	skill, version := createSkillAttachmentFixture(t, conn, projectID, managed.ID, "selected-skill", "user-test")
+
+	ingestor := &fakeDashboardIngestor{core: svc.core, assistantID: managed.ID}
+	svc.core.SetDashboardIngestor(ingestor)
+	res, err := svc.SendMessage(ctx, &gen.SendMessagePayload{
+		AssistantID: managed.ID.String(),
+		Message:     "follow the selected skill",
+		SkillIds:    []string{skill.ID.String()},
+	})
+	require.NoError(t, err)
+	require.True(t, res.Accepted)
+
+	var payload dashboardIngestPayload
+	require.NoError(t, json.Unmarshal(ingestor.lastPayload, &payload))
+	snapshot, err := decodeAssistantSkillSetSnapshot(payload.SkillSetSnapshot)
+	require.NoError(t, err)
+	require.Len(t, snapshot.Skills, 1)
+	require.Equal(t, skill.ID, snapshot.Skills[0].SkillID)
+	require.Equal(t, version.ID, snapshot.Skills[0].ResolvedVersionID)
+}
+
+func TestSendMessageRejectsUnavailableSelectedSkill(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_missing_skill")
+	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID), skillReadGrant(projectID))
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	require.NoError(t, err)
+	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core, assistantID: managed.ID})
+
+	_, err = svc.SendMessage(ctx, &gen.SendMessagePayload{
+		AssistantID: managed.ID.String(),
+		Message:     "hello",
+		SkillIds:    []string{uuid.NewString()},
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 // Each send without a chat id starts a fresh conversation with its own

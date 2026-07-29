@@ -64150,6 +64150,13 @@ components:
           description: The user's message text.
           minLength: 1
           maxLength: 10000
+        skill_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Project skills to make available for this turn.
+          maxItems: 10
       required:
         - assistant_id
         - message

@@ -31,6 +31,11 @@ export interface UseServerAssistantTransportResult {
   needsAdmin: boolean;
 }
 
+interface UseServerAssistantTransportOptions {
+  getSkillIds?: () => string[];
+  onSkillIdsSent?: (skillIds: string[]) => void;
+}
+
 /**
  * Resolves the project's server-side Project Assistant and exposes a transport
  * factory wired to it. The conversation id, history, and conversation list are
@@ -46,6 +51,7 @@ export interface UseServerAssistantTransportResult {
 export function useServerAssistantTransport(
   projectSlug: string,
   enabled: boolean,
+  options: UseServerAssistantTransportOptions = {},
 ): UseServerAssistantTransportResult {
   const client = useGramContext();
   const organization = useOrganization();
@@ -139,8 +145,21 @@ export function useServerAssistantTransport(
 
   const transport = useMemo<ElementsTransportFactory | undefined>(() => {
     if (!ready) return undefined;
-    return createServerAssistantTransport({ client, assistantId, projectSlug });
-  }, [ready, client, assistantId, projectSlug]);
+    return createServerAssistantTransport({
+      client,
+      assistantId,
+      projectSlug,
+      getSkillIds: options.getSkillIds,
+      onSkillIdsSent: options.onSkillIdsSent,
+    });
+  }, [
+    ready,
+    client,
+    assistantId,
+    projectSlug,
+    options.getSkillIds,
+    options.onSkillIdsSent,
+  ]);
 
   return { transport, assistantId, ready, error, needsAdmin };
 }

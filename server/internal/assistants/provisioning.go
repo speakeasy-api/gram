@@ -46,6 +46,10 @@ const (
 // project. The caller should ask the user to rename or remove it.
 var ErrManagedAssistantNameTaken = errors.New("an assistant with the managed assistant's name already exists in this project")
 
+// ErrAssistantTurnSkillUnavailable means at least one skill selected for a
+// dashboard turn is not an active project skill with a valid version.
+var ErrAssistantTurnSkillUnavailable = errors.New("one or more selected skills are unavailable")
+
 // managedAssistantName composes a project's managed-assistant display name. The
 // project name is embedded so the per-project assistants stay distinguishable
 // across an organization. project.name is capped at 40 chars and assistants.name
@@ -302,10 +306,11 @@ func assistantRecordFromManagedRow(row assistantrepo.GetManagedAssistantByProjec
 // dashboardIngestPayload is the wire shape the dashboard trigger definition
 // decodes in BuildDirectEvent.
 type dashboardIngestPayload struct {
-	Text           string `json:"text"`
-	UserID         string `json:"user_id"`
-	CorrelationID  string `json:"correlation_id"`
-	IdempotencyKey string `json:"idempotency_key"`
+	Text             string          `json:"text"`
+	UserID           string          `json:"user_id"`
+	CorrelationID    string          `json:"correlation_id"`
+	IdempotencyKey   string          `json:"idempotency_key"`
+	SkillSetSnapshot json.RawMessage `json:"skill_set_snapshot,omitempty"`
 }
 
 // DashboardSendResult is what the sendMessage endpoint returns to the dashboard.
@@ -325,10 +330,39 @@ type DashboardSendResult struct {
 // returned), or an existing chat id to continue it. idempotencyKey may be empty
 // — a fresh one is minted so the ingest still succeeds, but callers that want
 // retry-safe dedupe should pass a stable key.
-func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assistantID uuid.UUID, userID string, chatID uuid.UUID, text, idempotencyKey string) (DashboardSendResult, error) {
+func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assistantID uuid.UUID, userID string, chatID uuid.UUID, text, idempotencyKey string, skillIDs []uuid.UUID) (DashboardSendResult, error) {
 	assistant, err := s.GetAssistant(ctx, projectID, assistantID)
 	if err != nil {
 		return DashboardSendResult{}, err
+	}
+
+	var skillSetSnapshot json.RawMessage
+	if len(skillIDs) > 0 {
+		rows, err := assistantrepo.New(s.db).ResolveAssistantTurnSkills(ctx, assistantrepo.ResolveAssistantTurnSkillsParams{
+			ProjectID: projectID,
+			SkillIds:  skillIDs,
+		})
+		if err != nil {
+			return DashboardSendResult{}, fmt.Errorf("resolve dashboard turn skills: %w", err)
+		}
+		if len(rows) != len(skillIDs) {
+			return DashboardSendResult{}, ErrAssistantTurnSkillUnavailable
+		}
+		skills := make([]assistantSkillRow, 0, len(rows))
+		for _, row := range rows {
+			skills = append(skills, assistantSkillRow{
+				SkillID:           row.SkillID,
+				PinnedVersionID:   uuid.NullUUID{},
+				Name:              row.Name,
+				ResolvedVersionID: row.ResolvedVersionID,
+				Description:       conv.FromPGTextOrEmpty[string](row.Description),
+			})
+		}
+		snapshot, err := marshalAssistantSkillSetSnapshot(newAssistantSkillSetSnapshot(skills))
+		if err != nil {
+			return DashboardSendResult{}, err
+		}
+		skillSetSnapshot = snapshot
 	}
 
 	if chatID == uuid.Nil {
@@ -348,7 +382,13 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 	if idempotencyKey == "" {
 		idempotencyKey = uuid.NewString()
 	}
-	payload, err := json.Marshal(dashboardIngestPayload{Text: text, UserID: userID, CorrelationID: correlationID, IdempotencyKey: idempotencyKey})
+	payload, err := json.Marshal(dashboardIngestPayload{
+		Text:             text,
+		UserID:           userID,
+		CorrelationID:    correlationID,
+		IdempotencyKey:   idempotencyKey,
+		SkillSetSnapshot: skillSetSnapshot,
+	})
 	if err != nil {
 		return DashboardSendResult{}, fmt.Errorf("marshal dashboard message: %w", err)
 	}
