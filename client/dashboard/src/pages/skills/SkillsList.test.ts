@@ -2,6 +2,7 @@ import type { Skill } from "@gram/client/models/components/skill.js";
 import { describe, expect, it } from "vitest";
 import {
   filterSkills,
+  prioritizeAddableSkills,
   skillCountLabel,
   sortSkills,
 } from "./skills-list-helpers";
@@ -57,6 +58,22 @@ describe("SkillsList filtering", () => {
       ),
     ).toEqual(["b"]);
     expect(filterSkills(skills, "", ["manual"], ["built_in"])).toEqual([]);
+  });
+
+  it("prioritizes addable skills without reordering either group", () => {
+    const unavailableFirst = skill({ id: "a", hasValidVersion: false });
+    const availableFirst = skill({ id: "b" });
+    const unavailableSecond = skill({ id: "c", hasValidVersion: false });
+    const availableSecond = skill({ id: "d" });
+
+    expect(
+      prioritizeAddableSkills([
+        unavailableFirst,
+        availableFirst,
+        unavailableSecond,
+        availableSecond,
+      ]).map((item) => item.id),
+    ).toEqual(["b", "d", "a", "c"]);
   });
 
   it("never labels loaded pages as the project-wide total", () => {
