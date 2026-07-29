@@ -26,6 +26,7 @@ import {
   Info,
 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { HookSourceIcon } from "../hooks/HookSourceIcon";
 
 const COWORK_DOCS_URL =
@@ -697,7 +698,14 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
         "/rpc/plugins.downloadObservabilityPlugin?platform=opencode",
         {},
       );
-      if (!resp.ok) return;
+      if (!resp.ok) {
+        toast.error(
+          resp.status === 403
+            ? "Downloading the observability plugin requires an org admin."
+            : "Failed to download observability plugin",
+        );
+        return;
+      }
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -708,6 +716,9 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
           ?.match(/filename="(.+)"/)?.[1] ?? "observability-opencode.zip";
       a.click();
       URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error("Failed to download observability plugin");
+      console.error("observability plugin download failed", err);
     } finally {
       setIsDownloading(false);
     }

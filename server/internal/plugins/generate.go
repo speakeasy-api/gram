@@ -826,10 +826,10 @@ func GenerateSinglePluginPackage(plugin PluginInfo, cfg GenerateConfig, platform
 		if err := generateCodexPluginFlat(files, plugin, cfg); err != nil {
 			return nil, fmt.Errorf("generate codex plugin: %w", err)
 		}
-	case "opencode":
-		if err := generateOpenCodePluginFlat(files, plugin, cfg); err != nil {
-			return nil, fmt.Errorf("generate opencode plugin: %w", err)
-		}
+	// ponytail: no "opencode" case — the downloadPluginPackage enum is
+	// claude|cursor|codex, so a flat per-plugin opencode package is unreachable.
+	// OpenCode ships via downloadObservabilityPlugin only; add here if per-plugin
+	// opencode download is ever exposed in the design enum + UI.
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
 	}
@@ -861,10 +861,6 @@ func generateCursorPlugin(files map[string][]byte, p PluginInfo, cfg GenerateCon
 func generateCodexPlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
 	name := p.Slug + "-codex"
 	return generateCodexPluginInDir(files, name, name, p, cfg)
-}
-
-func generateOpenCodePluginFlat(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
-	return generateOpenCodePluginInDir(files, "", p, cfg)
 }
 
 func generateOpenCodePlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
