@@ -1000,7 +1000,7 @@ export function InsightsProvider({
           selectedSkillIds,
           onSelectedSkillIdsChange: setSelectedSkillIds,
           loading: skillsQuery.isPending || skillsQuery.isFetchingNextPage,
-          error: !!skillsQuery.error && !skillsQuery.data,
+          error: !!skillsQuery.error,
           maxSelected: 10,
         },
       },

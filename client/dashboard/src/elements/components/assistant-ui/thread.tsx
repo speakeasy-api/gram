@@ -1163,6 +1163,13 @@ const ComposerSkillContextPicker: FC = () => {
             autoFocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && query !== "") {
+                event.preventDefault();
+                event.stopPropagation();
+                setQuery("");
+              }
+            }}
             placeholder="Search skills…"
             className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
             aria-label="Search skills"

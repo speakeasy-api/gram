@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/assistants"
@@ -16,6 +18,7 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 )
 
 func projectWriteGrant(projectID uuid.UUID) authz.Grant {
@@ -161,6 +164,48 @@ func TestSendMessageRejectsUnavailableSelectedSkill(t *testing.T) {
 		AssistantID: managed.ID.String(),
 		Message:     "hello",
 		SkillIds:    []string{uuid.NewString()},
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestSendMessageRejectsOversizedSelectedSkillContext(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_send_message_large_skills")
+	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID), skillReadGrant(projectID))
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	require.NoError(t, err)
+	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core, assistantID: managed.ID})
+
+	skillIDs := make([]string, 0, 5)
+	for i := range 5 {
+		name := fmt.Sprintf("large-selected-skill-%d", i)
+		skill, _ := createSkillAttachmentFixture(t, conn, projectID, managed.ID, name, "user-test")
+		content := fmt.Sprintf(
+			"---\nname: %s\ndescription: Large selected skill\n---\n\n%s",
+			name,
+			strings.Repeat("x", 60*1024),
+		)
+		_, err := skillsrepo.New(conn).CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
+			Content:          content,
+			CanonicalSha256:  uuid.NewString(),
+			RawSha256:        uuid.NewString(),
+			Description:      pgtype.Text{String: "Large selected skill", Valid: true},
+			Metadata:         []byte(`{}`),
+			SpecValid:        true,
+			ValidationErrors: []byte(`[]`),
+			CreatedByUserID:  "user-test",
+			ProjectID:        projectID,
+			SkillID:          skill.ID,
+		})
+		require.NoError(t, err)
+		skillIDs = append(skillIDs, skill.ID.String())
+	}
+
+	_, err = svc.SendMessage(ctx, &gen.SendMessagePayload{
+		AssistantID: managed.ID.String(),
+		Message:     "hello",
+		SkillIds:    skillIDs,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }

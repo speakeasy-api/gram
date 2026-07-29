@@ -422,15 +422,17 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 	}
 
 	queries := assistantrepo.New(s.db)
+	observationCtx, cancelObservations := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancelObservations()
 	for _, skill := range skillContext {
-		if _, err := queries.RecordAssistantSkillObservation(ctx, assistantrepo.RecordAssistantSkillObservationParams{
+		if _, err := queries.RecordAssistantSkillObservation(observationCtx, assistantrepo.RecordAssistantSkillObservationParams{
 			AssistantID:    assistant.ID,
 			SessionID:      chatID.String(),
 			SkillVersionID: skill.ResolvedVersionID,
 			ProjectID:      projectID,
 			SkillID:        skill.SkillID,
 		}); err != nil {
-			s.logger.ErrorContext(ctx, "record selected assistant skill observation",
+			s.logger.ErrorContext(observationCtx, "record selected assistant skill observation",
 				attr.SlogError(err),
 				attr.SlogProjectID(projectID.String()),
 				attr.SlogAssistantID(assistant.ID.String()),
