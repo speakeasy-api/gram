@@ -3,10 +3,16 @@
  */
 
 import {
+  InfiniteData,
   InvalidateQueryFilters,
   QueryClient,
+  QueryKey,
+  useInfiniteQuery,
+  UseInfiniteQueryResult,
   useQuery,
   UseQueryResult,
+  useSuspenseInfiniteQuery,
+  UseSuspenseInfiniteQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
@@ -27,20 +33,32 @@ import {
 } from "../models/operations/queryskillefficacyinsights.js";
 import { useGramContext } from "./_context.js";
 import {
+  InfiniteQueryHookOptions,
   QueryHookOptions,
+  SuspenseInfiniteQueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
 import {
+  buildSkillEfficacyInsightsInfiniteQuery,
   buildSkillEfficacyInsightsQuery,
   prefetchSkillEfficacyInsights,
+  prefetchSkillEfficacyInsightsInfinite,
   queryKeySkillEfficacyInsights,
+  queryKeySkillEfficacyInsightsInfinite,
+  SkillEfficacyInsightsInfiniteQueryData,
+  SkillEfficacyInsightsPageParams,
   SkillEfficacyInsightsQueryData,
 } from "./skillEfficacyInsights.core.js";
 export {
+  buildSkillEfficacyInsightsInfiniteQuery,
   buildSkillEfficacyInsightsQuery,
   prefetchSkillEfficacyInsights,
+  prefetchSkillEfficacyInsightsInfinite,
   queryKeySkillEfficacyInsights,
+  queryKeySkillEfficacyInsightsInfinite,
+  type SkillEfficacyInsightsInfiniteQueryData,
+  type SkillEfficacyInsightsPageParams,
   type SkillEfficacyInsightsQueryData,
 };
 
@@ -113,6 +131,92 @@ export function useSkillEfficacyInsightsSuspense(
   });
 }
 
+/**
+ * queryInsights skillEfficacy
+ *
+ * @remarks
+ * Query activation-time skill efficacy, estimated savings, attributed session cost, and optional scored-session detail for the current project. Scores are sampled and costs fan out to every activated version.
+ */
+export function useSkillEfficacyInsightsInfinite(
+  request?: QuerySkillEfficacyInsightsRequest | undefined,
+  security?: QuerySkillEfficacyInsightsSecurity | undefined,
+  options?: InfiniteQueryHookOptions<
+    SkillEfficacyInsightsInfiniteQueryData,
+    SkillEfficacyInsightsQueryError
+  >,
+): UseInfiniteQueryResult<
+  InfiniteData<
+    SkillEfficacyInsightsInfiniteQueryData,
+    SkillEfficacyInsightsPageParams
+  >,
+  SkillEfficacyInsightsQueryError
+> {
+  const client = useGramContext();
+  return useInfiniteQuery<
+    SkillEfficacyInsightsInfiniteQueryData,
+    SkillEfficacyInsightsQueryError,
+    InfiniteData<
+      SkillEfficacyInsightsInfiniteQueryData,
+      SkillEfficacyInsightsPageParams
+    >,
+    QueryKey,
+    SkillEfficacyInsightsPageParams
+  >({
+    ...buildSkillEfficacyInsightsInfiniteQuery(
+      client,
+      request,
+      security,
+      options,
+    ),
+    initialPageParam: options?.initialPageParam,
+    getNextPageParam: (previousPage) => previousPage["~next"],
+    ...options,
+  });
+}
+
+/**
+ * queryInsights skillEfficacy
+ *
+ * @remarks
+ * Query activation-time skill efficacy, estimated savings, attributed session cost, and optional scored-session detail for the current project. Scores are sampled and costs fan out to every activated version.
+ */
+export function useSkillEfficacyInsightsInfiniteSuspense(
+  request?: QuerySkillEfficacyInsightsRequest | undefined,
+  security?: QuerySkillEfficacyInsightsSecurity | undefined,
+  options?: SuspenseInfiniteQueryHookOptions<
+    SkillEfficacyInsightsInfiniteQueryData,
+    SkillEfficacyInsightsQueryError
+  >,
+): UseSuspenseInfiniteQueryResult<
+  InfiniteData<
+    SkillEfficacyInsightsInfiniteQueryData,
+    SkillEfficacyInsightsPageParams
+  >,
+  SkillEfficacyInsightsQueryError
+> {
+  const client = useGramContext();
+  return useSuspenseInfiniteQuery<
+    SkillEfficacyInsightsInfiniteQueryData,
+    SkillEfficacyInsightsQueryError,
+    InfiniteData<
+      SkillEfficacyInsightsInfiniteQueryData,
+      SkillEfficacyInsightsPageParams
+    >,
+    QueryKey,
+    SkillEfficacyInsightsPageParams
+  >({
+    ...buildSkillEfficacyInsightsInfiniteQuery(
+      client,
+      request,
+      security,
+      options,
+    ),
+    initialPageParam: options?.initialPageParam,
+    getNextPageParam: (previousPage) => previousPage["~next"],
+    ...options,
+  });
+}
+
 export function setSkillEfficacyInsightsData(
   client: QueryClient,
   queryKeyBase: [
@@ -122,6 +226,8 @@ export function setSkillEfficacyInsightsData(
       to?: Date | undefined;
       includeVersions?: boolean | undefined;
       includeScoredSessions?: boolean | undefined;
+      cursor?: string | undefined;
+      limit?: number | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
@@ -142,6 +248,8 @@ export function invalidateSkillEfficacyInsights(
       to?: Date | undefined;
       includeVersions?: boolean | undefined;
       includeScoredSessions?: boolean | undefined;
+      cursor?: string | undefined;
+      limit?: number | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     }]

@@ -4,6 +4,13 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { safeParse } from "../../lib/schemas.js";
+import { Result as SafeParseResult } from "../../types/fp.js";
+import {
+  SkillEfficacyInsightsResult,
+  SkillEfficacyInsightsResult$inboundSchema,
+} from "../components/skillefficacyinsightsresult.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type QuerySkillEfficacyInsightsSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -28,9 +35,17 @@ export type QuerySkillEfficacyInsightsRequest = {
    */
   includeVersions?: boolean | undefined;
   /**
-   * Include up to 100 recent scored sessions. Intended for one skill detail view.
+   * Include a newest-first page of scored sessions. Intended for one skill detail view.
    */
   includeScoredSessions?: boolean | undefined;
+  /**
+   * Cursor for the next page of scored sessions.
+   */
+  cursor?: string | undefined;
+  /**
+   * The number of scored sessions to return per page.
+   */
+  limit?: number | undefined;
   /**
    * Session header
    */
@@ -39,6 +54,10 @@ export type QuerySkillEfficacyInsightsRequest = {
    * project header
    */
   gramProject?: string | undefined;
+};
+
+export type QuerySkillEfficacyInsightsResponse = {
+  result: SkillEfficacyInsightsResult;
 };
 
 /** @internal */
@@ -81,6 +100,8 @@ export type QuerySkillEfficacyInsightsRequest$Outbound = {
   to?: string | undefined;
   include_versions?: boolean | undefined;
   include_scored_sessions?: boolean | undefined;
+  cursor?: string | undefined;
+  limit: number;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
@@ -96,6 +117,8 @@ export const QuerySkillEfficacyInsightsRequest$outboundSchema: z.ZodMiniType<
     to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     includeVersions: z.optional(z.boolean()),
     includeScoredSessions: z.optional(z.boolean()),
+    cursor: z.optional(z.string()),
+    limit: z._default(z.int(), 20),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
   }),
@@ -117,5 +140,31 @@ export function querySkillEfficacyInsightsRequestToJSON(
     QuerySkillEfficacyInsightsRequest$outboundSchema.parse(
       querySkillEfficacyInsightsRequest,
     ),
+  );
+}
+
+/** @internal */
+export const QuerySkillEfficacyInsightsResponse$inboundSchema: z.ZodMiniType<
+  QuerySkillEfficacyInsightsResponse,
+  unknown
+> = z.pipe(
+  z.object({
+    Result: SkillEfficacyInsightsResult$inboundSchema,
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "Result": "result",
+    });
+  }),
+);
+
+export function querySkillEfficacyInsightsResponseFromJSON(
+  jsonString: string,
+): SafeParseResult<QuerySkillEfficacyInsightsResponse, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) =>
+      QuerySkillEfficacyInsightsResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'QuerySkillEfficacyInsightsResponse' from JSON`,
   );
 }
