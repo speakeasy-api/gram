@@ -620,6 +620,8 @@ type CountSkillsParams struct {
 	Classifications []string
 }
 
+// CountSkills handles empty cursor pages. Keep its filters in sync with ListSkills
+// so normal pages avoid a second query.
 func (q *Queries) CountSkills(ctx context.Context, arg CountSkillsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countSkills,
 		arg.ProjectID,

@@ -1250,6 +1250,8 @@ WHERE s.project_id = @project_id
   AND s.id = @skill_id
   AND s.archived_at IS NULL;
 
+-- CountSkills handles empty cursor pages. Keep its filters in sync with ListSkills
+-- so normal pages avoid a second query.
 -- name: CountSkills :one
 SELECT COUNT(*)
 FROM skills
