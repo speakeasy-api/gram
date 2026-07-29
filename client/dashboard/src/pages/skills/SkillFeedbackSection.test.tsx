@@ -162,6 +162,13 @@ describe("SkillFeedbackSection", () => {
         createdAt: new Date("2026-07-18T00:00:00Z"),
         source: "agent",
       },
+      {
+        id: "feedback_d",
+        outcome: "helped",
+        note: "Final verification step needs clarification details.",
+        createdAt: new Date("2026-07-17T00:00:00Z"),
+        source: "dev",
+      },
     ];
     const { container } = render(
       <SkillFeedbackSection skillId="skill_a" projectId="project_a" />,

@@ -48,12 +48,18 @@ type FeedbackGroup = {
   items: SkillFeedback[];
 };
 
+type IndexedFeedbackGroup = FeedbackGroup & {
+  tokenSets: Set<string>[];
+};
+
 function percentage(part: number, total: number): number {
   return total === 0 ? 0 : (part / total) * 100;
 }
 
 function groupFeedback(feedback: SkillFeedback[]): FeedbackGroup[] {
-  const groups: Array<FeedbackGroup & { tokens: Set<string> }> = [];
+  const groups: IndexedFeedbackGroup[] = [];
+  const groupsByKey = new Map<string, IndexedFeedbackGroup>();
+  const groupsByToken = new Map<string, Set<IndexedFeedbackGroup>>();
   for (const item of feedback) {
     if (!item.note) continue;
     const key = item.note
@@ -61,20 +67,39 @@ function groupFeedback(feedback: SkillFeedback[]): FeedbackGroup[] {
       .replace(/[^\p{L}\p{N}]+/gu, " ")
       .trim();
     const tokens = new Set(key.split(" "));
-    const group = groups.find((candidate) => {
-      if (candidate.key === key) return true;
-      const shared = [...tokens].filter((token) =>
-        candidate.tokens.has(token),
-      ).length;
-      return (
-        shared >= 2 &&
-        (2 * shared) / (tokens.size + candidate.tokens.size) >= 0.7
-      );
-    });
+    const candidates = new Map<IndexedFeedbackGroup, number>();
+    for (const token of tokens) {
+      for (const candidate of groupsByToken.get(token) ?? []) {
+        candidates.set(candidate, (candidates.get(candidate) ?? 0) + 1);
+      }
+    }
+    let group =
+      groupsByKey.get(key) ??
+      [...candidates].find(
+        ([candidate, shared]) =>
+          shared >= 2 &&
+          candidate.tokenSets.some((candidateTokens) => {
+            const memberShared = [...tokens].filter((token) =>
+              candidateTokens.has(token),
+            ).length;
+            return (
+              memberShared >= 2 &&
+              (2 * memberShared) / (tokens.size + candidateTokens.size) >= 0.7
+            );
+          }),
+      )?.[0];
     if (group) {
       group.items.push(item);
+      group.tokenSets.push(tokens);
     } else {
-      groups.push({ key, note: item.note, items: [item], tokens });
+      group = { key, note: item.note, items: [item], tokenSets: [tokens] };
+      groups.push(group);
+    }
+    groupsByKey.set(key, group);
+    for (const token of tokens) {
+      const indexed = groupsByToken.get(token) ?? new Set();
+      indexed.add(group);
+      groupsByToken.set(token, indexed);
     }
   }
   return groups;
