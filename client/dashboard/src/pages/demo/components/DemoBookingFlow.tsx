@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import _Cal from "@calcom/embed-react";
+import _Cal, { getCalApi } from "@calcom/embed-react";
 import { useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { CAL_DEMO_LINK, splitDisplayName } from "./demo-booking";
@@ -32,16 +32,35 @@ const CAL_BRAND_VARS = {
   "cal-brand-text": "#fff",
 };
 
-// The auth surface is fixed light mode, so both themes get the same values —
-// a dark-mode visitor would otherwise get a dark calendar inside a white card.
-const CAL_CSS_VARS = JSON.stringify({
-  light: CAL_BRAND_VARS,
-  dark: CAL_BRAND_VARS,
-});
+// `hideEventTypeDetails` and `cssVarsPerTheme` belong to Cal's UiConfig, not to
+// the `config` prop (PrefillAndIframeAttrsConfig) — passing them there only
+// appends inert query params, which is why the embed kept drawing its own
+// title/duration block. They have to go through the "ui" instruction.
+// The auth surface is fixed light mode, so both themes get the same values: a
+// dark-mode visitor would otherwise get a dark calendar inside a white card.
+function useCalBranding() {
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const cal = await getCalApi();
+      if (cancelled) return;
+      cal("ui", {
+        theme: "light",
+        hideEventTypeDetails: true,
+        cssVarsPerTheme: { light: CAL_BRAND_VARS, dark: CAL_BRAND_VARS },
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+}
 
 export function DemoBookingFlow(): JSX.Element {
   const { session } = useSessionData();
   const telemetry = useTelemetry();
+
+  useCalBranding();
 
   const email = session?.user.email ?? "";
   const { firstName, lastName } = splitDisplayName(session?.user.displayName);
@@ -101,19 +120,19 @@ export function DemoBookingFlow(): JSX.Element {
           </span>
         </div>
 
-        <div className="h-[clamp(440px,48vh,540px)] w-full overflow-auto">
+        {/* Tall enough for a six-row month without clipping the last week,
+            capped so the card still clears the fold on a laptop viewport. */}
+        <div className="h-[clamp(500px,58vh,600px)] w-full overflow-auto">
           <Cal
             calLink={CAL_DEMO_LINK}
             config={{
               layout: "month_view",
               theme: "light",
-              hideEventTypeDetails: "true",
               name,
               email,
               // Prefill key must match the booking question's identifier on the
               // Cal event (see CAL_DEMO_LINK).
               company: companyName,
-              cssVarsPerTheme: CAL_CSS_VARS,
             }}
             style={{ width: "100%", height: "100%", overflow: "auto" }}
           />
