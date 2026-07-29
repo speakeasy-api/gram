@@ -1026,7 +1026,6 @@ export function InsightsProvider({
       skillsQuery.isPending,
       skillsQuery.isFetchingNextPage,
       skillsQuery.error,
-      skillsQuery.data,
       resolveAssistantLink,
       resolveCreator,
       isOwnChat,
