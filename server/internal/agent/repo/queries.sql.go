@@ -159,6 +159,25 @@ func (q *Queries) GetAgentPluginSet(ctx context.Context, arg GetAgentPluginSetPa
 	return items, nil
 }
 
+const getDeviceAgentConfiguration = `-- name: GetDeviceAgentConfiguration :one
+SELECT organization_id, schema_version, config, created_at, updated_at
+FROM device_agent_configurations
+WHERE organization_id = $1
+`
+
+func (q *Queries) GetDeviceAgentConfiguration(ctx context.Context, organizationID string) (DeviceAgentConfiguration, error) {
+	row := q.db.QueryRow(ctx, getDeviceAgentConfiguration, organizationID)
+	var i DeviceAgentConfiguration
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.SchemaVersion,
+		&i.Config,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listDeviceAgentSyncs = `-- name: ListDeviceAgentSyncs :many
 SELECT organization_id, email, first_seen_at, last_seen_at
 FROM device_agent_syncs
@@ -198,6 +217,43 @@ func (q *Queries) ListDeviceAgentSyncs(ctx context.Context, organizationID strin
 		return nil, err
 	}
 	return items, nil
+}
+
+const upsertDeviceAgentConfiguration = `-- name: UpsertDeviceAgentConfiguration :one
+INSERT INTO device_agent_configurations (
+  organization_id,
+  schema_version,
+  config
+)
+VALUES (
+  $1,
+  $2,
+  $3::jsonb
+)
+ON CONFLICT (organization_id) DO UPDATE
+SET schema_version = EXCLUDED.schema_version
+  , config = EXCLUDED.config
+  , updated_at = clock_timestamp()
+RETURNING organization_id, schema_version, config, created_at, updated_at
+`
+
+type UpsertDeviceAgentConfigurationParams struct {
+	OrganizationID string
+	SchemaVersion  int32
+	Config         []byte
+}
+
+func (q *Queries) UpsertDeviceAgentConfiguration(ctx context.Context, arg UpsertDeviceAgentConfigurationParams) (DeviceAgentConfiguration, error) {
+	row := q.db.QueryRow(ctx, upsertDeviceAgentConfiguration, arg.OrganizationID, arg.SchemaVersion, arg.Config)
+	var i DeviceAgentConfiguration
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.SchemaVersion,
+		&i.Config,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const upsertDeviceAgentSync = `-- name: UpsertDeviceAgentSync :exec

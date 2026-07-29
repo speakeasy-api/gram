@@ -982,6 +982,11 @@ const ORG_ROUTE_STRUCTURE = {
     component: DeviceAgentRoot,
     indexComponent: DeviceAgent,
     subPages: {
+      configuration: {
+        title: "Configuration",
+        url: "configuration",
+        component: DeviceAgent,
+      },
       mdmIntegrations: {
         title: "MDM Integrations",
         url: "mdm-integrations",

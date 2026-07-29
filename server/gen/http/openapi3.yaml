@@ -5546,9 +5546,90 @@ paths:
             x-speakeasy-name-override: updateGlobalIssuer
             x-speakeasy-react-hook:
                 name: UpdateGlobalRemoteSessionIssuer
+    /rpc/agent.getConfiguration:
+        get:
+            description: Get the organization-wide device-agent configuration for the dashboard. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.
+            operationId: getDeviceAgentConfiguration
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DeviceAgentConfiguration'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getConfiguration agent
+            tags:
+                - agent
+            x-speakeasy-name-override: getConfiguration
+            x-speakeasy-react-hook:
+                name: DeviceAgentConfiguration
     /rpc/agent.getPlugins:
         get:
-            description: 'Resolve the marketplaces and plugins assigned to the enrolled user. The device agent reconciles these into whichever AI developer tools it manages (Claude Code today), so each tool''s own plugin manager fetches and installs the bundles. The response is tool-agnostic: it names what to install, and each tool''s syncer decides how to render it into that tool''s native configuration.'
+            description: Resolve the marketplaces, plugins, and optional organization configuration assigned to the enrolled user. The device agent reconciles these into the AI developer tools it manages. Organization configuration is delivered on this existing poll so agents do not need a second control-plane request.
             operationId: getAgentPlugins
             parameters:
                 - allowEmptyValue: true
@@ -5718,6 +5799,93 @@ paths:
             x-speakeasy-name-override: listSyncedUsers
             x-speakeasy-react-hook:
                 name: SyncedAgentUsers
+    /rpc/agent.updateConfiguration:
+        post:
+            description: Create or replace the organization-wide, non-secret device-agent configuration. Unknown keys are preserved for forward compatibility; identity and credential keys are rejected.
+            operationId: updateDeviceAgentConfiguration
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateConfigurationRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DeviceAgentConfiguration'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: updateConfiguration agent
+            tags:
+                - agent
+            x-speakeasy-name-override: updateConfiguration
+            x-speakeasy-react-hook:
+                name: UpdateDeviceAgentConfiguration
     /rpc/aiIntegrations.deleteConfig:
         post:
             description: Delete the org-wide AI integration config for a provider.
@@ -54436,6 +54604,34 @@ components:
             required:
                 - id
                 - user_session_issuer_id
+        DeviceAgentConfiguration:
+            type: object
+            properties:
+                config:
+                    type: object
+                    description: Forward-compatible non-secret settings document. Platform values use false, user, or managed enforcement layers.
+                    additionalProperties: true
+                etag:
+                    type: string
+                    description: Opaque revision identifier for this configuration.
+                is_configured:
+                    type: boolean
+                    description: Whether an administrator has saved a remote configuration. False means agents should not add a remote resolver layer.
+                schema_version:
+                    type: integer
+                    description: Schema version for this remote configuration envelope.
+                    format: int64
+                    minimum: 1
+                updated_at:
+                    type: string
+                    description: When this remote configuration was last saved. Absent when is_configured is false.
+                    format: date-time
+            description: Versioned organization-wide settings delivered to enrolled device agents. Agents must ignore unknown config keys. Remote settings override the shareable local/MDM settings after a successful fetch; per-device identity and secrets always remain local.
+            required:
+                - schema_version
+                - config
+                - is_configured
+                - etag
         DeviceIntegrationConfig:
             type: object
             properties:
@@ -56342,9 +56538,11 @@ components:
         GetPluginsResult:
             type: object
             properties:
+                configuration:
+                    $ref: '#/components/schemas/DeviceAgentConfiguration'
                 etag:
                     type: string
-                    description: Opaque revision identifier covering the marketplace + plugin set. The agent stores this to detect changes between polls.
+                    description: Opaque revision identifier covering the marketplace, plugin, and remote-configuration set. The agent stores this to detect changes between polls.
                 marketplaces:
                     type: array
                     items:
@@ -69079,6 +69277,15 @@ components:
                 - external_credential_id
                 - algorithm
                 - name
+        UpdateConfigurationRequestBody:
+            type: object
+            properties:
+                config:
+                    type: object
+                    description: Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, and sync_interval_seconds. Per-device identity and secret keys are forbidden.
+                    additionalProperties: true
+            required:
+                - config
         UpdateCustomDetectionRuleRequestBody:
             type: object
             properties:

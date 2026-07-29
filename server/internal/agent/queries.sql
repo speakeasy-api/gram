@@ -110,3 +110,25 @@ SELECT organization_id, email, first_seen_at, last_seen_at
 FROM device_agent_syncs
 WHERE organization_id = @organization_id
 ORDER BY last_seen_at DESC;
+
+-- name: GetDeviceAgentConfiguration :one
+SELECT organization_id, schema_version, config, created_at, updated_at
+FROM device_agent_configurations
+WHERE organization_id = @organization_id;
+
+-- name: UpsertDeviceAgentConfiguration :one
+INSERT INTO device_agent_configurations (
+  organization_id,
+  schema_version,
+  config
+)
+VALUES (
+  @organization_id,
+  @schema_version,
+  @config::jsonb
+)
+ON CONFLICT (organization_id) DO UPDATE
+SET schema_version = EXCLUDED.schema_version
+  , config = EXCLUDED.config
+  , updated_at = clock_timestamp()
+RETURNING organization_id, schema_version, config, created_at, updated_at;

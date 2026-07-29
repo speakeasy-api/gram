@@ -539,6 +539,14 @@ type DeploymentsPackage struct {
 	VersionID    uuid.UUID
 }
 
+type DeviceAgentConfiguration struct {
+	OrganizationID string
+	SchemaVersion  int32
+	Config         []byte
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type DeviceAgentSync struct {
 	ID             uuid.UUID
 	OrganizationID string

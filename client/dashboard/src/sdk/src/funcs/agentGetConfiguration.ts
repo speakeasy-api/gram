@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  GetPluginsResult,
-  GetPluginsResult$inboundSchema,
-} from "../models/components/getpluginsresult.js";
+  DeviceAgentConfiguration,
+  DeviceAgentConfiguration$inboundSchema,
+} from "../models/components/deviceagentconfiguration.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  GetAgentPluginsRequest,
-  GetAgentPluginsRequest$outboundSchema,
-  GetAgentPluginsSecurity,
-} from "../models/operations/getagentplugins.js";
+  GetDeviceAgentConfigurationRequest,
+  GetDeviceAgentConfigurationRequest$outboundSchema,
+  GetDeviceAgentConfigurationSecurity,
+} from "../models/operations/getdeviceagentconfiguration.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getPlugins agent
+ * getConfiguration agent
  *
  * @remarks
- * Resolve the marketplaces, plugins, and optional organization configuration assigned to the enrolled user. The device agent reconciles these into the AI developer tools it manages. Organization configuration is delivered on this existing poll so agents do not need a second control-plane request.
+ * Get the organization-wide device-agent configuration for the dashboard. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.
  */
-export function agentGetPlugins(
+export function agentGetConfiguration(
   client: GramCore,
-  request: GetAgentPluginsRequest,
-  security?: GetAgentPluginsSecurity | undefined,
+  request?: GetDeviceAgentConfigurationRequest | undefined,
+  security?: GetDeviceAgentConfigurationSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    GetPluginsResult,
+    DeviceAgentConfiguration,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function agentGetPlugins(
 
 async function $do(
   client: GramCore,
-  request: GetAgentPluginsRequest,
-  security?: GetAgentPluginsSecurity | undefined,
+  request?: GetDeviceAgentConfigurationRequest | undefined,
+  security?: GetDeviceAgentConfigurationSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      GetPluginsResult,
+      DeviceAgentConfiguration,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -95,7 +95,11 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(GetAgentPluginsRequest$outboundSchema, value),
+    (value) =>
+      z.parse(
+        z.optional(GetDeviceAgentConfigurationRequest$outboundSchema),
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -104,15 +108,11 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/agent.getPlugins")();
-
-  const query = encodeFormQuery({
-    "email": payload.email,
-  });
+  const path = pathToFunc("/rpc/agent.getConfiguration")();
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -121,9 +121,9 @@ async function $do(
   const requestSecurity = resolveSecurity(
     [
       {
-        fieldName: "Gram-Key",
+        fieldName: "Gram-Session",
         type: "apiKey:header",
-        value: security?.apikeyHeaderGramKey,
+        value: security?.sessionHeaderGramSession,
       },
     ],
   );
@@ -131,7 +131,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getAgentPlugins",
+    operationID: "getDeviceAgentConfiguration",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -149,7 +149,6 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -176,7 +175,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    GetPluginsResult,
+    DeviceAgentConfiguration,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -187,7 +186,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, GetPluginsResult$inboundSchema),
+    M.json(200, DeviceAgentConfiguration$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),
