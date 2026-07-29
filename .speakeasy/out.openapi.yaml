@@ -35616,12 +35616,30 @@ paths:
             description: Include per-version daily trends.
             type: boolean
         - allowEmptyValue: true
-          description: Include up to 100 recent scored sessions. Intended for one skill detail view.
+          description: Include a newest-first page of scored sessions. Intended for one skill detail view.
           in: query
           name: include_scored_sessions
           schema:
-            description: Include up to 100 recent scored sessions. Intended for one skill detail view.
+            description: Include a newest-first page of scored sessions. Intended for one skill detail view.
             type: boolean
+        - allowEmptyValue: true
+          description: Cursor for the next page of scored sessions.
+          in: query
+          name: cursor
+          schema:
+            description: Cursor for the next page of scored sessions.
+            type: string
+        - allowEmptyValue: true
+          description: The number of scored sessions to return per page.
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: The number of scored sessions to return per page.
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -35705,6 +35723,14 @@ paths:
       tags:
         - skillEfficacy
       x-speakeasy-name-override: queryInsights
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
       x-speakeasy-react-hook:
         name: SkillEfficacyInsights
         type: query
@@ -64527,6 +64553,9 @@ components:
         interval_seconds:
           type: integer
           format: int64
+        next_cursor:
+          type: string
+          description: Cursor for the next page of scored sessions; absent when exhausted.
         scored_sessions:
           type: array
           items:

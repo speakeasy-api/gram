@@ -6350,6 +6350,7 @@ examples:
       parameters:
         query:
           skill_ids: ["<value 1>"]
+          limit: 20
       requestBody:
         application/json: {"skill_ids": ["<value 1>"]}
       responses:

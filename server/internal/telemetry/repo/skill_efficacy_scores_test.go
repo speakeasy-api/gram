@@ -288,6 +288,8 @@ func TestListSkillEfficacyScoreSessionsReturnsActivationAndVerdict(t *testing.T)
 		SkillIDs:       []string{score.SkillID.String()},
 		From:           activatedAt.Add(-time.Hour),
 		To:             activatedAt.Add(time.Hour),
+		CursorScoredAt: time.Time{},
+		CursorID:       "",
 		Limit:          100,
 	})
 	require.NoError(t, err)
@@ -299,7 +301,7 @@ func TestListSkillEfficacyScoreSessionsReturnsActivationAndVerdict(t *testing.T)
 	require.Equal(t, score.Flags, rows[0].Flags)
 }
 
-func TestListSkillEfficacyScoreSessionsDeduplicatesBeforeLimit(t *testing.T) {
+func TestListSkillEfficacyScoreSessionsDeduplicatesAndPaginates(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -334,13 +336,20 @@ func TestListSkillEfficacyScoreSessionsDeduplicatesBeforeLimit(t *testing.T) {
 
 	rows, err := queries.ListSkillEfficacyScoreSessions(ctx, repo.ListSkillEfficacyScoreSessionsParams{
 		OrganizationID: orgID, ProjectID: projectID.String(), SkillIDs: []string{first.SkillID.String()},
-		From: activatedAt.Add(-time.Hour), To: activatedAt.Add(time.Hour), Limit: 2,
+		From: activatedAt.Add(-time.Hour), To: activatedAt.Add(time.Hour), CursorScoredAt: time.Time{}, CursorID: "", Limit: 1,
 	})
 	require.NoError(t, err)
-	require.Len(t, rows, 2)
+	require.Len(t, rows, 1)
 	require.Equal(t, first.ID.String(), rows[0].ID)
 	require.Equal(t, "first publication", rows[0].Rationale)
-	require.Equal(t, second.ID.String(), rows[1].ID)
+
+	rows, err = queries.ListSkillEfficacyScoreSessions(ctx, repo.ListSkillEfficacyScoreSessionsParams{
+		OrganizationID: orgID, ProjectID: projectID.String(), SkillIDs: []string{first.SkillID.String()},
+		From: activatedAt.Add(-time.Hour), To: activatedAt.Add(time.Hour), CursorScoredAt: rows[0].ScoredAt, CursorID: rows[0].ID, Limit: 1,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, second.ID.String(), rows[0].ID)
 }
 
 func TestInsertSkillEfficacyScores_ClassifiesConstraintViolations(t *testing.T) {

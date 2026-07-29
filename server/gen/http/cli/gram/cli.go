@@ -2233,6 +2233,8 @@ func ParseEndpoint(
 		skillEfficacyQueryInsightsToFlag                    = skillEfficacyQueryInsightsFlags.String("to", "", "")
 		skillEfficacyQueryInsightsIncludeVersionsFlag       = skillEfficacyQueryInsightsFlags.String("include-versions", "", "")
 		skillEfficacyQueryInsightsIncludeScoredSessionsFlag = skillEfficacyQueryInsightsFlags.String("include-scored-sessions", "", "")
+		skillEfficacyQueryInsightsCursorFlag                = skillEfficacyQueryInsightsFlags.String("cursor", "", "")
+		skillEfficacyQueryInsightsLimitFlag                 = skillEfficacyQueryInsightsFlags.String("limit", "20", "")
 		skillEfficacyQueryInsightsSessionTokenFlag          = skillEfficacyQueryInsightsFlags.String("session-token", "", "")
 		skillEfficacyQueryInsightsProjectSlugInputFlag      = skillEfficacyQueryInsightsFlags.String("project-slug-input", "", "")
 
@@ -6869,7 +6871,7 @@ func ParseEndpoint(
 				data, err = skillefficacyc.BuildUpsertSettingsPayload(*skillEfficacyUpsertSettingsBodyFlag, *skillEfficacyUpsertSettingsApikeyTokenFlag, *skillEfficacyUpsertSettingsSessionTokenFlag)
 			case "query-insights":
 				endpoint = c.QueryInsights()
-				data, err = skillefficacyc.BuildQueryInsightsPayload(*skillEfficacyQueryInsightsSkillIdsFlag, *skillEfficacyQueryInsightsFromFlag, *skillEfficacyQueryInsightsToFlag, *skillEfficacyQueryInsightsIncludeVersionsFlag, *skillEfficacyQueryInsightsIncludeScoredSessionsFlag, *skillEfficacyQueryInsightsSessionTokenFlag, *skillEfficacyQueryInsightsProjectSlugInputFlag)
+				data, err = skillefficacyc.BuildQueryInsightsPayload(*skillEfficacyQueryInsightsSkillIdsFlag, *skillEfficacyQueryInsightsFromFlag, *skillEfficacyQueryInsightsToFlag, *skillEfficacyQueryInsightsIncludeVersionsFlag, *skillEfficacyQueryInsightsIncludeScoredSessionsFlag, *skillEfficacyQueryInsightsCursorFlag, *skillEfficacyQueryInsightsLimitFlag, *skillEfficacyQueryInsightsSessionTokenFlag, *skillEfficacyQueryInsightsProjectSlugInputFlag)
 			}
 		case "skills":
 			c := skillsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -16493,6 +16495,8 @@ func skillEfficacyQueryInsightsUsage() {
 	fmt.Fprint(os.Stderr, " -to STRING")
 	fmt.Fprint(os.Stderr, " -include-versions BOOL")
 	fmt.Fprint(os.Stderr, " -include-scored-sessions BOOL")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
@@ -16507,12 +16511,14 @@ func skillEfficacyQueryInsightsUsage() {
 	fmt.Fprintln(os.Stderr, `    -to STRING: `)
 	fmt.Fprintln(os.Stderr, `    -include-versions BOOL: `)
 	fmt.Fprintln(os.Stderr, `    -include-scored-sessions BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skill-efficacy query-insights --skill-ids '[\n      \"abc123\"\n   ]' --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --include-versions false --include-scored-sessions false --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skill-efficacy query-insights --skill-ids '[\n      \"abc123\"\n   ]' --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --include-versions false --include-scored-sessions false --cursor \"abc123\" --limit 2 --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // skillsUsage displays the usage of the skills command and its subcommands.
