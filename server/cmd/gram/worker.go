@@ -720,6 +720,7 @@ func newWorkerCommand() *cli.Command {
 				env,
 				posthogClient,
 				serverURL,
+				nil,
 				encryptionClient,
 				cache.NewRedisCacheAdapter(redisClient),
 				guardianPolicy,

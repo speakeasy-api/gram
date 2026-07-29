@@ -70,7 +70,11 @@ type Publishers struct {
 	PromptInjectionAnalysis gcp.Publisher[*riskv1.PromptInjectionAnalysis]
 	PromptPolicyAnalysis    gcp.Publisher[*riskv1.PromptPolicyAnalysis]
 	CustomRulesAnalysis     gcp.Publisher[*riskv1.CustomRulesAnalysis]
-	TelemetryLogs           gcp.Publisher[*telemetryv1.LogRecord]
+	// RiskFindings is the shared findings topic the ClickHouse risk_findings
+	// writer consumes. The batch path publishes only sources with no stream
+	// publisher on it (see risk_analysis.batchOnlyFindingSources).
+	RiskFindings  gcp.Publisher[*riskv1.Finding]
+	TelemetryLogs gcp.Publisher[*telemetryv1.LogRecord]
 }
 
 type Activities struct {
@@ -210,6 +214,7 @@ func NewActivities(
 		publishers.PromptInjectionAnalysis,
 		publishers.PromptPolicyAnalysis,
 		publishers.CustomRulesAnalysis,
+		publishers.RiskFindings,
 		customRuleScanner,
 		celEng,
 		builtinPresets,

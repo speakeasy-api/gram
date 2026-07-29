@@ -145,7 +145,6 @@ func TestCustomDomainHealthCheckProbeRescuesDNSMismatch(t *testing.T) {
 	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil}, "custom-domain.example.com", noopEmailService(t), nil, nil)
 	checker.SetResolver(dns.NewMockResolver(mismatchResolverConfig("proxied.example.com")))
 	checker.SetProbe(func(context.Context, string) error { return nil })
-	checker.SetDryRun(false)
 
 	notification, err := checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{
 		CustomDomainID: domainID,
@@ -174,7 +173,6 @@ func TestCustomDomainHealthCheckProbeFailureKeepsDNSMismatch(t *testing.T) {
 	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil}, "custom-domain.example.com", noopEmailService(t), nil, nil)
 	checker.SetResolver(dns.NewMockResolver(mismatchResolverConfig("broken.example.com")))
 	checker.SetProbe(func(context.Context, string) error { return errors.New("connection refused") })
-	checker.SetDryRun(false)
 
 	notification, err := checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{
 		CustomDomainID: domainID,
@@ -204,7 +202,6 @@ func TestCustomDomainHealthCheckRetryReemitsNotification(t *testing.T) {
 	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil}, "custom-domain.example.com", noopEmailService(t), nil, nil)
 	checker.SetResolver(dns.NewMockResolver(mismatchResolverConfig("retry.example.com")))
 	checker.SetProbe(func(context.Context, string) error { return errors.New("connection refused") })
-	checker.SetDryRun(false)
 
 	// Match the workflow's pinned timestamp precision.
 	checkedAt := time.Now().UTC().Truncate(time.Microsecond)
@@ -231,39 +228,6 @@ func TestCustomDomainHealthCheckRetryReemitsNotification(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, third.Issue)
-}
-
-func TestCustomDomainHealthCheckDryRunObservesWithoutPersisting(t *testing.T) {
-	t.Parallel()
-
-	conn, err := infra.CloneTestDatabase(t, "custom_domain_health_dry_run")
-	require.NoError(t, err)
-	repository := customdomainsrepo.New(conn)
-	domainID := createActivatedCustomDomain(t, repository, "test-organization", "dryrun.example.com")
-
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil}, "custom-domain.example.com", noopEmailService(t), nil, nil)
-	checker.SetResolver(dns.NewMockResolver(mismatchResolverConfig("dryrun.example.com")))
-	checker.SetProbe(func(context.Context, string) error { return errors.New("connection refused") })
-
-	notification, err := checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{
-		CustomDomainID: domainID,
-		OrganizationID: "test-organization",
-		CheckedAt:      time.Now().UTC(),
-	})
-	require.NoError(t, err)
-	require.Equal(t, customdomains.HealthIssueDNSTargetMismatch, notification.Issue)
-	require.Equal(t, "dryrun.example.com", notification.Domain)
-
-	domain, err := repository.GetCustomDomainByIDAndOrganization(t.Context(), customdomainsrepo.GetCustomDomainByIDAndOrganizationParams{
-		ID:             domainID,
-		OrganizationID: "test-organization",
-	})
-	require.NoError(t, err)
-	require.False(t, domain.HealthStatus.Valid)
-	require.False(t, domain.HealthIssue.Valid)
-	require.False(t, domain.HealthCheckedAt.Valid)
-	require.False(t, domain.UnhealthySince.Valid)
-	require.False(t, domain.ConsecutiveFailures.Valid)
 }
 
 // seedCustomDomainAdminRecipient creates an organization with one member who
@@ -310,30 +274,6 @@ func seedCustomDomainAdminRecipient(t *testing.T, conn *pgxpool.Pool, organizati
 	return adminEmail
 }
 
-func TestCustomDomainNotifyOrgAdminsDryRunSendsNoEmail(t *testing.T) {
-	t.Parallel()
-
-	conn, err := infra.CloneTestDatabase(t, "custom_domain_notify_dry_run")
-	require.NoError(t, err)
-	organizationID := "org-custom-domain-health-dry"
-	seedCustomDomainAdminRecipient(t, conn, organizationID)
-
-	captured := &captureLoopsClient{sent: nil, failNext: 0}
-	siteURL, err := url.Parse("https://app.example.com")
-	require.NoError(t, err)
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil}, "custom-domain.example.com", email.NewService(testenv.NewLogger(t), captured), siteURL, nil)
-
-	err = checker.NotifyOrgAdmins(t.Context(), activities.NotifyCustomDomainUnhealthyArgs{
-		CustomDomainID: uuid.New(),
-		OrganizationID: organizationID,
-		Domain:         "dryrun.example.com",
-		Issue:          customdomains.HealthIssueDNSNotFound,
-		CheckedAt:      time.Now().UTC().Truncate(time.Microsecond),
-	})
-	require.NoError(t, err)
-	require.Empty(t, captured.Sent())
-}
-
 func TestCustomDomainNotifyOrgAdminsSendsIdempotentEmail(t *testing.T) {
 	t.Parallel()
 
@@ -346,7 +286,6 @@ func TestCustomDomainNotifyOrgAdminsSendsIdempotentEmail(t *testing.T) {
 	siteURL, err := url.Parse("https://app.example.com")
 	require.NoError(t, err)
 	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil}, "custom-domain.example.com", email.NewService(testenv.NewLogger(t), captured), siteURL, nil)
-	checker.SetDryRun(false)
 
 	err = checker.NotifyOrgAdmins(t.Context(), activities.NotifyCustomDomainUnhealthyArgs{
 		CustomDomainID: uuid.New(),

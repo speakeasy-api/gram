@@ -38,6 +38,10 @@ export type DeviceIntegrationConfigForm = {
   setSetting: (key: string, value: string) => void;
   isMutating: boolean;
   canSave: boolean;
+  // True while the draft differs from the saved config: a typed secret or a
+  // changed setting. The connection test always runs against SAVED values,
+  // so a dirty draft means "save before testing".
+  hasUnsavedChanges: boolean;
   save: () => void;
   saveEnabled: (nextEnabled: boolean) => void;
   remove: () => void;
@@ -65,6 +69,11 @@ export function useDeviceIntegrationConfigForm(
   const [enabled, setEnabled] = useState(false);
   const [credentials, setCredentials] = useState<FieldValues>({});
   const [settings, setSettings] = useState<FieldValues>({});
+  // The settings the server is known to hold, tracked locally so the dirty
+  // flag clears the moment a save succeeds instead of flapping through the
+  // config refetch window (and sticking if that refetch fails).
+  const [savedSettings, setSavedSettings] = useState<FieldValues>({});
+  const pendingSavedSettingsRef = useRef<FieldValues>({});
   const [testResult, setTestResult] = useState<TestConnectionResult | null>(
     null,
   );
@@ -84,6 +93,7 @@ export function useDeviceIntegrationConfigForm(
     onSuccess: () => {
       toast.success("Device integration saved");
       setCredentials({});
+      setSavedSettings(pendingSavedSettingsRef.current);
       setTestResult(null);
       invalidate();
       options.onSaveSuccess?.();
@@ -113,6 +123,7 @@ export function useDeviceIntegrationConfigForm(
         setEnabled(false);
         setCredentials({});
         setSettings({});
+        setSavedSettings({});
         setTestResult(null);
         invalidate();
         options.onDeleteSuccess?.();
@@ -141,6 +152,7 @@ export function useDeviceIntegrationConfigForm(
       setEnabled(false);
       setCredentials({});
       setSettings({});
+      setSavedSettings({});
       return;
     }
 
@@ -149,6 +161,7 @@ export function useDeviceIntegrationConfigForm(
     setEnabled(data.enabled);
     setCredentials({});
     setSettings(data.settings);
+    setSavedSettings(data.settings);
   }, [data]);
 
   const isMutating = upsertStatus === "pending" || deleteStatus === "pending";
@@ -176,6 +189,22 @@ export function useDeviceIntegrationConfigForm(
     settings,
   ]);
 
+  const hasUnsavedChanges = useMemo(() => {
+    // Any typed characters in a secret field count — even whitespace-only,
+    // which renders as masked dots and would otherwise leave the test
+    // enabled against the old saved secret while looking populated.
+    if (Object.values(credentials).some((value) => value !== "")) {
+      return true;
+    }
+    const keys = new Set([
+      ...Object.keys(settings),
+      ...Object.keys(savedSettings),
+    ]);
+    return [...keys].some(
+      (key) => (settings[key] ?? "") !== (savedSettings[key] ?? ""),
+    );
+  }, [credentials, savedSettings, settings]);
+
   const save = () => {
     // Only send secret values the user actually typed: omitted keys keep the
     // stored secret (per-key merge on the server).
@@ -183,6 +212,9 @@ export function useDeviceIntegrationConfigForm(
     for (const [key, value] of Object.entries(credentials)) {
       if (value.trim() !== "") suppliedCredentials[key] = value.trim();
     }
+    // Recorded now, promoted to savedSettings on success — the values the
+    // server will hold if this save lands.
+    pendingSavedSettingsRef.current = settings;
     upsert({
       request: {
         upsertConfigRequestBody2: {
@@ -203,6 +235,9 @@ export function useDeviceIntegrationConfigForm(
   const saveEnabled = (nextEnabled: boolean) => {
     setEnabled(nextEnabled);
     if (!isConfigured) return;
+    // The shared onSuccess promotes this ref; an enabled-only flip leaves
+    // the server's settings untouched, so carry the current snapshot.
+    pendingSavedSettingsRef.current = savedSettings;
     upsert({
       request: {
         upsertConfigRequestBody2: {
@@ -224,8 +259,14 @@ export function useDeviceIntegrationConfigForm(
 
   const resetDraft = () => {
     setCredentials({});
-    setSettings(data?.settings ?? {});
-    setEnabled(Boolean(data?.enabled));
+    // Restore from the locally promoted snapshot, not the query cache: right
+    // after a save the cache is stale until the refetch lands, and the
+    // same-config-id guard means that refetch never re-syncs the draft — a
+    // cache-based reset would leave the form permanently dirty. The enabled
+    // flag is deliberately untouched: the sheet never drafts it (the switch
+    // saves instantly), so "resetting" it could only revert server truth to
+    // a stale cache value.
+    setSettings(savedSettings);
     setTestResult(null);
   };
 
@@ -259,6 +300,7 @@ export function useDeviceIntegrationConfigForm(
     },
     isMutating,
     canSave,
+    hasUnsavedChanges,
     save,
     saveEnabled,
     remove,

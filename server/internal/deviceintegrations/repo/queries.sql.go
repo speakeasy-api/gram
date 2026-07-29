@@ -784,6 +784,23 @@ func (q *Queries) ListSyncCandidates(ctx context.Context, arg ListSyncCandidates
 	return items, nil
 }
 
+const markConfigSyncsDue = `-- name: MarkConfigSyncsDue :exec
+UPDATE device_integration_syncs s
+SET next_poll_after = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM device_integration_schedules sch
+WHERE s.device_integration_schedule_id = sch.id
+  AND sch.device_integration_config_id = $1
+`
+
+// Enabling a connection means "sync now": mark every schedule due without
+// disturbing failure history or the push digest (unlike the full reset a
+// credential rotation performs).
+func (q *Queries) MarkConfigSyncsDue(ctx context.Context, deviceIntegrationConfigID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, markConfigSyncsDue, deviceIntegrationConfigID)
+	return err
+}
+
 const markDevicesMissing = `-- name: MarkDevicesMissing :exec
 
 UPDATE mdm_devices

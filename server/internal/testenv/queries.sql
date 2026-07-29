@@ -175,6 +175,15 @@ UPDATE device_integration_schedules
 SET disabled_at = clock_timestamp()
 WHERE device_integration_config_id = @device_integration_config_id;
 
+-- Pushes every sync's next poll an hour out, simulating a config whose
+-- schedules already ran this interval.
+-- name: DeferDeviceIntegrationSyncsFixture :exec
+UPDATE device_integration_syncs s
+SET next_poll_after = clock_timestamp() + interval '1 hour'
+FROM device_integration_schedules sch
+WHERE s.device_integration_schedule_id = sch.id
+  AND sch.device_integration_config_id = @device_integration_config_id;
+
 -- name: GetDeviceIntegrationCredentialsCiphertext :one
 SELECT credentials_encrypted
 FROM device_integration_configs

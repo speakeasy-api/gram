@@ -330,6 +330,20 @@ func (q *Queries) CountChatsWithResolutions(ctx context.Context, arg CountChatsW
 	return total, err
 }
 
+type CreateChatContentPartParams struct {
+	ChatID              uuid.UUID
+	ProjectID           uuid.UUID
+	Kind                string
+	ContentAssetUrl     string
+	ExternalID          pgtype.Text
+	ParentChatMessageID uuid.NullUUID
+	Version             pgtype.Int4
+	Source              pgtype.Text
+	Metadata            []byte
+	RiskAnalyzedAt      pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+}
+
 type CreateChatMessageParams struct {
 	ChatID           uuid.UUID
 	Role             string
@@ -1209,6 +1223,104 @@ func (q *Queries) LinkAIIntegrationConfigChat(ctx context.Context, arg LinkAIInt
 	return last_cursor_id, err
 }
 
+const listChatContentPartsByChatID = `-- name: ListChatContentPartsByChatID :many
+SELECT
+    ccp.id
+  , ccp.chat_id
+  , ccp.project_id
+  , ccp.kind
+  , ccp.content_asset_url
+  , ccp.external_id
+  , ccp.parent_chat_message_id
+  , ccp.version
+  , ccp.source
+  , ccp.metadata
+  , ccp.risk_analyzed_at
+  , ccp.created_at
+  , ccp.updated_at
+  , ccp.deleted_at
+  , ccp.deleted
+  , EXISTS (
+      SELECT 1
+      FROM risk_results rr
+      JOIN risk_policies rp
+        ON rp.id = rr.risk_policy_id
+       AND rp.enabled IS TRUE
+       AND rp.deleted IS FALSE
+      WHERE rr.project_id = $1::uuid
+        AND rr.chat_content_part_id = ccp.id
+        AND rr.found IS TRUE
+        AND rr.excluded_at IS NULL
+        AND rr.false_positive_at IS NULL
+    ) AS is_risk
+FROM chat_content_parts ccp
+WHERE ccp.chat_id = $2
+  AND (ccp.project_id IS NULL OR ccp.project_id = $1::uuid)
+  AND ccp.deleted IS FALSE
+ORDER BY created_at ASC, id ASC
+`
+
+type ListChatContentPartsByChatIDParams struct {
+	ProjectID uuid.UUID
+	ChatID    uuid.UUID
+}
+
+type ListChatContentPartsByChatIDRow struct {
+	ID                  uuid.UUID
+	ChatID              uuid.UUID
+	ProjectID           uuid.NullUUID
+	Kind                string
+	ContentAssetUrl     string
+	ExternalID          pgtype.Text
+	ParentChatMessageID uuid.NullUUID
+	Version             pgtype.Int4
+	Source              pgtype.Text
+	Metadata            []byte
+	RiskAnalyzedAt      pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+	IsRisk              bool
+}
+
+func (q *Queries) ListChatContentPartsByChatID(ctx context.Context, arg ListChatContentPartsByChatIDParams) ([]ListChatContentPartsByChatIDRow, error) {
+	rows, err := q.db.Query(ctx, listChatContentPartsByChatID, arg.ProjectID, arg.ChatID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatContentPartsByChatIDRow
+	for rows.Next() {
+		var i ListChatContentPartsByChatIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.ProjectID,
+			&i.Kind,
+			&i.ContentAssetUrl,
+			&i.ExternalID,
+			&i.ParentChatMessageID,
+			&i.Version,
+			&i.Source,
+			&i.Metadata,
+			&i.RiskAnalyzedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.IsRisk,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatMessages = `-- name: ListChatMessages :many
 SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, content_hash, generation, replayed, created_at, risk_analyzed_at FROM chat_messages
 WHERE chat_id = $1 AND (project_id IS NULL OR project_id = $2::uuid)
@@ -2086,6 +2198,46 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 			&i.AssistantName,
 			&i.TotalCount,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClaudeUserMessagesForPromptAttachmentParent = `-- name: ListClaudeUserMessagesForPromptAttachmentParent :many
+SELECT cm.id, cm.content
+FROM chat_messages cm
+WHERE cm.chat_id = $1
+  AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
+  AND cm.role = 'user'
+  AND cm.content != ''
+ORDER BY cm.seq DESC, cm.created_at DESC
+`
+
+type ListClaudeUserMessagesForPromptAttachmentParentParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type ListClaudeUserMessagesForPromptAttachmentParentRow struct {
+	ID      uuid.UUID
+	Content string
+}
+
+func (q *Queries) ListClaudeUserMessagesForPromptAttachmentParent(ctx context.Context, arg ListClaudeUserMessagesForPromptAttachmentParentParams) ([]ListClaudeUserMessagesForPromptAttachmentParentRow, error) {
+	rows, err := q.db.Query(ctx, listClaudeUserMessagesForPromptAttachmentParent, arg.ChatID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListClaudeUserMessagesForPromptAttachmentParentRow
+	for rows.Next() {
+		var i ListClaudeUserMessagesForPromptAttachmentParentRow
+		if err := rows.Scan(&i.ID, &i.Content); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

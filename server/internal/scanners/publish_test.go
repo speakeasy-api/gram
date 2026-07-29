@@ -83,6 +83,37 @@ func TestPublishFindingsUsesDeterministicIDs(t *testing.T) {
 	require.Equal(t, firstPub.messages[0].GetId(), secondPub.messages[0].GetId())
 }
 
+func TestPublishFindingsDisambiguatesIdenticalFindings(t *testing.T) {
+	t.Parallel()
+
+	// Two findings with identical id inputs in one batch (e.g. two tool calls
+	// in one message hitting the same rule with the same match and zero
+	// positions) must publish under distinct ids, or ClickHouse uniqExact(id)
+	// collapses distinct persisted findings. The suffixed ids must also be
+	// stable across re-publishes so re-analysis still dedupes.
+	finding := testFinding()
+	meta := testFindingMetadata()
+	firstPub := &recordingFindingPublisher{results: nil, messages: nil}
+	secondPub := &recordingFindingPublisher{results: nil, messages: nil}
+
+	batch := []scanners.Finding{finding, finding, finding}
+	firstPublished, _, firstErr := scanners.PublishFindings(t.Context(), testenv.NewLogger(t), firstPub, meta, batch, "cli destructive")
+	secondPublished, _, secondErr := scanners.PublishFindings(t.Context(), testenv.NewLogger(t), secondPub, meta, batch, "cli destructive")
+
+	require.NoError(t, firstErr)
+	require.NoError(t, secondErr)
+	require.Equal(t, 3, firstPublished)
+	require.Equal(t, 3, secondPublished)
+	require.Len(t, firstPub.messages, 3)
+
+	ids := map[string]struct{}{}
+	for i, msg := range firstPub.messages {
+		ids[msg.GetId()] = struct{}{}
+		require.Equal(t, msg.GetId(), secondPub.messages[i].GetId(), "ids must be stable across re-publishes")
+	}
+	require.Len(t, ids, 3, "identical findings in one batch must get distinct ids")
+}
+
 func testFindingMetadata() scanners.FindingMetadata {
 	return scanners.FindingMetadata{
 		RequestID:         "req-1",

@@ -294,9 +294,11 @@ GRAM_ADMIN_OIDC_EMULATOR_URL = "http://{{env.GRAM_ADMIN_OIDC_EMULATOR_HOST}}:{{e
 GRAM_ADMIN_OIDC_CLIENT_ID = "gram-local.apps.googleusercontent.com"
 GRAM_ADMIN_OIDC_CLIENT_SECRET = "GOCSPX-example_secret"
 GRAM_ADMIN_ALLOWED_HDS = "speakeasyapi.dev,speakeasy.com"
-## Used for admin local development as a fake Google IDP
-MOCK_OIDC_PORT = "4000"
-MOCK_OIDC_ADDRESS = ":{{env.MOCK_OIDC_PORT}}"
+## Used for admin local development as a fake Google IDP. Derived from the
+## admin emulator vars (not a standalone *_PORT) so zero:remap-ports cannot
+## randomize the listen port and issuer out of sync with the admin client.
+MOCK_OIDC_ADDRESS = ":{{env.GRAM_ADMIN_OIDC_EMULATOR_PORT}}"
+MOCK_OIDC_ISSUER = "{{env.GRAM_ADMIN_OIDC_EMULATOR_URL}}"
 
 ########################
 ## Svix configuration ##

@@ -83,6 +83,8 @@ flagged-chats.jsonl
 .superpowers/
 # Stray riskjudgebench build/output artifacts (compiled binary + bench result dumps)
 /server/riskjudgebench
+# Stray skillsuggestbench binary from `go build ./cmd/skillsuggestbench` without -o
+/server/skillsuggestbench
 /results.json
 /finalists.json
 

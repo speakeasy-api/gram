@@ -223,6 +223,10 @@ function placeholderFor(
 }
 
 function TestConnectionRow({ form }: { form: DeviceIntegrationConfigForm }) {
+  // The test probes the SAVED configuration, so a dirty draft would test the
+  // old values while looking like it tested the new ones. Gate the button
+  // and say why, mirroring the pre-save state's guidance.
+  const dirty = form.hasUnsavedChanges;
   return (
     <Stack gap={2}>
       <Stack direction="horizontal" align="center" gap={2}>
@@ -230,7 +234,7 @@ function TestConnectionRow({ form }: { form: DeviceIntegrationConfigForm }) {
           variant="secondary"
           size="sm"
           onClick={form.testConnection}
-          disabled={form.isTesting || form.isMutating}
+          disabled={form.isTesting || form.isMutating || dirty}
         >
           <Button.LeftIcon>
             {form.isTesting ? (
@@ -244,7 +248,9 @@ function TestConnectionRow({ form }: { form: DeviceIntegrationConfigForm }) {
         <TestResultBadge form={form} />
       </Stack>
       <Type variant="body" className="text-muted-foreground text-xs">
-        Runs a real request against the vendor using the saved credentials.
+        {dirty
+          ? "Unsaved changes — save first. The test always runs against the saved credentials."
+          : "Runs a real request against the vendor using the saved credentials."}
       </Type>
     </Stack>
   );

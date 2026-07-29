@@ -1,3 +1,4 @@
+import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { Page } from "@/components/page-layout";
 import {
   defineFilters,
@@ -285,7 +286,7 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
         columns={columns}
         data={filteredDevices}
         rowKey={(row) => row.id}
-        noResultsMessage={<Type muted>No matching devices</Type>}
+        noResultsMessage={<WidgetEmptyState message="No matching devices" />}
       />
       {hasMore ? (
         <Stack direction="horizontal" align="center" gap={3}>
