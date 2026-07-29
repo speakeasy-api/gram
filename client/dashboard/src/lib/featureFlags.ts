@@ -9,7 +9,6 @@ export const FEATURE_FLAGS = {
   externalMcpUserSessions: "onboard-external-mcp-to-user-sessions",
   functions: "gram-functions",
   newCostsPage: "gram-new-costs-page",
-  orgMemory: "org-memory",
   promptPolicies: "gram-prompt-policies",
   rbac: "gram-rbac",
   tunneledMcp: "gram-tunneled-mcp",
