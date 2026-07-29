@@ -118,7 +118,7 @@ type promptPayload struct {
 	ValidationError string               `json:"previous_validation_error,omitempty"`
 }
 
-func buildPrompt(config Config, in GenerateInput) ([]byte, error) {
+func BuildPrompt(config Config, in GenerateInput) ([]byte, error) {
 	feedback := make([]promptFeedback, len(in.Feedback))
 	for i, item := range in.Feedback {
 		note := []rune(item.Note.String)
@@ -174,7 +174,7 @@ func buildPrompt(config Config, in GenerateInput) ([]byte, error) {
 }
 
 func (g *modelGenerator) Generate(ctx context.Context, in GenerateInput) (Generation, error) {
-	prompt, err := buildPrompt(g.config, in)
+	prompt, err := BuildPrompt(g.config, in)
 	if err != nil {
 		return Generation{}, err
 	}
@@ -203,12 +203,13 @@ func (g *modelGenerator) Generate(ctx context.Context, in GenerateInput) (Genera
 		HTTPMetadata:   nil,
 		JSONSchema: &or.ChatJSONSchemaConfig{
 			Name:        "skill_edit_suggestion",
-			Schema:      generationSchema(),
+			Schema:      GenerationSchema(),
 			Description: nil,
 			Strict:      optionalnullable.From(&strict),
 		},
-		KeyType: openrouter.KeyTypeInternal,
-		KeySlot: billing.ModelUsageSourceSkillSuggestions,
+		KeyType:   openrouter.KeyTypeInternal,
+		KeySlot:   billing.ModelUsageSourceSkillSuggestions,
+		Reasoning: nil,
 	})
 	switch {
 	case err != nil && errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil:
@@ -228,13 +229,13 @@ func (g *modelGenerator) Generate(ctx context.Context, in GenerateInput) (Genera
 	if err := json.Unmarshal([]byte(raw), &generation); err != nil {
 		return Generation{}, fmt.Errorf("decode skill suggestion response: %w: %w", ErrModelFailure, err)
 	}
-	if err := validateGeneration(&generation, len(in.Feedback)); err != nil {
+	if err := ValidateGeneration(&generation, len(in.Feedback)); err != nil {
 		return Generation{}, err
 	}
 	return generation, nil
 }
 
-func validateGeneration(generation *Generation, feedbackCount int) error {
+func ValidateGeneration(generation *Generation, feedbackCount int) error {
 	if generation.Decision != DecisionPropose && generation.Decision != DecisionDecline {
 		return fmt.Errorf("invalid skill suggestion decision %q: %w", generation.Decision, ErrModelFailure)
 	}
@@ -272,7 +273,7 @@ func validateGeneration(generation *Generation, feedbackCount int) error {
 	return nil
 }
 
-func generationSchema() map[string]any {
+func GenerationSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{

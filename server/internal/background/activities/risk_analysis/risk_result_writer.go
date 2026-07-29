@@ -138,14 +138,19 @@ func groupFindings(findings []scanners.Finding) []findingGroup {
 	return out
 }
 
-func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, rows []repo.InsertRiskResultsParams) error {
+// writeResults commits the batch's rows. The bool reports whether a commit
+// actually happened: false when the policy was deleted mid-analysis and the
+// results were dropped, so callers gating side effects (e.g. the batch-only
+// finding publish) on a durable write can tell the two nil-error outcomes
+// apart.
+func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, rows []repo.InsertRiskResultsParams) (bool, error) {
 	ctx, writeSpan := a.tracer.Start(ctx, "risk.writeResults")
 	defer writeSpan.End()
 
 	tx, err := a.db.Begin(ctx)
 	if err != nil {
 		writeSpan.SetStatus(codes.Error, err.Error())
-		return fmt.Errorf("begin transaction: %w", err)
+		return false, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
@@ -158,10 +163,10 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeSpan.SetAttributes(attribute.Bool("risk.policy_deleted", true))
 			a.logger.InfoContext(ctx, "risk policy deleted mid-analysis, dropping results", attr.SlogRiskPolicyID(args.RiskPolicyID.String()))
-			return nil
+			return false, nil
 		}
 		writeSpan.SetStatus(codes.Error, err.Error())
-		return fmt.Errorf("re-check risk policy before writing results: %w", err)
+		return false, fmt.Errorf("re-check risk policy before writing results: %w", err)
 	}
 
 	if err := txRepo.DeleteRiskResultsForMessages(ctx, repo.DeleteRiskResultsForMessagesParams{
@@ -170,13 +175,13 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 		MessageIds:   args.MessageIDs,
 	}); err != nil {
 		writeSpan.SetStatus(codes.Error, err.Error())
-		return fmt.Errorf("delete old results: %w", err)
+		return false, fmt.Errorf("delete old results: %w", err)
 	}
 
 	if len(rows) > 0 {
 		if _, err := txRepo.InsertRiskResults(ctx, rows); err != nil {
 			writeSpan.SetStatus(codes.Error, err.Error())
-			return fmt.Errorf("insert risk results: %w", err)
+			return false, fmt.Errorf("insert risk results: %w", err)
 		}
 	}
 
@@ -184,15 +189,15 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 	if len(payloads) > 0 {
 		if _, err := outbox.AppendBatch(ctx, tx, args.OrganizationID, events.RiskFindingCreatedV1, payloads); err != nil {
 			writeSpan.SetStatus(codes.Error, err.Error())
-			return fmt.Errorf("append risk findings to outbox: %w", err)
+			return false, fmt.Errorf("append risk findings to outbox: %w", err)
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		writeSpan.SetStatus(codes.Error, err.Error())
-		return fmt.Errorf("commit results: %w", err)
+		return false, fmt.Errorf("commit results: %w", err)
 	}
-	return nil
+	return true, nil
 }
 
 func findingCreatedPayloads(rows []repo.InsertRiskResultsParams, now time.Time) []events.RiskFindingCreatedPayloadV1 {

@@ -12,37 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const backfillLatestClaudeUserMessagePromptID = `-- name: BackfillLatestClaudeUserMessagePromptID :execrows
-WITH latest_user_message AS (
-  SELECT chat_messages.id
-  FROM chat_messages
-  WHERE chat_messages.chat_id = $2
-    AND (chat_messages.project_id IS NULL OR chat_messages.project_id = $3::uuid)
-    AND chat_messages.role = 'user'
-  ORDER BY chat_messages.created_at DESC, chat_messages.seq DESC
-  LIMIT 1
-)
-UPDATE chat_messages
-SET message_id = $1
-WHERE chat_messages.id = (SELECT latest_user_message.id FROM latest_user_message)
-  AND $1::text <> ''
-  AND (chat_messages.message_id IS NULL OR chat_messages.message_id = '' OR chat_messages.message_id != $1::text)
-`
-
-type BackfillLatestClaudeUserMessagePromptIDParams struct {
-	MessageID pgtype.Text
-	ChatID    uuid.UUID
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) BackfillLatestClaudeUserMessagePromptID(ctx context.Context, arg BackfillLatestClaudeUserMessagePromptIDParams) (int64, error) {
-	result, err := q.db.Exec(ctx, backfillLatestClaudeUserMessagePromptID, arg.MessageID, arg.ChatID, arg.ProjectID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const countEmployeesForExternalOrg = `-- name: CountEmployeesForExternalOrg :one
 SELECT COUNT(DISTINCT user_id)::bigint
 FROM user_accounts

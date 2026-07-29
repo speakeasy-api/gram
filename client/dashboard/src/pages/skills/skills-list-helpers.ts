@@ -28,6 +28,13 @@ export function filterSkills(
   });
 }
 
+export function prioritizeAddableSkills(skills: Skill[]): Skill[] {
+  return skills.toSorted(
+    (left, right) =>
+      Number(right.hasValidVersion) - Number(left.hasValidVersion),
+  );
+}
+
 export function sortSkills(
   skills: Skill[],
   metricsBySkill: ReadonlyMap<string, SkillInsightMetrics>,

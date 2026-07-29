@@ -543,6 +543,11 @@ DELETE FROM skill_edit_suggestion_changes
 WHERE project_id = @project_id
   AND id = @id;
 
+-- name: DeleteSkillEditSuggestionChangesByIDs :exec
+DELETE FROM skill_edit_suggestion_changes
+WHERE project_id = @project_id
+  AND id = ANY (@ids::uuid[]);
+
 -- name: RebaseSkillEditSuggestionChange :exec
 UPDATE skill_edit_suggestion_changes
 SET proposed_diff = @proposed_diff,

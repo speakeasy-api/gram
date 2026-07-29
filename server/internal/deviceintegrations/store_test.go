@@ -2,6 +2,7 @@ package deviceintegrations
 
 import (
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
@@ -126,6 +127,34 @@ func TestCredentialsStoredEncryptedAndNeverReadable(t *testing.T) {
 	}
 }
 
+func TestEnableTransitionMarksSyncsDue(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	created := mustUpsert(t, ctx, conn, store, orgID, validCreds(), validSettings(), true)
+	require.True(t, created.SyncsMadeDue, "creation seeds schedules due")
+
+	disabled := mustUpsert(t, ctx, conn, store, orgID, nil, validSettings(), false)
+	require.False(t, disabled.SyncsMadeDue, "disabling makes nothing due")
+
+	// Simulate a config disabled mid-interval: the sync already ran, so its
+	// next poll sits in the future.
+	require.NoError(t, testrepo.New(conn).DeferDeviceIntegrationSyncsFixture(ctx, created.Config.ID))
+
+	// Re-enabling means "sync now": the schedules must be due again or the
+	// immediate-sync trigger kicks a coordinator that finds nothing.
+	reenabled := mustUpsert(t, ctx, conn, store, orgID, nil, validSettings(), true)
+	require.True(t, reenabled.SyncsMadeDue, "an enable transition makes schedules due")
+	rows, err := store.repo.ListSchedulesWithSync(ctx, created.Config.ID)
+	require.NoError(t, err)
+	require.LessOrEqual(t, rows[0].NextPollAfter.Time, time.Now().UTC().Add(time.Minute), "next poll is due now")
+
+	// An enabled→enabled save with nothing else changed makes nothing due.
+	steady := mustUpsert(t, ctx, conn, store, orgID, nil, validSettings(), true)
+	require.False(t, steady.SyncsMadeDue, "a no-op save must not re-kick the sync machinery")
+}
+
 func TestUpsertClearsAutoPauseButNotUserDisable(t *testing.T) {
 	t.Parallel()
 
@@ -238,7 +267,8 @@ func TestSettingsRepointResetsSyncState(t *testing.T) {
 	// coverage digest hashes only the fleet, so the stored digest MUST clear
 	// or the newly pointed-at account receives nothing until the fleet
 	// changes.
-	mustUpsert(t, ctx, conn, store, orgID, nil, providers.Settings{"instance_url": "https://repointed.test"}, true)
+	repointed := mustUpsert(t, ctx, conn, store, orgID, nil, providers.Settings{"instance_url": "https://repointed.test"}, true)
+	require.True(t, repointed.SyncsMadeDue, "a repoint resets sync state, so the caller must kick a sync rather than wait out the interval")
 	digests, err := testrepo.New(conn).GetDeviceIntegrationSyncPushDigests(ctx, created.Config.ID)
 	require.NoError(t, err)
 	require.Len(t, digests, 1)

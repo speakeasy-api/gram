@@ -169,7 +169,7 @@ export class Skills extends ClientSDK {
    * approveSuggestion skills
    *
    * @remarks
-   * Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only one of its proposed changes. Stale suggestions are superseded instead.
+   * Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only a subset of its proposed changes. Stale suggestions are superseded instead.
    */
   async approveSuggestion(
     request: ApproveSkillSuggestionRequest,

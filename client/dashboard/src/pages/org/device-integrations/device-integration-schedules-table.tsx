@@ -1,3 +1,4 @@
+import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { RequireScope } from "@/components/require-scope";
 import { ScheduleStatusBadge } from "@/components/schedule-status-badge";
 import { Switch } from "@/components/ui/switch";
@@ -102,7 +103,7 @@ export const DeviceIntegrationSchedulesTable = memo(
         columns={scheduleColumns}
         data={rows}
         rowKey={(row) => row.key}
-        noResultsMessage={<Type muted>No schedules</Type>}
+        noResultsMessage={<WidgetEmptyState message="No schedules" />}
       />
     );
   },

@@ -1,4 +1,5 @@
 import { RequireScope } from "@/components/require-scope";
+import { Page } from "@/components/page-layout";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Button as UiButton } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,9 +25,13 @@ import { useUndistributeSkillMutation } from "@gram/client/react-query/undistrib
 import { Badge, Button, cn, Icon } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sparkles, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
+import {
+  filterSkills,
+  prioritizeAddableSkills,
+} from "../skills/skills-list-helpers";
 import { SectionEmptyState } from "./SectionEmptyState";
 
 /**
@@ -51,6 +56,7 @@ export function PluginSkillsSection({
   const project = useProject();
   const queryClient = useQueryClient();
   const [isAddSkillOpen, setIsAddSkillOpen] = useState(false);
+  const [skillSearch, setSkillSearch] = useState("");
 
   const distributionsQuery = useSkillDistributionsInfinite(
     { pluginId, limit: 50 },
@@ -92,14 +98,38 @@ export function PluginSkillsSection({
   // endpoint rejects them, so the picker explains why and links to the fix.
   const availableSkills = useMemo(() => {
     const distributedSkillIds = new Set(distributions.map((d) => d.skillId));
-    return (
-      skillsQuery.data?.pages.flatMap((page) => page.result.skills) ?? []
-    ).filter((skill) => !distributedSkillIds.has(skill.id));
+    return prioritizeAddableSkills(
+      (
+        skillsQuery.data?.pages.flatMap((page) => page.result.skills) ?? []
+      ).filter((skill) => !distributedSkillIds.has(skill.id)),
+    );
   }, [distributions, skillsQuery.data?.pages]);
+  const visibleSkills = useMemo(
+    () => filterSkills(availableSkills, skillSearch, [], []),
+    [availableSkills, skillSearch],
+  );
+  const unavailableSkillCount = availableSkills.filter(
+    (skill) => !skill.hasValidVersion,
+  ).length;
+  const hiddenSkillCount = availableSkills.length - visibleSkills.length;
+  const skillListSummary = [
+    hiddenSkillCount > 0
+      ? `${hiddenSkillCount} skill${hiddenSkillCount === 1 ? "" : "s"} hidden by search`
+      : "",
+    unavailableSkillCount > 0
+      ? `${unavailableSkillCount} unavailable skill${unavailableSkillCount === 1 ? "" : "s"}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const distribute = useDistributeSkillMutation();
   const undistribute = useUndistributeSkillMutation();
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
+  useEffect(() => {
+    setSkillSearch("");
+    setSelectedSkillIds([]);
+  }, [pluginId]);
   // Shared mutation observers only reflect their latest call, so a local flag
   // covers the whole allSettled batch to keep the dialog locked until it ends.
   const [isBatchAdding, setIsBatchAdding] = useState(false);
@@ -109,7 +139,10 @@ export function PluginSkillsSection({
     // failed-only retry selection.
     if (!open && isBatchAdding) return;
     setIsAddSkillOpen(open);
-    if (open) setSelectedSkillIds([]);
+    if (open) {
+      setSelectedSkillIds([]);
+      setSkillSearch("");
+    }
   };
 
   const toggleSkill = (skillId: string) => {
@@ -182,6 +215,37 @@ export function PluginSkillsSection({
       },
     );
   };
+
+  let skillPickerContent: JSX.Element;
+  if (isSkillListLoading) {
+    skillPickerContent = <Skeleton className="h-24 w-full" />;
+  } else if (visibleSkills.length > 0) {
+    skillPickerContent = (
+      <div className="flex max-h-64 flex-col gap-0.5 overflow-y-auto rounded-md border p-1">
+        {visibleSkills.map((skill) => (
+          <AddSkillOption
+            key={skill.id}
+            skill={skill}
+            checked={selectedSkillIds.includes(skill.id)}
+            disabled={isBatchAdding}
+            onToggle={() => toggleSkill(skill.id)}
+          />
+        ))}
+      </div>
+    );
+  } else if (availableSkills.length > 0) {
+    skillPickerContent = (
+      <Type muted small>
+        No skills match your search.
+      </Type>
+    );
+  } else {
+    skillPickerContent = (
+      <Type muted small>
+        No skills available to add. Record a skill in this project first.
+      </Type>
+    );
+  }
 
   // Precomputed list body keeps the JSX below free of nested ternaries while
   // distinguishing "nothing distributed yet" from "no search matches".
@@ -295,26 +359,19 @@ export function PluginSkillsSection({
           </Dialog.Header>
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">Skills</label>
-            {isSkillListLoading ? (
-              <Skeleton className="h-24 w-full" />
-            ) : availableSkills.length > 0 ? (
-              <div className="flex max-h-64 flex-col gap-0.5 overflow-y-auto rounded-md border p-1">
-                {availableSkills.map((skill) => (
-                  <AddSkillOption
-                    key={skill.id}
-                    skill={skill}
-                    checked={selectedSkillIds.includes(skill.id)}
-                    disabled={isBatchAdding}
-                    onToggle={() => toggleSkill(skill.id)}
-                  />
-                ))}
-              </div>
-            ) : (
+            <Page.Toolbar.Search
+              value={skillSearch}
+              onChange={setSkillSearch}
+              debounceMs={150}
+              placeholder="Search skills"
+              className="w-full"
+            />
+            {!isSkillListLoading && skillListSummary && (
               <Type muted small>
-                No skills available to add. Record a skill in this project
-                first.
+                {skillListSummary}
               </Type>
             )}
+            {skillPickerContent}
           </div>
           <Dialog.Footer>
             <Button
