@@ -476,7 +476,7 @@ func TestSkillsListSearchFiltersAndUpdatedPagination(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 	alpha := createSkill(t, ctx, ti, "alpha", "Alpha summary")
-	createSkill(t, ctx, ti, "bravo", "Bravo summary")
+	bravo := createSkill(t, ctx, ti, "bravo", "Bravo summary")
 	_, err := skillservice.CaptureSkillContent(ctx, ti.conn, ti.projectID, skillManifest("captured", "Captured summary", "body"))
 	require.NoError(t, err)
 	_, err = ti.service.Update(ctx, &gen.UpdatePayload{
@@ -519,6 +519,18 @@ func TestSkillsListSearchFiltersAndUpdatedPagination(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), captured.TotalCount)
 	require.Equal(t, "captured", captured.Skills[0].Name)
+
+	err = ti.service.Archive(ctx, &gen.ArchivePayload{
+		ID: bravo.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	empty, err := ti.service.List(ctx, &gen.ListPayload{
+		Cursor: first.NextCursor, Limit: 1, Search: nil, SourceKinds: []string{"manual"}, Classifications: nil, Sort: "updated",
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, empty.Skills)
+	require.Equal(t, int64(1), empty.TotalCount)
 }
 
 func TestSkillsReadAndWriteRBACExpansion(t *testing.T) {

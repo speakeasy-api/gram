@@ -22,7 +22,7 @@ import {
 import { Badge, type Column, Icon, Table } from "@speakeasy-api/moonshine";
 import { useRoutes } from "@/routes";
 import { useQueryState } from "nuqs";
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { ApproveAllSkillSuggestions } from "./ApproveAllSkillSuggestions";
@@ -128,15 +128,15 @@ export default function SkillsList(): JSX.Element {
       [],
     [metricQuery.data?.pages],
   );
-  const skills = metricSort
+  const insightSkills = metricSort
     ? metricSkills
     : (pageQuery.data?.result.skills ?? EMPTY_SKILLS);
   const insightsQuery = useSkillEfficacyInsights(
-    metricSort ? {} : { skillIds: skills.map((skill) => skill.id) },
+    metricSort ? {} : { skillIds: insightSkills.map((skill) => skill.id) },
     undefined,
     {
       throwOnError: false,
-      enabled: skills.length > 0,
+      enabled: insightSkills.length > 0,
     },
   );
   const openSuggestions = useOpenSkillSuggestions();
@@ -155,42 +155,61 @@ export default function SkillsList(): JSX.Element {
     filters.values.sourceKind.length > 0 ||
     filters.values.classification.length > 0;
   const insightsUnavailable = !!insightsQuery.error && !insightsQuery.data;
+  const effectiveMetricSort = metricSort && !insightsUnavailable;
   const effectiveSort = insightsUnavailable ? "updated" : sort;
+  const skills = effectiveMetricSort
+    ? metricSkills
+    : (pageQuery.data?.result.skills ?? EMPTY_SKILLS);
   const visibleSkills = useMemo(
     () =>
-      metricSort ? sortSkills(skills, metricsBySkill, effectiveSort) : skills,
-    [effectiveSort, metricSort, metricsBySkill, skills],
+      effectiveMetricSort
+        ? sortSkills(skills, metricsBySkill, effectiveSort)
+        : skills,
+    [effectiveMetricSort, effectiveSort, metricsBySkill, skills],
   );
 
+  useEffect(() => {
+    if (!insightsUnavailable || sort === "updated") return;
+    setSort("updated");
+    setPage(0);
+    setPageCursors([undefined]);
+  }, [insightsUnavailable, sort]);
+
   useDrainSkillPages({
-    active: metricSort,
+    active: effectiveMetricSort,
     hasNextPage: metricQuery.hasNextPage,
     isFetchingNextPage: metricQuery.isFetchingNextPage,
     isFetchNextPageError: metricQuery.isFetchNextPageError,
     fetchNextPage: metricQuery.fetchNextPage,
   });
 
-  const displayedSkills = metricSort
+  const displayedSkills = effectiveMetricSort
     ? visibleSkills.slice(
         page * RESULT_PAGE_SIZE,
         (page + 1) * RESULT_PAGE_SIZE,
       )
     : visibleSkills;
-  const totalCount = metricSort
+  const totalCount = effectiveMetricSort
     ? (metricQuery.data?.pages[0]?.result.totalCount ?? 0)
     : (pageQuery.data?.result.totalCount ?? 0);
-  const totalPages = Math.ceil(totalCount / RESULT_PAGE_SIZE);
-  const query = metricSort ? metricQuery : pageQuery;
+  const paginationCount =
+    effectiveMetricSort && metricQuery.isFetchNextPageError
+      ? visibleSkills.length
+      : totalCount;
+  const totalPages = Math.ceil(paginationCount / RESULT_PAGE_SIZE);
+  const query = effectiveMetricSort ? metricQuery : pageQuery;
   const isEmptyProject =
     !!query.data && totalCount === 0 && !active && !query.isFetching;
   const draining =
-    metricSort && metricQuery.hasNextPage && !metricQuery.isFetchNextPageError;
+    effectiveMetricSort &&
+    metricQuery.hasNextPage &&
+    !metricQuery.isFetchNextPageError;
   const resetPage = () => {
     setPage(0);
     setPageCursors([undefined]);
   };
   const nextPage = () => {
-    if (metricSort) {
+    if (effectiveMetricSort) {
       setPage((current) => current + 1);
       return;
     }
@@ -420,7 +439,7 @@ export default function SkillsList(): JSX.Element {
                   <Page.Toolbar.Refresh
                     onRefresh={() => {
                       void Promise.all([
-                        metricSort
+                        effectiveMetricSort
                           ? metricQuery.refetch()
                           : pageQuery.refetch(),
                         insightsQuery.refetch(),
@@ -507,13 +526,13 @@ export default function SkillsList(): JSX.Element {
                     className="min-w-[1100px]"
                     noResultsMessage={noResultsMessage(
                       active,
-                      metricSort && metricQuery.isFetchNextPageError,
+                      effectiveMetricSort && metricQuery.isFetchNextPageError,
                     )}
                   />
                 </div>
               )}
 
-              {metricSort && metricQuery.isFetchNextPageError && (
+              {effectiveMetricSort && metricQuery.isFetchNextPageError && (
                 <LoadMoreError
                   onRetry={() => void metricQuery.fetchNextPage()}
                 />

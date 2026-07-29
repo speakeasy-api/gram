@@ -592,6 +592,46 @@ func (q *Queries) CountSkillFeedbackOutcomes(ctx context.Context, arg CountSkill
 	return i, err
 }
 
+const countSkills = `-- name: CountSkills :one
+SELECT COUNT(*)
+FROM skills
+WHERE project_id = $1
+  AND archived_at IS NULL
+  AND (
+    $2::text IS NULL
+    OR name ILIKE '%' || $2::text || '%'
+    OR display_name ILIKE '%' || $2::text || '%'
+    OR COALESCE(summary, '') ILIKE '%' || $2::text || '%'
+  )
+  AND (
+    COALESCE(cardinality($3::text[]), 0) = 0
+    OR source_kind = ANY($3::text[])
+  )
+  AND (
+    COALESCE(cardinality($4::text[]), 0) = 0
+    OR classification = ANY($4::text[])
+  )
+`
+
+type CountSkillsParams struct {
+	ProjectID       uuid.UUID
+	Search          pgtype.Text
+	SourceKinds     []string
+	Classifications []string
+}
+
+func (q *Queries) CountSkills(ctx context.Context, arg CountSkillsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSkills,
+		arg.ProjectID,
+		arg.Search,
+		arg.SourceKinds,
+		arg.Classifications,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUnreviewedSkillFeedback = `-- name: CountUnreviewedSkillFeedback :one
 SELECT COUNT(*)
 FROM skill_feedback

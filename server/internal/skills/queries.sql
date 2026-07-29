@@ -1250,6 +1250,26 @@ WHERE s.project_id = @project_id
   AND s.id = @skill_id
   AND s.archived_at IS NULL;
 
+-- name: CountSkills :one
+SELECT COUNT(*)
+FROM skills
+WHERE project_id = @project_id
+  AND archived_at IS NULL
+  AND (
+    sqlc.narg(search)::text IS NULL
+    OR name ILIKE '%' || sqlc.narg(search)::text || '%'
+    OR display_name ILIKE '%' || sqlc.narg(search)::text || '%'
+    OR COALESCE(summary, '') ILIKE '%' || sqlc.narg(search)::text || '%'
+  )
+  AND (
+    COALESCE(cardinality(@source_kinds::text[]), 0) = 0
+    OR source_kind = ANY(@source_kinds::text[])
+  )
+  AND (
+    COALESCE(cardinality(@classifications::text[]), 0) = 0
+    OR classification = ANY(@classifications::text[])
+  );
+
 -- name: ListSkills :many
 SELECT
   sqlc.embed(s),

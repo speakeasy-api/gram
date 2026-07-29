@@ -20,6 +20,7 @@ const testState = vi.hoisted(() => ({
   insightsError: null as Error | null,
   insightsData: { insights: [] } as { insights: unknown[] } | undefined,
   insightsRefetch: vi.fn().mockResolvedValue(undefined),
+  metricTotalCount: undefined as number | undefined,
   skillRequests: [] as unknown[],
   metricSkillRequests: [] as unknown[],
   searchValue: "example",
@@ -115,7 +116,7 @@ vi.mock("@gram/client/react-query/skills.js", () => ({
           {
             result: {
               skills: matchingSkills,
-              totalCount: matchingSkills.length,
+              totalCount: testState.metricTotalCount ?? matchingSkills.length,
             },
           },
         ],
@@ -307,6 +308,7 @@ beforeEach(() => {
   testState.insightsData = { insights: [] };
   testState.insightsRefetch.mockReset();
   testState.insightsRefetch.mockResolvedValue(undefined);
+  testState.metricTotalCount = undefined;
   testState.skillRequests = [];
   testState.metricSkillRequests = [];
   testState.searchValue = "example";
@@ -354,6 +356,8 @@ describe("SkillsList pagination surfaces", () => {
   });
 
   it("keeps loaded rows visible and exposes an explicit retry after a page failure", () => {
+    testState.skills = makeSkills(100);
+    testState.metricTotalCount = 1000;
     testState.hasNextPage = true;
     testState.isFetchNextPageError = true;
     testState.error = new Error("next page failed");
@@ -362,6 +366,11 @@ describe("SkillsList pagination surfaces", () => {
 
     expect(screen.getAllByTestId("skill-row")).toHaveLength(50);
     expect(screen.getByText("Unable to load more skills.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getAllByTestId("skill-row")).toHaveLength(50);
+    expect(
+      screen.getByRole("button", { name: "Next" }).hasAttribute("disabled"),
+    ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(testState.fetchNextPage).toHaveBeenCalledOnce();
   });
@@ -432,6 +441,20 @@ describe("SkillsList pagination surfaces", () => {
     expect(screen.getAllByTestId("skill-row")).toHaveLength(50);
     fireEvent.click(screen.getByRole("button", { name: "Retry insights" }));
     expect(testState.insightsRefetch).toHaveBeenCalledOnce();
+  });
+
+  it("returns to paginated skills when metric insights are unavailable", async () => {
+    testState.hasNextPage = true;
+    testState.insightsData = undefined;
+    testState.insightsError = new Error("insights unavailable");
+    render(<SkillsList />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply metric sort" }));
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId("skill-row")).toHaveLength(50),
+    );
+    expect(testState.fetchNextPage).not.toHaveBeenCalled();
   });
 
   it("badges skills with open suggestions and drains suggestion pages", async () => {

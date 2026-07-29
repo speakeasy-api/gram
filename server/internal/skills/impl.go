@@ -786,7 +786,8 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		}
 	}
 
-	rows, err := repo.New(s.db).ListSkills(ctx, repo.ListSkillsParams{
+	queries := repo.New(s.db)
+	rows, err := queries.ListSkills(ctx, repo.ListSkillsParams{
 		ProjectID:       *authCtx.ProjectID,
 		Search:          conv.PtrToPGTextEmpty(payload.Search),
 		SourceKinds:     payload.SourceKinds,
@@ -817,6 +818,16 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	totalCount := int64(0)
 	if len(rows) > 0 {
 		totalCount = rows[0].TotalCount
+	} else {
+		totalCount, err = queries.CountSkills(ctx, repo.CountSkillsParams{
+			ProjectID:       *authCtx.ProjectID,
+			Search:          conv.PtrToPGTextEmpty(payload.Search),
+			SourceKinds:     payload.SourceKinds,
+			Classifications: payload.Classifications,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "count skills").LogError(ctx, logger)
+		}
 	}
 
 	return &gen.ListSkillsResult{
