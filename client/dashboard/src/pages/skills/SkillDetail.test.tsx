@@ -28,6 +28,11 @@ const testState = vi.hoisted(() => ({
   isFetchNextPageError: false,
   versionError: null as Error | null,
   versions: [] as Array<Record<string, unknown>>,
+  sightingTimeline: [] as Array<{
+    bucketStart: Date;
+    skillVersionId?: string;
+    activationCount: number;
+  }>,
   latestVersion: undefined as Record<string, unknown> | undefined,
   version: {
     id: "version_latest",
@@ -122,7 +127,7 @@ vi.mock("@gram/client/react-query/skill.js", () => ({
         windowStart: new Date("2026-06-16T00:00:00Z"),
         windowEnd: new Date("2026-07-16T00:00:00Z"),
       },
-      sightingTimeline: [],
+      sightingTimeline: testState.sightingTimeline,
     },
   }),
   invalidateAllSkill: testState.invalidateSkill,
@@ -162,6 +167,21 @@ vi.mock("@gram/client/react-query/shareSkill.js", () => ({
 }));
 vi.mock("@gram/client/react-query/unshareSkill.js", () => ({
   useUnshareSkillMutation: () => testState.unshare,
+}));
+vi.mock("react-chartjs-2", () => ({
+  Line: ({
+    data,
+  }: {
+    data: { datasets: Array<{ label: string; data: number[] }> };
+  }) => (
+    <div data-testid="activation-chart">
+      {data.datasets.map((dataset) => (
+        <span key={dataset.label}>
+          {dataset.label}:{dataset.data.reduce((sum, value) => sum + value, 0)}
+        </span>
+      ))}
+    </div>
+  ),
 }));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({
@@ -205,6 +225,8 @@ vi.mock("@speakeasy-api/moonshine", () => ({
   Button: ({ children }: { children: ReactNode }) => (
     <button>{children}</button>
   ),
+  cn: (...classes: Array<string | false | null | undefined>) =>
+    classes.filter(Boolean).join(" "),
   Icon: () => <span />,
   Table: ({
     columns,
@@ -248,12 +270,33 @@ beforeEach(() => {
   testState.isFetchNextPageError = false;
   testState.versionError = null;
   testState.versions = [testState.version];
+  testState.sightingTimeline = [];
   testState.latestVersion = testState.version;
 });
 
 afterEach(cleanup);
 
 describe("SkillDetail", () => {
+  it("charts activation counts by known and unknown version", () => {
+    testState.sightingTimeline = [
+      {
+        bucketStart: new Date("2026-07-15T00:00:00Z"),
+        skillVersionId: "version_latest",
+        activationCount: 3,
+      },
+      {
+        bucketStart: new Date("2026-07-15T00:00:00Z"),
+        activationCount: 2,
+      },
+    ];
+
+    render(<SkillDetail />);
+
+    const chart = screen.getByTestId("activation-chart");
+    expect(chart.textContent).toContain("v1 (12345678):3");
+    expect(chart.textContent).toContain("Unknown version:2");
+  });
+
   it("project-scopes every write affordance", () => {
     render(<SkillDetail />);
     const gates = screen.getAllByTestId("write-gate");
