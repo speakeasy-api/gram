@@ -1,27 +1,7 @@
 import { formatBillingQuantity } from "@/components/billing/billing-format";
 import { Type } from "@/components/ui/type";
-import type { ProductTier } from "@/hooks/useProductTier";
 import type { TierLimits } from "@gram/client/models/components/tierlimits.js";
-import type { UsageTiers } from "@gram/client/models/components/usagetiers.js";
 import { Stack } from "@speakeasy-api/moonshine";
-
-export function getChatCreditEntitlement(
-  productTier: ProductTier,
-  usageTiers: UsageTiers | undefined,
-): number | undefined {
-  if (!usageTiers) {
-    return undefined;
-  }
-
-  switch (productTier) {
-    case "__deprecated__pro":
-      return usageTiers.pro.includedCredits;
-    case "enterprise":
-      return usageTiers.enterprise.includedCredits;
-    default:
-      return usageTiers.free.includedCredits;
-  }
-}
 
 export function TierIncludedItems({
   tierLimits,

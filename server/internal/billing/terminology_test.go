@@ -7,6 +7,8 @@ import (
 )
 
 func TestAdditionalChatCreditsBullet(t *testing.T) {
+	t.Parallel()
+
 	require.Equal(
 		t,
 		"$11 per 10 additional chat credits",

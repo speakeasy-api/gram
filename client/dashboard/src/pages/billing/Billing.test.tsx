@@ -2,10 +2,8 @@ import { cleanup, render, screen } from "@testing-library/react";
 import type { TierLimits } from "@gram/client/models/components/tierlimits.js";
 import type { UsageTiers } from "@gram/client/models/components/usagetiers.js";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  getChatCreditEntitlement,
-  TierIncludedItems,
-} from "./billing-entitlements";
+import { getChatCreditEntitlement } from "./billing-entitlement";
+import { TierIncludedItems } from "./billing-entitlements";
 
 afterEach(cleanup);
 

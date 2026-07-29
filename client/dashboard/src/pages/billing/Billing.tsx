@@ -30,10 +30,8 @@ import {
   formatBillingCurrency,
   type BillingUnit,
 } from "@/components/billing/billing-format";
-import {
-  getChatCreditEntitlement,
-  TierIncludedItems,
-} from "./billing-entitlements";
+import { TierIncludedItems } from "./billing-entitlements";
+import { getChatCreditEntitlement } from "./billing-entitlement";
 
 export default function Billing(): JSX.Element {
   return (
