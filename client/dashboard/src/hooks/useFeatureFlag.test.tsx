@@ -74,7 +74,6 @@ describe("useFeatureFlag", () => {
 
     expect(result.current).toEqual({
       status: "loading",
-      enabled: undefined,
     });
     expect(isFeatureEnabled).not.toHaveBeenCalled();
     expect(onFeatureFlags).toHaveBeenCalledOnce();
@@ -85,7 +84,7 @@ describe("useFeatureFlag", () => {
 
     emitFlagResult(true);
 
-    expect(result.current).toEqual({ status: "ready", enabled: true });
+    expect(result.current).toEqual({ status: "enabled" });
     expect(isFeatureEnabled).toHaveBeenCalledWith("gram-rbac", {
       fresh: true,
     });
@@ -96,7 +95,7 @@ describe("useFeatureFlag", () => {
 
     emitFlagResult(false);
 
-    expect(result.current).toEqual({ status: "ready", enabled: false });
+    expect(result.current).toEqual({ status: "disabled" });
   });
 
   it("distinguishes a missing flag from loading", () => {
@@ -106,7 +105,6 @@ describe("useFeatureFlag", () => {
 
     expect(result.current).toEqual({
       status: "missing",
-      enabled: undefined,
     });
   });
 
@@ -119,7 +117,6 @@ describe("useFeatureFlag", () => {
 
     expect(result.current).toEqual({
       status: "error",
-      enabled: undefined,
     });
     expect(isFeatureEnabled).not.toHaveBeenCalled();
   });
@@ -128,10 +125,10 @@ describe("useFeatureFlag", () => {
     const { result, emitFlagResult } = renderFeatureFlag();
 
     emitFlagResult(true);
-    expect(result.current).toEqual({ status: "ready", enabled: true });
+    expect(result.current).toEqual({ status: "enabled" });
 
     emitFlagResult(false);
-    expect(result.current).toEqual({ status: "ready", enabled: false });
+    expect(result.current).toEqual({ status: "disabled" });
   });
 
   it("uses deterministic telemetry providers without subscribing", () => {
@@ -140,7 +137,7 @@ describe("useFeatureFlag", () => {
       initialValue: true,
     });
 
-    expect(result.current).toEqual({ status: "ready", enabled: true });
+    expect(result.current).toEqual({ status: "enabled" });
     expect(onFeatureFlags).not.toHaveBeenCalled();
   });
 

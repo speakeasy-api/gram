@@ -46,12 +46,10 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   });
 
   // Assistants is opt-in: unavailable flags remain hidden.
-  const isAssistantsEnabled =
-    assistantsFlag.status === "ready" && assistantsFlag.enabled;
+  const isAssistantsEnabled = assistantsFlag.status === "enabled";
   // Deployments is opt-out: it remains visible unless PostHog explicitly
   // resolves the flag to disabled.
-  const isDeploymentsPageEnabled =
-    deploymentsPageFlag.status !== "ready" || deploymentsPageFlag.enabled;
+  const isDeploymentsPageEnabled = deploymentsPageFlag.status !== "disabled";
   const isSkillsEnabled = productFeatures?.skillsEnabled === true;
 
   return useMemo<ProjectNavRoute[]>(() => {

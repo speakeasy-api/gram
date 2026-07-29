@@ -85,7 +85,7 @@ vi.mock("@gram/client/react-query/productFeatures.js", () => ({
 function unavailableFeatureFlag(
   status: "loading" | "missing" | "error",
 ): FeatureFlagResult {
-  return { status, enabled: undefined };
+  return { status };
 }
 
 beforeEach(() => {
@@ -169,8 +169,8 @@ describe("useProjectNavRoutes", () => {
 
   it("uses resolved values for feature-gated navigation", () => {
     testState.featureFlags = {
-      [FEATURE_FLAGS.assistants]: { status: "ready", enabled: true },
-      [FEATURE_FLAGS.deploymentsPage]: { status: "ready", enabled: false },
+      [FEATURE_FLAGS.assistants]: { status: "enabled" },
+      [FEATURE_FLAGS.deploymentsPage]: { status: "disabled" },
     };
 
     const { result } = renderHook(() => useProjectNavRoutes());

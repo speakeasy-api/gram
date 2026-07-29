@@ -142,14 +142,14 @@ if (assistants.status === "missing" || assistants.status === "error") {
   return <FeatureUnavailable />;
 }
 
-const assistantsEnabled = assistants.enabled; // status is "ready"; boolean
+const assistantsEnabled = assistants.status === "enabled";
 ```
 
 Add new frontend keys to the `FEATURE_FLAGS` registry in
 `client/dashboard/src/lib/featureFlags.ts`; its values generate the hook's
-`FeatureFlag` type. The hook distinguishes loading, ready, missing, and error
-states and stays reactive as PostHog reloads flags. On localhost, the
-development telemetry provider reports every flag ready and enabled.
+`FeatureFlag` type. The hook distinguishes loading, enabled, disabled, missing,
+and error states and stays reactive as PostHog reloads flags. On localhost,
+the development telemetry provider reports every flag as enabled.
 
 PostHog flags control rollout UI only. Never use them for authorization or
 entitlement enforcement, and never import PostHog hooks directly.
