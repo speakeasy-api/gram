@@ -486,7 +486,7 @@ test("forwards caller identity from _meta to the tool", async () => {
     "gram.ai/oauth-client-id": "client-abc",
   });
 
-  expect(options).toEqual({
+  expect(options).toMatchObject({
     clientInfo: { name: "claude-code", version: "2.1" },
     oauthClientId: "client-abc",
   });
@@ -497,7 +497,25 @@ test("defaults a missing client version so a name-only client is still usable", 
     "io.modelcontextprotocol/clientInfo": { name: "claude-code" },
   });
 
-  expect(options).toEqual({ clientInfo: { name: "claude-code", version: "" } });
+  expect(options.clientInfo).toEqual({ name: "claude-code", version: "" });
+});
+
+test("forwards the whole _meta block so tools can read unmodelled keys", async () => {
+  const options = await callerIdentityOptions({
+    "io.modelcontextprotocol/clientInfo": {
+      name: "claude-code",
+      version: "2.1",
+    },
+    "example.com/experiment": "b",
+  });
+
+  expect(options.meta).toEqual({
+    "io.modelcontextprotocol/clientInfo": {
+      name: "claude-code",
+      version: "2.1",
+    },
+    "example.com/experiment": "b",
+  });
 });
 
 test("drops malformed and unknown _meta entries", async () => {
@@ -507,7 +525,8 @@ test("drops malformed and unknown _meta entries", async () => {
     "example.com/unknown": "ignored",
   });
 
-  expect(options).toEqual({});
+  expect(options.clientInfo).toBeUndefined();
+  expect(options.oauthClientId).toBeUndefined();
 });
 
 test("omits caller identity when the call carries no _meta", async () => {

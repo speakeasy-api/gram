@@ -162,9 +162,9 @@ export interface MCPClientInfo {
 }
 
 /**
- * What is known about the caller of a single tool call. Every field is
- * optional: a caller may report an identity without authenticating, or the
- * reverse, and a direct (non-MCP) invocation has neither.
+ * What a tool call reports about its caller. Every field is optional and every
+ * field is attribution only — none of it is verified at the point a tool reads
+ * it, so none of it may be used for authorization.
  */
 export interface ToolCaller {
   clientInfo?: MCPClientInfo;
@@ -192,10 +192,15 @@ class ToolContext<Env> {
    */
   readonly clientInfo?: MCPClientInfo;
   /**
-   * The OAuth client the caller authenticated as, when the call arrived over
-   * an authenticated MCP connection. Unlike `clientInfo` this is established
-   * by the authorization flow rather than self-reported, so it is the
-   * identity to reach for when the answer has to be trustworthy.
+   * The OAuth client id attributed to the caller, when one accompanied the
+   * call.
+   *
+   * For attribution only — logging, metrics, telling one integration's traffic
+   * from another's. Never use it for authorization. It reaches a tool as
+   * ordinary request metadata, and a tool has no way to tell a value a trusted
+   * host attached from one a caller supplied itself, so an allowlist keyed on
+   * it can be defeated by simply claiming the right id. Authorization belongs
+   * to whatever verifies credentials in front of the tool.
    */
   readonly oauthClientId?: string;
   /**

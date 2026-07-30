@@ -336,8 +336,10 @@ export function fromGram(
           req.params._meta?.["io.modelcontextprotocol/clientInfo"],
         ) ?? normalizeClientInfo(server.getClientVersion());
 
-      // The OAuth client, in contrast, is established by the authorization
-      // flow. Gram stamps it on `_meta` when it fronts this server.
+      // The OAuth client id rides the same untrusted `_meta` block. Nothing
+      // here verifies it — this server is reachable directly, so the value is
+      // whatever the caller sent. It is carried for attribution only, and
+      // `ctx.oauthClientId` documents that it must never gate access.
       const rawOAuthClientId = req.params._meta?.["gram.ai/oauth-client-id"];
       const oauthClientId =
         typeof rawOAuthClientId === "string" && rawOAuthClientId !== ""

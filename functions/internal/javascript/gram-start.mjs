@@ -143,8 +143,12 @@ function normalizeClientInfo(value) {
  * dropped rather than surfaced: losing the caller's identity must never fail
  * the call.
  *
+ * The block is forwarded whole as `meta` as well, so a tool can read keys this
+ * runner does not model. The runner has already re-encoded it from a declared
+ * shape, so only known keys survive to here.
+ *
  * @param {unknown} meta
- * @returns {{ clientInfo?: MCPClientInfo, oauthClientId?: string }}
+ * @returns {{ clientInfo?: MCPClientInfo, oauthClientId?: string, meta?: Record<string, unknown> }}
  */
 function toolCallOptionsFromMeta(meta) {
   if (meta == null || typeof meta !== "object") {
@@ -153,8 +157,8 @@ function toolCallOptionsFromMeta(meta) {
 
   const record = /** @type {Record<string, unknown>} */ (meta);
 
-  /** @type {{ clientInfo?: MCPClientInfo, oauthClientId?: string }} */
-  const options = {};
+  /** @type {{ clientInfo?: MCPClientInfo, oauthClientId?: string, meta?: Record<string, unknown> }} */
+  const options = { meta: record };
 
   const clientInfo = normalizeClientInfo(
     record["io.modelcontextprotocol/clientInfo"],
@@ -231,10 +235,10 @@ function parseArgs(args) {
 }
 
 /**
- * @param {(call: {name: string, input: unknown}, options?: {clientInfo?: MCPClientInfo, oauthClientId?: string}) => Promise<Response>} func
+ * @param {(call: {name: string, input: unknown}, options?: {clientInfo?: MCPClientInfo, oauthClientId?: string, meta?: Record<string, unknown>}) => Promise<Response>} func
  * @param {string} name
  * @param {unknown} input
- * @param {{clientInfo?: MCPClientInfo, oauthClientId?: string}} options
+ * @param {{clientInfo?: MCPClientInfo, oauthClientId?: string, meta?: Record<string, unknown>}} options
  * @returns {Promise<Response>}
  */
 async function callTool(func, name, input, options) {
@@ -345,7 +349,7 @@ async function writeHTTPResponse(pipeFile, response) {
 
 /**
  * @param {string} codePath
- * @returns {Promise<{ok: true, value: (call: {name: string, input: unknown}, options?: {clientInfo?: MCPClientInfo, oauthClientId?: string}) => Promise<Response>} | {ok: false, error: FunctionsError}>}
+ * @returns {Promise<{ok: true, value: (call: {name: string, input: unknown}, options?: {clientInfo?: MCPClientInfo, oauthClientId?: string, meta?: Record<string, unknown>}) => Promise<Response>} | {ok: false, error: FunctionsError}>}
  */
 async function importToolCallHandler(codePath) {
   try {

@@ -55,12 +55,15 @@ type CallToolPayload struct {
 // ToolCallMeta carries per-call metadata about the caller, keyed the way MCP
 // keys request `_meta`. Configuration belongs in Environment; this is about
 // who is on the other end of this particular call.
+//
+// Everything here is attribution, not authorization. A function receives it as
+// ordinary request metadata and cannot tell which host attached it, so tools
+// are documented never to gate access on it.
 type ToolCallMeta struct {
-	// ClientInfo is what the MCP client reports about itself. Untrusted and
-	// self-reported — for observability and convenience, never authorization.
+	// ClientInfo is what the MCP client reports about itself.
 	ClientInfo *MCPClientInfo `json:"io.modelcontextprotocol/clientInfo,omitempty"`
-	// OAuthClientID is the OAuth client the caller authenticated as. Unlike
-	// ClientInfo this one is established by the authorization flow.
+	// OAuthClientID is the OAuth client the caller authenticated as, read here
+	// from the verified bearer token.
 	OAuthClientID string `json:"gram.ai/oauth-client-id,omitempty"`
 }
 

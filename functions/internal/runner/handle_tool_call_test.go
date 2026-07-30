@@ -110,9 +110,15 @@ func TestCallTool_DeliversCallerIdentityToUserCode(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
+	// The whole block rides along as `meta` beside the named fields, so a tool
+	// can read keys the runner does not model.
 	require.JSONEq(t, `{
 	  "clientInfo": {"name": "claude-code", "version": "2.1"},
-	  "oauthClientId": "client-abc"
+	  "oauthClientId": "client-abc",
+	  "meta": {
+	    "io.modelcontextprotocol/clientInfo": {"name": "claude-code", "version": "2.1"},
+	    "gram.ai/oauth-client-id": "client-abc"
+	  }
 	}`, recorder.Body.String())
 }
 

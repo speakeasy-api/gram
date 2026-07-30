@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"log/slog"
 	"strings"
 	"time"
@@ -19,11 +21,6 @@ const (
 	// maxClientInfoFieldLength bounds each stored client identity field. The
 	// same cap is applied to the PostHog properties recorded at initialize.
 	maxClientInfoFieldLength = 100
-	// maxSessionIDKeyLength bounds how much of a client-supplied
-	// Mcp-Session-Id is used as cache key material, so a misbehaving client
-	// cannot bloat Redis keys. Mirrors
-	// tunnelsessions.MaxBackendSessionIDLength.
-	maxSessionIDKeyLength = 512
 	// sessionClientInfoTTL is how long a handshake identity outlives its
 	// initialize. Matches the default anonymous tunnel session lifetime.
 	sessionClientInfoTTL = 24 * time.Hour
@@ -55,8 +52,16 @@ var _ cache.CacheableObject[SessionClientInfo] = (*SessionClientInfo)(nil)
 // SessionClientInfoCacheKey builds the cache key for one session's handshake
 // identity. Exported so readers can look an entry up without materializing a
 // partial SessionClientInfo.
+//
+// The session id is hashed rather than embedded. It arrives on a
+// client-supplied header of unbounded length, and it doubles as the bearer of
+// the session — hashing gives a fixed-length key that neither bloats Redis nor
+// writes the raw value into a keyspace that gets logged and enumerated.
+// Truncating instead would collide every id sharing a prefix, letting one
+// session read another's cached identity.
 func SessionClientInfoCacheKey(projectID uuid.UUID, toolsetSlug, sessionID string) string {
-	return "mcpClientInfo:" + projectID.String() + ":" + toolsetSlug + ":" + conv.TruncateString(sessionID, maxSessionIDKeyLength)
+	digest := sha256.Sum256([]byte(sessionID))
+	return "mcpClientInfo:" + projectID.String() + ":" + toolsetSlug + ":" + hex.EncodeToString(digest[:])
 }
 
 // CacheKey implements cache.CacheableObject.

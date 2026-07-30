@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -105,6 +106,39 @@ func newClientIdentityFixture(t *testing.T) (*cache.TypedCacheObject[SessionClie
 		mcpServerID:           nil,
 		tags:                  nil,
 	}
+}
+
+// TestSessionClientInfoCacheKey_DistinguishesLongSessionIDs guards the reason
+// the session id is hashed: a prefix-truncated key would map every id sharing
+// that prefix onto one entry, handing one session another's cached identity.
+func TestSessionClientInfoCacheKey_DistinguishesLongSessionIDs(t *testing.T) {
+	t.Parallel()
+
+	projectID := uuid.New()
+	shared := strings.Repeat("s", 4096)
+
+	first := SessionClientInfoCacheKey(projectID, "widgets", shared+"a")
+	second := SessionClientInfoCacheKey(projectID, "widgets", shared+"b")
+
+	require.NotEqual(t, first, second)
+	require.Len(t, second, len(first), "keys are fixed length regardless of session id size")
+	require.NotContains(t, first, shared, "the raw session id must not land in the keyspace")
+}
+
+func TestSessionClientInfoCacheKey_ScopedPerProjectAndToolset(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "session-1"
+	projectA, projectB := uuid.New(), uuid.New()
+
+	require.NotEqual(t,
+		SessionClientInfoCacheKey(projectA, "widgets", sessionID),
+		SessionClientInfoCacheKey(projectB, "widgets", sessionID),
+	)
+	require.NotEqual(t,
+		SessionClientInfoCacheKey(projectA, "widgets", sessionID),
+		SessionClientInfoCacheKey(projectA, "gadgets", sessionID),
+	)
 }
 
 func TestResolveClientIdentity_FallsBackToHandshake(t *testing.T) {

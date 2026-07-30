@@ -132,10 +132,12 @@ func (c *CaseInsensitiveEnv) Keys() []string {
 
 // MCPClientIdentity describes who is on the other end of an MCP tool call.
 //
-// The two identities have very different weight. Name and Version are
-// self-reported by the client and must never be used for authorization —
-// they exist so tools can adapt to a known caller and for observability.
-// OAuthClientID is established by the authorization flow.
+// Name and Version are self-reported by the client. OAuthClientID is read from
+// the caller's verified bearer token, so it is the sounder of the two here —
+// but it is forwarded to tools as plain request metadata, where that
+// provenance no longer travels with it. Both are for attribution and
+// observability; authorization stays on this side of the boundary, where the
+// credential is actually checked.
 //
 // Every field is optional: direct (non-MCP) tool calls populate none of them,
 // and an MCP client may report an identity without authenticating, or the
