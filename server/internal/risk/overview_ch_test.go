@@ -83,8 +83,9 @@ func TestGetRiskOverview_ClickHouseParity(t *testing.T) {
 	disabledPolicyID, err := uuid.Parse(disabledPolicy.ID)
 	require.NoError(t, err)
 
-	from := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
-	to := time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)
+	now := time.Now().UTC()
+	from := now.AddDate(0, 0, -30).Truncate(24 * time.Hour) // 30 days ago, well within ClickHouse TTL
+	to := from.AddDate(0, 0, 7)                             // 7-day window
 
 	aliceSecret1Chat, aliceSecret1 := seedChatWithUser(t, ti, projectID, orgID, "alice@example.com")
 	aliceSecret2Chat, aliceSecret2 := seedChatWithUser(t, ti, projectID, orgID, "alice@example.com")
@@ -186,13 +187,17 @@ func TestGetRiskOverview_ClickHouseParity(t *testing.T) {
 	for _, point := range result.TimeSeriesFindings {
 		timeSeries[point.Category+"|"+point.BucketStart] = point.Findings
 	}
-	require.Equal(t, int64(1), timeSeries["secrets|2026-05-02T12:00:00Z"])
-	require.Equal(t, int64(1), timeSeries["secrets|2026-05-02T14:00:00Z"])
-	require.Equal(t, int64(1), timeSeries["pii|2026-05-03T12:00:00Z"])
-	require.Equal(t, int64(1), timeSeries["shadow_mcp|2026-05-04T12:00:00Z"])
-	require.Equal(t, int64(1), timeSeries["secrets|2026-05-05T13:00:00Z"])
-	require.Equal(t, int64(1), timeSeries["secrets|2026-05-05T14:00:00Z"])
-	require.Equal(t, int64(0), timeSeries["pii|2026-05-05T13:00:00Z"])
+
+	bucket := func(offset time.Duration) string {
+		return from.Add(offset).Truncate(time.Hour).Format(time.RFC3339)
+	}
+	require.Equal(t, int64(1), timeSeries["secrets|"+bucket(36*time.Hour)])
+	require.Equal(t, int64(1), timeSeries["secrets|"+bucket(38*time.Hour)])
+	require.Equal(t, int64(1), timeSeries["pii|"+bucket(60*time.Hour)])
+	require.Equal(t, int64(1), timeSeries["shadow_mcp|"+bucket(84*time.Hour)])
+	require.Equal(t, int64(1), timeSeries["secrets|"+bucket(109*time.Hour)])
+	require.Equal(t, int64(1), timeSeries["secrets|"+bucket(110*time.Hour)])
+	require.Equal(t, int64(0), timeSeries["pii|"+bucket(109*time.Hour)])
 }
 
 // TestGetRiskOverview_ClickHouseUserEmailPrecedence covers the Go-side email
@@ -210,8 +215,9 @@ func TestGetRiskOverview_ClickHouseUserEmailPrecedence(t *testing.T) {
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
 
-	from := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
-	to := time.Date(2026, 5, 2, 0, 0, 0, 0, time.UTC)
+	now := time.Now().UTC()
+	from := now.AddDate(0, 0, -30).Truncate(24 * time.Hour) // 30 days ago, well within ClickHouse TTL
+	to := from.AddDate(0, 0, 1)                             // 1 day window
 
 	// The auth context user exists in the users table; findings attributed to
 	// that internal user id must resolve to its email even with an opaque
