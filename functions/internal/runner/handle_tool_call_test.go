@@ -2,6 +2,8 @@ package runner
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -73,4 +75,61 @@ func TestCallToolPayload_OmitsMetaWhenAbsent(t *testing.T) {
 	encoded, err := json.Marshal(payload)
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), "_meta")
+}
+
+// echoCallerBundle returns whatever the entrypoint hands it as a second
+// argument, which is how a tool sees its caller.
+const echoCallerBundle = `
+export async function handleToolCall(call, options) {
+  return new Response(JSON.stringify(options ?? null), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+`
+
+// TestCallTool_DeliversCallerIdentityToUserCode runs the whole runner path for
+// real — payload decode, subprocess spawn, the embedded entrypoint, and user
+// code — so the identity is proven to survive every hop rather than only the
+// encoding steps the tests above pin.
+func TestCallTool_DeliversCallerIdentityToUserCode(t *testing.T) {
+	t.Parallel()
+
+	svc := benchService(t, echoCallerBundle)
+	recorder := httptest.NewRecorder()
+
+	err := svc.callTool(t.Context(), svc.logger, CallToolPayload{
+		ToolName:    "whoami",
+		Input:       json.RawMessage(`{}`),
+		Environment: nil,
+		Meta: &ToolCallMeta{
+			ClientInfo:    &MCPClientInfo{Name: "claude-code", Version: "2.1"},
+			OAuthClientID: "client-abc",
+		},
+	}, recorder)
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.JSONEq(t, `{
+	  "clientInfo": {"name": "claude-code", "version": "2.1"},
+	  "oauthClientId": "client-abc"
+	}`, recorder.Body.String())
+}
+
+func TestCallTool_UnknownCallerReachesUserCodeAsEmpty(t *testing.T) {
+	t.Parallel()
+
+	svc := benchService(t, echoCallerBundle)
+	recorder := httptest.NewRecorder()
+
+	err := svc.callTool(t.Context(), svc.logger, CallToolPayload{
+		ToolName:    "whoami",
+		Input:       json.RawMessage(`{}`),
+		Environment: nil,
+		Meta:        nil,
+	}, recorder)
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.JSONEq(t, `{}`, recorder.Body.String())
 }
