@@ -1,0 +1,7 @@
+{
+  "plugins": {
+    "speakeasy-speakeasy/speakeasy-observability-cursor": {
+      "enabled": true
+    }
+  }
+}
