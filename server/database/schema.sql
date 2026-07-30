@@ -3188,7 +3188,7 @@ CREATE INDEX IF NOT EXISTS business_memories_project_created_at_idx
   ON business_memories (project_id, created_at DESC, id DESC)
   WHERE deleted IS FALSE;
 
-CREATE INDEX IF NOT EXISTS business_memories_embedding_hnsw
+CREATE INDEX IF NOT EXISTS business_memories_embedding_hnsw_idx
   ON business_memories USING hnsw (embedding halfvec_cosine_ops)
   WHERE deleted IS FALSE AND lifecycle_state = 'active';
 
