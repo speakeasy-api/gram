@@ -215,7 +215,7 @@ func TestReconcileSkillObservations_RawHashResolvesExactHistoricalVersionBeforeN
 	newVersion, err := skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, capturedManifest("hash-first", "New.", "new body"))
 	require.NoError(t, err)
 	require.NotEqual(t, oldVersion.SkillVersionID, newVersion.SkillVersionID)
-	insertSkillObservation(t, ti, "renamed-copy", "", "project", contentSHA256(oldContent), time.Now().UTC())
+	insertSkillObservation(t, ti, "plugin:renamed-copy", "", "project", contentSHA256(oldContent), time.Now().UTC())
 
 	result, err := skills.ReconcileSkillObservations(ctx, ti.conn, ti.projectID, 10)
 	require.NoError(t, err)
@@ -224,6 +224,7 @@ func TestReconcileSkillObservations_RawHashResolvesExactHistoricalVersionBeforeN
 	require.NoError(t, err)
 	require.Equal(t, oldVersion.SkillID, observations[0].SkillID.UUID)
 	require.Equal(t, oldVersion.SkillVersionID, observations[0].SkillVersionID.UUID)
+	require.Equal(t, "plugin:renamed-copy", observations[0].SkillName)
 	_, err = ti.repo.GetSkillByNameForUpdate(ctx, repo.GetSkillByNameForUpdateParams{ProjectID: ti.projectID, Name: "renamed-copy"})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
@@ -396,10 +397,10 @@ func TestReconcileSkillObservations_ClassifiesExternalPluginAsBuiltIn(t *testing
 	require.Equal(t, "built_in", skill.Classification)
 }
 
-func TestReconcileSkillObservations_StripsPluginPrefixWithoutSourceLevel(t *testing.T) {
+func TestReconcileSkillObservations_StripsScopedPrefixWithoutSourceMetadata(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
-	insertSkillObservation(t, ti, "vendor:external-plugin", "marketplace", "", "", time.Now().UTC())
+	insertSkillObservationForProject(t, ti, ti.projectID, "claude", "vendor:external-plugin", "", "", "", time.Now().UTC())
 
 	result, err := skills.ReconcileSkillObservations(ctx, ti.conn, ti.projectID, 10)
 	require.NoError(t, err)
@@ -409,6 +410,10 @@ func TestReconcileSkillObservations_StripsPluginPrefixWithoutSourceLevel(t *test
 		Name:      "external-plugin",
 	})
 	require.NoError(t, err)
+	observations, err := hooksrepo.New(ti.conn).ListSkillObservations(ctx, ti.projectID)
+	require.NoError(t, err)
+	require.Equal(t, "vendor:external-plugin", observations[0].SkillName)
+	require.True(t, observations[0].SkillID.Valid)
 }
 
 func TestReconcileSkillObservations_ProviderAloneRemainsCustom(t *testing.T) {
