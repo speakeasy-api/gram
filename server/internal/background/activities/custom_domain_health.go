@@ -34,6 +34,7 @@ const CustomDomainHealthCheckMaxAttempts = 3
 type CustomDomainInfrastructureChecker interface {
 	CheckCustomDomainInfrastructure(ctx context.Context, check k8s.CustomDomainInfrastructureCheck) (k8s.CustomDomainInfrastructureHealth, error)
 	ListManagedCustomDomainResources(ctx context.Context) ([]k8s.ManagedCustomDomainResource, error)
+	Provisioner(kind k8s.ProvisionerKind) k8s.CustomDomainProvisioner
 }
 
 type CustomDomainHealth struct {
@@ -196,6 +197,7 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 
 	var notification NotifyCustomDomainUnhealthyArgs
 	var next customdomains.HealthState
+	autoDisabled := false
 	if err := pgx.BeginFunc(ctx, c.db, func(tx pgx.Tx) error {
 		repository := customdomainsrepo.New(tx)
 		lockedDomain, err := repository.GetCustomDomainByIDAndOrganizationForHealthUpdate(ctx, customdomainsrepo.GetCustomDomainByIDAndOrganizationForHealthUpdateParams{
@@ -248,6 +250,17 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		if err != nil {
 			return fmt.Errorf("update custom domain health: %w", err)
 		}
+		if customdomains.ShouldAutoDisable(next, args.CheckedAt) {
+			// Disable under the same row lock that persisted the decision so
+			// a recovery cannot commit in between; k8s teardown waits for commit.
+			if _, err := repository.DisableCustomDomainForHealth(ctx, customdomainsrepo.DisableCustomDomainForHealthParams{
+				ID:             domain.ID,
+				OrganizationID: args.OrganizationID,
+			}); err != nil {
+				return fmt.Errorf("disable custom domain after failed health checks: %w", err)
+			}
+			autoDisabled = true
+		}
 		return nil
 	}); err != nil {
 		return noNotification, fmt.Errorf("save custom domain health: %w", err)
@@ -261,6 +274,21 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 			attr.SlogOrganizationID(args.OrganizationID),
 			attr.SlogCustomDomainHealthStatus(string(next.Status)),
 			attr.SlogCustomDomainHealthIssue(string(next.Issue)),
+		)
+	}
+
+	if autoDisabled {
+		// Retries reuse CheckedAt, so the reconcile no-ops and this idempotent
+		// teardown re-runs until it succeeds.
+		if domain.IngressName.String != "" {
+			provisioner := c.infrastructure.Provisioner(k8s.ProvisionerKind(domain.ProvisionerKind))
+			if err := provisioner.Delete(ctx, domain.IngressName.String, domain.CertSecretName.String); err != nil {
+				return noNotification, fmt.Errorf("tear down auto-disabled custom domain resources: %w", err)
+			}
+		}
+		c.logger.WarnContext(ctx, "auto-disabled custom domain after prolonged failed health checks",
+			attr.SlogURLDomain(domain.Domain),
+			attr.SlogOrganizationID(args.OrganizationID),
 		)
 	}
 
