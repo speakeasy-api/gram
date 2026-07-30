@@ -136,7 +136,10 @@ function MistralIcon({ className }: { className?: string }): JSX.Element {
   );
 }
 
-// Microsoft Copilot logo
+// GitHub Copilot logo — the official Copilot mark (GitHub `copilot` octicon).
+// Monochrome via currentColor so it matches the sibling coding-agent icons
+// (Cursor, Codex, opencode, ...) and adapts to light/dark instead of the
+// full-color Microsoft Copilot ribbon this platform is not.
 export function CopilotIcon({
   className,
 }: {
@@ -146,106 +149,11 @@ export function CopilotIcon({
     <svg
       className={className}
       xmlns="http://www.w3.org/2000/svg"
-      fill="none"
       viewBox="0 0 48 48"
+      fill="currentColor"
     >
-      <path
-        d="M34.142 7.325A4.63 4.63 0 0029.7 4H28.35a4.63 4.63 0 00-4.554 3.794L21.48 20.407l.575-1.965a4.63 4.63 0 014.444-3.33h7.853l3.294 1.282 3.175-1.283h-.926a4.63 4.63 0 01-4.443-3.325l-1.31-4.461z"
-        fill="url(#prefix__paint0_radial_56201_15503)"
-      />
-      <path
-        d="M14.33 40.656A4.63 4.63 0 0018.779 44h2.87a4.63 4.63 0 004.629-4.51l.312-12.163-.654 2.233a4.63 4.63 0 01-4.443 3.329h-7.919l-2.823-1.532-3.057 1.532h.912a4.63 4.63 0 014.447 3.344l1.279 4.423z"
-        fill="url(#prefix__paint1_radial_56201_15503)"
-      />
-      <path
-        d="M29.5 4H13.46c-4.583 0-7.332 6.057-9.165 12.113C2.123 23.29-.72 32.885 7.503 32.885h6.925a4.63 4.63 0 004.456-3.358 2078.617 2078.617 0 014.971-17.156c.843-2.843 1.544-5.284 2.621-6.805C27.08 4.714 28.086 4 29.5 4z"
-        fill="url(#prefix__paint2_linear_56201_15503)"
-      />
-      <path
-        d="M29.5 4H13.46c-4.583 0-7.332 6.057-9.165 12.113C2.123 23.29-.72 32.885 7.503 32.885h6.925a4.63 4.63 0 004.456-3.358 2078.617 2078.617 0 014.971-17.156c.843-2.843 1.544-5.284 2.621-6.805C27.08 4.714 28.086 4 29.5 4z"
-        fill="url(#prefix__paint3_linear_56201_15503)"
-      />
-      <path
-        d="M18.498 44h16.04c4.582 0 7.332-6.058 9.165-12.115 2.171-7.177 5.013-16.775-3.208-16.775h-6.926a4.63 4.63 0 00-4.455 3.358 2084.036 2084.036 0 01-4.972 17.16c-.842 2.843-1.544 5.285-2.62 6.806-.604.852-1.61 1.566-3.024 1.566z"
-        fill="url(#prefix__paint4_radial_56201_15503)"
-      />
-      <path
-        d="M18.498 44h16.04c4.582 0 7.332-6.058 9.165-12.115 2.171-7.177 5.013-16.775-3.208-16.775h-6.926a4.63 4.63 0 00-4.455 3.358 2084.036 2084.036 0 01-4.972 17.16c-.842 2.843-1.544 5.285-2.62 6.806-.604.852-1.61 1.566-3.024 1.566z"
-        fill="url(#prefix__paint5_linear_56201_15503)"
-      />
-      <defs>
-        <radialGradient
-          id="prefix__paint0_radial_56201_15503"
-          cx="0"
-          cy="0"
-          r="1"
-          gradientUnits="userSpaceOnUse"
-          gradientTransform="matrix(-10.96051 -13.38922 12.59013 -10.30637 38.005 20.514)"
-        >
-          <stop offset=".096" stopColor="#00AEFF" />
-          <stop offset=".773" stopColor="#2253CE" />
-          <stop offset="1" stopColor="#0736C4" />
-        </radialGradient>
-        <radialGradient
-          id="prefix__paint1_radial_56201_15503"
-          cx="0"
-          cy="0"
-          r="1"
-          gradientUnits="userSpaceOnUse"
-          gradientTransform="rotate(51.84 -28.201 27.85) scale(15.9912 15.5119)"
-        >
-          <stop stopColor="#FFB657" />
-          <stop offset=".634" stopColor="#FF5F3D" />
-          <stop offset=".923" stopColor="#C02B3C" />
-        </radialGradient>
-        <radialGradient
-          id="prefix__paint4_radial_56201_15503"
-          cx="0"
-          cy="0"
-          r="1"
-          gradientUnits="userSpaceOnUse"
-          gradientTransform="rotate(109.274 16.301 20.802) scale(38.3873 45.9867)"
-        >
-          <stop offset=".066" stopColor="#8C48FF" />
-          <stop offset=".5" stopColor="#F2598A" />
-          <stop offset=".896" stopColor="#FFB152" />
-        </radialGradient>
-        <linearGradient
-          id="prefix__paint2_linear_56201_15503"
-          x1="12.5"
-          y1="7.5"
-          x2="14.788"
-          y2="33.975"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop offset=".156" stopColor="#0D91E1" />
-          <stop offset=".487" stopColor="#52B471" />
-          <stop offset=".652" stopColor="#98BD42" />
-          <stop offset=".937" stopColor="#FFC800" />
-        </linearGradient>
-        <linearGradient
-          id="prefix__paint3_linear_56201_15503"
-          x1="14.5"
-          y1="4"
-          x2="15.75"
-          y2="32.885"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop stopColor="#3DCBFF" />
-          <stop offset=".247" stopColor="#0588F7" stopOpacity="0" />
-        </linearGradient>
-        <linearGradient
-          id="prefix__paint5_linear_56201_15503"
-          x1="42.586"
-          y1="13.346"
-          x2="42.569"
-          y2="21.215"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop offset=".058" stopColor="#F8ADFA" />
-          <stop offset=".708" stopColor="#A86EDD" stopOpacity="0" />
-        </linearGradient>
-      </defs>
+      <path d="M47.801 34.003c-1.72 2.988-11.706 10.037-23.82 10.037S1.881 36.991.161 34.003a1.309 1.309 0 0 1-.161-.57v-5.615c.012-.17.047-.338.11-.498.744-1.867 2.692-4.58 5.206-5.308.333-.855.826-2.106 1.287-3.029a20.112 20.112 0 0 1-.104-2.171c0-2.659.563-4.992 2.262-6.729.793-.811 1.777-1.433 2.945-1.901C14.502 5.911 18.483 4 23.938 4c5.455 0 9.523 1.911 12.319 4.182 1.167.468 2.151 1.09 2.944 1.901 1.699 1.737 2.263 4.07 2.263 6.729 0 .736-.027 1.465-.105 2.171.461.923.954 2.174 1.288 3.029 2.513.728 4.461 3.441 5.205 5.308.081.205.115.424.115.645v5.318c0 .252-.04.502-.166.72ZM24.325 22.031h-.688a8.52 8.52 0 0 1-.709 1.016c-1.537 1.892-3.833 2.98-7.008 2.98-3.447 0-5.972-.717-7.557-2.514a4.408 4.408 0 0 1-.171-.21l-.195.21v13.155c2.867 1.558 9.02 4.353 15.984 4.353s13.117-2.795 15.984-4.353V23.513l-.195-.21s-.066.091-.171.21c-1.584 1.797-4.11 2.514-7.557 2.514-3.175 0-5.47-1.088-7.008-2.98a8.637 8.637 0 0 1-.709-1.016h-.033.033Zm-1.969-5.864a14.31 14.31 0 0 0 .127-1.785v-.042c-.003-1.537-.339-2.538-.876-3.152-.681-.78-2.09-1.378-5.06-1.057-3.008.326-4.69 1.073-5.643 2.048-.923.944-1.408 2.356-1.408 4.633 0 2.42.348 3.849 1.115 4.719.729.827 2.165 1.499 5.309 1.499 2.417 0 3.799-.786 4.683-1.873.948-1.168 1.482-2.878 1.753-4.99Zm3.25 0c.271 2.112.805 3.822 1.754 4.99.883 1.087 2.265 1.873 4.682 1.873 3.145 0 4.58-.672 5.309-1.499.767-.87 1.116-2.299 1.116-4.719 0-2.277-.485-3.689-1.408-4.633-.954-.975-2.635-1.722-5.644-2.048-2.969-.321-4.378.277-5.06 1.057-.537.614-.873 1.615-.876 3.152v.042c.002.53.042 1.123.127 1.785Z" />
+      <path d="M28.998 28.516c1.104 0 1.999.895 1.999 1.999v3.998a2 2 0 1 1-3.998 0v-3.998c0-1.104.895-1.999 1.999-1.999Zm-9.996 0c1.104 0 1.999.895 1.999 1.999v3.998a2 2 0 1 1-3.998 0v-3.998c0-1.104.895-1.999 1.999-1.999Z" />
     </svg>
   );
 }
