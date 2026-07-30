@@ -258,9 +258,33 @@ func TestHealthIssueMessageCertificateProblemsAreManagedByGram(t *testing.T) {
 	} {
 		require.Equal(t,
 			"There is a problem with the domain's TLS certificate. We're working to resolve it.",
-			HealthIssueMessage(issue),
+			HealthIssueMessage(issue, "cname.example.com."),
 		)
 	}
+}
+
+func TestHealthIssueMessageNamesExpectedCNAME(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t,
+		"The domain's DNS no longer resolves to the expected target. Point the domain's CNAME record at cname.example.com..",
+		HealthIssueMessage(HealthIssueDNSTargetMismatch, "cname.example.com."),
+	)
+	require.Equal(t,
+		"DNS records for the domain could not be found. Create a CNAME record pointing the domain at cname.example.com..",
+		HealthIssueMessage(HealthIssueDNSNotFound, "cname.example.com."),
+	)
+
+	// An unconfigured target must not leak an empty parenthetical or name the
+	// platform.
+	require.Equal(t,
+		"The domain's DNS no longer resolves to the expected target.",
+		HealthIssueMessage(HealthIssueDNSTargetMismatch, ""),
+	)
+	require.Equal(t,
+		"DNS records for the domain could not be found.",
+		HealthIssueMessage(HealthIssueDNSNotFound, ""),
+	)
 }
 
 func TestShouldAutoDisableRequiresAllThresholds(t *testing.T) {
