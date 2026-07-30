@@ -22,7 +22,6 @@ function result(
     createdAt: new Date("2026-07-06T00:00:00Z"),
     source,
     match,
-    replayed: false,
     ...extra,
   };
 }

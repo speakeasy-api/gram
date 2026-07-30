@@ -10304,7 +10304,6 @@ func marshalTypesRiskResultToRiskResultResponseBody(v *types.RiskResult) *RiskRe
 		Confidence:    v.Confidence,
 		MatchRedacted: v.MatchRedacted,
 		CreatedAt:     v.CreatedAt,
-		Replayed:      v.Replayed,
 	}
 	if v.Tags != nil {
 		res.Tags = make([]string, len(v.Tags))
