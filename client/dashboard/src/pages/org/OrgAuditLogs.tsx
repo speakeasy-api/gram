@@ -206,6 +206,9 @@ function hasDiff(log: AuditLog): boolean {
   return log.beforeSnapshot != null || log.afterSnapshot != null;
 }
 
+/** Marks the row targeted by j/k keyboard navigation. */
+const HIGHLIGHTED_ROW_CLASS = "ring-foreground/40 ring-1 ring-inset";
+
 function AuditLogRow({
   log,
   orgSlug,
@@ -271,10 +274,7 @@ function AuditLogRow({
 
   if (showDiff && diffExpanded) {
     return (
-      <div
-        ref={rowRef}
-        className={cn(isHighlighted && "border-l-foreground border-l-4")}
-      >
+      <div ref={rowRef} className={cn(isHighlighted && HIGHLIGHTED_ROW_CLASS)}>
         <div
           className={cn(
             "rounded-t-lg border border-b-0",
@@ -296,7 +296,7 @@ function AuditLogRow({
       className={cn(
         "rounded-none transition-colors",
         isOdd ? "bg-muted/30" : "bg-background",
-        isHighlighted && "border-l-foreground border-l-4",
+        isHighlighted && HIGHLIGHTED_ROW_CLASS,
       )}
     >
       {rowContent}

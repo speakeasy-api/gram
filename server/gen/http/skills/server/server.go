@@ -26,6 +26,7 @@ type Server struct {
 	List                   http.Handler
 	ListSuggestions        http.Handler
 	ListFeedback           http.Handler
+	TriggerSuggestion      http.Handler
 	ApproveSuggestion      http.Handler
 	DismissSuggestion      http.Handler
 	ListSuggestionFeedback http.Handler
@@ -76,6 +77,7 @@ func New(
 			{"List", "GET", "/rpc/skills.list"},
 			{"ListSuggestions", "GET", "/rpc/skills.listSuggestions"},
 			{"ListFeedback", "GET", "/rpc/skills.listFeedback"},
+			{"TriggerSuggestion", "POST", "/rpc/skills.triggerSuggestion"},
 			{"ApproveSuggestion", "POST", "/rpc/skills.approveSuggestion"},
 			{"DismissSuggestion", "POST", "/rpc/skills.dismissSuggestion"},
 			{"ListSuggestionFeedback", "GET", "/rpc/skills.listSuggestionFeedback"},
@@ -98,6 +100,7 @@ func New(
 		List:                   NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
 		ListSuggestions:        NewListSuggestionsHandler(e.ListSuggestions, mux, decoder, encoder, errhandler, formatter),
 		ListFeedback:           NewListFeedbackHandler(e.ListFeedback, mux, decoder, encoder, errhandler, formatter),
+		TriggerSuggestion:      NewTriggerSuggestionHandler(e.TriggerSuggestion, mux, decoder, encoder, errhandler, formatter),
 		ApproveSuggestion:      NewApproveSuggestionHandler(e.ApproveSuggestion, mux, decoder, encoder, errhandler, formatter),
 		DismissSuggestion:      NewDismissSuggestionHandler(e.DismissSuggestion, mux, decoder, encoder, errhandler, formatter),
 		ListSuggestionFeedback: NewListSuggestionFeedbackHandler(e.ListSuggestionFeedback, mux, decoder, encoder, errhandler, formatter),
@@ -127,6 +130,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.List = m(s.List)
 	s.ListSuggestions = m(s.ListSuggestions)
 	s.ListFeedback = m(s.ListFeedback)
+	s.TriggerSuggestion = m(s.TriggerSuggestion)
 	s.ApproveSuggestion = m(s.ApproveSuggestion)
 	s.DismissSuggestion = m(s.DismissSuggestion)
 	s.ListSuggestionFeedback = m(s.ListSuggestionFeedback)
@@ -155,6 +159,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListHandler(mux, h.List)
 	MountListSuggestionsHandler(mux, h.ListSuggestions)
 	MountListFeedbackHandler(mux, h.ListFeedback)
+	MountTriggerSuggestionHandler(mux, h.TriggerSuggestion)
 	MountApproveSuggestionHandler(mux, h.ApproveSuggestion)
 	MountDismissSuggestionHandler(mux, h.DismissSuggestion)
 	MountListSuggestionFeedbackHandler(mux, h.ListSuggestionFeedback)
@@ -524,6 +529,59 @@ func NewListFeedbackHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listFeedback")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountTriggerSuggestionHandler configures the mux to serve the "skills"
+// service "triggerSuggestion" endpoint.
+func MountTriggerSuggestionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/skills.triggerSuggestion", f)
+}
+
+// NewTriggerSuggestionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "skills" service "triggerSuggestion" endpoint.
+func NewTriggerSuggestionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeTriggerSuggestionRequest(mux, decoder)
+		encodeResponse = EncodeTriggerSuggestionResponse(encoder)
+		encodeError    = EncodeTriggerSuggestionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "triggerSuggestion")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
 		payload, err := decodeRequest(r)
 		if err != nil {

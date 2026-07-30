@@ -39,11 +39,13 @@ function OAuthWizard({
   onClose,
   toolsetSlug,
   toolset,
+  initialPath,
 }: {
   isOpen: boolean;
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
+  initialPath?: Input["initialPath"];
 }) {
   // Force the inner machine to remount after the modal close animation
   // finishes (200ms). This replaces the old `dispatch RESET` pattern: it
@@ -64,6 +66,7 @@ function OAuthWizard({
           onClose={onClose}
           toolsetSlug={toolsetSlug}
           toolset={toolset}
+          initialPath={initialPath}
         />
       </Dialog.Content>
     </Dialog>
@@ -79,10 +82,12 @@ function WizardBody({
   onClose,
   toolsetSlug,
   toolset,
+  initialPath,
 }: {
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
+  initialPath?: Input["initialPath"];
 }) {
   const client = useSdkClient();
   const queryClient = useQueryClient();
@@ -124,6 +129,7 @@ function WizardBody({
 
   const input: Input = {
     discovered,
+    initialPath,
     toolsetSlug,
     toolsetName: toolset.name,
     activeOrganizationId: session.activeOrganizationId,
@@ -237,11 +243,13 @@ export function ConnectOAuthModal({
   onClose,
   toolsetSlug,
   toolset,
+  initialPath,
 }: {
   isOpen: boolean;
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
+  initialPath?: Input["initialPath"];
 }): JSX.Element {
   const productTier = useProductTier();
   const isAccountUpgrade = productTier.includes("base");
@@ -267,6 +275,7 @@ export function ConnectOAuthModal({
       onClose={onClose}
       toolsetSlug={toolsetSlug}
       toolset={toolset}
+      initialPath={initialPath}
     />
   );
 }

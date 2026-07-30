@@ -1,10 +1,15 @@
 // Command migrations back-fills historical data into ClickHouse using a generic
-// Source -> Transform -> Sink pipeline (see the pipeline package). The only wired
-// migration today moves Postgres risk_results rows into the ClickHouse
-// risk_findings event log.
+// Source -> Transform -> Sink pipeline (see the pipeline package). Two
+// migrations are wired, selected by an optional leading subcommand:
 //
-// It is an offline operator tool, run by hand against production reached through
-// Cloud SQL Auth Proxy and a ClickHouse tunnel:
+//   - riskfindings (default): moves Postgres risk_results rows into the
+//     ClickHouse risk_findings event log (see RISK_RESULTS_MIGRATION.md).
+//   - riskfindingscols: backfills the message_created_at and assistant_id
+//     columns onto existing risk_findings rows via ClickHouse mutations (see
+//     RISKFINDINGS_COLS_MIGRATION.md).
+//
+// It is an offline operator tool, run by hand against production reached
+// through Cloud SQL Auth Proxy and a ClickHouse tunnel:
 //
 // Secrets come from the environment only (never flags, which leak through argv):
 //
@@ -49,15 +54,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 )
 
+// clickhouseConfig carries the non-secret ClickHouse connection settings
+// shared by every migration subcommand; the password comes from the
+// environment.
+type clickhouseConfig struct {
+	host       string
+	database   string
+	username   string
+	password   string
+	nativePort string
+	insecure   bool
+}
+
 type config struct {
 	dbURL         string
 	pepperKeyring string
-	chHost        string
-	chDatabase    string
-	chUsername    string
-	chPassword    string
-	chNativePort  string
-	chInsecure    bool
+	ch            clickhouseConfig
 	orgID         string
 	projectID     uuid.NullUUID
 	policyID      uuid.NullUUID
@@ -75,7 +87,29 @@ func main() {
 }
 
 func run() int {
-	cfg, err := parseFlags()
+	// The subcommand is the optional first non-flag argument; a bare flag list
+	// keeps the original riskfindings behavior.
+	args := os.Args[1:]
+	migration := "riskfindings"
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		migration = args[0]
+		args = args[1:]
+	}
+
+	switch migration {
+	case "riskfindings":
+		return runRiskFindings(args)
+	case "riskfindingscols":
+		return runRiskFindingsCols(args)
+	default:
+		// The unrecognized name is deliberately not echoed (log injection).
+		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols)")
+		return 2
+	}
+}
+
+func runRiskFindings(args []string) int {
+	cfg, err := parseFlags(args)
 	if err != nil {
 		log.Printf("invalid arguments: %v", err)
 		return 2
@@ -103,7 +137,7 @@ func run() int {
 
 	var chConn clickhouse.Conn
 	if !cfg.dryRun {
-		chConn, err = openClickhouse(ctx, cfg)
+		chConn, err = openClickhouse(ctx, cfg.ch)
 		if err != nil {
 			log.Printf("connect clickhouse: %v", err)
 			return 1
@@ -172,17 +206,17 @@ func (c config) criteria() pipeline.Criteria {
 	return crit
 }
 
-func openClickhouse(ctx context.Context, cfg config) (clickhouse.Conn, error) {
+func openClickhouse(ctx context.Context, cfg clickhouseConfig) (clickhouse.Conn, error) {
 	conn, err := clickhouse.Open(&clickhouse.Options{
 		Protocol: clickhouse.Native,
-		Addr:     []string{net.JoinHostPort(cfg.chHost, cfg.chNativePort)},
+		Addr:     []string{net.JoinHostPort(cfg.host, cfg.nativePort)},
 		Auth: clickhouse.Auth{
-			Database: cfg.chDatabase,
-			Username: cfg.chUsername,
-			Password: cfg.chPassword,
+			Database: cfg.database,
+			Username: cfg.username,
+			Password: cfg.password,
 		},
 		TLS: &tls.Config{
-			InsecureSkipVerify: cfg.chInsecure, // #nosec G402 -- operator-supplied flag for local/tunnelled use
+			InsecureSkipVerify: cfg.insecure, // #nosec G402 -- operator-supplied flag for local/tunnelled use
 			MinVersion:         tls.VersionTLS12,
 		},
 	})
@@ -195,29 +229,49 @@ func openClickhouse(ctx context.Context, cfg config) (clickhouse.Conn, error) {
 	return conn, nil
 }
 
-func parseFlags() (config, error) {
+// registerClickhouseFlags declares the shared non-secret ClickHouse flags on
+// fs; the returned struct is populated (password included, from the
+// environment) once fs.Parse has run.
+func registerClickhouseFlags(fs *flag.FlagSet) *clickhouseConfig {
+	cfg := &clickhouseConfig{
+		host:       "",
+		database:   "",
+		username:   "",
+		password:   "",
+		nativePort: "",
+		insecure:   false,
+	}
+	fs.StringVar(&cfg.host, "ch-host", envOr("CLICKHOUSE_HOST", "localhost"), "ClickHouse host")
+	fs.StringVar(&cfg.database, "ch-database", envOr("CLICKHOUSE_DATABASE", "default"), "ClickHouse database")
+	fs.StringVar(&cfg.username, "ch-username", envOr("CLICKHOUSE_USERNAME", "gram"), "ClickHouse username")
+	fs.StringVar(&cfg.nativePort, "ch-native-port", envOr("CLICKHOUSE_NATIVE_PORT", "9440"), "ClickHouse native protocol port")
+	fs.BoolVar(&cfg.insecure, "ch-insecure", os.Getenv("CLICKHOUSE_INSECURE") == "true", "skip ClickHouse TLS verification")
+	return cfg
+}
+
+func parseFlags(args []string) (config, error) {
+	fs := flag.NewFlagSet("riskfindings", flag.ContinueOnError)
+
 	// Secrets (Postgres URL, ClickHouse password, fingerprint pepper) are read
 	// from the environment (or a file, for the pepper) only — never as flag
 	// values — so they do not leak through argv / ps.
 	var (
-		pepperKeyringFile = flag.String("pepper-keyring-file", "", "path to a file holding the JSON pepper keyring (alternative to $GRAM_RISK_FINGERPRINT_PEPPER_KEYRING)")
-		chHost            = flag.String("ch-host", envOr("CLICKHOUSE_HOST", "localhost"), "ClickHouse host")
-		chDatabase        = flag.String("ch-database", envOr("CLICKHOUSE_DATABASE", "default"), "ClickHouse database")
-		chUsername        = flag.String("ch-username", envOr("CLICKHOUSE_USERNAME", "gram"), "ClickHouse username")
-		chNativePort      = flag.String("ch-native-port", envOr("CLICKHOUSE_NATIVE_PORT", "9440"), "ClickHouse native protocol port")
-		chInsecure        = flag.Bool("ch-insecure", os.Getenv("CLICKHOUSE_INSECURE") == "true", "skip ClickHouse TLS verification")
-		orgID             = flag.String("org", "", "organization_id to scope the migration (optional; all orgs if empty)")
-		projectID         = flag.String("project", "", "project_id (uuid) to scope (optional)")
-		policyID          = flag.String("policy", "", "risk_policy_id (uuid) to scope (optional)")
-		fromStr           = flag.String("from", "", "lower time bound, RFC3339 (optional; from the beginning if empty)")
-		toStr             = flag.String("to", "", "upper time bound, RFC3339 (optional; to the end if empty)")
-		cursorStr         = flag.String("cursor", "", "resume after this risk_results id (exclusive); keyset resume position only — still pass the original -from/-to/-org/-project/-policy")
-		batchSize         = flag.Int("batch-size", riskfindings.DefaultBatchSize, "rows per source page and sink batch")
-		bufferSize        = flag.Int("buffer", riskfindings.DefaultBatchSize, "channel buffer between pipeline stages")
-		dryRun            = flag.Bool("dry-run", true, "when true (default) read and transform but do not write; pass -dry-run=false to insert")
-		liftPartGuard     = flag.Bool("lift-partition-guard", true, "set max_partitions_per_insert_block=0 on inserts; pass -lift-partition-guard=false when the ClickHouse settings profile constrains that setting (code 452)")
+		pepperKeyringFile = fs.String("pepper-keyring-file", "", "path to a file holding the JSON pepper keyring (alternative to $GRAM_RISK_FINGERPRINT_PEPPER_KEYRING)")
+		chCfg             = registerClickhouseFlags(fs)
+		orgID             = fs.String("org", "", "organization_id to scope the migration (optional; all orgs if empty)")
+		projectID         = fs.String("project", "", "project_id (uuid) to scope (optional)")
+		policyID          = fs.String("policy", "", "risk_policy_id (uuid) to scope (optional)")
+		fromStr           = fs.String("from", "", "lower time bound, RFC3339 (optional; from the beginning if empty)")
+		toStr             = fs.String("to", "", "upper time bound, RFC3339 (optional; to the end if empty)")
+		cursorStr         = fs.String("cursor", "", "resume after this risk_results id (exclusive); keyset resume position only — still pass the original -from/-to/-org/-project/-policy")
+		batchSize         = fs.Int("batch-size", riskfindings.DefaultBatchSize, "rows per source page and sink batch")
+		bufferSize        = fs.Int("buffer", riskfindings.DefaultBatchSize, "channel buffer between pipeline stages")
+		dryRun            = fs.Bool("dry-run", true, "when true (default) read and transform but do not write; pass -dry-run=false to insert")
+		liftPartGuard     = fs.Bool("lift-partition-guard", true, "set max_partitions_per_insert_block=0 on inserts; pass -lift-partition-guard=false when the ClickHouse settings profile constrains that setting (code 452)")
 	)
-	flag.Parse()
+	if err := fs.Parse(args); err != nil {
+		return config{}, fmt.Errorf("parse flags: %w", err)
+	}
 
 	pepperKeyring := os.Getenv("GRAM_RISK_FINGERPRINT_PEPPER_KEYRING")
 	if *pepperKeyringFile != "" {
@@ -228,15 +282,12 @@ func parseFlags() (config, error) {
 		pepperKeyring = strings.TrimSpace(string(b))
 	}
 
+	chCfg.password = os.Getenv("CLICKHOUSE_PASSWORD")
+
 	cfg := config{
 		dbURL:         os.Getenv("GRAM_DATABASE_URL"),
 		pepperKeyring: pepperKeyring,
-		chHost:        *chHost,
-		chDatabase:    *chDatabase,
-		chUsername:    *chUsername,
-		chPassword:    os.Getenv("CLICKHOUSE_PASSWORD"),
-		chNativePort:  *chNativePort,
-		chInsecure:    *chInsecure,
+		ch:            *chCfg,
 		orgID:         *orgID,
 		projectID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		policyID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},

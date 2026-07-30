@@ -50,6 +50,8 @@ func chOverviewFinding(t *testing.T, projectID uuid.UUID, orgID string, chatID, 
 		FingerprintTenantHS256:   "",
 		ExcludedAt:               nil,
 		ExclusionID:              nil,
+		MessageCreatedAt:         createdAt,
+		AssistantID:              "",
 	}
 }
 
@@ -83,8 +85,9 @@ func TestGetRiskOverview_ClickHouseParity(t *testing.T) {
 	disabledPolicyID, err := uuid.Parse(disabledPolicy.ID)
 	require.NoError(t, err)
 
-	from := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
-	to := time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)
+	now := time.Now().UTC()
+	from := now.AddDate(0, 0, -30).Truncate(24 * time.Hour) // 30 days ago, well within ClickHouse TTL
+	to := from.AddDate(0, 0, 7)                             // 7-day window
 
 	aliceSecret1Chat, aliceSecret1 := seedChatWithUser(t, ti, projectID, orgID, "alice@example.com")
 	aliceSecret2Chat, aliceSecret2 := seedChatWithUser(t, ti, projectID, orgID, "alice@example.com")
@@ -186,13 +189,16 @@ func TestGetRiskOverview_ClickHouseParity(t *testing.T) {
 	for _, point := range result.TimeSeriesFindings {
 		timeSeries[point.Category+"|"+point.BucketStart] = point.Findings
 	}
-	require.Equal(t, int64(1), timeSeries["secrets|2026-05-02T12:00:00Z"])
-	require.Equal(t, int64(1), timeSeries["secrets|2026-05-02T14:00:00Z"])
-	require.Equal(t, int64(1), timeSeries["pii|2026-05-03T12:00:00Z"])
-	require.Equal(t, int64(1), timeSeries["shadow_mcp|2026-05-04T12:00:00Z"])
-	require.Equal(t, int64(1), timeSeries["secrets|2026-05-05T13:00:00Z"])
-	require.Equal(t, int64(1), timeSeries["secrets|2026-05-05T14:00:00Z"])
-	require.Equal(t, int64(0), timeSeries["pii|2026-05-05T13:00:00Z"])
+	bucket := func(offset time.Duration) string {
+		return from.Add(offset).Truncate(time.Hour).Format(time.RFC3339)
+	}
+	require.Equal(t, int64(1), timeSeries["secrets|"+bucket(36*time.Hour)])
+	require.Equal(t, int64(1), timeSeries["secrets|"+bucket(38*time.Hour)])
+	require.Equal(t, int64(1), timeSeries["pii|"+bucket(60*time.Hour)])
+	require.Equal(t, int64(1), timeSeries["shadow_mcp|"+bucket(84*time.Hour)])
+	require.Equal(t, int64(1), timeSeries["secrets|"+bucket(109*time.Hour)])
+	require.Equal(t, int64(1), timeSeries["secrets|"+bucket(110*time.Hour)])
+	require.Equal(t, int64(0), timeSeries["pii|"+bucket(109*time.Hour)])
 }
 
 // TestGetRiskOverview_ClickHouseUserEmailPrecedence covers the Go-side email
@@ -210,8 +216,9 @@ func TestGetRiskOverview_ClickHouseUserEmailPrecedence(t *testing.T) {
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
 
-	from := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
-	to := time.Date(2026, 5, 2, 0, 0, 0, 0, time.UTC)
+	now := time.Now().UTC()
+	from := now.AddDate(0, 0, -30).Truncate(24 * time.Hour) // 30 days ago, well within ClickHouse TTL
+	to := from.AddDate(0, 0, 1)                             // 1 day window
 
 	// The auth context user exists in the users table; findings attributed to
 	// that internal user id must resolve to its email even with an opaque
@@ -244,4 +251,32 @@ func TestGetRiskOverview_ClickHouseUserEmailPrecedence(t *testing.T) {
 	}
 	require.Equal(t, int64(1), users[userEmail])
 	require.Equal(t, int64(1), users["Unknown user"])
+}
+
+func TestRiskFindingsTTLRemovesExpiredRows(t *testing.T) { //nolint:paralleltest // OPTIMIZE mutates the ClickHouse table shared by this package's tests.
+	ctx, ti := newTestRiskService(t)
+
+	const retention = 90 * 24 * time.Hour
+	now := time.Now().UTC()
+	projectID := uuid.New()
+	orgID := "org_" + uuid.NewString()
+	expired := chOverviewFinding(t, projectID, orgID, uuid.New(), uuid.New(), now.Add(-retention-24*time.Hour), "gitleaks", "secret.github_pat", "expired@example.com")
+	retained := chOverviewFinding(t, projectID, orgID, uuid.New(), uuid.New(), now.Add(-retention+24*time.Hour), "gitleaks", "secret.github_pat", "retained@example.com")
+
+	queries := chrepo.New(ti.chConn)
+	require.NoError(t, queries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{expired, retained}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	// TTL deletion normally happens during background merges. Force a merge so
+	// this test observes the retention contract deterministically.
+	require.NoError(t, ti.chConn.Exec(ctx, "OPTIMIZE TABLE risk_findings FINAL"))
+
+	var expiredCount, retainedCount uint64
+	require.NoError(t, ti.chConn.QueryRow(ctx, `
+		SELECT countIf(id = ?), countIf(id = ?)
+		FROM risk_findings
+		WHERE organization_id = ? AND project_id = ?
+	`, expired.ID, retained.ID, orgID, projectID.String()).Scan(&expiredCount, &retainedCount))
+	require.Zero(t, expiredCount)
+	require.Equal(t, uint64(1), retainedCount)
 }

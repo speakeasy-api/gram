@@ -23,6 +23,7 @@ type Endpoints struct {
 	List                   goa.Endpoint
 	ListSuggestions        goa.Endpoint
 	ListFeedback           goa.Endpoint
+	TriggerSuggestion      goa.Endpoint
 	ApproveSuggestion      goa.Endpoint
 	DismissSuggestion      goa.Endpoint
 	ListSuggestionFeedback goa.Endpoint
@@ -51,6 +52,7 @@ func NewEndpoints(s Service) *Endpoints {
 		List:                   NewListEndpoint(s, a.APIKeyAuth),
 		ListSuggestions:        NewListSuggestionsEndpoint(s, a.APIKeyAuth),
 		ListFeedback:           NewListFeedbackEndpoint(s, a.APIKeyAuth),
+		TriggerSuggestion:      NewTriggerSuggestionEndpoint(s, a.APIKeyAuth),
 		ApproveSuggestion:      NewApproveSuggestionEndpoint(s, a.APIKeyAuth),
 		DismissSuggestion:      NewDismissSuggestionEndpoint(s, a.APIKeyAuth),
 		ListSuggestionFeedback: NewListSuggestionFeedbackEndpoint(s, a.APIKeyAuth),
@@ -77,6 +79,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.List = m(e.List)
 	e.ListSuggestions = m(e.ListSuggestions)
 	e.ListFeedback = m(e.ListFeedback)
+	e.TriggerSuggestion = m(e.TriggerSuggestion)
 	e.ApproveSuggestion = m(e.ApproveSuggestion)
 	e.DismissSuggestion = m(e.DismissSuggestion)
 	e.ListSuggestionFeedback = m(e.ListSuggestionFeedback)
@@ -503,6 +506,65 @@ func NewListFeedbackEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return s.ListFeedback(ctx, p)
+	}
+}
+
+// NewTriggerSuggestionEndpoint returns an endpoint function that calls the
+// method "triggerSuggestion" of service "skills".
+func NewTriggerSuggestionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*TriggerSuggestionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.TriggerSuggestion(ctx, p)
 	}
 }
 

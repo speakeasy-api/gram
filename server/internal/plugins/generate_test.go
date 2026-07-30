@@ -98,6 +98,8 @@ func TestGeneratePluginPackagesProducesExpectedFiles(t *testing.T) {
 		"cursor-plugins/engineering-tools-cursor/mcp.json",
 		"engineering-tools-codex/.codex-plugin/plugin.json",
 		"engineering-tools-codex/.mcp.json",
+		"opencode-plugins/engineering-tools/plugin/engineering-tools.ts",
+		"opencode-plugins/engineering-tools/engineering-tools/mcp.json",
 	}
 	for _, p := range expectedPaths {
 		_, ok := files[p]
@@ -1292,6 +1294,7 @@ func TestCarryHooksSubtreeIsLayoutIndependent(t *testing.T) {
 		prefixes[0] + ".claude-plugin/plugin.json":   []byte("{}"),
 		prefixes[1] + "hooks/hook.sh":                []byte("v14 cursor"),
 		prefixes[2] + "hooks/hook.sh":                []byte("v14 codex"),
+		prefixes[3] + "plugin/agenthooks.ts":         []byte("v14 opencode"),
 		"some-mcp-plugin/.claude-plugin/plugin.json": []byte("{}"),
 	}
 
@@ -1299,7 +1302,7 @@ func TestCarryHooksSubtreeIsLayoutIndependent(t *testing.T) {
 	carriedOrg, carried := carryHooksSubtree(dst, published, []byte(`{"org_name":"Acme"}`), "Renamed Since Publish")
 	require.True(t, carried)
 	require.Equal(t, "Acme", carriedOrg)
-	require.Len(t, dst, 4)
+	require.Len(t, dst, 5)
 	require.Equal(t, []byte("v14 claude"), dst[prefixes[0]+"hooks/hook.sh"])
 	require.NotContains(t, dst, "some-mcp-plugin/.claude-plugin/plugin.json")
 
@@ -1466,7 +1469,7 @@ func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
 		ServerURL:   "https://app.getgram.ai",
 		HooksAPIKey: "gram_local_secret_xyz",
 	}
-	for _, platform := range []string{"claude", "cursor", "codex"} {
+	for _, platform := range []string{"claude", "cursor", "codex", "opencode"} {
 		files, err := GenerateObservabilityPluginPackage(cfg, platform)
 		require.NoError(t, err)
 		for name, content := range files {
@@ -1479,6 +1482,31 @@ func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
 			require.NoError(t, err, "%s %s failed bash -n: %s", platform, name, out)
 		}
 	}
+}
+
+// OpenCode has no hooks.json or plugin manifest — the shim under plugin/ is the
+// whole hook registration — so a regression there is silent. Pin that the
+// package ships the shim wired to serve mode and the sibling speakeasy.json.
+func TestGenerateOpenCodeObservabilityPluginPackage(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "opencode")
+	require.NoError(t, err)
+
+	shim, ok := files["plugin/agenthooks.ts"]
+	require.True(t, ok, "opencode package must ship plugin/agenthooks.ts")
+	require.Contains(t, string(shim), "--provider=opencode")
+	require.Contains(t, string(shim), "speakeasy.json")
+	require.Contains(t, string(shim), "bootstrap.sh")
+
+	_, ok = files["speakeasy.json"]
+	require.True(t, ok, "opencode package must ship speakeasy.json alongside the shim")
+	_, ok = files["hooks/bootstrap.sh"]
+	require.True(t, ok, "opencode package must ship the hooks bootstrapper the shim spawns")
 }
 
 // An upgraded install already carries [hooks.state] entries whose trusted_hash

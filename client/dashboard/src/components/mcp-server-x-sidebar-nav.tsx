@@ -9,13 +9,13 @@ import {
 } from "@/components/mcp-server-readiness-bar";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Type } from "@/components/ui/type";
-import { useTelemetry } from "@/contexts/Telemetry";
 import {
   getMcpServerArgs,
   remoteMcpRouteParam,
   tunneledMcpRouteParam,
 } from "@/lib/sources";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
+import { useRBAC } from "@/hooks/useRBAC";
 import { MCPServerStatusDropdown } from "@/pages/mcp/x/MCPServerDetails";
 import {
   activeTabFromPath,
@@ -43,10 +43,9 @@ import { useLocation, useParams } from "react-router";
 
 export function McpServerXSidebarNav(): React.JSX.Element | null {
   const routes = useRoutes();
-  const telemetry = useTelemetry();
   const location = useLocation();
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
-  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
+  const { hasScope } = useRBAC();
 
   const idOrSlug = mcpServerSlug ?? "";
   const { data: mcpServer } = useGetMcpServer(
@@ -102,6 +101,8 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const isRemoteBacked = !!mcpServer?.remoteMcpServerId;
   const isTunneledBacked = !!mcpServer?.tunneledMcpServerId;
   const isSourceBacked = isRemoteBacked || isTunneledBacked;
+  const canViewTeamAccess =
+    !!mcpServer && hasScope("org:read") && hasScope("mcp:read", mcpServer.id);
 
   let authenticationDescription =
     "Attach a remote identity provider so users can access the upstream service.";
@@ -185,7 +186,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       href: mcpServerTabHref(routes, idOrSlug, "inspect"),
       active: activeTab === "inspect",
     },
-    ...(isRbacEnabled
+    ...(canViewTeamAccess
       ? [
           {
             key: "team-access",

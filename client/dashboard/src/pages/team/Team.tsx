@@ -69,7 +69,6 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { useRBAC } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
 import { cn } from "@/lib/utils";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
@@ -104,7 +103,6 @@ type MemberMenuDeps = {
   adminCount: number;
   adminRoleId: string | undefined;
   challengesHref: string;
-  isRbacEnabled: boolean;
   navigate: ReturnType<typeof useNavigate>;
   roleIdsByUserId: Map<string, string[]>;
   scimManaged: boolean;
@@ -171,8 +169,8 @@ function getMemberMenuModel(
       void setTimeout(() => deps.setMemberToRemove(member), 0);
     },
     scimManaged: deps.scimManaged,
-    showChallenges: deps.isRbacEnabled,
-    showManageRoles: deps.isRbacEnabled,
+    showChallenges: true,
+    showManageRoles: true,
   };
 }
 
@@ -256,7 +254,6 @@ export default function Team(): JSX.Element {
 function TeamInner() {
   const organization = useOrganization();
   const user = useUser();
-  const { isRbacEnabled } = useRBAC();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const orgRoutes = useOrgRoutes();
@@ -315,9 +312,7 @@ function TeamInner() {
   );
   const memberRoleId = memberRole?.id;
   const defaultRoleId = memberRoleId;
-  const effectiveInviteRoleId = isRbacEnabled
-    ? (inviteRoleId ?? defaultRoleId)
-    : memberRoleId;
+  const effectiveInviteRoleId = inviteRoleId ?? defaultRoleId;
 
   // Cross-reference AccessMember (has roleIds) by user ID
   const roleIdsByUserId = new Map(accessMembers.map((m) => [m.id, m.roleIds]));
@@ -458,7 +453,6 @@ function TeamInner() {
     invite: OrganizationInvitation,
     roleId: string,
   ) => {
-    if (!isRbacEnabled) return;
     if (!roleId || roleId === getInviteRoleId(invite)) return;
 
     updateInviteRoleMutation.mutate(
@@ -482,9 +476,7 @@ function TeamInner() {
   };
 
   const handleResendInvite = (invite: OrganizationInvitation) => {
-    const inviteRoleId = isRbacEnabled
-      ? (getInviteRoleId(invite) ?? effectiveInviteRoleId)
-      : memberRoleId;
+    const inviteRoleId = getInviteRoleId(invite) ?? effectiveInviteRoleId;
 
     // Must revoke first — the unique partial index (org_id, email) WHERE
     // state = 'pending' blocks a second pending invite for the same email.
@@ -534,7 +526,6 @@ function TeamInner() {
     adminCount,
     adminRoleId,
     challengesHref: orgRoutes.access.challenges.href(),
-    isRbacEnabled,
     navigate,
     roleIdsByUserId,
     scimManaged: Boolean(organization.scimEnabled),
@@ -595,45 +586,41 @@ function TeamInner() {
         </Type>
       ),
     },
-    ...(isRbacEnabled
-      ? [
-          {
-            key: "role",
-            header: "Roles",
-            width: "200px",
-            render: (member) => {
-              const memberRoleIds = roleIdsByUserId.get(member.userId);
-              if (!memberRoleIds || memberRoleIds.length === 0)
-                return <span className="text-muted-foreground">—</span>;
-              const MAX_VISIBLE = 1;
-              const visible = memberRoleIds.slice(0, MAX_VISIBLE);
-              const overflow = memberRoleIds.slice(MAX_VISIBLE);
-              return (
-                <Stack direction="horizontal" gap={1} className="flex-wrap">
-                  {visible.map((roleId) => (
-                    <Link
-                      key={roleId}
-                      to={`${orgRoutes.access.roles.href()}?editRole=${roleId}`}
-                      className="text-foreground hover:text-primary rounded-sm border px-1.5 py-0.5 text-xs no-underline transition-colors"
-                    >
-                      {getRoleName(roleId)}
-                    </Link>
-                  ))}
-                  {overflow.length > 0 && (
-                    <SimpleTooltip
-                      tooltip={overflow.map((id) => getRoleName(id)).join(", ")}
-                    >
-                      <span className="text-muted-foreground cursor-pointer rounded-sm border px-1.5 py-0.5 text-xs">
-                        +{overflow.length} more
-                      </span>
-                    </SimpleTooltip>
-                  )}
-                </Stack>
-              );
-            },
-          } satisfies Column<OrganizationUser>,
-        ]
-      : []),
+    {
+      key: "role",
+      header: "Roles",
+      width: "200px",
+      render: (member) => {
+        const memberRoleIds = roleIdsByUserId.get(member.userId);
+        if (!memberRoleIds || memberRoleIds.length === 0)
+          return <span className="text-muted-foreground">—</span>;
+        const MAX_VISIBLE = 1;
+        const visible = memberRoleIds.slice(0, MAX_VISIBLE);
+        const overflow = memberRoleIds.slice(MAX_VISIBLE);
+        return (
+          <Stack direction="horizontal" gap={1} className="flex-wrap">
+            {visible.map((roleId) => (
+              <Link
+                key={roleId}
+                to={`${orgRoutes.access.roles.href()}?editRole=${roleId}`}
+                className="text-foreground hover:text-primary rounded-sm border px-1.5 py-0.5 text-xs no-underline transition-colors"
+              >
+                {getRoleName(roleId)}
+              </Link>
+            ))}
+            {overflow.length > 0 && (
+              <SimpleTooltip
+                tooltip={overflow.map((id) => getRoleName(id)).join(", ")}
+              >
+                <span className="text-muted-foreground cursor-pointer rounded-sm border px-1.5 py-0.5 text-xs">
+                  +{overflow.length} more
+                </span>
+              </SimpleTooltip>
+            )}
+          </Stack>
+        );
+      },
+    } satisfies Column<OrganizationUser>,
     {
       key: "lastLogin",
       header: "Last active",
@@ -745,48 +732,40 @@ function TeamInner() {
         );
       },
     },
-    ...(isRbacEnabled
-      ? [
-          {
-            key: "role",
-            header: "Role",
-            width: "180px",
-            render: (invite) => {
-              const inviteRole = getInviteRole(invite);
-              if (roles.length === 0) {
-                return (
-                  <Type variant="body" className="text-muted-foreground">
-                    {invite.roleSlug ?? "—"}
-                  </Type>
-                );
-              }
+    {
+      key: "role",
+      header: "Role",
+      width: "180px",
+      render: (invite) => {
+        const inviteRole = getInviteRole(invite);
+        if (roles.length === 0) {
+          return (
+            <Type variant="body" className="text-muted-foreground">
+              {invite.roleSlug ?? "—"}
+            </Type>
+          );
+        }
 
-              return (
-                <Select
-                  value={inviteRole?.id}
-                  onValueChange={(roleId) =>
-                    handleUpdateInviteRole(invite, roleId)
-                  }
-                  disabled={updateInviteRoleMutation.isPending}
-                >
-                  <SelectTrigger>
-                    <SelectValue
-                      placeholder={invite.roleSlug ?? "Select role"}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roles.map((role) => (
-                      <SelectItem key={role.id} value={role.id}>
-                        {role.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              );
-            },
-          } satisfies Column<OrganizationInvitation>,
-        ]
-      : []),
+        return (
+          <Select
+            value={inviteRole?.id}
+            onValueChange={(roleId) => handleUpdateInviteRole(invite, roleId)}
+            disabled={updateInviteRoleMutation.isPending}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={invite.roleSlug ?? "Select role"} />
+            </SelectTrigger>
+            <SelectContent>
+              {roles.map((role) => (
+                <SelectItem key={role.id} value={role.id}>
+                  {role.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        );
+      },
+    } satisfies Column<OrganizationInvitation>,
     {
       key: "invitedBy",
       header: "Invited by",
@@ -1134,7 +1113,7 @@ function TeamInner() {
               data-lpignore="true"
               data-bwignore
             />
-            {isRbacEnabled && roles.length > 0 && (
+            {roles.length > 0 && (
               <AnyField
                 label="Role"
                 optionality="hidden"
@@ -1257,7 +1236,7 @@ function TeamInner() {
       </Dialog>
 
       {/* Change Role Dialog — hidden when directory sync manages role assignment */}
-      {isRbacEnabled && !organization.scimEnabled && (
+      {!organization.scimEnabled && (
         <ChangeRoleDialog
           member={changingMember}
           onOpenChange={(open) => {

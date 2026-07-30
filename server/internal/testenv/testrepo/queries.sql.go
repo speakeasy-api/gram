@@ -328,6 +328,33 @@ func (q *Queries) GetOutboxRelayState(ctx context.Context, outboxID int64) (GetO
 	return i, err
 }
 
+const insertChatContentPartFixture = `-- name: InsertChatContentPartFixture :one
+INSERT INTO chat_content_parts (chat_id, project_id, kind, content_asset_url)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type InsertChatContentPartFixtureParams struct {
+	ChatID          uuid.UUID
+	ProjectID       uuid.NullUUID
+	Kind            string
+	ContentAssetUrl string
+}
+
+// Test-only fixture: seeds a minimal chat content part so tests can anchor a
+// risk_results row to it.
+func (q *Queries) InsertChatContentPartFixture(ctx context.Context, arg InsertChatContentPartFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertChatContentPartFixture,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Kind,
+		arg.ContentAssetUrl,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const insertChatMessage = `-- name: InsertChatMessage :one
 INSERT INTO chat_messages (chat_id, project_id, role, content)
 VALUES ($1, $2, $3, $4)
@@ -351,6 +378,51 @@ func (q *Queries) InsertChatMessage(ctx context.Context, arg InsertChatMessagePa
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const insertContentPartRiskResultFixture = `-- name: InsertContentPartRiskResultFixture :exec
+INSERT INTO risk_results (
+  id, project_id, organization_id, risk_policy_id, risk_policy_version,
+  chat_content_part_id, source, found, rule_id, description, match, tags
+) VALUES (
+  $1, $2, $3, $4, $5,
+  $6, $7, TRUE, $8, $9, $10, $11
+)
+`
+
+type InsertContentPartRiskResultFixtureParams struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	ChatContentPartID uuid.NullUUID
+	Source            string
+	RuleID            pgtype.Text
+	Description       pgtype.Text
+	Match             pgtype.Text
+	Tags              []string
+}
+
+// Test-only fixture: seeds a risk_results row anchored to a chat content part
+// (chat_message_id IS NULL), a shape the production InsertRiskResults copyfrom
+// cannot produce, so backfill tooling can exercise the fallback path its
+// chat_messages join takes when a finding has no chat message.
+func (q *Queries) InsertContentPartRiskResultFixture(ctx context.Context, arg InsertContentPartRiskResultFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertContentPartRiskResultFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.RiskPolicyID,
+		arg.RiskPolicyVersion,
+		arg.ChatContentPartID,
+		arg.Source,
+		arg.RuleID,
+		arg.Description,
+		arg.Match,
+		arg.Tags,
+	)
+	return err
 }
 
 const insertDeviceAgentDeviceSyncFixture = `-- name: InsertDeviceAgentDeviceSyncFixture :exec

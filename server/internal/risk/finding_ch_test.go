@@ -164,6 +164,10 @@ func TestFindingCHWriter_HandleBatch_MapsAllFields(t *testing.T) {
 	require.Equal(t, int32(10), row.EndPos)
 	require.Empty(t, row.DeadLetterReason)
 	require.True(t, time.Date(2026, 6, 27, 12, 30, 0, 0, time.UTC).Equal(row.CreatedAt))
+	// Unresolvable chat_message_id: message_created_at falls back to the scan
+	// time and no assistant is stamped.
+	require.True(t, row.CreatedAt.Equal(row.MessageCreatedAt))
+	require.Empty(t, row.AssistantID)
 
 	// "chat-1" is not a UUID, so attribution resolution is skipped and the
 	// denormalized fields stay empty. The classifier still runs: ("input",
@@ -454,6 +458,22 @@ func TestFindingCHWriter_HandleBatch_ResolvesAttribution(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// Live assistant link for the chat: stamped as assistant_id on both
+	// resolved findings.
+	assistantID, err := queries.CreateAssistantForTest(t.Context(), riskrepo.CreateAssistantForTestParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Name:           "attribution-assistant",
+	})
+	require.NoError(t, err)
+	_, err = queries.CreateAssistantThreadForTest(t.Context(), riskrepo.CreateAssistantThreadForTestParams{
+		AssistantID:   assistantID,
+		ProjectID:     *authCtx.ProjectID,
+		CorrelationID: "attribution-thread",
+		ChatID:        chatID,
+	})
+	require.NoError(t, err)
+
 	ins := &fakeCHInserter{}
 	fp, err := risk.ParsePepperKeyRing(keyRingJSON(t, testPepperVersion, map[string][]byte{testPepperVersion: testPepperKey}))
 	require.NoError(t, err)
@@ -483,16 +503,25 @@ func TestFindingCHWriter_HandleBatch_ResolvesAttribution(t *testing.T) {
 	require.Equal(t, chatID.String(), ownRow.ChatID)
 	require.Equal(t, "msg-user", ownRow.UserID)
 	require.Equal(t, "msg-user@example.com", ownRow.ExternalUserID)
+	require.Equal(t, assistantID.String(), ownRow.AssistantID)
+	// The message was inserted moments ago; a resolved finding carries the
+	// message's event time, not the finding's fixed scan time.
+	require.WithinDuration(t, time.Now().UTC(), ownRow.MessageCreatedAt, time.Minute)
 
 	fallbackRow := byID[uuid.MustParse(fallback.GetId())]
 	require.Equal(t, chatID.String(), fallbackRow.ChatID)
 	require.Equal(t, "chat-user", fallbackRow.UserID)
 	require.Equal(t, "chat-user@example.com", fallbackRow.ExternalUserID)
+	require.Equal(t, assistantID.String(), fallbackRow.AssistantID)
 
 	unknownRow := byID[uuid.MustParse(unknown.GetId())]
 	require.Empty(t, unknownRow.ChatID)
 	require.Empty(t, unknownRow.UserID)
 	require.Empty(t, unknownRow.ExternalUserID)
+	require.Empty(t, unknownRow.AssistantID)
+	// Unresolved attribution: message_created_at falls back to the finding's
+	// own scan time.
+	require.True(t, unknownRow.CreatedAt.Equal(unknownRow.MessageCreatedAt))
 }
 
 // chMessagesInsertedPoint returns the single data point for the CH

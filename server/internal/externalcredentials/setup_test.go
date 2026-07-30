@@ -73,7 +73,7 @@ func (f *fakeGcpResolver) TokenSource(context.Context, gcpauth.Credential) (oaut
 
 // withAdmin returns ctx with the auth context's IsAdmin flag flipped to true.
 // Admin-only endpoints opt in explicitly so non-admin paths exercise the
-// realistic default produced by testenv.InitAuthContext.
+// realistic default produced by authztest.InitAuthContext.
 func withAdmin(t *testing.T, ctx context.Context) context.Context {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -100,7 +100,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)

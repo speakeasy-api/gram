@@ -57,12 +57,16 @@ func (p *IngressProvisioner) Get(ctx context.Context, resourceName string) error
 }
 
 func (p *IngressProvisioner) Delete(ctx context.Context, resourceName, secretName string) error {
-	if err := p.clientset.NetworkingV1().Ingresses(p.namespace).Delete(ctx, resourceName, metav1.DeleteOptions{}); err != nil {
+	// NotFound counts as success so retries after a partial teardown converge.
+	if err := p.clientset.NetworkingV1().Ingresses(p.namespace).Delete(ctx, resourceName, metav1.DeleteOptions{}); err != nil && !k8serrors.IsNotFound(err) {
 		return fmt.Errorf("delete ingress %s: %w", resourceName, err)
 	}
 	p.logger.InfoContext(ctx, "ingress deleted", attr.SlogIngressName(resourceName))
 
-	if err := p.clientset.CoreV1().Secrets(p.namespace).Delete(ctx, secretName, metav1.DeleteOptions{}); err != nil {
+	if secretName == "" {
+		return nil
+	}
+	if err := p.clientset.CoreV1().Secrets(p.namespace).Delete(ctx, secretName, metav1.DeleteOptions{}); err != nil && !k8serrors.IsNotFound(err) {
 		return fmt.Errorf("delete secret %s: %w", secretName, err)
 	}
 	p.logger.InfoContext(ctx, "secret deleted", attr.SlogSecretName(secretName))

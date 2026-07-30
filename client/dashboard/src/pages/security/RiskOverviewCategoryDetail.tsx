@@ -24,9 +24,10 @@ import {
 } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
-import { getRuleTitleFallback } from "./risk-utils";
+import { getRuleTitleFallback, isJudgeSource } from "./risk-utils";
 import {
   CategoryLabel,
+  EventMatchDialog,
   MaskedMatch,
   RevealAllProvider,
   RevealAllToggle,
@@ -297,10 +298,10 @@ function ResultsTable({
         <thead className="bg-muted text-muted-foreground sticky top-0 z-[1] text-xs font-medium tracking-wide uppercase shadow-[0_1px_0_0_var(--color-border)]">
           <tr>
             <th className="px-4 py-2 text-left">Time</th>
-            <th className="px-4 py-2 text-left">Rule</th>
+            <th className="px-4 py-2 text-left">Category / Rule</th>
             <th className="px-4 py-2 text-left">Session</th>
             <th className="px-4 py-2 text-left">User</th>
-            <th className="px-4 py-2 text-left">Match</th>
+            <th className="px-4 py-2 text-left">Evidence</th>
             <th className="px-4 py-2"></th>
           </tr>
         </thead>
@@ -347,10 +348,18 @@ function ResultsTable({
                 {result.userId ?? "-"}
               </td>
               <td className="px-4 py-3">
-                <MaskedMatch
-                  resultId={result.id}
-                  matchRedacted={result.matchRedacted}
-                />
+                {isJudgeSource(result.source) ? (
+                  <EventMatchDialog
+                    resultId={result.id}
+                    matchRedacted={result.matchRedacted}
+                    rationale={result.description}
+                  />
+                ) : (
+                  <MaskedMatch
+                    resultId={result.id}
+                    matchRedacted={result.matchRedacted}
+                  />
+                )}
               </td>
               <td className="px-4 py-3 text-right">
                 {result.chatId && (

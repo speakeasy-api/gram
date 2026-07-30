@@ -109,7 +109,7 @@ func newTestFunctionsService(t *testing.T) (context.Context, *testInstance) {
 
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	ph := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
