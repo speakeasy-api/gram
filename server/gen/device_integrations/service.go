@@ -114,13 +114,22 @@ type DeviceIntegrationCoverage struct {
 	// Freshness window: an agent counts as active when its heartbeat is within
 	// this many minutes.
 	ActiveWindowMinutes int
-	// Which claim this org's coverage supports. "device": matched on hardware
-	// serial, so an active bucket means THIS machine ran the agent. "user":
-	// matched on assigned-user email, so it means only that the device's assigned
-	// user ran the agent somewhere.
+	// The strongest claim that holds for EVERY active device in this response —
+	// not merely the org's matching mode. "device": every active device was
+	// matched on its own hardware serial, so each one ran the agent. "user": at
+	// least one active device was matched only on its assigned-user email, so the
+	// set as a whole supports only the weaker claim that assigned users ran the
+	// agent somewhere.
 	Attestation string
-	// Devices whose assigned user has an agent heartbeat within the window.
+	// Devices with an agent heartbeat within the window. What that attests depends
+	// on the matching mode and, per device, on whether the match was by serial or
+	// by email — compare against agent_active_device_attested.
 	AgentActive int64
+	// How many of agent_active are backed by that machine's OWN heartbeat (serial
+	// match). Under user-level matching this is 0; under device-level matching a
+	// value below agent_active means some devices fell back to the assigned-user
+	// email, which is the weaker claim.
+	AgentActiveDeviceAttested int64
 	// Devices with a known agent that went quiet — the drift/disable case.
 	AgentStale int64
 	// Device-level matching only: devices whose assigned user runs the agent, but
@@ -297,8 +306,12 @@ type ListSchedulesPayload struct {
 }
 
 // One device from a connected MDM's inventory, annotated with its
-// agent-coverage bucket. Agent presence is attested per assigned user (the
-// agent heartbeat is keyed by user email), not per device.
+// agent-coverage bucket. What that bucket attests depends on the
+// organization's matching mode: under device-level matching a device may be
+// classified by its own hardware serial (this machine ran the agent) or, when
+// no serial heartbeat exists for it, by its assigned-user email (only that
+// user ran the agent somewhere). Under user-level matching only the latter
+// applies.
 type ManagedDevice struct {
 	// Device row ID.
 	ID string
@@ -326,7 +339,9 @@ type ManagedDevice struct {
 	// under device-level matching, otherwise its assigned user's. Omitted when no
 	// agent has ever synced.
 	AgentLastSeenAt *string
-	// Coverage classification for the device.
+	// Coverage classification for the device. What agent_active attests depends on
+	// the org's matching mode and on whether this device matched by serial or by
+	// assigned-user email.
 	CoverageBucket string
 	// When the device went absent from the MDM inventory. Omitted while present.
 	MissingSince *string

@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -512,4 +513,52 @@ func TestDeviceLevelCoverageDualEnrollmentCountsBoth(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 2, counts.AgentActive, "both inventory rows describe the same covered machine")
 	require.EqualValues(t, 2, counts.Total, "the heartbeat row must not fan out the device count")
+}
+
+// TestCoverageAttestationDowngradesOnMixedEvidence pins the honesty rule for
+// the headline claim: one email-matched active device downgrades the whole
+// response to user attestation, because the strong sentence ("N devices are
+// running the agent") would be false for that device.
+func TestCoverageAttestationDowngradesOnMixedEvidence(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+	cfg := mustUpsert(t, ctx, conn, store, orgID, validCreds(), validSettings(), true)
+	now := time.Now().UTC()
+
+	// One machine reports its own serial; a second is covered only through its
+	// assigned user's heartbeat.
+	attestedEmail := "attested@example.test"
+	attestedUser := seedUser(t, ctx, conn, attestedEmail)
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "attested", attestedEmail, &attestedUser, "S-ATTESTED", false)
+	seedDeviceAgentSync(t, ctx, conn, orgID, "S-ATTESTED", attestedEmail, now)
+	seedAgentSync(t, ctx, conn, orgID, attestedEmail, now)
+
+	legacyEmail := "legacy@example.test"
+	legacyUser := seedUser(t, ctx, conn, legacyEmail)
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "legacy", legacyEmail, &legacyUser, "S-LEGACY", false)
+	seedAgentSync(t, ctx, conn, orgID, legacyEmail, now)
+
+	counts, err := store.repo.GetCoverageCounts(ctx, repo.GetCoverageCountsParams{
+		DeviceLevel:    true,
+		ActiveCutoff:   conv.ToPGTimestamptz(now.Add(-time.Hour)),
+		OrganizationID: orgID,
+		Provider:       conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 2, counts.AgentActive, "both devices are covered")
+	require.EqualValues(t, 1, counts.AgentActiveDeviceAttested, "only one is backed by its own heartbeat")
+
+	require.Equal(t, string(providers.AttestationUser),
+		coverageAttestation(true, counts.AgentActive, counts.AgentActiveDeviceAttested),
+		"a single email-matched active device downgrades the response's claim")
+	require.Equal(t, string(providers.AttestationDevice),
+		coverageAttestation(true, 2, 2),
+		"all-device-attested earns the strong claim")
+	require.Equal(t, string(providers.AttestationUser),
+		coverageAttestation(false, 2, 0),
+		"user-level matching never claims device attestation")
+	require.Equal(t, string(providers.AttestationUser),
+		coverageAttestation(true, 0, 0),
+		"an empty active set cannot support the strong claim")
 }

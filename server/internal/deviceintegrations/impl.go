@@ -108,13 +108,21 @@ func (s *Service) deviceLevelCoverage(ctx context.Context, orgID string) bool {
 	return enabled
 }
 
-// attestationMode names the claim the returned counts support, so clients do
-// not have to infer it from the bucket values.
-func attestationMode(deviceLevel bool) string {
-	if deviceLevel {
-		return "device"
+// coverageAttestation names the strongest claim that holds for EVERY active
+// device in a response — deliberately not just the org's matching mode.
+//
+// agent_active is reachable through the email fallback even under device-level
+// matching (an agent that predates hardware reporting, or hardware with no
+// readable serial), so reporting "device" purely because the mode is on would
+// tell the dashboard to print "N devices are running the agent" while some of
+// that N is only "their assigned user is running it somewhere". One
+// email-matched device downgrades the whole set, which is the same rule the
+// evidence path applies per record.
+func coverageAttestation(deviceLevel bool, active, deviceAttested int64) string {
+	if deviceLevel && active > 0 && deviceAttested == active {
+		return string(providers.AttestationDevice)
 	}
-	return "user"
+	return string(providers.AttestationUser)
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -714,8 +722,9 @@ func (s *Service) GetCoverage(ctx context.Context, payload *gen.GetCoveragePaylo
 	return &gen.DeviceIntegrationCoverage{
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		ActiveWindowMinutes: int(activeWindow / time.Minute),
-		Attestation:         attestationMode(deviceLevel),
-		AgentActive:         counts.AgentActive,
+		Attestation:         coverageAttestation(deviceLevel, counts.AgentActive, counts.AgentActiveDeviceAttested),
+		AgentActive:               counts.AgentActive,
+		AgentActiveDeviceAttested: counts.AgentActiveDeviceAttested,
 		AgentStale:          counts.AgentStale,
 		AgentOtherDevice:    counts.AgentOtherDevice,
 		NoAgent:             counts.NoAgent,

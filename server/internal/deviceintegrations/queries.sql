@@ -269,6 +269,12 @@ SELECT
   , count(*) FILTER (WHERE cov.coverage_bucket = 'agent_active') AS agent_active
   , count(*) FILTER (WHERE cov.coverage_bucket = 'agent_stale') AS agent_stale
   , count(*) FILTER (WHERE cov.coverage_bucket = 'agent_other_device') AS agent_other_device
+    -- How many of the agent_active devices are backed by their OWN heartbeat.
+    -- agent_active is reachable via the email fallback even in device-level
+    -- mode, so without this the caller cannot tell whether "active" means
+    -- "this machine reported" for every device or only for some — and would
+    -- have to state the strong claim for all of them.
+  , count(*) FILTER (WHERE @device_level::boolean AND dads.last_seen_at >= @active_cutoff::timestamptz) AS agent_active_device_attested
   , count(*) FILTER (WHERE cov.coverage_bucket = 'no_agent') AS no_agent
   , count(*) FILTER (WHERE cov.coverage_bucket = 'unresolved_email') AS unresolved_email
   , count(*) AS total

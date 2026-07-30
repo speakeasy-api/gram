@@ -284,6 +284,12 @@ SELECT
   , count(*) FILTER (WHERE cov.coverage_bucket = 'agent_active') AS agent_active
   , count(*) FILTER (WHERE cov.coverage_bucket = 'agent_stale') AS agent_stale
   , count(*) FILTER (WHERE cov.coverage_bucket = 'agent_other_device') AS agent_other_device
+    -- How many of the agent_active devices are backed by their OWN heartbeat.
+    -- agent_active is reachable via the email fallback even in device-level
+    -- mode, so without this the caller cannot tell whether "active" means
+    -- "this machine reported" for every device or only for some — and would
+    -- have to state the strong claim for all of them.
+  , count(*) FILTER (WHERE $1::boolean AND dads.last_seen_at >= $2::timestamptz) AS agent_active_device_attested
   , count(*) FILTER (WHERE cov.coverage_bucket = 'no_agent') AS no_agent
   , count(*) FILTER (WHERE cov.coverage_bucket = 'unresolved_email') AS unresolved_email
   , count(*) AS total
@@ -303,7 +309,7 @@ LEFT JOIN LATERAL (
   WHERE o.organization_id = d.organization_id
     AND LOWER(o.email) = LOWER(d.user_email)
     AND LOWER(o.serial_number) IS DISTINCT FROM LOWER(d.serial_number)
-    AND o.last_seen_at >= $1::timestamptz
+    AND o.last_seen_at >= $2::timestamptz
   LIMIT 1
 ) other ON TRUE
 CROSS JOIN LATERAL (
@@ -312,22 +318,22 @@ CROSS JOIN LATERAL (
     -- Device-level: this machine's own heartbeat answers for it, and outranks
     -- everything email-based including no_email — a device the MDM records
     -- with no assigned user is still legible when its own agent reports in.
-    WHEN $2::boolean AND dads.last_seen_at >= $1::timestamptz THEN 'agent_active'
-    WHEN $2::boolean AND dads.id IS NOT NULL THEN 'agent_stale'
+    WHEN $1::boolean AND dads.last_seen_at >= $2::timestamptz THEN 'agent_active'
+    WHEN $1::boolean AND dads.id IS NOT NULL THEN 'agent_stale'
     -- Device-level only, and it requires POSITIVE evidence: the assigned user
     -- has a fresh heartbeat from a different serial-identified machine, so
     -- this one is a real gap. Without that evidence we must NOT land here —
     -- an agent that reports no serial is indistinguishable from one running
     -- on another machine, and guessing "elsewhere" would tell an admin to
     -- reinstall on a device already running the agent.
-    WHEN $2::boolean AND dads.id IS NULL AND other.found IS NOT NULL THEN 'agent_other_device'
+    WHEN $1::boolean AND dads.id IS NULL AND other.found IS NOT NULL THEN 'agent_other_device'
     -- Shared fallback, identical in both modes. This is what keeps the two
     -- consistent: a device with only a user-level heartbeat stays
     -- agent_active (the evidence push says the same thing, at "user"
     -- attestation), so enabling device-level matching can never demote a
     -- covered fleet to 0%.
     WHEN coalesce(d.user_email, '') = '' THEN 'no_email'
-    WHEN das.last_seen_at >= $1::timestamptz THEN 'agent_active'
+    WHEN das.last_seen_at >= $2::timestamptz THEN 'agent_active'
     WHEN das.id IS NOT NULL THEN 'agent_stale'
     WHEN d.user_id IS NOT NULL THEN 'no_agent'
     ELSE 'unresolved_email'
@@ -338,21 +344,22 @@ WHERE d.organization_id = $3
 `
 
 type GetCoverageCountsParams struct {
-	ActiveCutoff   pgtype.Timestamptz
 	DeviceLevel    bool
+	ActiveCutoff   pgtype.Timestamptz
 	OrganizationID string
 	Provider       pgtype.Text
 }
 
 type GetCoverageCountsRow struct {
-	Missing          int64
-	NoEmail          int64
-	AgentActive      int64
-	AgentStale       int64
-	AgentOtherDevice int64
-	NoAgent          int64
-	UnresolvedEmail  int64
-	Total            int64
+	Missing                   int64
+	NoEmail                   int64
+	AgentActive               int64
+	AgentStale                int64
+	AgentOtherDevice          int64
+	AgentActiveDeviceAttested int64
+	NoAgent                   int64
+	UnresolvedEmail           int64
+	Total                     int64
 }
 
 // Coverage classifies each present (non-missing) device of the org's live
@@ -390,8 +397,8 @@ type GetCoverageCountsRow struct {
 // question.
 func (q *Queries) GetCoverageCounts(ctx context.Context, arg GetCoverageCountsParams) (GetCoverageCountsRow, error) {
 	row := q.db.QueryRow(ctx, getCoverageCounts,
-		arg.ActiveCutoff,
 		arg.DeviceLevel,
+		arg.ActiveCutoff,
 		arg.OrganizationID,
 		arg.Provider,
 	)
@@ -402,6 +409,7 @@ func (q *Queries) GetCoverageCounts(ctx context.Context, arg GetCoverageCountsPa
 		&i.AgentActive,
 		&i.AgentStale,
 		&i.AgentOtherDevice,
+		&i.AgentActiveDeviceAttested,
 		&i.NoAgent,
 		&i.UnresolvedEmail,
 		&i.Total,

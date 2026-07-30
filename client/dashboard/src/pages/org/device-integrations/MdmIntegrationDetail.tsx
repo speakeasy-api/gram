@@ -225,11 +225,12 @@ function MdmIntegrationDetailInner({
 }
 
 // The headline number an admin acts on. The sentence follows the server's
-// attestation mode rather than guessing: under device-level matching the
-// active bucket really does mean the machine ran the agent, but under
-// user-level matching it only means its assigned user did somewhere, and
-// stating the stronger claim there would overclaim. Floors so the headline
-// never claims 100% while any device is uncovered.
+// attestation field, which reports the strongest claim holding for EVERY
+// active device — not merely the org's matching mode. That distinction
+// matters: agent_active is reachable through the email fallback even under
+// device-level matching, so a mixed response is reported as "user" and must
+// not print the per-machine sentence. Floors so the headline never claims
+// 100% while any device is uncovered.
 function coverageHeadlineCopy(coverage: DeviceIntegrationCoverage): string {
   const noun = coverage.totalDevices === 1 ? "device" : "devices";
   if (coverage.attestation === "device") {

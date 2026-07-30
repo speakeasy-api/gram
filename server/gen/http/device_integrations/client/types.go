@@ -207,13 +207,22 @@ type GetCoverageResponseBody struct {
 	// Freshness window: an agent counts as active when its heartbeat is within
 	// this many minutes.
 	ActiveWindowMinutes *int `form:"active_window_minutes,omitempty" json:"active_window_minutes,omitempty" xml:"active_window_minutes,omitempty"`
-	// Which claim this org's coverage supports. "device": matched on hardware
-	// serial, so an active bucket means THIS machine ran the agent. "user":
-	// matched on assigned-user email, so it means only that the device's assigned
-	// user ran the agent somewhere.
+	// The strongest claim that holds for EVERY active device in this response —
+	// not merely the org's matching mode. "device": every active device was
+	// matched on its own hardware serial, so each one ran the agent. "user": at
+	// least one active device was matched only on its assigned-user email, so the
+	// set as a whole supports only the weaker claim that assigned users ran the
+	// agent somewhere.
 	Attestation *string `form:"attestation,omitempty" json:"attestation,omitempty" xml:"attestation,omitempty"`
-	// Devices whose assigned user has an agent heartbeat within the window.
+	// Devices with an agent heartbeat within the window. What that attests depends
+	// on the matching mode and, per device, on whether the match was by serial or
+	// by email — compare against agent_active_device_attested.
 	AgentActive *int64 `form:"agent_active,omitempty" json:"agent_active,omitempty" xml:"agent_active,omitempty"`
+	// How many of agent_active are backed by that machine's OWN heartbeat (serial
+	// match). Under user-level matching this is 0; under device-level matching a
+	// value below agent_active means some devices fell back to the assigned-user
+	// email, which is the weaker claim.
+	AgentActiveDeviceAttested *int64 `form:"agent_active_device_attested,omitempty" json:"agent_active_device_attested,omitempty" xml:"agent_active_device_attested,omitempty"`
 	// Devices with a known agent that went quiet — the drift/disable case.
 	AgentStale *int64 `form:"agent_stale,omitempty" json:"agent_stale,omitempty" xml:"agent_stale,omitempty"`
 	// Device-level matching only: devices whose assigned user runs the agent, but
@@ -2206,7 +2215,9 @@ type ManagedDeviceResponseBody struct {
 	// under device-level matching, otherwise its assigned user's. Omitted when no
 	// agent has ever synced.
 	AgentLastSeenAt *string `form:"agent_last_seen_at,omitempty" json:"agent_last_seen_at,omitempty" xml:"agent_last_seen_at,omitempty"`
-	// Coverage classification for the device.
+	// Coverage classification for the device. What agent_active attests depends on
+	// the org's matching mode and on whether this device matched by serial or by
+	// assigned-user email.
 	CoverageBucket *string `form:"coverage_bucket,omitempty" json:"coverage_bucket,omitempty" xml:"coverage_bucket,omitempty"`
 	// When the device went absent from the MDM inventory. Omitted while present.
 	MissingSince *string `form:"missing_since,omitempty" json:"missing_since,omitempty" xml:"missing_since,omitempty"`
@@ -3783,18 +3794,19 @@ func NewListManagedDevicesGatewayError(body *ListManagedDevicesGatewayErrorRespo
 // service "getCoverage" endpoint result from a HTTP "OK" response.
 func NewGetCoverageDeviceIntegrationCoverageOK(body *GetCoverageResponseBody) *deviceintegrations.DeviceIntegrationCoverage {
 	v := &deviceintegrations.DeviceIntegrationCoverage{
-		OrganizationID:      *body.OrganizationID,
-		ActiveWindowMinutes: *body.ActiveWindowMinutes,
-		Attestation:         *body.Attestation,
-		AgentActive:         *body.AgentActive,
-		AgentStale:          *body.AgentStale,
-		AgentOtherDevice:    *body.AgentOtherDevice,
-		NoAgent:             *body.NoAgent,
-		NoEmail:             *body.NoEmail,
-		UnresolvedEmail:     *body.UnresolvedEmail,
-		Missing:             *body.Missing,
-		TotalDevices:        *body.TotalDevices,
-		UnmanagedAgentUsers: *body.UnmanagedAgentUsers,
+		OrganizationID:            *body.OrganizationID,
+		ActiveWindowMinutes:       *body.ActiveWindowMinutes,
+		Attestation:               *body.Attestation,
+		AgentActive:               *body.AgentActive,
+		AgentActiveDeviceAttested: *body.AgentActiveDeviceAttested,
+		AgentStale:                *body.AgentStale,
+		AgentOtherDevice:          *body.AgentOtherDevice,
+		NoAgent:                   *body.NoAgent,
+		NoEmail:                   *body.NoEmail,
+		UnresolvedEmail:           *body.UnresolvedEmail,
+		Missing:                   *body.Missing,
+		TotalDevices:              *body.TotalDevices,
+		UnmanagedAgentUsers:       *body.UnmanagedAgentUsers,
 	}
 
 	return v
@@ -4151,6 +4163,9 @@ func ValidateGetCoverageResponseBody(body *GetCoverageResponseBody) (err error) 
 	}
 	if body.AgentActive == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_active", "body"))
+	}
+	if body.AgentActiveDeviceAttested == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_active_device_attested", "body"))
 	}
 	if body.AgentStale == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_stale", "body"))
