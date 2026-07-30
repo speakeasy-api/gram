@@ -216,8 +216,12 @@ function CoverageNode({
           covered · {running} of {total} devices
         </Type>
       </Stack>
+      {/* The track needs its own contrast: bg-muted collapses to the card
+          color in dark mode, which hides the uncovered remainder and makes the
+          filled portion read as far more than its true share. foreground/15
+          stays visible on both grounds. */}
       <div
-        className="bg-muted flex h-2 overflow-hidden rounded-full"
+        className="bg-foreground/15 flex h-2 overflow-hidden rounded-full"
         role="img"
         aria-label={`${running} running the agent, ${coverage.agentStale} stale, of ${total} devices`}
       >
