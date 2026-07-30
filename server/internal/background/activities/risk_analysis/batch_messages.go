@@ -97,16 +97,20 @@ func newContentPartBatchMessages(rows []repo.GetContentPartBatchRow, contents []
 		if !message.IsTypeValid(messageType) {
 			continue
 		}
+		// Content parts carry no chat position, so they scan without trajectory
+		// context.
 		msg := batchMessage{
-			ID:           row.ID,
-			ContentPart:  true,
-			Type:         messageType,
-			Content:      contents[i],
-			RawToolCalls: nil,
-			ToolCalls:    []recordedToolCall{},
-			UserID:       row.ChatUserID,
-			CreatedAt:    time.Time{},
-			Source:       row.Source.String,
+			ID:                     row.ID,
+			ContentPart:            true,
+			Type:                   messageType,
+			Content:                contents[i],
+			RawToolCalls:           nil,
+			ToolCalls:              []recordedToolCall{},
+			PriorUserRequest:       "",
+			RecentUntrustedContent: "",
+			UserID:                 row.ChatUserID,
+			CreatedAt:              time.Time{},
+			Source:                 row.Source.String,
 		}
 		if row.CreatedAt.Valid {
 			msg.CreatedAt = row.CreatedAt.Time

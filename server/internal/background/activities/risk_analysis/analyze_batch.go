@@ -364,15 +364,17 @@ func mergeSessionFindings(ids []batchMessage, findings [][]scanners.Finding, ses
 			findings[i] = append(findings[i], kept...)
 		} else {
 			ids = append(ids, batchMessage{
-				ID:           sf.messageID,
-				ContentPart:  false,
-				Type:         "",
-				Content:      "",
-				RawToolCalls: nil,
-				ToolCalls:    nil,
-				UserID:       "",
-				CreatedAt:    time.Time{},
-				Source:       "",
+				ID:                     sf.messageID,
+				ContentPart:            false,
+				Type:                   "",
+				Content:                "",
+				RawToolCalls:           nil,
+				ToolCalls:              nil,
+				PriorUserRequest:       "",
+				RecentUntrustedContent: "",
+				UserID:                 "",
+				CreatedAt:              time.Time{},
+				Source:                 "",
 			})
 			findings = append(findings, kept)
 		}
