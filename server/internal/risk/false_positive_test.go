@@ -11,6 +11,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
 func TestMarkUnmarkRiskResultsFalsePositive(t *testing.T) {
@@ -60,6 +62,20 @@ func TestMarkUnmarkRiskResultsFalsePositive(t *testing.T) {
 	require.Equal(t, resultID, dismissed.Results[0].ID)
 	require.NotNil(t, dismissed.Results[0].FalsePositiveAt)
 
+	// The reason isn't surfaced on the API type today (no UI sends one yet),
+	// but it must still land in Postgres from the RPC payload.
+	resultUUID, err := uuid.Parse(resultID)
+	require.NoError(t, err)
+	dismissedRows, err := riskrepo.New(ti.conn).ListFalsePositiveRiskResults(ctx, riskrepo.ListFalsePositiveRiskResultsParams{
+		ProjectID: *authCtx.ProjectID,
+		PageLimit: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, dismissedRows, 1)
+	require.Equal(t, resultUUID, dismissedRows[0].ID)
+	require.True(t, dismissedRows[0].FalsePositiveReason.Valid)
+	require.Equal(t, "noise", dismissedRows[0].FalsePositiveReason.String)
+
 	restoreCountBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultRestore)
 	require.NoError(t, err)
 
@@ -94,4 +110,67 @@ func TestMarkRiskResultsFalsePositive_RejectsEmptyIDs(t *testing.T) {
 
 	err := ti.service.MarkRiskResultsFalsePositive(ctx, &gen.MarkRiskResultsFalsePositivePayload{ResultIds: nil})
 	require.Error(t, err)
+}
+
+func TestMarkRiskResultsFalsePositive_Unauthorized(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn) // no org:admin grant
+
+	err := ti.service.MarkRiskResultsFalsePositive(ctx, &gen.MarkRiskResultsFalsePositivePayload{
+		ResultIds: []string{uuid.NewString()},
+	})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestUnmarkRiskResultsFalsePositive_Unauthorized(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn) // no org:admin grant
+
+	err := ti.service.UnmarkRiskResultsFalsePositive(ctx, &gen.UnmarkRiskResultsFalsePositivePayload{
+		ResultIds: []string{uuid.NewString()},
+	})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestListDismissedRiskResults_Unauthorized(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn) // no org:admin grant
+
+	_, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+// TestMarkRiskResultsFalsePositive_RejectsBatchTooLarge exercises the
+// maxFalsePositiveBatch guard (matching the "no batch job" scoping decision
+// in the plan: multiselect is bounded, so a page-sized cap is enough).
+func TestMarkRiskResultsFalsePositive_RejectsBatchTooLarge(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	ids := make([]string, 501)
+	for i := range ids {
+		ids[i] = uuid.NewString()
+	}
+	err := ti.service.MarkRiskResultsFalsePositive(ctx, &gen.MarkRiskResultsFalsePositivePayload{ResultIds: ids})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
 }
