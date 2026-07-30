@@ -37,6 +37,7 @@ pubsub:
           string kind = 9;
           repeated ToolCall tool_calls = 10;
           repeated string custom_rule_ids = 11;
+          string content_part_id = 12;
           message ToolCall {
             string name = 1;
             string arguments = 2;
@@ -68,6 +69,7 @@ pubsub:
           string source = 15;
           double confidence = 16;
           string dead_letter_reason = 17;
+          string content_part_id = 18;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -87,6 +89,7 @@ pubsub:
           string created_at = 7;
           string reply_urn = 8;
           string content = 9;
+          string content_part_id = 10;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -108,6 +111,7 @@ pubsub:
           string content = 9;
           repeated string entities = 10;
           double score_threshold = 11;
+          string content_part_id = 12;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -132,6 +136,7 @@ pubsub:
           string body = 12;
           string tool_name = 13;
           repeated ToolCall tool_calls = 14;
+          string content_part_id = 15;
           message ToolCall {
             string name = 1;
             string arguments = 2;
@@ -161,6 +166,7 @@ pubsub:
           string body = 13;
           string tool_name = 14;
           repeated ToolCall tool_calls = 15;
+          string content_part_id = 16;
           message ToolCall {
             string name = 1;
             string arguments = 2;

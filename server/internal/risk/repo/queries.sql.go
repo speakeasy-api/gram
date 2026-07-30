@@ -1219,6 +1219,84 @@ func (q *Queries) GetBatchChatIdentities(ctx context.Context, arg GetBatchChatId
 	return items, nil
 }
 
+const getChatContentPartAttribution = `-- name: GetChatContentPartAttribution :many
+SELECT
+    ccp.id
+  , ccp.chat_id
+  , ccp.project_id
+  , COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id
+  , COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
+FROM chat_content_parts ccp
+LEFT JOIN chat_messages cm
+  ON cm.id = ccp.parent_chat_message_id
+  AND cm.chat_id = ccp.chat_id
+LEFT JOIN chats c
+  ON c.id = ccp.chat_id
+  AND c.deleted IS FALSE
+WHERE ccp.id = ANY($1::uuid[])
+  AND ccp.project_id = ANY($2::uuid[])
+  AND ccp.deleted IS FALSE
+  -- Nothing in the schema ties a part's project_id to its chat's, so a part
+  -- pointing at a chat in another project is rejected outright rather than
+  -- attributed. Constraining the chats join alone would not be enough: the
+  -- parent message is reached through ccp.chat_id, so its user ids would still
+  -- come from the foreign chat.
+  AND EXISTS (
+    SELECT 1
+    FROM chats pc
+    WHERE pc.id = ccp.chat_id
+      AND pc.project_id = ccp.project_id
+  )
+`
+
+type GetChatContentPartAttributionParams struct {
+	Ids        []uuid.UUID
+	ProjectIds []uuid.UUID
+}
+
+type GetChatContentPartAttributionRow struct {
+	ID             uuid.UUID
+	ChatID         uuid.UUID
+	ProjectID      uuid.NullUUID
+	UserID         string
+	ExternalUserID string
+}
+
+// Resolves denormalized attribution for a content-part finding. The parent
+// message's user ids win over chat-level ids; both empty and NULL collapse to
+// ”. A content part without a parent still resolves chat-level attribution.
+// A findings batch can span projects, so the scope is the batch's set of
+// project ids rather than a single id. project_id is still returned because
+// that set only proves the part belongs to SOME project in the batch: the
+// caller re-checks it against the individual finding's project.
+// The parent must sit in the part's own chat. Unconstrained, a stale or forged
+// parent_chat_message_id would hand another tenant's user ids to this row.
+func (q *Queries) GetChatContentPartAttribution(ctx context.Context, arg GetChatContentPartAttributionParams) ([]GetChatContentPartAttributionRow, error) {
+	rows, err := q.db.Query(ctx, getChatContentPartAttribution, arg.Ids, arg.ProjectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetChatContentPartAttributionRow
+	for rows.Next() {
+		var i GetChatContentPartAttributionRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.ProjectID,
+			&i.UserID,
+			&i.ExternalUserID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getChatMessageAttribution = `-- name: GetChatMessageAttribution :many
 SELECT
     cm.id

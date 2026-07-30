@@ -234,16 +234,20 @@ func batchMessageView(msg batchMessage) MessageView {
 	return view
 }
 
-// chatMessageAnchored drops content parts from a batch. The async analysis
-// request protos carry only chat_message_id, so a content part has nothing to
-// anchor to until that field exists.
-func chatMessageAnchored(messages []batchMessage) []batchMessage {
-	anchored := make([]batchMessage, 0, len(messages))
-	for _, msg := range messages {
-		if msg.ContentPart {
-			continue
-		}
-		anchored = append(anchored, msg)
+// anchorIDStrings returns the scanned unit's anchor as proto-ready pointers:
+// exactly one of chat message id or content part id is non-nil.
+func (m batchMessage) anchorIDStrings() (*string, *string) {
+	chatMessageID := m.chatMessageID()
+	if chatMessageID.Valid {
+		id := chatMessageID.UUID.String()
+		return &id, nil
 	}
-	return anchored
+
+	chatContentPartID := m.chatContentPartID()
+	if chatContentPartID.Valid {
+		id := chatContentPartID.UUID.String()
+		return nil, &id
+	}
+
+	return nil, nil
 }
