@@ -15,6 +15,8 @@ flowchart LR
   classDef python fill:#fef9c3,stroke:#ca8a04,color:#713f12;
   classDef deprecated stroke-dasharray:4 3,opacity:0.55;
 
+  t_gram_otel_v1_log_record(["gram-otel-v1-log-record<br/>(topic)"]):::topic
+  t_gram_otel_v1_span(["gram-otel-v1-span<br/>(topic)"]):::topic
   t_gram_ping_v2_message(["gram-ping-v2-message<br/>(topic)"]):::topic
   t_gram_ping_v2_processor_dlq(["gram-ping-v2-processor-dlq<br/>(dlq)"]):::dlq
   t_gram_ping_v2_py_processor_dlq(["gram-ping-v2-py-processor-dlq<br/>(dlq)"]):::dlq
@@ -90,6 +92,8 @@ flowchart LR
 
 | Topic | Kind | Retention | Published by |
 | --- | --- | --- | --- |
+| [`gram-otel-v1-log-record`](../infra/proto/gram/otel/v1/log_record.proto) | topic | 7d | — |
+| [`gram-otel-v1-span`](../infra/proto/gram/otel/v1/span.proto) | topic | 7d | — |
 | [`gram-ping-v2-message`](../infra/proto/gram/ping/v2/ping.proto) | topic | 1d | [`server/internal/ping/publisher.go`](../server/internal/ping/publisher.go) |
 | [`gram-ping-v2-processor-dlq`](../infra/proto/gram/ping/v2/processor.proto) | DLQ | — | — |
 | [`gram-ping-v2-py-processor-dlq`](../infra/proto/gram/ping/v2/processor.proto) | DLQ | — | — |
@@ -114,4 +118,9 @@ flowchart LR
 | [`gram-risk-v1-prompt-injection-analyzer`](../infra/proto/gram/risk/v1/prompt_injection_analyzer.proto) | `gram-risk-v1-prompt-injection-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-prompt-policy-analyzer`](../infra/proto/gram/risk/v1/prompt_policy_analyzer.proto) | `gram-risk-v1-prompt-policy-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-telemetry-v1-noop`](../infra/proto/gram/telemetry/v1/noop.proto) | `gram-telemetry-v1-log-record` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+
+## Notes
+
+- Topic `gram-otel-v1-log-record` has no publisher in `server/` or `pystreams/`.
+- Topic `gram-otel-v1-span` has no publisher in `server/` or `pystreams/`.
 
