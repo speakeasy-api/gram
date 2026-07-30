@@ -70,7 +70,7 @@ export function CoveragePipeline({
   // reports device attestation for every active device; otherwise fall back
   // to the weaker match wording (and default weak while coverage loads).
   const deviceAttested = coverage?.attestation === "device";
-  const agentLabel = deviceAttested ? "Running the agent" : "Active agent";
+  const agentLabel = deviceAttested ? "Running the agent" : "Active agents";
   const agentHint = deviceAttested
     ? "with a live device-agent heartbeat"
     : "assigned user has a live agent";
@@ -90,7 +90,7 @@ export function CoveragePipeline({
             label={agentLabel}
             value={running}
             hint={agentHint}
-            foot="reported by the agent"
+            foot="reported by device agent"
           />
         </div>
 

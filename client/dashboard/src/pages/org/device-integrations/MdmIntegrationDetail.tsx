@@ -17,7 +17,12 @@ import { PlugZap } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, Navigate, useParams } from "react-router";
 import { CoverageSummaryTiles, ManagedDeviceTable } from "./coverage-widgets";
-import { isSink, providerRole, ROLE_COPY } from "./provider-role";
+import {
+  isProviderVisible,
+  isSink,
+  providerRole,
+  ROLE_COPY,
+} from "./provider-role";
 import {
   ConnectionStatusBadge,
   DeviceIntegrationConfigureSheet,
@@ -56,7 +61,11 @@ export default function MdmIntegrationDetail(): JSX.Element | null {
 
   const provider = data?.providers.find((p) => p.id === providerID);
   if (isLoading) return null;
-  if (!provider) return <Navigate to=".." replace />;
+  // Hidden providers 404 to the list even by direct URL, so a not-yet-supported
+  // integration can't be reached out of band.
+  if (!provider || !isProviderVisible(provider)) {
+    return <Navigate to=".." replace />;
+  }
 
   return (
     <Page>
@@ -397,7 +406,10 @@ function FleetSourceBreakdown() {
     staleTime: 300_000,
   });
   const sources = useMemo(
-    () => (data?.providers ?? []).filter((provider) => !isSink(provider)),
+    () =>
+      (data?.providers ?? []).filter(
+        (provider) => !isSink(provider) && isProviderVisible(provider),
+      ),
     [data],
   );
   const coverageQueries = useQueries({
