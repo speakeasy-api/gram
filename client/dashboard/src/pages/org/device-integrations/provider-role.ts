@@ -26,7 +26,12 @@ export function isSink(provider: DeviceIntegrationProvider): boolean {
 // breakdown, and direct-URL access — until they are fully supported. This is a
 // deliberately temporary frontend gate: drop the id here to reveal it, no
 // backend change needed.
-const HIDDEN_PROVIDER_IDS = new Set(["intune"]);
+//   - intune: inventory source not yet fully supported.
+//   - vanta: evidence push is blocked on Vanta — custom resources aren't
+//     supported for partner-built integrations, and they'd require each
+//     customer to hand-author the compliance test. Hidden until Vanta offers a
+//     supported path (e.g. a partner-writable device resource type).
+const HIDDEN_PROVIDER_IDS = new Set(["intune", "vanta"]);
 
 export function isProviderVisible(
   provider: DeviceIntegrationProvider,
