@@ -310,14 +310,12 @@ export default function RiskEvents(): JSX.Element {
             {viewingInactivePolicy ? (
               <InactivePolicyNotice policyName={selectedPolicy?.name} />
             ) : null}
-            {selection.selectedCount > 0 ? (
-              <BulkActionBar
-                selectedCount={selection.selectedCount}
-                actionLabel="Mark as false positive"
-                onAction={handleDismissSelected}
-                onClear={selection.clear}
-              />
-            ) : null}
+            <BulkActionBar
+              selectedCount={selection.selectedCount}
+              actionLabel="Mark as false positive"
+              onAction={handleDismissSelected}
+              onClear={selection.clear}
+            />
             {resultsQuery.isFetching && results.length > 0 ? (
               <div className="bg-primary/20 h-1 shrink-0">
                 <div className="bg-primary h-full animate-pulse" />

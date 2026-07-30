@@ -5,6 +5,8 @@ import { useRiskMarkResultsFalsePositiveMutation } from "@gram/client/react-quer
 import { useRiskUnmarkResultsFalsePositiveMutation } from "@gram/client/react-query/riskUnmarkResultsFalsePositive.js";
 import { invalidateAllRiskListDismissedResults } from "@gram/client/react-query/riskListDismissedResults.js";
 import { invalidateAllRiskOverview } from "@gram/client/react-query/riskOverview.js";
+import { invalidateAllRiskRuleBreakdown } from "@gram/client/react-query/riskRuleBreakdown.js";
+import { invalidateAllRiskUserBreakdown } from "@gram/client/react-query/riskUserBreakdown.js";
 import { showUndoToast } from "@/lib/toast-undo";
 
 /** Bulk/single mark-false-positive with optimistic hide + undo toast, shared
@@ -32,6 +34,8 @@ export function useDismissFinding(): {
     });
     void invalidateAllRiskListDismissedResults(queryClient);
     void invalidateAllRiskOverview(queryClient);
+    void invalidateAllRiskRuleBreakdown(queryClient);
+    void invalidateAllRiskUserBreakdown(queryClient);
   }, [queryClient]);
 
   const undo = useCallback(

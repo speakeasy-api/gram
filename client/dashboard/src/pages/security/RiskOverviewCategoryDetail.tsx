@@ -221,7 +221,17 @@ function RiskOverviewCategoryDetailContent() {
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
               <MetricCard
                 title="Findings"
-                value={overviewCategory?.findings ?? totalCount}
+                // Before overviewQuery resolves, totalCount (from the
+                // category-filtered results list) is a reasonable interim
+                // estimate. Once it has resolved, a category absent from
+                // topCategories has zero findings — not totalCount, which is
+                // project-wide and would otherwise flash a stale-looking
+                // number after every finding in the category is dismissed.
+                value={
+                  overviewQuery.data
+                    ? (overviewCategory?.findings ?? 0)
+                    : totalCount
+                }
                 format="compact"
                 icon="flag"
               />
@@ -241,14 +251,12 @@ function RiskOverviewCategoryDetailContent() {
                   .filter(Boolean)}
               />
             </div>
-            {selection.selectedCount > 0 && (
-              <BulkActionBar
-                selectedCount={selection.selectedCount}
-                actionLabel="Mark as false positive"
-                onAction={handleDismissSelected}
-                onClear={selection.clear}
-              />
-            )}
+            <BulkActionBar
+              selectedCount={selection.selectedCount}
+              actionLabel="Mark as false positive"
+              onAction={handleDismissSelected}
+              onClear={selection.clear}
+            />
             <ResultsTable
               results={visibleResults}
               isLoading={resultsQuery.isLoading}
