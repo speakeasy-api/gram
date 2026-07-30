@@ -79,14 +79,17 @@ function MdmIntegrationDetailInner({
 }: {
   provider: DeviceIntegrationProvider;
 }) {
-  const [configureOpen, setConfigureOpen] = useState(false);
-  const form = useDeviceIntegrationConfigForm(provider);
-  const { runtimes, toggle, retry } = useDeviceScheduleRuntimes(provider.id);
-  const ui = providerUI(provider);
-  const Icon = ui.icon;
-
   const role = providerRole(provider);
   const sink = role === "sink";
+
+  const [configureOpen, setConfigureOpen] = useState(false);
+  const form = useDeviceIntegrationConfigForm(provider);
+  const { runtimes, toggle, retry } = useDeviceScheduleRuntimes(
+    provider.id,
+    role,
+  );
+  const ui = providerUI(provider);
+  const Icon = ui.icon;
 
   // A sink republishes the whole org's fleet, so its coverage and evidence are
   // org-wide (no provider filter) — that is exactly the record set it pushes.
@@ -195,6 +198,8 @@ function MdmIntegrationDetailInner({
                 <SinkEvidenceHeadline
                   coverage={coverage}
                   providerName={provider.displayName}
+                  configured={form.isConfigured}
+                  enabled={form.enabled}
                 />
               ) : (
                 <CoverageHeadline coverage={coverage} />
@@ -296,16 +301,23 @@ function CoverageHeadline({
 }
 
 // A sink republishes the org-wide fleet, so its headline states what it is
-// publishing — not a coverage percentage of its own. With no fleet yet it
-// surfaces the dependency instead of an empty stat: a destination is inert
-// until an inventory source feeds it.
+// publishing — not a coverage percentage of its own. The "published" claim is
+// gated on the connection actually being live: a not-connected or paused sink
+// is not sending anything, however many devices the fleet holds, so it reads
+// as "ready to publish" rather than asserting evidence that isn't flowing.
 function SinkEvidenceHeadline({
   coverage,
   providerName,
+  configured,
+  enabled,
 }: {
   coverage: DeviceIntegrationCoverage;
   providerName: string;
+  configured: boolean;
+  enabled: boolean;
 }) {
+  // No fleet: the dependency on an inventory source dominates, whatever the
+  // sink's own state.
   if (coverage.totalDevices === 0) {
     return (
       <Type muted>
@@ -314,12 +326,38 @@ function SinkEvidenceHeadline({
       </Type>
     );
   }
+
   const noun = coverage.totalDevices === 1 ? "device" : "devices";
+  const count = (
+    <Type variant="body" className="text-3xl font-semibold tabular-nums">
+      {coverage.totalDevices}
+    </Type>
+  );
+
+  if (!configured) {
+    return (
+      <Stack direction="horizontal" align="baseline" gap={2}>
+        {count}
+        <Type muted>
+          managed {noun} ready to publish — connect {providerName} to start.
+        </Type>
+      </Stack>
+    );
+  }
+  if (!enabled) {
+    return (
+      <Stack direction="horizontal" align="baseline" gap={2}>
+        {count}
+        <Type muted>
+          managed {noun} ready to publish — enable the connection to resume
+          pushing to {providerName}.
+        </Type>
+      </Stack>
+    );
+  }
   return (
     <Stack direction="horizontal" align="baseline" gap={2}>
-      <Type variant="body" className="text-3xl font-semibold tabular-nums">
-        {coverage.totalDevices}
-      </Type>
+      {count}
       <Type muted>
         managed {noun} published to {providerName} as coverage evidence
       </Type>

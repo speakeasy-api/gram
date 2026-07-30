@@ -30,6 +30,7 @@ export const ROLE_COPY: Record<
     syncNowTooltip: string;
     syncNowAria: (schedule: string) => string;
     scheduleBlurb: string;
+    retryStartedToast: string;
   }
 > = {
   source: {
@@ -38,6 +39,7 @@ export const ROLE_COPY: Record<
     syncNowAria: (schedule) => `Sync ${schedule} now`,
     scheduleBlurb:
       "Each schedule pulls this MDM's inventory on its own cadence and can be paused or run immediately.",
+    retryStartedToast: "Sync started. Fresh inventory should appear shortly.",
   },
   sink: {
     lastRunHeader: "Last pushed",
@@ -45,5 +47,6 @@ export const ROLE_COPY: Record<
     syncNowAria: (schedule) => `Push ${schedule} now`,
     scheduleBlurb:
       "Each schedule pushes the org-wide coverage on its own cadence and can be paused or run immediately.",
+    retryStartedToast: "Push started. Evidence should update shortly.",
   },
 };

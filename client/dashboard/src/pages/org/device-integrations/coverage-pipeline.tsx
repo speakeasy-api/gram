@@ -64,6 +64,17 @@ export function CoveragePipeline({
   const total = coverage?.totalDevices ?? 0;
   const running = coverage?.agentActive ?? 0;
 
+  // Under user-level matching an active count can mean the assigned user's
+  // agent is live on ANOTHER device, not this one — so "running the agent"
+  // would overclaim. Only assert the device-local phrasing when the server
+  // reports device attestation for every active device; otherwise fall back
+  // to the weaker match wording (and default weak while coverage loads).
+  const deviceAttested = coverage?.attestation === "device";
+  const agentLabel = deviceAttested ? "Running the agent" : "Active agent";
+  const agentHint = deviceAttested
+    ? "with a live device-agent heartbeat"
+    : "assigned user has a live agent";
+
   return (
     <div className="border-border bg-card rounded-lg border p-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,0.95fr)_auto_minmax(0,1.2fr)_auto_minmax(0,0.75fr)] md:items-stretch">
@@ -76,9 +87,9 @@ export function CoveragePipeline({
             foot="pulled from your MDMs"
           />
           <InputNode
-            label="Running the agent"
+            label={agentLabel}
             value={running}
-            hint="with a live device-agent heartbeat"
+            hint={agentHint}
             foot="reported by the agent"
           />
         </div>

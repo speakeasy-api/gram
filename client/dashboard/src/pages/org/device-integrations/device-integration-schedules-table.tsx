@@ -157,23 +157,32 @@ function ActionsCell({ row }: { row: DeviceIntegrationScheduleRow }) {
               : "Connect the provider first."
           }
         >
-          <Button
-            variant="tertiary"
-            size="sm"
-            onClick={() => row.retry(row.schedule.schedule)}
-            disabled={!canRetry}
-            aria-label={ROLE_COPY[row.role].syncNowAria(row.schedule.schedule)}
-            className="size-8 px-0"
-          >
-            <Button.Icon>
-              <RefreshCw
-                className={cn(
-                  "size-4",
-                  row.runtime.isMutating && "animate-spin",
-                )}
-              />
-            </Button.Icon>
-          </Button>
+          {/* A disabled button receives no pointer events, so the tooltip
+              trigger has to be this always-enabled span — otherwise the
+              "connect first" explanation never shows on the state where it
+              matters. inline-flex keeps the button centered with the sibling
+              switch (see the switch wrapper above). */}
+          <span className="inline-flex items-center">
+            <Button
+              variant="tertiary"
+              size="sm"
+              onClick={() => row.retry(row.schedule.schedule)}
+              disabled={!canRetry}
+              aria-label={ROLE_COPY[row.role].syncNowAria(
+                row.schedule.schedule,
+              )}
+              className="size-8 px-0"
+            >
+              <Button.Icon>
+                <RefreshCw
+                  className={cn(
+                    "size-4",
+                    row.runtime.isMutating && "animate-spin",
+                  )}
+                />
+              </Button.Icon>
+            </Button>
+          </span>
         </SimpleTooltip>
       </RequireScope>
     </Stack>
