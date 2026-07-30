@@ -587,6 +587,30 @@ func TestStrandedSweepDecodesSessionListShapes(t *testing.T) {
 	}
 }
 
+// TestFlexIDAcceptsOnlyScalarIDs pins the decode boundary: ids become URL
+// path segments (resource and session-cancel requests), so a non-scalar id
+// must fail the decode loudly rather than serialize into a bogus API call.
+func TestFlexIDAcceptsOnlyScalarIDs(t *testing.T) {
+	t.Parallel()
+
+	var ref sessionRef
+	require.Error(t, json.Unmarshal([]byte(`{"id": {"nested": 1}}`), &ref))
+	require.Error(t, json.Unmarshal([]byte(`{"id": true}`), &ref))
+	require.Error(t, json.Unmarshal([]byte(`{"id": ["7"]}`), &ref))
+
+	var quoted sessionRef
+	require.NoError(t, json.Unmarshal([]byte(`{"id": "a\"b"}`), &quoted))
+	require.Equal(t, `a"b`, string(quoted.ID), "string escapes decode as JSON, not by quote-trimming")
+
+	var numeric sessionRef
+	require.NoError(t, json.Unmarshal([]byte(`{"id": 42}`), &numeric))
+	require.Equal(t, "42", string(numeric.ID))
+
+	var null sessionRef
+	require.NoError(t, json.Unmarshal([]byte(`{"id": null}`), &null))
+	require.Empty(t, string(null.ID))
+}
+
 func TestPushRecoversAfterPartialFailure(t *testing.T) {
 	t.Parallel()
 

@@ -218,15 +218,32 @@ func (s *sink) doJSON(ctx context.Context, creds providers.Credentials, method, 
 // flexID tolerates Drata serializing ids as JSON numbers or strings. The
 // reference documents resource ids as numbers, and session listings have been
 // observed carrying numeric "id" fields in production — but a string-typed id
-// must not permanently brick the integration either way.
+// must not permanently brick the integration either way. Only strings,
+// numbers, and null decode; any other JSON value fails the surrounding
+// decode loudly, because these ids become URL path segments (resource and
+// session-cancel requests) and a mangled composite value must not turn into
+// a bogus API call.
 type flexID string
 
 func (r *flexID) UnmarshalJSON(data []byte) error {
-	trimmed := strings.Trim(strings.TrimSpace(string(data)), `"`)
-	if trimmed == "null" {
-		trimmed = ""
+	trimmed := bytes.TrimSpace(data)
+	if bytes.Equal(trimmed, []byte("null")) {
+		*r = ""
+		return nil
 	}
-	*r = flexID(trimmed)
+	if len(trimmed) > 0 && trimmed[0] == '"' {
+		var s string
+		if err := json.Unmarshal(trimmed, &s); err != nil {
+			return fmt.Errorf("decode id: %w", err)
+		}
+		*r = flexID(s)
+		return nil
+	}
+	var n json.Number
+	if err := json.Unmarshal(trimmed, &n); err != nil {
+		return fmt.Errorf("decode id: %w", err)
+	}
+	*r = flexID(n)
 	return nil
 }
 
