@@ -27,6 +27,8 @@ CREATE TABLE "business_memories" (
   CONSTRAINT "business_memories_source_evaluation_id_fkey" FOREIGN KEY ("source_evaluation_id") REFERENCES "chat_analysis_evaluations" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
   CONSTRAINT "business_memories_body_size_check" CHECK (octet_length(body) <= 8192)
 );
+-- Create index "business_memories_content_scope_gin_idx" to table: "business_memories"
+CREATE INDEX "business_memories_content_scope_gin_idx" ON "business_memories" USING gin ("content_scope") WHERE (deleted IS FALSE);
 -- Create index "business_memories_embedding_hnsw_idx" to table: "business_memories"
 CREATE INDEX "business_memories_embedding_hnsw_idx" ON "business_memories" USING hnsw ("embedding" halfvec_cosine_ops) WHERE ((deleted IS FALSE) AND (lifecycle_state = 'active'::text));
 -- Create index "business_memories_project_created_at_idx" to table: "business_memories"
