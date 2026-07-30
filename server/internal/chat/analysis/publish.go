@@ -368,10 +368,6 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, input r
 	}
 
 	if scoreless, ok := judge.(ScorelessJudge); ok && scoreless.SkipScoreSink() {
-		if err := p.markScored(ctx, projectID, input.ID); err != nil {
-			result.Retryable++
-			return err
-		}
 		result.Scored++
 		return nil
 	}

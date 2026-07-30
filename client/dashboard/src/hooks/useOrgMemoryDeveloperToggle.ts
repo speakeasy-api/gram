@@ -2,13 +2,15 @@ import { useCallback, useSyncExternalStore } from "react";
 
 const STORAGE_KEY = "gram-dev-org-memory";
 const CHANGE_EVENT = "org-memory-developer-toggle-change";
+let memoryFallback = false;
 
 function readEnabled(): boolean {
   try {
-    return window.sessionStorage.getItem(STORAGE_KEY) === "1";
+    memoryFallback = window.sessionStorage.getItem(STORAGE_KEY) === "1";
   } catch {
-    return false;
+    // Use the session-local in-memory value when browser storage is unavailable.
   }
+  return memoryFallback;
 }
 
 function subscribe(onStoreChange: () => void): () => void {
@@ -30,6 +32,7 @@ export function useOrgMemoryDeveloperToggle(): readonly [
   const enabled = useSyncExternalStore(subscribe, readEnabled, () => false);
 
   const setEnabled = useCallback((nextEnabled: boolean) => {
+    memoryFallback = nextEnabled;
     try {
       if (nextEnabled) {
         window.sessionStorage.setItem(STORAGE_KEY, "1");
@@ -37,7 +40,7 @@ export function useOrgMemoryDeveloperToggle(): readonly [
         window.sessionStorage.removeItem(STORAGE_KEY);
       }
     } catch {
-      // The in-memory snapshot remains false when sessionStorage is unavailable.
+      // The in-memory fallback above still keeps mounted consumers synchronized.
     }
     window.dispatchEvent(new Event(CHANGE_EVENT));
   }, []);

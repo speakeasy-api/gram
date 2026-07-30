@@ -77,9 +77,9 @@ type Judge interface {
 	Judge(ctx context.Context, in JudgeInput) (JudgeResult, error)
 }
 
-// ScorelessJudge performs its durable work inside Judge and does not publish a
-// verdict to the shared ClickHouse score sink. It still uses the common queue,
-// retry, and completion lifecycle.
+// ScorelessJudge performs its durable work and marks its evaluation scored
+// atomically inside Judge, so it does not publish a verdict to the shared
+// ClickHouse score sink.
 type ScorelessJudge interface {
 	SkipScoreSink() bool
 }

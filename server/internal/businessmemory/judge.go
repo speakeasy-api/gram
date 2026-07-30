@@ -186,14 +186,11 @@ func (j *Judge) Judge(ctx context.Context, in analysis.JudgeInput) (analysis.Jud
 		return analysis.JudgeResult{}, err
 	}
 
-	persisted := candidates
-	if len(candidates) > 0 {
-		persisted, err = j.persist(ctx, in, projectID, model, candidates)
-		if err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return analysis.JudgeResult{}, fmt.Errorf("persist business memories: %w: %w", analysis.ErrRetryable, err)
-		}
+	persisted, err := j.persist(ctx, in, projectID, model, candidates)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return analysis.JudgeResult{}, fmt.Errorf("persist business memories: %w: %w", analysis.ErrRetryable, err)
 	}
 
 	summary := extractionSummary{
@@ -283,18 +280,23 @@ func (j *Judge) persist(
 	for _, candidate := range candidates {
 		inputs = append(inputs, candidate.Body)
 	}
-	vectors, err := j.client.CreateEmbeddings(
-		ctx,
-		in.OrgID,
-		embeddingModel,
-		inputs,
-		openrouter.WithEmbeddingDimensions(embeddingDimensions),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create business memory embeddings: %w", err)
-	}
-	if len(vectors) != len(candidates) {
-		return nil, fmt.Errorf("embedding response had %d vectors, expected %d", len(vectors), len(candidates))
+	var vectors [][]float32
+	if len(inputs) > 0 {
+		var err error
+		vectors, err = j.client.CreateEmbeddings(
+			ctx,
+			in.OrgID,
+			embeddingModel,
+			inputs,
+			openrouter.WithEmbeddingDimensions(embeddingDimensions),
+			openrouter.WithEmbeddingKeyType(openrouter.KeyTypeInternal),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("create business memory embeddings: %w", err)
+		}
+		if len(vectors) != len(candidates) {
+			return nil, fmt.Errorf("embedding response had %d vectors, expected %d", len(vectors), len(candidates))
+		}
 	}
 
 	dbtx, err := j.db.Begin(ctx)
@@ -302,11 +304,16 @@ func (j *Judge) persist(
 		return nil, fmt.Errorf("begin business memory insert: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-	if err := enableFilteredVectorScan(ctx, dbtx); err != nil {
-		return nil, err
-	}
 
 	queries := repo.New(dbtx)
+	if len(candidates) > 0 {
+		if err := queries.LockBusinessMemoryExtraction(ctx, fmt.Sprintf("%s/%s", in.OrgID, projectID)); err != nil {
+			return nil, fmt.Errorf("lock business memory extraction: %w", err)
+		}
+		if err := enableFilteredVectorScan(ctx, dbtx); err != nil {
+			return nil, err
+		}
+	}
 	persisted := make([]extractionCandidate, 0, len(candidates))
 	for index, candidate := range candidates {
 		embedding := pgvector_go.NewHalfVector(vectors[index])
@@ -347,6 +354,17 @@ func (j *Judge) persist(
 			return nil, fmt.Errorf("insert business memory candidate %d: %w", index, err)
 		}
 		persisted = append(persisted, candidate)
+	}
+
+	marked, err := queries.CompleteBusinessMemoryEvaluation(ctx, repo.CompleteBusinessMemoryEvaluationParams{
+		ProjectID: projectID,
+		ID:        in.EvaluationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("complete business memory evaluation: %w", err)
+	}
+	if marked != 1 {
+		return nil, fmt.Errorf("complete business memory evaluation: expected one reserved evaluation, updated %d", marked)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {

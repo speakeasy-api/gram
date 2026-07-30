@@ -1,8 +1,9 @@
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { useOrgMemoryDeveloperToggle } from "./useOrgMemoryDeveloperToggle";
 
 afterEach(() => {
+  vi.restoreAllMocks();
   sessionStorage.clear();
 });
 
@@ -25,5 +26,26 @@ describe("useOrgMemoryDeveloperToggle", () => {
     expect(first.result.current[0]).toBe(false);
     expect(second.result.current[0]).toBe(false);
     expect(sessionStorage.getItem("gram-dev-org-memory")).toBeNull();
+  });
+
+  it("uses an in-memory fallback when session storage is unavailable", () => {
+    const getItem = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation(() => {
+        throw new Error("storage unavailable");
+      });
+    const setItem = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new Error("storage unavailable");
+      });
+    const result = renderHook(() => useOrgMemoryDeveloperToggle());
+
+    act(() => result.result.current[1](true));
+    expect(result.result.current[0]).toBe(true);
+
+    getItem.mockRestore();
+    setItem.mockRestore();
+    act(() => result.result.current[1](false));
   });
 });

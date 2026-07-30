@@ -32,6 +32,18 @@ INSERT INTO business_memories (
 )
 ON CONFLICT (source_evaluation_id, source_candidate_index) DO NOTHING;
 
+-- name: LockBusinessMemoryExtraction :exec
+SELECT pg_advisory_xact_lock(hashtextextended(@lock_key, 0));
+
+-- name: CompleteBusinessMemoryEvaluation :execrows
+UPDATE chat_analysis_evaluations
+SET state = 'scored',
+    scored_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND id = @id
+  AND state = 'reserved';
+
 -- name: GetNearestActiveBusinessMemory :one
 SELECT
   id,
@@ -70,6 +82,7 @@ FROM business_memories
 WHERE project_id = @project_id
   AND organization_id = @organization_id
   AND deleted IS FALSE
+  AND lifecycle_state = 'active'
   AND (
     (
       sqlc.narg(content_scope)::text IS NULL
@@ -115,6 +128,7 @@ WITH expanded AS (
   WHERE project_id = @project_id
     AND organization_id = @organization_id
     AND deleted IS FALSE
+    AND lifecycle_state = 'active'
 )
 SELECT
   namespace AS scope,
@@ -139,7 +153,8 @@ SELECT count(*)::bigint
 FROM business_memories
 WHERE project_id = @project_id
   AND organization_id = @organization_id
-  AND deleted IS FALSE;
+  AND deleted IS FALSE
+  AND lifecycle_state = 'active';
 
 -- name: SearchBusinessMemories :many
 SELECT

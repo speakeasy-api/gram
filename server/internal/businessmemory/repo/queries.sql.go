@@ -13,12 +13,36 @@ import (
 	pgvector_go "github.com/pgvector/pgvector-go"
 )
 
+const completeBusinessMemoryEvaluation = `-- name: CompleteBusinessMemoryEvaluation :execrows
+UPDATE chat_analysis_evaluations
+SET state = 'scored',
+    scored_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = $1
+  AND id = $2
+  AND state = 'reserved'
+`
+
+type CompleteBusinessMemoryEvaluationParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+func (q *Queries) CompleteBusinessMemoryEvaluation(ctx context.Context, arg CompleteBusinessMemoryEvaluationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, completeBusinessMemoryEvaluation, arg.ProjectID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countBusinessMemories = `-- name: CountBusinessMemories :one
 SELECT count(*)::bigint
 FROM business_memories
 WHERE project_id = $1
   AND organization_id = $2
   AND deleted IS FALSE
+  AND lifecycle_state = 'active'
 `
 
 type CountBusinessMemoriesParams struct {
@@ -170,6 +194,7 @@ FROM business_memories
 WHERE project_id = $1
   AND organization_id = $2
   AND deleted IS FALSE
+  AND lifecycle_state = 'active'
   AND (
     (
       $3::text IS NULL
@@ -290,6 +315,7 @@ WITH expanded AS (
   WHERE project_id = $1
     AND organization_id = $2
     AND deleted IS FALSE
+    AND lifecycle_state = 'active'
 )
 SELECT
   namespace AS scope,
@@ -339,6 +365,15 @@ func (q *Queries) ListBusinessMemoryContentScopes(ctx context.Context, arg ListB
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockBusinessMemoryExtraction = `-- name: LockBusinessMemoryExtraction :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1, 0))
+`
+
+func (q *Queries) LockBusinessMemoryExtraction(ctx context.Context, lockKey string) error {
+	_, err := q.db.Exec(ctx, lockBusinessMemoryExtraction, lockKey)
+	return err
 }
 
 const searchBusinessMemories = `-- name: SearchBusinessMemories :many
