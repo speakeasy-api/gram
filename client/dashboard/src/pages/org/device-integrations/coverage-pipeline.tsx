@@ -9,14 +9,19 @@ import { useQueries } from "@tanstack/react-query";
 import { ArrowRight } from "lucide-react";
 import { useMemo } from "react";
 
-// The pipeline banner: the spine of the page. It makes the data flow legible
-// at a glance — inventory sources on the left PULL the fleet, the org-wide
-// coverage in the middle is the shared truth, and evidence destinations on the
-// right PUSH it out. The middle is deliberately the emphasized node because it
-// is the one thing that belongs to neither side: it is the join of every
-// source's inventory against agent heartbeats, and it is exactly what every
-// sink republishes. Making it central is what stops a sink page from looking
-// like it "owns" devices it merely forwards.
+// The pipeline banner: the spine of the page. Coverage is a CONFLUENCE, not a
+// single-source pipeline — it is the join of two independent inputs:
+//
+//   1. the MDM inventory (which devices exist — the denominator), pulled from
+//      the inventory sources, and
+//   2. the device agent's own heartbeats (which devices are actually running
+//      the agent — the numerator), reported by the agent, NOT by any MDM.
+//
+// Coverage = numerator / denominator. Framing it as "sources → coverage" hid
+// the agent entirely, which is doubly wrong on the Device Agent page: the
+// agent is the signal the whole feature exists to report, and it is what
+// drives the headline percentage. So the banner shows both inputs meeting at
+// coverage, and coverage flowing out to the evidence destinations.
 export function CoveragePipeline({
   sources,
   sinks,
@@ -26,20 +31,18 @@ export function CoveragePipeline({
 }): JSX.Element {
   const client = useSdkClient();
 
-  // Org-wide coverage: no provider filter. This is the fleet every sink sends.
+  // Org-wide coverage: no provider filter. This is the joined fleet every sink
+  // sends — totalDevices from the MDM side, agentActive from the agent side.
   const { data: coverage } = useDeviceIntegrationCoverage(
     undefined,
     undefined,
-    {
-      throwOnError: false,
-      staleTime: 30_000,
-    },
+    { throwOnError: false, staleTime: 30_000 },
   );
 
-  // "Connected" here matches the row badge: a config that is enabled (which
-  // implies configured). The queries share cache keys with the connection
-  // rows, and the enable/disable mutation invalidates all config queries, so
-  // toggling a single connection re-derives these counts with no extra wiring.
+  // "Connected" matches the row badge: a config that is enabled. The queries
+  // share cache keys with the connection rows, and the enable/disable mutation
+  // invalidates all config queries, so toggling a connection re-derives these
+  // counts with no extra wiring.
   const providers = useMemo(() => [...sources, ...sinks], [sources, sinks]);
   const configQueries = useQueries({
     queries: providers.map((provider) => ({
@@ -58,24 +61,187 @@ export function CoveragePipeline({
   const sourceConnected = sources.filter((p) => connectedIds.has(p.id)).length;
   const sinkConnected = sinks.filter((p) => connectedIds.has(p.id)).length;
 
+  const total = coverage?.totalDevices ?? 0;
+  const running = coverage?.agentActive ?? 0;
+
   return (
-    <div className="border-border bg-card grid grid-cols-1 items-stretch gap-3 rounded-lg border p-4 md:grid-cols-[1fr_auto_1.4fr_auto_1fr]">
-      <PipelineEnd
-        label="Inventory sources"
-        count={sourceConnected}
-        noun="connected"
-        verb="pull inventory"
+    <div className="border-border bg-card rounded-lg border p-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,0.95fr)_auto_minmax(0,1.2fr)_auto_minmax(0,0.75fr)] md:items-stretch">
+        {/* Two inputs, stacked. Each row is one operand of the coverage join. */}
+        <div className="flex flex-col gap-3">
+          <InputNode
+            label="Managed devices"
+            value={total}
+            hint={sourcesHint(sourceConnected, sources.length)}
+            foot="pulled from your MDMs"
+          />
+          <InputNode
+            label="Running the agent"
+            value={running}
+            hint="with a live device-agent heartbeat"
+            foot="reported by the agent"
+          />
+        </div>
+
+        <MergeArrows />
+        <CoverageNode coverage={coverage} total={total} running={running} />
+        <SingleArrow />
+
+        <div className="flex flex-col justify-center">
+          <PipelineEnd
+            label="Evidence destinations"
+            count={sinkConnected}
+            noun="connected"
+            verb="push evidence"
+            alignEnd
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function sourcesHint(connected: number, available: number): string {
+  if (available === 0) return "no MDM sources available";
+  const noun = available === 1 ? "source" : "sources";
+  return `${connected} of ${available} ${noun} connected`;
+}
+
+// One operand of the coverage join: a metric with the source of the number
+// named beneath it, so the two inputs read as distinct data origins rather
+// than one MDM feed.
+function InputNode({
+  label,
+  value,
+  hint,
+  foot,
+}: {
+  label: string;
+  value: number;
+  hint: string;
+  foot: string;
+}) {
+  return (
+    <div className="bg-muted/40 flex flex-col gap-1 rounded-md p-3">
+      <Type
+        variant="small"
+        className="text-muted-foreground font-mono text-[10.5px] tracking-wider uppercase"
+      >
+        {label}
+      </Type>
+      <Stack direction="horizontal" align="baseline" gap={1.5}>
+        <Type variant="body" className="text-2xl font-semibold tabular-nums">
+          {value}
+        </Type>
+        <Type muted small>
+          {hint}
+        </Type>
+      </Stack>
+      <Type
+        variant="small"
+        className="text-muted-foreground/70 font-mono text-[10px] tracking-wide uppercase"
+      >
+        {foot}
+      </Type>
+    </div>
+  );
+}
+
+// The join result. Emphasized (spectrum-topped) because it is the one figure
+// that belongs to neither input alone — running ÷ managed.
+function CoverageNode({
+  coverage,
+  total,
+  running,
+}: {
+  coverage: DeviceIntegrationCoverage | undefined;
+  total: number;
+  running: number;
+}) {
+  if (!coverage || total === 0) {
+    return (
+      <div className="border-border/60 bg-muted/20 flex flex-col justify-center gap-1 rounded-md border border-dashed p-3">
+        <Type
+          variant="small"
+          className="text-muted-foreground font-mono text-[10.5px] tracking-wider uppercase"
+        >
+          Agent coverage
+        </Type>
+        <Type muted small>
+          No devices yet — connect an inventory source to build your fleet.
+        </Type>
+      </div>
+    );
+  }
+
+  const percent = Math.floor((running / total) * 100);
+  const activePct = (running / total) * 100;
+  const stalePct = (coverage.agentStale / total) * 100;
+
+  return (
+    <div className="border-border relative flex flex-col justify-center gap-2 overflow-hidden rounded-md border p-3">
+      <span
+        aria-hidden
+        className="absolute inset-x-0 top-0 h-[3px]"
+        style={{
+          background:
+            "linear-gradient(90deg,#e11d48,#f59e0b,#10b981,#3b82f6,#8b5cf6)",
+        }}
       />
-      <FlowArrow />
-      <CoverageNode coverage={coverage} />
-      <FlowArrow />
-      <PipelineEnd
-        label="Evidence destinations"
-        count={sinkConnected}
-        noun="connected"
-        verb="push evidence"
-        alignEnd
-      />
+      <Type
+        variant="small"
+        className="text-muted-foreground font-mono text-[10.5px] tracking-wider uppercase"
+      >
+        Agent coverage
+      </Type>
+      <Stack direction="horizontal" align="baseline" gap={2}>
+        <Type
+          variant="body"
+          className="text-3xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400"
+        >
+          {percent}%
+        </Type>
+        <Type muted small>
+          covered · {running} of {total} devices
+        </Type>
+      </Stack>
+      <div
+        className="bg-muted flex h-2 overflow-hidden rounded-full"
+        role="img"
+        aria-label={`${running} running the agent, ${coverage.agentStale} stale, of ${total} devices`}
+      >
+        <div
+          className="h-full bg-emerald-600 dark:bg-emerald-500"
+          style={{ width: `${activePct}%` }}
+        />
+        <div
+          className="h-full bg-amber-500"
+          style={{ width: `${stalePct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// Two inputs converging into coverage. Each arrow sits beside its input node
+// (both columns split their height equally), so the merge reads correctly.
+function MergeArrows() {
+  return (
+    <div className="text-muted-foreground/50 hidden flex-col md:flex">
+      <div className="flex flex-1 items-center justify-center">
+        <ArrowRight className="size-5" aria-hidden />
+      </div>
+      <div className="flex flex-1 items-center justify-center">
+        <ArrowRight className="size-5" aria-hidden />
+      </div>
+    </div>
+  );
+}
+
+function SingleArrow() {
+  return (
+    <div className="text-muted-foreground/50 hidden items-center justify-center md:flex">
+      <ArrowRight className="size-5" aria-hidden />
     </div>
   );
 }
@@ -121,79 +287,5 @@ function PipelineEnd({
         {verb}
       </Type>
     </Stack>
-  );
-}
-
-// Horizontal on desktop, hidden on the stacked mobile layout where the reading
-// order already implies the flow.
-function FlowArrow() {
-  return (
-    <div className="text-muted-foreground/50 hidden items-center justify-center md:flex">
-      <ArrowRight className="size-5" aria-hidden />
-    </div>
-  );
-}
-
-function CoverageNode({
-  coverage,
-}: {
-  coverage: DeviceIntegrationCoverage | undefined;
-}) {
-  const total = coverage?.totalDevices ?? 0;
-
-  if (!coverage || total === 0) {
-    return (
-      <div className="bg-muted/40 border-border/60 flex flex-col justify-center gap-1 rounded-md border border-dashed p-3">
-        <Type
-          variant="small"
-          className="text-muted-foreground font-mono text-[10.5px] tracking-wider uppercase"
-        >
-          Agent coverage · your fleet
-        </Type>
-        <Type muted small>
-          No devices yet — connect an inventory source to build your fleet.
-        </Type>
-      </div>
-    );
-  }
-
-  const percent = Math.floor((coverage.agentActive / total) * 100);
-  const activePct = (coverage.agentActive / total) * 100;
-  const stalePct = (coverage.agentStale / total) * 100;
-
-  return (
-    <div className="bg-muted/30 flex flex-col justify-center gap-2 rounded-md p-3">
-      <Type
-        variant="small"
-        className="text-muted-foreground font-mono text-[10.5px] tracking-wider uppercase"
-      >
-        Agent coverage · your fleet
-      </Type>
-      <Stack direction="horizontal" align="baseline" gap={2}>
-        <Type variant="body" className="text-3xl font-semibold tabular-nums">
-          {total}
-        </Type>
-        <Type muted small>
-          managed devices ·{" "}
-          <span className="font-medium text-emerald-600 tabular-nums dark:text-emerald-400">
-            {percent}% covered
-          </span>
-        </Type>
-      </Stack>
-      <div
-        className="bg-muted flex h-2 overflow-hidden rounded-full"
-        role="img"
-        aria-label={`${coverage.agentActive} running the agent, ${coverage.agentStale} stale, of ${total} devices`}
-      >
-        <div
-          className="h-full bg-emerald-600 dark:bg-emerald-500"
-          style={{ width: `${activePct}%` }}
-        />
-        <div
-          className="h-full bg-amber-500"
-          style={{ width: `${stalePct}%` }}
-        />
-      </div>
-    </div>
   );
 }
