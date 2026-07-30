@@ -538,6 +538,10 @@ func EncodeQueryInsightsRequest(encoder func(*http.Request) goahttp.Encoder) fun
 		if p.IncludeScoredSessions != nil {
 			values.Add("include_scored_sessions", fmt.Sprintf("%v", *p.IncludeScoredSessions))
 		}
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

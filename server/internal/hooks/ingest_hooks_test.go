@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
@@ -26,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // ingestUserScopedShadowMCPScanner reports a blocking shadow-MCP policy for a
@@ -660,7 +662,8 @@ func TestIngest_InferredSkillEmitsDerivedTelemetryRow(t *testing.T) {
 	require.Contains(t, skillRow.Attributes, "repo-review")
 	require.Contains(t, skillRow.Attributes, `"Skill"`)
 	require.NotNil(t, skillRow.GramChatID)
-	require.Equal(t, "codex-skill-session", *skillRow.GramChatID)
+	require.Equal(t, sessionIDToUUID("codex-skill-session").String(), *skillRow.GramChatID,
+		"telemetry carries the resolved chat id, not the raw session id")
 
 	// trace_summaries resolves tool_name with any(): on a shared trace the
 	// Bash sibling could win the summary and hide the activation from
@@ -944,6 +947,64 @@ func TestIngest_ThoughtEventsExcludedFromTranscript(t *testing.T) {
 	require.Equal(t, "assistant", msgs[0].Role)
 }
 
+// TestIngest_NonUUIDSessionIDStampsResolvedChatID pins the cross-store identity
+// invariant: telemetry_logs.chat_id (gen_ai.conversation.id) must be the chats
+// row id, not the raw agent session id. Claude/Codex/Cursor session ids are
+// themselves UUIDs so the two coincided by accident; opencode's ("ses_...") are
+// not, and stamping the raw string sent a malformed UUID to every consumer that
+// loads a chat by the telemetry id — the costs page session drill-in among them.
+func TestIngest_NonUUIDSessionIDStampsResolvedChatID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	// The chats row only exists when session capture is on — this test compares
+	// the two stores, so it needs the transcript side written.
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	const sessionID = "ses_05c47a44fffeCPIAOSNROITwrf"
+	_, err := uuid.Parse(sessionID)
+	require.Error(t, err, "the fixture must be a non-UUID session id for this test to mean anything")
+
+	chatID := sessionIDToUUID(sessionID)
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+
+	prompt := "hello from opencode"
+	payload := canonicalIngestPayload("opencode", "prompt.submitted", sessionID)
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+	res, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	// The transcript lands under the mapped UUID.
+	persisted, err := chatRepo.New(ti.conn).GetChat(ctx, chatID)
+	require.NoError(t, err)
+
+	var logs []telemetryrepo.TelemetryLog
+	require.Eventually(t, func() bool {
+		logs, err = chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+			GramProjectID: authCtx.ProjectID.String(),
+			TimeStart:     timestamp.Add(-2 * time.Minute).UnixNano(),
+			TimeEnd:       time.Now().Add(time.Minute).UnixNano(),
+			GramURNs:      nil,
+			SortOrder:     "desc",
+			Cursor:        "",
+			Limit:         10,
+		})
+		return err == nil && len(logs) == 1
+	}, 2*time.Second, 50*time.Millisecond, "expected the ingested prompt row")
+
+	require.NotNil(t, logs[0].GramChatID)
+	require.NotEqual(t, sessionID, *logs[0].GramChatID, "the raw agent session id must not reach telemetry as the chat id")
+	require.Equal(t, persisted.ID.String(), *logs[0].GramChatID,
+		"telemetry chat_id must resolve to the same chats row the transcript was stored under")
+
+	// The costs page hands this value straight to a uuid-typed endpoint.
+	_, err = uuid.Parse(*logs[0].GramChatID)
+	require.NoError(t, err, "telemetry chat_id must be a parseable UUID")
+}
+
 // TestIngest_LinksChatToUserAccount confirms the canonical ingest path adopts
 // the account attribution the OTEL path cached for the session, so a chat
 // created here is linked to its user_accounts row — the join the
@@ -1098,8 +1159,9 @@ func TestIngest_PersistsPromptAttachmentsAsScannableToolRows(t *testing.T) {
 	require.False(t, secondPromptRow.MessageID.Valid, "hash match must not stamp the newer unrelated prompt")
 
 	parts, err := chatRepo.New(ti.conn).ListChatContentPartsByChatID(ctx, chatRepo.ListChatContentPartsByChatIDParams{
-		ChatID:    chatID,
-		ProjectID: *authCtx.ProjectID,
+		ChatID:               chatID,
+		ProjectID:            *authCtx.ProjectID,
+		ParentChatMessageIds: []uuid.UUID{promptRow.ID, secondPromptRow.ID},
 	})
 	require.NoError(t, err)
 	require.Len(t, parts, 1)
@@ -1119,6 +1181,51 @@ func TestIngest_PersistsPromptAttachmentsAsScannableToolRows(t *testing.T) {
 	require.JSONEq(t, `{"display_path": "marker.txt", "kind": "file"}`, string(attachmentRow.Metadata))
 	require.True(t, attachmentRow.CreatedAt.Valid)
 	require.Equal(t, int64(2026), int64(attachmentRow.CreatedAt.Time.Year()))
+
+	policyID, err := uuid.NewV7()
+	require.NoError(t, err)
+	policy, err := riskRepo.New(ti.conn).CreateRiskPolicy(ctx, riskRepo.CreateRiskPolicyParams{
+		ID:             policyID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Name:           "content part test policy",
+		Sources:        []string{"gitleaks"},
+		Enabled:        true,
+		Action:         "flag",
+		AudienceType:   "everyone",
+		AutoName:       false,
+		UserMessage:    pgtype.Text{},
+	})
+	require.NoError(t, err)
+	resultID, err := uuid.NewV7()
+	require.NoError(t, err)
+	_, err = riskRepo.New(ti.conn).InsertRiskResults(ctx, []riskRepo.InsertRiskResultsParams{{
+		ID:                resultID,
+		ProjectID:         *authCtx.ProjectID,
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		RiskPolicyID:      policy.ID,
+		RiskPolicyVersion: policy.Version,
+		ChatMessageID:     uuid.NullUUID{},
+		ChatContentPartID: uuid.NullUUID{UUID: attachmentRow.ID, Valid: true},
+		Source:            "gitleaks",
+		Found:             true,
+		RuleID:            pgtype.Text{String: "secret.test", Valid: true},
+		Description:       pgtype.Text{String: "test finding", Valid: true},
+		Match:             pgtype.Text{String: "secret", Valid: true},
+		StartPos:          pgtype.Int4{Int32: 0, Valid: true},
+		EndPos:            pgtype.Int4{Int32: 6, Valid: true},
+		Confidence:        pgtype.Float8{Float64: 1, Valid: true},
+		Tags:              []string{},
+	}})
+	require.NoError(t, err)
+	results, err := testrepo.New(ti.conn).ListRiskResultsAll(ctx, testrepo.ListRiskResultsAllParams{
+		ProjectID:    *authCtx.ProjectID,
+		RiskPolicyID: policy.ID,
+	})
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.False(t, results[0].ChatMessageID.Valid)
+	require.Equal(t, attachmentRow.ID, results[0].ChatContentPartID.UUID)
 
 	// A redelivered attachment event must not stamp an unrelated prompt row.
 	redelivery := canonicalIngestPayload("claude", "assistant.responded", sessionID)
@@ -1444,6 +1551,14 @@ func TestTelemetryHookEventName_TranslatesCanonicalVocabulary(t *testing.T) {
 
 	// Unrecognized raw names for known adapters fall back to the canonical map.
 	require.Equal(t, "PreToolUse", telemetryHookEventName(withRaw("cursor", "tool.requested", "beforeReadFile")))
+
+	// OpenCode's message.part.updated carries every streaming part update, not
+	// just failures; agenthooks decides whether it is a real tool failure, so the
+	// raw name must defer to the canonical Event.Type instead of forcing a
+	// failure. session.idle likewise defers (canonical assistant.responded).
+	require.Equal(t, "PostToolUseFailure", telemetryHookEventName(withRaw("opencode", "tool.failed", "message.part.updated")))
+	require.Equal(t, "session.updated", telemetryHookEventName(withRaw("opencode", "session.updated", "message.part.updated")))
+	require.Equal(t, "AfterAgentResponse", telemetryHookEventName(withRaw("opencode", "assistant.responded", "session.idle")))
 
 	// Custom adapters have no raw vocabulary: canonical types map to their
 	// provider-style equivalents so summaries still count them.

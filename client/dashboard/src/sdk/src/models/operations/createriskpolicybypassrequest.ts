@@ -5,10 +5,10 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  CreateShadowMCPApprovalRequestForm,
-  CreateShadowMCPApprovalRequestForm$Outbound,
-  CreateShadowMCPApprovalRequestForm$outboundSchema,
-} from "../components/createshadowmcpapprovalrequestform.js";
+  CreateRiskPolicyBypassRequestRequestBody,
+  CreateRiskPolicyBypassRequestRequestBody$Outbound,
+  CreateRiskPolicyBypassRequestRequestBody$outboundSchema,
+} from "../components/createriskpolicybypassrequestrequestbody.js";
 
 export type CreateRiskPolicyBypassRequestSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -19,7 +19,8 @@ export type CreateRiskPolicyBypassRequestRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  createShadowMCPApprovalRequestForm: CreateShadowMCPApprovalRequestForm;
+  createRiskPolicyBypassRequestRequestBody:
+    CreateRiskPolicyBypassRequestRequestBody;
 };
 
 /** @internal */
@@ -56,8 +57,8 @@ export function createRiskPolicyBypassRequestSecurityToJSON(
 /** @internal */
 export type CreateRiskPolicyBypassRequestRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  CreateShadowMCPApprovalRequestForm:
-    CreateShadowMCPApprovalRequestForm$Outbound;
+  CreateRiskPolicyBypassRequestRequestBody:
+    CreateRiskPolicyBypassRequestRequestBody$Outbound;
 };
 
 /** @internal */
@@ -67,13 +68,14 @@ export const CreateRiskPolicyBypassRequestRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    createShadowMCPApprovalRequestForm:
-      CreateShadowMCPApprovalRequestForm$outboundSchema,
+    createRiskPolicyBypassRequestRequestBody:
+      CreateRiskPolicyBypassRequestRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
-      createShadowMCPApprovalRequestForm: "CreateShadowMCPApprovalRequestForm",
+      createRiskPolicyBypassRequestRequestBody:
+        "CreateRiskPolicyBypassRequestRequestBody",
     });
   }),
 );

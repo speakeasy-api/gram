@@ -1,5 +1,10 @@
 package skills
 
+// MaxFeedbackNoteRunes caps a feedback note everywhere it is handled: the wire
+// contract, ingest validation, and the suggestion prompt all admit the full
+// note so recorded evidence is never silently truncated downstream.
+const MaxFeedbackNoteRunes = 4000
+
 type FeedbackOutcome string
 
 const (

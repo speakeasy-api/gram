@@ -25,7 +25,7 @@ import { cn, getCustomDomainCNAME } from "@/lib/utils";
 import { useCustomDomainMcpEndpoints } from "@gram/client/react-query/customDomainMcpEndpoints";
 import { useCheckDomainHealthMutation } from "@gram/client/react-query/checkDomainHealth";
 import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
-import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
+import { invalidateAllListDomains } from "@gram/client/react-query/listDomains";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
 import { useUpdateDomainMutation } from "@gram/client/react-query/updateDomain";
 import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
@@ -115,16 +115,31 @@ function customDomainHealthMessage(issue?: string): string {
 // not a customer-actionable problem; only surface it once it has persisted
 // across consecutive checks.
 function showCustomDomainUnhealthy(domain: {
+  verified: boolean;
   healthStatus?: string;
   healthIssue?: string;
   consecutiveFailures?: number;
 }): boolean {
-  if (domain.healthStatus !== "unhealthy") {
+  if (!domain.verified || domain.healthStatus !== "unhealthy") {
     return false;
   }
   return (
     domain.healthIssue !== "check_failed" ||
     (domain.consecutiveFailures ?? 0) >= 2
+  );
+}
+
+// Unhealthy state on an unverified domain means the health sweep auto-disabled
+// it: routing was torn down and it must go back through the reverify flow.
+function showCustomDomainAutoDisabled(domain: {
+  verified: boolean;
+  healthStatus?: string;
+  unhealthySince?: unknown;
+}): boolean {
+  return (
+    !domain.verified &&
+    domain.healthStatus === "unhealthy" &&
+    Boolean(domain.unhealthySince)
   );
 }
 
@@ -316,14 +331,14 @@ function OrgDomainsInner() {
     onSuccess: async () => {
       setIsDeleteDomainDialogOpen(false);
       setDomainInput("");
-      await invalidateAllGetDomain(queryClient);
+      await invalidateAllListDomains(queryClient);
     },
   });
 
   const updateDomainMutation = useUpdateDomainMutation({
     onSuccess: async () => {
       setIsEditAllowlistOpen(false);
-      await invalidateAllGetDomain(queryClient);
+      await invalidateAllListDomains(queryClient);
     },
     onError: (error) => {
       setUpdateAllowlistError(error.message || "Failed to save allowlist");
@@ -332,7 +347,7 @@ function OrgDomainsInner() {
 
   const checkDomainHealthMutation = useCheckDomainHealthMutation({
     onSuccess: async () => {
-      await invalidateAllGetDomain(queryClient);
+      await invalidateAllListDomains(queryClient);
       toast.success("Custom domain health check completed");
     },
     onError: (error) => {
@@ -410,6 +425,10 @@ function OrgDomainsInner() {
                 {domain.isUpdating ? (
                   <SimpleTooltip tooltip="Your domain is being verified. This may take a few minutes.">
                     <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                  </SimpleTooltip>
+                ) : showCustomDomainAutoDisabled(domain) ? (
+                  <SimpleTooltip tooltip="This domain was disabled after failing health checks for over a week">
+                    <X className="h-4 w-4 stroke-3 text-red-500" />
                   </SimpleTooltip>
                 ) : showCustomDomainUnhealthy(domain) ? (
                   <SimpleTooltip tooltip="The latest health check found a problem">
@@ -490,6 +509,41 @@ function OrgDomainsInner() {
               </Stack>
             </RequireScope>
           </Stack>
+          {showCustomDomainAutoDisabled(domain) && (
+            <Alert variant="error" dismissible={false} className="mt-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <Type variant="body" className="font-medium">
+                    This custom domain was disabled
+                  </Type>
+                  <Type variant="body" className="text-sm">
+                    It failed health checks continuously for over a week, so its
+                    routing and TLS certificate were removed.{" "}
+                    {customDomainHealthMessage(domain.healthIssue)}
+                  </Type>
+                  {domain.unhealthySince && (
+                    <Type variant="body" className="text-sm opacity-80">
+                      Unhealthy since{" "}
+                      <HumanizeDateTime date={domain.unhealthySince} />
+                    </Type>
+                  )}
+                  <Type variant="body" className="text-sm">
+                    Fix the issue above, then reverify the domain to provision
+                    it again.
+                  </Type>
+                </div>
+                <RequireScope scope="org:admin" level="component">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIsAddDomainDialogOpen(true)}
+                  >
+                    Reverify domain
+                  </Button>
+                </RequireScope>
+              </div>
+            </Alert>
+          )}
           {showCustomDomainUnhealthy(domain) && (
             <Alert variant="warning" dismissible={false} className="mt-4">
               <div className="flex flex-wrap items-center justify-between gap-3">

@@ -80,11 +80,11 @@ export default function Plugins(): JSX.Element {
   const [isObservabilityDownloadMenuOpen, setIsObservabilityDownloadMenuOpen] =
     useState(false);
   const [isDownloadingObservability, setIsDownloadingObservability] = useState<
-    "claude" | "cursor" | "codex" | null
+    "claude" | "cursor" | "codex" | "opencode" | null
   >(null);
 
   const handleObservabilityDownload = async (
-    platform: "claude" | "cursor" | "codex",
+    platform: "claude" | "cursor" | "codex" | "opencode",
   ) => {
     setIsObservabilityDownloadMenuOpen(false);
     setIsDownloadingObservability(platform);
@@ -542,7 +542,7 @@ function ObservabilityPluginCard({
   isDownloadMenuOpen: boolean;
   onDownloadMenuOpenChange: (open: boolean) => void;
   isDownloading: boolean;
-  onDownload: (platform: "claude" | "cursor" | "codex") => void;
+  onDownload: (platform: "claude" | "cursor" | "codex" | "opencode") => void;
 }) {
   const [isInstallSheetOpen, setIsInstallSheetOpen] = useState(false);
   const isConnected = !!publishStatus?.connected;
@@ -636,6 +636,14 @@ function ObservabilityPluginCard({
               }}
             >
               Download as zip — Codex
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={isDownloading}
+              onClick={() => {
+                onDownload("opencode");
+              }}
+            >
+              Download as zip — OpenCode
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

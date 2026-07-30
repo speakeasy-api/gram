@@ -117,6 +117,21 @@ type DevicePage struct {
 	NextCursor string
 }
 
+// AgentAttestation names which claim a piece of coverage evidence supports.
+// It is per DEVICE, not per organization: even with device-level matching
+// enabled, a machine whose agent cannot report a serial is matched by its
+// assigned user's email and is therefore only user-attested.
+type AgentAttestation string
+
+const (
+	// AttestationDevice means the agent on THIS machine reported in — matched
+	// on hardware serial.
+	AttestationDevice AgentAttestation = "device"
+	// AttestationUser means only that the device's assigned user runs the
+	// agent somewhere — matched on assigned-user email. Strictly weaker.
+	AttestationUser AgentAttestation = "user"
+)
+
 // CoverageDevice is one device's entry in an evidence snapshot. Field naming
 // is deliberate: agent presence is attested per assigned user, not per
 // device, so sinks must never present these as "device monitored".

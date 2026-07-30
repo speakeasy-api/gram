@@ -78,6 +78,8 @@ type LoadChatResponseBody struct {
 	// The list of messages in the chat for the returned generation, ordered oldest
 	// to newest by `seq`.
 	Messages []*ChatMessageResponseBody `form:"messages" json:"messages" xml:"messages"`
+	// Non-turn content attached to this chat, such as prompt attachments.
+	ContentParts []*ChatContentPartResponseBody `form:"content_parts" json:"content_parts" xml:"content_parts"`
 	// The generation that this response's messages belong to. A generation is an
 	// immutable snapshot of the transcript; a new one is opened on compaction or
 	// message edits, while normal turns append to the current one.
@@ -2127,6 +2129,24 @@ type ChatMessageResponseBody struct {
 	Generation int `form:"generation" json:"generation" xml:"generation"`
 }
 
+// ChatContentPartResponseBody is used to define fields on response body types.
+type ChatContentPartResponseBody struct {
+	// The ID of the content part.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The content kind, such as prompt_attachment.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// The text content.
+	Content string `form:"content" json:"content" xml:"content"`
+	// The chat message this content hangs off, when resolved.
+	ParentChatMessageID *string `form:"parent_chat_message_id,omitempty" json:"parent_chat_message_id,omitempty" xml:"parent_chat_message_id,omitempty"`
+	// Sparse metadata for the content kind.
+	Metadata json.RawMessage `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
+	// Whether this content part has an active risk finding.
+	IsRisk bool `form:"is_risk" json:"is_risk" xml:"is_risk"`
+	// When the content part was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+}
+
 // RiskSegmentResponseBody is used to define fields on response body types.
 type RiskSegmentResponseBody struct {
 	// The `seq` of the first (oldest) message in this segment.
@@ -2304,6 +2324,18 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 		}
 	} else {
 		body.Messages = []*ChatMessageResponseBody{}
+	}
+	if res.ContentParts != nil {
+		body.ContentParts = make([]*ChatContentPartResponseBody, len(res.ContentParts))
+		for i, val := range res.ContentParts {
+			if val == nil {
+				body.ContentParts[i] = nil
+				continue
+			}
+			body.ContentParts[i] = marshalChatChatContentPartToChatContentPartResponseBody(val)
+		}
+	} else {
+		body.ContentParts = []*ChatContentPartResponseBody{}
 	}
 	if res.RiskSegments != nil {
 		body.RiskSegments = make([]*RiskSegmentResponseBody, len(res.RiskSegments))

@@ -236,12 +236,12 @@ var _ = Service("skills", func() {
 	})
 
 	Method("approveSuggestion", func() {
-		Description("Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only one of its proposed changes. Stale suggestions are superseded instead.")
+		Description("Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only a subset of its proposed changes. Stale suggestions are superseded instead.")
 
 		Payload(func() {
 			Attribute("id", String, "The suggestion ID.", func() { Format(FormatUUID) })
 			Attribute("content", String, "Optional edited complete SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
-			Attribute("change_id", String, "Optional ID of the single proposed change to take. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.", func() { Format(FormatUUID) })
+			Attribute("change_ids", ArrayOf(String, func() { Format(FormatUUID) }), "Optional IDs of the proposed changes to take together as one new version. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.")
 			Required("id")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -688,7 +688,7 @@ var ApproveSkillSuggestionRequestBody = Type("ApproveSkillSuggestionRequestBody"
 
 	Attribute("id", String, "The suggestion ID.", func() { Format(FormatUUID) })
 	Attribute("content", String, "Optional edited complete SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
-	Attribute("change_id", String, "Optional ID of the single proposed change to take. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.", func() { Format(FormatUUID) })
+	Attribute("change_ids", ArrayOf(String, func() { Format(FormatUUID) }), "Optional IDs of the proposed changes to take together as one new version. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.")
 	Required("id")
 })
 
@@ -999,8 +999,9 @@ var SkillAdoption = Type("SkillAdoption", func() {
 })
 
 var SkillSightingTimelinePoint = Type("SkillSightingTimelinePoint", func() {
-	Description("A UTC-day activation bucket for a skill.")
+	Description("A UTC-day activation bucket for one attributed skill version.")
 	Attribute("bucket_start", String, "Start of the UTC day.", func() { Format(FormatDateTime) })
+	Attribute("skill_version_id", String, "The attributed skill version, absent when the observation could not be resolved to a version.", func() { Format(FormatUUID) })
 	Attribute("activation_count", Int64, "Activations observed during the day.")
 	Required("bucket_start", "activation_count")
 })
@@ -1102,7 +1103,7 @@ var GetSkillResult = Type("GetSkillResult", func() {
 	Attribute("skill", Skill, "The skill.")
 	Attribute("latest_version", SkillVersion, "The current immutable version by effective promotion time.")
 	Attribute("adoption", SkillAdoption, "Activation adoption metrics.")
-	Attribute("sighting_timeline", ArrayOf(SkillSightingTimelinePoint), "Daily activations in the adoption window.")
+	Attribute("sighting_timeline", ArrayOf(SkillSightingTimelinePoint), "Daily activations by attributed version in the adoption window.")
 	Attribute("drift", SkillDrift, "Active-machine version convergence.")
 	Attribute("assistant_count", Int64, "The number of active, non-deleted assistants using the skill.")
 	Required("skill", "adoption", "sighting_timeline", "drift", "assistant_count")

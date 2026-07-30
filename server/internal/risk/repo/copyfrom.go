@@ -35,6 +35,7 @@ func (r iteratorForInsertRiskResults) Values() ([]interface{}, error) {
 		r.rows[0].RiskPolicyID,
 		r.rows[0].RiskPolicyVersion,
 		r.rows[0].ChatMessageID,
+		r.rows[0].ChatContentPartID,
 		r.rows[0].Source,
 		r.rows[0].Found,
 		r.rows[0].RuleID,
@@ -54,5 +55,5 @@ func (r iteratorForInsertRiskResults) Err() error {
 }
 
 func (q *Queries) InsertRiskResults(ctx context.Context, arg []InsertRiskResultsParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"risk_results"}, []string{"id", "project_id", "organization_id", "risk_policy_id", "risk_policy_version", "chat_message_id", "source", "found", "rule_id", "description", "match", "start_pos", "end_pos", "confidence", "tags", "spans", "dead_letter_reason"}, &iteratorForInsertRiskResults{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"risk_results"}, []string{"id", "project_id", "organization_id", "risk_policy_id", "risk_policy_version", "chat_message_id", "chat_content_part_id", "source", "found", "rule_id", "description", "match", "start_pos", "end_pos", "confidence", "tags", "spans", "dead_letter_reason"}, &iteratorForInsertRiskResults{rows: arg})
 }

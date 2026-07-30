@@ -5260,6 +5260,7 @@ func marshalSkillsSkillAdoptionToSkillAdoptionResponseBody(v *skills.SkillAdopti
 func marshalSkillsSkillSightingTimelinePointToSkillSightingTimelinePointResponseBody(v *skills.SkillSightingTimelinePoint) *SkillSightingTimelinePointResponseBody {
 	res := &SkillSightingTimelinePointResponseBody{
 		BucketStart:     v.BucketStart,
+		SkillVersionID:  v.SkillVersionID,
 		ActivationCount: v.ActivationCount,
 	}
 

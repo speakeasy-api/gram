@@ -6,95 +6,6 @@ info:
 servers:
   - url: https://app.getgram.ai
 paths:
-  /rpc/access.approveShadowMcpRequest:
-    post:
-      description: Approve a Shadow MCP request, creating an allow rule scoped to the organization or project.
-      operationId: approveShadowMCPApprovalRequest
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ApproveShadowMCPApprovalRequestForm'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ShadowMCPApprovalDecisionResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: approveShadowMCPApprovalRequest access
-      tags:
-        - access
-      x-speakeasy-name-override: approveShadowMCPApprovalRequest
-      x-speakeasy-react-hook:
-        name: ApproveShadowMCPApprovalRequest
-        type: mutation
   /rpc/access.createRole:
     post:
       description: Create a new custom role.
@@ -191,184 +102,6 @@ paths:
       x-speakeasy-name-override: createRole
       x-speakeasy-react-hook:
         name: CreateRole
-  /rpc/access.createShadowMcpRequest:
-    post:
-      description: Create or return an active Shadow MCP approval request.
-      operationId: createShadowMCPApprovalRequest
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateShadowMCPApprovalRequestForm'
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ShadowMCPApprovalRequest'
-          description: Created response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: createShadowMCPApprovalRequest access
-      tags:
-        - access
-      x-speakeasy-name-override: createShadowMCPApprovalRequest
-      x-speakeasy-react-hook:
-        name: CreateShadowMCPApprovalRequest
-        type: mutation
-  /rpc/access.createShadowMcpRule:
-    post:
-      description: Create a managed Shadow MCP access rule.
-      operationId: createShadowMCPAccessRule
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateShadowMCPAccessRuleForm'
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CreateShadowMCPAccessRuleResult'
-          description: Created response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: createShadowMCPAccessRule access
-      tags:
-        - access
-      x-speakeasy-name-override: createShadowMCPAccessRule
-      x-speakeasy-react-hook:
-        name: CreateShadowMCPAccessRule
-        type: mutation
   /rpc/access.deleteRole:
     delete:
       description: Delete a custom role (system roles cannot be deleted).
@@ -559,181 +292,6 @@ paths:
       x-speakeasy-name-override: deleteShadowMCPInventoryPolicyBypass
       x-speakeasy-react-hook:
         name: DeleteShadowMCPInventoryPolicyBypass
-        type: mutation
-  /rpc/access.deleteShadowMcpRule:
-    delete:
-      description: Delete a managed Shadow MCP access rule.
-      operationId: deleteShadowMCPAccessRule
-      parameters:
-        - allowEmptyValue: true
-          in: query
-          name: id
-          required: true
-          schema:
-            format: uuid
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      responses:
-        "204":
-          description: No Content response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: deleteShadowMCPAccessRule access
-      tags:
-        - access
-      x-speakeasy-name-override: deleteShadowMCPAccessRule
-      x-speakeasy-react-hook:
-        name: DeleteShadowMCPAccessRule
-        type: mutation
-  /rpc/access.denyShadowMcpRequest:
-    post:
-      description: Deny a Shadow MCP request and optionally create a deny rule.
-      operationId: denyShadowMCPApprovalRequest
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DenyShadowMCPApprovalRequestForm'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ShadowMCPApprovalDecisionResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: denyShadowMCPApprovalRequest access
-      tags:
-        - access
-      x-speakeasy-name-override: denyShadowMCPApprovalRequest
-      x-speakeasy-react-hook:
-        name: DenyShadowMCPApprovalRequest
         type: mutation
   /rpc/access.disableRBAC:
     post:
@@ -2054,239 +1612,6 @@ paths:
       x-speakeasy-name-override: listShadowMCPInventoryUsers
       x-speakeasy-react-hook:
         name: ShadowMCPInventoryUsers
-  /rpc/access.listShadowMcpRequests:
-    get:
-      description: List Shadow MCP approval requests for the current organization. Requires organization admin access because requests include requester and block details.
-      operationId: listShadowMCPApprovalRequests
-      parameters:
-        - allowEmptyValue: true
-          in: query
-          name: status
-          schema:
-            enum:
-              - requested
-              - approved
-              - denied
-            type: string
-        - allowEmptyValue: true
-          in: query
-          name: project_id
-          schema:
-            format: uuid
-            type: string
-        - allowEmptyValue: true
-          in: query
-          name: limit
-          schema:
-            default: 50
-            format: int64
-            maximum: 200
-            minimum: 1
-            type: integer
-        - allowEmptyValue: true
-          description: Cursor for the next page of results.
-          in: query
-          name: cursor
-          schema:
-            description: Cursor for the next page of results.
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListShadowMCPApprovalRequestsResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: listShadowMCPApprovalRequests access
-      tags:
-        - access
-      x-speakeasy-name-override: listShadowMCPApprovalRequests
-      x-speakeasy-react-hook:
-        name: ShadowMCPApprovalRequests
-  /rpc/access.listShadowMcpRules:
-    get:
-      description: List managed Shadow MCP allow and deny rules.
-      operationId: listShadowMCPAccessRules
-      parameters:
-        - allowEmptyValue: true
-          in: query
-          name: disposition
-          schema:
-            enum:
-              - allowed
-              - denied
-            type: string
-        - allowEmptyValue: true
-          in: query
-          name: access_scope
-          schema:
-            enum:
-              - organization
-              - project
-            type: string
-        - allowEmptyValue: true
-          in: query
-          name: project_id
-          schema:
-            format: uuid
-            type: string
-        - allowEmptyValue: true
-          in: query
-          name: limit
-          schema:
-            default: 50
-            format: int64
-            maximum: 200
-            minimum: 1
-            type: integer
-        - allowEmptyValue: true
-          description: Cursor for the next page of results.
-          in: query
-          name: cursor
-          schema:
-            description: Cursor for the next page of results.
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListShadowMCPAccessRulesResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: listShadowMCPAccessRules access
-      tags:
-        - access
-      x-speakeasy-name-override: listShadowMCPAccessRules
-      x-speakeasy-react-hook:
-        name: ShadowMCPAccessRules
   /rpc/access.resolveChallenge:
     post:
       description: Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.
@@ -2748,95 +2073,6 @@ paths:
       x-speakeasy-name-override: updateShadowMCPInventoryServerName
       x-speakeasy-react-hook:
         name: UpdateShadowMCPInventoryServerName
-        type: mutation
-  /rpc/access.updateShadowMcpRule:
-    put:
-      description: Update a managed Shadow MCP access rule.
-      operationId: updateShadowMCPAccessRule
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateShadowMCPAccessRuleForm'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ShadowMCPAccessRule'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: updateShadowMCPAccessRule access
-      tags:
-        - access
-      x-speakeasy-name-override: updateShadowMCPAccessRule
-      x-speakeasy-react-hook:
-        name: UpdateShadowMCPAccessRule
         type: mutation
   /rpc/access.upsertShadowMCPInventoryPolicyBypass:
     post:
@@ -4840,6 +4076,24 @@ paths:
           name: Gram-Key
           schema:
             description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Hardware serial number of the machine the agent runs on, when it can be read. Lets device coverage attest this specific machine rather than its assigned user.
+          example: C02XK1ABCDEF
+          in: header
+          name: Gram-Device-Serial
+          schema:
+            description: Hardware serial number of the machine the agent runs on, when it can be read. Lets device coverage attest this specific machine rather than its assigned user.
+            example: C02XK1ABCDEF
+            type: string
+        - allowEmptyValue: true
+          description: Hostname of the machine the agent runs on, when it can be read.
+          example: dev-macbook-pro
+          in: header
+          name: Gram-Device-Hostname
+          schema:
+            description: Hostname of the machine the agent runs on, when it can be read.
+            example: dev-macbook-pro
             type: string
       responses:
         "200":
@@ -12138,6 +11392,7 @@ paths:
             enum:
               - agent_active
               - agent_stale
+              - agent_other_device
               - no_agent
               - no_email
               - unresolved_email
@@ -13068,6 +12323,88 @@ paths:
       x-speakeasy-name-override: getDomain
       x-speakeasy-react-hook:
         name: getDomain
+  /rpc/domain.list:
+    get:
+      description: List the custom domains for an organization. The result is empty when no custom domain has been configured.
+      operationId: listDomains
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListCustomDomainsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listDomains domains
+      tags:
+        - domains
+      x-speakeasy-name-override: listDomains
+      x-speakeasy-react-hook:
+        name: listDomains
   /rpc/domain.listMcpEndpoints:
     get:
       description: List the MCP endpoints registered under the organization's custom domain across every project. Returns enriched rows that include the parent MCP server and project so callers can preview what a custom-domain deletion would cascade through.
@@ -26000,6 +25337,7 @@ paths:
               - claude
               - cursor
               - codex
+              - opencode
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -32103,7 +31441,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateShadowMCPApprovalRequestForm'
+              $ref: '#/components/schemas/CreateRiskPolicyBypassRequestRequestBody'
         required: true
       responses:
         "201":
@@ -36298,12 +35636,30 @@ paths:
             description: Include per-version daily trends.
             type: boolean
         - allowEmptyValue: true
-          description: Include up to 100 recent scored sessions. Intended for one skill detail view.
+          description: Include a newest-first page of scored sessions. Intended for one skill detail view.
           in: query
           name: include_scored_sessions
           schema:
-            description: Include up to 100 recent scored sessions. Intended for one skill detail view.
+            description: Include a newest-first page of scored sessions. Intended for one skill detail view.
             type: boolean
+        - allowEmptyValue: true
+          description: Cursor for the next page of scored sessions.
+          in: query
+          name: cursor
+          schema:
+            description: Cursor for the next page of scored sessions.
+            type: string
+        - allowEmptyValue: true
+          description: The number of scored sessions to return per page.
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: The number of scored sessions to return per page.
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -36387,6 +35743,14 @@ paths:
       tags:
         - skillEfficacy
       x-speakeasy-name-override: queryInsights
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
       x-speakeasy-react-hook:
         name: SkillEfficacyInsights
         type: query
@@ -36698,7 +36062,7 @@ paths:
         name: ApproveAllSkillSuggestions
   /rpc/skills.approveSuggestion:
     post:
-      description: Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only one of its proposed changes. Stale suggestions are superseded instead.
+      description: Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only a subset of its proposed changes. Stale suggestions are superseded instead.
       operationId: approveSkillSuggestion
       parameters:
         - allowEmptyValue: true
@@ -50364,52 +49728,15 @@ components:
       description: Per-item outcomes for the snapshotted open suggestions.
       required:
         - items
-    ApproveShadowMCPApprovalRequestForm:
-      type: object
-      properties:
-        access_scope:
-          type: string
-          enum:
-            - organization
-            - project
-        display_name:
-          type: string
-        id:
-          type: string
-          format: uuid
-        match_breadth:
-          type: string
-          enum:
-            - full_url
-            - url_host
-        match_value:
-          type: string
-        observed_full_url:
-          type: string
-        observed_server_identity:
-          type: string
-        observed_url_host:
-          type: string
-        project_ids:
-          type: array
-          items:
-            type: string
-          description: Project ids to create project-scoped rules for. Empty falls back to the request project.
-        reason:
-          type: string
-      required:
-        - id
-        - access_scope
-        - match_breadth
-        - match_value
-        - display_name
     ApproveSkillSuggestionRequestBody:
       type: object
       properties:
-        change_id:
-          type: string
-          description: Optional ID of the single proposed change to take. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.
-          format: uuid
+        change_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Optional IDs of the proposed changes to take together as one new version. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.
         content:
           type: string
           description: Optional edited complete SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.
@@ -51380,6 +50707,11 @@ components:
         assistant_name:
           type: string
           description: The name of the assistant that produced this chat, if any
+        content_parts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatContentPart'
+          description: Non-turn content attached to this chat, such as prompt attachments.
         created_at:
           type: string
           description: When the chat was created.
@@ -51481,6 +50813,7 @@ components:
           description: Full work-units analysis verdict as JSON (per-task breakdown, rationales, and flags). Present only when `work_units` is present.
       required:
         - messages
+        - content_parts
         - generation
         - max_generation
         - has_more_before
@@ -51515,6 +50848,36 @@ components:
         - work_units_enabled
         - work_units_daily_cap
         - is_default
+    ChatContentPart:
+      type: object
+      properties:
+        content:
+          type: string
+          description: The text content.
+        created_at:
+          type: string
+          description: When the content part was created.
+          format: date-time
+        id:
+          type: string
+          description: The ID of the content part.
+        is_risk:
+          type: boolean
+          description: Whether this content part has an active risk finding.
+        kind:
+          type: string
+          description: The content kind, such as prompt_attachment.
+        metadata:
+          description: Sparse metadata for the content kind.
+        parent_chat_message_id:
+          type: string
+          description: The chat message this content hangs off, when resolved.
+      required:
+        - id
+        - kind
+        - content
+        - is_risk
+        - created_at
     ChatMessage:
       type: object
       properties:
@@ -53089,6 +52452,14 @@ components:
       required:
         - match_type
         - match_value
+    CreateRiskPolicyBypassRequestRequestBody:
+      type: object
+      properties:
+        request_token:
+          type: string
+          description: Signed request token generated when a risk policy blocks an action.
+      required:
+        - request_token
     CreateRiskPolicyRequestBody:
       type: object
       properties:
@@ -53277,67 +52648,6 @@ components:
       required:
         - remote_mcp_server_id
         - name
-    CreateShadowMCPAccessRuleForm:
-      type: object
-      properties:
-        access_scope:
-          type: string
-          enum:
-            - organization
-            - project
-        display_name:
-          type: string
-        disposition:
-          type: string
-          enum:
-            - allowed
-            - denied
-        match_breadth:
-          type: string
-          enum:
-            - full_url
-            - url_host
-        match_value:
-          type: string
-        observed_full_url:
-          type: string
-        observed_server_identity:
-          type: string
-        observed_url_host:
-          type: string
-        project_id:
-          type: string
-          format: uuid
-        project_ids:
-          type: array
-          items:
-            type: string
-          description: Project ids to create project-scoped rules for. Empty uses project_id for single-rule creation.
-        reason:
-          type: string
-      required:
-        - disposition
-        - access_scope
-        - match_breadth
-        - match_value
-        - display_name
-    CreateShadowMCPAccessRuleResult:
-      type: object
-      properties:
-        rules:
-          type: array
-          items:
-            $ref: '#/components/schemas/ShadowMCPAccessRule'
-      required:
-        - rules
-    CreateShadowMCPApprovalRequestForm:
-      type: object
-      properties:
-        request_token:
-          type: string
-          description: Signed token from the Shadow MCP block response.
-      required:
-        - request_token
     CreateSignedChatAttachmentURLForm:
       type: object
       properties:
@@ -53860,39 +53170,6 @@ components:
           description: Override ID to delete
       required:
         - override_id
-    DenyShadowMCPApprovalRequestForm:
-      type: object
-      properties:
-        create_deny_rule:
-          type: boolean
-        display_name:
-          type: string
-        id:
-          type: string
-          format: uuid
-        match_breadth:
-          type: string
-          enum:
-            - full_url
-            - url_host
-        match_value:
-          type: string
-        observed_full_url:
-          type: string
-        observed_server_identity:
-          type: string
-        observed_url_host:
-          type: string
-        project_ids:
-          type: array
-          items:
-            type: string
-          description: Project ids to create project-scoped deny rules for. Empty falls back to the request project.
-        reason:
-          type: string
-      required:
-        - id
-        - create_deny_rule
     Deployment:
       type: object
       properties:
@@ -54201,16 +53478,30 @@ components:
       properties:
         active_window_minutes:
           type: integer
-          description: 'Freshness window: an assigned user counts as active when their agent heartbeat is within this many minutes.'
+          description: 'Freshness window: an agent counts as active when its heartbeat is within this many minutes.'
           format: int64
         agent_active:
           type: integer
-          description: Devices whose assigned user has an agent heartbeat within the window.
+          description: Devices with an agent heartbeat within the window. What that attests depends on the matching mode and, per device, on whether the match was by serial or by email — compare against agent_active_device_attested.
+          format: int64
+        agent_active_device_attested:
+          type: integer
+          description: How many of agent_active are backed by that machine's OWN heartbeat (serial match). Under user-level matching this is 0; under device-level matching a value below agent_active means some devices fell back to the assigned-user email, which is the weaker claim.
+          format: int64
+        agent_other_device:
+          type: integer
+          description: 'Device-level matching only: devices whose assigned user runs the agent, but not on this machine. Always 0 under user-level matching, which cannot distinguish this from agent_active.'
           format: int64
         agent_stale:
           type: integer
-          description: Devices whose assigned user has an agent that went quiet — the drift/disable case.
+          description: Devices with a known agent that went quiet — the drift/disable case.
           format: int64
+        attestation:
+          type: string
+          description: 'The strongest claim that holds for EVERY active device in this response — not merely the org''s matching mode. "device": every active device was matched on its own hardware serial, so each one ran the agent. "user": at least one active device was matched only on its assigned-user email, so the set as a whole supports only the weaker claim that assigned users ran the agent somewhere.'
+          enum:
+            - device
+            - user
         missing:
           type: integer
           description: Devices absent from the latest completed MDM snapshot.
@@ -54238,12 +53529,15 @@ components:
           type: integer
           description: Devices whose assigned email matches neither an agent user nor an org member.
           format: int64
-      description: 'Agent-coverage summary across the org''s connected MDM inventories. Buckets attest the assigned user''s agent (the heartbeat is per user), not the device itself: agent_active means the device''s assigned user has a fresh agent heartbeat somewhere.'
+      description: 'Agent-coverage summary across the org''s connected MDM inventories. What a bucket attests depends on the org''s matching mode: under device-level matching (hardware serial) agent_active means THIS machine reported in, while under user-level matching it means only that the device''s assigned user has a fresh heartbeat somewhere.'
       required:
         - organization_id
         - active_window_minutes
+        - attestation
         - agent_active
+        - agent_active_device_attested
         - agent_stale
+        - agent_other_device
         - no_agent
         - no_email
         - unresolved_email
@@ -54622,7 +53916,7 @@ components:
           type: array
           items:
             type: string
-          description: Message types to judge (user_message, assistant_message, tool_request, tool_response), matching a policy's message_types. When empty or omitted, judges all supported types.
+          description: Message types to judge (user_message, assistant_message, tool_request, tool_response, prompt_attachment), matching a policy's message_types. When empty or omitted, judges all supported types.
         model_config:
           $ref: '#/components/schemas/RiskPolicyModelConfig'
         prompt:
@@ -56269,7 +55563,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SkillSightingTimelinePoint'
-          description: Daily activations in the adoption window.
+          description: Daily activations by attributed version in the adoption window.
         skill:
           $ref: '#/components/schemas/Skill'
       description: An active skill and its current version.
@@ -57646,6 +56940,16 @@ components:
       description: Result of listing the MCP endpoints registered under an organization's custom domain.
       required:
         - mcp_endpoints
+    ListCustomDomainsResult:
+      type: object
+      properties:
+        domains:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomDomain'
+      description: Result of listing an organization's custom domains.
+      required:
+        - domains
     ListDeploymentForm:
       type: object
       properties:
@@ -58359,30 +57663,6 @@ components:
       description: Result of listing org-scoped chat sessions
       required:
         - sessions
-    ListShadowMCPAccessRulesResult:
-      type: object
-      properties:
-        next_cursor:
-          type: string
-          description: Cursor for the next page of results.
-        rules:
-          type: array
-          items:
-            $ref: '#/components/schemas/ShadowMCPAccessRule'
-      required:
-        - rules
-    ListShadowMCPApprovalRequestsResult:
-      type: object
-      properties:
-        next_cursor:
-          type: string
-          description: Cursor for the next page of results.
-        requests:
-          type: array
-          items:
-            $ref: '#/components/schemas/ShadowMCPApprovalRequest'
-      required:
-        - requests
     ListShadowMCPInventoryResult:
       type: object
       properties:
@@ -58972,14 +58252,15 @@ components:
       properties:
         agent_last_seen_at:
           type: string
-          description: The assigned user's latest device-agent heartbeat. Omitted when the user has never synced an agent.
+          description: 'The device-agent heartbeat that classified this device: the machine''s own under device-level matching, otherwise its assigned user''s. Omitted when no agent has ever synced.'
           format: date-time
         coverage_bucket:
           type: string
-          description: Coverage classification for the device.
+          description: Coverage classification for the device. What agent_active attests depends on the org's matching mode and on whether this device matched by serial or by assigned-user email.
           enum:
             - agent_active
             - agent_stale
+            - agent_other_device
             - no_agent
             - no_email
             - unresolved_email
@@ -59025,7 +58306,7 @@ components:
         user_id:
           type: string
           description: Resolved Gram user for the assigned email. Omitted when the email is missing or does not resolve to an org member.
-      description: One device from a connected MDM's inventory, annotated with its agent-coverage bucket. Agent presence is attested per assigned user (the agent heartbeat is keyed by user email), not per device.
+      description: 'One device from a connected MDM''s inventory, annotated with its agent-coverage bucket. What that bucket attests depends on the organization''s matching mode: under device-level matching a device may be classified by its own hardware serial (this machine ran the agent) or, when no serial heartbeat exists for it, by its assigned-user email (only that user ran the agent somewhere). Under user-level matching only the latter applies.'
       required:
         - id
         - provider
@@ -61168,7 +60449,7 @@ components:
           format: uuid
         message_type:
           type: string
-          description: The judged message type (user_message, assistant_message, tool_request, tool_response).
+          description: The judged message type (user_message, assistant_message, tool_request, tool_response, prompt_attachment).
         prompt_tokens:
           type: integer
           description: Prompt tokens billed for this judge call.
@@ -62797,7 +62078,7 @@ components:
           type: array
           items:
             type: string
-          description: 'Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.'
+          description: 'Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message, prompt_attachment.'
         model_config:
           $ref: '#/components/schemas/RiskPolicyModelConfig'
         name:
@@ -63086,13 +62367,17 @@ components:
           type: string
           description: ID of the durable tool call block recorded for this finding's message, when one exists. Links to the block page at /blocks/:id.
           format: uuid
+        chat_content_part_id:
+          type: string
+          description: The chat content part that was scanned, when the finding is anchored to a content part.
+          format: uuid
         chat_id:
           type: string
           description: The chat session containing the message.
           format: uuid
         chat_message_id:
           type: string
-          description: The chat message that was scanned.
+          description: The chat message that was scanned, when the finding is anchored to a message.
           format: uuid
         chat_title:
           type: string
@@ -63130,9 +62415,6 @@ components:
           type: integer
           description: Policy version when this result was produced.
           format: int64
-        replayed:
-          type: boolean
-          description: True when the scanned message arrived as a replay from a device's offline spool after control-plane downtime — the finding was produced retroactively rather than from live traffic.
         rule_id:
           type: string
           description: The matched rule identifier.
@@ -63160,20 +62442,22 @@ components:
         - id
         - policy_id
         - policy_version
-        - chat_message_id
         - source
         - created_at
-        - replayed
     RiskResultRedacted:
       type: object
       properties:
+        chat_content_part_id:
+          type: string
+          description: The chat content part that was scanned, when the finding is anchored to a content part.
+          format: uuid
         chat_id:
           type: string
           description: The chat session containing the message.
           format: uuid
         chat_message_id:
           type: string
-          description: The chat message that was scanned.
+          description: The chat message that was scanned, when the finding is anchored to a message.
           format: uuid
         chat_title:
           type: string
@@ -63230,7 +62514,6 @@ components:
         - id
         - policy_id
         - policy_version
-        - chat_message_id
         - source
         - created_at
         - match_redacted
@@ -64747,203 +64030,6 @@ components:
           type: string
           description: The user_session_issuer id to link, or null to unlink.
           format: uuid
-    ShadowMCPAccessRule:
-      type: object
-      properties:
-        access_scope:
-          type: string
-          enum:
-            - organization
-            - project
-        created_at:
-          type: string
-          format: date-time
-        created_by:
-          type: string
-        display_name:
-          type: string
-        disposition:
-          type: string
-          enum:
-            - allowed
-            - denied
-        id:
-          type: string
-          format: uuid
-        match_breadth:
-          type: string
-          enum:
-            - full_url
-            - url_host
-        match_value:
-          type: string
-        observed_full_url:
-          type: string
-        observed_server_identity:
-          type: string
-        observed_url_host:
-          type: string
-        organization_id:
-          type: string
-        project_id:
-          type: string
-          format: uuid
-        reason:
-          type: string
-        resource_type:
-          type: string
-        source_request_id:
-          type: string
-          format: uuid
-        updated_at:
-          type: string
-          format: date-time
-        updated_by:
-          type: string
-      required:
-        - id
-        - organization_id
-        - access_scope
-        - resource_type
-        - disposition
-        - match_breadth
-        - match_value
-        - display_name
-        - created_at
-        - updated_at
-    ShadowMCPAccessRuleForm:
-      type: object
-      properties:
-        access_scope:
-          type: string
-          enum:
-            - organization
-            - project
-        display_name:
-          type: string
-        disposition:
-          type: string
-          enum:
-            - allowed
-            - denied
-        match_breadth:
-          type: string
-          enum:
-            - full_url
-            - url_host
-        match_value:
-          type: string
-        observed_full_url:
-          type: string
-        observed_server_identity:
-          type: string
-        observed_url_host:
-          type: string
-        project_id:
-          type: string
-          format: uuid
-        reason:
-          type: string
-      required:
-        - disposition
-        - access_scope
-        - match_breadth
-        - match_value
-        - display_name
-    ShadowMCPApprovalDecisionResult:
-      type: object
-      properties:
-        request:
-          $ref: '#/components/schemas/ShadowMCPApprovalRequest'
-        rule:
-          $ref: '#/components/schemas/ShadowMCPAccessRule'
-        rules:
-          type: array
-          items:
-            $ref: '#/components/schemas/ShadowMCPAccessRule'
-      required:
-        - request
-        - rules
-    ShadowMCPApprovalRequest:
-      type: object
-      properties:
-        block_reason:
-          type: string
-        blocked_count:
-          type: integer
-          format: int64
-        created_at:
-          type: string
-          format: date-time
-        decided_at:
-          type: string
-          format: date-time
-        decided_by:
-          type: string
-        decision_note:
-          type: string
-        first_blocked_at:
-          type: string
-          format: date-time
-        id:
-          type: string
-          format: uuid
-        last_blocked_at:
-          type: string
-          format: date-time
-        observed_full_url:
-          type: string
-        observed_name:
-          type: string
-        observed_server_identity:
-          type: string
-        observed_url_host:
-          type: string
-        organization_id:
-          type: string
-        project_id:
-          type: string
-          format: uuid
-        requested_at:
-          type: string
-          format: date-time
-        requester_display_name:
-          type: string
-        requester_email:
-          type: string
-        requester_user_id:
-          type: string
-        resource_type:
-          type: string
-        risk_policy_id:
-          type: string
-          format: uuid
-        risk_result_id:
-          type: string
-          format: uuid
-        status:
-          type: string
-          enum:
-            - requested
-            - approved
-            - denied
-        tool_call:
-          type: string
-        tool_name:
-          type: string
-        updated_at:
-          type: string
-          format: date-time
-      required:
-        - id
-        - organization_id
-        - project_id
-        - resource_type
-        - status
-        - blocked_count
-        - requested_at
-        - created_at
-        - updated_at
     ShadowMCPInventoryPolicyBypassForm:
       type: object
       properties:
@@ -65543,6 +64629,9 @@ components:
         interval_seconds:
           type: integer
           format: int64
+        next_cursor:
+          type: string
+          description: Cursor for the next page of scored sessions; absent when exhausted.
         scored_sessions:
           type: array
           items:
@@ -65920,7 +65009,11 @@ components:
           type: string
           description: Start of the UTC day.
           format: date-time
-      description: A UTC-day activation bucket for a skill.
+        skill_version_id:
+          type: string
+          description: The attributed skill version, absent when the observation could not be resolved to a version.
+          format: uuid
+      description: A UTC-day activation bucket for one attributed skill version.
       required:
         - bucket_start
         - activation_count
@@ -69616,49 +68709,6 @@ components:
       required:
         - id
         - name
-    UpdateShadowMCPAccessRuleForm:
-      type: object
-      properties:
-        access_scope:
-          type: string
-          enum:
-            - organization
-            - project
-        display_name:
-          type: string
-        disposition:
-          type: string
-          enum:
-            - allowed
-            - denied
-        id:
-          type: string
-          format: uuid
-        match_breadth:
-          type: string
-          enum:
-            - full_url
-            - url_host
-        match_value:
-          type: string
-        observed_full_url:
-          type: string
-        observed_server_identity:
-          type: string
-        observed_url_host:
-          type: string
-        project_id:
-          type: string
-          format: uuid
-        reason:
-          type: string
-      required:
-        - id
-        - disposition
-        - match_breadth
-        - match_value
-        - display_name
-        - access_scope
     UpdateShadowMCPInventoryServerNameForm:
       type: object
       properties:

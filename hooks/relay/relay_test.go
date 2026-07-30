@@ -552,6 +552,71 @@ func TestCodexSessionEndRelaysCanonicalLifecycle(t *testing.T) {
 	require.Equal(t, "sess-codex-end", *last.Session.ID)
 }
 
+// TestOpenCodeStopRelaysFinalMessage covers the assistant-message path for
+// opencode: the shim splices the transcript's final assistant text into the
+// session.idle input as finalMessage, and it must reach the server as
+// assistant.responded, or transcripts show only tool calls. The prompt is
+// delivered first so the stop event never triggers the runner's
+// prompt-backfill, which keys off machine-global session markers and would
+// make the event count depend on prior runs.
+func TestOpenCodeStopRelaysFinalMessage(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	prompt := []byte(`{"seq":1,"hook":"chat.message","input":{},"output":{"message":{"sessionID":"ses_oc_stop"},"parts":[{"type":"text","text":"hi"}]}}`)
+	payload := []byte(`{"seq":2,"hook":"session.idle","input":{"sessionID":"ses_oc_stop","finalMessage":"final answer"},"output":null}`)
+
+	agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderOpenCode, prompt)
+	require.Equal(t, 1, fs.count())
+
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderOpenCode, payload)
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, 2, fs.count())
+	last := fs.last()
+	require.Equal(t, components.TypeAssistantResponded, last.Event.Type)
+	require.NotNil(t, last.Session)
+	require.NotNil(t, last.Session.ID)
+	require.Equal(t, "ses_oc_stop", *last.Session.ID)
+	require.NotNil(t, last.Data)
+	require.NotNil(t, last.Data.Message)
+	require.NotNil(t, last.Data.Message.Text)
+	require.Equal(t, "final answer", *last.Data.Message.Text)
+	require.NotNil(t, last.Data.Message.Role)
+	require.Equal(t, "assistant", *last.Data.Message.Role)
+}
+
+// TestOpenCodeToolErrorRelaysToolFailed covers the failed-tool path for
+// opencode: tool.execute.after does not fire on error, so the shim forwards
+// the error-state tool part from message.part.updated and it must reach the
+// server as tool.failed. The prompt is delivered first so the tool-error
+// event never triggers the runner's prompt-backfill, which keys off
+// machine-global session markers and would make the event count depend on
+// prior runs.
+func TestOpenCodeToolErrorRelaysToolFailed(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	prompt := []byte(`{"seq":1,"hook":"chat.message","input":{},"output":{"message":{"sessionID":"ses_oc_err"},"parts":[{"type":"text","text":"hi"}]}}`)
+	payload := []byte(`{"seq":2,"hook":"message.part.updated","input":{"part":{"id":"prt-1","sessionID":"ses_oc_err","messageID":"msg-1","type":"tool","callID":"call-1","tool":"read","state":{"status":"error","input":{"filePath":"/tmp/missing.txt"},"error":"File not found"}}},"output":null}`)
+
+	agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderOpenCode, prompt)
+	require.Equal(t, 1, fs.count())
+
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderOpenCode, payload)
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, 2, fs.count())
+	last := fs.last()
+	require.Equal(t, components.TypeToolFailed, last.Event.Type)
+	require.NotNil(t, last.Session)
+	require.NotNil(t, last.Session.ID)
+	require.Equal(t, "ses_oc_err", *last.Session.ID)
+	require.NotNil(t, last.Data)
+	require.NotNil(t, last.Data.ToolCall)
+	require.NotNil(t, last.Data.ToolCall.Name)
+	require.Equal(t, "read", *last.Data.ToolCall.Name)
+	require.Equal(t, "File not found", last.Data.ToolCall.Error)
+}
+
 func TestStopEventsRemainPerTurn(t *testing.T) {
 	fs := newFakeServer(t, nil)
 	cfg := authedConfig(t, fs.URL)
@@ -631,6 +696,31 @@ func TestWritePluginMatchesPublishedEventSets(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWritePluginOpenCodeRendersShim(t *testing.T) {
+	dir := t.TempDir()
+	err := WritePlugin(t.Context(), "opencode", dir, PluginConfig{
+		ServerURL:    "https://gram.test",
+		ProjectSlug:  "default",
+		OrgID:        "org-1",
+		HooksAPIKey:  "shared-key",
+		BrowserLogin: false,
+		BinaryPath:   "/tmp/speakeasy-hooks",
+	})
+	require.NoError(t, err)
+
+	shim, err := os.ReadFile(filepath.Join(dir, ".opencode", "plugin", "agenthooks.ts"))
+	require.NoError(t, err)
+	require.Contains(t, string(shim), `"/tmp/speakeasy-hooks"`)
+	require.Contains(t, string(shim), "--config="+filepath.Join(dir, configFileName))
+	require.Contains(t, string(shim), "--provider=opencode")
+
+	var cfg FileConfig
+	b, err := os.ReadFile(filepath.Join(dir, configFileName))
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(b, &cfg))
+	require.Equal(t, "https://gram.test", cfg.ServerURL)
 }
 
 func TestClaudeConfigChangeIsRelayed(t *testing.T) {
@@ -1326,11 +1416,12 @@ func TestRedactCommandMasksURLQuerySecrets(t *testing.T) {
 }
 
 func TestMCPInventoryRedactionMasksSignedURLCredentials(t *testing.T) {
-	got, ok := redactMCPInventoryURL("https://mcp.example.com/sse?sig=short&X-Amz-Signature=aws-secret&X-Amz-Credential=aws-credential&channel=eng")
+	got, ok := redactMCPInventoryURL("https://mcp.example.com/sse?sig=short&X-Amz-Signature=aws-secret&X-Amz-Credential=aws-credential&oauth_signature=oauth-secret&channel=eng")
 	require.True(t, ok)
 	require.NotContains(t, got, "short")
 	require.NotContains(t, got, "aws-secret")
 	require.NotContains(t, got, "aws-credential")
+	require.NotContains(t, got, "oauth-secret", "prefixed OAuth signature params must redact")
 	require.Contains(t, got, "channel=eng", "non-secret query parameters must survive")
 
 	command := redactCommand("npx -y mcp-remote https://mcp.example.com/sse?X-Goog-Signature=goog-secret&channel=eng")

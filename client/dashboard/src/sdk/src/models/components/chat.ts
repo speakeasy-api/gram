@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { AgentUsage, AgentUsage$inboundSchema } from "./agentusage.js";
+import {
+  ChatContentPart,
+  ChatContentPart$inboundSchema,
+} from "./chatcontentpart.js";
 import { ChatMessage, ChatMessage$inboundSchema } from "./chatmessage.js";
 import { ChatTotals, ChatTotals$inboundSchema } from "./chattotals.js";
 import { RiskSegment, RiskSegment$inboundSchema } from "./risksegment.js";
@@ -30,6 +34,10 @@ export type Chat = {
    * The name of the assistant that produced this chat, if any
    */
   assistantName?: string | undefined;
+  /**
+   * Non-turn content attached to this chat, such as prompt attachments.
+   */
+  contentParts: Array<ChatContentPart>;
   /**
    * When the chat was created.
    */
@@ -148,6 +156,7 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
     agent_usage: z.optional(AgentUsage$inboundSchema),
     assistant_id: z.optional(z.string()),
     assistant_name: z.optional(z.string()),
+    content_parts: z.array(ChatContentPart$inboundSchema),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -194,6 +203,7 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       "agent_usage": "agentUsage",
       "assistant_id": "assistantId",
       "assistant_name": "assistantName",
+      "content_parts": "contentParts",
       "created_at": "createdAt",
       "external_user_id": "externalUserId",
       "has_more_after": "hasMoreAfter",

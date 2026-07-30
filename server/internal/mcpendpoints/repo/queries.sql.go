@@ -70,7 +70,7 @@ VALUES (
     $3,
     $4
 )
-RETURNING id, project_id, custom_domain_id, mcp_server_id, slug, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, custom_domain_id, mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateMCPEndpointParams struct {
@@ -94,6 +94,7 @@ func (q *Queries) CreateMCPEndpoint(ctx context.Context, arg CreateMCPEndpointPa
 		&i.CustomDomainID,
 		&i.McpServerID,
 		&i.Slug,
+		&i.IsDomainRoot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -106,7 +107,7 @@ const deleteMCPEndpoint = `-- name: DeleteMCPEndpoint :one
 UPDATE mcp_endpoints
 SET deleted_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
-RETURNING id, project_id, custom_domain_id, mcp_server_id, slug, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, custom_domain_id, mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteMCPEndpointParams struct {
@@ -123,6 +124,7 @@ func (q *Queries) DeleteMCPEndpoint(ctx context.Context, arg DeleteMCPEndpointPa
 		&i.CustomDomainID,
 		&i.McpServerID,
 		&i.Slug,
+		&i.IsDomainRoot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -132,7 +134,7 @@ func (q *Queries) DeleteMCPEndpoint(ctx context.Context, arg DeleteMCPEndpointPa
 }
 
 const getMCPEndpointByCustomDomainAndSlug = `-- name: GetMCPEndpointByCustomDomainAndSlug :one
-SELECT id, project_id, custom_domain_id, mcp_server_id, slug, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, custom_domain_id, mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
 FROM mcp_endpoints
 WHERE slug = $1
   AND custom_domain_id IS NOT DISTINCT FROM $2
@@ -155,6 +157,7 @@ func (q *Queries) GetMCPEndpointByCustomDomainAndSlug(ctx context.Context, arg G
 		&i.CustomDomainID,
 		&i.McpServerID,
 		&i.Slug,
+		&i.IsDomainRoot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -164,7 +167,7 @@ func (q *Queries) GetMCPEndpointByCustomDomainAndSlug(ctx context.Context, arg G
 }
 
 const getMCPEndpointByID = `-- name: GetMCPEndpointByID :one
-SELECT id, project_id, custom_domain_id, mcp_server_id, slug, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, custom_domain_id, mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
 FROM mcp_endpoints
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -183,6 +186,7 @@ func (q *Queries) GetMCPEndpointByID(ctx context.Context, arg GetMCPEndpointByID
 		&i.CustomDomainID,
 		&i.McpServerID,
 		&i.Slug,
+		&i.IsDomainRoot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -192,7 +196,7 @@ func (q *Queries) GetMCPEndpointByID(ctx context.Context, arg GetMCPEndpointByID
 }
 
 const getMCPEndpointByProjectAndCustomDomainAndSlug = `-- name: GetMCPEndpointByProjectAndCustomDomainAndSlug :one
-SELECT id, project_id, custom_domain_id, mcp_server_id, slug, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, custom_domain_id, mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
 FROM mcp_endpoints
 WHERE project_id = $1
   AND slug = $2
@@ -218,6 +222,7 @@ func (q *Queries) GetMCPEndpointByProjectAndCustomDomainAndSlug(ctx context.Cont
 		&i.CustomDomainID,
 		&i.McpServerID,
 		&i.Slug,
+		&i.IsDomainRoot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -289,7 +294,7 @@ func (q *Queries) ListMCPEndpointsByCustomDomainID(ctx context.Context, customDo
 }
 
 const listMCPEndpointsByMCPServerID = `-- name: ListMCPEndpointsByMCPServerID :many
-SELECT id, project_id, custom_domain_id, mcp_server_id, slug, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, custom_domain_id, mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
 FROM mcp_endpoints
 WHERE project_id = $1
   AND mcp_server_id = $2
@@ -317,6 +322,7 @@ func (q *Queries) ListMCPEndpointsByMCPServerID(ctx context.Context, arg ListMCP
 			&i.CustomDomainID,
 			&i.McpServerID,
 			&i.Slug,
+			&i.IsDomainRoot,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -333,7 +339,7 @@ func (q *Queries) ListMCPEndpointsByMCPServerID(ctx context.Context, arg ListMCP
 }
 
 const listMCPEndpointsByProject = `-- name: ListMCPEndpointsByProject :many
-SELECT id, project_id, custom_domain_id, mcp_server_id, slug, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, custom_domain_id, mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
 FROM mcp_endpoints
 WHERE project_id = $1 AND deleted IS FALSE
 ORDER BY created_at DESC
@@ -354,6 +360,7 @@ func (q *Queries) ListMCPEndpointsByProject(ctx context.Context, projectID uuid.
 			&i.CustomDomainID,
 			&i.McpServerID,
 			&i.Slug,
+			&i.IsDomainRoot,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -373,7 +380,7 @@ const softDeleteMCPEndpointsByCustomDomainID = `-- name: SoftDeleteMCPEndpointsB
 UPDATE mcp_endpoints
 SET deleted_at = clock_timestamp()
 WHERE custom_domain_id = $1::uuid AND deleted IS FALSE
-RETURNING id, project_id, custom_domain_id, mcp_server_id, slug, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, custom_domain_id, mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
 `
 
 // Soft-delete all endpoints registered under a given custom_domain. Used when
@@ -399,6 +406,7 @@ func (q *Queries) SoftDeleteMCPEndpointsByCustomDomainID(ctx context.Context, cu
 			&i.CustomDomainID,
 			&i.McpServerID,
 			&i.Slug,
+			&i.IsDomainRoot,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -418,7 +426,7 @@ const softDeleteMCPEndpointsByMCPServerID = `-- name: SoftDeleteMCPEndpointsByMC
 UPDATE mcp_endpoints
 SET deleted_at = clock_timestamp()
 WHERE mcp_server_id = $1 AND project_id = $2 AND deleted IS FALSE
-RETURNING id, project_id, custom_domain_id, mcp_server_id, slug, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, custom_domain_id, mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
 `
 
 type SoftDeleteMCPEndpointsByMCPServerIDParams struct {
@@ -446,6 +454,7 @@ func (q *Queries) SoftDeleteMCPEndpointsByMCPServerID(ctx context.Context, arg S
 			&i.CustomDomainID,
 			&i.McpServerID,
 			&i.Slug,
+			&i.IsDomainRoot,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -469,7 +478,7 @@ SET
     slug = $3,
     updated_at = clock_timestamp()
 WHERE id = $4 AND project_id = $5 AND deleted IS FALSE
-RETURNING id, project_id, custom_domain_id, mcp_server_id, slug, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, custom_domain_id, mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateMCPEndpointParams struct {
@@ -495,6 +504,7 @@ func (q *Queries) UpdateMCPEndpoint(ctx context.Context, arg UpdateMCPEndpointPa
 		&i.CustomDomainID,
 		&i.McpServerID,
 		&i.Slug,
+		&i.IsDomainRoot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
