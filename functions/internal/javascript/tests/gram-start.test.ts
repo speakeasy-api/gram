@@ -479,7 +479,10 @@ async function callerIdentityOptions(meta: unknown) {
 
 test("forwards caller identity from _meta to the tool", async () => {
   const options = await callerIdentityOptions({
-    "io.modelcontextprotocol/clientInfo": { name: "claude-code", version: "2.1" },
+    "io.modelcontextprotocol/clientInfo": {
+      name: "claude-code",
+      version: "2.1",
+    },
     "gram.ai/oauth-client-id": "client-abc",
   });
 
