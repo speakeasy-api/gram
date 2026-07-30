@@ -46,7 +46,7 @@ import {
  * listFeedback skills
  *
  * @remarks
- * List all-time outcome counts and recent resolved feedback for a skill. Name-only feedback is excluded.
+ * List outcome counts, collection metrics, volume, and recent resolved feedback for a skill. Name-only feedback is excluded.
  */
 export function skillsListFeedback(
   client: GramCore,

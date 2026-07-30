@@ -42,6 +42,10 @@ export function shouldShowRiskRuleId(result: RiskResult): boolean {
   return Boolean(result.ruleId) && !isJudgeSource(result.source);
 }
 
+export function riskResultAnchorId(result: RiskResult): string | undefined {
+  return result.chatContentPartId ?? result.chatMessageId;
+}
+
 /** A finding from gitleaks/presidio carries a literal secret; its match is
  * masked until the viewer explicitly reveals it. */
 export function resultsAreSensitive(

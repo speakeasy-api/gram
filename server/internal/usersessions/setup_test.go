@@ -85,8 +85,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
-
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	enc := testenv.NewEncryptionClient(t)
@@ -144,19 +143,15 @@ func jtiRevoked(t *testing.T, ctx context.Context, r *redis.Client, jti string) 
 	return n > 0
 }
 
-// withExactAuthzGrants flips the auth context to enterprise (so RBAC is
-// enforced) and seeds the supplied grants on a freshly minted role principal,
-// returning a context with those grants prepared. Mirrors the helper used by
-// every other RBAC-tested service in this codebase.
+// withExactAuthzGrants seeds the supplied grants on a freshly minted role
+// principal, returning a context with those grants prepared. Mirrors the
+// helper used by every other RBAC-tested service in this codebase.
 func withExactAuthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...authz.Grant) context.Context {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-	authCtx.AccountType = "enterprise"
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
-
 	principal := urn.NewPrincipal(urn.PrincipalTypeRole, "usersessions-rbac-grants-"+uuid.NewString())
 	for _, grant := range grants {
 		selectors, err := grant.Selector.MarshalJSON()

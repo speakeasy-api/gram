@@ -227,12 +227,12 @@ func snapshotOf(deviceCount int) providers.CoverageSnapshot {
 	devices := make([]providers.CoverageDevice, 0, deviceCount)
 	for i := range deviceCount {
 		devices = append(devices, providers.CoverageDevice{
-			ExternalID:                  fmt.Sprintf("dev-%04d", i+1),
-			SerialNumber:                fmt.Sprintf("SER%04d", i+1),
-			Hostname:                    fmt.Sprintf("mac-%04d", i+1),
-			UserEmail:                   fmt.Sprintf("user%d@example.test", i+1),
-			AssignedUserAgentActive:     i%2 == 0,
-			AssignedUserAgentLastSeenAt: time.Date(2026, 7, 28, 9, 0, 0, 0, time.UTC),
+			ExternalID:      fmt.Sprintf("dev-%04d", i+1),
+			SerialNumber:    fmt.Sprintf("SER%04d", i+1),
+			Hostname:        fmt.Sprintf("mac-%04d", i+1),
+			UserEmail:       fmt.Sprintf("user%d@example.test", i+1),
+			AgentActive:     i%2 == 0,
+			AgentLastSeenAt: time.Date(2026, 7, 28, 9, 0, 0, 0, time.UTC),
 		})
 	}
 	return providers.CoverageSnapshot{
@@ -256,8 +256,8 @@ func TestPushCoverageReplacesSnapshot(t *testing.T) {
 	require.Equal(t, "SER0001", first["serialNumber"])
 	require.Equal(t, "mac-0001", first["hostname"])
 	require.Equal(t, "user1@example.test", first["assignedUserEmail"])
-	require.Equal(t, true, first["assignedUserAgentActive"])
-	require.Equal(t, "2026-07-28T09:00:00Z", first["assignedUserAgentLastSeenAt"])
+	require.Equal(t, true, first["agentActive"])
+	require.Equal(t, "2026-07-28T09:00:00Z", first["agentLastSeenAt"])
 	// The attestation is per assigned user: no device-level claim may leak
 	// into the schema.
 	for key := range first {
@@ -382,12 +382,12 @@ func TestUnassignedDeviceRecord(t *testing.T) {
 		OrganizationID: "org-test",
 		GeneratedAt:    time.Date(2026, 7, 28, 10, 30, 0, 0, time.UTC),
 		Devices: []providers.CoverageDevice{{
-			ExternalID:                  "dev-unassigned",
-			SerialNumber:                "SERX",
-			Hostname:                    "mac-x",
-			UserEmail:                   "",
-			AssignedUserAgentActive:     false,
-			AssignedUserAgentLastSeenAt: time.Time{},
+			ExternalID:      "dev-unassigned",
+			SerialNumber:    "SERX",
+			Hostname:        "mac-x",
+			UserEmail:       "",
+			AgentActive:     false,
+			AgentLastSeenAt: time.Time{},
 		}},
 	}
 	require.NoError(t, s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshot))
@@ -395,8 +395,8 @@ func TestUnassignedDeviceRecord(t *testing.T) {
 	require.Len(t, fake.records, 1)
 	record := fake.records[0]
 	require.Empty(t, record["assignedUserEmail"])
-	require.Equal(t, false, record["assignedUserAgentActive"])
-	_, present := record["assignedUserAgentLastSeenAt"]
+	require.Equal(t, false, record["agentActive"])
+	_, present := record["agentLastSeenAt"]
 	require.False(t, present, "a never-seen agent omits the field entirely — the schema types it as a plain string, so null or a zero timestamp would overclaim")
 }
 
@@ -462,4 +462,60 @@ func TestStrandedSweepNeverCancelsActiveSession(t *testing.T) {
 	require.NoError(t, s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(4)))
 	require.Empty(t, fake.canceled, "only IN_PROGRESS sessions may be cancelled, whatever the listing returns")
 	require.Len(t, fake.records, 4)
+}
+
+// TestPushCoverageEmitsAttestationPerRecord pins the field this integration's
+// whole compliance claim rests on, at the JSON boundary the CUSTOMER's Drata
+// record schema must match. Both strengths must survive one push: a machine
+// whose agent cannot read a serial stays user-attested even for an org on
+// device-level matching.
+func TestPushCoverageEmitsAttestationPerRecord(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeDrata(t)
+	s := fake.newSink(t)
+
+	seen := time.Date(2026, 7, 29, 9, 0, 0, 0, time.UTC)
+	snapshot := providers.CoverageSnapshot{
+		OrganizationID: "org-test",
+		GeneratedAt:    time.Date(2026, 7, 29, 10, 0, 0, 0, time.UTC),
+		Devices: []providers.CoverageDevice{
+			{
+				ExternalID: "dev-attested", SerialNumber: "SER-A", Hostname: "mac-a",
+				UserEmail: "a@example.test", AgentActive: true,
+				AgentAttestation: providers.AttestationDevice, AgentLastSeenAt: seen,
+			},
+			{
+				ExternalID: "dev-user-only", SerialNumber: "SER-B", Hostname: "mac-b",
+				UserEmail: "b@example.test", AgentActive: true,
+				AgentAttestation: providers.AttestationUser, AgentLastSeenAt: seen,
+			},
+		},
+	}
+	require.NoError(t, s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshot))
+
+	require.Len(t, fake.records, 2)
+	byID := map[string]map[string]any{}
+	for _, r := range fake.records {
+		id, ok := r["id"].(string)
+		require.True(t, ok)
+		byID[id] = r
+	}
+
+	attested := byID["dev-attested"]
+	require.Equal(t, "device", attested["agentAttestation"],
+		"a serial-matched device must publish the strong claim under the exact key the docs tell auditors to test")
+	require.Equal(t, true, attested["agentActive"])
+	require.Equal(t, "2026-07-29T09:00:00Z", attested["agentLastSeenAt"])
+
+	userOnly := byID["dev-user-only"]
+	require.Equal(t, "user", userOnly["agentAttestation"],
+		"an email-matched device must publish the weaker claim in the same push")
+	require.Equal(t, true, userOnly["agentActive"])
+
+	// The removed field names must not linger anywhere in the payload.
+	for _, r := range fake.records {
+		require.NotContains(t, r, "assignedUserAgentActive")
+		require.NotContains(t, r, "assignedUserAgentLastSeenAt")
+	}
 }

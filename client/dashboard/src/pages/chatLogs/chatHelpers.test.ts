@@ -5,6 +5,7 @@ import {
   getMatchStrings,
   matchRanges,
   matchShownInDescription,
+  riskResultAnchorId,
 } from "./chatHelpers";
 
 // Minimal RiskResult factory — only the fields the match-display helpers read
@@ -22,7 +23,6 @@ function result(
     createdAt: new Date("2026-07-06T00:00:00Z"),
     source,
     match,
-    replayed: false,
     ...extra,
   };
 }
@@ -158,5 +158,22 @@ describe("getMatchStrings", () => {
   it("returns [] for empty or undefined input", () => {
     expect(getMatchStrings([])).toEqual([]);
     expect(getMatchStrings(undefined)).toEqual([]);
+  });
+});
+
+describe("riskResultAnchorId", () => {
+  it("uses the content-part anchor when present", () => {
+    expect(
+      riskResultAnchorId(
+        result("gitleaks", "secret", {
+          chatMessageId: "message-1",
+          chatContentPartId: "part-1",
+        }),
+      ),
+    ).toBe("part-1");
+  });
+
+  it("falls back to the message anchor for legacy rows", () => {
+    expect(riskResultAnchorId(result("gitleaks", "secret"))).toBe("m1");
   });
 });

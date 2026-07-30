@@ -77,7 +77,7 @@ export type SkillFeedbackQueryError =
  * listFeedback skills
  *
  * @remarks
- * List all-time outcome counts and recent resolved feedback for a skill. Name-only feedback is excluded.
+ * List outcome counts, collection metrics, volume, and recent resolved feedback for a skill. Name-only feedback is excluded.
  */
 export function useSkillFeedback(
   request: ListSkillFeedbackRequest,
@@ -100,7 +100,7 @@ export function useSkillFeedback(
  * listFeedback skills
  *
  * @remarks
- * List all-time outcome counts and recent resolved feedback for a skill. Name-only feedback is excluded.
+ * List outcome counts, collection metrics, volume, and recent resolved feedback for a skill. Name-only feedback is excluded.
  */
 export function useSkillFeedbackSuspense(
   request: ListSkillFeedbackRequest,
@@ -126,7 +126,7 @@ export function useSkillFeedbackSuspense(
  * listFeedback skills
  *
  * @remarks
- * List all-time outcome counts and recent resolved feedback for a skill. Name-only feedback is excluded.
+ * List outcome counts, collection metrics, volume, and recent resolved feedback for a skill. Name-only feedback is excluded.
  */
 export function useSkillFeedbackInfinite(
   request: ListSkillFeedbackRequest,
@@ -163,7 +163,7 @@ export function useSkillFeedbackInfinite(
  * listFeedback skills
  *
  * @remarks
- * List all-time outcome counts and recent resolved feedback for a skill. Name-only feedback is excluded.
+ * List outcome counts, collection metrics, volume, and recent resolved feedback for a skill. Name-only feedback is excluded.
  */
 export function useSkillFeedbackInfiniteSuspense(
   request: ListSkillFeedbackRequest,

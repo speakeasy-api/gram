@@ -113,7 +113,7 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		return out
 	}
 
-	a.publishPromptPolicyScanRequests(ctx, args, policy, messages, indices)
+	a.publishPromptPolicyScanRequests(ctx, args, policy, chatMessageAnchored(messages), indices)
 
 	judgeFanout(
 		ctx, a.judge,

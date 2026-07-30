@@ -25843,6 +25843,7 @@ paths:
                         - claude
                         - cursor
                         - codex
+                        - opencode
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -30461,7 +30462,12 @@ paths:
                 name: FetchRemoteSessionIssuerMetadata
     /rpc/remoteSessionIssuers.get:
         get:
-            description: Get a remote_session_issuer by id or by slug. Provide exactly one.
+            description: |-
+                Get a remote_session_issuer by id, by slug, or by upstream issuer URL. Provide exactly one.
+
+                Looking up by issuer is how an automatic setup flow decides whether an upstream authorization server already has an identity provider before creating one: a 404 means nothing describes that URL yet, so create it. Unlike id and slug, which address at most one record, several issuers may legitimately describe the same URL — a project may keep its own alongside one inherited from its organization or from the platform catalog. This returns the one this project would use, preferring project over organization over platform and, within a tier, the oldest.
+
+                The issuer URL is canonicalized before matching: scheme and host are lowercased, the scheme's default port is dropped, and trailing slashes are stripped. http and https are deliberately NOT equated, path case is significant, and a URL carrying a query or fragment is rejected (RFC 8414 forbids both on issuer identifiers). Canonicalization applies to the supplied URL only, never to stored values, so an issuer recorded with an unusual spelling may not be found and a duplicate is created instead, which is the safe direction to fail.
             operationId: getRemoteSessionIssuer
             parameters:
                 - allowEmptyValue: true
@@ -30478,6 +30484,13 @@ paths:
                   name: slug
                   schema:
                     description: The remote_session_issuer slug.
+                    type: string
+                - allowEmptyValue: true
+                  description: The upstream issuer URL (e.g. https://login.linear.app). Returns the issuer this project would use for that URL, or 404 when none describes it.
+                  in: query
+                  name: issuer
+                  schema:
+                    description: The upstream issuer URL (e.g. https://login.linear.app). Returns the issuer this project would use for that URL, or 404 when none describes it.
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -37533,6 +37546,49 @@ paths:
                     minimum: 1
                     type: integer
                 - allowEmptyValue: true
+                  description: Search skill names, display names, and summaries.
+                  in: query
+                  name: search
+                  schema:
+                    description: Search skill names, display names, and summaries.
+                    maxLength: 256
+                    type: string
+                - allowEmptyValue: true
+                  description: Only return skills from these sources.
+                  in: query
+                  name: source_kinds
+                  schema:
+                    description: Only return skills from these sources.
+                    items:
+                        enum:
+                            - manual
+                            - captured
+                        type: string
+                    type: array
+                - allowEmptyValue: true
+                  description: Only return skills with these classifications.
+                  in: query
+                  name: classifications
+                  schema:
+                    description: Only return skills with these classifications.
+                    items:
+                        enum:
+                            - custom
+                            - built_in
+                        type: string
+                    type: array
+                - allowEmptyValue: true
+                  description: How to order skills.
+                  in: query
+                  name: sort
+                  schema:
+                    default: name
+                    description: How to order skills.
+                    enum:
+                        - name
+                        - updated
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -37775,7 +37831,7 @@ paths:
                 name: SkillDistributions
     /rpc/skills.listFeedback:
         get:
-            description: List all-time outcome counts and recent resolved feedback for a skill. Name-only feedback is excluded.
+            description: List outcome counts, collection metrics, volume, and recent resolved feedback for a skill. Name-only feedback is excluded.
             operationId: listSkillFeedback
             parameters:
                 - allowEmptyValue: true
@@ -38621,6 +38677,107 @@ paths:
             x-speakeasy-name-override: share
             x-speakeasy-react-hook:
                 name: ShareSkill
+    /rpc/skills.triggerSuggestion:
+        post:
+            description: Manually run suggestion analysis for a skill, bypassing automatic feedback and efficacy thresholds while preserving the one-open-suggestion invariant.
+            operationId: triggerSkillSuggestion
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/TriggerSkillSuggestionRequestBody'
+                required: true
+            responses:
+                "202":
+                    description: Accepted response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: triggerSuggestion skills
+            tags:
+                - skills
+            x-speakeasy-name-override: triggerSuggestion
+            x-speakeasy-react-hook:
+                name: TriggerSkillSuggestion
+                type: mutation
     /rpc/skills.undistribute:
         post:
             description: Revoke a skill's active distribution to exactly one plugin or assistant. Repeated requests are a no-op.
@@ -51312,6 +51469,11 @@ components:
                 assistant_name:
                     type: string
                     description: The name of the assistant that produced this chat, if any
+                content_parts:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ChatContentPart'
+                    description: Non-turn content attached to this chat, such as prompt attachments.
                 created_at:
                     type: string
                     description: When the chat was created.
@@ -51413,6 +51575,7 @@ components:
                     description: Full work-units analysis verdict as JSON (per-task breakdown, rationales, and flags). Present only when `work_units` is present.
             required:
                 - messages
+                - content_parts
                 - generation
                 - max_generation
                 - has_more_before
@@ -51447,6 +51610,36 @@ components:
                 - work_units_enabled
                 - work_units_daily_cap
                 - is_default
+        ChatContentPart:
+            type: object
+            properties:
+                content:
+                    type: string
+                    description: The text content.
+                created_at:
+                    type: string
+                    description: When the content part was created.
+                    format: date-time
+                id:
+                    type: string
+                    description: The ID of the content part.
+                is_risk:
+                    type: boolean
+                    description: Whether this content part has an active risk finding.
+                kind:
+                    type: string
+                    description: The content kind, such as prompt_attachment.
+                metadata:
+                    description: Sparse metadata for the content kind.
+                parent_chat_message_id:
+                    type: string
+                    description: The chat message this content hangs off, when resolved.
+            required:
+                - id
+                - kind
+                - content
+                - is_risk
+                - created_at
         ChatMessage:
             type: object
             properties:
@@ -54484,7 +54677,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: Message types to judge (user_message, assistant_message, tool_request, tool_response), matching a policy's message_types. When empty or omitted, judges all supported types.
+                    description: Message types to judge (user_message, assistant_message, tool_request, tool_response, prompt_attachment), matching a policy's message_types. When empty or omitted, judges all supported types.
                 model_config:
                     $ref: '#/components/schemas/RiskPolicyModelConfig'
                 prompt:
@@ -58278,12 +58471,20 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/SkillFeedback'
+                metrics:
+                    $ref: '#/components/schemas/SkillFeedbackMetrics'
                 next_cursor:
                     type: string
                     description: Cursor for the next page; absent when exhausted.
-            description: All-time outcome counts and a newest-first page of feedback for a skill.
+                timeline:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillFeedbackTimelinePoint'
+            description: Outcome counts, collection metrics, a 30-day timeline, and a newest-first page of feedback for a skill.
             required:
                 - counts
+                - metrics
+                - timeline
                 - feedback
         ListSkillSuggestionFeedbackResult:
             type: object
@@ -58340,9 +58541,14 @@ components:
                     items:
                         $ref: '#/components/schemas/Skill'
                     description: The active skills in this page.
+                total_count:
+                    type: integer
+                    description: The total number of active skills matching the filters.
+                    format: int64
             description: A page of active project skills.
             required:
                 - skills
+                - total_count
         ListSourcesResult:
             type: object
             properties:
@@ -61031,7 +61237,7 @@ components:
                     format: uuid
                 message_type:
                     type: string
-                    description: The judged message type (user_message, assistant_message, tool_request, tool_response).
+                    description: The judged message type (user_message, assistant_message, tool_request, tool_response, prompt_attachment).
                 prompt_tokens:
                     type: integer
                     description: Prompt tokens billed for this judge call.
@@ -62660,7 +62866,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: 'Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.'
+                    description: 'Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message, prompt_attachment.'
                 model_config:
                     $ref: '#/components/schemas/RiskPolicyModelConfig'
                 name:
@@ -62949,13 +63155,17 @@ components:
                     type: string
                     description: ID of the durable tool call block recorded for this finding's message, when one exists. Links to the block page at /blocks/:id.
                     format: uuid
+                chat_content_part_id:
+                    type: string
+                    description: The chat content part that was scanned, when the finding is anchored to a content part.
+                    format: uuid
                 chat_id:
                     type: string
                     description: The chat session containing the message.
                     format: uuid
                 chat_message_id:
                     type: string
-                    description: The chat message that was scanned.
+                    description: The chat message that was scanned, when the finding is anchored to a message.
                     format: uuid
                 chat_title:
                     type: string
@@ -62997,9 +63207,6 @@ components:
                     type: integer
                     description: Policy version when this result was produced.
                     format: int64
-                replayed:
-                    type: boolean
-                    description: True when the scanned message arrived as a replay from a device's offline spool after control-plane downtime — the finding was produced retroactively rather than from live traffic.
                 rule_id:
                     type: string
                     description: The matched rule identifier.
@@ -63027,20 +63234,22 @@ components:
                 - id
                 - policy_id
                 - policy_version
-                - chat_message_id
                 - source
                 - created_at
-                - replayed
         RiskResultRedacted:
             type: object
             properties:
+                chat_content_part_id:
+                    type: string
+                    description: The chat content part that was scanned, when the finding is anchored to a content part.
+                    format: uuid
                 chat_id:
                     type: string
                     description: The chat session containing the message.
                     format: uuid
                 chat_message_id:
                     type: string
-                    description: The chat message that was scanned.
+                    description: The chat message that was scanned, when the finding is anchored to a message.
                     format: uuid
                 chat_title:
                     type: string
@@ -63097,7 +63306,6 @@ components:
                 - id
                 - policy_id
                 - policy_version
-                - chat_message_id
                 - source
                 - created_at
                 - match_redacted
@@ -65484,6 +65692,46 @@ components:
                 - did_not_help
                 - misleading
                 - harmful
+        SkillFeedbackMetrics:
+            type: object
+            properties:
+                activations_in_window:
+                    type: integer
+                    description: Resolved skill activations during the collection window.
+                    format: int64
+                converted:
+                    type: integer
+                    description: All-time feedback linked to a generated suggestion.
+                    format: int64
+                feedback_activations_in_window:
+                    type: integer
+                    description: Resolved activations paired to feedback during the collection window.
+                    format: int64
+                feedback_in_window:
+                    type: integer
+                    description: Feedback recorded during the collection window.
+                    format: int64
+                unreviewed:
+                    type: integer
+                    description: Feedback not yet reviewed by suggestion analysis.
+                    format: int64
+                window_end:
+                    type: string
+                    description: The end of the rolling collection window.
+                    format: date-time
+                window_start:
+                    type: string
+                    description: The start of the rolling collection window.
+                    format: date-time
+            description: Feedback collection and suggestion conversion metrics for a skill.
+            required:
+                - window_start
+                - window_end
+                - feedback_in_window
+                - activations_in_window
+                - feedback_activations_in_window
+                - unreviewed
+                - converted
         SkillFeedbackPayload:
             type: object
             properties:
@@ -65516,6 +65764,20 @@ components:
                 - schema_version
                 - skill
                 - outcome
+        SkillFeedbackTimelinePoint:
+            type: object
+            properties:
+                bucket_start:
+                    type: string
+                    description: The start of the UTC day.
+                    format: date-time
+                feedback_count:
+                    type: integer
+                    format: int64
+            description: Feedback volume for one UTC day.
+            required:
+                - bucket_start
+                - feedback_count
         SkillInsightMetrics:
             type: object
             properties:
@@ -68062,6 +68324,15 @@ components:
                     default: 100
                     format: int32
                     minimum: 0
+            required:
+                - id
+        TriggerSkillSuggestionRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The skill ID.
+                    format: uuid
             required:
                 - id
         TumDetailsBreakdown:

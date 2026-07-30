@@ -250,7 +250,7 @@ func (s *Service) ListDismissedRiskResults(ctx context.Context, payload *gen.Lis
 	var nextCursor *riskResultsCursor
 	for i, row := range rows {
 		chatID := row.ChatID.String()
-		result := foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, uuid.Nil, row.ChatMessageID.UUID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.CreatedAt, row.Replayed)
+		result := foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, uuid.Nil, row.ChatMessageID, uuid.NullUUID{}, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.CreatedAt)
 		falsePositiveAt := row.FalsePositiveAt.Time.Format(time.RFC3339)
 		result.FalsePositiveAt = &falsePositiveAt
 		results = append(results, result)

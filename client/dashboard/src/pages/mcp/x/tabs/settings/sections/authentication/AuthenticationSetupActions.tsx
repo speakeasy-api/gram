@@ -5,6 +5,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Button } from "@speakeasy-api/moonshine";
+import type { ReactNode } from "react";
 import type { ProtectedResourceProbeStatus } from "./useProtectedResourceMetadata";
 
 export function AuthenticationSetupActions({
@@ -12,6 +13,7 @@ export function AuthenticationSetupActions({
   hasDiscoveredAuthorizationServer,
   onUseDiscovered,
   onStartManual,
+  additionalAction,
 }: {
   probeStatus: ProtectedResourceProbeStatus;
   // True only when the RFC 9728 probe returned at least one
@@ -20,6 +22,7 @@ export function AuthenticationSetupActions({
   hasDiscoveredAuthorizationServer: boolean;
   onUseDiscovered: () => void;
   onStartManual: () => void;
+  additionalAction?: ReactNode;
 }): JSX.Element {
   const probing = probeStatus === "loading";
   const discoverAvailable =
@@ -71,6 +74,7 @@ export function AuthenticationSetupActions({
         <Button variant="secondary" onClick={onStartManual}>
           <Button.Text>Configure Manually</Button.Text>
         </Button>
+        {additionalAction}
       </div>
     </RequireScope>
   );

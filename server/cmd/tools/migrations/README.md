@@ -6,9 +6,10 @@ reusable **Source → Transform → Sink** pipeline.
 Each concrete migration is a set of three small implementations wired together by
 the shared harness. The migrations shipped today:
 
-| Migration                                            | Doc                                                      |
-| ---------------------------------------------------- | -------------------------------------------------------- |
-| Postgres `risk_results` → ClickHouse `risk_findings` | [RISK_RESULTS_MIGRATION.md](./RISK_RESULTS_MIGRATION.md) |
+| Migration                                                                           | Doc                                                                |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Postgres `risk_results` → ClickHouse `risk_findings`                                | [RISK_RESULTS_MIGRATION.md](./RISK_RESULTS_MIGRATION.md)           |
+| `risk_findings` `message_created_at`/`assistant_id` column backfill (via mutations) | [RISKFINDINGS_COLS_MIGRATION.md](./RISKFINDINGS_COLS_MIGRATION.md) |
 
 ## Concepts
 
@@ -77,12 +78,13 @@ without changing the harness. Publish typed keys as their real Go types
 
 ## Usage
 
-Each migration is invoked through the single `migrations` binary. The flags,
+Each migration is invoked through the single `migrations` binary, selected by
+an optional leading subcommand (omitting it runs `riskfindings`). The flags,
 environment variables, and examples are migration-specific — see the linked doc
 for the migration you want to run. The general shape is:
 
 ```
-go run ./server/cmd/tools/migrations [flags]
+go run ./server/cmd/tools/migrations [migration] [flags]
 ```
 
 `-dry-run` defaults to **true** for every migration: a plain run reads and

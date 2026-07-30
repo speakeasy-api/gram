@@ -663,18 +663,21 @@ LIMIT 1;
 -- heartbeat. Ordered by external id so the snapshot digest is deterministic.
 
 -- name: ListCoverageSnapshotDevices :many
--- Deliberately still user-level. Pushed evidence keeps matching on email
--- until the sink field names change with it: under device-level matching
--- assigned_user_agent_active would be backed by a device heartbeat while
--- still claiming to describe the assigned user, and an auditor reading a
--- stronger claim than the field name supports is the one outcome this
--- integration must not produce. Flipped together with the rename.
+-- Prefers the machine's own heartbeat, falling back to its assigned user's.
+-- device_attested travels with each row because the answer is per device, not
+-- per org: even with device-level matching on, a machine whose agent cannot
+-- report a serial is still only user-attested, and pushed evidence must say
+-- so rather than let the stronger claim leak across.
 SELECT
     d.external_id
   , d.serial_number
   , d.hostname
   , d.user_email
-  , das.last_seen_at AS agent_last_seen_at
+  , (CASE
+      WHEN @device_level::boolean AND dads.id IS NOT NULL THEN dads.last_seen_at
+      ELSE das.last_seen_at
+    END)::timestamptz AS agent_last_seen_at
+  , (@device_level::boolean AND dads.id IS NOT NULL) AS device_attested
 FROM mdm_devices d
 JOIN device_integration_configs c
   ON c.id = d.device_integration_config_id
@@ -682,6 +685,9 @@ JOIN device_integration_configs c
 LEFT JOIN device_agent_syncs das
   ON das.organization_id = d.organization_id
  AND LOWER(das.email) = LOWER(d.user_email)
+LEFT JOIN device_agent_device_syncs dads
+  ON dads.organization_id = d.organization_id
+ AND LOWER(dads.serial_number) = LOWER(d.serial_number)
 WHERE d.organization_id = @organization_id
   AND d.missing_since IS NULL
 ORDER BY d.external_id ASC, d.id ASC;

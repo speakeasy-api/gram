@@ -53,6 +53,10 @@ func (t *List) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Re
 	result, err := t.skills.List(ctx, &genskills.ListPayload{
 		Cursor:           input.Cursor,
 		Limit:            input.Limit,
+		Search:           nil,
+		SourceKinds:      nil,
+		Classifications:  nil,
+		Sort:             "name",
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,

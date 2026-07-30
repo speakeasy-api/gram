@@ -50,6 +50,8 @@ func chOverviewFinding(t *testing.T, projectID uuid.UUID, orgID string, chatID, 
 		FingerprintTenantHS256:   "",
 		ExcludedAt:               nil,
 		ExclusionID:              nil,
+		MessageCreatedAt:         createdAt,
+		AssistantID:              "",
 	}
 }
 
@@ -187,7 +189,6 @@ func TestGetRiskOverview_ClickHouseParity(t *testing.T) {
 	for _, point := range result.TimeSeriesFindings {
 		timeSeries[point.Category+"|"+point.BucketStart] = point.Findings
 	}
-
 	bucket := func(offset time.Duration) string {
 		return from.Add(offset).Truncate(time.Hour).Format(time.RFC3339)
 	}
@@ -373,4 +374,32 @@ func TestGetRiskOverview_ClickHouseUserEmailPrecedence(t *testing.T) {
 	}
 	require.Equal(t, int64(1), users[userEmail])
 	require.Equal(t, int64(1), users["Unknown user"])
+}
+
+func TestRiskFindingsTTLRemovesExpiredRows(t *testing.T) { //nolint:paralleltest // OPTIMIZE mutates the ClickHouse table shared by this package's tests.
+	ctx, ti := newTestRiskService(t)
+
+	const retention = 90 * 24 * time.Hour
+	now := time.Now().UTC()
+	projectID := uuid.New()
+	orgID := "org_" + uuid.NewString()
+	expired := chOverviewFinding(t, projectID, orgID, uuid.New(), uuid.New(), now.Add(-retention-24*time.Hour), "gitleaks", "secret.github_pat", "expired@example.com")
+	retained := chOverviewFinding(t, projectID, orgID, uuid.New(), uuid.New(), now.Add(-retention+24*time.Hour), "gitleaks", "secret.github_pat", "retained@example.com")
+
+	queries := chrepo.New(ti.chConn)
+	require.NoError(t, queries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{expired, retained}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	// TTL deletion normally happens during background merges. Force a merge so
+	// this test observes the retention contract deterministically.
+	require.NoError(t, ti.chConn.Exec(ctx, "OPTIMIZE TABLE risk_findings FINAL"))
+
+	var expiredCount, retainedCount uint64
+	require.NoError(t, ti.chConn.QueryRow(ctx, `
+		SELECT countIf(id = ?), countIf(id = ?)
+		FROM risk_findings
+		WHERE organization_id = ? AND project_id = ?
+	`, expired.ID, retained.ID, orgID, projectID.String()).Scan(&expiredCount, &retainedCount))
+	require.Zero(t, expiredCount)
+	require.Equal(t, uint64(1), retainedCount)
 }

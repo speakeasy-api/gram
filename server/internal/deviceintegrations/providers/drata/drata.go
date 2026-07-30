@@ -17,17 +17,20 @@
 //	    "serialNumber": { "type": "string" },
 //	    "hostname": { "type": "string" },
 //	    "assignedUserEmail": { "type": "string" },
-//	    "assignedUserAgentActive": { "type": "boolean" },
-//	    "assignedUserAgentLastSeenAt": { "type": "string" }
+//	    "agentActive": { "type": "boolean" },
+//	    "agentAttestation": { "type": "string" },
+//	    "agentLastSeenAt": { "type": "string" }
 //	  }
 //	}
 //
-// Evidence precision: agent presence is attested per assigned USER, not per
-// device — the field names say exactly that (assignedUserAgentActive, never
-// "device_monitored"), and assignedUserAgentLastSeenAt is omitted (not
-// null, not zero) when the assigned user has never synced an agent. An
-// auditor consuming a stronger claim than we can support is worse than no
-// integration.
+// Evidence precision: every record states its own attestation strength.
+// agentAttestation "device" means that machine's agent reported in (matched
+// on hardware serial); "user" means only that its assigned user runs one
+// somewhere (matched on email). Both can appear in one push, because a
+// machine whose agent cannot read a serial stays user-attested even for an
+// org on device-level matching. agentLastSeenAt is omitted (not null, not
+// zero) when no agent has ever synced. An auditor consuming a stronger claim
+// than we can support is worse than no integration.
 //
 // Endpoints used (all under the region's public API base URL):
 //
@@ -338,29 +341,35 @@ func (s *sink) TestConnection(ctx context.Context, creds providers.Credentials, 
 // record schema types it as a plain string, and an explicit null (or a zero
 // timestamp masquerading as evidence) would overstate what we can prove.
 type coverageRecord struct {
-	ID                          string  `json:"id"`
-	SerialNumber                string  `json:"serialNumber"`
-	Hostname                    string  `json:"hostname"`
-	AssignedUserEmail           string  `json:"assignedUserEmail"`
-	AssignedUserAgentActive     bool    `json:"assignedUserAgentActive"`
-	AssignedUserAgentLastSeenAt *string `json:"assignedUserAgentLastSeenAt,omitempty"`
+	ID                string `json:"id"`
+	SerialNumber      string `json:"serialNumber"`
+	Hostname          string `json:"hostname"`
+	AssignedUserEmail string `json:"assignedUserEmail"`
+	AgentActive       bool   `json:"agentActive"`
+	// agentAttestation is what keeps agentActive honest per row: "device"
+	// means this machine's own agent reported in, "user" means only that its
+	// assigned user runs one somewhere. An auditor reading agentActive
+	// without it would be reading a claim we may not be making.
+	AgentAttestation string  `json:"agentAttestation"`
+	AgentLastSeenAt  *string `json:"agentLastSeenAt,omitempty"`
 }
 
 func buildRecords(snapshot providers.CoverageSnapshot) []coverageRecord {
 	records := make([]coverageRecord, 0, len(snapshot.Devices))
 	for _, d := range snapshot.Devices {
 		var lastSeen *string
-		if !d.AssignedUserAgentLastSeenAt.IsZero() {
-			formatted := d.AssignedUserAgentLastSeenAt.UTC().Format(time.RFC3339)
+		if !d.AgentLastSeenAt.IsZero() {
+			formatted := d.AgentLastSeenAt.UTC().Format(time.RFC3339)
 			lastSeen = &formatted
 		}
 		records = append(records, coverageRecord{
-			ID:                          d.ExternalID,
-			SerialNumber:                d.SerialNumber,
-			Hostname:                    d.Hostname,
-			AssignedUserEmail:           d.UserEmail,
-			AssignedUserAgentActive:     d.AssignedUserAgentActive,
-			AssignedUserAgentLastSeenAt: lastSeen,
+			ID:                d.ExternalID,
+			SerialNumber:      d.SerialNumber,
+			Hostname:          d.Hostname,
+			AssignedUserEmail: d.UserEmail,
+			AgentActive:       d.AgentActive,
+			AgentAttestation:  string(d.AgentAttestation),
+			AgentLastSeenAt:   lastSeen,
 		})
 	}
 	return records

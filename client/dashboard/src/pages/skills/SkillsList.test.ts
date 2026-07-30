@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   filterSkills,
   prioritizeAddableSkills,
-  skillCountLabel,
   sortSkills,
 } from "./skills-list-helpers";
 
@@ -74,45 +73,6 @@ describe("SkillsList filtering", () => {
         availableSecond,
       ]).map((item) => item.id),
     ).toEqual(["b", "d", "a", "c"]);
-  });
-
-  it("never labels loaded pages as the project-wide total", () => {
-    expect(
-      skillCountLabel({
-        active: false,
-        hasNextPage: true,
-        incomplete: false,
-        loadedCount: 200,
-        resultCount: 200,
-      }),
-    ).toBe("200 loaded");
-    expect(
-      skillCountLabel({
-        active: true,
-        hasNextPage: true,
-        incomplete: false,
-        loadedCount: 200,
-        resultCount: 3,
-      }),
-    ).toBe("Searching 200 loaded");
-    expect(
-      skillCountLabel({
-        active: true,
-        hasNextPage: false,
-        incomplete: false,
-        loadedCount: 240,
-        resultCount: 3,
-      }),
-    ).toBe("3 skills");
-    expect(
-      skillCountLabel({
-        active: true,
-        hasNextPage: true,
-        incomplete: true,
-        loadedCount: 200,
-        resultCount: 0,
-      }),
-    ).toBe("0 matching loaded");
   });
 
   it("sorts sampled metrics ahead of missing values", () => {

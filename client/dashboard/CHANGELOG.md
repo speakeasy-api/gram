@@ -1,5 +1,84 @@
 # dashboard
 
+## 0.96.0
+
+### Minor Changes
+
+- 4bf8450: Let tenants inherit and attach clients to platform (global) remote identity providers while the issuers themselves stay read-only, and keep tenant clients on a platform issuer fully manageable through the organization-admin surface. The dashboard renders the new `Platform` tier and resolves issuers by `project > organization > platform` precedence.
+- 725bfaa: Skill edit suggestions now support batch apply: select individual proposed changes and apply them together as a single new version. The batch controls moved from the per-change comment box to a control bar above the diff.
+- 598799f: Add the MDM Integrations dashboard: an org-level catalog page listing MDM
+  and compliance providers from the backend registry, with a credential sheet
+  rendered from each provider's field spec (secret values masked and
+  write-only), a save → test-connection → enable flow, and per-schedule sync
+  status with pause/resume and sync-now controls. The Device Agent page gains a
+  coverage section joining MDM-managed devices against agent heartbeats, with
+  per-bucket summary tiles and a filterable device list that visually
+  distinguishes the stale-agent drift case. Both surfaces are gated behind the
+  `gram-device-integrations` PostHog flag.
+- 432d06c: feat: device-level agent coverage behind a rollout flag
+
+  Coverage can now match a device's hardware serial against per-device agent
+  heartbeats instead of its assigned-user email, falling back to email when no
+  serial match exists. Adds an `agent_other_device` bucket for "the user runs
+  the agent, just not on this machine", and an `attestation` field so clients
+  word the coverage claim to match the mode. Gated per org by the
+  `device-level-coverage` PostHog flag; evidence pushes stay user-level until
+  the sink field names change with them.
+
+- 811d494: automatically publish tool metadata from dashboard
+- a1e2015: opencode observability: surface opencode as a hook source in the dashboard (icon, platform filters) and add its install instructions to the setup flow.
+- ce74cd3: Paginate scored skill sessions, collapse their table by default, and link chats to the agent sessions explorer.
+- 43018c5: permission remote MCP tools by name in the role editor
+
+### Patch Changes
+
+- 7147f70: Persist edits made from the Playground's Add/Manage Tools dialog. Failed edits remain open for retry instead of reporting success before the update is saved.
+- b6d3a27: Add skill feedback metrics, grouped review evidence, and manually triggered suggestion analysis.
+- 703756b: Add `fetchMetadata` and `refreshMetadata` across all three remote identity provider tiers. `fetchMetadata` is keyed by issuer URL and persists nothing, as the pre-create step; `refreshMetadata` is keyed by issuer id and re-reads an existing provider's RFC 8414 document, persisting only discovered values (endpoints, the `*_supported` arrays, `client_id_metadata_document_supported`, and the documentation URLs) while leaving Gram's own behavior and display fields untouched. A "Refresh Discoverable Metadata" action is available from the Remote Identity Providers listing.
+- c93a9e1: Show the judge's rationale for prompt injection and prompt-based policy findings in Risk Events and the risk overview category drill-down, and drop the rule label for those findings since it only restated the category.
+- 023bec6: Use the searchable multi-select skill picker when attaching skills to assistants.
+- 6cc0201: Redesign the "Book a demo" enterprise gate on the shared auth shell, so it matches the login, register, and switch-organization screens. The page now carries the brand gradient strip, the control-plane header with a Log out action, and the animated governed-agent session alongside the booking card. The Cal.com embed is framed as a native booking card — its own theme variables are set from the auth-brand palette so the calendar reads as part of the page rather than an embedded iframe — and the details handed to the calendar are footnoted underneath.
+
+  The embed's appearance settings are now sent through Cal's `ui` instruction. They were previously passed as prefill config, where Cal ignored them, so the embed had been rendering its own event-title block over the card header and none of the brand colors were applied.
+
+- 7734a63: Chart skill activations by version across the rolling 30-day window.
+- 4225015: Custom domains that stay unhealthy for over a week (7+ consecutive failed daily checks) are now automatically disabled: their routing and TLS certificate are removed, and the dashboard explains what went wrong and walks admins through fixing the issue and reverifying the domain. Gram-side check failures never count toward disabling.
+- d3ad7d3: Add the device integrations framework: a capability-based provider registry (`InventorySource` for MDM fleet pulls, `EvidenceSink` for compliance evidence pushes) and a new `deviceIntegrations` management service. Organizations can connect a provider with secret credentials stored as an encrypted write-only document and non-secret settings kept readable, validated against the provider's declared field spec; credential rotation updates the config in place so synced device inventory is never orphaned. The service exposes provider discovery (credential specs drive dashboard form rendering), config CRUD with audit logging, a bounded test-connection probe through the SSRF-hardened guardian client, per-schedule state with distinct user-disable and system-auto-pause semantics, and agent-coverage reads: a bucketed summary (active / stale / no agent / no email / unresolved / missing, plus unmanaged agent users) and a paginated device listing, both computed as read-time joins between MDM inventory and the per-user agent heartbeat.
+
+  Settings updates merge per key with the stored document (omitted keys keep their values), credential rotation resets the schedules' sync execution state and pushed-snapshot digest, and audit before-snapshots are read inside the upsert transaction. The dashboard's OTel forwarding section is updated for a generated SDK type rename.
+
+- 3558aa7: Device integrations: enabling a connection (and "Sync now") triggers the
+  sync coordinator immediately instead of waiting for its next tick; the
+  configure sheet disables the connection test while the draft has unsaved
+  changes and explains that tests run against saved credentials; managed
+  device and schedule tables get properly spaced empty states; and the Iru
+  provider rejects the tenant console URL with an error naming the correct
+  API URL.
+- cda58dc: Remove the unused `replayed` field from the `RiskResult` API type. The flag was
+  denormalized from the scanned chat message onto every risk listing row but never
+  rendered by any consumer; dropping it shrinks the listing queries ahead of
+  serving the Risk Events page from ClickHouse.
+- efe9101: Add the Microsoft Intune inventory-source provider to device integrations:
+  Entra ID client-credentials auth (classifying Entra's 400 invalid_client
+  shape as a credential rejection), field-selected managed-device pulls via
+  Microsoft Graph with server-driven nextLink pagination (cursor validated to
+  stay on the Graph host), and mapping into the normalized managed-device
+  shape with emailAddress-then-UPN user attribution.
+- c5ca622: Add the Jamf Pro inventory-source provider to the device integrations framework, plus its dashboard presentation entry (Apple-fleet icon and console setup steps for minting the least-privilege API client). Organizations connect a Jamf Cloud tenant with an instance URL and least-privilege API Client credentials (an API Role with only "Read Computers"); the provider authenticates via the OAuth client-credentials grant with the token cached until expiry, pulls the computer inventory in stably ordered, section-filtered pages, and maps each device's serial, hostname, OS, assigned-user email, and last check-in into the managed-device store — preserving the full vendor record. Credential rejections, including tokens expiring mid-pull, classify as auth errors feeding the scheduler's auto-pause streak, and every API request carries the unique User-Agent header the Jamf Technology Partner Program requires.
+- df696de: Page the skills table and move its default search, filters, and sorting to the server.
+- 8eafabf: Tunneled MCP servers can now be published with public visibility, letting anyone call them anonymously with no login. Turn on **Public Access** for a tunnel source, then set an MCP server fronting it to Public. Public tunneled servers expose every tool to the open internet, so a high-friction confirmation guards the toggle and the MCP server visibility control stays locked to Private until the source opts in.
+- 3f11ea3: Remove the unused Redis-backed Shadow MCP access-rule and approval-request API in favor of risk policy bypass grants.
+- d960f03: Show the required permission on the page-level access-restricted screen. A "What access do I need?" disclosure expands into a bordered panel naming the scopes an organization admin can grant, so a blocked user knows what to ask for instead of just being told they lack access.
+- ea27950: Prioritize addable skills and add search to the plugin skill picker.
+- 074cb4b: Show the skill efficacy methodology in the dashboard instead of linking to GitHub.
+- 4f941e2: Label skill version history actions as rollbacks or roll-forwards relative to the current version.
+- d9fe35f: Redesign the switch-organization screen and the no-access gate on the new auth shell. The dropdown is replaced with a selectable organization list that pins the current org under a "Current" chip, the gate variant shows a no-access banner for the blocked org above the switchable list, and both screens get a Log out link in the shell header.
+- 8880982: Polish trial-facing setup and administration surfaces: use current Speakeasy
+  branding on public install pages, return an empty custom-domain list without a
+  404, remove invalid DOM and SVG attributes, explain unavailable collection
+  installs, and focus observability setup on supported integrations.
+- b3d06d1: Explain tokens under management on the billing page with the same definition as the public billing docs, and link the info affordances straight to that docs section.
+
 ## 0.95.0
 
 ### Minor Changes

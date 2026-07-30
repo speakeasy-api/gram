@@ -120,7 +120,9 @@ type DevicePage struct {
 // AgentAttestation names which claim a piece of coverage evidence supports.
 // It is per DEVICE, not per organization: even with device-level matching
 // enabled, a machine whose agent cannot report a serial is matched by its
-// assigned user's email and is therefore only user-attested.
+// assigned user's email and is therefore only user-attested. It therefore
+// travels with every pushed record, and the coverage API downgrades a whole
+// response to the weaker value when any active device carries it.
 type AgentAttestation string
 
 const (
@@ -132,20 +134,29 @@ const (
 	AttestationUser AgentAttestation = "user"
 )
 
-// CoverageDevice is one device's entry in an evidence snapshot. Field naming
-// is deliberate: agent presence is attested per assigned user, not per
-// device, so sinks must never present these as "device monitored".
+// CoverageDevice is one device's entry in an evidence snapshot.
+//
+// Attestation is carried as data rather than encoded in field names. Naming
+// the fields for one claim (assignedUserAgentActive, or deviceAgentActive)
+// forces every record into that claim's strength, which is wrong in both
+// directions: the former undersells a serial-matched device, and the latter
+// asserts of an email-matched one something we cannot prove. A stable schema
+// plus an explicit AgentAttestation lets an auditor see exactly which
+// evidence backs each row.
 type CoverageDevice struct {
 	ExternalID   string
 	SerialNumber string
 	Hostname     string
 	UserEmail    string
-	// AssignedUserAgentActive reports whether the device's assigned user has
-	// an agent heartbeat within the freshness window.
-	AssignedUserAgentActive bool
-	// AssignedUserAgentLastSeenAt is the assigned user's latest agent
-	// heartbeat; zero when the user has never synced an agent.
-	AssignedUserAgentLastSeenAt time.Time
+	// AgentActive reports whether the attested agent heartbeat is within the
+	// freshness window. Read it together with AgentAttestation: what it
+	// asserts depends on which match produced it.
+	AgentActive bool
+	// AgentAttestation is the strength of AgentActive for this device.
+	AgentAttestation AgentAttestation
+	// AgentLastSeenAt is the attested agent's latest heartbeat; zero when no
+	// agent has ever synced for this device or its assigned user.
+	AgentLastSeenAt time.Time
 }
 
 // CoverageSnapshot is the full evidence set an EvidenceSink pushes. Pushes

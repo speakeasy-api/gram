@@ -1,6 +1,7 @@
 package customdomains
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/k8s"
@@ -43,12 +44,21 @@ type HealthObservation struct {
 	CertificateExpiresAt *time.Time
 }
 
-func HealthIssueMessage(issue HealthIssue) string {
+// HealthIssueMessage renders the customer-facing description of a health
+// issue. expectedCNAME is the CNAME target customers must point their domain
+// at; product messaging names the exact record instead of the platform.
+func HealthIssueMessage(issue HealthIssue, expectedCNAME string) string {
 	switch issue {
 	case HealthIssueDNSNotFound:
+		if expectedCNAME != "" {
+			return fmt.Sprintf("DNS records for the domain could not be found. Create a CNAME record pointing the domain at %s.", expectedCNAME)
+		}
 		return "DNS records for the domain could not be found."
 	case HealthIssueDNSTargetMismatch:
-		return "The domain's DNS no longer resolves to Gram's endpoint."
+		if expectedCNAME != "" {
+			return fmt.Sprintf("The domain's DNS no longer resolves to the expected target. Point the domain's CNAME record at %s.", expectedCNAME)
+		}
+		return "The domain's DNS no longer resolves to the expected target."
 	case HealthIssueResourceMissing:
 		return "The routing configuration for the domain is missing."
 	case HealthIssueCertificateMissing,
