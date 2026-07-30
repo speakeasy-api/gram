@@ -1816,11 +1816,12 @@ const RISK_FINDING_CATALOG: [string, string, string, string, number][] = [
   ],
   // Prompt injection — match carries the full flagged event (the shape
   // judgemessage.Render produces), so the Risk Events "View event" dialog has a
-  // real payload to reveal instead of an opaque fingerprint.
+  // real payload to reveal instead of an opaque fingerprint. The description is
+  // the judge's rationale, which is what the Evidence column renders inline.
   [
     "prompt_injection",
     "prompt_injection",
-    "Prompt injection attempt",
+    "The user message overrides its prior instructions and directs the agent to disclose its system prompt and exfiltrate customer data to an external address.",
     JSON.stringify({
       produced_by: "end_user",
       body_kind: "content",
@@ -1833,7 +1834,7 @@ const RISK_FINDING_CATALOG: [string, string, string, string, number][] = [
   [
     "llm_judge",
     "llm_judge",
-    "Message matched the prompt-based policy (destructive tool call).",
+    "The tool call creates an issue instructing operators to run `rm -rf /var/data` fleet-wide, which the policy prohibits for irreversible infrastructure actions.",
     JSON.stringify({
       produced_by: "ai_assistant_tool_call",
       body_kind: "tool_calls",
@@ -1852,7 +1853,7 @@ const RISK_FINDING_CATALOG: [string, string, string, string, number][] = [
   [
     "llm_judge",
     "llm_judge",
-    "Message matched the prompt-based policy (financial policy violation).",
+    "The user asks the agent to move corporate funds to an external account and to omit the transfer from the books, which the policy treats as a financial-controls violation.",
     JSON.stringify({
       produced_by: "end_user",
       body_kind: "content",
