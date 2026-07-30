@@ -397,6 +397,53 @@ describe("OAuthWizard — rendering", () => {
     });
   });
 
+  it("does not overwrite manual metadata entered during the auto-discovery debounce", async () => {
+    let resolveDiscovery:
+      | ((value: Awaited<ReturnType<typeof mocks.discoverIssuer>>) => void)
+      | undefined;
+    mocks.discoverIssuer.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveDiscovery = resolve;
+      }),
+    );
+    renderWizard({ initialPath: "external" });
+
+    fireEvent.change(screen.getByPlaceholderText("https://login.example.com"), {
+      target: { value: "https://auth.example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Advanced metadata" }));
+    const metadataInput = screen.getByLabelText(
+      "OAuth Authorization Server Metadata",
+    ) as HTMLTextAreaElement;
+    const manualMetadata = JSON.stringify({
+      issuer: "https://auth.example.com",
+      authorization_endpoint: "https://manual.example.com/authorize",
+      token_endpoint: "https://manual.example.com/token",
+      registration_endpoint: "https://manual.example.com/register",
+    });
+    fireEvent.change(metadataInput, {
+      target: { value: manualMetadata },
+    });
+
+    await waitFor(() => {
+      expect(mocks.discoverIssuer).toHaveBeenCalledTimes(1);
+    });
+    resolveDiscovery?.({
+      issuer: "https://auth.example.com",
+      authorizationEndpoint: "https://auth.example.com/oauth/authorize",
+      tokenEndpoint: "https://auth.example.com/oauth/token",
+      registrationEndpoint: "https://auth.example.com/oauth/register",
+      clientIdMetadataDocumentSupported: false,
+      discoveryWarnings: [],
+      oidc: false,
+      passthrough: true,
+    });
+
+    await waitFor(() => {
+      expect(metadataInput.value).toBe(manualMetadata);
+    });
+  });
+
   it("offers an explicit retry after automatic discovery fails", async () => {
     mocks.discoverIssuer.mockRejectedValueOnce(new Error("Temporary failure"));
     renderWizard({ initialPath: "external" });

@@ -81,6 +81,7 @@ export function ExternalOAuthForm({
   externalRef.current = external;
   const issuerUrlRef = useRef(external.issuerUrl);
   issuerUrlRef.current = external.issuerUrl;
+  const manualMetadataDirtyRef = useRef(false);
   const lastAutoDiscoveryRef = useRef(
     external.metadataJson ? external.issuerUrl.trim() : "",
   );
@@ -139,7 +140,11 @@ export function ExternalOAuthForm({
       }
 
       if (purpose === "auto") {
-        if (externalRef.current.metadataJson !== metadataJsonAtStart) return;
+        if (
+          manualMetadataDirtyRef.current ||
+          externalRef.current.metadataJson !== metadataJsonAtStart
+        )
+          return;
         send({
           type: "FIELD_EXTERNAL",
           key: "metadataJson",
@@ -225,6 +230,7 @@ export function ExternalOAuthForm({
   };
 
   const handleMetadataChange = (value: string) => {
+    manualMetadataDirtyRef.current = true;
     clearVerification();
     send({ type: "FIELD_EXTERNAL", key: "metadataJson", value });
   };
