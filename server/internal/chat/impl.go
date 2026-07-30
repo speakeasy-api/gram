@@ -676,12 +676,14 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// A Speakeasy admin impersonating an org via the dev-tools override holds
-	// every scope (see authz.Engine), so RBAC cannot stop them — block
-	// transcript access explicitly before any session data is read.
-	if _, impersonating := contextvalues.GetAdminOverrideFromContext(ctx); impersonating && authCtx.IsAdmin {
-		return nil, oops.E(oops.CodeForbidden, nil, "chat sessions cannot be opened while impersonating an organization")
-	}
+	// Speakeasy admins impersonating an org via the dev-tools override hold
+	// every scope (see authz.Engine), so RBAC cannot stop them. Allow the load
+	// — the same transcript is already reachable via risk policy tooling
+	// (e.g. risk.evals.evaluate) — but skip the customer-visible
+	// chat_session:access audit entry so Speakeasy staff never appear in the
+	// customer's audit feed (DNO-391).
+	_, impersonatingAdmin := contextvalues.GetAdminOverrideFromContext(ctx)
+	skipAccessAudit := impersonatingAdmin && authCtx.IsAdmin
 
 	chatID, err := uuid.Parse(payload.ID)
 	if err != nil {
@@ -740,8 +742,10 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	// (before_seq/after_seq) reuses the same open and is not re-logged; only
 	// session-authenticated (dashboard) reads are recorded, since chat-token,
 	// external-user, and assistant reads are the owner/runtime consuming their
-	// own transcript rather than a reviewer accessing a session.
-	if authCtx.SessionID != nil && payload.BeforeSeq == nil && payload.AfterSeq == nil {
+	// own transcript rather than a reviewer accessing a session. Impersonating
+	// Speakeasy admins are excluded so staff support reads stay out of the
+	// customer-facing audit feed.
+	if !skipAccessAudit && authCtx.SessionID != nil && payload.BeforeSeq == nil && payload.AfterSeq == nil {
 		if err := s.logChatAccess(ctx, authCtx, chat); err != nil {
 			return nil, err
 		}

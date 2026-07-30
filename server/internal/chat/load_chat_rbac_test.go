@@ -116,10 +116,11 @@ func TestLoadChat_AuditsSessionAccess(t *testing.T) {
 	require.Equal(t, ti.projectID, rec.ProjectID.UUID)
 }
 
-// A Speakeasy admin impersonating an org via the dev-tools override is blocked
-// from opening chat sessions outright, even though impersonation grants every
-// scope, and no chat_session:access audit event is written.
-func TestLoadChat_ImpersonatingAdminBlocked(t *testing.T) {
+// A Speakeasy admin impersonating an org via the dev-tools override can still
+// load chat sessions (needed for support workflows such as the risk-policy
+// traffic preview), but no chat_session:access audit event is written so
+// Speakeasy staff never appear in the customer's audit feed.
+func TestLoadChat_ImpersonatingAdminSkipsAudit(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
 	ctx := initSessionCtx(t, ti)
@@ -135,15 +136,13 @@ func TestLoadChat_ImpersonatingAdminBlocked(t *testing.T) {
 	before, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionChatSessionAccess)
 	require.NoError(t, err)
 
-	_, err = ti.service.LoadChat(adminCtx, loadPayload(other.String()))
-	require.Error(t, err)
-	var shareable *oops.ShareableError
-	require.ErrorAs(t, err, &shareable)
-	require.Equal(t, oops.CodeForbidden, shareable.Code)
+	res, err := ti.service.LoadChat(adminCtx, loadPayload(other.String()))
+	require.NoError(t, err)
+	require.Equal(t, other.String(), res.ID)
 
 	after, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionChatSessionAccess)
 	require.NoError(t, err)
-	require.Equal(t, before, after, "blocked opens must not record an access audit event")
+	require.Equal(t, before, after, "impersonated opens must not record an access audit event")
 }
 
 // A stray admin-override cookie on a non-admin session has no effect: auth
