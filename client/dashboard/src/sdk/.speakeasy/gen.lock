@@ -579,6 +579,7 @@ trackedFiles:
   src/models/components/challengeresolution.ts: {}
   src/models/components/chat.ts: {}
   src/models/components/chatanalysissettings.ts: {}
+  src/models/components/chatcontentpart.ts: {}
   src/models/components/chatmessage.ts: {}
   src/models/components/chatoverview.ts: {}
   src/models/components/chatsummary.ts: {}
@@ -6214,7 +6215,7 @@ examples:
           risk_only: false
       responses:
         "200":
-          application/json: {"created_at": "2025-04-09T14:22:10.370Z", "generation": 828666, "has_more_after": true, "has_more_before": false, "id": "<id>", "last_message_timestamp": "2026-11-05T12:22:55.772Z", "max_generation": 159680, "messages": [{"created_at": "2025-03-05T16:47:00.180Z", "generation": 822312, "id": "<id>", "model": "Escalade", "role": "<value>", "seq": 948464}], "num_messages": 330731, "title": "<value>", "updated_at": "2026-01-13T22:10:05.983Z"}
+          application/json: {"content_parts": [], "created_at": "2025-04-09T14:22:10.370Z", "generation": 828666, "has_more_after": true, "has_more_before": false, "id": "<id>", "last_message_timestamp": "2026-11-05T12:22:55.772Z", "max_generation": 159680, "messages": [{"created_at": "2025-03-05T16:47:00.180Z", "generation": 822312, "id": "<id>", "model": "Escalade", "role": "<value>", "seq": 948464}], "num_messages": 330731, "title": "<value>", "updated_at": "2026-01-13T22:10:05.983Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

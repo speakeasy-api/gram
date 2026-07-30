@@ -35,6 +35,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
 	srv "github.com/speakeasy-api/gram/server/gen/http/chat/server"
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -991,6 +992,38 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat entry totals").LogError(ctx, s.logger)
 	}
 
+	contentPartRows, err := s.repo.ListChatContentPartsByChatID(ctx, repo.ListChatContentPartsByChatIDParams{
+		ChatID:    chat.ID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat content parts").LogError(ctx, s.logger)
+	}
+	contentParts := make([]*gen.ChatContentPart, len(contentPartRows))
+	var contentPartGroup errgroup.Group
+	contentPartGroup.SetLimit(maxConcurrentChatAssetWork)
+	for i, row := range contentPartRows {
+		contentPartGroup.Go(func() error {
+			content := s.loadContentPartContent(ctx, row.ChatID, row.ID, row.ContentAssetUrl)
+			contentPart := &gen.ChatContentPart{
+				ID:                  row.ID.String(),
+				Kind:                row.Kind,
+				Content:             content,
+				ParentChatMessageID: nil,
+				Metadata:            json.RawMessage(row.Metadata),
+				IsRisk:              row.IsRisk,
+				CreatedAt:           row.CreatedAt.Time.Format(time.RFC3339),
+			}
+			if row.ParentChatMessageID.Valid {
+				parentID := row.ParentChatMessageID.UUID.String()
+				contentPart.ParentChatMessageID = &parentID
+			}
+			contentParts[i] = contentPart
+			return nil
+		})
+	}
+	_ = contentPartGroup.Wait()
+
 	var source *string
 	if isInitialLatest {
 		for i := len(latestPageRows) - 1; i >= 0; i-- {
@@ -1022,6 +1055,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		Summary:              conv.FromPGText[string](chat.Summary),
 		SummaryGeneratedAt:   formatOptionalTimestamptz(chat.SummaryGeneratedAt),
 		Messages:             resultMessages,
+		ContentParts:         contentParts,
 		Generation:           int(generation),
 		MaxGeneration:        int(maxGeneration),
 		HasMoreBefore:        hasMoreBefore,
@@ -2127,6 +2161,19 @@ func (s *Service) loadMessageContentFields(ctx context.Context, chatID uuid.UUID
 	}
 
 	// 3. Fallback to plain text content
+	return content
+}
+
+func (s *Service) loadContentPartContent(ctx context.Context, chatID uuid.UUID, contentPartID uuid.UUID, contentAssetURL string) string {
+	content, err := blobio.ReadAllString(ctx, s.assetStorage, contentAssetURL, maxAssetReadSize)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to read content part from asset storage",
+			attr.SlogError(err),
+			attr.SlogChatID(chatID.String()),
+			attr.SlogChatContentPartID(contentPartID.String()),
+		)
+		return ""
+	}
 	return content
 }
 

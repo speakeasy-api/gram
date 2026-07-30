@@ -2,14 +2,20 @@ package chat_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // loadPayload returns a fully-populated LoadChatPayload (exhaustruct-friendly)
@@ -129,6 +135,73 @@ func containsSeq(msgs []*gen.ChatMessage, seq int64) bool {
 		}
 	}
 	return false
+}
+
+func TestLoadChat_ContentPartAssetReadFailureLeavesTranscriptIntact(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatServiceRBACDisabled(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	chatID := seedChat(t, ctx, ti, authCtx.UserID, "", "content parts")
+	msgID := seedMessageContent(t, ctx, ti, chatID, "review this attachment")
+
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, ti.assets)
+	t.Cleanup(func() { _ = shutdown(t.Context()) })
+	validContent := "asset-backed content"
+	validURL, err := writer.WriteContentPartAsset(ctx, ti.projectID, chatID, []byte(validContent))
+	require.NoError(t, err)
+
+	createdAt := pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
+	rows := []repo.CreateChatContentPartParams{
+		{
+			ChatID:              chatID,
+			ProjectID:           ti.projectID,
+			Kind:                message.PromptAttachment,
+			ContentAssetUrl:     validURL,
+			ExternalID:          pgtype.Text{String: "valid-part", Valid: true},
+			ParentChatMessageID: uuid.NullUUID{UUID: msgID, Valid: true},
+			Version:             pgtype.Int4{},
+			Source:              pgtype.Text{},
+			Metadata:            []byte(`{"display_path":"valid.txt","kind":"file"}`),
+			RiskAnalyzedAt:      pgtype.Timestamptz{},
+			CreatedAt:           createdAt,
+		},
+		{
+			ChatID:              chatID,
+			ProjectID:           ti.projectID,
+			Kind:                message.PromptAttachment,
+			ContentAssetUrl:     "file:///missing-content-part.txt",
+			ExternalID:          pgtype.Text{String: "missing-part", Valid: true},
+			ParentChatMessageID: uuid.NullUUID{UUID: msgID, Valid: true},
+			Version:             pgtype.Int4{},
+			Source:              pgtype.Text{},
+			Metadata:            []byte(`{"display_path":"missing.txt","kind":"file"}`),
+			RiskAnalyzedAt:      pgtype.Timestamptz{},
+			CreatedAt:           createdAt,
+		},
+	}
+	_, err = repo.New(ti.conn).CreateChatContentPart(ctx, rows)
+	require.NoError(t, err)
+
+	res, err := ti.service.LoadChat(ctx, loadPayload(chatID.String()))
+	require.NoError(t, err)
+	require.Len(t, res.Messages, 1)
+	require.Equal(t, msgID.String(), res.Messages[0].ID)
+	require.Len(t, res.ContentParts, 2)
+
+	partsByDisplayPath := map[string]*gen.ChatContentPart{}
+	for _, part := range res.ContentParts {
+		var metadata struct {
+			DisplayPath string `json:"display_path"`
+		}
+		require.NoError(t, json.Unmarshal(part.Metadata, &metadata))
+		partsByDisplayPath[metadata.DisplayPath] = part
+	}
+	require.Contains(t, partsByDisplayPath, "valid.txt")
+	require.Contains(t, partsByDisplayPath, "missing.txt")
+	require.Equal(t, validContent, partsByDisplayPath["valid.txt"].Content)
+	require.Empty(t, partsByDisplayPath["missing.txt"].Content)
 }
 
 // isRiskAt reports the is_risk flag of the message with this seq (false when the
