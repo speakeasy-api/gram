@@ -50707,6 +50707,11 @@ components:
         assistant_name:
           type: string
           description: The name of the assistant that produced this chat, if any
+        content_parts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatContentPart'
+          description: Non-turn content attached to this chat, such as prompt attachments.
         created_at:
           type: string
           description: When the chat was created.
@@ -50808,6 +50813,7 @@ components:
           description: Full work-units analysis verdict as JSON (per-task breakdown, rationales, and flags). Present only when `work_units` is present.
       required:
         - messages
+        - content_parts
         - generation
         - max_generation
         - has_more_before
@@ -50842,6 +50848,36 @@ components:
         - work_units_enabled
         - work_units_daily_cap
         - is_default
+    ChatContentPart:
+      type: object
+      properties:
+        content:
+          type: string
+          description: The text content.
+        created_at:
+          type: string
+          description: When the content part was created.
+          format: date-time
+        id:
+          type: string
+          description: The ID of the content part.
+        is_risk:
+          type: boolean
+          description: Whether this content part has an active risk finding.
+        kind:
+          type: string
+          description: The content kind, such as prompt_attachment.
+        metadata:
+          description: Sparse metadata for the content kind.
+        parent_chat_message_id:
+          type: string
+          description: The chat message this content hangs off, when resolved.
+      required:
+        - id
+        - kind
+        - content
+        - is_risk
+        - created_at
     ChatMessage:
       type: object
       properties:
@@ -53880,7 +53916,7 @@ components:
           type: array
           items:
             type: string
-          description: Message types to judge (user_message, assistant_message, tool_request, tool_response), matching a policy's message_types. When empty or omitted, judges all supported types.
+          description: Message types to judge (user_message, assistant_message, tool_request, tool_response, prompt_attachment), matching a policy's message_types. When empty or omitted, judges all supported types.
         model_config:
           $ref: '#/components/schemas/RiskPolicyModelConfig'
         prompt:
@@ -60413,7 +60449,7 @@ components:
           format: uuid
         message_type:
           type: string
-          description: The judged message type (user_message, assistant_message, tool_request, tool_response).
+          description: The judged message type (user_message, assistant_message, tool_request, tool_response, prompt_attachment).
         prompt_tokens:
           type: integer
           description: Prompt tokens billed for this judge call.
@@ -62042,7 +62078,7 @@ components:
           type: array
           items:
             type: string
-          description: 'Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.'
+          description: 'Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message, prompt_attachment.'
         model_config:
           $ref: '#/components/schemas/RiskPolicyModelConfig'
         name:
@@ -62331,13 +62367,17 @@ components:
           type: string
           description: ID of the durable tool call block recorded for this finding's message, when one exists. Links to the block page at /blocks/:id.
           format: uuid
+        chat_content_part_id:
+          type: string
+          description: The chat content part that was scanned, when the finding is anchored to a content part.
+          format: uuid
         chat_id:
           type: string
           description: The chat session containing the message.
           format: uuid
         chat_message_id:
           type: string
-          description: The chat message that was scanned.
+          description: The chat message that was scanned, when the finding is anchored to a message.
           format: uuid
         chat_title:
           type: string
@@ -62402,19 +62442,22 @@ components:
         - id
         - policy_id
         - policy_version
-        - chat_message_id
         - source
         - created_at
     RiskResultRedacted:
       type: object
       properties:
+        chat_content_part_id:
+          type: string
+          description: The chat content part that was scanned, when the finding is anchored to a content part.
+          format: uuid
         chat_id:
           type: string
           description: The chat session containing the message.
           format: uuid
         chat_message_id:
           type: string
-          description: The chat message that was scanned.
+          description: The chat message that was scanned, when the finding is anchored to a message.
           format: uuid
         chat_title:
           type: string
@@ -62471,7 +62514,6 @@ components:
         - id
         - policy_id
         - policy_version
-        - chat_message_id
         - source
         - created_at
         - match_redacted

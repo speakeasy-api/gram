@@ -151,7 +151,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("detection_scopes", ArrayOf(RiskDetectionScope), "Per-category detection scopes specified for this policy. The scan surface merges these with the recommended scopes, the specified scope winning on category conflict. Empty means every recommendation applies unchanged.")
 	Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.")
 	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.")
-	Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.")
+	Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message, prompt_attachment.")
 	Attribute("scope_include", String, "CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Null/empty means all messages are in scope.")
 	Attribute("scope_exempt", String, "CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Null/empty means no inline exemption.")
 	Attribute("enabled", Boolean, "Whether the policy is active.")
@@ -262,7 +262,10 @@ var RiskResult = Type("RiskResult", func() {
 	Attribute("block_id", String, "ID of the durable tool call block recorded for this finding's message, when one exists. Links to the block page at /blocks/:id.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("chat_message_id", String, "The chat message that was scanned.", func() {
+	Attribute("chat_message_id", String, "The chat message that was scanned, when the finding is anchored to a message.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("chat_content_part_id", String, "The chat content part that was scanned, when the finding is anchored to a content part.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("chat_id", String, "The chat session containing the message.", func() {
@@ -283,7 +286,7 @@ var RiskResult = Type("RiskResult", func() {
 	Attribute("created_at", String, "When this result was created.", func() {
 		Format(FormatDateTime)
 	})
-	Required("id", "policy_id", "policy_version", "chat_message_id", "source", "created_at")
+	Required("id", "policy_id", "policy_version", "source", "created_at")
 })
 
 // RiskSpan is one matched span attributed to a finding.
@@ -332,7 +335,10 @@ var RiskResultRedacted = Type("RiskResultRedacted", func() {
 		Format(FormatUUID)
 	})
 	Attribute("policy_version", Int64, "Policy version when this result was produced.")
-	Attribute("chat_message_id", String, "The chat message that was scanned.", func() {
+	Attribute("chat_message_id", String, "The chat message that was scanned, when the finding is anchored to a message.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("chat_content_part_id", String, "The chat content part that was scanned, when the finding is anchored to a content part.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("chat_id", String, "The chat session containing the message.", func() {
@@ -352,7 +358,7 @@ var RiskResultRedacted = Type("RiskResultRedacted", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "policy_id", "policy_version", "chat_message_id", "source", "created_at", "match_redacted", "position_known")
+	Required("id", "policy_id", "policy_version", "source", "created_at", "match_redacted", "position_known")
 })
 
 var RiskChatSummary = Type("RiskChatSummary", func() {

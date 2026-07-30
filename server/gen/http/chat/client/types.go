@@ -77,6 +77,8 @@ type LoadChatResponseBody struct {
 	// The list of messages in the chat for the returned generation, ordered oldest
 	// to newest by `seq`.
 	Messages []*ChatMessageResponseBody `form:"messages,omitempty" json:"messages,omitempty" xml:"messages,omitempty"`
+	// Non-turn content attached to this chat, such as prompt attachments.
+	ContentParts []*ChatContentPartResponseBody `form:"content_parts,omitempty" json:"content_parts,omitempty" xml:"content_parts,omitempty"`
 	// The generation that this response's messages belong to. A generation is an
 	// immutable snapshot of the transcript; a new one is opened on compaction or
 	// message edits, while normal turns append to the current one.
@@ -2126,6 +2128,24 @@ type ChatMessageResponseBody struct {
 	Generation *int `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
 }
 
+// ChatContentPartResponseBody is used to define fields on response body types.
+type ChatContentPartResponseBody struct {
+	// The ID of the content part.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The content kind, such as prompt_attachment.
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// The text content.
+	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
+	// The chat message this content hangs off, when resolved.
+	ParentChatMessageID *string `form:"parent_chat_message_id,omitempty" json:"parent_chat_message_id,omitempty" xml:"parent_chat_message_id,omitempty"`
+	// Sparse metadata for the content kind.
+	Metadata json.RawMessage `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
+	// Whether this content part has an active risk finding.
+	IsRisk *bool `form:"is_risk,omitempty" json:"is_risk,omitempty" xml:"is_risk,omitempty"`
+	// When the content part was created.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+}
+
 // RiskSegmentResponseBody is used to define fields on response body types.
 type RiskSegmentResponseBody struct {
 	// The `seq` of the first (oldest) message in this segment.
@@ -2637,6 +2657,14 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 			continue
 		}
 		v.Messages[i] = unmarshalChatMessageResponseBodyToChatChatMessage(val)
+	}
+	v.ContentParts = make([]*chat.ChatContentPart, len(body.ContentParts))
+	for i, val := range body.ContentParts {
+		if val == nil {
+			v.ContentParts[i] = nil
+			continue
+		}
+		v.ContentParts[i] = unmarshalChatContentPartResponseBodyToChatChatContentPart(val)
 	}
 	if body.RiskSegments != nil {
 		v.RiskSegments = make([]*chat.RiskSegment, len(body.RiskSegments))
@@ -3958,6 +3986,9 @@ func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
 	if body.Messages == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("messages", "body"))
 	}
+	if body.ContentParts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("content_parts", "body"))
+	}
 	if body.Generation == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("generation", "body"))
 	}
@@ -3991,6 +4022,13 @@ func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
 	for _, e := range body.Messages {
 		if e != nil {
 			if err2 := ValidateChatMessageResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.ContentParts {
+		if e != nil {
+			if err2 := ValidateChatContentPartResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -6571,6 +6609,30 @@ func ValidateChatMessageResponseBody(body *ChatMessageResponseBody) (err error) 
 	}
 	if body.Generation == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("generation", "body"))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateChatContentPartResponseBody runs the validations defined on
+// ChatContentPartResponseBody
+func ValidateChatContentPartResponseBody(body *ChatContentPartResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.Content == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("content", "body"))
+	}
+	if body.IsRisk == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_risk", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

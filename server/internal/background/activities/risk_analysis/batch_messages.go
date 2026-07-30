@@ -18,6 +18,7 @@ import (
 
 type batchMessage struct {
 	ID           uuid.UUID
+	ContentPart  bool
 	Type         message.Type
 	Content      string
 	RawToolCalls []byte
@@ -85,6 +86,32 @@ func newBatchMessages(ctx context.Context, logger *slog.Logger, rows []repo.GetM
 	return messages
 }
 
+func newContentPartBatchMessages(rows []repo.GetContentPartBatchRow, contents []string) []batchMessage {
+	messages := make([]batchMessage, 0, len(rows))
+	for i, row := range rows {
+		messageType := strings.TrimSpace(row.MessageType)
+		if !message.IsTypeValid(messageType) {
+			continue
+		}
+		msg := batchMessage{
+			ID:           row.ID,
+			ContentPart:  true,
+			Type:         messageType,
+			Content:      contents[i],
+			RawToolCalls: nil,
+			ToolCalls:    []recordedToolCall{},
+			UserID:       row.ChatUserID,
+			CreatedAt:    time.Time{},
+			Source:       row.Source.String,
+		}
+		if row.CreatedAt.Valid {
+			msg.CreatedAt = row.CreatedAt.Time
+		}
+		messages = append(messages, msg)
+	}
+	return messages
+}
+
 // newBatchMessage builds a single batchMessage from the recorded columns,
 // applying the same role→type mapping and tool-call parsing every batch scanner
 // and the eval-guardrail replay share. ok is false for roles the analyzer does
@@ -98,6 +125,7 @@ func newBatchMessage(ctx context.Context, logger *slog.Logger, id uuid.UUID, rol
 
 	msg := batchMessage{
 		ID:           id,
+		ContentPart:  false,
 		Type:         messageType,
 		Content:      content,
 		RawToolCalls: toolCalls,
@@ -112,6 +140,20 @@ func newBatchMessage(ctx context.Context, logger *slog.Logger, id uuid.UUID, rol
 	return msg, true
 }
 
+func (m batchMessage) chatMessageID() uuid.NullUUID {
+	if m.ContentPart {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+	return uuid.NullUUID{UUID: m.ID, Valid: true}
+}
+
+func (m batchMessage) chatContentPartID() uuid.NullUUID {
+	if !m.ContentPart {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+	return uuid.NullUUID{UUID: m.ID, Valid: true}
+}
+
 func parseRecordedToolCalls(ctx context.Context, logger *slog.Logger, raw []byte) []recordedToolCall {
 	var calls []recordedToolCall
 	if err := json.Unmarshal(raw, &calls); err != nil {
@@ -124,23 +166,17 @@ func parseRecordedToolCalls(ctx context.Context, logger *slog.Logger, raw []byte
 	return calls
 }
 
-func filterMessagesByMessageTypes(messages []repo.GetMessageContentBatchRow, messageTypes []string) []repo.GetMessageContentBatchRow {
-	filtered := make([]repo.GetMessageContentBatchRow, 0, len(messages))
+func filterBatchMessagesByMessageTypes(messages []batchMessage, messageTypes []string) []batchMessage {
+	if len(messageTypes) == 0 {
+		return messages
+	}
+	filtered := make([]batchMessage, 0, len(messages))
 	for _, msg := range messages {
-		messageType, ok := messageRowMessageType(msg)
-		if !ok {
-			continue
+		if slices.Contains(messageTypes, msg.Type) {
+			filtered = append(filtered, msg)
 		}
-		if len(messageTypes) > 0 && !slices.Contains(messageTypes, messageType) {
-			continue
-		}
-		filtered = append(filtered, msg)
 	}
 	return filtered
-}
-
-func messageRowMessageType(msg repo.GetMessageContentBatchRow) (message.Type, bool) {
-	return messageTypeForRole(msg.Role, msg.ToolCalls)
 }
 
 func messageTypeForRole(role string, toolCalls []byte) (message.Type, bool) {
@@ -196,4 +232,18 @@ func batchMessageView(msg batchMessage) MessageView {
 		view.Tools = append(view.Tools, NewToolView(c.Function.Name, c.Function.Arguments))
 	}
 	return view
+}
+
+// chatMessageAnchored drops content parts from a batch. The async analysis
+// request protos carry only chat_message_id, so a content part has nothing to
+// anchor to until that field exists.
+func chatMessageAnchored(messages []batchMessage) []batchMessage {
+	anchored := make([]batchMessage, 0, len(messages))
+	for _, msg := range messages {
+		if msg.ContentPart {
+			continue
+		}
+		anchored = append(anchored, msg)
+	}
+	return anchored
 }

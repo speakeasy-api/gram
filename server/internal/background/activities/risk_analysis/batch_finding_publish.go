@@ -3,8 +3,6 @@ package risk_analysis
 import (
 	"context"
 
-	"github.com/google/uuid"
-
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
@@ -58,9 +56,16 @@ var batchOnlyFindingSources = map[string]struct{}{
 // first and the acks drained through drainPublishAcks, which caps each ack,
 // survives activity cancellation, and heartbeats between acks — the same
 // discipline every other publish in this activity uses.
-func (a *AnalyzeBatch) publishBatchOnlyFindings(ctx context.Context, args AnalyzeBatchArgs, ids []uuid.UUID, findings [][]scanners.Finding) {
+// anchors carries one entry per findings slot, so the two stay index aligned.
+// Content parts are skipped: the finding proto only has a chat_message_id to
+// anchor to until that field exists.
+func (a *AnalyzeBatch) publishBatchOnlyFindings(ctx context.Context, args AnalyzeBatchArgs, anchors []batchMessage, findings [][]scanners.Finding) {
 	var results []gcp.PublishResult
-	for i, id := range ids {
+	for i, anchor := range anchors {
+		if anchor.ContentPart {
+			continue
+		}
+		id := anchor.ID
 		var toPublish []scanners.Finding
 		for _, f := range findings[i] {
 			if _, ok := batchOnlyFindingSources[f.Source]; !ok || f.DeadLetterReason != "" {
