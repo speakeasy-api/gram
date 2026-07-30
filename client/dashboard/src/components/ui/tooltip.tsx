@@ -63,7 +63,7 @@ function SimpleTooltip({
   tooltip,
   children,
 }: {
-  tooltip: string;
+  tooltip: React.ReactNode;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (

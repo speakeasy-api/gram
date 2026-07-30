@@ -152,7 +152,7 @@ export function StackedTimeSeriesPanel({
 }: {
   // The panel title, with the info-tooltip copy beside it.
   title: string;
-  headerHint: string;
+  headerHint: ReactNode;
   // Gap-filled daily UTC bucket start times — the axis grid. Every stack's
   // series aligns to it by index.
   bucketsMs: number[];
