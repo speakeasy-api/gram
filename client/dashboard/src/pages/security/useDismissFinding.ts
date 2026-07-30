@@ -40,11 +40,17 @@ export function useDismissFinding(): {
   const unmarkMutation = useRiskUnmarkResultsFalsePositiveMutation();
 
   const invalidateLists = useCallback(() => {
-    // RiskEvents.tsx and RiskOverviewCategoryDetail.tsx query listRiskResults
-    // directly via useInfiniteQuery (not the generated hook), under queryKeys
-    // starting with this prefix — see those files for the exact keys.
+    // RiskEvents.tsx, RiskOverviewCategoryDetail.tsx, and DismissedFindingsTab.tsx
+    // each query results directly via useInfiniteQuery (not a generated hook),
+    // under their own queryKey under this shared ["risk", "results", ...]
+    // prefix (e.g. ["risk","results","list"], ["risk","results","list-dismissed"]).
+    // Invalidate the whole prefix rather than each exact key — a dismiss from
+    // one surface (e.g. Risk Events) must be reflected on every other surface
+    // (e.g. the Dismissed tab), and matching each new custom key one-by-one
+    // here is exactly the kind of thing that's easy to add a surface and
+    // forget to wire up.
     void queryClient.invalidateQueries({
-      queryKey: ["risk", "results", "list"],
+      queryKey: ["risk", "results"],
     });
     void invalidateAllRiskListDismissedResults(queryClient);
     void invalidateAllRiskOverview(queryClient);

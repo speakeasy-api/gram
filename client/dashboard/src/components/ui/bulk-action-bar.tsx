@@ -2,16 +2,25 @@ import { Button } from "@speakeasy-api/moonshine";
 import { useEffect, useRef, type JSX } from "react";
 import { cn } from "@/lib/utils";
 
-/** Sticky bar shown above a selectable list/table once at least one row is selected.
+/** Bar shown above a selectable list/table once at least one row is selected.
  * New for AIS-321 — no bulk-select affordance existed anywhere in the dashboard before
  * "mark false positive" needed one.
  *
  * Callers must always mount this (not `{selectedCount > 0 && <BulkActionBar .../>}`)
  * so its height stays reserved in the layout. It fades its own content in/out via
  * opacity instead of mounting/unmounting, so selecting or clearing a row doesn't
- * shift every row in the table below it. `sticky top-0` keeps it visible while a
- * long selectable list scrolls underneath it (only matters for pages where this
- * bar sits inside the scrolling container, e.g. Category Detail's table). */
+ * shift every row in the table below it.
+ *
+ * Both current callers (RiskEvents.tsx, RiskOverviewCategoryDetail.tsx) already
+ * render this outside the selectable list's own scrolling container, so it stays
+ * visible while the list itself scrolls with no extra work — that's the property
+ * that actually matters when reviewing several selected rows. `sticky top-0` is
+ * additionally set for the rarer case of the whole page scrolling past it, but
+ * verify it actually takes effect before relying on it in a new context: at least
+ * one of Gram's shared page layouts wraps content in a Tailwind `@container`
+ * element, and `container-type` implicitly applies CSS containment, which breaks
+ * `position: sticky` for any descendant trying to stick relative to a scrolling
+ * ancestor *outside* that boundary. */
 export function BulkActionBar({
   selectedCount,
   actionLabel,

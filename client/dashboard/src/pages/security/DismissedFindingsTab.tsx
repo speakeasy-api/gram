@@ -37,10 +37,17 @@ export function DismissedFindingsTab(): JSX.Element {
   );
 
   const invalidateLists = () => {
-    void invalidateAllRiskListDismissedResults(queryClient);
+    // This component's own results come from a plain useInfiniteQuery (see
+    // above) under ["risk","results","list-dismissed"], not the generated
+    // hook — invalidateAllRiskListDismissedResults only covers the generated
+    // hook's own key namespace and never touches this one. Invalidate the
+    // whole ["risk","results"] prefix (shared with RiskEvents.tsx and
+    // RiskOverviewCategoryDetail.tsx's own custom queries) rather than this
+    // exact key alone, matching useDismissFinding.ts's invalidateLists.
     void queryClient.invalidateQueries({
-      queryKey: ["risk", "results", "list"],
+      queryKey: ["risk", "results"],
     });
+    void invalidateAllRiskListDismissedResults(queryClient);
     void invalidateAllRiskOverview(queryClient);
     void invalidateAllRiskRuleBreakdown(queryClient);
     void invalidateAllRiskUserBreakdown(queryClient);
