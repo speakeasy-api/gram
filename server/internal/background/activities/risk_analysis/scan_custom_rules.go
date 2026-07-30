@@ -15,7 +15,7 @@ import (
 )
 
 func (a *AnalyzeBatch) scanCustomRules(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage, customRuleIDs []string) ([][]scanners.Finding, error) {
-	a.publishCustomRulesScanRequests(ctx, args, requestID, messages, customRuleIDs)
+	a.publishCustomRulesScanRequests(ctx, args, requestID, chatMessageAnchored(messages), customRuleIDs)
 
 	// ScanBatch loads the rules from the database once for the whole batch and
 	// evaluates them against each message through its caching CEL evaluator,
@@ -55,8 +55,8 @@ func (a *AnalyzeBatch) scanCustomRules(ctx context.Context, args AnalyzeBatchArg
 // subscriber can re-load and evaluate the same rules against the same message.
 func (a *AnalyzeBatch) publishCustomRulesScanRequests(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage, customRuleIDs []string) {
 	createdAt := time.Now().UTC().Format(time.RFC3339)
-	publishResults := make([]gcp.PublishResult, len(messages))
-	for i, msg := range messages {
+	publishResults := make([]gcp.PublishResult, 0, len(messages))
+	for _, msg := range messages {
 		view := batchMessageView(msg)
 		toolCalls := make([]*riskv1.CustomRulesAnalysis_ToolCall, 0, len(view.Tools))
 		for _, t := range view.Tools {
@@ -66,7 +66,7 @@ func (a *AnalyzeBatch) publishCustomRulesScanRequests(ctx context.Context, args 
 			}.Build())
 		}
 
-		publishResults[i] = a.customRulesPub.Publish(ctx, riskv1.CustomRulesAnalysis_builder{
+		publishResults = append(publishResults, a.customRulesPub.Publish(ctx, riskv1.CustomRulesAnalysis_builder{
 			RequestId:         new(requestID.String()),
 			ChatMessageId:     new(msg.ID.String()),
 			ProjectId:         new(args.ProjectID.String()),
@@ -79,7 +79,7 @@ func (a *AnalyzeBatch) publishCustomRulesScanRequests(ctx context.Context, args 
 			Kind:          new(msg.Type),
 			ToolCalls:     toolCalls,
 			CustomRuleIds: customRuleIDs,
-		}.Build())
+		}.Build()))
 	}
 	drainPublishAcks(ctx, a.logger, "failed to publish custom rules scan request", publishResults)
 }

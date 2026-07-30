@@ -25,6 +25,7 @@ type RiskFindingRow struct {
 	ProjectID         string    `ch:"project_id"`
 	RequestID         string    `ch:"request_id"`
 	ChatMessageID     string    `ch:"chat_message_id"`
+	ContentPartID     string    `ch:"content_part_id"`
 	RiskPolicyID      string    `ch:"risk_policy_id"`
 	RiskPolicyVersion int64     `ch:"risk_policy_version"`
 	RuleID            string    `ch:"rule_id"`
@@ -102,6 +103,7 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			"project_id",
 			"request_id",
 			"chat_message_id",
+			"content_part_id",
 			"risk_policy_id",
 			"risk_policy_version",
 			"rule_id",
@@ -135,6 +137,7 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			row.ProjectID,
 			row.RequestID,
 			row.ChatMessageID,
+			row.ContentPartID,
 			row.RiskPolicyID,
 			row.RiskPolicyVersion,
 			row.RuleID,

@@ -87,9 +87,9 @@ type IPRow = { id: number; value: string; error: string | null };
 
 const healthIssueMessages: Record<string, string> = {
   dns_not_found:
-    "We couldn't find DNS records for this domain. Check that the record still exists with your DNS provider.",
+    "We couldn't find DNS records for this domain. Set this record with your DNS provider:",
   dns_target_mismatch:
-    "This domain's DNS does not resolve to the platform's endpoint. If the domain sits behind a proxy or CDN, traffic may still work; otherwise update its DNS record to the value shown when you registered the domain.",
+    "This domain's DNS does not resolve to the expected CNAME target. If the domain sits behind a proxy or CDN, traffic may still work; otherwise set this DNS record:",
   resource_missing:
     "The routing configuration for this domain is missing. Run the check again to confirm the problem persists.",
   certificate_missing:
@@ -109,6 +109,32 @@ function customDomainHealthMessage(issue?: string): string {
     ? (healthIssueMessages[issue] ??
         "The latest health check found a problem with this domain.")
     : "The latest health check found a problem with this domain.";
+}
+
+// DNS-shaped issues end in a colon and expect the exact record the customer
+// must create; the other messages stand alone.
+function CustomDomainHealthMessage({
+  issue,
+  domainName,
+}: {
+  issue?: string;
+  domainName: string;
+}) {
+  const showsExpectedRecord =
+    issue === "dns_not_found" || issue === "dns_target_mismatch";
+  return (
+    <>
+      {customDomainHealthMessage(issue)}
+      {showsExpectedRecord && (
+        <>
+          {" "}
+          <code className="break-all">
+            {domainName} CNAME {getCustomDomainCNAME()}
+          </code>
+        </>
+      )}
+    </>
+  );
 }
 
 // A single failed probe (check_failed) is usually a transient Gram-side issue,
@@ -519,7 +545,10 @@ function OrgDomainsInner() {
                   <Type variant="body" className="text-sm">
                     It failed health checks continuously for over a week, so its
                     routing and TLS certificate were removed.{" "}
-                    {customDomainHealthMessage(domain.healthIssue)}
+                    <CustomDomainHealthMessage
+                      issue={domain.healthIssue}
+                      domainName={domain.domain}
+                    />
                   </Type>
                   {domain.unhealthySince && (
                     <Type variant="body" className="text-sm opacity-80">
@@ -552,7 +581,10 @@ function OrgDomainsInner() {
                     This custom domain may not be working
                   </Type>
                   <Type variant="body" className="text-sm">
-                    {customDomainHealthMessage(domain.healthIssue)}
+                    <CustomDomainHealthMessage
+                      issue={domain.healthIssue}
+                      domainName={domain.domain}
+                    />
                   </Type>
                   {domain.healthCheckedAt && (
                     <Type variant="body" className="text-sm opacity-80">

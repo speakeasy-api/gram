@@ -57,6 +57,85 @@ FROM skill_feedback
 WHERE project_id = @project_id
   AND skill_id = @skill_id;
 
+-- name: GetSkillFeedbackMetrics :one
+SELECT
+  COUNT(*) FILTER (
+    WHERE feedback.created_at >= @window_start
+      AND feedback.created_at < @window_end
+  )::bigint AS feedback_in_window,
+  COUNT(*) FILTER (WHERE feedback.reviewed_at IS NULL)::bigint AS unreviewed,
+  (
+    SELECT COUNT(*)::bigint
+    FROM skill_observations observation
+    WHERE observation.project_id = @project_id
+      AND observation.skill_id = @skill_id
+      AND observation.reconciled_at IS NOT NULL
+      AND observation.reconcile_error_code IS NULL
+      AND observation.seen_at >= @window_start
+      AND observation.seen_at < @window_end
+  ) AS activations_in_window,
+  (
+    SELECT COUNT(*)::bigint
+    FROM skill_observations observation
+    WHERE observation.project_id = @project_id
+      AND observation.skill_id = @skill_id
+      AND observation.reconciled_at IS NOT NULL
+      AND observation.reconcile_error_code IS NULL
+      AND observation.session_id IS NOT NULL
+      AND observation.seen_at >= @window_start
+      AND observation.seen_at < @window_end
+      AND EXISTS (
+        SELECT 1
+        FROM skill_feedback paired
+        WHERE paired.project_id = observation.project_id
+          AND paired.skill_id = observation.skill_id
+          AND paired.session_id = observation.session_id
+          AND paired.created_at >= @window_start
+          AND paired.created_at < @window_end
+      )
+  ) AS feedback_activations_in_window,
+  (
+    SELECT COUNT(DISTINCT converted.id)::bigint
+    FROM skill_feedback converted
+    JOIN skill_edit_suggestion_feedback link
+      ON link.project_id = converted.project_id
+      AND link.feedback_id = converted.id
+    JOIN skill_edit_suggestion_changes change
+      ON change.project_id = link.project_id
+      AND change.id = link.change_id
+    JOIN skill_edit_suggestions suggestion
+      ON suggestion.project_id = change.project_id
+      AND suggestion.id = change.suggestion_id
+    WHERE converted.project_id = @project_id
+      AND converted.skill_id = @skill_id
+      AND suggestion.skill_id = @skill_id
+  ) AS converted
+FROM skill_feedback feedback
+WHERE feedback.project_id = @project_id
+  AND feedback.skill_id = @skill_id;
+
+-- name: ListSkillFeedbackTimeline :many
+WITH buckets AS (
+  SELECT generate_series(
+    date_trunc('day', @window_start::timestamptz, 'UTC'),
+    date_trunc('day', @window_end::timestamptz, 'UTC'),
+    interval '1 day'
+  )::timestamptz AS bucket_start
+)
+SELECT
+  buckets.bucket_start,
+  COUNT(feedback.id)::bigint AS feedback_count
+FROM buckets
+LEFT JOIN skill_feedback feedback
+  ON feedback.project_id = @project_id
+  AND feedback.skill_id = @skill_id
+  AND feedback.created_at >= buckets.bucket_start
+  AND feedback.created_at < buckets.bucket_start + interval '1 day'
+  AND feedback.created_at >= @window_start
+  AND feedback.created_at < @window_end
+GROUP BY buckets.bucket_start
+ORDER BY buckets.bucket_start;
+
 -- name: ListSkillFeedbackByID :many
 SELECT *
 FROM skill_feedback
@@ -1250,6 +1329,28 @@ WHERE s.project_id = @project_id
   AND s.id = @skill_id
   AND s.archived_at IS NULL;
 
+-- CountSkills handles empty cursor pages. Keep its filters in sync with ListSkills
+-- so normal pages avoid a second query.
+-- name: CountSkills :one
+SELECT COUNT(*)
+FROM skills
+WHERE project_id = @project_id
+  AND archived_at IS NULL
+  AND (
+    sqlc.narg(search)::text IS NULL
+    OR name ILIKE '%' || sqlc.narg(search)::text || '%'
+    OR display_name ILIKE '%' || sqlc.narg(search)::text || '%'
+    OR COALESCE(summary, '') ILIKE '%' || sqlc.narg(search)::text || '%'
+  )
+  AND (
+    COALESCE(cardinality(@source_kinds::text[]), 0) = 0
+    OR source_kind = ANY(@source_kinds::text[])
+  )
+  AND (
+    COALESCE(cardinality(@classifications::text[]), 0) = 0
+    OR classification = ANY(@classifications::text[])
+  );
+
 -- name: ListSkills :many
 SELECT
   sqlc.embed(s),
@@ -1259,7 +1360,27 @@ SELECT
   EXISTS (
     SELECT 1 FROM skill_versions sv
     WHERE sv.skill_id = s.id AND sv.spec_valid IS TRUE
-  )::boolean AS has_valid_version
+  )::boolean AS has_valid_version,
+  (
+    SELECT COUNT(*)
+    FROM skills counted
+    WHERE counted.project_id = @project_id
+      AND counted.archived_at IS NULL
+      AND (
+        sqlc.narg(search)::text IS NULL
+        OR counted.name ILIKE '%' || sqlc.narg(search)::text || '%'
+        OR counted.display_name ILIKE '%' || sqlc.narg(search)::text || '%'
+        OR COALESCE(counted.summary, '') ILIKE '%' || sqlc.narg(search)::text || '%'
+      )
+      AND (
+        COALESCE(cardinality(@source_kinds::text[]), 0) = 0
+        OR counted.source_kind = ANY(@source_kinds::text[])
+      )
+      AND (
+        COALESCE(cardinality(@classifications::text[]), 0) = 0
+        OR counted.classification = ANY(@classifications::text[])
+      )
+  )::bigint AS total_count
 FROM skills s
 LEFT JOIN LATERAL (
   SELECT
@@ -1276,10 +1397,42 @@ LEFT JOIN skill_share_links l
 WHERE s.project_id = @project_id
   AND s.archived_at IS NULL
   AND (
-    sqlc.narg(cursor_name)::text IS NULL
-    OR s.name > sqlc.narg(cursor_name)::text
+    sqlc.narg(search)::text IS NULL
+    OR s.name ILIKE '%' || sqlc.narg(search)::text || '%'
+    OR s.display_name ILIKE '%' || sqlc.narg(search)::text || '%'
+    OR COALESCE(s.summary, '') ILIKE '%' || sqlc.narg(search)::text || '%'
   )
-ORDER BY s.name ASC
+  AND (
+    COALESCE(cardinality(@source_kinds::text[]), 0) = 0
+    OR s.source_kind = ANY(@source_kinds::text[])
+  )
+  AND (
+    COALESCE(cardinality(@classifications::text[]), 0) = 0
+    OR s.classification = ANY(@classifications::text[])
+  )
+  AND (
+    (
+      COALESCE(NULLIF(@sort_order::text, ''), 'name') = 'name'
+      AND (
+        sqlc.narg(cursor_name)::text IS NULL
+        OR s.name > sqlc.narg(cursor_name)::text
+      )
+    )
+    OR (
+      COALESCE(NULLIF(@sort_order::text, ''), 'name') = 'updated'
+      AND (
+        sqlc.narg(cursor_updated_at)::timestamptz IS NULL
+        OR (s.updated_at, s.id) < (
+          sqlc.narg(cursor_updated_at)::timestamptz,
+          sqlc.narg(cursor_id)::uuid
+        )
+      )
+    )
+  )
+ORDER BY
+  CASE WHEN COALESCE(NULLIF(@sort_order::text, ''), 'name') = 'name' THEN s.name END ASC,
+  CASE WHEN COALESCE(NULLIF(@sort_order::text, ''), 'name') = 'updated' THEN s.updated_at END DESC,
+  CASE WHEN COALESCE(NULLIF(@sort_order::text, ''), 'name') = 'updated' THEN s.id END DESC
 LIMIT @page_limit;
 
 -- name: ListSkillVersions :many

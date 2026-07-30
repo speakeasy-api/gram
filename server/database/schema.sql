@@ -1175,6 +1175,15 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   provisioner_kind TEXT NOT NULL DEFAULT 'ingress',
   -- IP addresses or CIDR ranges allowed to access this domain. Empty array = unrestricted.
   ip_allowlist TEXT[] NOT NULL DEFAULT '{}',
+  openai_apps_challenge_token TEXT CONSTRAINT custom_domains_openai_apps_challenge_token_check CHECK (
+    openai_apps_challenge_token IS NULL
+    OR (
+      openai_apps_challenge_token <> ''
+      AND char_length(openai_apps_challenge_token) <= 256
+      AND position(chr(10) IN openai_apps_challenge_token) = 0
+      AND position(chr(13) IN openai_apps_challenge_token) = 0
+    )
+  ),
   health_status TEXT,
   health_issue TEXT,
   health_checked_at timestamptz,
@@ -3948,6 +3957,7 @@ CREATE TABLE IF NOT EXISTS mcp_endpoints (
   custom_domain_id uuid,
   mcp_server_id uuid NOT NULL,
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 128),
+  is_domain_root BOOLEAN,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3957,7 +3967,8 @@ CREATE TABLE IF NOT EXISTS mcp_endpoints (
   CONSTRAINT mcp_endpoints_pkey PRIMARY KEY (id),
   CONSTRAINT mcp_endpoints_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT mcp_endpoints_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE CASCADE,
-  CONSTRAINT mcp_endpoints_custom_domain_id_fkey FOREIGN KEY (custom_domain_id) REFERENCES custom_domains (id) ON DELETE SET NULL
+  CONSTRAINT mcp_endpoints_custom_domain_id_fkey FOREIGN KEY (custom_domain_id) REFERENCES custom_domains (id) ON DELETE SET NULL,
+  CONSTRAINT mcp_endpoints_domain_root_requires_custom_domain_check CHECK (is_domain_root IS NOT TRUE OR custom_domain_id IS NOT NULL)
 );
 
 CREATE INDEX IF NOT EXISTS mcp_endpoints_project_id_idx
@@ -3979,6 +3990,10 @@ WHERE custom_domain_id IS NOT NULL AND deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_endpoints_slug_null_custom_domain_id_key
 ON mcp_endpoints (slug)
 WHERE custom_domain_id IS NULL AND deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_endpoints_custom_domain_id_root_key
+ON mcp_endpoints (custom_domain_id)
+WHERE is_domain_root IS TRUE AND deleted IS FALSE;
 
 -- MCP servers attached directly to an assistant. The legacy toolset
 -- attachment path lives in assistant_toolsets; this table covers

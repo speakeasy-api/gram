@@ -40,6 +40,7 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 		ProjectID:                "proj-1",
 		RequestID:                "req-1",
 		ChatMessageID:            "chat-1",
+		ContentPartID:            "",
 		RiskPolicyID:             "policy-1",
 		RiskPolicyVersion:        7,
 		RuleID:                   "pii.email_address",

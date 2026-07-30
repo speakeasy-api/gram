@@ -432,25 +432,26 @@ type ChatUserFeedback struct {
 }
 
 type CustomDomain struct {
-	ID                   uuid.UUID
-	OrganizationID       string
-	Domain               string
-	Verified             bool
-	Activated            bool
-	IngressName          pgtype.Text
-	CertSecretName       pgtype.Text
-	ProvisionerKind      string
-	IpAllowlist          []string
-	HealthStatus         pgtype.Text
-	HealthIssue          pgtype.Text
-	HealthCheckedAt      pgtype.Timestamptz
-	UnhealthySince       pgtype.Timestamptz
-	CertificateExpiresAt pgtype.Timestamptz
-	ConsecutiveFailures  pgtype.Int4
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
-	DeletedAt            pgtype.Timestamptz
-	Deleted              bool
+	ID                       uuid.UUID
+	OrganizationID           string
+	Domain                   string
+	Verified                 bool
+	Activated                bool
+	IngressName              pgtype.Text
+	CertSecretName           pgtype.Text
+	ProvisionerKind          string
+	IpAllowlist              []string
+	OpenaiAppsChallengeToken pgtype.Text
+	HealthStatus             pgtype.Text
+	HealthIssue              pgtype.Text
+	HealthCheckedAt          pgtype.Timestamptz
+	UnhealthySince           pgtype.Timestamptz
+	CertificateExpiresAt     pgtype.Timestamptz
+	ConsecutiveFailures      pgtype.Int4
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
+	DeletedAt                pgtype.Timestamptz
+	Deleted                  bool
 }
 
 type Deployment struct {
@@ -999,6 +1000,7 @@ type McpEndpoint struct {
 	CustomDomainID uuid.NullUUID
 	McpServerID    uuid.UUID
 	Slug           string
+	IsDomainRoot   pgtype.Bool
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz

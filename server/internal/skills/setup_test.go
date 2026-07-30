@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -60,6 +61,31 @@ type testInstance struct {
 	sessionManager *sessions.Manager
 	authContext    *contextvalues.AuthContext
 	projectID      uuid.UUID
+	signaler       *captureSuggestionSignaler
+}
+
+type suggestionSignal struct {
+	projectID uuid.UUID
+	skillID   uuid.UUID
+}
+
+type captureSuggestionSignaler struct {
+	mu      sync.Mutex
+	signals []suggestionSignal
+	err     error
+}
+
+func (s *captureSuggestionSignaler) SignalManual(_ context.Context, projectID, skillID uuid.UUID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.signals = append(s.signals, suggestionSignal{projectID: projectID, skillID: skillID})
+	return s.err
+}
+
+func (s *captureSuggestionSignaler) recorded() []suggestionSignal {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]suggestionSignal(nil), s.signals...)
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -106,7 +132,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
-	service := skills.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger())
+	signaler := &captureSuggestionSignaler{signals: nil, err: nil}
+	service := skills.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), signaler)
 
 	ti := &testInstance{
 		service:        service,
@@ -116,6 +143,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager: sessionManager,
 		authContext:    authContext,
 		projectID:      *authContext.ProjectID,
+		signaler:       signaler,
 	}
 	enableSkills(t, ctx, ti)
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeSkillWrite, ti.projectID.String()))

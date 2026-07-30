@@ -18,6 +18,7 @@ import (
 type SkillSuggestionIdentity struct {
 	ProjectID uuid.UUID `json:"project_id"`
 	SkillID   uuid.UUID `json:"skill_id"`
+	Force     bool      `json:"force"`
 }
 
 type AnalyzeSkillSuggestionParams struct {
@@ -59,11 +60,16 @@ func NewSkillSuggestionAnalyzer(db *pgxpool.Pool, engine *suggest.Engine, signal
 }
 
 func (a *SkillSuggestionAnalyzer) AnalyzeSkillSuggestion(ctx context.Context, params AnalyzeSkillSuggestionParams) (*suggest.Result, error) {
-	result, err := a.engine.Run(ctx, suggest.RunInput{
+	input := suggest.RunInput{
 		ProjectID: params.ProjectID,
 		SkillID:   params.SkillID,
 		Now:       params.Now,
-	})
+	}
+	run := a.engine.Run
+	if params.Force {
+		run = a.engine.RunForced
+	}
+	result, err := run(ctx, input)
 	if errors.Is(err, suggest.ErrModelFailure) {
 		return nil, temporal.NewNonRetryableApplicationError("skill suggestion model failure", "skill_suggestion_model_failure", err)
 	}

@@ -203,6 +203,7 @@ func NewActivities(
 		tracerProvider,
 		meterProvider,
 		db,
+		assetStorage,
 		piiScanner,
 		piScanner,
 		shadowMCPClient,
