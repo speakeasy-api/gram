@@ -346,7 +346,7 @@ func (c *CustomDomainHealth) NotifyOrgAdmins(ctx context.Context, args NotifyCus
 		tmpl := email.CustomDomainUnhealthy{
 			Email:        user.Email,
 			Domain:       args.Domain,
-			IssueMessage: customdomains.HealthIssueMessage(args.Issue),
+			IssueMessage: customdomains.HealthIssueMessage(args.Issue, c.expectedTarget),
 			DomainLink:   domainLink,
 		}
 		// CheckedAt is stable across retries; hashing satisfies Loops's 100-character key limit.
