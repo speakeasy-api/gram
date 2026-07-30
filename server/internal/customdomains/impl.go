@@ -134,7 +134,9 @@ func (s *Service) ListDomains(ctx context.Context, _ *gen.ListDomainsPayload) (*
 		return nil, err
 	}
 
-	domain, err := repo.New(s.db).GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+	repo := repo.New(s.db)
+
+	domain, err := repo.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return &gen.ListCustomDomainsResult{Domains: []*gen.CustomDomain{}}, nil
 	}
@@ -147,8 +149,13 @@ func (s *Service) ListDomains(ctx context.Context, _ *gen.ListDomainsPayload) (*
 		isUpdating = workflowInfo.GetWorkflowExecutionInfo().GetStatus() == enums.WORKFLOW_EXECUTION_STATUS_RUNNING
 	}
 
+	route, err := repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load custom domain route").LogError(ctx, s.logger)
+	}
+
 	return &gen.ListCustomDomainsResult{
-		Domains: []*gen.CustomDomain{buildCustomDomainView(domain, isUpdating)},
+		Domains: []*gen.CustomDomain{mv.BuildCustomDomainView(domain, isUpdating, route.RootMcpEndpointID)},
 	}, nil
 }
 
