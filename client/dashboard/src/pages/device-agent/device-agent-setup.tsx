@@ -1,6 +1,7 @@
 import { CodeBlock } from "@/components/code";
 import { Page } from "@/components/page-layout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Dialog } from "@/components/ui/dialog";
 import { Link as ExternalLink } from "@/components/ui/link";
 import {
   Sheet,
@@ -503,6 +504,7 @@ function GenerateInlineButton({
 function FleetIdentity() {
   const { name: orgName, slug: orgSlug } = useOrganization();
   const apiKeysHref = useOrgRoutes().apiKeys.href();
+  const [rotateConfirmOpen, setRotateConfirmOpen] = useState(false);
 
   // org_slug / org_name are org-level constants, safe to prefill. email is
   // per-user: this fleet-wide file must not pin one identity, so the example
@@ -541,6 +543,20 @@ function FleetIdentity() {
     generatedToken ?? ORG_TOKEN_SENTINEL,
   );
 
+  const handleGenerateOrRotate = () => {
+    if (hasExistingAgentKey) {
+      setRotateConfirmOpen(true);
+      return;
+    }
+
+    generate();
+  };
+
+  const confirmRotation = () => {
+    setRotateConfirmOpen(false);
+    generate();
+  };
+
   // Host the inline action only while no token exists. CodeBlock matches the
   // sentinel as a substring of whatever token shiki emits (it ends up quoted as
   // a JSON value), so we key by the bare sentinel; copyText keeps a
@@ -551,7 +567,7 @@ function FleetIdentity() {
         [ORG_TOKEN_SENTINEL]: {
           node: (
             <GenerateInlineButton
-              onClick={generate}
+              onClick={handleGenerateOrRotate}
               pending={isPending}
               disabled={!canGenerate}
               existing={hasExistingAgentKey}
@@ -593,21 +609,6 @@ function FleetIdentity() {
 
       <div>
         <SubHeading>Example managed.json</SubHeading>
-        {hasExistingAgentKey && !generatedToken && (
-          <Alert variant="destructive" className="mb-3">
-            <Icon name="triangle-alert" className="h-4 w-4" />
-            <AlertTitle>
-              Rotating this token will break your current MDM integration
-            </AlertTitle>
-            <AlertDescription>
-              Clicking <strong>Rotate token</strong> expires the token currently
-              deployed in your MDM settings. You must replace it with the new{" "}
-              <code>org_token</code> and propagate the updated configuration to
-              every managed device. Until then, policy syncing to end-user
-              devices will not work.
-            </AlertDescription>
-          </Alert>
-        )}
         <CodeBlock language="json" slots={slots}>
           {exampleManagedJson}
         </CodeBlock>
@@ -677,6 +678,40 @@ function FleetIdentity() {
           check that it's readable by the logged-in user, and validate the JSON.
         </Type>
       </div>
+
+      <Dialog open={rotateConfirmOpen} onOpenChange={setRotateConfirmOpen}>
+        <Dialog.Content>
+          <Dialog.Header>
+            <Dialog.Title>Rotate device agent token?</Dialog.Title>
+            <Dialog.Description>
+              This expires the token currently deployed in your MDM settings.
+            </Dialog.Description>
+          </Dialog.Header>
+          <Alert variant="destructive">
+            <Icon name="triangle-alert" className="h-4 w-4" />
+            <AlertTitle>
+              Your current MDM integration will stop working
+            </AlertTitle>
+            <AlertDescription>
+              You must replace the existing <code>org_token</code> with the new
+              token and propagate the updated configuration to every managed
+              device. Until then, policy syncing to end-user devices will not
+              work.
+            </AlertDescription>
+          </Alert>
+          <Dialog.Footer>
+            <Button
+              variant="tertiary"
+              onClick={() => setRotateConfirmOpen(false)}
+            >
+              <Button.Text>Cancel</Button.Text>
+            </Button>
+            <Button variant="destructive-primary" onClick={confirmRotation}>
+              <Button.Text>Rotate token</Button.Text>
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
     </div>
   );
 }
