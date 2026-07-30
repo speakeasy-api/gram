@@ -455,3 +455,58 @@ test("fails when functions file does not export handleResources", async () => {
   expect(content).toContain(ERROR_CODES.INVALID_RESOURCE_FUNC);
   expect(content).toMatchSnapshot();
 });
+
+/**
+ * Runs the caller-identity fixture and returns the options the entrypoint
+ * handed to user code.
+ */
+async function callerIdentityOptions(meta: unknown) {
+  const pipePath = await fakepipe();
+  const args = JSON.stringify({
+    name: "whoami",
+    input: {},
+    ...(meta === undefined ? {} : { _meta: meta }),
+  });
+
+  await main(
+    ["node", "./gram-start.mjs", pipePath, args, "tool"],
+    join(import.meta.dirname, "caller-identity.js"),
+  );
+
+  const content = await readFile(pipePath, "utf-8");
+  return JSON.parse(content.trim().split("\n").at(-1) ?? "");
+}
+
+test("forwards caller identity from _meta to the tool", async () => {
+  const options = await callerIdentityOptions({
+    "io.modelcontextprotocol/clientInfo": { name: "claude-code", version: "2.1" },
+    "gram.ai/oauth-client-id": "client-abc",
+  });
+
+  expect(options).toEqual({
+    clientInfo: { name: "claude-code", version: "2.1" },
+    oauthClientId: "client-abc",
+  });
+});
+
+test("defaults a missing client version so a name-only client is still usable", async () => {
+  const options = await callerIdentityOptions({
+    "io.modelcontextprotocol/clientInfo": { name: "claude-code" },
+  });
+
+  expect(options).toEqual({ clientInfo: { name: "claude-code", version: "" } });
+});
+
+test("drops malformed and unknown _meta entries", async () => {
+  const options = await callerIdentityOptions({
+    "io.modelcontextprotocol/clientInfo": { version: "2.1" },
+    "gram.ai/oauth-client-id": 42,
+    "example.com/unknown": "ignored",
+  });
+
+  expect(options).toEqual({});
+});
+
+test("omits caller identity when the call carries no _meta", async () => {
+  expect(await callerIdentityOptions(undefined)).toEqual({});
+});
