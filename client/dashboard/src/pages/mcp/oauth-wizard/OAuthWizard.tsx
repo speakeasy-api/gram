@@ -169,6 +169,7 @@ function WizardSteps({
         <ExternalOAuthForm
           hasMultipleOAuth2AuthCode={hasMultipleOAuth2AuthCode}
           oauth2SecurityCount={oauth2SecurityCount}
+          onCancel={onClose}
         />
       )}
 
