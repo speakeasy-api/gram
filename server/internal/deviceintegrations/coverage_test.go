@@ -562,3 +562,51 @@ func TestCoverageAttestationDowngradesOnMixedEvidence(t *testing.T) {
 		coverageAttestation(true, 0, 0),
 		"an empty active set cannot support the strong claim")
 }
+
+// TestCoverageAttestationIgnoresMissingDevices is the regression test for a
+// counting bug in the attestation comparison: a device retired from MDM keeps
+// its bucket 'missing', but its agent may still be installed and polling. If
+// the device-attested count included it, that count could EXCEED agent_active
+// and the equality check would never match again — permanently printing the
+// weaker claim for an org whose every active device is serial-attested.
+func TestCoverageAttestationIgnoresMissingDevices(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+	cfg := mustUpsert(t, ctx, conn, store, orgID, validCreds(), validSettings(), true)
+	now := time.Now().UTC()
+
+	// Two present machines, both reporting their own serials.
+	for _, d := range []struct{ ext, email, serial string }{
+		{"present-a", "a@example.test", "S-A"},
+		{"present-b", "b@example.test", "S-B"},
+	} {
+		userID := seedUser(t, ctx, conn, d.email)
+		seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, d.ext, d.email, &userID, d.serial, false)
+		seedDeviceAgentSync(t, ctx, conn, orgID, d.serial, d.email, now)
+	}
+
+	// A third machine was retired from MDM inventory, but the agent is still
+	// installed and still reporting its serial.
+	retiredEmail := "retired@example.test"
+	retiredUser := seedUser(t, ctx, conn, retiredEmail)
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "retired", retiredEmail, &retiredUser, "S-RETIRED", true)
+	seedDeviceAgentSync(t, ctx, conn, orgID, "S-RETIRED", retiredEmail, now)
+
+	counts, err := store.repo.GetCoverageCounts(ctx, repo.GetCoverageCountsParams{
+		DeviceLevel:    true,
+		ActiveCutoff:   conv.ToPGTimestamptz(now.Add(-time.Hour)),
+		OrganizationID: orgID,
+		Provider:       conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, counts.Missing)
+	require.EqualValues(t, 2, counts.AgentActive)
+	require.EqualValues(t, 2, counts.AgentActiveDeviceAttested,
+		"the missing device's live heartbeat must not be counted among active ones")
+	require.LessOrEqual(t, counts.AgentActiveDeviceAttested, counts.AgentActive,
+		"device-attested can never exceed active, or the equality check below is unreachable")
+	require.Equal(t, string(providers.AttestationDevice),
+		coverageAttestation(true, counts.AgentActive, counts.AgentActiveDeviceAttested),
+		"every ACTIVE device is serial-attested, so the strong claim holds")
+}

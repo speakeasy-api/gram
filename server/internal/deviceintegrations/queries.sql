@@ -274,7 +274,12 @@ SELECT
     -- mode, so without this the caller cannot tell whether "active" means
     -- "this machine reported" for every device or only for some — and would
     -- have to state the strong claim for all of them.
-  , count(*) FILTER (WHERE @device_level::boolean AND dads.last_seen_at >= @active_cutoff::timestamptz) AS agent_active_device_attested
+    -- The bucket guard is load-bearing, not decoration. A device retired from
+    -- MDM keeps bucket 'missing' while its agent may still be installed and
+    -- reporting, so without it this count could EXCEED agent_active and the
+    -- caller's equality check would never match again — permanently printing
+    -- the weaker claim for an org whose every active device is serial-attested.
+  , count(*) FILTER (WHERE cov.coverage_bucket = 'agent_active' AND @device_level::boolean AND dads.last_seen_at >= @active_cutoff::timestamptz) AS agent_active_device_attested
   , count(*) FILTER (WHERE cov.coverage_bucket = 'no_agent') AS no_agent
   , count(*) FILTER (WHERE cov.coverage_bucket = 'unresolved_email') AS unresolved_email
   , count(*) AS total

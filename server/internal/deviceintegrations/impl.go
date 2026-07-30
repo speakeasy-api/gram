@@ -720,19 +720,19 @@ func (s *Service) GetCoverage(ctx context.Context, payload *gen.GetCoveragePaylo
 	}
 
 	return &gen.DeviceIntegrationCoverage{
-		OrganizationID:      authCtx.ActiveOrganizationID,
-		ActiveWindowMinutes: int(activeWindow / time.Minute),
-		Attestation:         coverageAttestation(deviceLevel, counts.AgentActive, counts.AgentActiveDeviceAttested),
+		OrganizationID:            authCtx.ActiveOrganizationID,
+		ActiveWindowMinutes:       int(activeWindow / time.Minute),
+		Attestation:               coverageAttestation(deviceLevel, counts.AgentActive, counts.AgentActiveDeviceAttested),
 		AgentActive:               counts.AgentActive,
 		AgentActiveDeviceAttested: counts.AgentActiveDeviceAttested,
-		AgentStale:          counts.AgentStale,
-		AgentOtherDevice:    counts.AgentOtherDevice,
-		NoAgent:             counts.NoAgent,
-		NoEmail:             counts.NoEmail,
-		UnresolvedEmail:     counts.UnresolvedEmail,
-		Missing:             counts.Missing,
-		TotalDevices:        counts.Total,
-		UnmanagedAgentUsers: unmanaged,
+		AgentStale:                counts.AgentStale,
+		AgentOtherDevice:          counts.AgentOtherDevice,
+		NoAgent:                   counts.NoAgent,
+		NoEmail:                   counts.NoEmail,
+		UnresolvedEmail:           counts.UnresolvedEmail,
+		Missing:                   counts.Missing,
+		TotalDevices:              counts.Total,
+		UnmanagedAgentUsers:       unmanaged,
 	}, nil
 }
 
