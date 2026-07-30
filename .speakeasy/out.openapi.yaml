@@ -4077,6 +4077,24 @@ paths:
           schema:
             description: API Key header
             type: string
+        - allowEmptyValue: true
+          description: Hardware serial number of the machine the agent runs on, when it can be read. Lets device coverage attest this specific machine rather than its assigned user.
+          example: C02XK1ABCDEF
+          in: header
+          name: Gram-Device-Serial
+          schema:
+            description: Hardware serial number of the machine the agent runs on, when it can be read. Lets device coverage attest this specific machine rather than its assigned user.
+            example: C02XK1ABCDEF
+            type: string
+        - allowEmptyValue: true
+          description: Hostname of the machine the agent runs on, when it can be read.
+          example: dev-macbook-pro
+          in: header
+          name: Gram-Device-Hostname
+          schema:
+            description: Hostname of the machine the agent runs on, when it can be read.
+            example: dev-macbook-pro
+            type: string
       responses:
         "200":
           content:
@@ -11374,6 +11392,7 @@ paths:
             enum:
               - agent_active
               - agent_stale
+              - agent_other_device
               - no_agent
               - no_email
               - unresolved_email
@@ -12304,6 +12323,88 @@ paths:
       x-speakeasy-name-override: getDomain
       x-speakeasy-react-hook:
         name: getDomain
+  /rpc/domain.list:
+    get:
+      description: List the custom domains for an organization. The result is empty when no custom domain has been configured.
+      operationId: listDomains
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListCustomDomainsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listDomains domains
+      tags:
+        - domains
+      x-speakeasy-name-override: listDomains
+      x-speakeasy-react-hook:
+        name: listDomains
   /rpc/domain.listMcpEndpoints:
     get:
       description: List the MCP endpoints registered under the organization's custom domain across every project. Returns enriched rows that include the parent MCP server and project so callers can preview what a custom-domain deletion would cascade through.
@@ -35534,12 +35635,30 @@ paths:
             description: Include per-version daily trends.
             type: boolean
         - allowEmptyValue: true
-          description: Include up to 100 recent scored sessions. Intended for one skill detail view.
+          description: Include a newest-first page of scored sessions. Intended for one skill detail view.
           in: query
           name: include_scored_sessions
           schema:
-            description: Include up to 100 recent scored sessions. Intended for one skill detail view.
+            description: Include a newest-first page of scored sessions. Intended for one skill detail view.
             type: boolean
+        - allowEmptyValue: true
+          description: Cursor for the next page of scored sessions.
+          in: query
+          name: cursor
+          schema:
+            description: Cursor for the next page of scored sessions.
+            type: string
+        - allowEmptyValue: true
+          description: The number of scored sessions to return per page.
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: The number of scored sessions to return per page.
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -35623,6 +35742,14 @@ paths:
       tags:
         - skillEfficacy
       x-speakeasy-name-override: queryInsights
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
       x-speakeasy-react-hook:
         name: SkillEfficacyInsights
         type: query
@@ -53314,16 +53441,30 @@ components:
       properties:
         active_window_minutes:
           type: integer
-          description: 'Freshness window: an assigned user counts as active when their agent heartbeat is within this many minutes.'
+          description: 'Freshness window: an agent counts as active when its heartbeat is within this many minutes.'
           format: int64
         agent_active:
           type: integer
-          description: Devices whose assigned user has an agent heartbeat within the window.
+          description: Devices with an agent heartbeat within the window. What that attests depends on the matching mode and, per device, on whether the match was by serial or by email — compare against agent_active_device_attested.
+          format: int64
+        agent_active_device_attested:
+          type: integer
+          description: How many of agent_active are backed by that machine's OWN heartbeat (serial match). Under user-level matching this is 0; under device-level matching a value below agent_active means some devices fell back to the assigned-user email, which is the weaker claim.
+          format: int64
+        agent_other_device:
+          type: integer
+          description: 'Device-level matching only: devices whose assigned user runs the agent, but not on this machine. Always 0 under user-level matching, which cannot distinguish this from agent_active.'
           format: int64
         agent_stale:
           type: integer
-          description: Devices whose assigned user has an agent that went quiet — the drift/disable case.
+          description: Devices with a known agent that went quiet — the drift/disable case.
           format: int64
+        attestation:
+          type: string
+          description: 'The strongest claim that holds for EVERY active device in this response — not merely the org''s matching mode. "device": every active device was matched on its own hardware serial, so each one ran the agent. "user": at least one active device was matched only on its assigned-user email, so the set as a whole supports only the weaker claim that assigned users ran the agent somewhere.'
+          enum:
+            - device
+            - user
         missing:
           type: integer
           description: Devices absent from the latest completed MDM snapshot.
@@ -53351,12 +53492,15 @@ components:
           type: integer
           description: Devices whose assigned email matches neither an agent user nor an org member.
           format: int64
-      description: 'Agent-coverage summary across the org''s connected MDM inventories. Buckets attest the assigned user''s agent (the heartbeat is per user), not the device itself: agent_active means the device''s assigned user has a fresh agent heartbeat somewhere.'
+      description: 'Agent-coverage summary across the org''s connected MDM inventories. What a bucket attests depends on the org''s matching mode: under device-level matching (hardware serial) agent_active means THIS machine reported in, while under user-level matching it means only that the device''s assigned user has a fresh heartbeat somewhere.'
       required:
         - organization_id
         - active_window_minutes
+        - attestation
         - agent_active
+        - agent_active_device_attested
         - agent_stale
+        - agent_other_device
         - no_agent
         - no_email
         - unresolved_email
@@ -56759,6 +56903,16 @@ components:
       description: Result of listing the MCP endpoints registered under an organization's custom domain.
       required:
         - mcp_endpoints
+    ListCustomDomainsResult:
+      type: object
+      properties:
+        domains:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomDomain'
+      description: Result of listing an organization's custom domains.
+      required:
+        - domains
     ListDeploymentForm:
       type: object
       properties:
@@ -58061,14 +58215,15 @@ components:
       properties:
         agent_last_seen_at:
           type: string
-          description: The assigned user's latest device-agent heartbeat. Omitted when the user has never synced an agent.
+          description: 'The device-agent heartbeat that classified this device: the machine''s own under device-level matching, otherwise its assigned user''s. Omitted when no agent has ever synced.'
           format: date-time
         coverage_bucket:
           type: string
-          description: Coverage classification for the device.
+          description: Coverage classification for the device. What agent_active attests depends on the org's matching mode and on whether this device matched by serial or by assigned-user email.
           enum:
             - agent_active
             - agent_stale
+            - agent_other_device
             - no_agent
             - no_email
             - unresolved_email
@@ -58114,7 +58269,7 @@ components:
         user_id:
           type: string
           description: Resolved Gram user for the assigned email. Omitted when the email is missing or does not resolve to an org member.
-      description: One device from a connected MDM's inventory, annotated with its agent-coverage bucket. Agent presence is attested per assigned user (the agent heartbeat is keyed by user email), not per device.
+      description: 'One device from a connected MDM''s inventory, annotated with its agent-coverage bucket. What that bucket attests depends on the organization''s matching mode: under device-level matching a device may be classified by its own hardware serial (this machine ran the agent) or, when no serial heartbeat exists for it, by its assigned-user email (only that user ran the agent somewhere). Under user-level matching only the latter applies.'
       required:
         - id
         - provider
@@ -64435,6 +64590,9 @@ components:
         interval_seconds:
           type: integer
           format: int64
+        next_cursor:
+          type: string
+          description: Cursor for the next page of scored sessions; absent when exhausted.
         scored_sessions:
           type: array
           items:

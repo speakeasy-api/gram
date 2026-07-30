@@ -39,6 +39,8 @@ type ProxyManager struct {
 	proxyMetrics *proxy.Metrics
 	mcpMetrics   *ProxyMetrics
 
+	toolDispositions ToolDispositionResolver
+
 	toolsCallUsageLimitsInterceptor       *ToolsCallUsageLimitsInterceptor
 	toolsCallUsageTrackingInterceptor     *ToolsCallUsageTrackingInterceptor
 	resourcesReadUsageLimitsInterceptor   *ResourcesReadUsageLimitsInterceptor
@@ -59,6 +61,7 @@ func NewProxyManager(
 	telemLogger *tm.Logger,
 	billingRepo billing.Repository,
 	billingTracker billing.Tracker,
+	toolDispositions ToolDispositionResolver,
 ) *ProxyManager {
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/remotemcp")
@@ -72,6 +75,7 @@ func NewProxyManager(
 		telemLogger:                           telemLogger,
 		proxyMetrics:                          proxy.NewMetrics(meter, logger),
 		mcpMetrics:                            NewProxyMetrics(meter, logger),
+		toolDispositions:                      toolDispositions,
 		toolsCallUsageLimitsInterceptor:       NewToolsCallUsageLimitsInterceptor(billingRepo, logger),
 		toolsCallUsageTrackingInterceptor:     NewToolsCallUsageTrackingInterceptor(billingTracker, logger),
 		resourcesReadUsageLimitsInterceptor:   NewResourcesReadUsageLimitsInterceptor(billingRepo, logger),
@@ -169,14 +173,14 @@ func (f *ProxyManager) BuildTarget(
 	}
 	if visibility == mcpservers.VisibilityPrivate {
 		toolsCallReqInterceptors = append(toolsCallReqInterceptors,
-			NewToolsCallAuthzInterceptor(f.authz, identity.McpServerID, projectID, logger),
+			NewToolsCallAuthzInterceptor(f.authz, f.toolDispositions, identity.McpServerID, projectID, logger),
 		)
 	}
 
 	toolsListRespInterceptors := []proxy.ToolsListResponseInterceptor{}
 	if visibility == mcpservers.VisibilityPrivate {
 		toolsListRespInterceptors = append(toolsListRespInterceptors,
-			NewToolsListMCPConnectFilterInterceptor(f.authz, identity.McpServerID, projectID, logger),
+			NewToolsListMCPConnectFilterInterceptor(f.authz, f.toolDispositions, identity.McpServerID, projectID, logger),
 		)
 	}
 

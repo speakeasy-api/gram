@@ -158,9 +158,21 @@ VALUES (@id, @email, @display_name);
 INSERT INTO device_agent_syncs (organization_id, email, first_seen_at, last_seen_at)
 VALUES (@organization_id, @email, @seen_at, @seen_at);
 
+-- name: ListDeviceAgentDeviceSyncsFixture :many
+-- Reads back per-device agent heartbeats so tests can assert the write path;
+-- there is no production reader until the coverage join lands.
+SELECT organization_id, serial_number, email, hostname, first_seen_at, last_seen_at
+FROM device_agent_device_syncs
+WHERE organization_id = @organization_id
+ORDER BY serial_number ASC;
+
 -- name: InsertMdmDeviceFixture :exec
-INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, missing_since)
-VALUES (@device_integration_config_id, @organization_id, @external_id, NULLIF(@user_email::text, ''), sqlc.narg('user_id')::text, sqlc.narg('missing_since')::timestamptz);
+INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, serial_number, missing_since)
+VALUES (@device_integration_config_id, @organization_id, @external_id, NULLIF(@user_email::text, ''), sqlc.narg('user_id')::text, NULLIF(@serial_number::text, ''), sqlc.narg('missing_since')::timestamptz);
+
+-- name: InsertDeviceAgentDeviceSyncFixture :exec
+INSERT INTO device_agent_device_syncs (organization_id, serial_number, email, hostname, first_seen_at, last_seen_at)
+VALUES (@organization_id, @serial_number, @email, NULLIF(@hostname::text, ''), @seen_at, @seen_at);
 
 -- name: PauseDeviceIntegrationSyncsFixture :exec
 UPDATE device_integration_syncs s

@@ -27,6 +27,7 @@ import {
   CheckCircle2,
   CircleSlash,
   HelpCircle,
+  Laptop,
   MailX,
   MonitorX,
   TriangleAlert,
@@ -35,10 +36,17 @@ import {
 import { memo, useDeferredValue, useMemo, useState } from "react";
 import { Link } from "react-router";
 
-// Coverage joins the MDM-reported fleet against device agent heartbeats.
-// Attestation is per assigned USER, not per device: an active heartbeat
-// proves "this device's assigned user runs the agent somewhere", never
-// "this device is monitored". Copy below must not overclaim.
+// Coverage joins the MDM-reported fleet against device agent heartbeats, in
+// one of two modes the server selects per org. Under device-level matching
+// (hardware serial) an active heartbeat proves THIS machine ran the agent.
+// Under user-level matching it proves only "this device's assigned user runs
+// the agent somewhere" — never "this device is monitored".
+//
+// Copy below must hold under BOTH modes, because the client is not told which
+// one produced the counts. That is why the agent_active detail speaks of "the
+// device agent" without asserting whose machine it ran on, while
+// agent_other_device — which only device-level matching can produce — is free
+// to be specific.
 type BucketDisplay = {
   label: string;
   variant: "destructive" | "neutral" | "success" | "warning";
@@ -58,15 +66,21 @@ const BUCKETS: Record<CoverageBucket, BucketDisplay> = {
     label: "Agent active",
     variant: "success",
     icon: CheckCircle2,
-    detail:
-      "The assigned user's device agent reported a heartbeat within the active window.",
+    detail: "The device agent reported a heartbeat within the active window.",
   },
   agent_stale: {
     label: "Agent stale",
     variant: "warning",
     icon: TriangleAlert,
     detail:
-      "The assigned user's agent has gone quiet while the MDM still sees the device checking in — the drift case. The agent may be disabled or removed.",
+      "The agent has gone quiet while the MDM still sees the device checking in — the drift case. The agent may be disabled or removed.",
+  },
+  agent_other_device: {
+    label: "Agent on another device",
+    variant: "warning",
+    icon: Laptop,
+    detail:
+      "The assigned user runs the device agent, but not on this machine. Install it here — unlike No agent, the user is already onboarded.",
   },
   no_agent: {
     label: "No agent",
@@ -139,6 +153,18 @@ export function CoverageSummaryTiles({
       display: BUCKETS.agent_stale,
       count: coverage.agentStale,
     },
+    // Only rendered when non-zero: user-level matching cannot produce this
+    // bucket, so an always-present "0" tile would be dead weight for every
+    // org that has not moved to device-level matching yet.
+    ...(coverage.agentOtherDevice > 0
+      ? [
+          {
+            key: "agent_other_device",
+            display: BUCKETS.agent_other_device,
+            count: coverage.agentOtherDevice,
+          },
+        ]
+      : []),
     { key: "no_agent", display: BUCKETS.no_agent, count: coverage.noAgent },
     { key: "no_email", display: BUCKETS.no_email, count: coverage.noEmail },
     {
@@ -157,7 +183,13 @@ export function CoverageSummaryTiles({
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+    <div
+      className={
+        tiles.length > 7
+          ? "grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8"
+          : "grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7"
+      }
+    >
       {tiles.map(({ key, display, count }) => (
         <CoverageStatTile key={key} display={display} count={count} />
       ))}

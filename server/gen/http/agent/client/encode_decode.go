@@ -45,6 +45,14 @@ func EncodeGetPluginsRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
+		if p.SerialNumber != nil {
+			head := *p.SerialNumber
+			req.Header.Set("Gram-Device-Serial", head)
+		}
+		if p.Hostname != nil {
+			head := *p.Hostname
+			req.Header.Set("Gram-Device-Hostname", head)
+		}
 		values := req.URL.Query()
 		values.Add("email", p.Email)
 		req.URL.RawQuery = values.Encode()

@@ -785,6 +785,57 @@ CREATE TABLE IF NOT EXISTS device_agent_syncs (
 CREATE INDEX IF NOT EXISTS device_agent_syncs_organization_id_lower_email_idx
 ON device_agent_syncs (organization_id, LOWER(email));
 
+-- Per-DEVICE agent heartbeats, the sibling of device_agent_syncs. Both are
+-- written by the same agent.getPlugins poll: that table answers "does this
+-- user run the agent somewhere", this one answers "does THIS machine run
+-- it". They are separate tables rather than one widened table because
+-- (organization_id, email) remains a correct and independently useful key —
+-- the product-feature probe and the synced-users list both read it, and the
+-- coverage join still falls back to it for devices whose agent predates
+-- hardware reporting or cannot read a serial.
+--
+-- Keyed on the hardware serial because that is the one identifier both sides
+-- of the coverage join can supply without a human maintaining it: every MDM
+-- reads it off the hardware, whereas an assigned-user email is frequently
+-- absent or disagrees between systems. email here is descriptive (the user
+-- whose agent last checked in from this machine), not part of the key.
+CREATE TABLE IF NOT EXISTS device_agent_device_syncs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id TEXT NOT NULL,
+  serial_number TEXT NOT NULL,
+
+  email TEXT NOT NULL,
+  hostname TEXT,
+
+  first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT device_agent_device_syncs_pkey PRIMARY KEY (id),
+  CONSTRAINT device_agent_device_syncs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+-- The dedup key, and deliberately an EXPRESSION index rather than a
+-- UNIQUE (organization_id, serial_number) table constraint: vendors and agent
+-- read-paths disagree on serial casing (macOS ioreg vs Windows WMI, and any
+-- change between agent builds), and every consumer matches on
+-- LOWER(serial_number). A raw-column key would let 'abc123' and 'ABC123'
+-- coexist for one machine, and because the coverage joins are case-insensitive
+-- BOTH rows would match the same device and fan it out — inflating counts and
+-- breaking evidence pushes that reject duplicate device ids. Keying on the
+-- same expression the readers use is what makes that state unrepresentable.
+--
+-- It also lets Postgres prove the join yields at most one row, so the planner
+-- can drop it entirely for organizations not on device-level matching.
+--
+-- Postgres cannot express an expression key as a table constraint, hence the
+-- standalone CREATE UNIQUE INDEX. The upsert infers this index via
+-- ON CONFLICT (organization_id, LOWER(serial_number)).
+CREATE UNIQUE INDEX IF NOT EXISTS device_agent_device_syncs_org_lower_serial_key
+ON device_agent_device_syncs (organization_id, LOWER(serial_number));
+
 CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   deployment_id uuid NOT NULL,
@@ -5312,6 +5363,15 @@ ON mdm_devices (organization_id, user_id);
 -- device_agent_syncs_organization_id_lower_email_idx on the agent side.
 CREATE INDEX IF NOT EXISTS mdm_devices_organization_id_lower_user_email_idx
 ON mdm_devices (organization_id, LOWER(user_email))
+WHERE missing_since IS NULL;
+
+-- Serves the coverage join's primary serial match against present devices,
+-- pairing with device_agent_device_syncs_organization_id_lower_serial_idx on
+-- the agent side. Deliberately NOT unique: one physical machine enrolled in
+-- two MDMs (a Jamf-to-Intune migration, say) legitimately yields two rows
+-- carrying the same serial, so uniqueness here would reject real inventory.
+CREATE INDEX IF NOT EXISTS mdm_devices_organization_id_lower_serial_number_idx
+ON mdm_devices (organization_id, LOWER(serial_number))
 WHERE missing_since IS NULL;
 
 -- Backs the user FK's ON DELETE SET NULL, which must match every row for

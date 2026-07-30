@@ -45,6 +45,7 @@ func findSyncID(t *testing.T, ctx context.Context, store *Store, orgID string, p
 
 func listDevicesParams(orgID string) repo.ListManagedDevicesParams {
 	return repo.ListManagedDevicesParams{
+		DeviceLevel:    false,
 		ActiveCutoff:   conv.ToPGTimestamptz(time.Now().UTC().Add(-activeWindow)),
 		OrganizationID: orgID,
 		Provider:       conv.PtrToPGTextEmpty(nil),

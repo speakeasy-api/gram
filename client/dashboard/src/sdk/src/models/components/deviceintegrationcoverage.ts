@@ -5,25 +5,50 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * Agent-coverage summary across the org's connected MDM inventories. Buckets attest the assigned user's agent (the heartbeat is per user), not the device itself: agent_active means the device's assigned user has a fresh agent heartbeat somewhere.
+ * The strongest claim that holds for EVERY active device in this response — not merely the org's matching mode. "device": every active device was matched on its own hardware serial, so each one ran the agent. "user": at least one active device was matched only on its assigned-user email, so the set as a whole supports only the weaker claim that assigned users ran the agent somewhere.
+ */
+export const Attestation = {
+  Device: "device",
+  User: "user",
+} as const;
+/**
+ * The strongest claim that holds for EVERY active device in this response — not merely the org's matching mode. "device": every active device was matched on its own hardware serial, so each one ran the agent. "user": at least one active device was matched only on its assigned-user email, so the set as a whole supports only the weaker claim that assigned users ran the agent somewhere.
+ */
+export type Attestation = ClosedEnum<typeof Attestation>;
+
+/**
+ * Agent-coverage summary across the org's connected MDM inventories. What a bucket attests depends on the org's matching mode: under device-level matching (hardware serial) agent_active means THIS machine reported in, while under user-level matching it means only that the device's assigned user has a fresh heartbeat somewhere.
  */
 export type DeviceIntegrationCoverage = {
   /**
-   * Freshness window: an assigned user counts as active when their agent heartbeat is within this many minutes.
+   * Freshness window: an agent counts as active when its heartbeat is within this many minutes.
    */
   activeWindowMinutes: number;
   /**
-   * Devices whose assigned user has an agent heartbeat within the window.
+   * Devices with an agent heartbeat within the window. What that attests depends on the matching mode and, per device, on whether the match was by serial or by email — compare against agent_active_device_attested.
    */
   agentActive: number;
   /**
-   * Devices whose assigned user has an agent that went quiet — the drift/disable case.
+   * How many of agent_active are backed by that machine's OWN heartbeat (serial match). Under user-level matching this is 0; under device-level matching a value below agent_active means some devices fell back to the assigned-user email, which is the weaker claim.
+   */
+  agentActiveDeviceAttested: number;
+  /**
+   * Device-level matching only: devices whose assigned user runs the agent, but not on this machine. Always 0 under user-level matching, which cannot distinguish this from agent_active.
+   */
+  agentOtherDevice: number;
+  /**
+   * Devices with a known agent that went quiet — the drift/disable case.
    */
   agentStale: number;
+  /**
+   * The strongest claim that holds for EVERY active device in this response — not merely the org's matching mode. "device": every active device was matched on its own hardware serial, so each one ran the agent. "user": at least one active device was matched only on its assigned-user email, so the set as a whole supports only the weaker claim that assigned users ran the agent somewhere.
+   */
+  attestation: Attestation;
   /**
    * Devices absent from the latest completed MDM snapshot.
    */
@@ -55,6 +80,10 @@ export type DeviceIntegrationCoverage = {
 };
 
 /** @internal */
+export const Attestation$inboundSchema: z.ZodMiniEnum<typeof Attestation> = z
+  .enum(Attestation);
+
+/** @internal */
 export const DeviceIntegrationCoverage$inboundSchema: z.ZodMiniType<
   DeviceIntegrationCoverage,
   unknown
@@ -62,7 +91,10 @@ export const DeviceIntegrationCoverage$inboundSchema: z.ZodMiniType<
   z.object({
     active_window_minutes: z.int(),
     agent_active: z.int(),
+    agent_active_device_attested: z.int(),
+    agent_other_device: z.int(),
     agent_stale: z.int(),
+    attestation: Attestation$inboundSchema,
     missing: z.int(),
     no_agent: z.int(),
     no_email: z.int(),
@@ -75,6 +107,8 @@ export const DeviceIntegrationCoverage$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "active_window_minutes": "activeWindowMinutes",
       "agent_active": "agentActive",
+      "agent_active_device_attested": "agentActiveDeviceAttested",
+      "agent_other_device": "agentOtherDevice",
       "agent_stale": "agentStale",
       "no_agent": "noAgent",
       "no_email": "noEmail",
