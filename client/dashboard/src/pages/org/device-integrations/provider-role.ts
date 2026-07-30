@@ -21,6 +21,19 @@ export function isSink(provider: DeviceIntegrationProvider): boolean {
   return providerRole(provider) === "sink";
 }
 
+// Providers that are registered on the backend but not ready for general use.
+// Hidden from the UI entirely — the list, the pipeline counts, the source
+// breakdown, and direct-URL access — until they are fully supported. This is a
+// deliberately temporary frontend gate: drop the id here to reveal it, no
+// backend change needed.
+const HIDDEN_PROVIDER_IDS = new Set(["intune"]);
+
+export function isProviderVisible(
+  provider: DeviceIntegrationProvider,
+): boolean {
+  return !HIDDEN_PROVIDER_IDS.has(provider.id);
+}
+
 // Role-specific verbs, kept in one place so "synced" never leaks onto a sink
 // or "pushed" onto a source.
 export const ROLE_COPY: Record<

@@ -7,7 +7,7 @@ import { Stack } from "@speakeasy-api/moonshine";
 import React from "react";
 import { CoveragePipeline } from "./coverage-pipeline";
 import { DeviceIntegrationConnectionRow } from "./device-integration-connection-row";
-import { isSink } from "./provider-role";
+import { isProviderVisible, isSink } from "./provider-role";
 
 // MDM Integrations catalog, rendered as a tab of the Device Agent page. The
 // page is a one-directional pipeline: inventory sources pull the managed
@@ -23,7 +23,7 @@ export function MdmIntegrationsTab(): React.JSX.Element {
     // The provider registry only changes on deploy.
     { staleTime: 300_000 },
   );
-  const providers = data?.providers ?? [];
+  const providers = (data?.providers ?? []).filter(isProviderVisible);
   const sources = providers.filter((provider) => !isSink(provider));
   const sinks = providers.filter(isSink);
 
