@@ -12,6 +12,7 @@ import {
   ConnectionStatusBadge,
   DeviceIntegrationConfigureSheet,
 } from "./device-integration-configure-sheet";
+import { providerRole } from "./provider-role";
 import { providerUI } from "./provider-ui";
 import { useDeviceIntegrationConfigForm } from "./use-device-integration-config";
 import {
@@ -32,7 +33,10 @@ export function DeviceIntegrationConnectionRow({
   const orgRoutes = useOrgRoutes();
   const [configureOpen, setConfigureOpen] = useState(false);
   const form = useDeviceIntegrationConfigForm(provider);
-  const { runtimes } = useDeviceScheduleRuntimes(provider.id);
+  const { runtimes } = useDeviceScheduleRuntimes(
+    provider.id,
+    providerRole(provider),
+  );
   const ui = providerUI(provider);
   const Icon = ui.icon;
 

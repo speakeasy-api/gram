@@ -147,7 +147,7 @@ sudo mv speakeasyd speakeasy /usr/local/bin/`,
     ),
     serviceRegister: `speakeasyd -service install
 speakeasyd -service start`,
-    verify: `speakeasy status`,
+    verify: `speakeasyd status`,
     downloadKeys: ["darwin/arm64", "darwin/amd64"],
   },
   windows: {
@@ -195,7 +195,7 @@ sudo mv speakeasyd speakeasy /usr/local/bin/`,
     ),
     serviceRegister: `speakeasyd -service install
 speakeasyd -service start`,
-    verify: `speakeasy status`,
+    verify: `speakeasyd status`,
     downloadKeys: ["linux/amd64", "linux/arm64"],
   },
 };
