@@ -46,6 +46,10 @@ type fakeDrata struct {
 	// failComplete rejects the completing action, stranding the session
 	// mid-push the way a crashed or timed-out run does.
 	failComplete bool
+	// rejectRecordID makes the upload endpoint reject that record the way
+	// the real API rejects a schema-validation failure: the response stays
+	// 2xx and the rejection rides in the per-record result's "error" field.
+	rejectRecordID string
 	// records is the authoritative dataset: replaced wholesale when a
 	// session completes, exactly like the real API.
 	records []map[string]any
@@ -53,6 +57,9 @@ type fakeDrata struct {
 	uploadRequests int
 	completed      []string
 	canceled       []string
+	// deletedRecords logs ids removed via the record-delete endpoint, the
+	// empty-fleet clear path.
+	deletedRecords []string
 
 	server *httptest.Server
 }
@@ -68,10 +75,12 @@ func newFakeDrata(t *testing.T) *fakeDrata {
 		sessionStatus:      map[string]string{},
 		ignoreStatusFilter: false,
 		failComplete:       false,
+		rejectRecordID:     "",
 		records:            nil,
 		uploadRequests:     0,
 		completed:          nil,
 		canceled:           nil,
+		deletedRecords:     nil,
 		server:             nil,
 	}
 
@@ -89,15 +98,19 @@ func newFakeDrata(t *testing.T) *fakeDrata {
 		}
 		wanted := r.URL.Query().Get("status")
 		f.mu.Lock()
+		// Items mirror the shape observed from the production API: a numeric
+		// "id" alongside the caller-chosen "sessionId", extra timestamp
+		// fields, and a pagination envelope. The provider once decoded "id"
+		// as a string and the mismatch broke every push.
 		listed := make([]string, 0, len(f.sessionStatus))
 		for id, status := range f.sessionStatus {
 			if f.ignoreStatusFilter || wanted == "" || status == wanted {
-				listed = append(listed, fmt.Sprintf(`{"sessionId": %q, "status": %q}`, id, status))
+				listed = append(listed, fmt.Sprintf(`{"id": %d, "sessionId": %q, "status": %q, "activatedAt": null}`, len(listed)+1, id, status))
 			}
 		}
 		f.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintf(w, `{"data": [%s]}`, strings.Join(listed, ","))
+		_, _ = fmt.Fprintf(w, `{"data": [%s], "pagination": {"cursor": null}}`, strings.Join(listed, ","))
 	})
 	mux.HandleFunc(connBase, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(f.t, http.MethodGet, r.Method)
@@ -154,6 +167,14 @@ func newFakeDrata(t *testing.T) *fakeDrata {
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
+			if len(uploaded) == 0 {
+				// Mirrors production: completing a session with no records is
+				// refused with 422 "Cannot complete a session with no data
+				// records" — which is why the empty-fleet path must delete
+				// records instead of pushing an empty session.
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				return
+			}
 			// Completion makes the session the authoritative dataset.
 			f.records = uploaded
 			f.sessionStatus[sessionID] = "ACTIVE"
@@ -183,15 +204,72 @@ func newFakeDrata(t *testing.T) *fakeDrata {
 				return
 			}
 		}
+		// Per-record results mirror the real response: overall 2xx with a
+		// bare array whose rejected entries carry an "error" object (their
+		// statusCode still reads 201) and the record only under "data".
+		// Rejected records are not staged into the session.
+		results := make([]string, 0, len(payload.Data))
+		accepted := make([]map[string]any, 0, len(payload.Data))
+		for _, rec := range payload.Data {
+			id, _ := rec["id"].(string)
+			if f.rejectRecordID != "" && id == f.rejectRecordID {
+				results = append(results, fmt.Sprintf(`{"statusCode": 201, "error": {"message": "Schema validation failed for data", "code": 28022}, "data": {"id": %q}}`, id))
+				continue
+			}
+			results = append(results, fmt.Sprintf(`{"id": %q, "statusCode": 201, "data": {"id": %q}}`, id, id))
+			accepted = append(accepted, rec)
+		}
 		// Assignment (not just append) so an empty first upload still
 		// creates the session, mirroring implicit session creation.
-		f.sessions[rest] = append(f.sessions[rest], payload.Data...)
+		f.sessions[rest] = append(f.sessions[rest], accepted...)
 		if _, seen := f.sessionStatus[rest]; !seen {
 			f.sessionStatus[rest] = "IN_PROGRESS"
 		}
 		f.uploadRequests++
 		f.mu.Unlock()
-		w.WriteHeader(http.StatusCreated)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, "[%s]", strings.Join(results, ","))
+	})
+
+	recordsBase := connBase + "/resources/" + testResourceID + "/records"
+	mux.HandleFunc(recordsBase, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(f.t, http.MethodGet, r.Method)
+		if !f.authorized(w, r) {
+			return
+		}
+		f.mu.Lock()
+		items := make([]string, 0, len(f.records))
+		for _, rec := range f.records {
+			items = append(items, fmt.Sprintf(`{"id": %q, "data": {"id": %q}}`, rec["id"], rec["id"]))
+		}
+		f.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"data": [%s], "pagination": {"cursor": null}}`, strings.Join(items, ","))
+	})
+	mux.HandleFunc(recordsBase+"/", func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(f.t, http.MethodDelete, r.Method)
+		if !f.authorized(w, r) {
+			return
+		}
+		id := strings.TrimPrefix(r.URL.Path, recordsBase+"/")
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		kept := make([]map[string]any, 0, len(f.records))
+		found := false
+		for _, rec := range f.records {
+			if !found && rec["id"] == id {
+				found = true
+				continue
+			}
+			kept = append(kept, rec)
+		}
+		if !found {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		f.records = kept
+		f.deletedRecords = append(f.deletedRecords, id)
+		w.WriteHeader(http.StatusNoContent)
 	})
 
 	f.server = httptest.NewTLSServer(mux)
@@ -305,6 +383,28 @@ func TestPushCoverageEmptyFleetClearsEvidence(t *testing.T) {
 	empty.GeneratedAt = empty.GeneratedAt.Add(time.Hour)
 	require.NoError(t, s.PushCoverage(t.Context(), fake.creds(), fake.settings(), empty))
 	require.Empty(t, fake.records, "an empty fleet replaces stale evidence with the truthful empty set")
+	require.Len(t, fake.deletedRecords, 4, "the empty fleet clears via record deletion — the API refuses to complete an empty session")
+	require.Len(t, fake.completed, 1, "only the initial non-empty push completes a session")
+}
+
+// TestPushSurfacesPerRecordRejection pins the trap where an upload's 2xx
+// response hides schema-validation rejections in per-record results: a push
+// that ignored them would complete a session missing part of the fleet and
+// publish it as the authoritative dataset.
+func TestPushSurfacesPerRecordRejection(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeDrata(t)
+	s := fake.newSink(t)
+
+	fake.mu.Lock()
+	fake.rejectRecordID = "dev-0002"
+	fake.mu.Unlock()
+
+	err := s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(3))
+	require.ErrorContains(t, err, "dev-0002")
+	require.ErrorContains(t, err, "Schema validation failed")
+	require.Empty(t, fake.completed, "a partially rejected upload must not publish the session")
 }
 
 func TestTestConnection(t *testing.T) {
@@ -420,6 +520,95 @@ func TestPushCancelsStrandedSession(t *testing.T) {
 	require.Len(t, fake.completed, 1)
 	require.NotContains(t, fake.completed, "gram-stranded")
 	require.Len(t, fake.records, 2, "the live dataset is the new snapshot alone")
+}
+
+// TestStrandedSweepDecodesSessionListShapes pins the sweep's decode against
+// the response shapes the endpoint is undocumented enough to serve. The
+// production API returns numeric session "id"s inside a data/pagination
+// envelope — decoding "id" as a string once broke every push — and an empty
+// sweep may surface as data: null or a missing data key rather than [].
+func TestStrandedSweepDecodesSessionListShapes(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		body string
+		// wantCancel is the session identifier the sweep must cancel, or ""
+		// when the listing holds nothing cancellable.
+		wantCancel string
+	}{
+		{name: "envelope with null data", body: `{"data": null, "pagination": {"cursor": null}}`, wantCancel: ""},
+		{name: "envelope without data key", body: `{"pagination": {"cursor": null}}`, wantCancel: ""},
+		{name: "bare empty array", body: `[]`, wantCancel: ""},
+		{name: "bare array with a strand", body: `[{"sessionId": "gram-old", "status": "IN_PROGRESS"}]`, wantCancel: "gram-old"},
+		{
+			name:       "production envelope shape",
+			body:       `{"data": [{"id": 2, "sessionId": "gram-old", "status": "IN_PROGRESS", "createdAt": "2026-07-30T16:55:20.756Z", "activatedAt": null}], "pagination": {"cursor": null}}`,
+			wantCancel: "gram-old",
+		},
+		{
+			// No sessionId at all: the identifier must fall back to the
+			// numeric id, stringified, because it names the cancel URL.
+			name:       "numeric id only",
+			body:       `{"data": [{"id": 7, "status": "IN_PROGRESS"}]}`,
+			wantCancel: "7",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var canceled []string
+			mux := http.NewServeMux()
+			mux.HandleFunc("/resource/sessions", func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "IN_PROGRESS", r.URL.Query().Get("status"))
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprint(w, tc.body)
+			})
+			mux.HandleFunc("/resource/sessions/", func(w http.ResponseWriter, r *http.Request) {
+				id, ok := strings.CutSuffix(strings.TrimPrefix(r.URL.Path, "/resource/sessions/"), "/actions")
+				assert.True(t, ok, "only action posts are expected here")
+				canceled = append(canceled, id)
+				w.WriteHeader(http.StatusCreated)
+			})
+			server := httptest.NewTLSServer(mux)
+			t.Cleanup(server.Close)
+
+			s := &sink{client: server.Client(), regions: map[string]string{"us": server.URL}}
+			require.NoError(t, s.cancelStrandedSessions(t.Context(), providers.Credentials{fieldAPIKey: "k"}, server.URL+"/resource"))
+
+			if tc.wantCancel == "" {
+				require.Empty(t, canceled)
+			} else {
+				require.Equal(t, []string{tc.wantCancel}, canceled)
+			}
+		})
+	}
+}
+
+// TestFlexIDAcceptsOnlyScalarIDs pins the decode boundary: ids become URL
+// path segments (resource and session-cancel requests), so a non-scalar id
+// must fail the decode loudly rather than serialize into a bogus API call.
+func TestFlexIDAcceptsOnlyScalarIDs(t *testing.T) {
+	t.Parallel()
+
+	var ref sessionRef
+	require.Error(t, json.Unmarshal([]byte(`{"id": {"nested": 1}}`), &ref))
+	require.Error(t, json.Unmarshal([]byte(`{"id": true}`), &ref))
+	require.Error(t, json.Unmarshal([]byte(`{"id": ["7"]}`), &ref))
+
+	var quoted sessionRef
+	require.NoError(t, json.Unmarshal([]byte(`{"id": "a\"b"}`), &quoted))
+	require.Equal(t, `a"b`, string(quoted.ID), "string escapes decode as JSON, not by quote-trimming")
+
+	var numeric sessionRef
+	require.NoError(t, json.Unmarshal([]byte(`{"id": 42}`), &numeric))
+	require.Equal(t, "42", string(numeric.ID))
+
+	var null sessionRef
+	require.NoError(t, json.Unmarshal([]byte(`{"id": null}`), &null))
+	require.Empty(t, string(null.ID))
 }
 
 func TestPushRecoversAfterPartialFailure(t *testing.T) {

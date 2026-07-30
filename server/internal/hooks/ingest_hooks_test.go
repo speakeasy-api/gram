@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -17,12 +18,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -1227,6 +1230,43 @@ func TestIngest_PersistsPromptAttachmentsAsScannableToolRows(t *testing.T) {
 	require.False(t, results[0].ChatMessageID.Valid)
 	require.Equal(t, attachmentRow.ID, results[0].ChatContentPartID.UUID)
 
+	findingID, err := uuid.NewV7()
+	require.NoError(t, err)
+	chInserter := &recordingRiskFindingInserter{rows: nil}
+	fingerprinter, err := risk.ParsePepperKeyRing(fmt.Appendf(nil, `{"current":"v1","keys":{"v1":%q}}`, base64.StdEncoding.EncodeToString([]byte("test-fingerprint-key-material"))))
+	require.NoError(t, err)
+	chWriter := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), chInserter, fingerprinter)
+	startPos := int32(0)
+	endPos := int32(6)
+	confidence := float64(1)
+	createdAt := time.Now().UTC().Format(time.RFC3339)
+	require.NoError(t, chWriter.HandleBatch(ctx, []*riskv1.Finding{
+		riskv1.Finding_builder{
+			Id:                new(findingID.String()),
+			RequestId:         new("req-content-part"),
+			ChatMessageId:     nil,
+			ContentPartId:     new(attachmentRow.ID.String()),
+			ProjectId:         new(authCtx.ProjectID.String()),
+			OrganizationId:    &authCtx.ActiveOrganizationID,
+			RiskPolicyId:      new(policy.ID.String()),
+			RiskPolicyVersion: &policy.Version,
+			CreatedAt:         &createdAt,
+			RuleId:            new("secret.test"),
+			Description:       new("test finding"),
+			Match:             new("secret"),
+			StartPos:          &startPos,
+			EndPos:            &endPos,
+			Tags:              []string{},
+			Source:            new("gitleaks"),
+			Confidence:        &confidence,
+			DeadLetterReason:  nil,
+		}.Build(),
+	}, nil))
+	require.Len(t, chInserter.rows, 1)
+	require.Empty(t, chInserter.rows[0].ChatMessageID)
+	require.Equal(t, attachmentRow.ID.String(), chInserter.rows[0].ContentPartID)
+	require.Equal(t, chatID.String(), chInserter.rows[0].ChatID)
+
 	// A redelivered attachment event must not stamp an unrelated prompt row.
 	redelivery := canonicalIngestPayload("claude", "assistant.responded", sessionID)
 	redelivery.Data = payload.Data
@@ -1715,4 +1755,13 @@ func TestIngest_ReplayedMessageSortsByOccurredAt(t *testing.T) {
 	require.WithinDuration(t, wantBacklogAt, msgs[1].CreatedAt.Time, time.Second, "created_at must carry the event's occurred_at")
 	require.WithinDuration(t, time.Now(), msgs[3].CreatedAt.Time, 30*time.Second, "a future occurred_at must be clamped to arrival time")
 	require.WithinDuration(t, time.Now().Add(-14*24*time.Hour), msgs[0].CreatedAt.Time, 30*time.Second, "a far-past occurred_at must be floored to the 14-day backdate bound")
+}
+
+type recordingRiskFindingInserter struct {
+	rows []chrepo.RiskFindingRow
+}
+
+func (r *recordingRiskFindingInserter) InsertRiskFindings(_ context.Context, rows []chrepo.RiskFindingRow) error {
+	r.rows = rows
+	return nil
 }

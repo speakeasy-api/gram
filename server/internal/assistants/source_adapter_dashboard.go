@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,8 +18,9 @@ type dashboardSourceRef struct {
 }
 
 type dashboardEventPayload struct {
-	Text   string `json:"text"`
-	UserID string `json:"user_id,omitempty"`
+	Text         string                      `json:"text"`
+	UserID       string                      `json:"user_id,omitempty"`
+	SkillContext []dashboardTurnSkillContext `json:"skill_context,omitempty"`
 }
 
 type dashboardAdapter struct{}
@@ -92,7 +94,27 @@ func (dashboardAdapter) DecodeTurn(event assistantThreadEventRecord) (string, er
 	if payload.UserID != "" {
 		fmt.Fprintf(&b, "UserID: %s\n", payload.UserID)
 	}
-	b.WriteString("</message-context>\n\n")
+	b.WriteString("</message-context>\n")
+	for _, skill := range payload.SkillContext {
+		if skill.SkillID == uuid.Nil || skill.ResolvedVersionID == uuid.Nil || skill.Name == "" || skill.Content == "" {
+			return "", fmt.Errorf("dashboard turn contains invalid skill context")
+		}
+		name, description := safeSkillMetadata(assistantSkillSnapshot{
+			SkillID:           skill.SkillID,
+			Name:              skill.Name,
+			Description:       skill.Description,
+			ResolvedVersionID: skill.ResolvedVersionID,
+		})
+		b.WriteString("\n<skill-context>\n")
+		fmt.Fprintf(&b, "Name: %s\nDescription: %s\n", name, description)
+		b.WriteString("<skill-content>\n")
+		b.WriteString(skill.Content)
+		if !strings.HasSuffix(skill.Content, "\n") {
+			b.WriteByte('\n')
+		}
+		b.WriteString("</skill-content>\n</skill-context>\n")
+	}
+	b.WriteByte('\n')
 	b.WriteString(payload.Text)
 	return b.String(), nil
 }

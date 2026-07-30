@@ -3,8 +3,11 @@ package scanners_test
 import (
 	"context"
 	"errors"
+	"strconv"
+	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -114,10 +117,57 @@ func TestPublishFindingsDisambiguatesIdenticalFindings(t *testing.T) {
 	require.Len(t, ids, 3, "identical findings in one batch must get distinct ids")
 }
 
+func TestPublishFindingsMessageAnchorKeepsHistoricalDeterministicID(t *testing.T) {
+	t.Parallel()
+
+	finding := testFinding()
+	meta := testFindingMetadata()
+	pub := &recordingFindingPublisher{results: nil, messages: nil}
+
+	published, _, err := scanners.PublishFindings(t.Context(), testenv.NewLogger(t), pub, meta, []scanners.Finding{finding}, "prompt injection")
+
+	require.NoError(t, err)
+	require.Equal(t, 1, published)
+	require.Len(t, pub.messages, 1)
+	expectedParts := []string{
+		meta.RequestID,
+		meta.ChatMessageID,
+		meta.ProjectID,
+		meta.OrganizationID,
+		meta.RiskPolicyID,
+		strconv.FormatInt(meta.RiskPolicyVersion, 10),
+		finding.Source,
+		finding.RuleID,
+		strconv.Itoa(finding.StartPos),
+		strconv.Itoa(finding.EndPos),
+		finding.Match,
+	}
+	expected := uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:risk:finding:"+strings.Join(expectedParts, "\x00")))
+	require.Equal(t, expected.String(), pub.messages[0].GetId())
+}
+
+func TestPublishFindingsPublishesContentPartAnchor(t *testing.T) {
+	t.Parallel()
+
+	meta := testFindingMetadata()
+	meta.ChatMessageID = ""
+	meta.ContentPartID = "part-1"
+	pub := &recordingFindingPublisher{results: nil, messages: nil}
+
+	published, _, err := scanners.PublishFindings(t.Context(), testenv.NewLogger(t), pub, meta, []scanners.Finding{testFinding()}, "prompt policy")
+
+	require.NoError(t, err)
+	require.Equal(t, 1, published)
+	require.Len(t, pub.messages, 1)
+	require.Empty(t, pub.messages[0].GetChatMessageId())
+	require.Equal(t, "part-1", pub.messages[0].GetContentPartId())
+}
+
 func testFindingMetadata() scanners.FindingMetadata {
 	return scanners.FindingMetadata{
 		RequestID:         "req-1",
 		ChatMessageID:     "msg-1",
+		ContentPartID:     "",
 		ProjectID:         "project-1",
 		OrganizationID:    "org-1",
 		RiskPolicyID:      "policy-1",

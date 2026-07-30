@@ -74,9 +74,10 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 	tenantKeyCache := make(map[string][]byte)
 
 	// Batch-resolve the denormalized attribution (chat id, user ids) for every
-	// finding that carries a well-formed chat_message_id — one Postgres query
-	// per batch, best-effort.
-	attribution := w.chatMessageAttribution(ctx, messages)
+	// finding that carries a well-formed anchor — one Postgres query per anchor
+	// kind, best-effort.
+	messageAttribution := w.chatMessageAttribution(ctx, messages)
+	contentPartAttribution := w.chatContentPartAttribution(ctx, messages)
 
 	rows := make([]chrepo.RiskFindingRow, 0, len(messages))
 	for _, message := range messages {
@@ -179,15 +180,18 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			tags = []string{}
 		}
 
-		// Attribution is an enrichment: findings whose message id is absent,
+		chatMessageID := message.GetChatMessageId()
+		contentPartID := message.GetContentPartId()
+
+		// Attribution is an enrichment: findings whose anchor is absent,
 		// malformed, or unresolved keep empty strings rather than being dropped.
 		// message_created_at falls back to the finding's own scan time so the
 		// listing sort key is never zero, mirroring the column's DEFAULT for
 		// pre-column rows.
 		var chatID, userID, externalUserID, assistantID string
 		messageCreatedAt := createdAt.UTC()
-		if msgID, err := uuid.Parse(message.GetChatMessageId()); err == nil {
-			if a, ok := attribution[msgID]; ok {
+		if msgID, err := uuid.Parse(chatMessageID); err == nil {
+			if a, ok := messageAttribution[msgID]; ok {
 				chatID = a.ChatID.String()
 				userID = a.UserID
 				externalUserID = a.ExternalUserID
@@ -197,6 +201,18 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 				if a.MessageCreatedAt.Valid {
 					messageCreatedAt = a.MessageCreatedAt.Time.UTC()
 				}
+			}
+		} else if partID, err := uuid.Parse(contentPartID); err == nil {
+			// Only attribute a part that belongs to the finding's own project,
+			// so a wrong or forged anchor id cannot pull another tenant's chat
+			// and user ids into this row. A NULL project_id (project deleted)
+			// is unverifiable and so gets no attribution. The part attribution
+			// query carries no assistant link or message timestamp, so both keep
+			// the fallbacks above.
+			if a, ok := contentPartAttribution[partID]; ok && a.ProjectID.Valid && a.ProjectID.UUID.String() == message.GetProjectId() {
+				chatID = a.ChatID.String()
+				userID = a.UserID
+				externalUserID = a.ExternalUserID
 			}
 		}
 
@@ -222,15 +238,13 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 		}
 
 		rows = append(rows, chrepo.RiskFindingRow{
-			ID:             id,
-			CreatedAt:      createdAt.UTC(),
-			OrganizationID: message.GetOrganizationId(),
-			ProjectID:      message.GetProjectId(),
-			RequestID:      message.GetRequestId(),
-			// The part anchor is carried through in a follow-up; async
-			// scanners only publish chat-message-anchored findings today.
-			ContentPartID:            "",
-			ChatMessageID:            message.GetChatMessageId(),
+			ID:                       id,
+			CreatedAt:                createdAt.UTC(),
+			OrganizationID:           message.GetOrganizationId(),
+			ProjectID:                message.GetProjectId(),
+			RequestID:                message.GetRequestId(),
+			ChatMessageID:            chatMessageID,
+			ContentPartID:            contentPartID,
 			RiskPolicyID:             message.GetRiskPolicyId(),
 			RiskPolicyVersion:        message.GetRiskPolicyVersion(),
 			RuleID:                   message.GetRuleId(),
@@ -280,19 +294,9 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 // simply get no attribution; a query error logs and enriches nothing rather
 // than dropping or redriving findings.
 func (w *FindingCHWriter) chatMessageAttribution(ctx context.Context, messages []*riskv1.Finding) map[uuid.UUID]repo.GetChatMessageAttributionRow {
-	ids := make([]uuid.UUID, 0, len(messages))
-	seen := make(map[uuid.UUID]struct{}, len(messages))
-	for _, message := range messages {
-		id, err := uuid.Parse(message.GetChatMessageId())
-		if err != nil {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		ids = append(ids, id)
-	}
+	ids := findingAnchorIDs(messages, func(message *riskv1.Finding) string {
+		return message.GetChatMessageId()
+	})
 	if len(ids) == 0 {
 		return nil
 	}
@@ -308,6 +312,63 @@ func (w *FindingCHWriter) chatMessageAttribution(ctx context.Context, messages [
 		out[row.ID] = row
 	}
 	return out
+}
+
+// chatContentPartAttribution batch-fetches denormalized attribution for
+// content-part findings, keyed by content part id. It resolves via the content
+// part's parent message when present and falls back to the chat.
+func (w *FindingCHWriter) chatContentPartAttribution(ctx context.Context, messages []*riskv1.Finding) map[uuid.UUID]repo.GetChatContentPartAttributionRow {
+	ids := findingAnchorIDs(messages, func(message *riskv1.Finding) string {
+		return message.GetContentPartId()
+	})
+	if len(ids) == 0 {
+		return nil
+	}
+
+	// Bound the read to the projects present in this batch. Findings whose
+	// project id is unparseable contribute nothing, so a part they anchor to
+	// simply resolves no attribution.
+	projectIDs := findingAnchorIDs(messages, func(message *riskv1.Finding) string {
+		return message.GetProjectId()
+	})
+	if len(projectIDs) == 0 {
+		return nil
+	}
+
+	rows, err := repo.New(w.db).GetChatContentPartAttribution(ctx, repo.GetChatContentPartAttributionParams{
+		Ids:        ids,
+		ProjectIds: projectIDs,
+	})
+	if err != nil {
+		w.logger.ErrorContext(ctx, "resolve chat content part attribution", attr.SlogError(err))
+		return nil
+	}
+
+	out := make(map[uuid.UUID]repo.GetChatContentPartAttributionRow, len(rows))
+	for _, row := range rows {
+		out[row.ID] = row
+	}
+	return out
+}
+
+func findingAnchorIDs(messages []*riskv1.Finding, getRawID func(*riskv1.Finding) string) []uuid.UUID {
+	ids := make([]uuid.UUID, 0, len(messages))
+	seen := make(map[uuid.UUID]struct{}, len(messages))
+	for _, message := range messages {
+		id, err := uuid.Parse(getRawID(message))
+		if err != nil {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	return ids
 }
 
 // matchedExclusion returns the id of the going-forward exclusion that

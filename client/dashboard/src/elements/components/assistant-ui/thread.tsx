@@ -38,6 +38,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -83,6 +84,7 @@ import { useToolMentions } from "@/elements/hooks/useToolMentions";
 import { getApiUrl } from "@/elements/lib/api";
 import { EASE_OUT_QUINT } from "@/elements/lib/easing";
 import { MODELS } from "@/elements/lib/models";
+import type { ComposerSkill, SkillContextConfig } from "@/elements/types";
 import {
   type MentionableTool,
   toolSetToMentionableTools,
@@ -652,6 +654,8 @@ const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
 
           {toolMentionsEnabled && <ComposerToolMentions tools={mcpTools} />}
 
+          <ComposerSkillContextBadges />
+
           <ComposerPrimitive.Input
             placeholder={composerConfig.placeholder}
             className={cn(
@@ -1050,6 +1054,216 @@ const ComposerToolMentionPicker: FC = () => {
   );
 };
 
+const ComposerSkillContextBadges: FC = () => {
+  const skillContext = useElements().config.composer?.skillContext;
+  if (!skillContext || skillContext.selectedSkillIds.length === 0) {
+    return null;
+  }
+
+  const selectedIDs = new Set(skillContext.selectedSkillIds);
+  const selectedSkills = skillContext.skills.filter((skill) =>
+    selectedIDs.has(skill.id),
+  );
+
+  return (
+    <div className="aui-composer-skill-context-badges flex flex-wrap gap-1 px-3 pt-1">
+      {selectedSkills.map((skill) => (
+        <span
+          key={skill.id}
+          className="flex max-w-full items-center gap-1 rounded-md border border-input bg-muted px-2 py-1 text-xs text-foreground"
+        >
+          <AtSign className="size-3 shrink-0 text-muted-foreground" />
+          <span className="truncate">{skill.displayName}</span>
+          <button
+            type="button"
+            onClick={() =>
+              skillContext.onSelectedSkillIdsChange(
+                skillContext.selectedSkillIds.filter((id) => id !== skill.id),
+              )
+            }
+            className="ml-0.5 shrink-0 text-muted-foreground hover:text-foreground"
+            aria-label={`Remove ${skill.displayName} context`}
+          >
+            ×
+          </button>
+        </span>
+      ))}
+    </div>
+  );
+};
+
+const ComposerSkillContextPicker: FC = () => {
+  const skillContext = useElements().config.composer?.skillContext;
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
+
+  if (!skillContext) {
+    return null;
+  }
+
+  const selectedIDs = new Set(skillContext.selectedSkillIds);
+  const normalizedQuery = deferredQuery.trim().toLowerCase();
+  const visibleSkills = normalizedQuery
+    ? skillContext.skills.filter(
+        (skill) =>
+          skill.displayName.toLowerCase().includes(normalizedQuery) ||
+          skill.name.toLowerCase().includes(normalizedQuery) ||
+          (skill.summary?.toLowerCase().includes(normalizedQuery) ?? false),
+      )
+    : skillContext.skills;
+  const maxSelected = skillContext.maxSelected ?? 10;
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      setQuery("");
+    }
+  };
+
+  const toggleSkill = (skillID: string) => {
+    if (selectedIDs.has(skillID)) {
+      skillContext.onSelectedSkillIdsChange(
+        skillContext.selectedSkillIds.filter((id) => id !== skillID),
+      );
+      setOpen(false);
+      setQuery("");
+      return;
+    }
+    if (skillContext.selectedSkillIds.length >= maxSelected) {
+      return;
+    }
+    skillContext.onSelectedSkillIdsChange([
+      ...skillContext.selectedSkillIds,
+      skillID,
+    ]);
+    setOpen(false);
+    setQuery("");
+  };
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          data-state={open ? "open" : "closed"}
+          className="aui-composer-skill-context-picker flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold data-[state=open]:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30"
+          aria-label="Add skill context"
+        >
+          <AtSign className="size-4 stroke-[1.5px]" />
+          <span className="aui-composer-skill-context-picker-label">
+            Add context
+          </span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="start"
+        className="aui-composer-skill-context-popover w-[360px] overflow-hidden p-0"
+        onEscapeKeyDown={(event) => {
+          if (query !== "") {
+            event.preventDefault();
+            setQuery("");
+          }
+        }}
+      >
+        <div className="flex items-center gap-2 border-b border-input px-3 py-2">
+          <Search className="size-4 shrink-0 text-muted-foreground" />
+          <input
+            autoFocus
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search skills…"
+            className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            aria-label="Search skills"
+          />
+        </div>
+        <SkillContextPickerResults
+          skillContext={skillContext}
+          visibleSkills={visibleSkills}
+          selectedIDs={selectedIDs}
+          maxSelected={maxSelected}
+          onToggle={toggleSkill}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+};
+
+function SkillContextPickerResults({
+  skillContext,
+  visibleSkills,
+  selectedIDs,
+  maxSelected,
+  onToggle,
+}: {
+  skillContext: SkillContextConfig;
+  visibleSkills: ComposerSkill[];
+  selectedIDs: Set<string>;
+  maxSelected: number;
+  onToggle: (skillID: string) => void;
+}): React.ReactElement {
+  if (skillContext.loading) {
+    return (
+      <div className="px-3 py-8 text-center text-xs text-muted-foreground">
+        Loading skills…
+      </div>
+    );
+  }
+  if (skillContext.error) {
+    return (
+      <div className="px-3 py-8 text-center text-xs text-muted-foreground">
+        Unable to load skills
+      </div>
+    );
+  }
+  if (visibleSkills.length === 0) {
+    return (
+      <div className="px-3 py-8 text-center text-xs text-muted-foreground">
+        No skills found
+      </div>
+    );
+  }
+
+  const atLimit = selectedIDs.size >= maxSelected;
+  return (
+    <div className="max-h-72 overflow-y-auto p-2">
+      {visibleSkills.map((skill) => {
+        const selected = selectedIDs.has(skill.id);
+        return (
+          <button
+            key={skill.id}
+            type="button"
+            onClick={() => onToggle(skill.id)}
+            disabled={atLimit && !selected}
+            aria-pressed={selected}
+            className="flex w-full items-start gap-2 rounded px-2 py-2 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border border-input">
+              {selected ? <CheckIcon className="size-3" /> : null}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium text-foreground">
+                {skill.displayName}
+              </span>
+              <span className="block truncate font-mono text-[11px] text-muted-foreground">
+                {skill.name}
+              </span>
+              {skill.summary ? (
+                <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">
+                  {skill.summary}
+                </span>
+              ) : null}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 const ComposerAction: FC = () => {
   const { config } = useElements();
   const r = useRadius();
@@ -1064,6 +1278,8 @@ const ComposerAction: FC = () => {
         )}
 
         <ComposerToolMentionPicker />
+
+        <ComposerSkillContextPicker />
 
         {config.model?.showModelPicker && !config.languageModel && (
           <ComposerModelPicker />

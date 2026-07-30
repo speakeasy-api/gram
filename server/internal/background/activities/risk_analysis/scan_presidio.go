@@ -16,7 +16,7 @@ import (
 
 func (a *AnalyzeBatch) scanPresidio(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage, contents []string) ([][]scanners.Finding, error) {
 	scoreThreshold := resolvePresidioScoreThreshold(args.PresidioScoreThreshold)
-	a.publishPresidioScanRequests(ctx, args, requestID, chatMessageAnchored(messages), scoreThreshold)
+	a.publishPresidioScanRequests(ctx, args, requestID, messages, scoreThreshold)
 
 	results, err := a.piiScanner.AnalyzeBatch(ctx, contents, args.PresidioEntities, scoreThreshold, func() {
 		activity.RecordHeartbeat(ctx, SourcePresidio)
@@ -38,9 +38,11 @@ func (a *AnalyzeBatch) publishPresidioScanRequests(ctx context.Context, args Ana
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
 	for _, msg := range messages {
+		chatMessageID, contentPartID := msg.anchorIDStrings()
 		publishResults = append(publishResults, a.presidioPub.Publish(ctx, riskv1.PresidioAnalysis_builder{
 			RequestId:         new(requestID.String()),
-			ChatMessageId:     new(msg.ID.String()),
+			ChatMessageId:     chatMessageID,
+			ContentPartId:     contentPartID,
 			ProjectId:         new(args.ProjectID.String()),
 			OrganizationId:    &args.OrganizationID,
 			RiskPolicyId:      new(args.RiskPolicyID.String()),
