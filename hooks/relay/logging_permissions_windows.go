@@ -34,8 +34,10 @@ func secureLogFile(file *os.File) error {
 		return err
 	}
 
-	return windows.SetSecurityInfo(
-		windows.Handle(file.Fd()),
+	// SetNamedSecurityInfo opens the file with WRITE_DAC itself. The append
+	// handle returned by os.OpenFile intentionally does not carry that access.
+	return windows.SetNamedSecurityInfo(
+		file.Name(),
 		windows.SE_FILE_OBJECT,
 		windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION,
 		nil,
