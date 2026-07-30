@@ -46,6 +46,15 @@ var ContentScopeNode = Type("BusinessMemoryContentScopeNode", func() {
 	Attribute("memory_count", Int64, "Number of distinct memories assigned to this scope.")
 })
 
+func declareContentScopeFilters() {
+	Attribute("content_scope", String, "Exact content-scope tag to match.", func() {
+		Pattern(`^[a-z0-9][a-z0-9:_-]{0,127}$`)
+	})
+	Attribute("content_scope_namespace", String, "Content-scope namespace to match.", func() {
+		Pattern(`^[a-z0-9][a-z0-9_-]{0,127}$`)
+	})
+}
+
 var _ = Service("businessMemories", func() {
 	Description("Inspect and semantically search business memories.")
 	Security(security.Session, security.ProjectSlug)
@@ -55,6 +64,7 @@ var _ = Service("businessMemories", func() {
 		Description("List memories extracted for the active project. Requires organization admin.")
 		Payload(func() {
 			Attribute("cursor", String, "Cursor for the next result page.")
+			declareContentScopeFilters()
 			Attribute("limit", Int, "Number of memories to return.", func() {
 				Default(50)
 				Minimum(1)
@@ -71,6 +81,8 @@ var _ = Service("businessMemories", func() {
 		HTTP(func() {
 			GET("/rpc/businessMemories.list")
 			Param("cursor")
+			Param("content_scope")
+			Param("content_scope_namespace")
 			Param("limit")
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -111,6 +123,7 @@ var _ = Service("businessMemories", func() {
 				MinLength(1)
 				MaxLength(2000)
 			})
+			declareContentScopeFilters()
 			Attribute("limit", Int, "Maximum search results.", func() {
 				Default(20)
 				Minimum(1)
@@ -127,6 +140,8 @@ var _ = Service("businessMemories", func() {
 		HTTP(func() {
 			GET("/rpc/businessMemories.search")
 			Param("query")
+			Param("content_scope")
+			Param("content_scope_namespace")
 			Param("limit")
 			security.SessionHeader()
 			security.ProjectHeader()

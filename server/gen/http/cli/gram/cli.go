@@ -572,21 +572,25 @@ func ParseEndpoint(
 
 		businessMemoriesFlags = flag.NewFlagSet("business-memories", flag.ContinueOnError)
 
-		businessMemoriesListBusinessMemoriesFlags                = flag.NewFlagSet("list-business-memories", flag.ExitOnError)
-		businessMemoriesListBusinessMemoriesCursorFlag           = businessMemoriesListBusinessMemoriesFlags.String("cursor", "", "")
-		businessMemoriesListBusinessMemoriesLimitFlag            = businessMemoriesListBusinessMemoriesFlags.String("limit", "50", "")
-		businessMemoriesListBusinessMemoriesSessionTokenFlag     = businessMemoriesListBusinessMemoriesFlags.String("session-token", "", "")
-		businessMemoriesListBusinessMemoriesProjectSlugInputFlag = businessMemoriesListBusinessMemoriesFlags.String("project-slug-input", "", "")
+		businessMemoriesListBusinessMemoriesFlags                     = flag.NewFlagSet("list-business-memories", flag.ExitOnError)
+		businessMemoriesListBusinessMemoriesCursorFlag                = businessMemoriesListBusinessMemoriesFlags.String("cursor", "", "")
+		businessMemoriesListBusinessMemoriesContentScopeFlag          = businessMemoriesListBusinessMemoriesFlags.String("content-scope", "", "")
+		businessMemoriesListBusinessMemoriesContentScopeNamespaceFlag = businessMemoriesListBusinessMemoriesFlags.String("content-scope-namespace", "", "")
+		businessMemoriesListBusinessMemoriesLimitFlag                 = businessMemoriesListBusinessMemoriesFlags.String("limit", "50", "")
+		businessMemoriesListBusinessMemoriesSessionTokenFlag          = businessMemoriesListBusinessMemoriesFlags.String("session-token", "", "")
+		businessMemoriesListBusinessMemoriesProjectSlugInputFlag      = businessMemoriesListBusinessMemoriesFlags.String("project-slug-input", "", "")
 
 		businessMemoriesListBusinessMemoryContentScopesFlags                = flag.NewFlagSet("list-business-memory-content-scopes", flag.ExitOnError)
 		businessMemoriesListBusinessMemoryContentScopesSessionTokenFlag     = businessMemoriesListBusinessMemoryContentScopesFlags.String("session-token", "", "")
 		businessMemoriesListBusinessMemoryContentScopesProjectSlugInputFlag = businessMemoriesListBusinessMemoryContentScopesFlags.String("project-slug-input", "", "")
 
-		businessMemoriesSearchBusinessMemoriesFlags                = flag.NewFlagSet("search-business-memories", flag.ExitOnError)
-		businessMemoriesSearchBusinessMemoriesQueryFlag            = businessMemoriesSearchBusinessMemoriesFlags.String("query", "REQUIRED", "")
-		businessMemoriesSearchBusinessMemoriesLimitFlag            = businessMemoriesSearchBusinessMemoriesFlags.String("limit", "20", "")
-		businessMemoriesSearchBusinessMemoriesSessionTokenFlag     = businessMemoriesSearchBusinessMemoriesFlags.String("session-token", "", "")
-		businessMemoriesSearchBusinessMemoriesProjectSlugInputFlag = businessMemoriesSearchBusinessMemoriesFlags.String("project-slug-input", "", "")
+		businessMemoriesSearchBusinessMemoriesFlags                     = flag.NewFlagSet("search-business-memories", flag.ExitOnError)
+		businessMemoriesSearchBusinessMemoriesQueryFlag                 = businessMemoriesSearchBusinessMemoriesFlags.String("query", "REQUIRED", "")
+		businessMemoriesSearchBusinessMemoriesContentScopeFlag          = businessMemoriesSearchBusinessMemoriesFlags.String("content-scope", "", "")
+		businessMemoriesSearchBusinessMemoriesContentScopeNamespaceFlag = businessMemoriesSearchBusinessMemoriesFlags.String("content-scope-namespace", "", "")
+		businessMemoriesSearchBusinessMemoriesLimitFlag                 = businessMemoriesSearchBusinessMemoriesFlags.String("limit", "20", "")
+		businessMemoriesSearchBusinessMemoriesSessionTokenFlag          = businessMemoriesSearchBusinessMemoriesFlags.String("session-token", "", "")
+		businessMemoriesSearchBusinessMemoriesProjectSlugInputFlag      = businessMemoriesSearchBusinessMemoriesFlags.String("project-slug-input", "", "")
 
 		chatFlags = flag.NewFlagSet("chat", flag.ContinueOnError)
 
@@ -5892,13 +5896,13 @@ func ParseEndpoint(
 			switch epn {
 			case "list-business-memories":
 				endpoint = c.ListBusinessMemories()
-				data, err = businessmemoriesc.BuildListBusinessMemoriesPayload(*businessMemoriesListBusinessMemoriesCursorFlag, *businessMemoriesListBusinessMemoriesLimitFlag, *businessMemoriesListBusinessMemoriesSessionTokenFlag, *businessMemoriesListBusinessMemoriesProjectSlugInputFlag)
+				data, err = businessmemoriesc.BuildListBusinessMemoriesPayload(*businessMemoriesListBusinessMemoriesCursorFlag, *businessMemoriesListBusinessMemoriesContentScopeFlag, *businessMemoriesListBusinessMemoriesContentScopeNamespaceFlag, *businessMemoriesListBusinessMemoriesLimitFlag, *businessMemoriesListBusinessMemoriesSessionTokenFlag, *businessMemoriesListBusinessMemoriesProjectSlugInputFlag)
 			case "list-business-memory-content-scopes":
 				endpoint = c.ListBusinessMemoryContentScopes()
 				data, err = businessmemoriesc.BuildListBusinessMemoryContentScopesPayload(*businessMemoriesListBusinessMemoryContentScopesSessionTokenFlag, *businessMemoriesListBusinessMemoryContentScopesProjectSlugInputFlag)
 			case "search-business-memories":
 				endpoint = c.SearchBusinessMemories()
-				data, err = businessmemoriesc.BuildSearchBusinessMemoriesPayload(*businessMemoriesSearchBusinessMemoriesQueryFlag, *businessMemoriesSearchBusinessMemoriesLimitFlag, *businessMemoriesSearchBusinessMemoriesSessionTokenFlag, *businessMemoriesSearchBusinessMemoriesProjectSlugInputFlag)
+				data, err = businessmemoriesc.BuildSearchBusinessMemoriesPayload(*businessMemoriesSearchBusinessMemoriesQueryFlag, *businessMemoriesSearchBusinessMemoriesContentScopeFlag, *businessMemoriesSearchBusinessMemoriesContentScopeNamespaceFlag, *businessMemoriesSearchBusinessMemoriesLimitFlag, *businessMemoriesSearchBusinessMemoriesSessionTokenFlag, *businessMemoriesSearchBusinessMemoriesProjectSlugInputFlag)
 			}
 		case "chat":
 			c := chatc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -9191,6 +9195,8 @@ func businessMemoriesListBusinessMemoriesUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] business-memories list-business-memories", os.Args[0])
 	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -content-scope STRING")
+	fmt.Fprint(os.Stderr, " -content-scope-namespace STRING")
 	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -9202,13 +9208,15 @@ func businessMemoriesListBusinessMemoriesUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-scope STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-scope-namespace STRING: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "business-memories list-business-memories --cursor \"abc123\" --limit 2 --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "business-memories list-business-memories --cursor \"abc123\" --content-scope \"1\" --content-scope-namespace \"1\" --limit 2 --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func businessMemoriesListBusinessMemoryContentScopesUsage() {
@@ -9235,6 +9243,8 @@ func businessMemoriesSearchBusinessMemoriesUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] business-memories search-business-memories", os.Args[0])
 	fmt.Fprint(os.Stderr, " -query STRING")
+	fmt.Fprint(os.Stderr, " -content-scope STRING")
+	fmt.Fprint(os.Stderr, " -content-scope-namespace STRING")
 	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -9246,13 +9256,15 @@ func businessMemoriesSearchBusinessMemoriesUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -query STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-scope STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-scope-namespace STRING: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "business-memories search-business-memories --query \"aa\" --limit 2 --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "business-memories search-business-memories --query \"aa\" --content-scope \"1\" --content-scope-namespace \"1\" --limit 2 --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // chatUsage displays the usage of the chat command and its subcommands.

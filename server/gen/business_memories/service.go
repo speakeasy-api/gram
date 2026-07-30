@@ -94,6 +94,10 @@ type BusinessMemoryContentScopeNode struct {
 type ListBusinessMemoriesPayload struct {
 	// Cursor for the next result page.
 	Cursor *string
+	// Exact content-scope tag to match.
+	ContentScope *string
+	// Content-scope namespace to match.
+	ContentScopeNamespace *string
 	// Number of memories to return.
 	Limit            int
 	SessionToken     *string
@@ -128,6 +132,10 @@ type ListBusinessMemoryContentScopesResult struct {
 type SearchBusinessMemoriesPayload struct {
 	// Natural-language semantic search query.
 	Query string
+	// Exact content-scope tag to match.
+	ContentScope *string
+	// Content-scope namespace to match.
+	ContentScopeNamespace *string
 	// Maximum search results.
 	Limit            int
 	SessionToken     *string

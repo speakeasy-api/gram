@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildScopeTree,
-  memoryMatchesScope,
+  scopeSelectionToFilter,
   type ScopeSelection,
 } from "./businessMemoryScopes";
 
@@ -51,33 +51,21 @@ describe("buildScopeTree", () => {
   });
 });
 
-describe("memoryMatchesScope", () => {
-  const taggedMemory = {
-    contentScope: ["product:github", "topic:tool-usage"],
-  } as Parameters<typeof memoryMatchesScope>[0];
-
+describe("scopeSelectionToFilter", () => {
   it.each<{
     selection: ScopeSelection | null;
-    matches: boolean;
+    filter: ReturnType<typeof scopeSelectionToFilter>;
   }>([
-    { selection: null, matches: true },
+    { selection: null, filter: {} },
     {
       selection: { kind: "namespace", value: "product" },
-      matches: true,
-    },
-    {
-      selection: { kind: "namespace", value: "topic" },
-      matches: true,
+      filter: { contentScopeNamespace: "product" },
     },
     {
       selection: { kind: "tag", value: "product:github" },
-      matches: true,
+      filter: { contentScope: "product:github" },
     },
-    {
-      selection: { kind: "tag", value: "product:gitlab" },
-      matches: false,
-    },
-  ])("matches multi-tag memories for $selection", ({ selection, matches }) => {
-    expect(memoryMatchesScope(taggedMemory, selection)).toBe(matches);
+  ])("maps $selection to the server filter", ({ selection, filter }) => {
+    expect(scopeSelectionToFilter(selection)).toEqual(filter);
   });
 });

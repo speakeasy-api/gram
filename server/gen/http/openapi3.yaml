@@ -8895,6 +8895,22 @@ paths:
                     description: Cursor for the next result page.
                     type: string
                 - allowEmptyValue: true
+                  description: Exact content-scope tag to match.
+                  in: query
+                  name: content_scope
+                  schema:
+                    description: Exact content-scope tag to match.
+                    pattern: ^[a-z0-9][a-z0-9:_-]{0,127}$
+                    type: string
+                - allowEmptyValue: true
+                  description: Content-scope namespace to match.
+                  in: query
+                  name: content_scope_namespace
+                  schema:
+                    description: Content-scope namespace to match.
+                    pattern: ^[a-z0-9][a-z0-9_-]{0,127}$
+                    type: string
+                - allowEmptyValue: true
                   description: Number of memories to return.
                   in: query
                   name: limit
@@ -9011,6 +9027,22 @@ paths:
                     description: Natural-language semantic search query.
                     maxLength: 2000
                     minLength: 1
+                    type: string
+                - allowEmptyValue: true
+                  description: Exact content-scope tag to match.
+                  in: query
+                  name: content_scope
+                  schema:
+                    description: Exact content-scope tag to match.
+                    pattern: ^[a-z0-9][a-z0-9:_-]{0,127}$
+                    type: string
+                - allowEmptyValue: true
+                  description: Content-scope namespace to match.
+                  in: query
+                  name: content_scope_namespace
+                  schema:
+                    description: Content-scope namespace to match.
+                    pattern: ^[a-z0-9][a-z0-9_-]{0,127}$
                     type: string
                 - allowEmptyValue: true
                   description: Maximum search results.

@@ -82,6 +82,8 @@ export function buildListBusinessMemoriesQuery(
   return {
     queryKey: queryKeyListBusinessMemories({
       cursor: request?.cursor,
+      contentScope: request?.contentScope,
+      contentScopeNamespace: request?.contentScopeNamespace,
       limit: request?.limit,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
@@ -124,6 +126,8 @@ export function buildListBusinessMemoriesInfiniteQuery(
   return {
     queryKey: queryKeyListBusinessMemoriesInfinite({
       cursor: request?.cursor,
+      contentScope: request?.contentScope,
+      contentScopeNamespace: request?.contentScopeNamespace,
       limit: request?.limit,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
@@ -163,6 +167,8 @@ export function buildListBusinessMemoriesInfiniteQuery(
 export function queryKeyListBusinessMemories(
   parameters: {
     cursor?: string | undefined;
+    contentScope?: string | undefined;
+    contentScopeNamespace?: string | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
@@ -174,6 +180,8 @@ export function queryKeyListBusinessMemories(
 export function queryKeyListBusinessMemoriesInfinite(
   parameters: {
     cursor?: string | undefined;
+    contentScope?: string | undefined;
+    contentScopeNamespace?: string | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;

@@ -71,6 +71,30 @@ WHERE project_id = @project_id
   AND organization_id = @organization_id
   AND deleted IS FALSE
   AND (
+    (
+      sqlc.narg(content_scope)::text IS NULL
+      AND sqlc.narg(content_scope_namespace)::text IS NULL
+    )
+    OR (
+      sqlc.narg(content_scope)::text IS NOT NULL
+      AND content_scope ? sqlc.narg(content_scope)::text
+    )
+    OR (
+      sqlc.narg(content_scope_namespace)::text IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements_text(content_scope) AS scope(value)
+        WHERE (
+          scope.value = sqlc.narg(content_scope_namespace)::text
+          OR starts_with(
+            scope.value,
+            sqlc.narg(content_scope_namespace)::text || ':'
+          )
+        )
+      )
+    )
+  )
+  AND (
     sqlc.narg(cursor_created_at)::timestamptz IS NULL
     OR (created_at, id) < (
       sqlc.narg(cursor_created_at)::timestamptz,
@@ -141,5 +165,29 @@ WHERE project_id = @project_id
   AND organization_id = @organization_id
   AND deleted IS FALSE
   AND lifecycle_state = 'active'
+  AND (
+    (
+      sqlc.narg(content_scope)::text IS NULL
+      AND sqlc.narg(content_scope_namespace)::text IS NULL
+    )
+    OR (
+      sqlc.narg(content_scope)::text IS NOT NULL
+      AND content_scope ? sqlc.narg(content_scope)::text
+    )
+    OR (
+      sqlc.narg(content_scope_namespace)::text IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements_text(content_scope) AS scope(value)
+        WHERE (
+          scope.value = sqlc.narg(content_scope_namespace)::text
+          OR starts_with(
+            scope.value,
+            sqlc.narg(content_scope_namespace)::text || ':'
+          )
+        )
+      )
+    )
+  )
 ORDER BY embedding <=> @query_embedding
 LIMIT @result_limit;

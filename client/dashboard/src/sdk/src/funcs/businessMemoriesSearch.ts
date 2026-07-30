@@ -107,6 +107,8 @@ async function $do(
   const path = pathToFunc("/rpc/businessMemories.search")();
 
   const query = encodeFormQuery({
+    "content_scope": payload.content_scope,
+    "content_scope_namespace": payload.content_scope_namespace,
     "limit": payload.limit,
     "query": payload.query,
   });

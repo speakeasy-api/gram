@@ -1163,9 +1163,11 @@ func NewSearchBusinessMemoriesGatewayErrorResponseBody(res *goa.ServiceError) *S
 
 // NewListBusinessMemoriesPayload builds a businessMemories service
 // listBusinessMemories endpoint payload.
-func NewListBusinessMemoriesPayload(cursor *string, limit int, sessionToken *string, projectSlugInput *string) *businessmemories.ListBusinessMemoriesPayload {
+func NewListBusinessMemoriesPayload(cursor *string, contentScope *string, contentScopeNamespace *string, limit int, sessionToken *string, projectSlugInput *string) *businessmemories.ListBusinessMemoriesPayload {
 	v := &businessmemories.ListBusinessMemoriesPayload{}
 	v.Cursor = cursor
+	v.ContentScope = contentScope
+	v.ContentScopeNamespace = contentScopeNamespace
 	v.Limit = limit
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1185,9 +1187,11 @@ func NewListBusinessMemoryContentScopesPayload(sessionToken *string, projectSlug
 
 // NewSearchBusinessMemoriesPayload builds a businessMemories service
 // searchBusinessMemories endpoint payload.
-func NewSearchBusinessMemoriesPayload(query string, limit int, sessionToken *string, projectSlugInput *string) *businessmemories.SearchBusinessMemoriesPayload {
+func NewSearchBusinessMemoriesPayload(query string, contentScope *string, contentScopeNamespace *string, limit int, sessionToken *string, projectSlugInput *string) *businessmemories.SearchBusinessMemoriesPayload {
 	v := &businessmemories.SearchBusinessMemoriesPayload{}
 	v.Query = query
+	v.ContentScope = contentScope
+	v.ContentScopeNamespace = contentScopeNamespace
 	v.Limit = limit
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

@@ -19,7 +19,7 @@ func TestNormalizeExtraction(t *testing.T) {
 		}]
 	}`
 
-	got, err := normalizeExtraction(raw, 3)
+	got, err := normalizeExtraction(raw, map[int]struct{}{2: {}, 3: {}, 4: {}})
 	require.NoError(t, err)
 	require.Equal(t, []extractionCandidate{{
 		Body:         "Tool usage is counted after successful execution.",
@@ -42,10 +42,19 @@ func TestNormalizeExtractionRejectsInvalidCandidates(t *testing.T) {
 	for name, raw := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			_, err := normalizeExtraction(raw, 1)
+			_, err := normalizeExtraction(raw, map[int]struct{}{1: {}})
 			require.Error(t, err)
 		})
 	}
+}
+
+func TestNormalizeExtractionRejectsOmittedTranscriptTurn(t *testing.T) {
+	t.Parallel()
+
+	raw := `{"memories":[{"body":"Useful fact","memory_type":"result","content_scope":[],"source_turn":2}]}`
+	_, err := normalizeExtraction(raw, map[int]struct{}{3: {}, 4: {}})
+
+	require.ErrorContains(t, err, "source turn 2 outside transcript")
 }
 
 func TestIsDuplicateMemoryAcceptsThreshold(t *testing.T) {

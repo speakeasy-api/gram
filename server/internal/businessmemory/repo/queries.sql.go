@@ -171,22 +171,48 @@ WHERE project_id = $1
   AND organization_id = $2
   AND deleted IS FALSE
   AND (
-    $3::timestamptz IS NULL
+    (
+      $3::text IS NULL
+      AND $4::text IS NULL
+    )
+    OR (
+      $3::text IS NOT NULL
+      AND content_scope ? $3::text
+    )
+    OR (
+      $4::text IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements_text(content_scope) AS scope(value)
+        WHERE (
+          scope.value = $4::text
+          OR starts_with(
+            scope.value,
+            $4::text || ':'
+          )
+        )
+      )
+    )
+  )
+  AND (
+    $5::timestamptz IS NULL
     OR (created_at, id) < (
-      $3::timestamptz,
-      $4::uuid
+      $5::timestamptz,
+      $6::uuid
     )
   )
 ORDER BY created_at DESC, id DESC
-LIMIT $5
+LIMIT $7
 `
 
 type ListBusinessMemoriesParams struct {
-	ProjectID       uuid.UUID
-	OrganizationID  string
-	CursorCreatedAt pgtype.Timestamptz
-	CursorID        uuid.NullUUID
-	PageLimit       int32
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	ContentScope          pgtype.Text
+	ContentScopeNamespace pgtype.Text
+	CursorCreatedAt       pgtype.Timestamptz
+	CursorID              uuid.NullUUID
+	PageLimit             int32
 }
 
 type ListBusinessMemoriesRow struct {
@@ -212,6 +238,8 @@ func (q *Queries) ListBusinessMemories(ctx context.Context, arg ListBusinessMemo
 	rows, err := q.db.Query(ctx, listBusinessMemories,
 		arg.ProjectID,
 		arg.OrganizationID,
+		arg.ContentScope,
+		arg.ContentScopeNamespace,
 		arg.CursorCreatedAt,
 		arg.CursorID,
 		arg.PageLimit,
@@ -337,15 +365,41 @@ WHERE project_id = $2
   AND organization_id = $3
   AND deleted IS FALSE
   AND lifecycle_state = 'active'
+  AND (
+    (
+      $4::text IS NULL
+      AND $5::text IS NULL
+    )
+    OR (
+      $4::text IS NOT NULL
+      AND content_scope ? $4::text
+    )
+    OR (
+      $5::text IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements_text(content_scope) AS scope(value)
+        WHERE (
+          scope.value = $5::text
+          OR starts_with(
+            scope.value,
+            $5::text || ':'
+          )
+        )
+      )
+    )
+  )
 ORDER BY embedding <=> $1
-LIMIT $4
+LIMIT $6
 `
 
 type SearchBusinessMemoriesParams struct {
-	QueryEmbedding pgvector_go.HalfVector
-	ProjectID      uuid.UUID
-	OrganizationID string
-	ResultLimit    int32
+	QueryEmbedding        pgvector_go.HalfVector
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	ContentScope          pgtype.Text
+	ContentScopeNamespace pgtype.Text
+	ResultLimit           int32
 }
 
 type SearchBusinessMemoriesRow struct {
@@ -373,6 +427,8 @@ func (q *Queries) SearchBusinessMemories(ctx context.Context, arg SearchBusiness
 		arg.QueryEmbedding,
 		arg.ProjectID,
 		arg.OrganizationID,
+		arg.ContentScope,
+		arg.ContentScopeNamespace,
 		arg.ResultLimit,
 	)
 	if err != nil {

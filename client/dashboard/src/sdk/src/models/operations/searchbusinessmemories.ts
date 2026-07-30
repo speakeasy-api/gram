@@ -16,6 +16,14 @@ export type SearchBusinessMemoriesRequest = {
    */
   query: string;
   /**
+   * Exact content-scope tag to match.
+   */
+  contentScope?: string | undefined;
+  /**
+   * Content-scope namespace to match.
+   */
+  contentScopeNamespace?: string | undefined;
+  /**
    * Maximum search results.
    */
   limit?: number | undefined;
@@ -65,6 +73,8 @@ export function searchBusinessMemoriesSecurityToJSON(
 /** @internal */
 export type SearchBusinessMemoriesRequest$Outbound = {
   query: string;
+  content_scope?: string | undefined;
+  content_scope_namespace?: string | undefined;
   limit: number;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -77,12 +87,16 @@ export const SearchBusinessMemoriesRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     query: z.string(),
+    contentScope: z.optional(z.string()),
+    contentScopeNamespace: z.optional(z.string()),
     limit: z._default(z.int(), 20),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      contentScope: "content_scope",
+      contentScopeNamespace: "content_scope_namespace",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
     });

@@ -14,7 +14,7 @@ import { useMemo, useState } from "react";
 import { BusinessMemoryScopeTree } from "./BusinessMemoryScopeTree";
 import {
   buildScopeTree,
-  memoryMatchesScope,
+  scopeSelectionToFilter,
   type ScopeSelection,
 } from "./businessMemoryScopes";
 
@@ -124,16 +124,20 @@ export function BusinessMemoryCorpus(): JSX.Element {
   const queryClient = useQueryClient();
   const deleteChat = useChatDeleteMutation();
   const normalizedSearch = search.trim();
+  const scopeFilter = scopeSelectionToFilter(scopeSelection);
   const listQuery = useListBusinessMemoriesInfinite(
-    { limit: PAGE_SIZE },
+    { limit: PAGE_SIZE, ...scopeFilter },
     undefined,
-    { throwOnError: false },
+    {
+      enabled: normalizedSearch.length === 0,
+      throwOnError: false,
+    },
   );
   const scopeQuery = useListBusinessMemoryContentScopes(undefined, undefined, {
     throwOnError: false,
   });
   const searchQuery = useSearchBusinessMemories(
-    { query: normalizedSearch, limit: SEARCH_LIMIT },
+    { query: normalizedSearch, limit: SEARCH_LIMIT, ...scopeFilter },
     undefined,
     {
       enabled: normalizedSearch.length > 0,
@@ -154,11 +158,6 @@ export function BusinessMemoryCorpus(): JSX.Element {
   const scopeTree = useMemo(
     () => buildScopeTree(scopeQuery.data?.nodes ?? []),
     [scopeQuery.data?.nodes],
-  );
-  const filteredMemories = useMemo(
-    () =>
-      memories.filter((memory) => memoryMatchesScope(memory, scopeSelection)),
-    [memories, scopeSelection],
   );
   const loading =
     normalizedSearch.length > 0 ? searchQuery.isLoading : listQuery.isLoading;
@@ -196,8 +195,8 @@ export function BusinessMemoryCorpus(): JSX.Element {
             />
             {!loading && (
               <Page.Toolbar.Count>
-                {filteredMemories.length}{" "}
-                {filteredMemories.length === 1 ? "memory" : "memories"}
+                {memories.length}{" "}
+                {memories.length === 1 ? "memory" : "memories"}
               </Page.Toolbar.Count>
             )}
             <Page.Toolbar.Refresh
@@ -229,7 +228,7 @@ export function BusinessMemoryCorpus(): JSX.Element {
             <>
               <Table
                 columns={columns}
-                data={filteredMemories}
+                data={memories}
                 rowKey={(memory) => memory.id}
                 onRowClick={(memory) => {
                   if (

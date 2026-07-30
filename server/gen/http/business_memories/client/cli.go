@@ -18,12 +18,32 @@ import (
 
 // BuildListBusinessMemoriesPayload builds the payload for the businessMemories
 // listBusinessMemories endpoint from CLI flags.
-func BuildListBusinessMemoriesPayload(businessMemoriesListBusinessMemoriesCursor string, businessMemoriesListBusinessMemoriesLimit string, businessMemoriesListBusinessMemoriesSessionToken string, businessMemoriesListBusinessMemoriesProjectSlugInput string) (*businessmemories.ListBusinessMemoriesPayload, error) {
+func BuildListBusinessMemoriesPayload(businessMemoriesListBusinessMemoriesCursor string, businessMemoriesListBusinessMemoriesContentScope string, businessMemoriesListBusinessMemoriesContentScopeNamespace string, businessMemoriesListBusinessMemoriesLimit string, businessMemoriesListBusinessMemoriesSessionToken string, businessMemoriesListBusinessMemoriesProjectSlugInput string) (*businessmemories.ListBusinessMemoriesPayload, error) {
 	var err error
 	var cursor *string
 	{
 		if businessMemoriesListBusinessMemoriesCursor != "" {
 			cursor = &businessMemoriesListBusinessMemoriesCursor
+		}
+	}
+	var contentScope *string
+	{
+		if businessMemoriesListBusinessMemoriesContentScope != "" {
+			contentScope = &businessMemoriesListBusinessMemoriesContentScope
+			err = goa.MergeErrors(err, goa.ValidatePattern("content_scope", *contentScope, "^[a-z0-9][a-z0-9:_-]{0,127}$"))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var contentScopeNamespace *string
+	{
+		if businessMemoriesListBusinessMemoriesContentScopeNamespace != "" {
+			contentScopeNamespace = &businessMemoriesListBusinessMemoriesContentScopeNamespace
+			err = goa.MergeErrors(err, goa.ValidatePattern("content_scope_namespace", *contentScopeNamespace, "^[a-z0-9][a-z0-9_-]{0,127}$"))
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var limit int
@@ -60,6 +80,8 @@ func BuildListBusinessMemoriesPayload(businessMemoriesListBusinessMemoriesCursor
 	}
 	v := &businessmemories.ListBusinessMemoriesPayload{}
 	v.Cursor = cursor
+	v.ContentScope = contentScope
+	v.ContentScopeNamespace = contentScopeNamespace
 	v.Limit = limit
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -91,7 +113,7 @@ func BuildListBusinessMemoryContentScopesPayload(businessMemoriesListBusinessMem
 
 // BuildSearchBusinessMemoriesPayload builds the payload for the
 // businessMemories searchBusinessMemories endpoint from CLI flags.
-func BuildSearchBusinessMemoriesPayload(businessMemoriesSearchBusinessMemoriesQuery string, businessMemoriesSearchBusinessMemoriesLimit string, businessMemoriesSearchBusinessMemoriesSessionToken string, businessMemoriesSearchBusinessMemoriesProjectSlugInput string) (*businessmemories.SearchBusinessMemoriesPayload, error) {
+func BuildSearchBusinessMemoriesPayload(businessMemoriesSearchBusinessMemoriesQuery string, businessMemoriesSearchBusinessMemoriesContentScope string, businessMemoriesSearchBusinessMemoriesContentScopeNamespace string, businessMemoriesSearchBusinessMemoriesLimit string, businessMemoriesSearchBusinessMemoriesSessionToken string, businessMemoriesSearchBusinessMemoriesProjectSlugInput string) (*businessmemories.SearchBusinessMemoriesPayload, error) {
 	var err error
 	var query string
 	{
@@ -104,6 +126,26 @@ func BuildSearchBusinessMemoriesPayload(businessMemoriesSearchBusinessMemoriesQu
 		}
 		if err != nil {
 			return nil, err
+		}
+	}
+	var contentScope *string
+	{
+		if businessMemoriesSearchBusinessMemoriesContentScope != "" {
+			contentScope = &businessMemoriesSearchBusinessMemoriesContentScope
+			err = goa.MergeErrors(err, goa.ValidatePattern("content_scope", *contentScope, "^[a-z0-9][a-z0-9:_-]{0,127}$"))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var contentScopeNamespace *string
+	{
+		if businessMemoriesSearchBusinessMemoriesContentScopeNamespace != "" {
+			contentScopeNamespace = &businessMemoriesSearchBusinessMemoriesContentScopeNamespace
+			err = goa.MergeErrors(err, goa.ValidatePattern("content_scope_namespace", *contentScopeNamespace, "^[a-z0-9][a-z0-9_-]{0,127}$"))
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var limit int
@@ -140,6 +182,8 @@ func BuildSearchBusinessMemoriesPayload(businessMemoriesSearchBusinessMemoriesQu
 	}
 	v := &businessmemories.SearchBusinessMemoriesPayload{}
 	v.Query = query
+	v.ContentScope = contentScope
+	v.ContentScopeNamespace = contentScopeNamespace
 	v.Limit = limit
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

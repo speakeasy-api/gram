@@ -118,6 +118,8 @@ async function $do(
   const path = pathToFunc("/rpc/businessMemories.list")();
 
   const query = encodeFormQuery({
+    "content_scope": payload?.content_scope,
+    "content_scope_namespace": payload?.content_scope_namespace,
     "cursor": payload?.cursor,
     "limit": payload?.limit,
   });

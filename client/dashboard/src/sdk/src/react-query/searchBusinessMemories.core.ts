@@ -51,6 +51,8 @@ export function buildSearchBusinessMemoriesQuery(
   return {
     queryKey: queryKeySearchBusinessMemories({
       query: request.query,
+      contentScope: request.contentScope,
+      contentScopeNamespace: request.contentScopeNamespace,
       limit: request.limit,
       gramSession: request.gramSession,
       gramProject: request.gramProject,
@@ -82,6 +84,8 @@ export function buildSearchBusinessMemoriesQuery(
 export function queryKeySearchBusinessMemories(
   parameters: {
     query: string;
+    contentScope?: string | undefined;
+    contentScopeNamespace?: string | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;

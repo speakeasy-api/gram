@@ -175,7 +175,11 @@ func (j *Judge) Judge(ctx context.Context, in analysis.JudgeInput) (analysis.Jud
 		return analysis.JudgeResult{}, err
 	}
 
-	candidates, err := normalizeExtraction(raw, len(in.Transcript.Messages))
+	transcriptTurns := make(map[int]struct{}, len(in.Transcript.Messages))
+	for _, message := range in.Transcript.Messages {
+		transcriptTurns[message.Index] = struct{}{}
+	}
+	candidates, err := normalizeExtraction(raw, transcriptTurns)
 	if err != nil {
 		err = fmt.Errorf("parse business memory extraction: %w: %w", analysis.ErrModelFailure, err)
 		span.SetStatus(codes.Error, err.Error())
@@ -218,7 +222,7 @@ func (j *Judge) Judge(ctx context.Context, in analysis.JudgeInput) (analysis.Jud
 	}, nil
 }
 
-func normalizeExtraction(raw string, transcriptTurns int) ([]extractionCandidate, error) {
+func normalizeExtraction(raw string, transcriptTurns map[int]struct{}) ([]extractionCandidate, error) {
 	var verdict extractionVerdict
 	if err := json.Unmarshal([]byte(raw), &verdict); err != nil {
 		return nil, fmt.Errorf("decode extraction: %w", err)
@@ -238,7 +242,7 @@ func normalizeExtraction(raw string, transcriptTurns int) ([]extractionCandidate
 		default:
 			return nil, fmt.Errorf("invalid memory type %q", candidate.MemoryType)
 		}
-		if candidate.SourceTurn < 1 || candidate.SourceTurn > transcriptTurns {
+		if _, ok := transcriptTurns[candidate.SourceTurn]; !ok {
 			return nil, fmt.Errorf("source turn %d outside transcript", candidate.SourceTurn)
 		}
 		if len(candidate.ContentScope) > maxContentLabels {
@@ -298,6 +302,9 @@ func (j *Judge) persist(
 		return nil, fmt.Errorf("begin business memory insert: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	if err := enableFilteredVectorScan(ctx, dbtx); err != nil {
+		return nil, err
+	}
 
 	queries := repo.New(dbtx)
 	persisted := make([]extractionCandidate, 0, len(candidates))

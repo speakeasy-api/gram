@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -102,11 +103,13 @@ func (s *Service) ListBusinessMemories(ctx context.Context, payload *gen.ListBus
 	}
 
 	rows, err := repo.New(s.db).ListBusinessMemories(ctx, repo.ListBusinessMemoriesParams{
-		ProjectID:       *authCtx.ProjectID,
-		OrganizationID:  authCtx.ActiveOrganizationID,
-		CursorCreatedAt: conv.PtrToPGTimestamptz(cursorCreatedAt),
-		CursorID:        uuid.NullUUID{UUID: conv.PtrValOr(cursorID, uuid.Nil), Valid: cursorID != nil},
-		PageLimit:       conv.SafeInt32(payload.Limit),
+		ProjectID:             *authCtx.ProjectID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		CursorCreatedAt:       conv.PtrToPGTimestamptz(cursorCreatedAt),
+		CursorID:              uuid.NullUUID{UUID: conv.PtrValOr(cursorID, uuid.Nil), Valid: cursorID != nil},
+		ContentScope:          conv.PtrToPGText(payload.ContentScope),
+		ContentScopeNamespace: conv.PtrToPGText(payload.ContentScopeNamespace),
+		PageLimit:             conv.SafeInt32(payload.Limit),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list business memories").LogError(ctx, s.logger)
@@ -211,14 +214,28 @@ func (s *Service) SearchBusinessMemories(ctx context.Context, payload *gen.Searc
 		return nil, oops.E(oops.CodeUnexpected, nil, "embedding response had %d vectors, expected 1", len(vectors)).LogError(ctx, s.logger)
 	}
 
-	rows, err := repo.New(s.db).SearchBusinessMemories(ctx, repo.SearchBusinessMemoriesParams{
-		QueryEmbedding: pgvector_go.NewHalfVector(vectors[0]),
-		ProjectID:      *authCtx.ProjectID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ResultLimit:    conv.SafeInt32(payload.Limit),
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin business memory search").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	if err := enableFilteredVectorScan(ctx, dbtx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "configure business memory search").LogError(ctx, s.logger)
+	}
+
+	rows, err := repo.New(dbtx).SearchBusinessMemories(ctx, repo.SearchBusinessMemoriesParams{
+		QueryEmbedding:        pgvector_go.NewHalfVector(vectors[0]),
+		ProjectID:             *authCtx.ProjectID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		ContentScope:          conv.PtrToPGText(payload.ContentScope),
+		ContentScopeNamespace: conv.PtrToPGText(payload.ContentScopeNamespace),
+		ResultLimit:           conv.SafeInt32(payload.Limit),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "search business memories").LogError(ctx, s.logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit business memory search").LogError(ctx, s.logger)
 	}
 
 	memories := make([]*gen.BusinessMemory, 0, len(rows))

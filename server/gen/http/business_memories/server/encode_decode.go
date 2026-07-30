@@ -38,16 +38,32 @@ func DecodeListBusinessMemoriesRequest(mux goahttp.Muxer, decoder func(*http.Req
 	return func(r *http.Request) (*businessmemories.ListBusinessMemoriesPayload, error) {
 		var payload *businessmemories.ListBusinessMemoriesPayload
 		var (
-			cursor           *string
-			limit            int
-			sessionToken     *string
-			projectSlugInput *string
-			err              error
+			cursor                *string
+			contentScope          *string
+			contentScopeNamespace *string
+			limit                 int
+			sessionToken          *string
+			projectSlugInput      *string
+			err                   error
 		)
 		qp := r.URL.Query()
 		cursorRaw := qp.Get("cursor")
 		if cursorRaw != "" {
 			cursor = &cursorRaw
+		}
+		contentScopeRaw := qp.Get("content_scope")
+		if contentScopeRaw != "" {
+			contentScope = &contentScopeRaw
+		}
+		if contentScope != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("content_scope", *contentScope, "^[a-z0-9][a-z0-9:_-]{0,127}$"))
+		}
+		contentScopeNamespaceRaw := qp.Get("content_scope_namespace")
+		if contentScopeNamespaceRaw != "" {
+			contentScopeNamespace = &contentScopeNamespaceRaw
+		}
+		if contentScopeNamespace != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("content_scope_namespace", *contentScopeNamespace, "^[a-z0-9][a-z0-9_-]{0,127}$"))
 		}
 		{
 			limitRaw := qp.Get("limit")
@@ -78,7 +94,7 @@ func DecodeListBusinessMemoriesRequest(mux goahttp.Muxer, decoder func(*http.Req
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListBusinessMemoriesPayload(cursor, limit, sessionToken, projectSlugInput)
+		payload = NewListBusinessMemoriesPayload(cursor, contentScope, contentScopeNamespace, limit, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -478,11 +494,13 @@ func DecodeSearchBusinessMemoriesRequest(mux goahttp.Muxer, decoder func(*http.R
 	return func(r *http.Request) (*businessmemories.SearchBusinessMemoriesPayload, error) {
 		var payload *businessmemories.SearchBusinessMemoriesPayload
 		var (
-			query            string
-			limit            int
-			sessionToken     *string
-			projectSlugInput *string
-			err              error
+			query                 string
+			contentScope          *string
+			contentScopeNamespace *string
+			limit                 int
+			sessionToken          *string
+			projectSlugInput      *string
+			err                   error
 		)
 		qp := r.URL.Query()
 		query = qp.Get("query")
@@ -494,6 +512,20 @@ func DecodeSearchBusinessMemoriesRequest(mux goahttp.Muxer, decoder func(*http.R
 		}
 		if utf8.RuneCountInString(query) > 2000 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("query", query, utf8.RuneCountInString(query), 2000, false))
+		}
+		contentScopeRaw := qp.Get("content_scope")
+		if contentScopeRaw != "" {
+			contentScope = &contentScopeRaw
+		}
+		if contentScope != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("content_scope", *contentScope, "^[a-z0-9][a-z0-9:_-]{0,127}$"))
+		}
+		contentScopeNamespaceRaw := qp.Get("content_scope_namespace")
+		if contentScopeNamespaceRaw != "" {
+			contentScopeNamespace = &contentScopeNamespaceRaw
+		}
+		if contentScopeNamespace != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("content_scope_namespace", *contentScopeNamespace, "^[a-z0-9][a-z0-9_-]{0,127}$"))
 		}
 		{
 			limitRaw := qp.Get("limit")
@@ -524,7 +556,7 @@ func DecodeSearchBusinessMemoriesRequest(mux goahttp.Muxer, decoder func(*http.R
 		if err != nil {
 			return payload, err
 		}
-		payload = NewSearchBusinessMemoriesPayload(query, limit, sessionToken, projectSlugInput)
+		payload = NewSearchBusinessMemoriesPayload(query, contentScope, contentScopeNamespace, limit, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

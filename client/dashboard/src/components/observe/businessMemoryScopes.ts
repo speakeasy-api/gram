@@ -1,4 +1,3 @@
-import type { BusinessMemory } from "@gram/client/models/components/businessmemory.js";
 import type { BusinessMemoryContentScopeNode } from "@gram/client/models/components/businessmemorycontentscopenode.js";
 
 export type ScopeSelection =
@@ -62,15 +61,13 @@ export function buildScopeTree(
     .sort((a, b) => a.namespace.localeCompare(b.namespace));
 }
 
-export function memoryMatchesScope(
-  memory: BusinessMemory,
-  selection: ScopeSelection | null,
-): boolean {
-  if (!selection) return true;
+export function scopeSelectionToFilter(selection: ScopeSelection | null): {
+  contentScope?: string;
+  contentScopeNamespace?: string;
+} {
+  if (!selection) return {};
   if (selection.kind === "tag") {
-    return memory.contentScope.includes(selection.value);
+    return { contentScope: selection.value };
   }
-  return memory.contentScope.some(
-    (tag) => tag === selection.value || tag.startsWith(`${selection.value}:`),
-  );
+  return { contentScopeNamespace: selection.value };
 }

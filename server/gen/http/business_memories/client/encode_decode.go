@@ -55,6 +55,12 @@ func EncodeListBusinessMemoriesRequest(encoder func(*http.Request) goahttp.Encod
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}
+		if p.ContentScope != nil {
+			values.Add("content_scope", *p.ContentScope)
+		}
+		if p.ContentScopeNamespace != nil {
+			values.Add("content_scope_namespace", *p.ContentScopeNamespace)
+		}
 		values.Add("limit", fmt.Sprintf("%v", p.Limit))
 		req.URL.RawQuery = values.Encode()
 		return nil
@@ -531,6 +537,12 @@ func EncodeSearchBusinessMemoriesRequest(encoder func(*http.Request) goahttp.Enc
 		}
 		values := req.URL.Query()
 		values.Add("query", p.Query)
+		if p.ContentScope != nil {
+			values.Add("content_scope", *p.ContentScope)
+		}
+		if p.ContentScopeNamespace != nil {
+			values.Add("content_scope_namespace", *p.ContentScopeNamespace)
+		}
 		values.Add("limit", fmt.Sprintf("%v", p.Limit))
 		req.URL.RawQuery = values.Encode()
 		return nil

@@ -222,6 +222,8 @@ export function setListBusinessMemoriesData(
   queryKeyBase: [
     parameters: {
       cursor?: string | undefined;
+      contentScope?: string | undefined;
+      contentScopeNamespace?: string | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -239,6 +241,8 @@ export function invalidateListBusinessMemories(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       cursor?: string | undefined;
+      contentScope?: string | undefined;
+      contentScopeNamespace?: string | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;

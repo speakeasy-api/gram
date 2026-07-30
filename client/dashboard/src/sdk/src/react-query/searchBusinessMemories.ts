@@ -118,6 +118,8 @@ export function setSearchBusinessMemoriesData(
   queryKeyBase: [
     parameters: {
       query: string;
+      contentScope?: string | undefined;
+      contentScopeNamespace?: string | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -135,6 +137,8 @@ export function invalidateSearchBusinessMemories(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       query: string;
+      contentScope?: string | undefined;
+      contentScopeNamespace?: string | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
