@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -82,7 +83,9 @@ func TestDebugLogCapturesRelayAndAgenthooksDiagnostics(t *testing.T) {
 
 	info, err := os.Stat(path)
 	require.NoError(t, err)
-	require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	}
 }
 
 func TestDebugLogSecuresExistingFile(t *testing.T) {
@@ -95,7 +98,9 @@ func TestDebugLogSecuresExistingFile(t *testing.T) {
 
 	info, err := os.Stat(path)
 	require.NoError(t, err)
-	require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	}
 }
 
 func TestDebugLogCapsIndividualRecords(t *testing.T) {
@@ -123,4 +128,36 @@ func TestTransportDiagnosticRedactsAndCapsURLErrors(t *testing.T) {
 	require.NotContains(t, diagnostic, "secret")
 	require.Contains(t, diagnostic, "example.com")
 	require.Contains(t, diagnostic, "connection failure")
+}
+
+func TestDeliveryLogRedactsConfiguredServerURL(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "speakeasy-hooks.log")
+	cfg := Config{
+		ServerURL:    "http://user:password@example.com/hooks?token=secret",
+		SiteURL:      "",
+		ProjectSlug:  "",
+		OrgID:        "",
+		HooksAPIKey:  "",
+		BrowserLogin: false,
+		Nonblocking:  false,
+		DebugLog:     path,
+		ConfigPath:   "",
+		ConfigError:  "",
+	}
+	event := &agenthooks.PromptEvent{
+		Event: agenthooks.Event{
+			Provider:   agenthooks.ProviderClaudeCode,
+			Kind:       agenthooks.KindPromptSubmitted,
+			NativeName: "UserPromptSubmit",
+		},
+		Prompt: "hello",
+	}
+
+	NewRelay(cfg).deliver(t.Context(), event)
+
+	logData, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(logData), "example.com")
+	require.NotContains(t, string(logData), "password")
+	require.NotContains(t, string(logData), "secret")
 }

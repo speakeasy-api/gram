@@ -60,8 +60,14 @@ func (w debugLogWriter) Write(p []byte) (int, error) {
 	)
 	withFileLock(w.path, func() {
 		if info, err := os.Stat(w.path); err == nil && info.Size()+int64(len(p)) > maxDebugLogBytes {
-			_ = os.Remove(w.path + ".1")
-			_ = os.Rename(w.path, w.path+".1")
+			if err := os.Remove(w.path + ".1"); err != nil && !os.IsNotExist(err) {
+				writeErr = fmt.Errorf("remove previous hooks log: %w", err)
+				return
+			}
+			if err := os.Rename(w.path, w.path+".1"); err != nil {
+				writeErr = fmt.Errorf("rotate hooks log: %w", err)
+				return
+			}
 		}
 
 		file, err := os.OpenFile(w.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
@@ -69,7 +75,7 @@ func (w debugLogWriter) Write(p []byte) (int, error) {
 			writeErr = fmt.Errorf("open hooks log: %w", err)
 			return
 		}
-		if err := file.Chmod(0o600); err != nil {
+		if err := secureLogFile(file); err != nil {
 			_ = file.Close()
 			writeErr = fmt.Errorf("secure hooks log permissions: %w", err)
 			return

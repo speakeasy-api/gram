@@ -151,7 +151,7 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	// with the ratchet's usual split: never-authenticated machines skip the
 	// network silently, established machines fail closed.
 	if insecureServerURL(r.cfg.ServerURL) {
-		r.debugf("event=%s insecure-server-url server=%s", agenthooks.EventOf(typed).NativeName, r.cfg.ServerURL)
+		r.debugf("event=%s insecure-server-url server=%s", agenthooks.EventOf(typed).NativeName, redactURL(r.cfg.ServerURL))
 		if authEstablished() {
 			msg := fmt.Sprintf("Speakeasy hooks refused insecure Gram server URL %q; use https:// (or an http://localhost dev server).", r.cfg.ServerURL)
 			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil, skillCapture: nil, diagnostic: ""}, stateBroken
@@ -214,7 +214,7 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	if res.diagnostic != "" {
 		r.debugf("event=%s ingest-error: %s", agenthooks.EventOf(typed).NativeName, res.diagnostic)
 	}
-	r.debugf("event=%s type=%s server=%s authfile=%s status=%d denied=%t", agenthooks.EventOf(typed).NativeName, payload.Event.Type, r.cfg.ServerURL, authFilePath(), res.statusCode, res.decision.denied())
+	r.debugf("event=%s type=%s server=%s authfile=%s status=%d denied=%t", agenthooks.EventOf(typed).NativeName, payload.Event.Type, redactURL(r.cfg.ServerURL), authFilePath(), res.statusCode, res.decision.denied())
 	if res.authRejected && c.Source == credEnv {
 		// The configured key is authoritative and a re-login can never replace
 		// it, so name it in the failure instead of pointing at the cache flow.
