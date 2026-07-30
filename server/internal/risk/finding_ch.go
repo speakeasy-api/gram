@@ -181,12 +181,22 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 
 		// Attribution is an enrichment: findings whose message id is absent,
 		// malformed, or unresolved keep empty strings rather than being dropped.
-		var chatID, userID, externalUserID string
+		// message_created_at falls back to the finding's own scan time so the
+		// listing sort key is never zero, mirroring the column's DEFAULT for
+		// pre-column rows.
+		var chatID, userID, externalUserID, assistantID string
+		messageCreatedAt := createdAt.UTC()
 		if msgID, err := uuid.Parse(message.GetChatMessageId()); err == nil {
 			if a, ok := attribution[msgID]; ok {
 				chatID = a.ChatID.String()
 				userID = a.UserID
 				externalUserID = a.ExternalUserID
+				if a.AssistantID != uuid.Nil {
+					assistantID = a.AssistantID.String()
+				}
+				if a.MessageCreatedAt.Valid {
+					messageCreatedAt = a.MessageCreatedAt.Time.UTC()
+				}
 			}
 		}
 
@@ -228,6 +238,8 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			FingerprintTenantHS256:   tenantHS256,
 			ExcludedAt:               excludedAt,
 			ExclusionID:              exclusionID,
+			MessageCreatedAt:         messageCreatedAt,
+			AssistantID:              assistantID,
 		})
 	}
 

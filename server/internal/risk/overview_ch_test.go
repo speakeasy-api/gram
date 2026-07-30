@@ -50,6 +50,8 @@ func chOverviewFinding(t *testing.T, projectID uuid.UUID, orgID string, chatID, 
 		FingerprintTenantHS256:   "",
 		ExcludedAt:               nil,
 		ExclusionID:              nil,
+		MessageCreatedAt:         createdAt,
+		AssistantID:              "",
 	}
 }
 

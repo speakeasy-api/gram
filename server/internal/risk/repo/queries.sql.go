@@ -441,6 +441,50 @@ func (q *Queries) CountTotalMessages(ctx context.Context, projectID uuid.NullUUI
 	return column_1, err
 }
 
+const createAssistantForTest = `-- name: CreateAssistantForTest :one
+INSERT INTO assistants (project_id, organization_id, name, model, instructions)
+VALUES ($1, $2, $3, 'test-model', '')
+RETURNING id
+`
+
+type CreateAssistantForTestParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Name           string
+}
+
+func (q *Queries) CreateAssistantForTest(ctx context.Context, arg CreateAssistantForTestParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createAssistantForTest, arg.ProjectID, arg.OrganizationID, arg.Name)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createAssistantThreadForTest = `-- name: CreateAssistantThreadForTest :one
+INSERT INTO assistant_threads (assistant_id, project_id, correlation_id, chat_id, source_kind)
+VALUES ($1, $2, $3, $4, 'test')
+RETURNING id
+`
+
+type CreateAssistantThreadForTestParams struct {
+	AssistantID   uuid.UUID
+	ProjectID     uuid.UUID
+	CorrelationID string
+	ChatID        uuid.UUID
+}
+
+func (q *Queries) CreateAssistantThreadForTest(ctx context.Context, arg CreateAssistantThreadForTestParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createAssistantThreadForTest,
+		arg.AssistantID,
+		arg.ProjectID,
+		arg.CorrelationID,
+		arg.ChatID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const createChatContentPartForTest = `-- name: CreateChatContentPartForTest :one
 INSERT INTO chat_content_parts (chat_id, project_id, kind, content_asset_url, parent_chat_message_id)
 VALUES ($1, $2, $3, $4, $5)
@@ -1179,25 +1223,39 @@ const getChatMessageAttribution = `-- name: GetChatMessageAttribution :many
 SELECT
     cm.id
   , cm.chat_id
+  , cm.created_at AS message_created_at
   , COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id
   , COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
+  , COALESCE(thread.assistant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS assistant_id
 FROM chat_messages cm
 LEFT JOIN chats c
   ON c.id = cm.chat_id
   AND c.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT at.assistant_id
+  FROM assistant_threads at
+  WHERE at.chat_id = cm.chat_id
+    AND at.deleted IS FALSE
+  ORDER BY at.created_at DESC
+  LIMIT 1
+) thread ON TRUE
 WHERE cm.id = ANY($1::uuid[])
 `
 
 type GetChatMessageAttributionRow struct {
-	ID             uuid.UUID
-	ChatID         uuid.UUID
-	UserID         string
-	ExternalUserID string
+	ID               uuid.UUID
+	ChatID           uuid.UUID
+	MessageCreatedAt pgtype.Timestamptz
+	UserID           string
+	ExternalUserID   string
+	AssistantID      uuid.UUID
 }
 
-// Resolves the denormalized attribution (chat id, user ids) the ClickHouse
-// finding writer stamps on risk_findings rows at ingest. Message-level ids win
-// over chat-level ids; both empty and NULL collapse to ”.
+// Resolves the denormalized attribution (chat id, user ids, message event
+// time, assistant link) the ClickHouse finding writer stamps on risk_findings
+// rows at ingest. Message-level ids win over chat-level ids; both empty and
+// NULL collapse to ”. The assistant id is the chat's most recent live
+// assistant_threads link, or the nil UUID when the chat has no assistant.
 func (q *Queries) GetChatMessageAttribution(ctx context.Context, ids []uuid.UUID) ([]GetChatMessageAttributionRow, error) {
 	rows, err := q.db.Query(ctx, getChatMessageAttribution, ids)
 	if err != nil {
@@ -1210,8 +1268,10 @@ func (q *Queries) GetChatMessageAttribution(ctx context.Context, ids []uuid.UUID
 		if err := rows.Scan(
 			&i.ID,
 			&i.ChatID,
+			&i.MessageCreatedAt,
 			&i.UserID,
 			&i.ExternalUserID,
+			&i.AssistantID,
 		); err != nil {
 			return nil, err
 		}
