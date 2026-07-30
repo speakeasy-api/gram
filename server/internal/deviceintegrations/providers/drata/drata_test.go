@@ -46,6 +46,10 @@ type fakeDrata struct {
 	// failComplete rejects the completing action, stranding the session
 	// mid-push the way a crashed or timed-out run does.
 	failComplete bool
+	// rejectRecordID makes the upload endpoint reject that record the way
+	// the real API rejects a schema-validation failure: the response stays
+	// 2xx and the rejection rides in the per-record result's "error" field.
+	rejectRecordID string
 	// records is the authoritative dataset: replaced wholesale when a
 	// session completes, exactly like the real API.
 	records []map[string]any
@@ -53,6 +57,9 @@ type fakeDrata struct {
 	uploadRequests int
 	completed      []string
 	canceled       []string
+	// deletedRecords logs ids removed via the record-delete endpoint, the
+	// empty-fleet clear path.
+	deletedRecords []string
 
 	server *httptest.Server
 }
@@ -68,10 +75,12 @@ func newFakeDrata(t *testing.T) *fakeDrata {
 		sessionStatus:      map[string]string{},
 		ignoreStatusFilter: false,
 		failComplete:       false,
+		rejectRecordID:     "",
 		records:            nil,
 		uploadRequests:     0,
 		completed:          nil,
 		canceled:           nil,
+		deletedRecords:     nil,
 		server:             nil,
 	}
 
@@ -158,6 +167,14 @@ func newFakeDrata(t *testing.T) *fakeDrata {
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
+			if len(uploaded) == 0 {
+				// Mirrors production: completing a session with no records is
+				// refused with 422 "Cannot complete a session with no data
+				// records" — which is why the empty-fleet path must delete
+				// records instead of pushing an empty session.
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				return
+			}
 			// Completion makes the session the authoritative dataset.
 			f.records = uploaded
 			f.sessionStatus[sessionID] = "ACTIVE"
@@ -187,15 +204,72 @@ func newFakeDrata(t *testing.T) *fakeDrata {
 				return
 			}
 		}
+		// Per-record results mirror the real response: overall 2xx with a
+		// bare array whose rejected entries carry an "error" object (their
+		// statusCode still reads 201) and the record only under "data".
+		// Rejected records are not staged into the session.
+		results := make([]string, 0, len(payload.Data))
+		accepted := make([]map[string]any, 0, len(payload.Data))
+		for _, rec := range payload.Data {
+			id, _ := rec["id"].(string)
+			if f.rejectRecordID != "" && id == f.rejectRecordID {
+				results = append(results, fmt.Sprintf(`{"statusCode": 201, "error": {"message": "Schema validation failed for data", "code": 28022}, "data": {"id": %q}}`, id))
+				continue
+			}
+			results = append(results, fmt.Sprintf(`{"id": %q, "statusCode": 201, "data": {"id": %q}}`, id, id))
+			accepted = append(accepted, rec)
+		}
 		// Assignment (not just append) so an empty first upload still
 		// creates the session, mirroring implicit session creation.
-		f.sessions[rest] = append(f.sessions[rest], payload.Data...)
+		f.sessions[rest] = append(f.sessions[rest], accepted...)
 		if _, seen := f.sessionStatus[rest]; !seen {
 			f.sessionStatus[rest] = "IN_PROGRESS"
 		}
 		f.uploadRequests++
 		f.mu.Unlock()
-		w.WriteHeader(http.StatusCreated)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, "[%s]", strings.Join(results, ","))
+	})
+
+	recordsBase := connBase + "/resources/" + testResourceID + "/records"
+	mux.HandleFunc(recordsBase, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(f.t, http.MethodGet, r.Method)
+		if !f.authorized(w, r) {
+			return
+		}
+		f.mu.Lock()
+		items := make([]string, 0, len(f.records))
+		for _, rec := range f.records {
+			items = append(items, fmt.Sprintf(`{"id": %q, "data": {"id": %q}}`, rec["id"], rec["id"]))
+		}
+		f.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"data": [%s], "pagination": {"cursor": null}}`, strings.Join(items, ","))
+	})
+	mux.HandleFunc(recordsBase+"/", func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(f.t, http.MethodDelete, r.Method)
+		if !f.authorized(w, r) {
+			return
+		}
+		id := strings.TrimPrefix(r.URL.Path, recordsBase+"/")
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		kept := make([]map[string]any, 0, len(f.records))
+		found := false
+		for _, rec := range f.records {
+			if !found && rec["id"] == id {
+				found = true
+				continue
+			}
+			kept = append(kept, rec)
+		}
+		if !found {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		f.records = kept
+		f.deletedRecords = append(f.deletedRecords, id)
+		w.WriteHeader(http.StatusNoContent)
 	})
 
 	f.server = httptest.NewTLSServer(mux)
@@ -309,6 +383,28 @@ func TestPushCoverageEmptyFleetClearsEvidence(t *testing.T) {
 	empty.GeneratedAt = empty.GeneratedAt.Add(time.Hour)
 	require.NoError(t, s.PushCoverage(t.Context(), fake.creds(), fake.settings(), empty))
 	require.Empty(t, fake.records, "an empty fleet replaces stale evidence with the truthful empty set")
+	require.Len(t, fake.deletedRecords, 4, "the empty fleet clears via record deletion — the API refuses to complete an empty session")
+	require.Len(t, fake.completed, 1, "only the initial non-empty push completes a session")
+}
+
+// TestPushSurfacesPerRecordRejection pins the trap where an upload's 2xx
+// response hides schema-validation rejections in per-record results: a push
+// that ignored them would complete a session missing part of the fleet and
+// publish it as the authoritative dataset.
+func TestPushSurfacesPerRecordRejection(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeDrata(t)
+	s := fake.newSink(t)
+
+	fake.mu.Lock()
+	fake.rejectRecordID = "dev-0002"
+	fake.mu.Unlock()
+
+	err := s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(3))
+	require.ErrorContains(t, err, "dev-0002")
+	require.ErrorContains(t, err, "Schema validation failed")
+	require.Empty(t, fake.completed, "a partially rejected upload must not publish the session")
 }
 
 func TestTestConnection(t *testing.T) {

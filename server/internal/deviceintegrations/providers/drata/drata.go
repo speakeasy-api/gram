@@ -34,10 +34,12 @@
 //
 // Endpoints used (all under the region's public API base URL):
 //
-//	GET  /public/v2/custom-connections/{id}?expand[]=customResources — connection test + resource discovery
-//	GET  /public/v2/custom-connections/{id}/resources/{rid}/sessions?status=IN_PROGRESS — stranded-session sweep
-//	POST /public/v2/custom-connections/{id}/resources/{rid}/sessions/{sid} — batched record upload
-//	POST /public/v2/custom-connections/{id}/resources/{rid}/sessions/{sid}/actions — cancel a strand, then complete the session
+//	GET    /public/v2/custom-connections/{id}?expand[]=customResources — connection test + resource discovery
+//	GET    /public/v2/custom-connections/{id}/resources/{rid}/sessions?status=IN_PROGRESS — stranded-session sweep
+//	POST   /public/v2/custom-connections/{id}/resources/{rid}/sessions/{sid} — batched record upload
+//	POST   /public/v2/custom-connections/{id}/resources/{rid}/sessions/{sid}/actions — cancel a strand, then complete the session
+//	GET    /public/v2/custom-connections/{id}/resources/{rid}/records — enumerate live records (empty-fleet clear)
+//	DELETE /public/v2/custom-connections/{id}/resources/{rid}/records/{recordId} — delete one record (empty-fleet clear)
 //
 // Sessions give true snapshot-replace semantics: completing a session makes
 // it the authoritative dataset and Drata deletes every record not in it, so
@@ -392,6 +394,88 @@ func buildRecords(snapshot providers.CoverageSnapshot) []coverageRecord {
 	return records
 }
 
+// checkUploadResults surfaces per-record rejections hidden inside a 2xx
+// upload response. The observed shape is a bare array of per-record results;
+// a rejected record carries an "error" object (with the schema-validation
+// message) while its top-level "statusCode" still reads 201, so the error
+// field is the only reliable discriminator. Unknown response shapes pass:
+// the 2xx already says the request itself succeeded, and failing on a shape
+// change would break pushes that worked.
+func checkUploadResults(body []byte) error {
+	trimmed := bytes.TrimSpace(body)
+	if len(trimmed) == 0 || trimmed[0] != '[' {
+		return nil
+	}
+	var results []struct {
+		ID    string `json:"id"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(trimmed, &results); err != nil {
+		return nil
+	}
+	for _, r := range results {
+		if r.Error == nil {
+			continue
+		}
+		// Rejected results have been observed carrying the record only under
+		// "data", so fall back there for the id naming the failure.
+		id := r.ID
+		if id == "" {
+			id = r.Data.ID
+		}
+		return fmt.Errorf("record %q rejected: %s", id, r.Error.Message)
+	}
+	return nil
+}
+
+// deleteAllRecords clears the resource's live records one by one. It exists
+// because sessions cannot express an empty fleet (completion of an empty
+// session is refused), so this is the only truthful path when every device
+// has departed. Each pass re-lists the first page and deletes what it finds,
+// so cursor semantics never matter: the loop drains the list or reports the
+// first failure.
+func (s *sink) deleteAllRecords(ctx context.Context, creds providers.Credentials, resourcePath string) error {
+	deleted := make(map[string]bool)
+	for {
+		body, err := s.doJSON(ctx, creds, http.MethodGet, resourcePath+"/records", nil)
+		if err != nil {
+			return err
+		}
+		var page struct {
+			Data []struct {
+				ID flexID `json:"id"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(body, &page); err != nil {
+			return fmt.Errorf("decode record list: %w", err)
+		}
+		if len(page.Data) == 0 {
+			return nil
+		}
+		for _, rec := range page.Data {
+			id := string(rec.ID)
+			if id == "" {
+				return fmt.Errorf("record listed with no id")
+			}
+			// A re-listed id whose delete already returned success means
+			// deletes are not taking effect; erroring out beats spinning
+			// on the listing forever.
+			if deleted[id] {
+				return fmt.Errorf("record %q reappeared after deletion", id)
+			}
+			if _, err := s.doJSON(ctx, creds, http.MethodDelete, resourcePath+"/records/"+url.PathEscape(id), nil); err != nil {
+				return fmt.Errorf("delete stale record: %w", err)
+			}
+			deleted[id] = true
+		}
+	}
+}
+
 // PushCoverage replaces the connection's evidence with the snapshot: batched
 // uploads into a fresh session, then a completing action that makes the
 // session authoritative (Drata deletes everything not in it).
@@ -433,15 +517,26 @@ func (s *sink) PushCoverage(ctx context.Context, creds providers.Credentials, se
 	// completion publishes each id once.
 	records := buildRecords(snapshot)
 	if len(records) == 0 {
-		// An empty fleet still pushes: sessions are created implicitly by
-		// their first upload, so one empty batch makes the session exist,
-		// and completing it clears stale evidence — the truthful state.
-		if _, err := s.doJSON(ctx, creds, http.MethodPost, sessionPath, map[string]any{"data": []coverageRecord{}}); err != nil {
-			return fmt.Errorf("upload evidence batch: %w", err)
+		// Sessions cannot express an empty fleet: the production API refuses
+		// the completing action with 422 "Cannot complete a session with no
+		// data records". Stale evidence still has to clear — a departed
+		// fleet must not keep attesting — so the truthful empty state is
+		// reached by deleting the live records directly.
+		if err := s.deleteAllRecords(ctx, creds, resourcePath); err != nil {
+			return fmt.Errorf("clear evidence for empty fleet: %w", err)
 		}
+		return nil
 	}
 	for batch := range slices.Chunk(records, recordBatchSize) {
-		if _, err := s.doJSON(ctx, creds, http.MethodPost, sessionPath, map[string]any{"data": batch}); err != nil {
+		body, err := s.doJSON(ctx, creds, http.MethodPost, sessionPath, map[string]any{"data": batch})
+		if err != nil {
+			return fmt.Errorf("upload evidence batch: %w", err)
+		}
+		// A 2xx upload can still reject records: the response carries a
+		// per-record result whose "error" field reports schema-validation
+		// failures. Ignoring those would complete a session missing part of
+		// the fleet — or, for a wholly rejected batch, publish an empty one.
+		if err := checkUploadResults(body); err != nil {
 			return fmt.Errorf("upload evidence batch: %w", err)
 		}
 	}
