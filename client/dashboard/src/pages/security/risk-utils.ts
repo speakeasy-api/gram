@@ -19,6 +19,21 @@ const SOURCE_TO_CATEGORY: ReadonlyMap<string, RuleCategory> = new Map<
   ["presidio", "pii"],
 ]);
 
+// The judge-backed detectors. Each owns exactly one rule whose humanized id
+// restates its own category ("Prompt Injection" under a "Prompt Injection"
+// badge), so the rule label adds nothing for these findings. Their
+// `description` carries the judge's per-finding rationale instead of a static
+// rule blurb, and their `match` is the whole flagged event rather than a
+// substring.
+const JUDGE_SOURCES: ReadonlySet<string> = new Set([
+  "llm_judge",
+  "prompt_injection",
+]);
+
+export function isJudgeSource(source: string | undefined): boolean {
+  return source !== undefined && JUDGE_SOURCES.has(source);
+}
+
 const ruleIdToCategory = new Map<string, RuleCategory>();
 const ruleIdToTitle = new Map<string, string>();
 

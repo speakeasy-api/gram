@@ -10,6 +10,7 @@ import {
 import {
   getCategoryCodeForFinding,
   getRuleTitleFallback,
+  isJudgeSource,
 } from "@/pages/security/risk-utils";
 import { useRevealAll } from "@/pages/security/reveal-all-context";
 
@@ -34,8 +35,10 @@ export function getRiskBadgeLabel(result: RiskResult): string {
   );
 }
 
+/** Judge findings carry one rule per category, so their rule id only restates
+ * the badge beside it ("prompt_injection" under PROMPT_INJECTION). */
 export function shouldShowRiskRuleId(result: RiskResult): boolean {
-  return Boolean(result.ruleId) && result.ruleId !== "llm_judge";
+  return Boolean(result.ruleId) && !isJudgeSource(result.source);
 }
 
 /** A finding from gitleaks/presidio carries a literal secret; its match is

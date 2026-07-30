@@ -29,9 +29,13 @@ import {
   RuleLabel,
   SeverityScore,
 } from "./risk-ui";
+import { isJudgeSource } from "./risk-utils";
 
+// Evidence gets the widest track: for judge findings it holds a sentence or two
+// of rationale, where every other column holds a label. Rule pays for most of
+// it, since judge rows leave it empty.
 const RISK_EVENTS_GRID =
-  "grid grid-cols-[172px_minmax(0,0.9fr)_88px_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1.1fr)_110px] gap-3";
+  "grid grid-cols-[172px_minmax(0,0.9fr)_88px_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,2.2fr)_minmax(0,0.9fr)_110px] gap-3";
 
 // Strongly-typed filter schema for Risk Events. `policy_id` and the date range
 // are pinned (always visible in the bar); the rest live behind "More filters".
@@ -378,7 +382,7 @@ function RiskEventsHeader() {
       <div className="min-w-0">Rule</div>
       <div className="min-w-0">Session Name</div>
       <div className="min-w-0">User</div>
-      <div className="min-w-0">Match</div>
+      <div className="min-w-0">Evidence</div>
       <div className="min-w-0">Policy</div>
       <div className="flex min-w-0 justify-center">Actions</div>
     </div>
@@ -492,8 +496,7 @@ function RiskEventsRow({
   onSelectChat: (chatId: string | null) => void;
 }) {
   const isShadowMCP = result.source === "shadow_mcp";
-  const isEventSource =
-    result.source === "llm_judge" || result.source === "prompt_injection";
+  const isEventSource = isJudgeSource(result.source);
 
   // A row click opens the chat only when the gesture both starts and ends inside
   // the row. This rejects the stray click Radix's outside-dismiss sends here:
@@ -575,15 +578,20 @@ function RiskEventsRow({
       </div>
       <div className="min-w-0 truncate">{result.chatTitle ?? "Untitled"}</div>
       <div className="min-w-0 truncate">{result.userId ?? "-"}</div>
-      <div className="min-w-0 truncate">
+      {/* Judge rationale wraps to two lines, so this cell can't clip to one. */}
+      <div className={cn("min-w-0", !isEventSource && "truncate")}>
         {isShadowMCP && result.matchRedacted ? (
-          <span className="font-mono text-xs" title={result.matchRedacted}>
+          <span
+            className="block truncate font-mono text-xs"
+            title={result.matchRedacted}
+          >
             {result.matchRedacted}
           </span>
         ) : isEventSource ? (
           <EventMatchDialog
             resultId={result.id}
             matchRedacted={result.matchRedacted}
+            rationale={result.description}
           />
         ) : (
           <MaskedMatch
