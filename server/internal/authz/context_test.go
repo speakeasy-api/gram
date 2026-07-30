@@ -24,7 +24,7 @@ func TestPrepareContext_loadsUserGrants(t *testing.T) {
 	conn := newTestDB(t)
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, NewDirectChallengePublisher(t, testenv.NewLogger(t), chConn), rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -49,7 +49,7 @@ func TestPrepareContext_rejectsInvalidUserPrincipal(t *testing.T) {
 	conn := newTestDB(t)
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, NewDirectChallengePublisher(t, testenv.NewLogger(t), chConn), rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -70,7 +70,7 @@ func TestPrepareContext_skipsNonSessionAuth(t *testing.T) {
 	conn := newTestDB(t)
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, NewDirectChallengePublisher(t, testenv.NewLogger(t), chConn), rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -92,7 +92,7 @@ func TestPrepareContext_loadsAssistantPrincipalGrants(t *testing.T) {
 	conn := newTestDB(t)
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, NewDirectChallengePublisher(t, testenv.NewLogger(t), chConn), rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -122,7 +122,7 @@ func TestShouldEnforce_assistantPrincipalOnEnterpriseOrgEnforces(t *testing.T) {
 	conn := newTestDB(t)
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, NewDirectChallengePublisher(t, testenv.NewLogger(t), chConn), rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -147,7 +147,7 @@ func TestShouldEnforce_assistantPrincipalOnNonEnterpriseOrgEnforces(t *testing.T
 	conn := newTestDB(t)
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, NewDirectChallengePublisher(t, testenv.NewLogger(t), chConn), rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -171,7 +171,7 @@ func TestPrepareContext_loadsGrantsForNonEnterpriseOrgs(t *testing.T) {
 	conn := newTestDB(t)
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, NewDirectChallengePublisher(t, testenv.NewLogger(t), chConn), rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

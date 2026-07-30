@@ -87,9 +87,6 @@ func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *te
 	// Create test asset storage for testing
 	assetStorage := assetstest.NewTestBlobStore(t)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	auditLogger := audit.NewLogger()
 
 	svc := projects.NewService(
@@ -100,7 +97,7 @@ func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *te
 		authz.NewEngine(
 			logger,
 			conn,
-			chConn,
+			authz.NewNoopChallengePublisher(logger),
 			func(context.Context, string) (bool, error) {
 				return enableRBAC, nil
 			},

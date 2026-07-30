@@ -15,6 +15,8 @@ flowchart LR
   classDef python fill:#fef9c3,stroke:#ca8a04,color:#713f12;
   classDef deprecated stroke-dasharray:4 3,opacity:0.55;
 
+  t_gram_authz_v1_challenge_ch_writer_dlq(["gram-authz-v1-challenge-ch-writer-dlq<br/>(dlq)"]):::dlq
+  t_gram_authz_v1_challenge_row(["gram-authz-v1-challenge-row<br/>(topic)"]):::topic
   t_gram_ping_v2_message(["gram-ping-v2-message<br/>(topic)"]):::topic
   t_gram_ping_v2_processor_dlq(["gram-ping-v2-processor-dlq<br/>(dlq)"]):::dlq
   t_gram_ping_v2_py_processor_dlq(["gram-ping-v2-py-processor-dlq<br/>(dlq)"]):::dlq
@@ -25,6 +27,7 @@ flowchart LR
   t_gram_risk_v1_prompt_injection_analysis(["gram-risk-v1-prompt-injection-analysis<br/>(topic)"]):::topic
   t_gram_risk_v1_prompt_policy_analysis(["gram-risk-v1-prompt-policy-analysis<br/>(topic)"]):::topic
   t_gram_telemetry_v1_log_record(["gram-telemetry-v1-log-record<br/>(topic)"]):::topic
+  s_gram_authz_v1_challenge_ch_writer["gram-authz-v1-challenge-ch-writer<br/>(sub)"]:::sub
   s_gram_ping_v2_processor["gram-ping-v2-processor<br/>(sub)"]:::sub
   s_gram_ping_v2_py_processor["gram-ping-v2-py-processor<br/>(sub)"]:::sub
   s_gram_risk_v1_custom_rules_analyzer["gram-risk-v1-custom-rules-analyzer<br/>(sub)"]:::sub
@@ -57,6 +60,8 @@ flowchart LR
   p9 --> t_gram_risk_v1_prompt_policy_analysis
   p10[/"📤<br/>server/internal/telemetry/log_publisher.go"/]:::go
   p10 --> t_gram_telemetry_v1_log_record
+  t_gram_authz_v1_challenge_row --> s_gram_authz_v1_challenge_ch_writer
+  s_gram_authz_v1_challenge_ch_writer -. dead-letter .-> t_gram_authz_v1_challenge_ch_writer_dlq
   t_gram_ping_v2_message --> s_gram_ping_v2_processor
   s_gram_ping_v2_processor -. dead-letter .-> t_gram_ping_v2_processor_dlq
   t_gram_ping_v2_message --> s_gram_ping_v2_py_processor
@@ -92,6 +97,8 @@ flowchart LR
 
 | Topic | Kind | Retention | Published by |
 | --- | --- | --- | --- |
+| [`gram-authz-v1-challenge-ch-writer-dlq`](../infra/proto/gram/authz/v1/challenge_ch_writer.proto) | DLQ | — | — |
+| [`gram-authz-v1-challenge-row`](../infra/proto/gram/authz/v1/challenge_row.proto) | topic | 7d | — |
 | [`gram-ping-v2-message`](../infra/proto/gram/ping/v2/ping.proto) | topic | 1d | [`server/internal/ping/publisher.go`](../server/internal/ping/publisher.go) |
 | [`gram-ping-v2-processor-dlq`](../infra/proto/gram/ping/v2/processor.proto) | DLQ | — | — |
 | [`gram-ping-v2-py-processor-dlq`](../infra/proto/gram/ping/v2/processor.proto) | DLQ | — | — |
@@ -107,6 +114,7 @@ flowchart LR
 
 | Subscription | Topic | Ack | DLQ | Consumed by |
 | --- | --- | --- | --- | --- |
+| [`gram-authz-v1-challenge-ch-writer`](../infra/proto/gram/authz/v1/challenge_ch_writer.proto) | `gram-authz-v1-challenge-row` | 1m | `gram-authz-v1-challenge-ch-writer-dlq` | — |
 | [`gram-ping-v2-processor`](../infra/proto/gram/ping/v2/processor.proto) | `gram-ping-v2-message` | 30s | `gram-ping-v2-processor-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-ping-v2-py-processor`](../infra/proto/gram/ping/v2/processor.proto) | `gram-ping-v2-message` | 30s | `gram-ping-v2-py-processor-dlq` | [`pystreams/src/pystreams/cmd/multi.py`](../pystreams/src/pystreams/cmd/multi.py) |
 | [`gram-risk-v1-custom-rules-analyzer`](../infra/proto/gram/risk/v1/custom_rules_analyzer.proto) | `gram-risk-v1-custom-rules-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
@@ -116,4 +124,9 @@ flowchart LR
 | [`gram-risk-v1-prompt-injection-analyzer`](../infra/proto/gram/risk/v1/prompt_injection_analyzer.proto) | `gram-risk-v1-prompt-injection-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-prompt-policy-analyzer`](../infra/proto/gram/risk/v1/prompt_policy_analyzer.proto) | `gram-risk-v1-prompt-policy-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-telemetry-v1-noop`](../infra/proto/gram/telemetry/v1/noop.proto) | `gram-telemetry-v1-log-record` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+
+## Notes
+
+- Topic `gram-authz-v1-challenge-row` has no publisher in `server/` or `pystreams/`.
+- Subscription `gram-authz-v1-challenge-ch-writer` has no consumer in `server/` or `pystreams/`.
 

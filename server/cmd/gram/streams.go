@@ -22,11 +22,13 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/speakeasy-api/gram/infra/gen"
+	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -313,25 +315,21 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to parse risk fingerprint pepper keyring: %w", err)
 			}
 
-			// ClickHouse risk_findings writer (sole write path). Only connect
-			// when the kill switch is off so a disabled deployment does not
-			// require ClickHouse reachability.
-			//
-			// A ClickHouse connect/ping failure must NOT abort streams: taking
-			// the process down would also kill every other receiver. Degrade
-			// instead — log the failure and disable only the ClickHouse
-			// receiver.
+			// ClickHouse writers (authz challenges + risk_findings). A connect/
+			// ping failure must NOT abort streams: taking the process down would
+			// also kill every other receiver. Degrade instead — log the failure
+			// and disable only the ClickHouse receivers. The risk_findings kill
+			// switch can further disable that consumer without affecting authz
+			// challenge ingestion.
 			enableCHRiskWrites := !c.Bool("disable-clickhouse-risk-writes")
 			var chConn clickhouse.Conn
-			if enableCHRiskWrites {
-				conn, shutdown, err := newClickhouseClient(ctx, logger, c)
-				if err != nil {
-					logger.ErrorContext(ctx, "failed to create clickhouse client, disabling clickhouse risk_findings writer", attr.SlogError(err))
-					enableCHRiskWrites = false
-				} else {
-					shutdownFuncs = append(shutdownFuncs, shutdown)
-					chConn = conn
-				}
+			chClient, chShutdown, err := newClickhouseClient(ctx, logger, c)
+			if err != nil {
+				logger.ErrorContext(ctx, "failed to create clickhouse client, disabling clickhouse writers", attr.SlogError(err))
+				enableCHRiskWrites = false
+			} else {
+				shutdownFuncs = append(shutdownFuncs, chShutdown)
+				chConn = chClient
 			}
 
 			// Gitleaks shadow-mode subscriber: re-runs the in-process gitleaks
@@ -416,7 +414,15 @@ func newStreamsCommand() *cli.Command {
 
 				mustReceive(rg, &telemetryv1.LogRecord{}, &telemetryv1.Noop{}, new(subscribers.NoopHandler[*telemetryv1.LogRecord]))
 
-				if enableCHRiskWrites {
+				if chConn != nil {
+					mustReceiveBatch(
+						rg, &authzv1.ChallengeRow{}, &authzv1.ChallengeCHWriter{},
+						gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second},
+						authz.NewChallengeCHWriterFromConn(logger, chConn),
+					)
+				}
+
+				if enableCHRiskWrites && chConn != nil {
 					mustReceiveBatch(
 						rg, &riskv1.Finding{}, &riskv1.FindingCHWriter{},
 						gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second},

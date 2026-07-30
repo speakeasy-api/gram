@@ -45,6 +45,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/speakeasy-api/gram/infra/gen"
+	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -164,6 +165,14 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 		Settings: clickhouse.Settings{
 			"max_execution_time": 60, // query timeout
 		},
+		// Explicit pool bounds: clickhouse-go defaults to MaxOpenConns=10 and
+		// DialTimeout=30s. DialTimeout also caps how long acquire waits for a
+		// free pool slot, so a saturated pool previously stalled request-path
+		// writers (notably authz challenges) for 30s. Keep the pool modest but
+		// fail fast on exhaustion; authz challenges now publish via Pub/Sub.
+		DialTimeout:  2 * time.Second,
+		MaxOpenConns: 20,
+		MaxIdleConns: 10,
 		TLS: &tls.Config{
 			// #nosec G402 -- we're reading the value from an environment variable.
 			InsecureSkipVerify: insecure,
@@ -1045,6 +1054,23 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "telemetryLogs", pub: telemetryLogs})
 
+	// Authz challenge publishes are best-effort and must stay bounded during a
+	// Pub/Sub outage: fail fast at enqueue once the buffer fills rather than
+	// stalling the authz request path.
+	authzChallengePublishSettings := pubsub.DefaultPublishSettings
+	authzChallengePublishSettings.Timeout = 10 * time.Second
+	authzChallengePublishSettings.FlowControlSettings.MaxOutstandingMessages = 10_000
+	authzChallengePublishSettings.FlowControlSettings.MaxOutstandingBytes = 128 * 1024 * 1024
+	authzChallengePublishSettings.FlowControlSettings.LimitExceededBehavior = pubsub.FlowControlSignalError
+
+	authzChallenges, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &authzv1.ChallengeRow{},
+		gcp.WithPubSubPublishSettings(&authzChallengePublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for authz challenges: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "authzChallenges", pub: authzChallenges})
+
 	shutdown := func(ctx context.Context) error {
 		var err error
 		for _, pub := range pubs {
@@ -1063,5 +1089,6 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		CustomRulesAnalysis:     customRulesAnalysis,
 		RiskFindings:            riskFindings,
 		TelemetryLogs:           telemetryLogs,
+		AuthzChallenges:         authzChallenges,
 	}, shutdown, nil
 }
