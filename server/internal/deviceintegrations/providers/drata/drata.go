@@ -433,13 +433,31 @@ func checkUploadResults(body []byte) error {
 	return nil
 }
 
-// deleteAllRecords clears the resource's live records one by one. It exists
-// because sessions cannot express an empty fleet (completion of an empty
-// session is refused), so this is the only truthful path when every device
-// has departed. Each pass re-lists the first page and deletes what it finds,
-// so cursor semantics never matter: the loop drains the list or reports the
-// first failure.
-func (s *sink) deleteAllRecords(ctx context.Context, creds providers.Credentials, resourcePath string) error {
+// clearEvidenceRecords deletes every live record on the resource, one by one.
+//
+// DESTRUCTIVE — read before calling. This removes the connection's entire
+// evidence dataset. It is safe only because of three invariants, and a new
+// call site must re-justify all of them:
+//
+//  1. It expresses a truthful state, not a cleanup: it is called only when a
+//     completed inventory sync reported zero managed devices, so "no
+//     evidence" IS the correct evidence. Mark-missing is completion-gated
+//     upstream, so a failed or partial MDM sync can never produce the empty
+//     snapshot that reaches here.
+//  2. It only ever touches data this integration owns: resolveResourceID
+//     refuses any connection carrying more than one resource, so the
+//     resource being cleared holds nothing but records earlier pushes wrote.
+//  3. It is the N=0 case of the deletion every ordinary push already
+//     performs — completing a session deletes all records not in it — and
+//     exists only because the production API refuses to complete an empty
+//     session (422 "Cannot complete a session with no data records"), making
+//     this the one snapshot size sessions cannot express. A later non-empty
+//     push fully restores the dataset, so the operation is self-correcting.
+//
+// Each pass re-lists the first page and deletes what it finds, so cursor
+// semantics never matter: the loop drains the list or reports the first
+// failure.
+func (s *sink) clearEvidenceRecords(ctx context.Context, creds providers.Credentials, resourcePath string) error {
 	deleted := make(map[string]bool)
 	for {
 		body, err := s.doJSON(ctx, creds, http.MethodGet, resourcePath+"/records", nil)
@@ -521,8 +539,9 @@ func (s *sink) PushCoverage(ctx context.Context, creds providers.Credentials, se
 		// the completing action with 422 "Cannot complete a session with no
 		// data records". Stale evidence still has to clear — a departed
 		// fleet must not keep attesting — so the truthful empty state is
-		// reached by deleting the live records directly.
-		if err := s.deleteAllRecords(ctx, creds, resourcePath); err != nil {
+		// reached by deleting the live records directly. See the invariants
+		// on clearEvidenceRecords before touching this path.
+		if err := s.clearEvidenceRecords(ctx, creds, resourcePath); err != nil {
 			return fmt.Errorf("clear evidence for empty fleet: %w", err)
 		}
 		return nil
