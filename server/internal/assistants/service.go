@@ -3015,12 +3015,13 @@ func composeInstructions(base string, thread assistantThreadRecord, skills []ass
 		parts = append(parts, base)
 	}
 	if len(skills) > 0 {
-		lines := make([]string, 0, len(skills)+1)
+		lines := make([]string, 0, len(skills)+2)
 		lines = append(lines, "## Skills")
+		lines = append(lines, "If a user turn includes a <skill-context> block for one of these skills, its embedded <skill-content> is already loaded and takes precedence for that turn. Do not call mcp__p-assistants_skills_load for that skill in that turn.")
 		for _, skill := range skills {
 			name := strings.Join(strings.Fields(skill.Name), " ")
 			description := conv.TruncateString(strings.Join(strings.Fields(skill.Description), " "), 200)
-			lines = append(lines, "- Name: "+strconv.Quote(name)+"; description: "+strconv.Quote(description)+". Call mcp__p-assistants_skills_load with name "+strconv.Quote(name)+" before relying on this skill.")
+			lines = append(lines, "- Name: "+strconv.Quote(name)+"; description: "+strconv.Quote(description)+". Unless this turn already includes a <skill-context> for this skill, call mcp__p-assistants_skills_load with name "+strconv.Quote(name)+" before relying on this skill.")
 		}
 		parts = append(parts, strings.Join(lines, "\n"))
 	}

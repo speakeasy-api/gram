@@ -1,10 +1,13 @@
+import type { ApproveSkillSuggestionResultOutcome } from "@gram/client/models/components/approveskillsuggestionresult.js";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
   screen,
   waitFor,
 } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SkillManifestDialog } from "./SkillManifestDialog";
 import { MAX_SKILL_MANIFEST_BYTES } from "./skill-manifest";
@@ -21,10 +24,18 @@ const testState = vi.hoisted(() => ({
     reset: vi.fn(),
     isPending: false,
   },
+  approveSuggestion: {
+    mutateAsync: vi.fn(),
+    reset: vi.fn(),
+    isPending: false,
+  },
   invalidateSkills: vi.fn().mockResolvedValue(undefined),
   invalidateSkill: vi.fn().mockResolvedValue(undefined),
   invalidateDistributions: vi.fn().mockResolvedValue(undefined),
   invalidateVersions: vi.fn().mockResolvedValue(undefined),
+  invalidateSuggestions: vi.fn().mockResolvedValue(undefined),
+  invalidateFeedback: vi.fn().mockResolvedValue(undefined),
+  invalidateEfficacy: vi.fn().mockResolvedValue(undefined),
   setSkillParam: vi.fn(),
 }));
 
@@ -37,6 +48,9 @@ vi.mock("@gram/client/react-query/createSkill.js", () => ({
 vi.mock("@gram/client/react-query/addSkillVersion.js", () => ({
   useAddSkillVersionMutation: () => testState.addVersion,
 }));
+vi.mock("@gram/client/react-query/approveSkillSuggestion.js", () => ({
+  useApproveSkillSuggestionMutation: () => testState.approveSuggestion,
+}));
 vi.mock("@gram/client/react-query/skills.js", () => ({
   invalidateAllSkills: testState.invalidateSkills,
 }));
@@ -48,6 +62,15 @@ vi.mock("@gram/client/react-query/skillDistributions.js", () => ({
 }));
 vi.mock("@gram/client/react-query/skillVersions.js", () => ({
   invalidateAllSkillVersions: testState.invalidateVersions,
+}));
+vi.mock("@gram/client/react-query/skillSuggestions.js", () => ({
+  invalidateAllSkillSuggestions: testState.invalidateSuggestions,
+}));
+vi.mock("@gram/client/react-query/skillFeedback.js", () => ({
+  invalidateAllSkillFeedback: testState.invalidateFeedback,
+}));
+vi.mock("@gram/client/react-query/skillEfficacyInsights.js", () => ({
+  invalidateAllSkillEfficacyInsights: testState.invalidateEfficacy,
 }));
 vi.mock("nuqs", () => ({
   useQueryState: () => [null, testState.setSkillParam],
@@ -73,6 +96,22 @@ const validResult = {
   },
 };
 
+function ApprovalHarness(): JSX.Element {
+  const [open, setOpen] = useState(true);
+  return (
+    <>
+      <button onClick={() => setOpen(true)}>Reopen approval</button>
+      <SkillManifestDialog
+        mode="approve-suggestion"
+        open={open}
+        onOpenChange={setOpen}
+        suggestionId="suggestion_a"
+        initialContent={UPDATED_MANIFEST}
+      />
+    </>
+  );
+}
+
 beforeEach(() => {
   testState.create.isPending = false;
   testState.addVersion.isPending = false;
@@ -80,10 +119,16 @@ beforeEach(() => {
   testState.create.reset.mockReset();
   testState.addVersion.mutateAsync.mockReset();
   testState.addVersion.reset.mockReset();
-  testState.invalidateSkills.mockClear();
-  testState.invalidateSkill.mockClear();
-  testState.invalidateDistributions.mockClear();
-  testState.invalidateVersions.mockClear();
+  testState.approveSuggestion.isPending = false;
+  testState.approveSuggestion.mutateAsync.mockReset();
+  testState.approveSuggestion.reset.mockReset();
+  testState.invalidateSkills.mockReset().mockResolvedValue(undefined);
+  testState.invalidateSkill.mockReset().mockResolvedValue(undefined);
+  testState.invalidateDistributions.mockReset().mockResolvedValue(undefined);
+  testState.invalidateVersions.mockReset().mockResolvedValue(undefined);
+  testState.invalidateSuggestions.mockReset().mockResolvedValue(undefined);
+  testState.invalidateFeedback.mockReset().mockResolvedValue(undefined);
+  testState.invalidateEfficacy.mockReset().mockResolvedValue(undefined);
   testState.setSkillParam.mockReset();
 });
 
@@ -119,6 +164,15 @@ describe("SkillManifestDialog", () => {
     expect(testState.invalidateVersions).toHaveBeenCalledWith(
       testState.queryClient,
     );
+    expect(testState.invalidateSuggestions).toHaveBeenCalledWith(
+      testState.queryClient,
+    );
+    expect(testState.invalidateFeedback).toHaveBeenCalledWith(
+      testState.queryClient,
+    );
+    expect(testState.invalidateEfficacy).toHaveBeenCalledWith(
+      testState.queryClient,
+    );
     await waitFor(() => {
       expect(testState.setSkillParam).toHaveBeenCalledWith("skill_result");
     });
@@ -149,6 +203,124 @@ describe("SkillManifestDialog", () => {
         },
       });
     });
+  });
+
+  it("submits edited suggestion content through approve instead of add version", async () => {
+    const onSuggestionApproved =
+      vi.fn<(outcome: ApproveSkillSuggestionResultOutcome) => void>();
+    testState.approveSuggestion.mutateAsync.mockResolvedValue({
+      outcome: "applied",
+    });
+    render(
+      <SkillManifestDialog
+        mode="approve-suggestion"
+        open
+        onOpenChange={() => {}}
+        suggestionId="suggestion_a"
+        initialContent={UPDATED_MANIFEST}
+        onSuggestionApproved={onSuggestionApproved}
+      />,
+    );
+    expect(
+      screen.getByText(/unless the skill changed, in which case/),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Approve edited suggestion" }),
+    );
+
+    await waitFor(() => {
+      expect(testState.approveSuggestion.mutateAsync).toHaveBeenCalledWith({
+        request: {
+          approveSkillSuggestionRequestBody: {
+            id: "suggestion_a",
+            content: UPDATED_MANIFEST,
+          },
+        },
+      });
+    });
+    expect(testState.addVersion.mutateAsync).not.toHaveBeenCalled();
+    expect(onSuggestionApproved).toHaveBeenCalledWith("applied");
+    expect(testState.invalidateSuggestions).toHaveBeenCalledWith(
+      testState.queryClient,
+    );
+  });
+
+  it("invalidates and warns when edited approval transport fails", async () => {
+    testState.approveSuggestion.mutateAsync.mockRejectedValue(
+      new Error("connection lost"),
+    );
+    render(<ApprovalHarness />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Approve edited suggestion" }),
+    );
+
+    expect(
+      await screen.findByText(
+        /Approval status may be unknown. Review the refreshed state before retrying/,
+      ),
+    ).toBeTruthy();
+    expect(testState.invalidateSuggestions).toHaveBeenCalledWith(
+      testState.queryClient,
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "Approve edited suggestion" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Approve edited suggestion" }),
+    );
+    expect(testState.approveSuggestion.mutateAsync).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reopen approval" }));
+    expect(
+      screen
+        .getByRole("button", { name: "Approve edited suggestion" })
+        .hasAttribute("disabled"),
+    ).toBe(false);
+    expect(screen.queryByText(/Approval status may be unknown/)).toBeNull();
+  });
+
+  it("disables edited approval controls until cache reconciliation finishes", async () => {
+    const onOpenChange = vi.fn<(open: boolean) => void>();
+    testState.approveSuggestion.mutateAsync.mockResolvedValue({
+      outcome: "applied",
+    });
+    let finishInvalidation!: () => void;
+    testState.invalidateSuggestions.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishInvalidation = resolve;
+      }),
+    );
+    render(
+      <SkillManifestDialog
+        mode="approve-suggestion"
+        open
+        onOpenChange={onOpenChange}
+        suggestionId="suggestion_a"
+        initialContent={UPDATED_MANIFEST}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Approve edited suggestion" }),
+    );
+    await waitFor(() =>
+      expect(testState.invalidateSuggestions).toHaveBeenCalled(),
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "Saving..." })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Cancel" }).hasAttribute("disabled"),
+    ).toBe(true);
+    expect(onOpenChange).not.toHaveBeenCalled();
+
+    await act(async () => finishInvalidation());
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
   });
 
   it("keeps a persisted invalid version in the dialog and disables repeat submission", async () => {

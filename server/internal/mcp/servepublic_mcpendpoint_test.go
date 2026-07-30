@@ -35,7 +35,6 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -148,12 +147,9 @@ func createRemoteMcpEndpoint(
 	return mcpServer, remoteServer
 }
 
-// TestServePublic_McpEndpoint_PublicTunneledBacked_FailsClosed: tunneled MCP
-// servers front customer-private networks and may never serve publicly. The
-// management API rejects public visibility at create/update; this test seeds
-// the forbidden state directly through the repo layer (the shape a manual SQL
-// edit or future write path would produce) and asserts the serve path fails
-// closed rather than proxying unauthenticated traffic into the tunnel.
+// A tunneled MCP server with public visibility but no allow_public consent
+// must fail closed — as a 404, so unauthenticated callers cannot distinguish
+// a gated endpoint from a missing one.
 func TestServePublic_McpEndpoint_PublicTunneledBacked_FailsClosed(t *testing.T) {
 	t.Parallel()
 
@@ -201,10 +197,10 @@ func TestServePublic_McpEndpoint_PublicTunneledBacked_FailsClosed(t *testing.T) 
 	require.NoError(t, err)
 
 	_, err = servePublicHTTP(t, context.Background(), ti, endpointSlug, makeInitializeBody(), "", nil)
-	require.Error(t, err, "public tunneled-backed endpoint must fail closed")
+	require.Error(t, err, "public tunneled-backed endpoint must fail closed without owner consent")
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
 // createUserSessionIssuer inserts a user_session_issuers row in the
@@ -636,7 +632,7 @@ func decodeMCPResult(t *testing.T, body []byte) map[string]any {
 // Before the fix, serveRemoteBackend only called authz.PrepareContext on the
 // non-issuer-gated path. For issuer-gated callers the proxy still attached
 // the tools/list mcp:connect filter and the tools/call authz interceptor;
-// with an enterprise org + session principal + RBAC enabled, those ran
+// with a session principal + RBAC enabled, those ran
 // FindMatched / Require against a context with no prepared grants, returned
 // ErrMissingGrants (mapped to CodeUnexpected), and the proxy substituted a
 // JSON-RPC error event — yielding zero tools and a broken tools/call even
@@ -654,15 +650,6 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_ResolvesG
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
-
-	// Mark the caller's org enterprise so authz.ShouldEnforce returns true
-	// (enterprise + session principal + the test engine's always-on RBAC
-	// flag). Without this the missing-grants path is dead — RBAC never
-	// enforces and the bug cannot reproduce.
-	require.NoError(t, orgsrepo.New(ti.conn).SetAccountType(ctx, orgsrepo.SetAccountTypeParams{
-		GramAccountType: "enterprise",
-		ID:              authCtx.ActiveOrganizationID,
-	}))
 
 	const toolName = "ping"
 	upstream := newStatelessRemoteMCPUpstream(t, toolName)
@@ -735,11 +722,6 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_RequiresC
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	require.NoError(t, orgsrepo.New(ti.conn).SetAccountType(ctx, orgsrepo.SetAccountTypeParams{
-		GramAccountType: "enterprise",
-		ID:              authCtx.ActiveOrganizationID,
-	}))
-
 	upstreamHit := make(chan struct{}, 1)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		upstreamHit <- struct{}{}
@@ -765,7 +747,8 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_RequiresC
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-	require.Equal(t, mcpaccess.ServerPermissionDeniedMessage, oopsErr.Error())
+	requestAccessURL := mcpaccess.AuthorizationChallengesURL(ti.siteURL, authCtx.OrganizationSlug)
+	require.Equal(t, mcpaccess.ServerPermissionDeniedMessage+"\n\nRequest access:\n"+requestAccessURL, oopsErr.Error())
 
 	select {
 	case <-upstreamHit:

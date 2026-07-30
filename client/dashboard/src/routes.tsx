@@ -21,7 +21,8 @@ import SkillDetail from "./pages/skills/SkillDetail";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import UserSessions from "./pages/org/UserSessions";
-import DeviceAgent from "./pages/device-agent/DeviceAgent";
+import DeviceAgent, { DeviceAgentRoot } from "./pages/device-agent/DeviceAgent";
+import MdmIntegrationDetail from "./pages/org/device-integrations/MdmIntegrationDetail";
 import Elements from "./pages/elements/Elements";
 import EnvironmentPage from "./pages/environments/Environment";
 import Environments, {
@@ -62,6 +63,11 @@ import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
 import OrgSkills from "./pages/org/OrgSkills";
+import ExternalCredentialDetail from "./pages/org/external-services/ExternalCredentialDetail";
+import {
+  ExternalServicesPage,
+  ExternalServicesRoot,
+} from "./pages/org/external-services/ExternalServices";
 import OrgWebhooks from "./pages/org/OrgWebhooks";
 import {
   RemoteIdentityProvidersPage,
@@ -386,16 +392,20 @@ const ROUTE_STRUCTURE = {
             title: "MCP Server Overview",
             url: "overview",
           },
-          tools: {
-            title: "MCP Server Tools",
-            url: "tools",
+          inspect: {
+            title: "MCP Server Inspect",
+            url: "inspect",
           },
-          // Legacy route. MCPServerDetails redirects this to
+          // Legacy routes. MCPServerDetails redirects `authentication` to
           // settings#authentication now that authentication lives under
-          // Settings.
+          // Settings, and `tools` to `inspect`.
           authentication: {
             title: "MCP Server Authentication",
             url: "authentication",
+          },
+          tools: {
+            title: "MCP Server Tools",
+            url: "tools",
           },
           teamAccess: {
             title: "MCP Server Team Access",
@@ -903,6 +913,24 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "webhook",
     component: OrgWebhooks,
   },
+  externalServices: {
+    title: "External Services",
+    url: "external-services",
+    icon: "cloud",
+    component: ExternalServicesRoot,
+    indexComponent: ExternalServicesPage,
+    subPages: {
+      credentialDetail: {
+        title: "External Credential",
+        url: ":credentialId",
+        component: ExternalCredentialDetail,
+        subPages: {
+          overview: { title: "Overview", url: "overview" },
+          settings: { title: "Settings", url: "settings" },
+        },
+      },
+    },
+  },
   auditLogs: {
     title: "Audit Logs",
     url: "audit-logs",
@@ -955,7 +983,20 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Device Agent",
     url: "device-agent",
     icon: "laptop",
-    component: DeviceAgent,
+    component: DeviceAgentRoot,
+    indexComponent: DeviceAgent,
+    subPages: {
+      mdmIntegrations: {
+        title: "MDM Integrations",
+        url: "mdm-integrations",
+        component: DeviceAgent,
+      },
+      mdmDetail: {
+        title: "MDM Integration",
+        url: "mdm-integrations/:provider",
+        component: MdmIntegrationDetail,
+      },
+    },
   },
   access: {
     title: "Roles & Permissions",

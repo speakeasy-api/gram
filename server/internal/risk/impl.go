@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
@@ -123,6 +124,10 @@ type Service struct {
 	// the realtime scanner uses. Optional: when nil the eval endpoint returns
 	// un-matched verdicts (judge unavailable).
 	promptJudge promptpolicy.Evaluator
+	// findingsCH reads the ClickHouse risk_findings table for the overview
+	// endpoint when FlagRiskOverviewFromClickHouse is on for the org.
+	// Optional: when nil the overview always serves from Postgres.
+	findingsCH *chrepo.Queries
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -162,6 +167,7 @@ func NewObserver(
 		celEng:                       nil,
 		builtinPresets:               nil,
 		promptJudge:                  nil,
+		findingsCH:                   nil,
 	}
 }
 
@@ -187,6 +193,7 @@ func NewService(
 	promptJudge promptpolicy.Evaluator,
 	reconcileShadowMCPPolicyURLs ShadowMCPPolicyURLReconciler,
 	shadowMCPInventoryURLLookup ShadowMCPInventoryURLLookup,
+	findingsCH *chrepo.Queries,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -214,6 +221,7 @@ func NewService(
 		celEng:                       celEng,
 		builtinPresets:               builtinPresets,
 		promptJudge:                  promptJudge,
+		findingsCH:                   findingsCH,
 	}
 }
 
@@ -356,6 +364,11 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		}
 	}
 
+	shadowMCPDisposition := conv.PtrValOr(payload.ShadowMcpDisposition, "")
+	if err := validateShadowMCPDisposition(shadowMCPDisposition, sources, action); err != nil {
+		return nil, err
+	}
+
 	// Auto-generate a name when the caller opted in (explicit auto_name=true
 	// or omitted both auto_name and name). Setting auto_name=false with an
 	// empty name surfaces a validation error below rather than silently
@@ -368,6 +381,8 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		}
 		if policyType == ra.PolicyTypePromptBased {
 			name = s.generatePromptPolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), prompt.String, existingNames)
+		} else if shadowName := shadowMCPPolicyAutoName(sources, action, existingNames); shadowName != "" {
+			name = shadowName
 		} else {
 			customRuleTitles := s.customRuleTitlesForIDs(ctx, *authCtx.ProjectID, payload.CustomRuleIds)
 			name = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, payload.PresidioEntities, customRuleTitles, action, existingNames)
@@ -441,6 +456,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		Enabled:              enabled,
 		Action:               action,
 		AudienceType:         audienceType,
+		ShadowMcpDisposition: conv.ToPGTextEmpty(shadowMCPDisposition),
 		AutoName:             autoName,
 		UserMessage:          conv.PtrToPGTextEmpty(payload.UserMessage),
 		Prompt:               prompt,
@@ -769,6 +785,25 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	}
 	audiencePrincipalURNs = principalStrings(audiencePrincipals)
 
+	// The disposition is immutable: accept only the policy's current effective
+	// value (so form round-trips stay valid); anything else is a posture
+	// switch, which requires delete + recreate. A policy with an explicitly
+	// stored disposition also cannot morph away from being a blocking shadow
+	// MCP policy via a sources/action change — that would silently drop the
+	// posture and orphan the blocked-URL list.
+	effectiveDisposition := effectiveShadowMCPDisposition(current.ShadowMcpDisposition, sources, action)
+	if current.ShadowMcpDisposition.Valid && current.ShadowMcpDisposition.String != "" && effectiveDisposition == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "cannot change the sources or action of a shadow mcp policy with a disposition; delete and recreate the policy instead")
+	}
+	if payload.ShadowMcpDisposition != nil {
+		if effectiveDisposition == "" {
+			return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp disposition requires a blocking shadow mcp policy")
+		}
+		if *payload.ShadowMcpDisposition != effectiveDisposition {
+			return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp disposition is immutable; delete and recreate the policy to switch posture")
+		}
+	}
+
 	var shadowMCPAllowedURLs []string
 	audienceUpdateRequested := payload.AudienceType != nil || payload.AudiencePrincipalUrns != nil
 	if payload.ShadowMcpAllowedUrls != nil {
@@ -827,6 +862,8 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		}
 		if current.PolicyType == ra.PolicyTypePromptBased {
 			name = s.generatePromptPolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), prompt.String, existingNames)
+		} else if shadowName := shadowMCPPolicyAutoName(sources, action, existingNames); shadowName != "" {
+			name = shadowName
 		} else {
 			customRuleTitles := s.customRuleTitlesForIDs(ctx, *authCtx.ProjectID, customRuleIds)
 			name = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, presidioEntities, customRuleTitles, action, existingNames)
@@ -1353,22 +1390,23 @@ func redactRiskResult(r *types.RiskResult, orgID string) *types.RiskResultRedact
 	}
 
 	return &types.RiskResultRedacted{
-		ID:            r.ID,
-		PolicyID:      r.PolicyID,
-		PolicyVersion: r.PolicyVersion,
-		ChatMessageID: r.ChatMessageID,
-		ChatID:        r.ChatID,
-		ChatTitle:     r.ChatTitle,
-		UserID:        r.UserID,
-		Source:        r.Source,
-		RuleID:        r.RuleID,
-		Description:   r.Description,
-		MatchRedacted: matchRedacted,
-		PositionKnown: r.StartPos != nil && r.EndPos != nil,
-		Confidence:    r.Confidence,
-		Tags:          r.Tags,
-		SpansRedacted: spansRedacted,
-		CreatedAt:     r.CreatedAt,
+		ID:                r.ID,
+		PolicyID:          r.PolicyID,
+		PolicyVersion:     r.PolicyVersion,
+		ChatMessageID:     r.ChatMessageID,
+		ChatContentPartID: r.ChatContentPartID,
+		ChatID:            r.ChatID,
+		ChatTitle:         r.ChatTitle,
+		UserID:            r.UserID,
+		Source:            r.Source,
+		RuleID:            r.RuleID,
+		Description:       r.Description,
+		MatchRedacted:     matchRedacted,
+		PositionKnown:     r.StartPos != nil && r.EndPos != nil,
+		Confidence:        r.Confidence,
+		Tags:              r.Tags,
+		SpansRedacted:     spansRedacted,
+		CreatedAt:         r.CreatedAt,
 	}
 }
 
@@ -1482,6 +1520,10 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 	from, to, err := resolveRiskOverviewWindow(payload.From, payload.To)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid overview window").LogError(ctx, s.logger)
+	}
+
+	if s.overviewFromClickHouse(ctx, authCtx) {
+		return s.getRiskOverviewFromClickHouse(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, from, to)
 	}
 
 	window := riskOverviewWindowParams(from, to)
@@ -1626,13 +1668,19 @@ func riskOverviewWindowParams(from, to time.Time) riskOverviewWindow {
 }
 
 func riskOverviewTopCategories(rows []repo.ListRiskOverviewTimeSeriesFindingsRow, limit int) []*gen.RiskOverviewCategory {
-	if limit <= 0 {
-		return nil
-	}
-
 	counts := make(map[string]int64)
 	for _, row := range rows {
 		counts[row.Category] += row.Findings
+	}
+
+	return topCategoriesFromCounts(counts, limit)
+}
+
+// topCategoriesFromCounts is the shared tail of the Postgres and ClickHouse
+// top-categories derivations: rank per-category totals, drop empty ones.
+func topCategoriesFromCounts(counts map[string]int64, limit int) []*gen.RiskOverviewCategory {
+	if limit <= 0 {
+		return nil
 	}
 
 	categories := make([]*gen.RiskOverviewCategory, 0, len(counts))
@@ -1694,7 +1742,7 @@ func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, ra
 	var nextCursor *riskResultsCursor
 	for i, row := range rows {
 		cid := row.ChatID.String()
-		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, &cid, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt, row.Replayed))
+		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, row.ChatContentPartID, &cid, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt))
 		if i == pageSize {
 			nextCursor = &riskResultsCursor{MessageCreatedAt: row.MessageCreatedAt.Time, ID: row.ID}
 		}
@@ -1726,7 +1774,7 @@ func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID,
 	var nextCursor *riskResultsCursor
 	for i, row := range rows {
 		chatID := row.ChatID.String()
-		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt, row.Replayed))
+		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, row.ChatContentPartID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt))
 		if i == pageSize {
 			nextCursor = &riskResultsCursor{MessageCreatedAt: row.MessageCreatedAt.Time, ID: row.ID}
 		}
@@ -2485,7 +2533,7 @@ CEL environment for "detection_expr":
   - assistant — the body of an assistant message (empty otherwise).
   - tool_result — the output of a tool response message (empty otherwise). Singular: one response carries one tool's output.
 - tool_calls — the tool calls on a tool-request message (plural: one request can fan out parallel calls). Iterate with tool_calls.exists(t, <predicate on t>). Each t has correlated fields: t.name (raw tool-call name, e.g. mcp__mise__run_task), t.server (MCP server name, "" for native tools like Bash), t.function (bare function name, e.g. run_task), t.args (the raw tool arguments JSON).
-- kind — message type string (user_message, assistant_message, tool_request, tool_response). Usually unnecessary because the body fields are already auto-scoped.
+- kind — message type string (user_message, assistant_message, tool_request, tool_response, prompt_attachment). Usually unnecessary because the body fields are already auto-scoped.
 
 Matchers (call as a method on a field; all return bool):
 - field.matchRegex(pattern)  — RE2 regex match. Use for secret/PII/text patterns.
@@ -2556,6 +2604,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		UserEmail:      userEmail,
 		HTTPMetadata:   nil,
 		JSONSchema:     &jsonSchema,
+		Reasoning:      nil,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("openrouter object completion: %w", err)
@@ -2691,6 +2740,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		UserEmail:      userEmail,
 		HTTPMetadata:   nil,
 		JSONSchema:     &jsonSchema,
+		Reasoning:      nil,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("openrouter object completion: %w", err)
@@ -3299,6 +3349,7 @@ func buildRiskPolicyType(row repo.RiskPolicy, totalMessages, analyzedMessages *i
 		Action:                 row.Action,
 		AudienceType:           row.AudienceType,
 		AudiencePrincipalUrns:  audiencePrincipalURNs,
+		ShadowMcpDisposition:   conv.PtrEmpty(effectiveShadowMCPDisposition(row.ShadowMcpDisposition, row.Sources, row.Action)),
 		AutoName:               row.AutoName,
 		UserMessage:            conv.FromPGText[string](row.UserMessage),
 		Prompt:                 conv.FromPGText[string](row.Prompt),
@@ -3336,6 +3387,7 @@ func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []
 		Action:                 row.Action,
 		AudienceType:           row.AudienceType,
 		AudiencePrincipalUrns:  audiencePrincipalURNs,
+		ShadowMcpDisposition:   conv.PtrEmpty(effectiveShadowMCPDisposition(row.ShadowMcpDisposition, row.Sources, row.Action)),
 		AutoName:               row.AutoName,
 		UserMessage:            conv.FromPGText[string](row.UserMessage),
 		Prompt:                 conv.FromPGText[string](row.Prompt),
@@ -3814,36 +3866,43 @@ func (s *Service) promptPoliciesEnabled(ctx context.Context, authCtx *contextval
 }
 
 func foundRowToResult(
-	id, policyID uuid.UUID, policyVersion int64, blockID uuid.UUID, chatMessageID uuid.UUID, chatID *string, chatTitle, chatUserID pgtype.Text,
+	id, policyID uuid.UUID, policyVersion int64, blockID uuid.UUID, chatMessageID, chatContentPartID uuid.NullUUID, chatID *string, chatTitle, chatUserID pgtype.Text,
 	source string, ruleID, description, match pgtype.Text,
 	startPos, endPos pgtype.Int4,
 	confidence pgtype.Float8, tags []string, spans []byte, createdAt pgtype.Timestamptz,
-	replayed bool,
 ) *types.RiskResult {
 	return &types.RiskResult{
-		ID:            id.String(),
-		PolicyID:      policyID.String(),
-		PolicyVersion: policyVersion,
-		BlockID:       blockIDPtr(blockID),
-		ChatMessageID: chatMessageID.String(),
-		ChatID:        chatID,
-		ChatTitle:     conv.FromPGText[string](chatTitle),
-		UserID:        conv.FromPGText[string](chatUserID),
-		Source:        source,
-		RuleID:        conv.FromPGText[string](ruleID),
-		Description:   conv.FromPGText[string](description),
-		Match:         conv.FromPGText[string](match),
-		StartPos:      conv.PtrInt32ToInt(conv.FromPGInt4(startPos)),
-		EndPos:        conv.PtrInt32ToInt(conv.FromPGInt4(endPos)),
-		Confidence:    conv.FromPGFloat8(confidence),
-		Tags:          tags,
-		Spans:         parseRiskSpans(spans),
+		ID:                id.String(),
+		PolicyID:          policyID.String(),
+		PolicyVersion:     policyVersion,
+		BlockID:           blockIDPtr(blockID),
+		ChatMessageID:     nullUUIDStringPtr(chatMessageID),
+		ChatContentPartID: nullUUIDStringPtr(chatContentPartID),
+		ChatID:            chatID,
+		ChatTitle:         conv.FromPGText[string](chatTitle),
+		UserID:            conv.FromPGText[string](chatUserID),
+		Source:            source,
+		RuleID:            conv.FromPGText[string](ruleID),
+		Description:       conv.FromPGText[string](description),
+		Match:             conv.FromPGText[string](match),
+		StartPos:          conv.PtrInt32ToInt(conv.FromPGInt4(startPos)),
+		EndPos:            conv.PtrInt32ToInt(conv.FromPGInt4(endPos)),
+		Confidence:        conv.FromPGFloat8(confidence),
+		Tags:              tags,
+		Spans:             parseRiskSpans(spans),
 		// MatchRedacted is populated later by redactResultMatchInPlace, only
 		// for callers ListRiskResults decides shouldn't see raw match/spans.
 		MatchRedacted: nil,
 		CreatedAt:     createdAt.Time.Format(time.RFC3339),
-		Replayed:      replayed,
 	}
+}
+
+func nullUUIDStringPtr(id uuid.NullUUID) *string {
+	if !id.Valid {
+		return nil
+	}
+	value := id.UUID.String()
+	return &value
 }
 
 // blockIDPtr maps the COALESCE'd block id to an optional string: a nil UUID

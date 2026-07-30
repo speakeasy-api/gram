@@ -762,10 +762,12 @@ func NewListSyncedUsersGatewayErrorResponseBody(res *goa.ServiceError) *ListSync
 }
 
 // NewGetPluginsPayload builds a agent service getPlugins endpoint payload.
-func NewGetPluginsPayload(email string, apikeyToken *string) *agent.GetPluginsPayload {
+func NewGetPluginsPayload(email string, apikeyToken *string, serialNumber *string, hostname *string) *agent.GetPluginsPayload {
 	v := &agent.GetPluginsPayload{}
 	v.Email = email
 	v.ApikeyToken = apikeyToken
+	v.SerialNumber = serialNumber
+	v.Hostname = hostname
 
 	return v
 }

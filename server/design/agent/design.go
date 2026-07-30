@@ -38,6 +38,19 @@ var _ = Service("agent", func() {
 			Attribute("email", String, "Email address of the enrolled user. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.", func() {
 				Example("dev@acme.corp")
 			})
+			// Hardware identity, reported by agents that can read it. Both are
+			// optional and MUST stay that way: agents predating the capability
+			// omit them entirely, and Goa rejects a request missing a Required
+			// attribute — marking either one Required would break every older
+			// agent's poll. An agent that cannot read a serial (common on
+			// white-box PCs, which report blank or a placeholder) also sends
+			// nothing, and coverage falls back to the per-user email match.
+			Attribute("serial_number", String, "Hardware serial number of the machine the agent runs on, when it can be read. Lets device coverage attest this specific machine rather than its assigned user.", func() {
+				Example("C02XK1ABCDEF")
+			})
+			Attribute("hostname", String, "Hostname of the machine the agent runs on, when it can be read.", func() {
+				Example("dev-macbook-pro")
+			})
 			Required("email")
 		})
 
@@ -47,6 +60,14 @@ var _ = Service("agent", func() {
 			GET("/rpc/agent.getPlugins")
 			security.ByKeyHeader()
 			Param("email")
+			// Carried as headers rather than query params: a serial is a
+			// durable hardware identifier and a hostname frequently embeds a
+			// person's name, and the request logger records URLs (see
+			// middleware/logging.go) but not these headers. `email` is already
+			// a query param for compatibility; that is not a reason to widen
+			// what lands in access logs.
+			Header("serial_number:Gram-Device-Serial")
+			Header("hostname:Gram-Device-Hostname")
 			Response(StatusOK)
 		})
 

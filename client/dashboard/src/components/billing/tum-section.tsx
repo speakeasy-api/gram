@@ -2,7 +2,6 @@ import { Page } from "@/components/page-layout";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
@@ -15,7 +14,7 @@ import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { useSetBillingMetadataMutation } from "@gram/client/react-query/setBillingMetadata.js";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Info, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { BillingCyclePicker } from "./billing-cycle-picker";
@@ -37,6 +36,7 @@ import {
 } from "./breakdown-options";
 import { BreakdownPicker } from "./breakdown-picker";
 import { type GroupSeries, TokenUsagePanel } from "./token-usage-panel";
+import { TumDefinitionTooltip } from "./tum-definition";
 import { TumDetailsTable } from "./tum-details-table";
 import { tumDetailsQuery } from "./tum-queries";
 import { TumUsageCard } from "./tum-usage-card";
@@ -320,9 +320,7 @@ export const TumUsageSection = (): JSX.Element => {
               <Type variant="body" className="font-medium">
                 Tokens Under Management
               </Type>
-              <SimpleTooltip tooltip="Counts the tokens observed in your users' agent sessions (input, output, and cache writes; cache reads excluded) during the selected billing cycle. Compared against your contracted monthly allowance.">
-                <Info className="text-muted-foreground h-4 w-4" />
-              </SimpleTooltip>
+              <TumDefinitionTooltip />
               <div className="ml-auto flex items-center gap-2">
                 <BillingCyclePicker
                   cycles={cycles}

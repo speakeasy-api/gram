@@ -73,6 +73,8 @@ type QueryInsightsResponseBody struct {
 	ScoresAvailable *bool                                     `form:"scores_available,omitempty" json:"scores_available,omitempty" xml:"scores_available,omitempty"`
 	Insights        []*SkillEfficacyInsightResponseBody       `form:"insights,omitempty" json:"insights,omitempty" xml:"insights,omitempty"`
 	ScoredSessions  []*SkillEfficacyScoredSessionResponseBody `form:"scored_sessions,omitempty" json:"scored_sessions,omitempty" xml:"scored_sessions,omitempty"`
+	// Cursor for the next page of scored sessions; absent when exhausted.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // GetSettingsUnauthorizedResponseBody is the type of the "skillEfficacy"
@@ -641,6 +643,8 @@ type SkillEfficacyInsightResponseBody struct {
 	SkillID  *string                            `form:"skill_id,omitempty" json:"skill_id,omitempty" xml:"skill_id,omitempty"`
 	Metrics  *SkillInsightMetricsResponseBody   `form:"metrics,omitempty" json:"metrics,omitempty" xml:"metrics,omitempty"`
 	Versions []*SkillVersionInsightResponseBody `form:"versions,omitempty" json:"versions,omitempty" xml:"versions,omitempty"`
+	// Absent when the skill has no valid current version.
+	RegressionSignal *SkillEfficacyRegressionSignalResponseBody `form:"regression_signal,omitempty" json:"regression_signal,omitempty" xml:"regression_signal,omitempty"`
 }
 
 // SkillInsightMetricsResponseBody is used to define fields on response body
@@ -687,6 +691,21 @@ type SkillInsightPointResponseBody struct {
 	ScoredSessions        *uint64  `form:"scored_sessions,omitempty" json:"scored_sessions,omitempty" xml:"scored_sessions,omitempty"`
 	AverageScore          *float64 `form:"average_score,omitempty" json:"average_score,omitempty" xml:"average_score,omitempty"`
 	EstimatedMinutesSaved *float64 `form:"estimated_minutes_saved,omitempty" json:"estimated_minutes_saved,omitempty" xml:"estimated_minutes_saved,omitempty"`
+}
+
+// SkillEfficacyRegressionSignalResponseBody is used to define fields on
+// response body types.
+type SkillEfficacyRegressionSignalResponseBody struct {
+	Comparable                *bool    `form:"comparable,omitempty" json:"comparable,omitempty" xml:"comparable,omitempty"`
+	Regression                *bool    `form:"regression,omitempty" json:"regression,omitempty" xml:"regression,omitempty"`
+	CurrentVersionID          *string  `form:"current_version_id,omitempty" json:"current_version_id,omitempty" xml:"current_version_id,omitempty"`
+	PredecessorVersionID      *string  `form:"predecessor_version_id,omitempty" json:"predecessor_version_id,omitempty" xml:"predecessor_version_id,omitempty"`
+	CurrentAverageScore       *float64 `form:"current_average_score,omitempty" json:"current_average_score,omitempty" xml:"current_average_score,omitempty"`
+	CurrentScoredSessions     *uint64  `form:"current_scored_sessions,omitempty" json:"current_scored_sessions,omitempty" xml:"current_scored_sessions,omitempty"`
+	PredecessorAverageScore   *float64 `form:"predecessor_average_score,omitempty" json:"predecessor_average_score,omitempty" xml:"predecessor_average_score,omitempty"`
+	PredecessorScoredSessions *uint64  `form:"predecessor_scored_sessions,omitempty" json:"predecessor_scored_sessions,omitempty" xml:"predecessor_scored_sessions,omitempty"`
+	WindowStart               *string  `form:"window_start,omitempty" json:"window_start,omitempty" xml:"window_start,omitempty"`
+	WindowEnd                 *string  `form:"window_end,omitempty" json:"window_end,omitempty" xml:"window_end,omitempty"`
 }
 
 // SkillEfficacyScoredSessionResponseBody is used to define fields on response
@@ -1057,6 +1076,7 @@ func NewQueryInsightsSkillEfficacyInsightsResultOK(body *QueryInsightsResponseBo
 		To:              *body.To,
 		IntervalSeconds: *body.IntervalSeconds,
 		ScoresAvailable: *body.ScoresAvailable,
+		NextCursor:      body.NextCursor,
 	}
 	v.Insights = make([]*skillefficacy.SkillEfficacyInsight, len(body.Insights))
 	for i, val := range body.Insights {
@@ -2127,6 +2147,11 @@ func ValidateSkillEfficacyInsightResponseBody(body *SkillEfficacyInsightResponse
 			}
 		}
 	}
+	if body.RegressionSignal != nil {
+		if err2 := ValidateSkillEfficacyRegressionSignalResponseBody(body.RegressionSignal); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	return
 }
 
@@ -2233,6 +2258,51 @@ func ValidateSkillInsightPointResponseBody(body *SkillInsightPointResponseBody) 
 	}
 	if body.BucketStart != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.bucket_start", *body.BucketStart, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateSkillEfficacyRegressionSignalResponseBody runs the validations
+// defined on SkillEfficacyRegressionSignalResponseBody
+func ValidateSkillEfficacyRegressionSignalResponseBody(body *SkillEfficacyRegressionSignalResponseBody) (err error) {
+	if body.Comparable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("comparable", "body"))
+	}
+	if body.Regression == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("regression", "body"))
+	}
+	if body.CurrentVersionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("current_version_id", "body"))
+	}
+	if body.CurrentAverageScore == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("current_average_score", "body"))
+	}
+	if body.CurrentScoredSessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("current_scored_sessions", "body"))
+	}
+	if body.PredecessorAverageScore == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("predecessor_average_score", "body"))
+	}
+	if body.PredecessorScoredSessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("predecessor_scored_sessions", "body"))
+	}
+	if body.WindowStart == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("window_start", "body"))
+	}
+	if body.WindowEnd == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("window_end", "body"))
+	}
+	if body.CurrentVersionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.current_version_id", *body.CurrentVersionID, goa.FormatUUID))
+	}
+	if body.PredecessorVersionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.predecessor_version_id", *body.PredecessorVersionID, goa.FormatUUID))
+	}
+	if body.WindowStart != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.window_start", *body.WindowStart, goa.FormatDateTime))
+	}
+	if body.WindowEnd != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.window_end", *body.WindowEnd, goa.FormatDateTime))
 	}
 	return
 }

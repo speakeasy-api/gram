@@ -45,6 +45,10 @@ type Service interface {
 	// Pin or unpin a chat. Pinned chats surface in a dedicated section above
 	// recents on the chat page.
 	SetPinned(context.Context, *SetPinnedPayload) (err error)
+	// Generate or return a persisted LLM summary of a chat session transcript.
+	// When a summary already exists and regenerate is false, returns the cached
+	// summary without calling the model.
+	Summarize(context.Context, *SummarizePayload) (res *SummarizeChatResult, err error)
 	// Submit user feedback for a chat (success/failure)
 	SubmitFeedback(context.Context, *SubmitFeedbackPayload) (res *SubmitFeedbackResult, err error)
 	// List the distinct agent sources present in this project's chats, for
@@ -74,7 +78,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"listChats", "getWorkUnitsTrend", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "submitFeedback", "listSources"}
+var MethodNames = [10]string{"listChats", "getWorkUnitsTrend", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "summarize", "submitFeedback", "listSources"}
 
 type AgentUsage struct {
 	// The agent usage payload discriminator.
@@ -88,6 +92,8 @@ type Chat struct {
 	// The list of messages in the chat for the returned generation, ordered oldest
 	// to newest by `seq`.
 	Messages []*ChatMessage
+	// Non-turn content attached to this chat, such as prompt attachments.
+	ContentParts []*ChatContentPart
 	// The generation that this response's messages belong to. A generation is an
 	// immutable snapshot of the transcript; a new one is opened on compaction or
 	// message edits, while normal turns append to the current one.
@@ -164,6 +170,29 @@ type Chat struct {
 	// Email of the AI account that produced the chat, resolved from the linked AI
 	// account. May differ from the employee's work email (e.g. a personal account).
 	AccountEmail *string
+	// True when the chat is pinned
+	Pinned *bool
+	// Persisted LLM summary of the session transcript, if one has been generated
+	Summary *string
+	// When the session summary was last generated.
+	SummaryGeneratedAt *string
+}
+
+type ChatContentPart struct {
+	// The ID of the content part.
+	ID string
+	// The content kind, such as prompt_attachment.
+	Kind string
+	// The text content.
+	Content string
+	// The chat message this content hangs off, when resolved.
+	ParentChatMessageID *string
+	// Sparse metadata for the content kind.
+	Metadata json.RawMessage
+	// Whether this content part has an active risk finding.
+	IsRisk bool
+	// When the content part was created.
+	CreatedAt string
 }
 
 type ChatMessage struct {
@@ -249,6 +278,12 @@ type ChatOverview struct {
 	// Email of the AI account that produced the chat, resolved from the linked AI
 	// account. May differ from the employee's work email (e.g. a personal account).
 	AccountEmail *string
+	// True when the chat is pinned
+	Pinned *bool
+	// Persisted LLM summary of the session transcript, if one has been generated
+	Summary *string
+	// When the session summary was last generated.
+	SummaryGeneratedAt *string
 }
 
 // Trace-entry counts across the entire returned generation, independent of
@@ -542,6 +577,26 @@ type SubmitFeedbackPayload struct {
 type SubmitFeedbackResult struct {
 	// Whether the feedback was submitted successfully
 	Success bool
+}
+
+// SummarizeChatResult is the result type of the chat service summarize method.
+type SummarizeChatResult struct {
+	// The session summary text
+	Summary string
+	// When the summary was last generated.
+	SummaryGeneratedAt string
+	// True when an existing summary was returned without regenerating
+	Cached bool
+}
+
+// SummarizePayload is the payload type of the chat service summarize method.
+type SummarizePayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The ID of the chat to summarize
+	ID string
+	// When true, regenerate and overwrite any existing summary. Defaults to false.
+	Regenerate bool
 }
 
 type WorkUnitsTrendBucket struct {

@@ -1,10 +1,13 @@
 import { RequireScope } from "@/components/require-scope";
+import { useRBAC } from "@/hooks/useRBAC";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
 import { useOrgRoutes } from "@/routes";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { invalidateAllOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
+import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
+import { useRefreshOrganizationRemoteSessionIssuerMetadataMutation } from "@gram/client/react-query/refreshOrganizationRemoteSessionIssuerMetadata.js";
 import { useUpdateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionIssuer.js";
 import { Alert, Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
@@ -71,6 +74,8 @@ export function SettingsTab({
   const [clientSetupDocumentationUrl, setClientSetupDocumentationUrl] =
     useState(issuer.clientSetupDocumentationUrl ?? "");
   const [showDelete, setShowDelete] = useState(false);
+  const { hasAnyScope } = useRBAC();
+  const hasOrgAdminScope = hasAnyScope(["org:admin"]);
 
   // Issuer URL + endpoints + RFC 8414 discovery live in the shared hook, seeded
   // from the saved issuer so Discover/Reset work against the current values.
@@ -113,8 +118,10 @@ export function SettingsTab({
       opTosUri: issuer.opTosUri ?? "",
     },
     // Seed the saved values into the fields but not a discovery snapshot, so the
-    // Discover control is available against the existing issuer URL.
-    { seedSnapshot: false },
+    // Discover control is available against the existing issuer URL. This tab
+    // edits organization-level issuers too, which have no project to authorize
+    // against, so metadata is fetched through the org-scoped endpoint.
+    { seedSnapshot: false, scope: "organization" },
   );
 
   const update = useUpdateOrganizationRemoteSessionIssuerMutation({
@@ -128,6 +135,56 @@ export function SettingsTab({
       console.error("Update remote identity provider failed", error);
     },
   });
+
+  // Which of the two rediscovery controls applies comes down to which URL would
+  // be discovered against. Refresh sends the issuer id and the server reads the
+  // stored URL; Discover sends whatever is currently typed. So while the field
+  // still matches what is saved they would do the same thing, and Refresh is
+  // the better of the two: one click, only RFC 8414-derived columns, audited,
+  // and it refuses a document that names a different authorization server.
+  //
+  // Once the field diverges, Refresh is not merely worse but wrong — it would
+  // discover the old URL, and the server would abort on the mismatch anyway.
+  // Repointing a provider is exactly what Discover-then-Save is for, so the two
+  // swap rather than sit side by side.
+  const issuerUrlMatchesSaved = issuerUrl.trim() === issuer.issuer;
+
+  const refreshMetadata =
+    useRefreshOrganizationRemoteSessionIssuerMetadataMutation({
+      onSuccess: async (result) => {
+        // The tab is keyed on the issuer id, which never changes, and the
+        // discovery hook seeds its fields on mount only. Invalidating alone
+        // would refresh the cache while leaving these inputs showing the old
+        // endpoints, so the discovered values are pushed in directly. Only
+        // these four are touched, leaving unsaved name/slug edits intact.
+        setAuthorizationEndpoint(result.issuer.authorizationEndpoint ?? "");
+        setTokenEndpoint(result.issuer.tokenEndpoint ?? "");
+        setRegistrationEndpoint(result.issuer.registrationEndpoint ?? "");
+        setJwksUri(result.issuer.jwksUri ?? "");
+
+        await Promise.all([
+          invalidateAllOrganizationRemoteSessionIssuer(queryClient, {
+            refetchType: "all",
+          }),
+          invalidateAllOrganizationRemoteSessionIssuers(queryClient, {
+            refetchType: "all",
+          }),
+        ]);
+
+        if (result.discoveryWarnings.length > 0) {
+          toast.warning("Refreshed with warnings", {
+            description: result.discoveryWarnings.join(" "),
+          });
+          return;
+        }
+        toast.success("Discoverable metadata refreshed");
+      },
+      onError: (error) => {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to refresh metadata",
+        );
+      },
+    });
 
   const saveError = update.error
     ? update.error instanceof Error && update.error.message
@@ -195,7 +252,7 @@ export function SettingsTab({
 
       <SettingsSection
         title="Issuer configuration"
-        description="The upstream Authorization Server. Run discovery to fill the endpoints from its RFC 8414 metadata."
+        description="The upstream Authorization Server. Refresh to re-read its RFC 8414 metadata, or change the issuer URL and run discovery to point this provider somewhere else."
       >
         <IssuerUrlField
           issuerUrl={issuerUrl}
@@ -213,7 +270,16 @@ export function SettingsTab({
           endpointWarnings={endpointWarnings}
           discoverPending={discoverPending}
           discoverError={discoverError}
-          showDiscoverControls={showDiscoverControls}
+          // Two gates. Discovery here goes through the org-scoped endpoint,
+          // which requires org:admin, but this page admits org:read — hide the
+          // control rather than leave a button that can only produce a
+          // permission error, matching how Save and Delete below are gated.
+          // And Discover only earns its place once the URL has been edited;
+          // until then Refresh Discoverable Metadata below does the same job
+          // better.
+          showDiscoverControls={
+            showDiscoverControls && hasOrgAdminScope && !issuerUrlMatchesSaved
+          }
           showResetControls={showResetControls}
           onAuthorizationEndpointChange={setAuthorizationEndpoint}
           onTokenEndpointChange={setTokenEndpoint}
@@ -224,6 +290,32 @@ export function SettingsTab({
           }}
           onResetEndpoints={handleResetEndpoints}
         />
+        {hasOrgAdminScope && issuerUrlMatchesSaved && (
+          <div className="flex flex-col gap-1.5">
+            <div>
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  refreshMetadata.mutate({
+                    request: { riskIDRequestBody: { id: issuer.id } },
+                  })
+                }
+                disabled={refreshMetadata.isPending}
+              >
+                <Button.Text>
+                  {refreshMetadata.isPending
+                    ? "Refreshing…"
+                    : "Refresh Discoverable Metadata"}
+                </Button.Text>
+              </Button>
+            </div>
+            <Type small muted>
+              Re-reads this provider's RFC 8414 metadata and saves the endpoints
+              and advertised capabilities immediately. Your other changes on
+              this page are not saved.
+            </Type>
+          </div>
+        )}
       </SettingsSection>
 
       <SettingsSection

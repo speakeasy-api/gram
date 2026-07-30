@@ -233,6 +233,28 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: SyncMcpServerDisplayName :execrows
+-- Keep auto-derived plugin server names in sync with their MCP server while
+-- preserving names customized through UpdatePluginServer.
+UPDATE plugin_servers ps
+SET display_name = @new_display_name,
+    updated_at = clock_timestamp()
+FROM plugins p
+WHERE ps.plugin_id = p.id
+  AND p.project_id = @project_id
+  AND p.deleted IS FALSE
+  AND ps.mcp_server_id = @mcp_server_id
+  AND ps.display_name = @old_display_name
+  AND ps.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM plugin_servers sibling
+    WHERE sibling.plugin_id = ps.plugin_id
+      AND sibling.id <> ps.id
+      AND sibling.display_name = @new_display_name
+      AND sibling.deleted IS FALSE
+  );
+
 -- name: RemovePluginServer :one
 -- Soft-deletes a plugin server and returns the removed row so the caller can
 -- record the correct backend (toolset vs mcp_server) in the audit log.
@@ -531,7 +553,7 @@ JOIN LATERAL (
   WHERE sv.skill_id = prev.skill_id
     AND sv.spec_valid IS TRUE
     AND (prev.pinned_version_id IS NULL OR sv.id = prev.pinned_version_id)
-  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE prev.id = sd.id
@@ -572,7 +594,7 @@ JOIN LATERAL (
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
     AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
-  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE sd.project_id = @project_id

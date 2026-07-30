@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"strings"
 	"time"
 
@@ -19,7 +18,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	srv "github.com/speakeasy-api/gram/server/gen/http/access/server"
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
-	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -29,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
-	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -60,10 +57,6 @@ type Service struct {
 	roleMgr         *RoleManager
 	productFeatures ProductFeatures
 	audit           *audit.Logger
-	jwtSecret       string
-	accessStore     accesscontrol.Store
-	emailSvc        *email.Service
-	siteURL         url.URL
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -79,10 +72,6 @@ func NewService(
 	authz *authz.Engine,
 	productFeatures ProductFeatures,
 	auditLogger *audit.Logger,
-	jwtSecret string,
-	accessStore accesscontrol.Store,
-	emailSvc *email.Service,
-	siteURL url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
 
@@ -96,10 +85,6 @@ func NewService(
 		roleMgr:         roleMgr,
 		productFeatures: productFeatures,
 		audit:           auditLogger,
-		jwtSecret:       jwtSecret,
-		accessStore:     accessStore,
-		emailSvc:        emailSvc,
-		siteURL:         siteURL,
 	}
 }
 

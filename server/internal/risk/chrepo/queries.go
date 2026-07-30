@@ -25,6 +25,7 @@ type RiskFindingRow struct {
 	ProjectID         string    `ch:"project_id"`
 	RequestID         string    `ch:"request_id"`
 	ChatMessageID     string    `ch:"chat_message_id"`
+	ContentPartID     string    `ch:"content_part_id"`
 	RiskPolicyID      string    `ch:"risk_policy_id"`
 	RiskPolicyVersion int64     `ch:"risk_policy_version"`
 	RuleID            string    `ch:"rule_id"`
@@ -42,6 +43,14 @@ type RiskFindingRow struct {
 	ChatID         string `ch:"chat_id"`
 	UserID         string `ch:"user_id"`
 	ExternalUserID string `ch:"external_user_id"`
+
+	// MessageCreatedAt is the scanned chat message's event time, the sort and
+	// cursor key for the Risk Events listing. Falls back to CreatedAt (scan
+	// time) when attribution is unresolved, matching the column's DEFAULT for
+	// pre-column rows. AssistantID is the chat's live assistant link at ingest,
+	// empty when the chat has none.
+	MessageCreatedAt time.Time `ch:"message_created_at"`
+	AssistantID      string    `ch:"assistant_id"`
 
 	// Category is the canonical risk category for (source, rule_id), computed
 	// via internal/risk/categories at ingest. Empty for dead-letter sentinels.
@@ -94,6 +103,7 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			"project_id",
 			"request_id",
 			"chat_message_id",
+			"content_part_id",
 			"risk_policy_id",
 			"risk_policy_version",
 			"rule_id",
@@ -115,6 +125,8 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			"fingerprint_tenant_hs256",
 			"excluded_at",
 			"exclusion_id",
+			"message_created_at",
+			"assistant_id",
 		)
 
 	for _, row := range rows {
@@ -125,6 +137,7 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			row.ProjectID,
 			row.RequestID,
 			row.ChatMessageID,
+			row.ContentPartID,
 			row.RiskPolicyID,
 			row.RiskPolicyVersion,
 			row.RuleID,
@@ -151,6 +164,8 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			// the column binds as NULL.
 			chNullable(row.ExcludedAt),
 			chNullable(row.ExclusionID),
+			row.MessageCreatedAt,
+			row.AssistantID,
 		)
 	}
 

@@ -56,6 +56,7 @@ func TestSkillsFeatureDisabledRejectsEveryEndpoint(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 	created := createSkill(t, ctx, ti, "feature-gated", "Created while enabled.")
+	suggestion := createSuggestion(t, ti, created, skillManifest(created.Skill.Name, "Proposed while enabled.", "proposal"), "rationale")
 	disableSkills(t, ctx, ti)
 
 	_, err := ti.service.Create(ctx, &gen.CreatePayload{Content: skillManifest("disabled-create", "Denied.", "body"), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
@@ -63,6 +64,14 @@ func TestSkillsFeatureDisabledRejectsEveryEndpoint(t *testing.T) {
 	_, err = ti.service.AddVersion(ctx, &gen.AddVersionPayload{ID: created.Skill.ID, Content: skillManifest("feature-gated", "Denied.", "body"), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.List(ctx, &gen.ListPayload{Cursor: nil, Limit: 10, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.ListSuggestions(ctx, &gen.ListSuggestionsPayload{SkillID: nil, Cursor: nil, Limit: 10, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.ApproveSuggestion(ctx, &gen.ApproveSuggestionPayload{ID: suggestion.ID.String(), Content: nil, ChangeIds: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.DismissSuggestion(ctx, &gen.DismissSuggestionPayload{ID: suggestion.ID.String(), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.ApproveAllSuggestions(ctx, &gen.ApproveAllSuggestionsPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.ListUnknownActivations(ctx, &gen.ListUnknownActivationsPayload{Cursor: nil, Limit: 10, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)

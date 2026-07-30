@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -26,11 +27,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
 	chrepo "github.com/speakeasy-api/gram/server/internal/spendrules/chrepo"
@@ -60,6 +64,16 @@ type EvaluationSignaler interface {
 	Signal(ctx context.Context, organizationID string) error
 }
 
+type ActorEvaluationSignal struct {
+	OrganizationID string
+	UserID         string
+	Email          string
+}
+
+type ActorEvaluationSignaler interface {
+	SignalActor(ctx context.Context, signal ActorEvaluationSignal) error
+}
+
 type Service struct {
 	tracer trace.Tracer
 	logger *slog.Logger
@@ -69,6 +83,8 @@ type Service struct {
 	authz  *authz.Engine
 	audit  *audit.Logger
 	celEng *celenv.Engine
+	cache  cache.Cache
+	flags  feature.Provider
 	// signaler is optional; nil disables mutation-triggered re-evaluation.
 	signaler EvaluationSignaler
 }
@@ -82,6 +98,8 @@ func NewService(
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	celEng *celenv.Engine,
+	cacheImpl cache.Cache,
+	flags feature.Provider,
 	signaler EvaluationSignaler,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("spendrules"))
@@ -95,6 +113,8 @@ func NewService(
 		authz:    authzEngine,
 		audit:    auditLogger,
 		celEng:   celEng,
+		cache:    cacheImpl,
+		flags:    flags,
 		signaler: signaler,
 	}
 }
@@ -176,7 +196,7 @@ func (s *Service) CreateSpendRule(ctx context.Context, payload *gen.CreateSpendR
 		Version:        1,
 	})
 	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 		// Lost a race with a concurrent create picking the same slug.
 		return nil, oops.E(oops.CodeConflict, err, "a rule with a conflicting name was just created, try again")
 	}
@@ -198,7 +218,7 @@ func (s *Service) CreateSpendRule(ctx context.Context, payload *gen.CreateSpendR
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit spend rule create").LogError(ctx, s.logger)
 	}
-
+	s.refreshGateRulesAfterCommit(ctx, authCtx.ActiveOrganizationID)
 	s.signalEvaluation(ctx, authCtx.ActiveOrganizationID)
 
 	return buildSpendRuleView(row), nil
@@ -450,7 +470,7 @@ func (s *Service) UpdateSpendRule(ctx context.Context, payload *gen.UpdateSpendR
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit spend rule update").LogError(ctx, s.logger)
 	}
-
+	s.refreshGateRulesAfterCommit(ctx, authCtx.ActiveOrganizationID)
 	s.signalEvaluation(ctx, authCtx.ActiveOrganizationID)
 
 	return buildSpendRuleView(row), nil
@@ -477,9 +497,11 @@ func (s *Service) ArchiveSpendRule(ctx context.Context, payload *gen.ArchiveSpen
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	queries := repo.New(dbtx)
+
 	// superseded_by stays NULL: an admin archive ends the lineage outright,
 	// unlike the archive an edit performs on the way to a successor row.
-	row, err := repo.New(dbtx).ArchiveSpendRule(ctx, repo.ArchiveSpendRuleParams{
+	row, err := queries.ArchiveSpendRule(ctx, repo.ArchiveSpendRuleParams{
 		ID:             id,
 		OrganizationID: authCtx.ActiveOrganizationID,
 	})
@@ -491,7 +513,7 @@ func (s *Service) ArchiveSpendRule(ctx context.Context, payload *gen.ArchiveSpen
 		//     audit event);
 		//   - lookup returns ErrNoRows -> the rule never existed, 404;
 		//   - lookup fails otherwise -> surface the real (retryable) error.
-		_, lookupErr := repo.New(dbtx).GetArchivedSpendRule(ctx, repo.GetArchivedSpendRuleParams{
+		_, lookupErr := queries.GetArchivedSpendRule(ctx, repo.GetArchivedSpendRuleParams{
 			ID:             id,
 			OrganizationID: authCtx.ActiveOrganizationID,
 		})
@@ -522,7 +544,7 @@ func (s *Service) ArchiveSpendRule(ctx context.Context, payload *gen.ArchiveSpen
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit spend rule archive").LogError(ctx, s.logger)
 	}
-
+	s.refreshGateRulesAfterCommit(ctx, authCtx.ActiveOrganizationID)
 	s.signalEvaluation(ctx, authCtx.ActiveOrganizationID)
 
 	return nil
@@ -842,6 +864,52 @@ func (s *Service) signalEvaluation(ctx context.Context, organizationID string) {
 	if err := s.signaler.Signal(ctx, organizationID); err != nil {
 		s.logger.ErrorContext(ctx, "signal spend rule evaluation", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
 	}
+}
+
+func (s *Service) refreshGateRules(ctx context.Context, organizationID string, queries *repo.Queries) error {
+	if s.cache == nil {
+		return nil
+	}
+	if !s.budgetsEnabled(ctx, organizationID) {
+		if err := WriteGateRules(ctx, s.cache, organizationID, GateRules{SourceUpdatedAt: time.Now().UTC(), Rules: nil}); err != nil {
+			return fmt.Errorf("clear disabled gate rules: %w", err)
+		}
+		return nil
+	}
+	if err := WriteGateRulesFromDB(ctx, s.cache, queries, organizationID, time.Now().UTC()); err != nil {
+		return fmt.Errorf("refresh gate rules from db: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) refreshGateRulesAfterCommit(ctx context.Context, organizationID string) {
+	if err := s.refreshGateRules(ctx, organizationID, repo.New(s.db)); err != nil {
+		s.logger.ErrorContext(ctx, "refresh spend gate rules after commit",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(organizationID),
+		)
+	}
+}
+
+func (s *Service) budgetsEnabled(ctx context.Context, organizationID string) bool {
+	if s.flags == nil {
+		return false
+	}
+
+	var groups map[string]string
+	org, err := orgRepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve organization slug for budgets flag", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+	} else {
+		groups = feature.OrgProjectGroups(org.Slug, "")
+	}
+
+	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagBudgets, organizationID, groups)
+	if err != nil {
+		s.logger.WarnContext(ctx, "budgets flag check failed; treating as disabled", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		return false
+	}
+	return on
 }
 
 // ruleSlug derives the URN slug for a new rule from its name, appending a

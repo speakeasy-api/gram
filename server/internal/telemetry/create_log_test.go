@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -550,27 +551,29 @@ func newTestToolInfo(orgID string) telemetry.ToolInfo {
 	}
 }
 
-// flushAndGetLog drains ClickHouse's async insert queue so the row the
-// preceding Log call wrote becomes deterministically visible, then fetches
-// it. Logger.Log is synchronous up to the async insert queue, so the flush is
-// the only synchronization point needed — no polling (see
-// internal/telemetry/README.md).
+// flushAndGetLog drains ClickHouse's async insert queue, then polls the read.
+// Under full-suite load ClickHouse can acknowledge the flush just before the
+// row becomes queryable, so a single immediate read is occasionally empty.
 func flushAndGetLog(t *testing.T, ctx context.Context, ti *testInstance, projectID, urn string, timestamp time.Time) repo.TelemetryLog {
 	t.Helper()
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+	var logs []repo.TelemetryLog
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
-	logs, err := ti.chClient.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
-		GramProjectID: projectID,
-		TimeStart:     timestamp.Add(-1 * time.Minute).UnixNano(),
-		TimeEnd:       timestamp.Add(1 * time.Minute).UnixNano(),
-		GramURNs:      []string{urn},
-		SortOrder:     "desc",
-		Cursor:        "",
-		Limit:         10,
-	})
-	require.NoError(t, err)
-	require.Len(t, logs, 1, "expected 1 log in ClickHouse")
+		var err error
+		logs, err = ti.chClient.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
+			GramProjectID: projectID,
+			TimeStart:     timestamp.Add(-1 * time.Minute).UnixNano(),
+			TimeEnd:       timestamp.Add(1 * time.Minute).UnixNano(),
+			GramURNs:      []string{urn},
+			SortOrder:     "desc",
+			Cursor:        "",
+			Limit:         10,
+		})
+		assert.NoError(c, err)
+		assert.Len(c, logs, 1, "expected 1 log in ClickHouse")
+	}, 10*time.Second, 50*time.Millisecond)
 
 	return logs[0]
 }

@@ -26,6 +26,15 @@ export function toError(error: unknown): Error {
   }
 }
 
+// isNotFoundError reports whether an SDK call failed with a 404. Some lookups
+// treat "not found" as a normal answer rather than a failure — asking whether a
+// record exists before creating it — so they catch the rejection and branch on
+// this instead of surfacing an error.
+export function isNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return "statusCode" in error && error.statusCode === 404;
+}
+
 export function handleError(
   error: unknown,
   options: ErrorHandlerOptions = {},

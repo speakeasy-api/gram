@@ -2,22 +2,27 @@ package externalcredentials_test
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2"
 
+	adminecgen "github.com/speakeasy-api/gram/server/gen/admin_external_credentials"
 	gen "github.com/speakeasy-api/gram/server/gen/external_credentials"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/externalcredentials"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -43,8 +48,39 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service *externalcredentials.Service
-	conn    *pgxpool.Pool
+	service     *externalcredentials.Service
+	conn        *pgxpool.Pool
+	gcpResolver *fakeGcpResolver
+}
+
+// fakeGcpResolver is a hand-rolled stand-in for gcpauth.Resolver (our own
+// interface). Tests set fn to control the "who am I" probe outcome.
+type fakeGcpResolver struct {
+	fn func(ctx context.Context, cred gcpauth.Credential) (gcpauth.Principal, error)
+}
+
+var _ gcpauth.Resolver = (*fakeGcpResolver)(nil)
+
+func (f *fakeGcpResolver) ResolvePrincipal(ctx context.Context, cred gcpauth.Credential) (gcpauth.Principal, error) {
+	return f.fn(ctx, cred)
+}
+
+// TokenSource is unused by the credentials service, which only ever describes an
+// identity rather than calling Google APIs as it.
+func (f *fakeGcpResolver) TokenSource(context.Context, gcpauth.Credential) (oauth2.TokenSource, error) {
+	return nil, errors.New("fakeGcpResolver: TokenSource not supported")
+}
+
+// withAdmin returns ctx with the auth context's IsAdmin flag flipped to true.
+// Admin-only endpoints opt in explicitly so non-admin paths exercise the
+// realistic default produced by authztest.InitAuthContext.
+func withAdmin(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	authCtx.IsAdmin = true
+	return contextvalues.SetAuthContext(ctx, authCtx)
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -64,16 +100,21 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	auditLogger := audit.NewLogger()
-	svc := externalcredentials.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger)
+	// Default probe: a successful in-cluster ambient resolution. Verify tests
+	// override fn to exercise the failure and unsupported-mode paths.
+	gcpResolver := &fakeGcpResolver{fn: func(_ context.Context, _ gcpauth.Credential) (gcpauth.Principal, error) {
+		return gcpauth.Principal{Email: "gram@gram-platform.iam.gserviceaccount.com", Source: gcpauth.SourceMetadataServer}, nil
+	}}
+	svc := externalcredentials.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, gcpResolver)
 
-	return ctx, &testInstance{service: svc, conn: conn}
+	return ctx, &testInstance{service: svc, conn: conn, gcpResolver: gcpResolver}
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {
@@ -121,6 +162,25 @@ func createGCPImpersonationCredential(t *testing.T, ctx context.Context, ti *tes
 		SessionToken:              nil,
 		Name:                      name,
 		ImpersonateServiceAccount: new("gram@customer.iam.gserviceaccount.com"),
+		WifPoolID:                 nil,
+		WifProviderID:             nil,
+		WifProjectNumber:          nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, cred)
+
+	return cred
+}
+
+// createPlatformGCPAmbientCredential is a fixture: a platform (organization_id
+// NULL, project_id NULL) GCP credential using the ambient attached identity.
+func createPlatformGCPAmbientCredential(t *testing.T, ctx context.Context, ti *testInstance, name string) *adminecgen.GcpIamCredential {
+	t.Helper()
+
+	cred, err := ti.service.CreateGcpIamPlatformCredential(withAdmin(t, ctx), &adminecgen.CreateGcpIamPlatformCredentialPayload{
+		SessionToken:              nil,
+		Name:                      name,
+		ImpersonateServiceAccount: nil,
 		WifPoolID:                 nil,
 		WifProviderID:             nil,
 		WifProjectNumber:          nil,

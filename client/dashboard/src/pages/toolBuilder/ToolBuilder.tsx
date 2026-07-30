@@ -51,22 +51,14 @@ import { ChatProvider } from "../playground/ChatContext";
 import { useChatContext } from "../playground/useChatContext";
 import { ChatConfig, ChatWindow } from "../playground/ChatWindow";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
+import {
+  CustomTool,
+  Input,
+  parsePrompt,
+  SerializableStep,
+  Step,
+} from "./toolBuilderState";
 import { useToolifyContext } from "./useToolifyContext";
-
-type Input = {
-  name: string;
-  description?: string;
-};
-
-type Step = {
-  id: string;
-  tool?: string;
-  canonicalTool?: string;
-  toolUrn?: string;
-  instructions: string;
-  inputs?: string[];
-  update: (step: Step) => void;
-};
 
 function higherOrderToolToJSON(tool: CustomTool): string {
   return JSON.stringify(tool, null, 2);
@@ -74,17 +66,6 @@ function higherOrderToolToJSON(tool: CustomTool): string {
 
 const instructionsPlaceholder =
   "Interpret what to do with this tool based on the <purpose />, the chat history, and the output of previous steps.";
-
-// Type for steps without the update function (used for JSON serialization)
-type SerializableStep = Omit<Step, "update">;
-
-// Needs to stay aligned with server/internal/templates/impl.go:CustomToolJSONV1
-type CustomTool = {
-  toolName: string;
-  purpose: string;
-  inputs: Input[];
-  steps: SerializableStep[];
-};
 
 export function ToolBuilderNew(): React.JSX.Element {
   const ctx = useToolifyContext();
@@ -110,7 +91,6 @@ export function ToolBuilderNew(): React.JSX.Element {
       ...step,
       id: uuidv7(),
       canonicalTool: step.tool,
-      update: () => {}, // Set later
     }));
   }
 
@@ -176,7 +156,7 @@ type ToolBuilderState = {
   description: string;
   purpose: string;
   inputs: Input[];
-  steps: Step[];
+  steps: SerializableStep[];
   toolset?: ToolsetEntry;
 };
 
@@ -216,7 +196,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
   tools = tools.filter((t) => t.id !== initial.id); // Make sure you can't create recursive tools
 
   // Ensures that the canonical tool, tool URN, and update function is set for the step
-  const makeStep = (step: Step) => {
+  const makeStep = (step: SerializableStep): Step => {
     if (!step.tool || !tools.length) {
       return {
         ...step,
@@ -370,7 +350,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
         setDescription(initial.description);
         setPurpose(initial.purpose);
         setInputs(initial.inputs);
-        setSteps(initial.steps);
+        setSteps(initial.steps.map(makeStep));
       }}
     >
       Revert
@@ -885,26 +865,6 @@ const StepSeparator = () => {
   return (
     <div className="h-4 w-1/2 border-r-2 border-dashed border-stone-400 dark:border-stone-600" />
   );
-};
-
-const parsePrompt = (
-  prompt: string,
-): { purpose: string; inputs: Input[]; steps: Step[] } => {
-  const customTool = JSON.parse(prompt) as CustomTool;
-
-  const steps: Step[] = customTool.steps.map((step) => ({
-    ...step,
-    id: step.id || uuidv7(), // Ensure steps have IDs
-    update: () => {
-      console.error("update not implemented");
-    }, // This will be replaced by the component when used
-  }));
-
-  return {
-    purpose: customTool.purpose,
-    inputs: customTool.inputs,
-    steps,
-  };
 };
 
 const customToolSystemPrompt = [

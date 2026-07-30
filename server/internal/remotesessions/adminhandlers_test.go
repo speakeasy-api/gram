@@ -3,9 +3,11 @@ package remotesessions_test
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	adminrsgen "github.com/speakeasy-api/gram/server/gen/admin_remote_sessions"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -379,4 +381,42 @@ func TestAdminRemoteSessions_CreateGlobalClient_RejectsNonGlobalIssuer(t *testin
 		Audience:                nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+// TestDeleteGlobalIssuer_BlockedByTenantClient proves the platform-admin delete
+// is blocked once a tenant attaches a client, and that the blocking client does
+// not appear in the global client listing — the invisible-blocker the enriched
+// 409 message calls out.
+func TestDeleteGlobalIssuer_BlockedByTenantClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	adminCtx := withAdmin(t, ctx)
+
+	globalIssuer, err := ti.service.CreateGlobalIssuer(adminCtx, createGlobalIssuer(t, "delete-guard-global"))
+	require.NoError(t, err)
+	issuerUUID := uuid.MustParse(globalIssuer.ID)
+
+	// A tenant (the caller's org) attaches a client to the platform issuer.
+	seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, issuerUUID, "delete-guard-tenant-client")
+
+	// The platform admin sees zero global clients...
+	list, err := ti.service.ListGlobalClients(adminCtx, &adminrsgen.ListGlobalClientsPayload{
+		RemoteSessionIssuerID: globalIssuer.ID,
+		Cursor:                nil,
+		Limit:                 nil,
+		SessionToken:          nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, list.Items, "tenant clients never appear in the global client listing")
+
+	// ...yet the delete is correctly blocked by the tenant-held client.
+	err = ti.service.DeleteGlobalIssuer(adminCtx, &adminrsgen.DeleteGlobalIssuerPayload{
+		ID:           globalIssuer.ID,
+		SessionToken: nil,
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
 }

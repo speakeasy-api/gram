@@ -836,7 +836,7 @@ JOIN LATERAL (
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
     AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
-  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE sd.project_id = $1
@@ -1280,7 +1280,7 @@ JOIN LATERAL (
   WHERE sv.skill_id = prev.skill_id
     AND sv.spec_valid IS TRUE
     AND (prev.pinned_version_id IS NULL OR sv.id = prev.pinned_version_id)
-  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE prev.id = sd.id
@@ -1439,6 +1439,49 @@ func (q *Queries) SoftDeletePluginServersByMCPServerID(ctx context.Context, arg 
 		return nil, err
 	}
 	return items, nil
+}
+
+const syncMcpServerDisplayName = `-- name: SyncMcpServerDisplayName :execrows
+UPDATE plugin_servers ps
+SET display_name = $1,
+    updated_at = clock_timestamp()
+FROM plugins p
+WHERE ps.plugin_id = p.id
+  AND p.project_id = $2
+  AND p.deleted IS FALSE
+  AND ps.mcp_server_id = $3
+  AND ps.display_name = $4
+  AND ps.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM plugin_servers sibling
+    WHERE sibling.plugin_id = ps.plugin_id
+      AND sibling.id <> ps.id
+      AND sibling.display_name = $1
+      AND sibling.deleted IS FALSE
+  )
+`
+
+type SyncMcpServerDisplayNameParams struct {
+	NewDisplayName string
+	ProjectID      uuid.UUID
+	McpServerID    uuid.NullUUID
+	OldDisplayName string
+}
+
+// Keep auto-derived plugin server names in sync with their MCP server while
+// preserving names customized through UpdatePluginServer.
+func (q *Queries) SyncMcpServerDisplayName(ctx context.Context, arg SyncMcpServerDisplayNameParams) (int64, error) {
+	result, err := q.db.Exec(ctx, syncMcpServerDisplayName,
+		arg.NewDisplayName,
+		arg.ProjectID,
+		arg.McpServerID,
+		arg.OldDisplayName,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updatePlugin = `-- name: UpdatePlugin :one

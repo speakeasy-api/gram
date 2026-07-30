@@ -54,6 +54,9 @@ var _ = Service("risk", func() {
 			Attribute("shadow_mcp_allowed_urls", ArrayOf(String), "Complete desired canonical URL allow set for this policy. Omit or send empty to create no URL-specific allow decisions.", func() {
 				Meta("struct:tag:json", "shadow_mcp_allowed_urls")
 			})
+			Attribute("shadow_mcp_disposition", String, "Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.", func() {
+				shared.RiskPolicyShadowMCPDispositionEnum()
+			})
 			Attribute("auto_name", Boolean, "Whether the policy name should be auto-generated.")
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding.")
 			Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Required when policy_type is prompt_based.")
@@ -197,6 +200,9 @@ var _ = Service("risk", func() {
 			Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs this policy applies to. Omit to preserve the current target principals.")
 			Attribute("shadow_mcp_allowed_urls", ArrayOf(String), "Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.", func() {
 				Meta("struct:tag:json", "shadow_mcp_allowed_urls")
+			})
+			Attribute("shadow_mcp_disposition", String, "The policy's shadow MCP disposition. Immutable: omit, or send the current value unchanged; any other value is rejected. Switching posture requires delete + recreate.", func() {
+				shared.RiskPolicyShadowMCPDispositionEnum()
 			})
 			Attribute("auto_name", Boolean, "Whether the policy name should be auto-generated.")
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding. Send an empty string to clear.")
@@ -1368,7 +1374,7 @@ var _ = Service("risk", func() {
 				MaxLength(10000)
 			})
 			Attribute("model_config", shared.RiskPolicyModelConfig, "Optional per-policy LLM-judge model configuration. Omit for the default judge model.")
-			Attribute("message_types", ArrayOf(String), "Message types to judge (user_message, assistant_message, tool_request, tool_response), matching a policy's message_types. When empty or omitted, judges all supported types.")
+			Attribute("message_types", ArrayOf(String), "Message types to judge (user_message, assistant_message, tool_request, tool_response, prompt_attachment), matching a policy's message_types. When empty or omitted, judges all supported types.")
 			Attribute("scope_include", String, "CEL scope predicate: the replay judges a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.")
 			Attribute("scope_exempt", String, "CEL exemption predicate: the replay skips a message when this boolean expression is true. Omit/empty means no inline exemption.")
 			Required("chat_id", "prompt")
@@ -1503,7 +1509,7 @@ var PromptGuardrailMessageVerdict = Type("PromptGuardrailMessageVerdict", func()
 		Format(FormatUUID)
 	})
 	Attribute("seq", Int64, "Message sequence within the chat generation, ascending.")
-	Attribute("message_type", String, "The judged message type (user_message, assistant_message, tool_request, tool_response).")
+	Attribute("message_type", String, "The judged message type (user_message, assistant_message, tool_request, tool_response, prompt_attachment).")
 	Attribute("tool_name", String, "Tool name for a single-call tool_request message; empty otherwise.")
 	Attribute("matched", Boolean, "True when the guardrail flagged this message.")
 	Attribute("confidence", Float64, "Judge confidence in [0,1]; 0 when not matched.")

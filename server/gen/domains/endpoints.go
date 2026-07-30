@@ -17,8 +17,10 @@ import (
 // Endpoints wraps the "domains" service endpoints.
 type Endpoints struct {
 	GetDomain        goa.Endpoint
+	ListDomains      goa.Endpoint
 	CreateDomain     goa.Endpoint
 	UpdateDomain     goa.Endpoint
+	CheckHealth      goa.Endpoint
 	DeleteDomain     goa.Endpoint
 	ListMcpEndpoints goa.Endpoint
 }
@@ -29,8 +31,10 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		GetDomain:        NewGetDomainEndpoint(s, a.APIKeyAuth),
+		ListDomains:      NewListDomainsEndpoint(s, a.APIKeyAuth),
 		CreateDomain:     NewCreateDomainEndpoint(s, a.APIKeyAuth),
 		UpdateDomain:     NewUpdateDomainEndpoint(s, a.APIKeyAuth),
+		CheckHealth:      NewCheckHealthEndpoint(s, a.APIKeyAuth),
 		DeleteDomain:     NewDeleteDomainEndpoint(s, a.APIKeyAuth),
 		ListMcpEndpoints: NewListMcpEndpointsEndpoint(s, a.APIKeyAuth),
 	}
@@ -39,8 +43,10 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "domains" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetDomain = m(e.GetDomain)
+	e.ListDomains = m(e.ListDomains)
 	e.CreateDomain = m(e.CreateDomain)
 	e.UpdateDomain = m(e.UpdateDomain)
+	e.CheckHealth = m(e.CheckHealth)
 	e.DeleteDomain = m(e.DeleteDomain)
 	e.ListMcpEndpoints = m(e.ListMcpEndpoints)
 }
@@ -65,6 +71,29 @@ func NewGetDomainEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 			return nil, err
 		}
 		return s.GetDomain(ctx, p)
+	}
+}
+
+// NewListDomainsEndpoint returns an endpoint function that calls the method
+// "listDomains" of service "domains".
+func NewListDomainsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListDomainsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListDomains(ctx, p)
 	}
 }
 
@@ -111,6 +140,29 @@ func NewUpdateDomainEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return s.UpdateDomain(ctx, p)
+	}
+}
+
+// NewCheckHealthEndpoint returns an endpoint function that calls the method
+// "checkHealth" of service "domains".
+func NewCheckHealthEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CheckHealthPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CheckHealth(ctx, p)
 	}
 }
 

@@ -57,7 +57,7 @@ Scope vocabulary, grant types, and enforcement logic are defined here. `authz`'s
 
 **`authz.Filter` for list endpoints.** When a handler lists resources the caller might only partially own, `s.authz.Filter(ctx, scope, candidateIDs) ([]string, error)` returns the subset of IDs the caller holds the scope for. The standard pattern is: gather candidate IDs from the repo, call `Filter`, then rebuild the response from the allowed IDs. Prefer this over a post-hoc per-item `Require` loop. Canonical call sites: `server/internal/projects/impl.go` (projects list) and `server/internal/toolsets/impl.go` (toolsets list).
 
-**Auth context accessor.** `contextvalues.GetAuthContext(ctx)` returns the current `*AuthContext`. RBAC-relevant fields: `ActiveOrganizationID`, `ProjectID`, `UserID`, `Email`, `AccountType`, `IsAdmin`, `APIKeyID`, `SessionID`.
+**Auth context accessor.** `contextvalues.GetAuthContext(ctx)` returns the current `*AuthContext`. RBAC-relevant fields: `ActiveOrganizationID`, `ProjectID`, `UserID`, `Email`, `IsAdmin`, `APIKeyID`, `SessionID`. `AccountType` is billing metadata and does not control RBAC enforcement.
 
 **Scope overrides.** A local-dev/superadmin header can inject a restricted grant set for the request, parsed in `override.go` and surfaced via `Engine.GetScopeOverrides`. `access.ListGrants` returns the override set verbatim when active so the dashboard reflects what the engine will enforce.
 
@@ -129,7 +129,7 @@ The dashboard pages under `client/dashboard/src/pages/access/` render membership
 
 ### Conventions
 
-**`useRBAC` hook.** `client/dashboard/src/hooks/useRBAC.ts` wraps the generated `useGrants` React Query hook and exposes `hasScope(scope, resourceId?)`, `hasAllScopes(scopes, resourceId?)`, `hasAnyScope(scopes, resourceId?)`, plus `isRbacEnabled`, `isLoading`, `grants`, and `error`. Returns `false` from the `has*` checks while loading and `true` when RBAC is disabled. The module also exports `selectorMatches(grant, check)` and `resourceKindForScope(scope)` — direct mirrors of the server-side helpers in `authz/selector.go` — for code that needs parity with backend matching outside the standard `hasScope` flow.
+**`useRBAC` hook.** `client/dashboard/src/hooks/useRBAC.ts` wraps the generated `useGrants` React Query hook and exposes `hasScope(scope, resourceId?)`, `hasAllScopes(scopes, resourceId?)`, `hasAnyScope(scopes, resourceId?)`, plus `isLoading`, `grants`, and `error`. Returns `false` from the `has*` checks while grants are loading. The module also exports `selectorMatches(grant, check)` and `resourceKindForScope(scope)` — direct mirrors of the server-side helpers in `authz/selector.go` — for code that needs parity with backend matching outside the standard `hasScope` flow.
 
 **`RequireScope` component.** `client/dashboard/src/components/require-scope.tsx` is the primary rendering gate. Props: `scope: Scope | Scope[]`, `all?: boolean` (AND vs OR when multiple scopes), `resourceId?: string`, `level: "page" | "section" | "component"`, `children`, and level-specific extras (`fallback` for page/section, `reason`/`className` for component).
 

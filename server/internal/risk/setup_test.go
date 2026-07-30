@@ -10,12 +10,12 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
-	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
@@ -172,6 +173,7 @@ type testInstance struct {
 	shadowMCPInventoryURLLookup  risk.ShadowMCPInventoryURLLookup
 	completionClient             openrouter.CompletionClient
 	cacheDeletes                 *countingCache
+	chConn                       clickhouse.Conn
 }
 
 func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context.Context, *testInstance) {
@@ -191,8 +193,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
-
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	sig := &signalerStub{}
 
 	chConn, err := infra.NewClickhouseClient(t)
@@ -201,8 +202,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	cacheAdapter := &countingCache{Cache: cache.NewRedisCacheAdapter(redisClient), mu: sync.Mutex{}, deletes: nil}
-	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
-	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore, nil)
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, nil)
 	auditLogger := audit.NewLogger()
 	flags := &feature.InMemory{}
 
@@ -223,6 +223,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 		},
 		completionClient: nil,
 		cacheDeletes:     cacheAdapter,
+		chConn:           chConn,
 	}
 	for _, configureInstance := range configure {
 		configureInstance(ti)
@@ -231,7 +232,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 		return ti.reconcileShadowMCPPolicyURLs(ctx, db, input)
 	}, func(ctx context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
 		return ti.shadowMCPInventoryURLLookup(ctx, projectID, canonicalURLs)
-	})
+	}, chrepo.New(chConn))
 
 	return ctx, ti
 }
@@ -242,8 +243,6 @@ func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-	authCtx.AccountType = "enterprise"
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	principal := urn.NewPrincipal(urn.PrincipalTypeRole, "risk-rbac-grants-"+uuid.NewString())
 	for _, grant := range grants {

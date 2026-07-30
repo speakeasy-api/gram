@@ -12,7 +12,6 @@ import (
 
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -52,21 +51,15 @@ func newCapturingMockPublisher(result any) (*gcp.MockPublisher[*telemetryv1.LogR
 	return mockPub, capture
 }
 
-func shadowFlagsOn() *feature.InMemory {
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagTelemetryLogsPubSubShadow, telemetry.ShadowFlagDistinctID, true)
-	return flags
-}
-
 // newShadowTestLogger builds a Logger backed by the shared test ClickHouse
-// whose shadow publisher uses the given publisher and flags. The LogPublisher
-// is returned alongside so tests can await its ack drains.
-func newShadowTestLogger(t *testing.T, ctx context.Context, ti *testInstance, pub gcp.Publisher[*telemetryv1.LogRecord], flags feature.Provider) (*telemetry.Logger, *telemetry.LogPublisher) {
+// whose shadow publisher uses the given publisher. The LogPublisher is
+// returned alongside so tests can await its ack drains.
+func newShadowTestLogger(t *testing.T, ctx context.Context, ti *testInstance, pub gcp.Publisher[*telemetryv1.LogRecord]) (*telemetry.Logger, *telemetry.LogPublisher) {
 	t.Helper()
 
 	logger := testenv.NewLogger(t)
 	enabled := func(context.Context, string) (bool, error) { return true, nil }
-	logPub := telemetry.NewLogPublisher(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), pub, flags)
+	logPub := telemetry.NewLogPublisher(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), pub)
 	return telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.chConn, enabled, enabled, nil, logPub), logPub
 }
 
@@ -99,7 +92,7 @@ func TestLogPublisher_MirrorsRowsToPubSub(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 
 	mockPub, capture := newCapturingMockPublisher(gcp.NewSuccessPublishResult())
-	telemLogger, logPub := newShadowTestLogger(t, ctx, ti, mockPub, shadowFlagsOn())
+	telemLogger, logPub := newShadowTestLogger(t, ctx, ti, mockPub)
 
 	toolInfoA := newTestToolInfo(ti.orgID)
 	toolInfoB := newTestToolInfo(ti.orgID)
@@ -154,32 +147,6 @@ func TestLogPublisher_MirrorsRowsToPubSub(t *testing.T) {
 	logPub.WaitForPublishDrains()
 }
 
-// TestLogPublisher_FlagOffPublishesNothing verifies the killswitch: with the
-// shadow flag off (the fail-closed default), rows land in ClickHouse and
-// nothing is published.
-func TestLogPublisher_FlagOffPublishesNothing(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestLogsService(t)
-
-	mockPub := gcp.NewMockPublisher[*telemetryv1.LogRecord]()
-	telemLogger, _ := newShadowTestLogger(t, ctx, ti, mockPub, &feature.InMemory{})
-
-	attrs := telemetry.HTTPLogAttributes{}
-	attrs.RecordMethod("GET")
-	attrs.RecordStatusCode(200)
-
-	toolInfo := newTestToolInfo(ti.orgID)
-	timestamp := time.Now().UTC()
-	require.NoError(t, telemLogger.LogBulk(ctx, []telemetry.LogParams{
-		{Timestamp: timestamp, ToolInfo: toolInfo, Attributes: attrs},
-	}))
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-	fetchLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
-	mockPub.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
-}
-
 // TestLogPublisher_PublishesDespiteCanceledContext verifies that caller
 // cancellation does not drop the shadow copy. PublishLogs runs after ClickHouse
 // accepted the rows, and a row skipped at that point is never re-published: a
@@ -194,7 +161,6 @@ func TestLogPublisher_PublishesDespiteCanceledContext(t *testing.T) {
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		mockPub,
-		shadowFlagsOn(),
 	)
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -233,7 +199,7 @@ func TestLogPublisher_PublishFailureDoesNotAffectWrite(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 
 	mockPub, capture := newCapturingMockPublisher(errors.New("broker unavailable"))
-	telemLogger, logPub := newShadowTestLogger(t, ctx, ti, mockPub, shadowFlagsOn())
+	telemLogger, logPub := newShadowTestLogger(t, ctx, ti, mockPub)
 
 	attrs := telemetry.HTTPLogAttributes{}
 	attrs.RecordMethod("GET")

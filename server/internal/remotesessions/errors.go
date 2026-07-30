@@ -3,6 +3,7 @@ package remotesessions
 import (
 	"errors"
 
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
@@ -12,7 +13,7 @@ import (
 func isRemoteSessionIssuerSlugConflict(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) &&
-		pgErr.Code == "23505" &&
+		pgErr.Code == pgerrcode.UniqueViolation &&
 		pgErr.ConstraintName == "remote_session_issuers_project_slug_key"
 }
 
@@ -22,6 +23,6 @@ func isRemoteSessionIssuerSlugConflict(err error) bool {
 func isGlobalRemoteSessionIssuerSlugConflict(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) &&
-		pgErr.Code == "23505" &&
+		pgErr.Code == pgerrcode.UniqueViolation &&
 		pgErr.ConstraintName == "remote_session_issuers_global_slug_key"
 }

@@ -33,6 +33,15 @@ type SetPinnedRequestBody struct {
 	Pinned bool `form:"pinned" json:"pinned" xml:"pinned"`
 }
 
+// SummarizeRequestBody is the type of the "chat" service "summarize" endpoint
+// HTTP request body.
+type SummarizeRequestBody struct {
+	// The ID of the chat to summarize
+	ID string `form:"id" json:"id" xml:"id"`
+	// When true, regenerate and overwrite any existing summary. Defaults to false.
+	Regenerate bool `form:"regenerate" json:"regenerate" xml:"regenerate"`
+}
+
 // SubmitFeedbackRequestBody is the type of the "chat" service "submitFeedback"
 // endpoint HTTP request body.
 type SubmitFeedbackRequestBody struct {
@@ -68,6 +77,8 @@ type LoadChatResponseBody struct {
 	// The list of messages in the chat for the returned generation, ordered oldest
 	// to newest by `seq`.
 	Messages []*ChatMessageResponseBody `form:"messages,omitempty" json:"messages,omitempty" xml:"messages,omitempty"`
+	// Non-turn content attached to this chat, such as prompt attachments.
+	ContentParts []*ChatContentPartResponseBody `form:"content_parts,omitempty" json:"content_parts,omitempty" xml:"content_parts,omitempty"`
 	// The generation that this response's messages belong to. A generation is an
 	// immutable snapshot of the transcript; a new one is opened on compaction or
 	// message edits, while normal turns append to the current one.
@@ -144,6 +155,12 @@ type LoadChatResponseBody struct {
 	// Email of the AI account that produced the chat, resolved from the linked AI
 	// account. May differ from the employee's work email (e.g. a personal account).
 	AccountEmail *string `form:"account_email,omitempty" json:"account_email,omitempty" xml:"account_email,omitempty"`
+	// True when the chat is pinned
+	Pinned *bool `form:"pinned,omitempty" json:"pinned,omitempty" xml:"pinned,omitempty"`
+	// Persisted LLM summary of the session transcript, if one has been generated
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// When the session summary was last generated.
+	SummaryGeneratedAt *string `form:"summary_generated_at,omitempty" json:"summary_generated_at,omitempty" xml:"summary_generated_at,omitempty"`
 }
 
 // GenerateTitleResponseBody is the type of the "chat" service "generateTitle"
@@ -160,6 +177,17 @@ type CreditUsageResponseBody struct {
 	CreditsUsed *float64 `form:"credits_used,omitempty" json:"credits_used,omitempty" xml:"credits_used,omitempty"`
 	// The number of monthly credits
 	MonthlyCredits *int `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
+}
+
+// SummarizeResponseBody is the type of the "chat" service "summarize" endpoint
+// HTTP response body.
+type SummarizeResponseBody struct {
+	// The session summary text
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// When the summary was last generated.
+	SummaryGeneratedAt *string `form:"summary_generated_at,omitempty" json:"summary_generated_at,omitempty" xml:"summary_generated_at,omitempty"`
+	// True when an existing summary was returned without regenerating
+	Cached *bool `form:"cached,omitempty" json:"cached,omitempty" xml:"cached,omitempty"`
 }
 
 // SubmitFeedbackResponseBody is the type of the "chat" service
@@ -1443,6 +1471,186 @@ type SetPinnedGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// SummarizeUnauthorizedResponseBody is the type of the "chat" service
+// "summarize" endpoint HTTP response body for the "unauthorized" error.
+type SummarizeUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SummarizeForbiddenResponseBody is the type of the "chat" service "summarize"
+// endpoint HTTP response body for the "forbidden" error.
+type SummarizeForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SummarizeBadRequestResponseBody is the type of the "chat" service
+// "summarize" endpoint HTTP response body for the "bad_request" error.
+type SummarizeBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SummarizeNotFoundResponseBody is the type of the "chat" service "summarize"
+// endpoint HTTP response body for the "not_found" error.
+type SummarizeNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SummarizeConflictResponseBody is the type of the "chat" service "summarize"
+// endpoint HTTP response body for the "conflict" error.
+type SummarizeConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SummarizeUnsupportedMediaResponseBody is the type of the "chat" service
+// "summarize" endpoint HTTP response body for the "unsupported_media" error.
+type SummarizeUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SummarizeInvalidResponseBody is the type of the "chat" service "summarize"
+// endpoint HTTP response body for the "invalid" error.
+type SummarizeInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SummarizeInvariantViolationResponseBody is the type of the "chat" service
+// "summarize" endpoint HTTP response body for the "invariant_violation" error.
+type SummarizeInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SummarizeUnexpectedResponseBody is the type of the "chat" service
+// "summarize" endpoint HTTP response body for the "unexpected" error.
+type SummarizeUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SummarizeGatewayErrorResponseBody is the type of the "chat" service
+// "summarize" endpoint HTTP response body for the "gateway_error" error.
+type SummarizeGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // SubmitFeedbackUnauthorizedResponseBody is the type of the "chat" service
 // "submitFeedback" endpoint HTTP response body for the "unauthorized" error.
 type SubmitFeedbackUnauthorizedResponseBody struct {
@@ -1853,6 +2061,12 @@ type ChatOverviewResponseBody struct {
 	// Email of the AI account that produced the chat, resolved from the linked AI
 	// account. May differ from the employee's work email (e.g. a personal account).
 	AccountEmail *string `form:"account_email,omitempty" json:"account_email,omitempty" xml:"account_email,omitempty"`
+	// True when the chat is pinned
+	Pinned *bool `form:"pinned,omitempty" json:"pinned,omitempty" xml:"pinned,omitempty"`
+	// Persisted LLM summary of the session transcript, if one has been generated
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// When the session summary was last generated.
+	SummaryGeneratedAt *string `form:"summary_generated_at,omitempty" json:"summary_generated_at,omitempty" xml:"summary_generated_at,omitempty"`
 }
 
 // WorkUnitsTrendBucketResponseBody is used to define fields on response body
@@ -1912,6 +2126,24 @@ type ChatMessageResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// Conversation generation — bumps on compaction or edit divergence
 	Generation *int `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
+}
+
+// ChatContentPartResponseBody is used to define fields on response body types.
+type ChatContentPartResponseBody struct {
+	// The ID of the content part.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The content kind, such as prompt_attachment.
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// The text content.
+	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
+	// The chat message this content hangs off, when resolved.
+	ParentChatMessageID *string `form:"parent_chat_message_id,omitempty" json:"parent_chat_message_id,omitempty" xml:"parent_chat_message_id,omitempty"`
+	// Sparse metadata for the content kind.
+	Metadata json.RawMessage `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
+	// Whether this content part has an active risk finding.
+	IsRisk *bool `form:"is_risk,omitempty" json:"is_risk,omitempty" xml:"is_risk,omitempty"`
+	// When the content part was created.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 }
 
 // RiskSegmentResponseBody is used to define fields on response body types.
@@ -2022,6 +2254,22 @@ func NewSetPinnedRequestBody(p *chat.SetPinnedPayload) *SetPinnedRequestBody {
 	body := &SetPinnedRequestBody{
 		ID:     p.ID,
 		Pinned: p.Pinned,
+	}
+	return body
+}
+
+// NewSummarizeRequestBody builds the HTTP request body from the payload of the
+// "summarize" endpoint of the "chat" service.
+func NewSummarizeRequestBody(p *chat.SummarizePayload) *SummarizeRequestBody {
+	body := &SummarizeRequestBody{
+		ID:         p.ID,
+		Regenerate: p.Regenerate,
+	}
+	{
+		var zero bool
+		if body.Regenerate == zero {
+			body.Regenerate = false
+		}
 	}
 	return body
 }
@@ -2398,6 +2646,9 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 		WorkUnits:            body.WorkUnits,
 		AccountType:          body.AccountType,
 		AccountEmail:         body.AccountEmail,
+		Pinned:               body.Pinned,
+		Summary:              body.Summary,
+		SummaryGeneratedAt:   body.SummaryGeneratedAt,
 	}
 	v.Messages = make([]*chat.ChatMessage, len(body.Messages))
 	for i, val := range body.Messages {
@@ -2406,6 +2657,14 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 			continue
 		}
 		v.Messages[i] = unmarshalChatMessageResponseBodyToChatChatMessage(val)
+	}
+	v.ContentParts = make([]*chat.ChatContentPart, len(body.ContentParts))
+	for i, val := range body.ContentParts {
+		if val == nil {
+			v.ContentParts[i] = nil
+			continue
+		}
+		v.ContentParts[i] = unmarshalChatContentPartResponseBodyToChatChatContentPart(val)
 	}
 	if body.RiskSegments != nil {
 		v.RiskSegments = make([]*chat.RiskSegment, len(body.RiskSegments))
@@ -3201,6 +3460,166 @@ func NewSetPinnedGatewayError(body *SetPinnedGatewayErrorResponseBody) *goa.Serv
 	return v
 }
 
+// NewSummarizeChatResultOK builds a "chat" service "summarize" endpoint result
+// from a HTTP "OK" response.
+func NewSummarizeChatResultOK(body *SummarizeResponseBody) *chat.SummarizeChatResult {
+	v := &chat.SummarizeChatResult{
+		Summary:            *body.Summary,
+		SummaryGeneratedAt: *body.SummaryGeneratedAt,
+		Cached:             *body.Cached,
+	}
+
+	return v
+}
+
+// NewSummarizeUnauthorized builds a chat service summarize endpoint
+// unauthorized error.
+func NewSummarizeUnauthorized(body *SummarizeUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSummarizeForbidden builds a chat service summarize endpoint forbidden
+// error.
+func NewSummarizeForbidden(body *SummarizeForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSummarizeBadRequest builds a chat service summarize endpoint bad_request
+// error.
+func NewSummarizeBadRequest(body *SummarizeBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSummarizeNotFound builds a chat service summarize endpoint not_found
+// error.
+func NewSummarizeNotFound(body *SummarizeNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSummarizeConflict builds a chat service summarize endpoint conflict error.
+func NewSummarizeConflict(body *SummarizeConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSummarizeUnsupportedMedia builds a chat service summarize endpoint
+// unsupported_media error.
+func NewSummarizeUnsupportedMedia(body *SummarizeUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSummarizeInvalid builds a chat service summarize endpoint invalid error.
+func NewSummarizeInvalid(body *SummarizeInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSummarizeInvariantViolation builds a chat service summarize endpoint
+// invariant_violation error.
+func NewSummarizeInvariantViolation(body *SummarizeInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSummarizeUnexpected builds a chat service summarize endpoint unexpected
+// error.
+func NewSummarizeUnexpected(body *SummarizeUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSummarizeGatewayError builds a chat service summarize endpoint
+// gateway_error error.
+func NewSummarizeGatewayError(body *SummarizeGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewSubmitFeedbackResultOK builds a "chat" service "submitFeedback" endpoint
 // result from a HTTP "OK" response.
 func NewSubmitFeedbackResultOK(body *SubmitFeedbackResponseBody) *chat.SubmitFeedbackResult {
@@ -3567,6 +3986,9 @@ func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
 	if body.Messages == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("messages", "body"))
 	}
+	if body.ContentParts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("content_parts", "body"))
+	}
 	if body.Generation == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("generation", "body"))
 	}
@@ -3604,6 +4026,13 @@ func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
 			}
 		}
 	}
+	for _, e := range body.ContentParts {
+		if e != nil {
+			if err2 := ValidateChatContentPartResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	for _, e := range body.RiskSegments {
 		if e != nil {
 			if err2 := ValidateRiskSegmentResponseBody(e); err2 != nil {
@@ -3637,6 +4066,9 @@ func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
 	if body.LastMessageTimestamp != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_message_timestamp", *body.LastMessageTimestamp, goa.FormatDateTime))
 	}
+	if body.SummaryGeneratedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.summary_generated_at", *body.SummaryGeneratedAt, goa.FormatDateTime))
+	}
 	return
 }
 
@@ -3657,6 +4089,24 @@ func ValidateCreditUsageResponseBody(body *CreditUsageResponseBody) (err error) 
 	}
 	if body.MonthlyCredits == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("monthly_credits", "body"))
+	}
+	return
+}
+
+// ValidateSummarizeResponseBody runs the validations defined on
+// SummarizeResponseBody
+func ValidateSummarizeResponseBody(body *SummarizeResponseBody) (err error) {
+	if body.Summary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("summary", "body"))
+	}
+	if body.SummaryGeneratedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("summary_generated_at", "body"))
+	}
+	if body.Cached == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cached", "body"))
+	}
+	if body.SummaryGeneratedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.summary_generated_at", *body.SummaryGeneratedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -5359,6 +5809,246 @@ func ValidateSetPinnedGatewayErrorResponseBody(body *SetPinnedGatewayErrorRespon
 	return
 }
 
+// ValidateSummarizeUnauthorizedResponseBody runs the validations defined on
+// summarize_unauthorized_response_body
+func ValidateSummarizeUnauthorizedResponseBody(body *SummarizeUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSummarizeForbiddenResponseBody runs the validations defined on
+// summarize_forbidden_response_body
+func ValidateSummarizeForbiddenResponseBody(body *SummarizeForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSummarizeBadRequestResponseBody runs the validations defined on
+// summarize_bad_request_response_body
+func ValidateSummarizeBadRequestResponseBody(body *SummarizeBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSummarizeNotFoundResponseBody runs the validations defined on
+// summarize_not_found_response_body
+func ValidateSummarizeNotFoundResponseBody(body *SummarizeNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSummarizeConflictResponseBody runs the validations defined on
+// summarize_conflict_response_body
+func ValidateSummarizeConflictResponseBody(body *SummarizeConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSummarizeUnsupportedMediaResponseBody runs the validations defined
+// on summarize_unsupported_media_response_body
+func ValidateSummarizeUnsupportedMediaResponseBody(body *SummarizeUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSummarizeInvalidResponseBody runs the validations defined on
+// summarize_invalid_response_body
+func ValidateSummarizeInvalidResponseBody(body *SummarizeInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSummarizeInvariantViolationResponseBody runs the validations defined
+// on summarize_invariant_violation_response_body
+func ValidateSummarizeInvariantViolationResponseBody(body *SummarizeInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSummarizeUnexpectedResponseBody runs the validations defined on
+// summarize_unexpected_response_body
+func ValidateSummarizeUnexpectedResponseBody(body *SummarizeUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSummarizeGatewayErrorResponseBody runs the validations defined on
+// summarize_gateway_error_response_body
+func ValidateSummarizeGatewayErrorResponseBody(body *SummarizeGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateSubmitFeedbackUnauthorizedResponseBody runs the validations defined
 // on submitFeedback_unauthorized_response_body
 func ValidateSubmitFeedbackUnauthorizedResponseBody(body *SubmitFeedbackUnauthorizedResponseBody) (err error) {
@@ -5869,6 +6559,9 @@ func ValidateChatOverviewResponseBody(body *ChatOverviewResponseBody) (err error
 	if body.LastMessageTimestamp != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_message_timestamp", *body.LastMessageTimestamp, goa.FormatDateTime))
 	}
+	if body.SummaryGeneratedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.summary_generated_at", *body.SummaryGeneratedAt, goa.FormatDateTime))
+	}
 	return
 }
 
@@ -5916,6 +6609,30 @@ func ValidateChatMessageResponseBody(body *ChatMessageResponseBody) (err error) 
 	}
 	if body.Generation == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("generation", "body"))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateChatContentPartResponseBody runs the validations defined on
+// ChatContentPartResponseBody
+func ValidateChatContentPartResponseBody(body *ChatContentPartResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.Content == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("content", "body"))
+	}
+	if body.IsRisk == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_risk", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

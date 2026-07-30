@@ -3,29 +3,49 @@
  */
 
 import { skillsAddVersion } from "../funcs/skillsAddVersion.js";
+import { skillsApproveAllSuggestions } from "../funcs/skillsApproveAllSuggestions.js";
+import { skillsApproveSuggestion } from "../funcs/skillsApproveSuggestion.js";
 import { skillsArchive } from "../funcs/skillsArchive.js";
 import { skillsCreate } from "../funcs/skillsCreate.js";
+import { skillsDismissSuggestion } from "../funcs/skillsDismissSuggestion.js";
 import { skillsDistribute } from "../funcs/skillsDistribute.js";
 import { skillsGet } from "../funcs/skillsGet.js";
 import { skillsGetShared } from "../funcs/skillsGetShared.js";
 import { skillsList } from "../funcs/skillsList.js";
 import { skillsListDistributions } from "../funcs/skillsListDistributions.js";
+import { skillsListFeedback } from "../funcs/skillsListFeedback.js";
+import { skillsListSuggestionFeedback } from "../funcs/skillsListSuggestionFeedback.js";
+import { skillsListSuggestions } from "../funcs/skillsListSuggestions.js";
 import { skillsListUnknownActivations } from "../funcs/skillsListUnknownActivations.js";
 import { skillsListVersions } from "../funcs/skillsListVersions.js";
+import { skillsRestoreVersion } from "../funcs/skillsRestoreVersion.js";
 import { skillsShare } from "../funcs/skillsShare.js";
+import { skillsTriggerSuggestion } from "../funcs/skillsTriggerSuggestion.js";
 import { skillsUndistribute } from "../funcs/skillsUndistribute.js";
 import { skillsUnshare } from "../funcs/skillsUnshare.js";
 import { skillsUpdate } from "../funcs/skillsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { ApproveAllSkillSuggestionsResult } from "../models/components/approveallskillsuggestionsresult.js";
+import { ApproveSkillSuggestionResult } from "../models/components/approveskillsuggestionresult.js";
 import { GetSkillResult } from "../models/components/getskillresult.js";
+import { ListSkillSuggestionFeedbackResult } from "../models/components/listskillsuggestionfeedbackresult.js";
 import { RecordSkillResult } from "../models/components/recordskillresult.js";
 import { Skill } from "../models/components/skill.js";
 import { SkillDistribution } from "../models/components/skilldistribution.js";
+import { SkillEditSuggestion } from "../models/components/skilleditsuggestion.js";
 import { SkillShareLink } from "../models/components/skillsharelink.js";
 import {
   AddSkillVersionRequest,
   AddSkillVersionSecurity,
 } from "../models/operations/addskillversion.js";
+import {
+  ApproveAllSkillSuggestionsRequest,
+  ApproveAllSkillSuggestionsSecurity,
+} from "../models/operations/approveallskillsuggestions.js";
+import {
+  ApproveSkillSuggestionRequest,
+  ApproveSkillSuggestionSecurity,
+} from "../models/operations/approveskillsuggestion.js";
 import {
   ArchiveSkillRequest,
   ArchiveSkillSecurity,
@@ -34,6 +54,10 @@ import {
   CreateSkillRequest,
   CreateSkillSecurity,
 } from "../models/operations/createskill.js";
+import {
+  DismissSkillSuggestionRequest,
+  DismissSkillSuggestionSecurity,
+} from "../models/operations/dismissskillsuggestion.js";
 import {
   DistributeSkillRequest,
   DistributeSkillSecurity,
@@ -52,10 +76,24 @@ import {
   ListSkillDistributionsSecurity,
 } from "../models/operations/listskilldistributions.js";
 import {
+  ListSkillFeedbackRequest,
+  ListSkillFeedbackResponse,
+  ListSkillFeedbackSecurity,
+} from "../models/operations/listskillfeedback.js";
+import {
   ListSkillsRequest,
   ListSkillsResponse,
   ListSkillsSecurity,
 } from "../models/operations/listskills.js";
+import {
+  ListSkillSuggestionFeedbackRequest,
+  ListSkillSuggestionFeedbackSecurity,
+} from "../models/operations/listskillsuggestionfeedback.js";
+import {
+  ListSkillSuggestionsRequest,
+  ListSkillSuggestionsResponse,
+  ListSkillSuggestionsSecurity,
+} from "../models/operations/listskillsuggestions.js";
 import {
   ListSkillVersionsRequest,
   ListSkillVersionsResponse,
@@ -67,9 +105,17 @@ import {
   ListUnknownSkillActivationsSecurity,
 } from "../models/operations/listunknownskillactivations.js";
 import {
+  RestoreSkillVersionRequest,
+  RestoreSkillVersionSecurity,
+} from "../models/operations/restoreskillversion.js";
+import {
   ShareSkillRequest,
   ShareSkillSecurity,
 } from "../models/operations/shareskill.js";
+import {
+  TriggerSkillSuggestionRequest,
+  TriggerSkillSuggestionSecurity,
+} from "../models/operations/triggerskillsuggestion.js";
 import {
   UndistributeSkillRequest,
   UndistributeSkillSecurity,
@@ -98,6 +144,44 @@ export class Skills extends ClientSDK {
     options?: RequestOptions,
   ): Promise<RecordSkillResult> {
     return unwrapAsync(skillsAddVersion(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * approveAllSuggestions skills
+   *
+   * @remarks
+   * Snapshot and independently process selected skill edit suggestions, or every open suggestion when no IDs are supplied. One conflict or failure does not stop the remaining approvals.
+   */
+  async approveAllSuggestions(
+    request?: ApproveAllSkillSuggestionsRequest | undefined,
+    security?: ApproveAllSkillSuggestionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ApproveAllSkillSuggestionsResult> {
+    return unwrapAsync(skillsApproveAllSuggestions(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * approveSuggestion skills
+   *
+   * @remarks
+   * Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only a subset of its proposed changes. Stale suggestions are superseded instead.
+   */
+  async approveSuggestion(
+    request: ApproveSkillSuggestionRequest,
+    security?: ApproveSkillSuggestionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ApproveSkillSuggestionResult> {
+    return unwrapAsync(skillsApproveSuggestion(
       this,
       request,
       security,
@@ -136,6 +220,25 @@ export class Skills extends ClientSDK {
     options?: RequestOptions,
   ): Promise<RecordSkillResult> {
     return unwrapAsync(skillsCreate(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * dismissSuggestion skills
+   *
+   * @remarks
+   * Idempotently dismiss an open skill edit suggestion. Approved and superseded suggestions conflict.
+   */
+  async dismissSuggestion(
+    request: DismissSkillSuggestionRequest,
+    security?: DismissSkillSuggestionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SkillEditSuggestion> {
+    return unwrapAsync(skillsDismissSuggestion(
       this,
       request,
       security,
@@ -237,6 +340,63 @@ export class Skills extends ClientSDK {
   }
 
   /**
+   * listFeedback skills
+   *
+   * @remarks
+   * List outcome counts, collection metrics, volume, and recent resolved feedback for a skill. Name-only feedback is excluded.
+   */
+  async listFeedback(
+    request: ListSkillFeedbackRequest,
+    security?: ListSkillFeedbackSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<PageIterator<ListSkillFeedbackResponse, { cursor: string }>> {
+    return unwrapResultIterator(skillsListFeedback(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listSuggestionFeedback skills
+   *
+   * @remarks
+   * List the agent feedback cited as the reason for one proposed change, newest first.
+   */
+  async listSuggestionFeedback(
+    request: ListSkillSuggestionFeedbackRequest,
+    security?: ListSkillSuggestionFeedbackSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListSkillSuggestionFeedbackResult> {
+    return unwrapAsync(skillsListSuggestionFeedback(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listSuggestions skills
+   *
+   * @remarks
+   * List open skill edit suggestions in the project, newest first. The implementation requires the skills product feature and skill read scope.
+   */
+  async listSuggestions(
+    request?: ListSkillSuggestionsRequest | undefined,
+    security?: ListSkillSuggestionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<PageIterator<ListSkillSuggestionsResponse, { cursor: string }>> {
+    return unwrapResultIterator(skillsListSuggestions(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listUnknownActivations skills
    *
    * @remarks
@@ -277,6 +437,25 @@ export class Skills extends ClientSDK {
   }
 
   /**
+   * restoreVersion skills
+   *
+   * @remarks
+   * Restore a historical valid version as the skill's current version without changing the immutable version record or explicit distribution pins.
+   */
+  async restoreVersion(
+    request: RestoreSkillVersionRequest,
+    security?: RestoreSkillVersionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RecordSkillResult> {
+    return unwrapAsync(skillsRestoreVersion(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * share skills
    *
    * @remarks
@@ -288,6 +467,25 @@ export class Skills extends ClientSDK {
     options?: RequestOptions,
   ): Promise<SkillShareLink> {
     return unwrapAsync(skillsShare(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * triggerSuggestion skills
+   *
+   * @remarks
+   * Manually run suggestion analysis for a skill, bypassing automatic feedback and efficacy thresholds while preserving the one-open-suggestion invariant.
+   */
+  async triggerSuggestion(
+    request: TriggerSkillSuggestionRequest,
+    security?: TriggerSkillSuggestionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(skillsTriggerSuggestion(
       this,
       request,
       security,

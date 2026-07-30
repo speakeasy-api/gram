@@ -69,3 +69,14 @@ wait_for "Postgres" gram-db \
 # migration can fail with a connection EOF.
 wait_for "ClickHouse" clickhouse \
     docker compose exec -T clickhouse clickhouse-client --user "$CLICKHOUSE_USERNAME" --password "$CLICKHOUSE_PASSWORD" -q "SELECT 1"
+
+# Temporal is the last of the three to become usable, and the first thing that
+# needs it is `mise run seed`, whose deployment step starts a workflow. Without
+# this probe seed fails with `error starting deployment: context deadline
+# exceeded` — a 10s timeout on a Temporal that isn't serving yet — which on a
+# cold worktree leaves the stack up but only partially seeded.
+#
+# `cluster health` hangs rather than erroring when the dev-server's SQLite
+# persistence is wedged, so it relies on run_bounded to cap each attempt.
+wait_for "Temporal" gram-temporal \
+    docker compose exec -T gram-temporal temporal operator cluster health

@@ -13,12 +13,20 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// DiscoverRemoteSessionIssuerRequestBody is the type of the
-// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
-// request body.
-type DiscoverRemoteSessionIssuerRequestBody struct {
-	// Issuer URL to discover (e.g. https://login.linear.com).
+// FetchRemoteSessionIssuerMetadataRequestBody is the type of the
+// "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata" endpoint
+// HTTP request body.
+type FetchRemoteSessionIssuerMetadataRequestBody struct {
+	// Issuer URL to fetch metadata for (e.g. https://login.linear.com).
 	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
+}
+
+// RefreshRemoteSessionIssuerMetadataRequestBody is the type of the
+// "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata" endpoint
+// HTTP request body.
+type RefreshRemoteSessionIssuerMetadataRequestBody struct {
+	// The remote_session_issuer id.
+	ID string `form:"id" json:"id" xml:"id"`
 }
 
 // CreateRemoteSessionIssuerRequestBody is the type of the
@@ -120,10 +128,10 @@ type UpdateRemoteSessionIssuerRequestBody struct {
 	ClientIDMetadataDocumentSupported *bool `form:"client_id_metadata_document_supported,omitempty" json:"client_id_metadata_document_supported,omitempty" xml:"client_id_metadata_document_supported,omitempty"`
 }
 
-// DiscoverRemoteSessionIssuerResponseBody is the type of the
-// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
-// response body.
-type DiscoverRemoteSessionIssuerResponseBody struct {
+// FetchRemoteSessionIssuerMetadataResponseBody is the type of the
+// "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata" endpoint
+// HTTP response body.
+type FetchRemoteSessionIssuerMetadataResponseBody struct {
 	// Issuer URL; matches the iss claim.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
 	// Upstream authorization endpoint.
@@ -156,6 +164,19 @@ type DiscoverRemoteSessionIssuerResponseBody struct {
 	// as client_id (OAuth CIMD draft), parsed from the discovery document.
 	ClientIDMetadataDocumentSupported *bool `form:"client_id_metadata_document_supported,omitempty" json:"client_id_metadata_document_supported,omitempty" xml:"client_id_metadata_document_supported,omitempty"`
 	// Warnings describing any RFC 8414 deviations encountered during discovery.
+	DiscoveryWarnings []string `form:"discovery_warnings,omitempty" json:"discovery_warnings,omitempty" xml:"discovery_warnings,omitempty"`
+}
+
+// RefreshRemoteSessionIssuerMetadataResponseBody is the type of the
+// "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata" endpoint
+// HTTP response body.
+type RefreshRemoteSessionIssuerMetadataResponseBody struct {
+	// The remote_session_issuer after the refreshed metadata was persisted.
+	Issuer *RemoteSessionIssuerResponseBody `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Warnings describing any RFC 8414 deviations encountered while re-reading the
+	// issuer's metadata document. A refresh that returns warnings still persisted
+	// its result; deviations severe enough to distrust the document abort the
+	// refresh with an error instead.
 	DiscoveryWarnings []string `form:"discovery_warnings,omitempty" json:"discovery_warnings,omitempty" xml:"discovery_warnings,omitempty"`
 }
 
@@ -323,10 +344,10 @@ type GetRemoteSessionIssuerResponseBody struct {
 	UpdatedAt                         *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// DiscoverRemoteSessionIssuerUnauthorizedResponseBody is the type of the
-// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
-// response body for the "unauthorized" error.
-type DiscoverRemoteSessionIssuerUnauthorizedResponseBody struct {
+// FetchRemoteSessionIssuerMetadataUnauthorizedResponseBody is the type of the
+// "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata" endpoint
+// HTTP response body for the "unauthorized" error.
+type FetchRemoteSessionIssuerMetadataUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -342,10 +363,10 @@ type DiscoverRemoteSessionIssuerUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// DiscoverRemoteSessionIssuerForbiddenResponseBody is the type of the
-// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
-// response body for the "forbidden" error.
-type DiscoverRemoteSessionIssuerForbiddenResponseBody struct {
+// FetchRemoteSessionIssuerMetadataForbiddenResponseBody is the type of the
+// "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata" endpoint
+// HTTP response body for the "forbidden" error.
+type FetchRemoteSessionIssuerMetadataForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -361,10 +382,10 @@ type DiscoverRemoteSessionIssuerForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// DiscoverRemoteSessionIssuerBadRequestResponseBody is the type of the
-// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
-// response body for the "bad_request" error.
-type DiscoverRemoteSessionIssuerBadRequestResponseBody struct {
+// FetchRemoteSessionIssuerMetadataBadRequestResponseBody is the type of the
+// "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata" endpoint
+// HTTP response body for the "bad_request" error.
+type FetchRemoteSessionIssuerMetadataBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -380,10 +401,10 @@ type DiscoverRemoteSessionIssuerBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// DiscoverRemoteSessionIssuerNotFoundResponseBody is the type of the
-// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
-// response body for the "not_found" error.
-type DiscoverRemoteSessionIssuerNotFoundResponseBody struct {
+// FetchRemoteSessionIssuerMetadataNotFoundResponseBody is the type of the
+// "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata" endpoint
+// HTTP response body for the "not_found" error.
+type FetchRemoteSessionIssuerMetadataNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -399,10 +420,10 @@ type DiscoverRemoteSessionIssuerNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// DiscoverRemoteSessionIssuerConflictResponseBody is the type of the
-// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
-// response body for the "conflict" error.
-type DiscoverRemoteSessionIssuerConflictResponseBody struct {
+// FetchRemoteSessionIssuerMetadataConflictResponseBody is the type of the
+// "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata" endpoint
+// HTTP response body for the "conflict" error.
+type FetchRemoteSessionIssuerMetadataConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -418,10 +439,10 @@ type DiscoverRemoteSessionIssuerConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// DiscoverRemoteSessionIssuerUnsupportedMediaResponseBody is the type of the
-// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
-// response body for the "unsupported_media" error.
-type DiscoverRemoteSessionIssuerUnsupportedMediaResponseBody struct {
+// FetchRemoteSessionIssuerMetadataUnsupportedMediaResponseBody is the type of
+// the "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata"
+// endpoint HTTP response body for the "unsupported_media" error.
+type FetchRemoteSessionIssuerMetadataUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -437,10 +458,10 @@ type DiscoverRemoteSessionIssuerUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// DiscoverRemoteSessionIssuerInvalidResponseBody is the type of the
-// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
-// response body for the "invalid" error.
-type DiscoverRemoteSessionIssuerInvalidResponseBody struct {
+// FetchRemoteSessionIssuerMetadataInvalidResponseBody is the type of the
+// "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata" endpoint
+// HTTP response body for the "invalid" error.
+type FetchRemoteSessionIssuerMetadataInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -456,10 +477,10 @@ type DiscoverRemoteSessionIssuerInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// DiscoverRemoteSessionIssuerInvariantViolationResponseBody is the type of the
-// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
-// response body for the "invariant_violation" error.
-type DiscoverRemoteSessionIssuerInvariantViolationResponseBody struct {
+// FetchRemoteSessionIssuerMetadataInvariantViolationResponseBody is the type
+// of the "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata"
+// endpoint HTTP response body for the "invariant_violation" error.
+type FetchRemoteSessionIssuerMetadataInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -475,10 +496,10 @@ type DiscoverRemoteSessionIssuerInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// DiscoverRemoteSessionIssuerUnexpectedResponseBody is the type of the
-// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
-// response body for the "unexpected" error.
-type DiscoverRemoteSessionIssuerUnexpectedResponseBody struct {
+// FetchRemoteSessionIssuerMetadataUnexpectedResponseBody is the type of the
+// "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata" endpoint
+// HTTP response body for the "unexpected" error.
+type FetchRemoteSessionIssuerMetadataUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -494,10 +515,200 @@ type DiscoverRemoteSessionIssuerUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// DiscoverRemoteSessionIssuerGatewayErrorResponseBody is the type of the
-// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
-// response body for the "gateway_error" error.
-type DiscoverRemoteSessionIssuerGatewayErrorResponseBody struct {
+// FetchRemoteSessionIssuerMetadataGatewayErrorResponseBody is the type of the
+// "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata" endpoint
+// HTTP response body for the "gateway_error" error.
+type FetchRemoteSessionIssuerMetadataGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshRemoteSessionIssuerMetadataUnauthorizedResponseBody is the type of
+// the "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata"
+// endpoint HTTP response body for the "unauthorized" error.
+type RefreshRemoteSessionIssuerMetadataUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshRemoteSessionIssuerMetadataForbiddenResponseBody is the type of the
+// "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata" endpoint
+// HTTP response body for the "forbidden" error.
+type RefreshRemoteSessionIssuerMetadataForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshRemoteSessionIssuerMetadataBadRequestResponseBody is the type of the
+// "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata" endpoint
+// HTTP response body for the "bad_request" error.
+type RefreshRemoteSessionIssuerMetadataBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshRemoteSessionIssuerMetadataNotFoundResponseBody is the type of the
+// "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata" endpoint
+// HTTP response body for the "not_found" error.
+type RefreshRemoteSessionIssuerMetadataNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshRemoteSessionIssuerMetadataConflictResponseBody is the type of the
+// "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata" endpoint
+// HTTP response body for the "conflict" error.
+type RefreshRemoteSessionIssuerMetadataConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshRemoteSessionIssuerMetadataUnsupportedMediaResponseBody is the type
+// of the "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata"
+// endpoint HTTP response body for the "unsupported_media" error.
+type RefreshRemoteSessionIssuerMetadataUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshRemoteSessionIssuerMetadataInvalidResponseBody is the type of the
+// "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata" endpoint
+// HTTP response body for the "invalid" error.
+type RefreshRemoteSessionIssuerMetadataInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshRemoteSessionIssuerMetadataInvariantViolationResponseBody is the type
+// of the "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata"
+// endpoint HTTP response body for the "invariant_violation" error.
+type RefreshRemoteSessionIssuerMetadataInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshRemoteSessionIssuerMetadataUnexpectedResponseBody is the type of the
+// "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata" endpoint
+// HTTP response body for the "unexpected" error.
+type RefreshRemoteSessionIssuerMetadataUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshRemoteSessionIssuerMetadataGatewayErrorResponseBody is the type of
+// the "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata"
+// endpoint HTTP response body for the "gateway_error" error.
+type RefreshRemoteSessionIssuerMetadataGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1514,12 +1725,22 @@ type RemoteSessionIssuerResponseBody struct {
 	UpdatedAt                         *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// NewDiscoverRemoteSessionIssuerRequestBody builds the HTTP request body from
-// the payload of the "discoverRemoteSessionIssuer" endpoint of the
+// NewFetchRemoteSessionIssuerMetadataRequestBody builds the HTTP request body
+// from the payload of the "fetchRemoteSessionIssuerMetadata" endpoint of the
 // "remoteSessionIssuers" service.
-func NewDiscoverRemoteSessionIssuerRequestBody(p *remotesessionissuers.DiscoverRemoteSessionIssuerPayload) *DiscoverRemoteSessionIssuerRequestBody {
-	body := &DiscoverRemoteSessionIssuerRequestBody{
+func NewFetchRemoteSessionIssuerMetadataRequestBody(p *remotesessionissuers.FetchRemoteSessionIssuerMetadataPayload) *FetchRemoteSessionIssuerMetadataRequestBody {
+	body := &FetchRemoteSessionIssuerMetadataRequestBody{
 		Issuer: p.Issuer,
+	}
+	return body
+}
+
+// NewRefreshRemoteSessionIssuerMetadataRequestBody builds the HTTP request
+// body from the payload of the "refreshRemoteSessionIssuerMetadata" endpoint
+// of the "remoteSessionIssuers" service.
+func NewRefreshRemoteSessionIssuerMetadataRequestBody(p *remotesessionissuers.RefreshRemoteSessionIssuerMetadataPayload) *RefreshRemoteSessionIssuerMetadataRequestBody {
+	body := &RefreshRemoteSessionIssuerMetadataRequestBody{
+		ID: p.ID,
 	}
 	return body
 }
@@ -1621,10 +1842,10 @@ func NewUpdateRemoteSessionIssuerRequestBody(p *remotesessionissuers.UpdateRemot
 	return body
 }
 
-// NewDiscoverRemoteSessionIssuerRemoteSessionIssuerDraftOK builds a
-// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint result
-// from a HTTP "OK" response.
-func NewDiscoverRemoteSessionIssuerRemoteSessionIssuerDraftOK(body *DiscoverRemoteSessionIssuerResponseBody) *types.RemoteSessionIssuerDraft {
+// NewFetchRemoteSessionIssuerMetadataRemoteSessionIssuerDraftOK builds a
+// "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata" endpoint
+// result from a HTTP "OK" response.
+func NewFetchRemoteSessionIssuerMetadataRemoteSessionIssuerDraftOK(body *FetchRemoteSessionIssuerMetadataResponseBody) *types.RemoteSessionIssuerDraft {
 	v := &types.RemoteSessionIssuerDraft{
 		Issuer:                            *body.Issuer,
 		AuthorizationEndpoint:             body.AuthorizationEndpoint,
@@ -1670,9 +1891,10 @@ func NewDiscoverRemoteSessionIssuerRemoteSessionIssuerDraftOK(body *DiscoverRemo
 	return v
 }
 
-// NewDiscoverRemoteSessionIssuerUnauthorized builds a remoteSessionIssuers
-// service discoverRemoteSessionIssuer endpoint unauthorized error.
-func NewDiscoverRemoteSessionIssuerUnauthorized(body *DiscoverRemoteSessionIssuerUnauthorizedResponseBody) *goa.ServiceError {
+// NewFetchRemoteSessionIssuerMetadataUnauthorized builds a
+// remoteSessionIssuers service fetchRemoteSessionIssuerMetadata endpoint
+// unauthorized error.
+func NewFetchRemoteSessionIssuerMetadataUnauthorized(body *FetchRemoteSessionIssuerMetadataUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1685,9 +1907,9 @@ func NewDiscoverRemoteSessionIssuerUnauthorized(body *DiscoverRemoteSessionIssue
 	return v
 }
 
-// NewDiscoverRemoteSessionIssuerForbidden builds a remoteSessionIssuers
-// service discoverRemoteSessionIssuer endpoint forbidden error.
-func NewDiscoverRemoteSessionIssuerForbidden(body *DiscoverRemoteSessionIssuerForbiddenResponseBody) *goa.ServiceError {
+// NewFetchRemoteSessionIssuerMetadataForbidden builds a remoteSessionIssuers
+// service fetchRemoteSessionIssuerMetadata endpoint forbidden error.
+func NewFetchRemoteSessionIssuerMetadataForbidden(body *FetchRemoteSessionIssuerMetadataForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1700,9 +1922,9 @@ func NewDiscoverRemoteSessionIssuerForbidden(body *DiscoverRemoteSessionIssuerFo
 	return v
 }
 
-// NewDiscoverRemoteSessionIssuerBadRequest builds a remoteSessionIssuers
-// service discoverRemoteSessionIssuer endpoint bad_request error.
-func NewDiscoverRemoteSessionIssuerBadRequest(body *DiscoverRemoteSessionIssuerBadRequestResponseBody) *goa.ServiceError {
+// NewFetchRemoteSessionIssuerMetadataBadRequest builds a remoteSessionIssuers
+// service fetchRemoteSessionIssuerMetadata endpoint bad_request error.
+func NewFetchRemoteSessionIssuerMetadataBadRequest(body *FetchRemoteSessionIssuerMetadataBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1715,9 +1937,9 @@ func NewDiscoverRemoteSessionIssuerBadRequest(body *DiscoverRemoteSessionIssuerB
 	return v
 }
 
-// NewDiscoverRemoteSessionIssuerNotFound builds a remoteSessionIssuers service
-// discoverRemoteSessionIssuer endpoint not_found error.
-func NewDiscoverRemoteSessionIssuerNotFound(body *DiscoverRemoteSessionIssuerNotFoundResponseBody) *goa.ServiceError {
+// NewFetchRemoteSessionIssuerMetadataNotFound builds a remoteSessionIssuers
+// service fetchRemoteSessionIssuerMetadata endpoint not_found error.
+func NewFetchRemoteSessionIssuerMetadataNotFound(body *FetchRemoteSessionIssuerMetadataNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1730,9 +1952,9 @@ func NewDiscoverRemoteSessionIssuerNotFound(body *DiscoverRemoteSessionIssuerNot
 	return v
 }
 
-// NewDiscoverRemoteSessionIssuerConflict builds a remoteSessionIssuers service
-// discoverRemoteSessionIssuer endpoint conflict error.
-func NewDiscoverRemoteSessionIssuerConflict(body *DiscoverRemoteSessionIssuerConflictResponseBody) *goa.ServiceError {
+// NewFetchRemoteSessionIssuerMetadataConflict builds a remoteSessionIssuers
+// service fetchRemoteSessionIssuerMetadata endpoint conflict error.
+func NewFetchRemoteSessionIssuerMetadataConflict(body *FetchRemoteSessionIssuerMetadataConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1745,9 +1967,10 @@ func NewDiscoverRemoteSessionIssuerConflict(body *DiscoverRemoteSessionIssuerCon
 	return v
 }
 
-// NewDiscoverRemoteSessionIssuerUnsupportedMedia builds a remoteSessionIssuers
-// service discoverRemoteSessionIssuer endpoint unsupported_media error.
-func NewDiscoverRemoteSessionIssuerUnsupportedMedia(body *DiscoverRemoteSessionIssuerUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewFetchRemoteSessionIssuerMetadataUnsupportedMedia builds a
+// remoteSessionIssuers service fetchRemoteSessionIssuerMetadata endpoint
+// unsupported_media error.
+func NewFetchRemoteSessionIssuerMetadataUnsupportedMedia(body *FetchRemoteSessionIssuerMetadataUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1760,9 +1983,9 @@ func NewDiscoverRemoteSessionIssuerUnsupportedMedia(body *DiscoverRemoteSessionI
 	return v
 }
 
-// NewDiscoverRemoteSessionIssuerInvalid builds a remoteSessionIssuers service
-// discoverRemoteSessionIssuer endpoint invalid error.
-func NewDiscoverRemoteSessionIssuerInvalid(body *DiscoverRemoteSessionIssuerInvalidResponseBody) *goa.ServiceError {
+// NewFetchRemoteSessionIssuerMetadataInvalid builds a remoteSessionIssuers
+// service fetchRemoteSessionIssuerMetadata endpoint invalid error.
+func NewFetchRemoteSessionIssuerMetadataInvalid(body *FetchRemoteSessionIssuerMetadataInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1775,10 +1998,10 @@ func NewDiscoverRemoteSessionIssuerInvalid(body *DiscoverRemoteSessionIssuerInva
 	return v
 }
 
-// NewDiscoverRemoteSessionIssuerInvariantViolation builds a
-// remoteSessionIssuers service discoverRemoteSessionIssuer endpoint
+// NewFetchRemoteSessionIssuerMetadataInvariantViolation builds a
+// remoteSessionIssuers service fetchRemoteSessionIssuerMetadata endpoint
 // invariant_violation error.
-func NewDiscoverRemoteSessionIssuerInvariantViolation(body *DiscoverRemoteSessionIssuerInvariantViolationResponseBody) *goa.ServiceError {
+func NewFetchRemoteSessionIssuerMetadataInvariantViolation(body *FetchRemoteSessionIssuerMetadataInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1791,9 +2014,9 @@ func NewDiscoverRemoteSessionIssuerInvariantViolation(body *DiscoverRemoteSessio
 	return v
 }
 
-// NewDiscoverRemoteSessionIssuerUnexpected builds a remoteSessionIssuers
-// service discoverRemoteSessionIssuer endpoint unexpected error.
-func NewDiscoverRemoteSessionIssuerUnexpected(body *DiscoverRemoteSessionIssuerUnexpectedResponseBody) *goa.ServiceError {
+// NewFetchRemoteSessionIssuerMetadataUnexpected builds a remoteSessionIssuers
+// service fetchRemoteSessionIssuerMetadata endpoint unexpected error.
+func NewFetchRemoteSessionIssuerMetadataUnexpected(body *FetchRemoteSessionIssuerMetadataUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1806,9 +2029,180 @@ func NewDiscoverRemoteSessionIssuerUnexpected(body *DiscoverRemoteSessionIssuerU
 	return v
 }
 
-// NewDiscoverRemoteSessionIssuerGatewayError builds a remoteSessionIssuers
-// service discoverRemoteSessionIssuer endpoint gateway_error error.
-func NewDiscoverRemoteSessionIssuerGatewayError(body *DiscoverRemoteSessionIssuerGatewayErrorResponseBody) *goa.ServiceError {
+// NewFetchRemoteSessionIssuerMetadataGatewayError builds a
+// remoteSessionIssuers service fetchRemoteSessionIssuerMetadata endpoint
+// gateway_error error.
+func NewFetchRemoteSessionIssuerMetadataGatewayError(body *FetchRemoteSessionIssuerMetadataGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshRemoteSessionIssuerMetadataRemoteSessionIssuerRefreshOK builds a
+// "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata" endpoint
+// result from a HTTP "OK" response.
+func NewRefreshRemoteSessionIssuerMetadataRemoteSessionIssuerRefreshOK(body *RefreshRemoteSessionIssuerMetadataResponseBody) *types.RemoteSessionIssuerRefresh {
+	v := &types.RemoteSessionIssuerRefresh{}
+	v.Issuer = unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(body.Issuer)
+	v.DiscoveryWarnings = make([]string, len(body.DiscoveryWarnings))
+	for i, val := range body.DiscoveryWarnings {
+		v.DiscoveryWarnings[i] = val
+	}
+
+	return v
+}
+
+// NewRefreshRemoteSessionIssuerMetadataUnauthorized builds a
+// remoteSessionIssuers service refreshRemoteSessionIssuerMetadata endpoint
+// unauthorized error.
+func NewRefreshRemoteSessionIssuerMetadataUnauthorized(body *RefreshRemoteSessionIssuerMetadataUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshRemoteSessionIssuerMetadataForbidden builds a remoteSessionIssuers
+// service refreshRemoteSessionIssuerMetadata endpoint forbidden error.
+func NewRefreshRemoteSessionIssuerMetadataForbidden(body *RefreshRemoteSessionIssuerMetadataForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshRemoteSessionIssuerMetadataBadRequest builds a
+// remoteSessionIssuers service refreshRemoteSessionIssuerMetadata endpoint
+// bad_request error.
+func NewRefreshRemoteSessionIssuerMetadataBadRequest(body *RefreshRemoteSessionIssuerMetadataBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshRemoteSessionIssuerMetadataNotFound builds a remoteSessionIssuers
+// service refreshRemoteSessionIssuerMetadata endpoint not_found error.
+func NewRefreshRemoteSessionIssuerMetadataNotFound(body *RefreshRemoteSessionIssuerMetadataNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshRemoteSessionIssuerMetadataConflict builds a remoteSessionIssuers
+// service refreshRemoteSessionIssuerMetadata endpoint conflict error.
+func NewRefreshRemoteSessionIssuerMetadataConflict(body *RefreshRemoteSessionIssuerMetadataConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshRemoteSessionIssuerMetadataUnsupportedMedia builds a
+// remoteSessionIssuers service refreshRemoteSessionIssuerMetadata endpoint
+// unsupported_media error.
+func NewRefreshRemoteSessionIssuerMetadataUnsupportedMedia(body *RefreshRemoteSessionIssuerMetadataUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshRemoteSessionIssuerMetadataInvalid builds a remoteSessionIssuers
+// service refreshRemoteSessionIssuerMetadata endpoint invalid error.
+func NewRefreshRemoteSessionIssuerMetadataInvalid(body *RefreshRemoteSessionIssuerMetadataInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshRemoteSessionIssuerMetadataInvariantViolation builds a
+// remoteSessionIssuers service refreshRemoteSessionIssuerMetadata endpoint
+// invariant_violation error.
+func NewRefreshRemoteSessionIssuerMetadataInvariantViolation(body *RefreshRemoteSessionIssuerMetadataInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshRemoteSessionIssuerMetadataUnexpected builds a
+// remoteSessionIssuers service refreshRemoteSessionIssuerMetadata endpoint
+// unexpected error.
+func NewRefreshRemoteSessionIssuerMetadataUnexpected(body *RefreshRemoteSessionIssuerMetadataUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshRemoteSessionIssuerMetadataGatewayError builds a
+// remoteSessionIssuers service refreshRemoteSessionIssuerMetadata endpoint
+// gateway_error error.
+func NewRefreshRemoteSessionIssuerMetadataGatewayError(body *RefreshRemoteSessionIssuerMetadataGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2751,9 +3145,9 @@ func NewDeleteRemoteSessionIssuerGatewayError(body *DeleteRemoteSessionIssuerGat
 	return v
 }
 
-// ValidateDiscoverRemoteSessionIssuerResponseBody runs the validations defined
-// on DiscoverRemoteSessionIssuerResponseBody
-func ValidateDiscoverRemoteSessionIssuerResponseBody(body *DiscoverRemoteSessionIssuerResponseBody) (err error) {
+// ValidateFetchRemoteSessionIssuerMetadataResponseBody runs the validations
+// defined on FetchRemoteSessionIssuerMetadataResponseBody
+func ValidateFetchRemoteSessionIssuerMetadataResponseBody(body *FetchRemoteSessionIssuerMetadataResponseBody) (err error) {
 	if body.Issuer == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
 	}
@@ -2768,6 +3162,23 @@ func ValidateDiscoverRemoteSessionIssuerResponseBody(body *DiscoverRemoteSession
 	}
 	if body.DiscoveryWarnings == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("discovery_warnings", "body"))
+	}
+	return
+}
+
+// ValidateRefreshRemoteSessionIssuerMetadataResponseBody runs the validations
+// defined on RefreshRemoteSessionIssuerMetadataResponseBody
+func ValidateRefreshRemoteSessionIssuerMetadataResponseBody(body *RefreshRemoteSessionIssuerMetadataResponseBody) (err error) {
+	if body.Issuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
+	}
+	if body.DiscoveryWarnings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("discovery_warnings", "body"))
+	}
+	if body.Issuer != nil {
+		if err2 := ValidateRemoteSessionIssuerResponseBody(body.Issuer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }
@@ -2932,130 +3343,10 @@ func ValidateGetRemoteSessionIssuerResponseBody(body *GetRemoteSessionIssuerResp
 	return
 }
 
-// ValidateDiscoverRemoteSessionIssuerUnauthorizedResponseBody runs the
-// validations defined on discoverRemoteSessionIssuer_unauthorized_response_body
-func ValidateDiscoverRemoteSessionIssuerUnauthorizedResponseBody(body *DiscoverRemoteSessionIssuerUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDiscoverRemoteSessionIssuerForbiddenResponseBody runs the
-// validations defined on discoverRemoteSessionIssuer_forbidden_response_body
-func ValidateDiscoverRemoteSessionIssuerForbiddenResponseBody(body *DiscoverRemoteSessionIssuerForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDiscoverRemoteSessionIssuerBadRequestResponseBody runs the
-// validations defined on discoverRemoteSessionIssuer_bad_request_response_body
-func ValidateDiscoverRemoteSessionIssuerBadRequestResponseBody(body *DiscoverRemoteSessionIssuerBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDiscoverRemoteSessionIssuerNotFoundResponseBody runs the validations
-// defined on discoverRemoteSessionIssuer_not_found_response_body
-func ValidateDiscoverRemoteSessionIssuerNotFoundResponseBody(body *DiscoverRemoteSessionIssuerNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDiscoverRemoteSessionIssuerConflictResponseBody runs the validations
-// defined on discoverRemoteSessionIssuer_conflict_response_body
-func ValidateDiscoverRemoteSessionIssuerConflictResponseBody(body *DiscoverRemoteSessionIssuerConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDiscoverRemoteSessionIssuerUnsupportedMediaResponseBody runs the
+// ValidateFetchRemoteSessionIssuerMetadataUnauthorizedResponseBody runs the
 // validations defined on
-// discoverRemoteSessionIssuer_unsupported_media_response_body
-func ValidateDiscoverRemoteSessionIssuerUnsupportedMediaResponseBody(body *DiscoverRemoteSessionIssuerUnsupportedMediaResponseBody) (err error) {
+// fetchRemoteSessionIssuerMetadata_unauthorized_response_body
+func ValidateFetchRemoteSessionIssuerMetadataUnauthorizedResponseBody(body *FetchRemoteSessionIssuerMetadataUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3077,34 +3368,10 @@ func ValidateDiscoverRemoteSessionIssuerUnsupportedMediaResponseBody(body *Disco
 	return
 }
 
-// ValidateDiscoverRemoteSessionIssuerInvalidResponseBody runs the validations
-// defined on discoverRemoteSessionIssuer_invalid_response_body
-func ValidateDiscoverRemoteSessionIssuerInvalidResponseBody(body *DiscoverRemoteSessionIssuerInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDiscoverRemoteSessionIssuerInvariantViolationResponseBody runs the
+// ValidateFetchRemoteSessionIssuerMetadataForbiddenResponseBody runs the
 // validations defined on
-// discoverRemoteSessionIssuer_invariant_violation_response_body
-func ValidateDiscoverRemoteSessionIssuerInvariantViolationResponseBody(body *DiscoverRemoteSessionIssuerInvariantViolationResponseBody) (err error) {
+// fetchRemoteSessionIssuerMetadata_forbidden_response_body
+func ValidateFetchRemoteSessionIssuerMetadataForbiddenResponseBody(body *FetchRemoteSessionIssuerMetadataForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3126,34 +3393,434 @@ func ValidateDiscoverRemoteSessionIssuerInvariantViolationResponseBody(body *Dis
 	return
 }
 
-// ValidateDiscoverRemoteSessionIssuerUnexpectedResponseBody runs the
-// validations defined on discoverRemoteSessionIssuer_unexpected_response_body
-func ValidateDiscoverRemoteSessionIssuerUnexpectedResponseBody(body *DiscoverRemoteSessionIssuerUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateDiscoverRemoteSessionIssuerGatewayErrorResponseBody runs the
+// ValidateFetchRemoteSessionIssuerMetadataBadRequestResponseBody runs the
 // validations defined on
-// discoverRemoteSessionIssuer_gateway_error_response_body
-func ValidateDiscoverRemoteSessionIssuerGatewayErrorResponseBody(body *DiscoverRemoteSessionIssuerGatewayErrorResponseBody) (err error) {
+// fetchRemoteSessionIssuerMetadata_bad_request_response_body
+func ValidateFetchRemoteSessionIssuerMetadataBadRequestResponseBody(body *FetchRemoteSessionIssuerMetadataBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchRemoteSessionIssuerMetadataNotFoundResponseBody runs the
+// validations defined on
+// fetchRemoteSessionIssuerMetadata_not_found_response_body
+func ValidateFetchRemoteSessionIssuerMetadataNotFoundResponseBody(body *FetchRemoteSessionIssuerMetadataNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchRemoteSessionIssuerMetadataConflictResponseBody runs the
+// validations defined on
+// fetchRemoteSessionIssuerMetadata_conflict_response_body
+func ValidateFetchRemoteSessionIssuerMetadataConflictResponseBody(body *FetchRemoteSessionIssuerMetadataConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchRemoteSessionIssuerMetadataUnsupportedMediaResponseBody runs
+// the validations defined on
+// fetchRemoteSessionIssuerMetadata_unsupported_media_response_body
+func ValidateFetchRemoteSessionIssuerMetadataUnsupportedMediaResponseBody(body *FetchRemoteSessionIssuerMetadataUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchRemoteSessionIssuerMetadataInvalidResponseBody runs the
+// validations defined on fetchRemoteSessionIssuerMetadata_invalid_response_body
+func ValidateFetchRemoteSessionIssuerMetadataInvalidResponseBody(body *FetchRemoteSessionIssuerMetadataInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchRemoteSessionIssuerMetadataInvariantViolationResponseBody runs
+// the validations defined on
+// fetchRemoteSessionIssuerMetadata_invariant_violation_response_body
+func ValidateFetchRemoteSessionIssuerMetadataInvariantViolationResponseBody(body *FetchRemoteSessionIssuerMetadataInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchRemoteSessionIssuerMetadataUnexpectedResponseBody runs the
+// validations defined on
+// fetchRemoteSessionIssuerMetadata_unexpected_response_body
+func ValidateFetchRemoteSessionIssuerMetadataUnexpectedResponseBody(body *FetchRemoteSessionIssuerMetadataUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateFetchRemoteSessionIssuerMetadataGatewayErrorResponseBody runs the
+// validations defined on
+// fetchRemoteSessionIssuerMetadata_gateway_error_response_body
+func ValidateFetchRemoteSessionIssuerMetadataGatewayErrorResponseBody(body *FetchRemoteSessionIssuerMetadataGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshRemoteSessionIssuerMetadataUnauthorizedResponseBody runs the
+// validations defined on
+// refreshRemoteSessionIssuerMetadata_unauthorized_response_body
+func ValidateRefreshRemoteSessionIssuerMetadataUnauthorizedResponseBody(body *RefreshRemoteSessionIssuerMetadataUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshRemoteSessionIssuerMetadataForbiddenResponseBody runs the
+// validations defined on
+// refreshRemoteSessionIssuerMetadata_forbidden_response_body
+func ValidateRefreshRemoteSessionIssuerMetadataForbiddenResponseBody(body *RefreshRemoteSessionIssuerMetadataForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshRemoteSessionIssuerMetadataBadRequestResponseBody runs the
+// validations defined on
+// refreshRemoteSessionIssuerMetadata_bad_request_response_body
+func ValidateRefreshRemoteSessionIssuerMetadataBadRequestResponseBody(body *RefreshRemoteSessionIssuerMetadataBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshRemoteSessionIssuerMetadataNotFoundResponseBody runs the
+// validations defined on
+// refreshRemoteSessionIssuerMetadata_not_found_response_body
+func ValidateRefreshRemoteSessionIssuerMetadataNotFoundResponseBody(body *RefreshRemoteSessionIssuerMetadataNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshRemoteSessionIssuerMetadataConflictResponseBody runs the
+// validations defined on
+// refreshRemoteSessionIssuerMetadata_conflict_response_body
+func ValidateRefreshRemoteSessionIssuerMetadataConflictResponseBody(body *RefreshRemoteSessionIssuerMetadataConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshRemoteSessionIssuerMetadataUnsupportedMediaResponseBody runs
+// the validations defined on
+// refreshRemoteSessionIssuerMetadata_unsupported_media_response_body
+func ValidateRefreshRemoteSessionIssuerMetadataUnsupportedMediaResponseBody(body *RefreshRemoteSessionIssuerMetadataUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshRemoteSessionIssuerMetadataInvalidResponseBody runs the
+// validations defined on
+// refreshRemoteSessionIssuerMetadata_invalid_response_body
+func ValidateRefreshRemoteSessionIssuerMetadataInvalidResponseBody(body *RefreshRemoteSessionIssuerMetadataInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshRemoteSessionIssuerMetadataInvariantViolationResponseBody
+// runs the validations defined on
+// refreshRemoteSessionIssuerMetadata_invariant_violation_response_body
+func ValidateRefreshRemoteSessionIssuerMetadataInvariantViolationResponseBody(body *RefreshRemoteSessionIssuerMetadataInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshRemoteSessionIssuerMetadataUnexpectedResponseBody runs the
+// validations defined on
+// refreshRemoteSessionIssuerMetadata_unexpected_response_body
+func ValidateRefreshRemoteSessionIssuerMetadataUnexpectedResponseBody(body *RefreshRemoteSessionIssuerMetadataUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshRemoteSessionIssuerMetadataGatewayErrorResponseBody runs the
+// validations defined on
+// refreshRemoteSessionIssuerMetadata_gateway_error_response_body
+func ValidateRefreshRemoteSessionIssuerMetadataGatewayErrorResponseBody(body *RefreshRemoteSessionIssuerMetadataGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

@@ -29,6 +29,7 @@ message Finding {
   string source = 15; // Detection source (e.g. "gitleaks", "presidio")
   double confidence = 16; // 0.0-1.0 confidence score
   string dead_letter_reason = 17; // Non-empty => dead-letter sentinel, not a real finding
+  string content_part_id = 18;
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {

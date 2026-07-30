@@ -96,7 +96,7 @@ func BuildUpsertSettingsPayload(skillEfficacyUpsertSettingsBody string, skillEff
 
 // BuildQueryInsightsPayload builds the payload for the skillEfficacy
 // queryInsights endpoint from CLI flags.
-func BuildQueryInsightsPayload(skillEfficacyQueryInsightsSkillIds string, skillEfficacyQueryInsightsFrom string, skillEfficacyQueryInsightsTo string, skillEfficacyQueryInsightsIncludeVersions string, skillEfficacyQueryInsightsIncludeScoredSessions string, skillEfficacyQueryInsightsSessionToken string, skillEfficacyQueryInsightsProjectSlugInput string) (*skillefficacy.QueryInsightsPayload, error) {
+func BuildQueryInsightsPayload(skillEfficacyQueryInsightsSkillIds string, skillEfficacyQueryInsightsFrom string, skillEfficacyQueryInsightsTo string, skillEfficacyQueryInsightsIncludeVersions string, skillEfficacyQueryInsightsIncludeScoredSessions string, skillEfficacyQueryInsightsCursor string, skillEfficacyQueryInsightsLimit string, skillEfficacyQueryInsightsSessionToken string, skillEfficacyQueryInsightsProjectSlugInput string) (*skillefficacy.QueryInsightsPayload, error) {
 	var err error
 	var skillIds []string
 	{
@@ -149,6 +149,32 @@ func BuildQueryInsightsPayload(skillEfficacyQueryInsightsSkillIds string, skillE
 			}
 		}
 	}
+	var cursor *string
+	{
+		if skillEfficacyQueryInsightsCursor != "" {
+			cursor = &skillEfficacyQueryInsightsCursor
+		}
+	}
+	var limit int
+	{
+		if skillEfficacyQueryInsightsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(skillEfficacyQueryInsightsLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if skillEfficacyQueryInsightsSessionToken != "" {
@@ -167,6 +193,8 @@ func BuildQueryInsightsPayload(skillEfficacyQueryInsightsSkillIds string, skillE
 	v.To = to
 	v.IncludeVersions = includeVersions
 	v.IncludeScoredSessions = includeScoredSessions
+	v.Cursor = cursor
+	v.Limit = limit
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

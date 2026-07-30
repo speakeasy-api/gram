@@ -9,6 +9,7 @@ import type { ChatOverview } from "@gram/client/models/components/chatoverview.j
 import {
   AccountType,
   HasRisk,
+  Pinned,
   SortBy,
   SortOrder as ApiSortOrder,
 } from "@gram/client/models/operations/listchats";
@@ -21,9 +22,18 @@ import {
 } from "@gram/client/react-query/listChats.js";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { Badge } from "@/components/ui/badge";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Alert, Button, Icon } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { Pin } from "lucide-react";
+import {
+  useState,
+  useMemo,
+  useCallback,
+  useRef,
+  useEffect,
+  type ReactNode,
+} from "react";
 import { Link, useSearchParams } from "react-router";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
@@ -40,6 +50,7 @@ import { isValidPreset } from "@/components/observe/observeFilterUtils";
 
 type SortField = "chronological" | "messageCount";
 type SortOrder = "asc" | "desc";
+type SessionsView = "all" | "pinned";
 
 function toApiSortBy(field: SortField): SortBy {
   switch (field) {
@@ -59,6 +70,12 @@ function toApiHasRisk(value: string): HasRisk | undefined {
 function toApiAccountType(value: string): AccountType | undefined {
   if (value === "team") return AccountType.Team;
   if (value === "personal") return AccountType.Personal;
+  return undefined;
+}
+
+function toApiPinned(value: string): Pinned | undefined {
+  if (value === "true") return Pinned.True;
+  if (value === "false") return Pinned.False;
   return undefined;
 }
 
@@ -129,14 +146,36 @@ const HAS_RISK_OPTIONS: OptionsById = {
   ],
 };
 
-// Shown when RBAC is on and the caller lacks chat:read: the list is scoped to
-// their own sessions, so explain why and (for admins) point at the roles page
-// where chat:read is granted.
+const SESSIONS_VIEW_OPTIONS: {
+  value: SessionsView;
+  label: ReactNode;
+  tooltip: string;
+}[] = [
+  {
+    value: "all",
+    label: "All",
+    tooltip: "All agent sessions in the current filters",
+  },
+  {
+    value: "pinned",
+    label: (
+      <span className="inline-flex items-center gap-1.5">
+        <Pin className="size-3.5" aria-hidden />
+        Pinned
+      </span>
+    ),
+    tooltip: "Sessions you've pinned for quick access",
+  },
+];
+
+// Shown when the caller lacks chat:read: the list is scoped to their own
+// sessions, so explain why and (for admins) point at the roles page where
+// chat:read is granted.
 function OwnSessionsNotice(): JSX.Element | null {
   const orgRoutes = useOrgRoutes();
-  const { hasScope, isRbacEnabled, isLoading } = useRBAC();
+  const { hasScope, isLoading } = useRBAC();
 
-  if (isLoading || !isRbacEnabled || hasScope("chat:read")) return null;
+  if (isLoading || hasScope("chat:read")) return null;
 
   return (
     <Alert variant="info" dismissible={false} className="text-sm">
@@ -209,6 +248,7 @@ export function LogsAgentsContent(): JSX.Element {
   const urlChatId = searchParams.get("chatId");
   const urlHasRisk = searchParams.get("has_risk");
   const urlAccountType = searchParams.get("account_type");
+  const urlPinned = searchParams.get("pinned");
   const urlSource = searchParams.get("source");
   const urlMinRiskScore = searchParams.get("min_risk_score");
   const urlAssistantId = searchParams.get("assistantId");
@@ -225,6 +265,10 @@ export function LogsAgentsContent(): JSX.Element {
     urlAccountType === "team" || urlAccountType === "personal"
       ? urlAccountType
       : "";
+  // Pinned sessions get a dedicated view (toolbar segment), not a filter chip —
+  // otherwise they disappear into the chronological scroll of All sessions.
+  // Legacy ?pinned=false is ignored so the segment stays a two-way All/Pinned.
+  const sessionsView: SessionsView = urlPinned === "true" ? "pinned" : "all";
   const minRiskScore = useMemo(
     () => parseMinRiskScore(urlMinRiskScore),
     [urlMinRiskScore],
@@ -339,6 +383,13 @@ export function LogsAgentsContent(): JSX.Element {
     [updateSearchParams],
   );
 
+  const setSessionsView = useCallback(
+    (view: SessionsView) => {
+      updateSearchParams({ pinned: view === "pinned" ? "true" : null });
+    },
+    [updateSearchParams],
+  );
+
   const setSources = useCallback(
     (values: string[]) => {
       updateSearchParams({
@@ -366,7 +417,8 @@ export function LogsAgentsContent(): JSX.Element {
   );
 
   // Single setSearchParams so the synchronous clears don't clobber each other
-  // (react-router's setSearchParams reads a memoized snapshot).
+  // (react-router's setSearchParams reads a memoized snapshot). The All/Pinned
+  // view segment is independent of filters, so Reset leaves `pinned` alone.
   const clearAllFilters = useCallback(() => {
     updateSearchParams({
       range: null,
@@ -409,6 +461,7 @@ export function LogsAgentsContent(): JSX.Element {
             minRiskScore !== undefined ? undefined : toApiHasRisk(hasRisk),
           minRiskScore,
           accountType: toApiAccountType(accountType),
+          pinned: toApiPinned(sessionsView === "pinned" ? "true" : ""),
           assistantId: assistantId || undefined,
           source: sources.length ? sources.join(",") : undefined,
           from: timeRange.from,
@@ -442,8 +495,12 @@ export function LogsAgentsContent(): JSX.Element {
     [sourcesData?.sources],
   );
 
+  // Cache the last known total so pagination stays stable while a refetch is
+  // in flight (data briefly undefined). Include 0 so an empty view — e.g.
+  // Pinned after unpinning the last session — does not keep the previous
+  // view's count and leave Next enabled.
   const lastTotalRef = useRef(0);
-  if (data?.total !== undefined && data.total > 0) {
+  if (data?.total !== undefined) {
     lastTotalRef.current = data.total;
   }
   const total = lastTotalRef.current;
@@ -525,6 +582,8 @@ export function LogsAgentsContent(): JSX.Element {
         setHasRisk={setHasRisk}
         accountType={accountType}
         setAccountType={setAccountType}
+        sessionsView={sessionsView}
+        setSessionsView={setSessionsView}
         sources={sources}
         setSources={setSources}
         filterOptions={filterOptions}
@@ -571,6 +630,8 @@ function AgentSessionsPageContent({
   setHasRisk,
   accountType,
   setAccountType,
+  sessionsView,
+  setSessionsView,
   sources,
   setSources,
   filterOptions,
@@ -612,6 +673,8 @@ function AgentSessionsPageContent({
   setHasRisk: (value: string) => void;
   accountType: string;
   setAccountType: (value: string) => void;
+  sessionsView: SessionsView;
+  setSessionsView: (view: SessionsView) => void;
   sources: string[];
   setSources: (values: string[]) => void;
   filterOptions: OptionsById;
@@ -754,6 +817,13 @@ function AgentSessionsPageContent({
               }}
               onClearAll={clearAllFilters}
             />
+            <Page.Toolbar.Actions>
+              <SegmentedControl
+                value={sessionsView}
+                onChange={setSessionsView}
+                options={SESSIONS_VIEW_OPTIONS}
+              />
+            </Page.Toolbar.Actions>
             <Page.Toolbar.SortBy
               value={sortField}
               onChange={(v) => setSortField(v as SortField)}
@@ -782,6 +852,15 @@ function AgentSessionsPageContent({
                 onDeleteChat={onDeleteChat}
                 isLoading={isLoading}
                 error={error}
+                emptyState={
+                  sessionsView === "pinned"
+                    ? {
+                        title: "No pinned sessions",
+                        description:
+                          "Pin a session from All to keep it here for quick access.",
+                      }
+                    : undefined
+                }
               />
             </div>
             {(hasMore || offset > 0) && (

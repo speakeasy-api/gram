@@ -23,6 +23,17 @@ export type UseIssuerDiscoveryInitial = {
   opTosUri: string;
 } | null;
 
+// Which tier's fetchMetadata endpoint the hook calls. Both return the same
+// draft; they differ in what they authorize against.
+//
+// "project" requires an active project and is right for the per-MCP-server
+// authentication sheets, which always operate inside one. "organization"
+// requires org:admin and no project at all, which is what the org-admin Remote
+// Identity Providers surfaces need: an organization-level issuer has no project
+// to authorize against, so calling the project endpoint there authorized
+// against whichever project happened to be active in the session.
+type UseIssuerDiscoveryScope = "project" | "organization";
+
 // Options controlling how `initial` seeds the hook.
 export type UseIssuerDiscoveryOptions = {
   // When false, seed the field values from `initial` but NOT the discovered
@@ -31,6 +42,9 @@ export type UseIssuerDiscoveryOptions = {
   // already-saved issuer. Defaults to true (Modify sheet behavior: seed the
   // snapshot so Reset works and Discover only appears once the URL changes).
   seedSnapshot?: boolean;
+  // Defaults to "project" — the sheets that predate the organization-scoped
+  // endpoint all live inside a project.
+  scope?: UseIssuerDiscoveryScope;
 };
 
 // Encapsulates the Issuer URL + 4 endpoint state, RFC 8414 metadata
@@ -44,6 +58,7 @@ function useIssuerDiscoveryImpl(
 ) {
   const client = useSdkClient();
   const seedSnapshot = options?.seedSnapshot ?? true;
+  const scope = options?.scope ?? "project";
 
   const [issuerUrl, setIssuerUrl] = useState(initial?.issuerUrl ?? "");
   // Tracks the latest Issuer URL so an in-flight discovery's onSuccess can tell
@@ -87,9 +102,14 @@ function useIssuerDiscoveryImpl(
 
   const discoverMutation = useMutation({
     mutationFn: async (url: string): Promise<DiscoveredEndpoints> => {
-      const draft = await client.remoteSessionIssuers.discover({
-        discoverRemoteSessionIssuerRequestBody: { issuer: url },
-      });
+      const draft =
+        scope === "organization"
+          ? await client.organizationRemoteSessionIssuers.fetchMetadata({
+              fetchIssuerMetadataRequestBody: { issuer: url },
+            })
+          : await client.remoteSessionIssuers.fetchMetadata({
+              fetchIssuerMetadataRequestBody: { issuer: url },
+            });
       return {
         url,
         authorizationEndpoint: draft.authorizationEndpoint ?? "",

@@ -93,35 +93,7 @@ func TestServePlatformToolset_AssistantToolCallAudited(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// v1 (thread-scoped) tokens are validated against a real thread row.
-	chatID := uuid.New()
-	err = assistantsrepo.New(ti.conn).UpsertAssistantChat(t.Context(), assistantsrepo.UpsertAssistantChatParams{
-		ChatID:         chatID,
-		ProjectID:      *authCtx.ProjectID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-		UserID:         pgtype.Text{String: authCtx.UserID, Valid: true},
-		Title:          pgtype.Text{},
-	})
-	require.NoError(t, err)
-	threadID, err := assistantsrepo.New(ti.conn).UpsertAssistantThread(t.Context(), assistantsrepo.UpsertAssistantThreadParams{
-		AssistantID:   managedID,
-		ProjectID:     *authCtx.ProjectID,
-		CorrelationID: "audit-test-" + uuid.NewString()[:8],
-		ChatID:        chatID,
-		SourceKind:    "dashboard",
-		SourceRefJson: []byte("{}"),
-	})
-	require.NoError(t, err)
-
-	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine).Generate(assistanttokens.GenerateInput{
-		OrgID:       authCtx.ActiveOrganizationID,
-		ProjectID:   *authCtx.ProjectID,
-		UserID:      authCtx.UserID,
-		AssistantID: managedID,
-		ThreadID:    threadID,
-		TTL:         time.Hour,
-	})
-	require.NoError(t, err)
+	token, threadID := mintThreadAssistantToken(t, ti, authCtx, managedID, "audit-test")
 
 	countBefore, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionAssistantToolCall)
 	require.NoError(t, err)
@@ -167,6 +139,37 @@ func TestServePlatformToolset_AssistantToolCallAudited(t *testing.T) {
 	require.Equal(t, "[REDACTED]", params["api_token"], "secret-shaped params must be scrubbed")
 }
 
+func TestServePlatformToolset_PreservesShareableToolError(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	assistantID := createAssistant(t, ti, authCtx, "Feedback")
+	token, _ := mintThreadAssistantToken(t, ti, authCtx, assistantID, "feedback-error")
+	body, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": platformtools.ToolNamePlatformSkillFeedback,
+			"arguments": map[string]any{
+				"skill":   "missing-skill",
+				"outcome": "did_not_help",
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	w, err := servePlatformHTTP(t, ti, platformtools.AssistantsPlatformToolsetSlug, body, token)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), "call skills_load for this skill before submitting feedback")
+	require.NotContains(t, w.Body.String(), "Internal error")
+}
+
 func createAssistant(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, name string) uuid.UUID {
 	t.Helper()
 	a, err := assistantsrepo.New(ti.conn).CreateAssistant(t.Context(), assistantsrepo.CreateAssistantParams{
@@ -196,6 +199,39 @@ func mintAssistantToken(t *testing.T, ti *testInstance, authCtx *contextvalues.A
 	})
 	require.NoError(t, err)
 	return token
+}
+
+func mintThreadAssistantToken(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, assistantID uuid.UUID, correlationPrefix string) (string, uuid.UUID) {
+	t.Helper()
+
+	chatID := uuid.New()
+	err := assistantsrepo.New(ti.conn).UpsertAssistantChat(t.Context(), assistantsrepo.UpsertAssistantChatParams{
+		ChatID:         chatID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         pgtype.Text{String: authCtx.UserID, Valid: true},
+		Title:          pgtype.Text{},
+	})
+	require.NoError(t, err)
+	threadID, err := assistantsrepo.New(ti.conn).UpsertAssistantThread(t.Context(), assistantsrepo.UpsertAssistantThreadParams{
+		AssistantID:   assistantID,
+		ProjectID:     *authCtx.ProjectID,
+		CorrelationID: correlationPrefix + "-" + uuid.NewString()[:8],
+		ChatID:        chatID,
+		SourceKind:    "dashboard",
+		SourceRefJson: []byte("{}"),
+	})
+	require.NoError(t, err)
+	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine).Generate(assistanttokens.GenerateInput{
+		OrgID:       authCtx.ActiveOrganizationID,
+		ProjectID:   *authCtx.ProjectID,
+		UserID:      authCtx.UserID,
+		AssistantID: assistantID,
+		ThreadID:    threadID,
+		TTL:         time.Hour,
+	})
+	require.NoError(t, err)
+	return token, threadID
 }
 
 func toolsListBody() []byte {

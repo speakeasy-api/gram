@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -53,6 +54,7 @@ type testInstance struct {
 	service        *mcpservers.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
+	dispositions   *mcpservers.ToolDispositionCache
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -71,19 +73,22 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
 	auditLogger := audit.NewLogger()
 
-	svc := mcpservers.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, false)
+	dispositions := mcpservers.NewToolDispositionCache(logger, conn, cache.NewRedisCacheAdapter(redisClient))
+
+	svc := mcpservers.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, dispositions, false)
 
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
+		dispositions:   dispositions,
 	}
 }
 
@@ -152,4 +157,22 @@ func seedTunneledMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	require.NoError(t, err)
 
 	return server.ID
+}
+
+func enableTunneledPublicConsent(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, tunneledServerID uuid.UUID) {
+	t.Helper()
+
+	server, err := tunneledmcprepo.New(conn).GetServerByID(ctx, tunneledmcprepo.GetServerByIDParams{
+		ID:        tunneledServerID,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+
+	_, err = tunneledmcprepo.New(conn).UpdateServer(ctx, tunneledmcprepo.UpdateServerParams{
+		Name:        server.Name,
+		AllowPublic: pgtype.Bool{Bool: true, Valid: true},
+		ID:          tunneledServerID,
+		ProjectID:   projectID,
+	})
+	require.NoError(t, err)
 }

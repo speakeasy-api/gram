@@ -284,20 +284,7 @@ jobs:
       - name: Check formatting
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          set -euo pipefail
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            from_ref=$(git merge-base "$BASE_SHA" HEAD)
-            echo "Checking files changed since merge base $from_ref"
-            args=(--from-ref "$from_ref" --to-ref HEAD)
-          else
-            echo "Checking all files"
-            args=(--all)
-          fi
-          if ! hk check "${args[@]}"; then
-            echo "::error::Formatting check failed. Run 'hk fix --all' locally and commit the result."
-            exit 1
-          fi
+        run: hk check --all
 
       - name: Prune PNPM store
         if: success()
@@ -924,8 +911,17 @@ jobs:
   atlas-push:
     name: Push migrations to Atlas Registry
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes, server-build-lint]
-    if: needs.changes.outputs.server == 'true' && github.event_name != 'merge_group'
+    # Preview environments pin AtlasMigration resources to the
+    # pr-<number>-<8-char head sha> tag, so this must run for every PR head
+    # commit regardless of changed paths (adding the preview label does not
+    # re-run the workflow). Pushing a dir whose content is unchanged from
+    # main deduplicates server-side into a tag alias of the existing
+    # registry version. Forks are excluded because they cannot read
+    # ATLAS_TOKEN, and a skipped job passes ci-gate while a failed one
+    # would not.
+    if: |
+      github.event_name != 'merge_group' &&
+      (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork)
     permissions:
       contents: read
       pull-requests: write
@@ -2044,6 +2040,57 @@ jobs:
         if: success()
         run: pnpm store prune
 
+  # Scans the frontend for UI anti-patterns and "AI slop" tells (side-tab accent
+  # borders, gradient headings, bounce easing, AI-favourite color palettes, ...)
+  # using https://npmjs.com/package/impeccable.
+  #
+  # The tree is clean as of this check's introduction, so the whole frontend is
+  # scanned rather than just the PR diff — a full scan takes ~3 seconds and also
+  # catches regressions in files the PR did not touch. It is deliberately not
+  # path-filtered for the same reason.
+  #
+  # Rule waivers live in .impeccable/config.json (see `impeccable ignores --help`)
+  # or as inline `impeccable-disable-next-line <rule>` comments.
+  impeccable:
+    name: Detect UI anti-patterns
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    # The scan itself takes ~3s; this only guards against a hung npx install.
+    timeout-minutes: 5
+    env:
+      # Pin the CLI so a new release cannot turn a green PR red without a commit.
+      IMPECCABLE_VERSION: "3.4.0"
+      # puppeteer is an optional dependency only used for scanning live URLs. We
+      # scan files, so skip the ~150MB Chromium download.
+      PUPPETEER_SKIP_DOWNLOAD: "1"
+    steps:
+      - name: Checkout source code
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Run impeccable
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          # `detect` exits 0 when clean and 2 when anti-patterns are found.
+          npx --yes "impeccable@${IMPECCABLE_VERSION}" detect --json \
+            client ts-framework functions > findings.json
+          status=$?
+
+          if [ "$status" -ne 0 ] && [ "$status" -ne 2 ]; then
+            echo "::error::impeccable exited with unexpected status $status"
+            cat findings.json || true
+            exit "$status"
+          fi
+
+          node .github/scripts/impeccable-summary.mjs findings.json
+
   # Gate job: aggregates all check results into a single required status check.
   # This allows domain-specific jobs to skip (via job-level `if`) without blocking
   # merge, since skipped jobs don't report a status to rulesets.
@@ -2073,6 +2120,7 @@ jobs:
       - assistant-runtime-image
       - otel-collector
       - ts-framework-test
+      - impeccable
       - golang-migrate-clickhouse
       - lint-migrations
       - atlas-lint

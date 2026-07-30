@@ -303,6 +303,37 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "setPinned")
 	})
 
+	Method("summarize", func() {
+		Description("Generate or return a persisted LLM summary of a chat session transcript. When a summary already exists and regenerate is false, returns the cached summary without calling the model.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The ID of the chat to summarize", func() {
+				Format(FormatUUID)
+			})
+			Attribute("regenerate", Boolean, "When true, regenerate and overwrite any existing summary. Defaults to false.", func() {
+				Default(false)
+			})
+			Required("id")
+		})
+
+		Result(SummarizeChatResult)
+
+		HTTP(func() {
+			POST("/rpc/chat.summarize")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "summarizeChat")
+		Meta("openapi:extension:x-speakeasy-name-override", "summarize")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SummarizeChat"}`)
+	})
+
 	Method("submitFeedback", func() {
 		Description("Submit user feedback for a chat (success/failure)")
 
@@ -392,6 +423,16 @@ var ListChatsResult = Type("ListChatsResult", func() {
 	Required("chats", "total")
 })
 
+var SummarizeChatResult = Type("SummarizeChatResult", func() {
+	Attribute("summary", String, "The session summary text")
+	Attribute("summary_generated_at", String, func() {
+		Description("When the summary was last generated.")
+		Format(FormatDateTime)
+	})
+	Attribute("cached", Boolean, "True when an existing summary was returned without regenerating")
+	Required("summary", "summary_generated_at", "cached")
+})
+
 var ChatOverview = Type("ChatOverview", func() {
 	Attribute("id", String, "The ID of the chat")
 	Attribute("title", String, "The title of the chat")
@@ -421,6 +462,12 @@ var ChatOverview = Type("ChatOverview", func() {
 	Attribute("work_units", Float64, "Work units of value delivered in this chat as judged by the work-units analysis. Absent unless the organization has work-units analysis enabled and this chat has been scored.")
 	Attribute("account_type", String, "Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.")
 	Attribute("account_email", String, "Email of the AI account that produced the chat, resolved from the linked AI account. May differ from the employee's work email (e.g. a personal account).")
+	Attribute("pinned", Boolean, "True when the chat is pinned")
+	Attribute("summary", String, "Persisted LLM summary of the session transcript, if one has been generated")
+	Attribute("summary_generated_at", String, func() {
+		Description("When the session summary was last generated.")
+		Format(FormatDateTime)
+	})
 
 	Required("id", "title", "num_messages", "created_at", "updated_at", "last_message_timestamp")
 })
@@ -428,6 +475,7 @@ var ChatOverview = Type("ChatOverview", func() {
 var Chat = Type("Chat", func() {
 	Extend(ChatOverview)
 	Attribute("messages", ArrayOf(ChatMessage), "The list of messages in the chat for the returned generation, ordered oldest to newest by `seq`.")
+	Attribute("content_parts", ArrayOf(ChatContentPart), "Non-turn content attached to this chat, such as prompt attachments.")
 	Attribute("generation", Int, "The generation that this response's messages belong to. A generation is an immutable snapshot of the transcript; a new one is opened on compaction or message edits, while normal turns append to the current one.")
 	Attribute("max_generation", Int, "The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.")
 	Attribute("has_more_before", Boolean, "Whether older messages exist before the first message in this page (within the returned generation). Load them with a `before_seq` cursor.")
@@ -438,7 +486,24 @@ var Chat = Type("Chat", func() {
 	Attribute("totals", ChatTotals, "Whole-generation trace-entry totals for the returned generation. Because messages are paginated, callers must use these (not the length of `messages`) to render filter-bar counts.")
 	Attribute("work_units_report", String, "Full work-units analysis verdict as JSON (per-task breakdown, rationales, and flags). Present only when `work_units` is present.")
 
-	Required("messages", "generation", "max_generation", "has_more_before", "has_more_after")
+	Required("messages", "content_parts", "generation", "max_generation", "has_more_before", "has_more_after")
+})
+
+var ChatContentPart = Type("ChatContentPart", func() {
+	Attribute("id", String, "The ID of the content part.")
+	Attribute("kind", String, "The content kind, such as prompt_attachment.")
+	Attribute("content", String, "The text content.")
+	Attribute("parent_chat_message_id", String, "The chat message this content hangs off, when resolved.")
+	Attribute("metadata", Any, "Sparse metadata for the content kind.", func() {
+		Meta("struct:field:type", "json.RawMessage", "encoding/json")
+	})
+	Attribute("is_risk", Boolean, "Whether this content part has an active risk finding.")
+	Attribute("created_at", String, func() {
+		Description("When the content part was created.")
+		Format(FormatDateTime)
+	})
+
+	Required("id", "kind", "content", "is_risk", "created_at")
 })
 
 var ChatTotals = Type("ChatTotals", func() {

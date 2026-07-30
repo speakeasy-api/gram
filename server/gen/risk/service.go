@@ -348,6 +348,11 @@ type CreateRiskPolicyPayload struct {
 	// Complete desired canonical URL allow set for this policy. Omit or send empty
 	// to create no URL-specific allow decisions.
 	ShadowMcpAllowedUrls []string `json:"shadow_mcp_allowed_urls"`
+	// Default disposition for shadow MCP blocking policies: block_all (default)
+	// blocks every non-Gram-hosted server unless allowed, allow_all permits every
+	// server unless blocked. Only valid with the shadow_mcp source and block
+	// action. Immutable after create — switching requires delete + recreate.
+	ShadowMcpDisposition *string
 	// Whether the policy name should be auto-generated.
 	AutoName *bool
 	// Optional message shown to end users when this policy blocks an action or
@@ -444,8 +449,8 @@ type EvaluatePromptGuardrailPayload struct {
 	// judge model.
 	ModelConfig *types.RiskPolicyModelConfig
 	// Message types to judge (user_message, assistant_message, tool_request,
-	// tool_response), matching a policy's message_types. When empty or omitted,
-	// judges all supported types.
+	// tool_response, prompt_attachment), matching a policy's message_types. When
+	// empty or omitted, judges all supported types.
 	MessageTypes []string
 	// CEL scope predicate: the replay judges a message only when this boolean
 	// expression is true (in addition to message_types). Omit/empty means all
@@ -821,7 +826,7 @@ type PromptGuardrailMessageVerdict struct {
 	// Message sequence within the chat generation, ascending.
 	Seq int64
 	// The judged message type (user_message, assistant_message, tool_request,
-	// tool_response).
+	// tool_response, prompt_attachment).
 	MessageType string
 	// Tool name for a single-call tool_request message; empty otherwise.
 	ToolName *string
@@ -1306,6 +1311,10 @@ type UpdateRiskPolicyPayload struct {
 	// Complete desired canonical URL allow set for this policy. Omit to preserve;
 	// send empty to clear.
 	ShadowMcpAllowedUrls []string `json:"shadow_mcp_allowed_urls"`
+	// The policy's shadow MCP disposition. Immutable: omit, or send the current
+	// value unchanged; any other value is rejected. Switching posture requires
+	// delete + recreate.
+	ShadowMcpDisposition *string
 	// Whether the policy name should be auto-generated.
 	AutoName *bool
 	// Optional message shown to end users when this policy blocks an action or

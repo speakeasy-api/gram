@@ -11,4 +11,6 @@ func TestSkillEfficacyIsInternalButNotCustomerConfigurable(t *testing.T) {
 
 	require.NotContains(t, ModelUsageSources(), ModelUsageSourceSkillEfficacy)
 	require.Contains(t, GramHostedHookSourceStrings(), string(ModelUsageSourceSkillEfficacy))
+	require.NotContains(t, ModelUsageSources(), ModelUsageSourceSkillSuggestions)
+	require.Contains(t, GramHostedHookSourceStrings(), string(ModelUsageSourceSkillSuggestions))
 }

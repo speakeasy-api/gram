@@ -98,6 +98,8 @@ func TestGeneratePluginPackagesProducesExpectedFiles(t *testing.T) {
 		"cursor-plugins/engineering-tools-cursor/mcp.json",
 		"engineering-tools-codex/.codex-plugin/plugin.json",
 		"engineering-tools-codex/.mcp.json",
+		"opencode-plugins/engineering-tools/plugin/engineering-tools.ts",
+		"opencode-plugins/engineering-tools/engineering-tools/mcp.json",
 	}
 	for _, p := range expectedPaths {
 		_, ok := files[p]
@@ -1082,19 +1084,44 @@ func execCodexInstallScript(t *testing.T, script []byte, home string) {
 
 	bashPath, err := exec.LookPath("bash")
 	require.NoError(t, err, "bash is required to run the generated install script")
-	pythonPath, err := exec.LookPath("python3")
-	require.NoError(t, err, "python3 is required by the generated install script")
 
-	scriptPath := filepath.Join(t.TempDir(), "install.sh")
+	scriptDir := t.TempDir()
+	scriptPath := filepath.Join(scriptDir, "install.sh")
 	require.NoError(t, os.WriteFile(scriptPath, script, 0o755))
 
 	cmd := exec.Command(bashPath, scriptPath)
+	// Run from outside the repository so nothing the script executes can pick
+	// up repo-local configuration by walking up from the working directory.
+	cmd.Dir = scriptDir
 	cmd.Env = []string{
 		"HOME=" + home,
-		"PATH=" + filepath.Dir(pythonPath) + ":/usr/bin:/bin",
+		"PATH=" + realPythonBinDir(t) + ":/usr/bin:/bin",
 	}
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "install script failed: %s", out)
+}
+
+// realPythonBinDir returns a directory whose only entry is a python3 symlink
+// pointing at the real interpreter. exec.LookPath can resolve python3 to a
+// version-manager shim (e.g. mise), and putting the shim directory on the
+// subprocess PATH breaks the test's isolation twice over: the directory holds
+// shims for every managed tool (including codex, defeating the stub), and each
+// shim re-execs the manager, which under the scrubbed HOME cannot see the
+// user's per-machine trust state and refuses to run at all. Asking the
+// interpreter for sys.executable pierces any shim.
+func realPythonBinDir(t *testing.T) string {
+	t.Helper()
+
+	pythonPath, err := exec.LookPath("python3")
+	require.NoError(t, err, "python3 is required by the generated install script")
+	out, err := exec.Command(pythonPath, "-c", "import sys; print(sys.executable)").Output()
+	require.NoError(t, err, "resolve the real python3 interpreter")
+	realPython := strings.TrimSpace(string(out))
+	require.NotEmpty(t, realPython, "sys.executable must not be empty")
+
+	dir := t.TempDir()
+	require.NoError(t, os.Symlink(realPython, filepath.Join(dir, "python3")))
+	return dir
 }
 
 func seededCodexInstallConfig(plugin, marketplace string, approvals []codexHookApproval) string {
@@ -1267,6 +1294,7 @@ func TestCarryHooksSubtreeIsLayoutIndependent(t *testing.T) {
 		prefixes[0] + ".claude-plugin/plugin.json":   []byte("{}"),
 		prefixes[1] + "hooks/hook.sh":                []byte("v14 cursor"),
 		prefixes[2] + "hooks/hook.sh":                []byte("v14 codex"),
+		prefixes[3] + "plugin/agenthooks.ts":         []byte("v14 opencode"),
 		"some-mcp-plugin/.claude-plugin/plugin.json": []byte("{}"),
 	}
 
@@ -1274,7 +1302,7 @@ func TestCarryHooksSubtreeIsLayoutIndependent(t *testing.T) {
 	carriedOrg, carried := carryHooksSubtree(dst, published, []byte(`{"org_name":"Acme"}`), "Renamed Since Publish")
 	require.True(t, carried)
 	require.Equal(t, "Acme", carriedOrg)
-	require.Len(t, dst, 4)
+	require.Len(t, dst, 5)
 	require.Equal(t, []byte("v14 claude"), dst[prefixes[0]+"hooks/hook.sh"])
 	require.NotContains(t, dst, "some-mcp-plugin/.claude-plugin/plugin.json")
 
@@ -1441,7 +1469,7 @@ func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
 		ServerURL:   "https://app.getgram.ai",
 		HooksAPIKey: "gram_local_secret_xyz",
 	}
-	for _, platform := range []string{"claude", "cursor", "codex"} {
+	for _, platform := range []string{"claude", "cursor", "codex", "opencode"} {
 		files, err := GenerateObservabilityPluginPackage(cfg, platform)
 		require.NoError(t, err)
 		for name, content := range files {
@@ -1454,6 +1482,31 @@ func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
 			require.NoError(t, err, "%s %s failed bash -n: %s", platform, name, out)
 		}
 	}
+}
+
+// OpenCode has no hooks.json or plugin manifest — the shim under plugin/ is the
+// whole hook registration — so a regression there is silent. Pin that the
+// package ships the shim wired to serve mode and the sibling speakeasy.json.
+func TestGenerateOpenCodeObservabilityPluginPackage(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "opencode")
+	require.NoError(t, err)
+
+	shim, ok := files["plugin/agenthooks.ts"]
+	require.True(t, ok, "opencode package must ship plugin/agenthooks.ts")
+	require.Contains(t, string(shim), "--provider=opencode")
+	require.Contains(t, string(shim), "speakeasy.json")
+	require.Contains(t, string(shim), "bootstrap.sh")
+
+	_, ok = files["speakeasy.json"]
+	require.True(t, ok, "opencode package must ship speakeasy.json alongside the shim")
+	_, ok = files["hooks/bootstrap.sh"]
+	require.True(t, ok, "opencode package must ship the hooks bootstrapper the shim spawns")
 }
 
 // An upgraded install already carries [hooks.state] entries whose trusted_hash
@@ -1812,10 +1865,12 @@ func TestMCPFingerprintsIsStableAcrossCalls(t *testing.T) {
 func TestMCPFingerprintsIgnoresPerPublishFields(t *testing.T) {
 	t.Parallel()
 	plugins := fingerprintTestPlugins()
+	plugins[0].Skills = []PluginSkillInfo{{Name: "release-notes", Content: "v1"}}
 
 	base, err := MCPFingerprints(plugins, GenerateConfig{
-		OrgName:   "Acme Corp",
-		ServerURL: "https://app.getgram.ai",
+		OrgName:     "Acme Corp",
+		ServerURL:   "https://app.getgram.ai",
+		ProjectSlug: "acme",
 	})
 	require.NoError(t, err)
 
@@ -1824,6 +1879,7 @@ func TestMCPFingerprintsIgnoresPerPublishFields(t *testing.T) {
 	withNoise, err := MCPFingerprints(plugins, GenerateConfig{
 		OrgName:     "Acme Corp",
 		ServerURL:   "https://app.getgram.ai",
+		ProjectSlug: "acme",
 		Version:     "1750000000",
 		APIKey:      "gram_live_realkey",
 		HooksAPIKey: "gram_live_realhookskey",
@@ -1864,7 +1920,12 @@ func TestMCPFingerprintsIsolatesChangePerPlugin(t *testing.T) {
 
 func TestGenerateMCPFilesEmitsDistributedSkills(t *testing.T) {
 	t.Parallel()
-	cfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai"}
+	cfg := GenerateConfig{
+		OrgName:     "Acme Corp",
+		ServerURL:   "https://app.getgram.ai///",
+		HooksAPIKey: "gram_hooks_feedback",
+		ProjectSlug: "acme",
+	}
 	content := "---\nname: release-notes\ndescription: d\n---\n\nbody\n"
 	plugins := []PluginInfo{{
 		Name:        "Engineering Tools",
@@ -1889,6 +1950,153 @@ func TestGenerateMCPFilesEmitsDistributedSkills(t *testing.T) {
 	for p := range files {
 		require.NotContains(t, p, "escape", "invalid skill names must be dropped, not emitted as paths")
 	}
+
+	var claude claudeMCPConfig
+	require.NoError(t, json.Unmarshal(files["engineering-tools/.mcp.json"], &claude))
+	require.Equal(t, claudeMCPServer{
+		Type:    "stdio",
+		Command: "bash",
+		Args:    skillFeedbackMCPArgs("${CLAUDE_PLUGIN_ROOT}"),
+		URL:     "",
+		Headers: nil,
+	}, claude.MCPServers[skillFeedbackMCPServerName])
+
+	var cursor cursorMCPConfig
+	require.NoError(t, json.Unmarshal(files[cursorPluginRoot+"/engineering-tools-cursor/mcp.json"], &cursor))
+	require.Equal(t, cursorMCPServer{
+		Command: "bash",
+		Args:    skillFeedbackMCPArgs("${CURSOR_PLUGIN_ROOT}"),
+		URL:     "",
+		Headers: nil,
+	}, cursor.MCPServers[skillFeedbackMCPServerName])
+
+	var codex codexMCPConfig
+	require.NoError(t, json.Unmarshal(files["engineering-tools-codex/.mcp.json"], &codex))
+	require.Equal(t, codexMCPServer{
+		Command:           "bash",
+		Args:              codexSkillFeedbackMCPArgs("engineering-tools-codex", cfg),
+		URL:               "",
+		BearerTokenEnvVar: "",
+		HTTPHeaders:       nil,
+		EnvHTTPHeaders:    nil,
+	}, codex.MCPServers[skillFeedbackMCPServerName])
+	require.Contains(t, codex.MCPServers[skillFeedbackMCPServerName].Args[1], "${CODEX_HOME:-$HOME/.codex}/plugins/cache/")
+	feedbackJSON, err := json.Marshal(codex.MCPServers[skillFeedbackMCPServerName])
+	require.NoError(t, err)
+	require.NotContains(t, string(feedbackJSON), "url")
+	require.NotContains(t, string(feedbackJSON), "bearer_token_env_var")
+	require.NotContains(t, string(feedbackJSON), "http_headers")
+
+	// The stdio server rides the plugin-local bootstrap script and deployment
+	// identity, so skill-carrying feature plugins ship both.
+	for _, subdir := range []string{"engineering-tools", cursorPluginRoot + "/engineering-tools-cursor", "engineering-tools-codex"} {
+		require.Contains(t, files, subdir+"/hooks/bootstrap.sh")
+		require.Contains(t, string(files[subdir+"/speakeasy.json"]), "gram_hooks_feedback")
+	}
+}
+
+func TestGenerateMCPFilesOmitsSkillFeedbackWithoutSkill(t *testing.T) {
+	t.Parallel()
+	withoutSkill := PluginInfo{
+		Name:   "Engineering Tools",
+		Slug:   "engineering-tools",
+		Skills: []PluginSkillInfo{{Name: "../escape", Content: "invalid"}},
+	}
+	files, err := generateMCPFiles([]PluginInfo{withoutSkill}, GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_hooks_feedback",
+		ProjectSlug: "acme",
+	})
+	require.NoError(t, err)
+	for p, content := range files {
+		require.NotContains(t, string(content), skillFeedbackMCPServerName)
+		require.NotContains(t, p, "speakeasy.json", "plugins without skills must not carry the hooks runtime")
+	}
+}
+
+// The ZIP download path generates with no hooks key. The stdio server still
+// ships — the binary falls back to cached or browser-login credentials — so
+// downloaded packages keep the feedback loop.
+func TestGenerateSinglePluginPackageBundlesSkillFeedbackWithoutKey(t *testing.T) {
+	t.Parallel()
+	withSkill := PluginInfo{
+		Name:   "Engineering Tools",
+		Slug:   "engineering-tools",
+		Skills: []PluginSkillInfo{{Name: "release-notes", Content: "v1"}},
+	}
+	for _, platform := range []string{"claude", "cursor", "codex"} {
+		files, err := GenerateSinglePluginPackage(withSkill, GenerateConfig{
+			ServerURL:   "https://app.getgram.ai",
+			ProjectSlug: "acme",
+		}, platform)
+		require.NoError(t, err)
+		mcpPath := ".mcp.json"
+		if platform == "cursor" {
+			mcpPath = "mcp.json"
+		}
+		require.Contains(t, string(files[mcpPath]), skillFeedbackMCPServerName, platform)
+		require.Contains(t, files, "hooks/bootstrap.sh", platform)
+		require.Contains(t, files, "speakeasy.json", platform)
+	}
+}
+
+func TestGenerateMCPFilesPreservesSkillFeedbackServerCollision(t *testing.T) {
+	t.Parallel()
+	plugin := PluginInfo{
+		Name: "Engineering Tools",
+		Slug: "engineering-tools",
+		Servers: []PluginServerInfo{{
+			DisplayName: skillFeedbackMCPServerName,
+			MCPURL:      "https://user.example.com/mcp",
+		}},
+		Skills: []PluginSkillInfo{{Name: "release-notes", Content: "v1"}},
+	}
+	files, err := generateMCPFiles([]PluginInfo{plugin}, GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		APIKey:      "gram_consumer_key",
+		HooksAPIKey: "gram_hooks_feedback",
+		ProjectSlug: "acme",
+	})
+	require.NoError(t, err)
+
+	var claude claudeMCPConfig
+	require.NoError(t, json.Unmarshal(files["engineering-tools/.mcp.json"], &claude))
+	require.Equal(t, "https://user.example.com/mcp", claude.MCPServers[skillFeedbackMCPServerName].URL)
+	require.Equal(t, "Bearer gram_consumer_key", claude.MCPServers[skillFeedbackMCPServerName].Headers["Authorization"])
+
+	var cursor cursorMCPConfig
+	require.NoError(t, json.Unmarshal(files[cursorPluginRoot+"/engineering-tools-cursor/mcp.json"], &cursor))
+	require.Equal(t, "https://user.example.com/mcp", cursor.MCPServers[skillFeedbackMCPServerName].URL)
+	require.Equal(t, "Bearer gram_consumer_key", cursor.MCPServers[skillFeedbackMCPServerName].Headers["Authorization"])
+
+	var codex codexMCPConfig
+	require.NoError(t, json.Unmarshal(files["engineering-tools-codex/.mcp.json"], &codex))
+	require.Equal(t, "https://user.example.com/mcp", codex.MCPServers[skillFeedbackMCPServerName].URL)
+	require.Equal(t, "Bearer gram_consumer_key", codex.MCPServers[skillFeedbackMCPServerName].HTTPHeaders["Authorization"])
+}
+
+func TestGenerateCodexPluginPreservesNormalizedSkillFeedbackServerCollision(t *testing.T) {
+	t.Parallel()
+	plugin := PluginInfo{
+		Name: "Engineering Tools",
+		Slug: "engineering-tools",
+		Servers: []PluginServerInfo{{
+			DisplayName: "!" + skillFeedbackMCPServerName,
+			MCPURL:      "https://user.example.com/mcp",
+		}},
+		Skills: []PluginSkillInfo{{Name: "release-notes", Content: "v1"}},
+	}
+	files, err := GenerateSinglePluginPackage(plugin, GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		APIKey:      "gram_consumer_key",
+		HooksAPIKey: "gram_hooks_feedback",
+		ProjectSlug: "acme",
+	}, "codex")
+	require.NoError(t, err)
+
+	var config codexMCPConfig
+	require.NoError(t, json.Unmarshal(files[".mcp.json"], &config))
+	require.Equal(t, "https://user.example.com/mcp", config.MCPServers[skillFeedbackMCPServerName].URL)
 }
 
 // Distributing a skill (or changing its resolved content) must move the

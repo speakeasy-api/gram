@@ -12,13 +12,16 @@ vi.mock("@openrouter/ai-sdk-provider", () => ({
 }));
 
 vi.mock("ai", () => ({
-  generateObject: vi.fn(async () => ({
-    object: {
+  generateText: vi.fn(async () => ({
+    output: {
       from: "2026-01-01T00:00:00",
       to: "2026-01-01T23:59:59",
       label: "Jan 1",
     },
   })),
+  Output: {
+    object: vi.fn((opts: unknown) => opts),
+  },
 }));
 
 // Avoid pulling Datadog RUM (and its window access) into the Node test env.
@@ -26,13 +29,79 @@ vi.mock("@/elements/lib/errorTracking", () => ({ trackError: vi.fn() }));
 
 import {
   getPresetRange,
+  parseRelativeTimeRange,
   parseWithAI,
   resolveParsedRange,
 } from "./time-range-picker";
 
+describe("parseRelativeTimeRange", () => {
+  const now = new Date(2026, 6, 27, 15, 30);
+
+  it("parses this month from the first day through now", () => {
+    expect(parseRelativeTimeRange("this month", now)).toEqual({
+      type: "custom",
+      range: {
+        from: new Date(2026, 6, 1),
+        to: now,
+      },
+      label: "Jul",
+    });
+  });
+
+  it("parses this year from January 1 through now", () => {
+    expect(parseRelativeTimeRange("this year", now)).toEqual({
+      type: "custom",
+      range: {
+        from: new Date(2026, 0, 1),
+        to: now,
+      },
+      label: "2026",
+    });
+  });
+
+  it("parses a since date through now", () => {
+    expect(parseRelativeTimeRange("since July 1", now)).toEqual({
+      type: "custom",
+      range: {
+        from: new Date(2026, 6, 1),
+        to: now,
+      },
+      label: "7/1-7/27",
+    });
+  });
+
+  it("uses the most recent matching date when no year is provided", () => {
+    expect(parseRelativeTimeRange("since Dec 1st", now)).toEqual({
+      type: "custom",
+      range: {
+        from: new Date(2025, 11, 1),
+        to: now,
+      },
+      label: "12/1-7/27",
+    });
+  });
+
+  it("rejects invalid and future explicit dates", () => {
+    expect(parseRelativeTimeRange("since February 30", now)).toBeNull();
+    expect(parseRelativeTimeRange("since August 1, 2026", now)).toBeNull();
+  });
+});
+
 describe("parseWithAI request auth", () => {
   beforeEach(() => {
     createOpenRouterMock.mockClear();
+  });
+
+  it("resolves common relative ranges without an API request", async () => {
+    const parsed = await parseWithAI(
+      "this month",
+      "https://app.getgram.ai",
+      "proj-slug",
+      { "Gram-Session": "test-token" },
+    );
+
+    expect(parsed?.type).toBe("custom");
+    expect(createOpenRouterMock).not.toHaveBeenCalled();
   });
 
   // Root-cause regression test: the /chat/completions proxy authenticates from
