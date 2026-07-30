@@ -430,6 +430,24 @@ JOIN assistants a ON a.id = pma.assistant_id
 WHERE pma.project_id = @project_id
   AND a.deleted IS FALSE;
 
+-- name: ReconcileManagedAssistantDefaults :execrows
+-- Moves a project's managed assistant onto the current platform defaults for
+-- model and warm TTL. Only values still equal to a known previous default are
+-- rewritten, so an operator who deliberately changed one keeps their choice.
+-- The two fields are guarded independently: a project may have been created
+-- across two different default eras.
+UPDATE assistants a
+SET
+  model = CASE WHEN a.model = @legacy_model::TEXT THEN @model::TEXT ELSE a.model END,
+  warm_ttl_seconds = CASE WHEN a.warm_ttl_seconds = @legacy_warm_ttl_seconds::BIGINT THEN @warm_ttl_seconds::BIGINT ELSE a.warm_ttl_seconds END,
+  updated_at = clock_timestamp()
+FROM project_managed_assistants pma
+WHERE pma.project_id = @project_id
+  AND a.id = pma.assistant_id
+  AND a.project_id = @project_id
+  AND a.deleted IS FALSE
+  AND (a.model = @legacy_model::TEXT OR a.warm_ttl_seconds = @legacy_warm_ttl_seconds::BIGINT);
+
 -- name: GetProjectName :one
 -- Display name of a project, used to compose the managed assistant's name so
 -- it's distinguishable from other projects' managed assistants in the same org.

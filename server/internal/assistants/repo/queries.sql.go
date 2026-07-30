@@ -2616,6 +2616,47 @@ func (q *Queries) ReapStuckAssistantRuntimes(ctx context.Context, arg ReapStuckA
 	return items, nil
 }
 
+const reconcileManagedAssistantDefaults = `-- name: ReconcileManagedAssistantDefaults :execrows
+UPDATE assistants a
+SET
+  model = CASE WHEN a.model = $1::TEXT THEN $2::TEXT ELSE a.model END,
+  warm_ttl_seconds = CASE WHEN a.warm_ttl_seconds = $3::BIGINT THEN $4::BIGINT ELSE a.warm_ttl_seconds END,
+  updated_at = clock_timestamp()
+FROM project_managed_assistants pma
+WHERE pma.project_id = $5
+  AND a.id = pma.assistant_id
+  AND a.project_id = $5
+  AND a.deleted IS FALSE
+  AND (a.model = $1::TEXT OR a.warm_ttl_seconds = $3::BIGINT)
+`
+
+type ReconcileManagedAssistantDefaultsParams struct {
+	LegacyModel          string
+	Model                string
+	LegacyWarmTtlSeconds int64
+	WarmTtlSeconds       int64
+	ProjectID            uuid.UUID
+}
+
+// Moves a project's managed assistant onto the current platform defaults for
+// model and warm TTL. Only values still equal to a known previous default are
+// rewritten, so an operator who deliberately changed one keeps their choice.
+// The two fields are guarded independently: a project may have been created
+// across two different default eras.
+func (q *Queries) ReconcileManagedAssistantDefaults(ctx context.Context, arg ReconcileManagedAssistantDefaultsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, reconcileManagedAssistantDefaults,
+		arg.LegacyModel,
+		arg.Model,
+		arg.LegacyWarmTtlSeconds,
+		arg.WarmTtlSeconds,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const recordAssistantSkillObservation = `-- name: RecordAssistantSkillObservation :execrows
 WITH observed AS (
   SELECT clock_timestamp() AS seen_at

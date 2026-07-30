@@ -108,41 +108,8 @@ EXAMPLE - LINE CHART (multiple series):
   }
 }
 
-EXAMPLE - PIE CHART:
-{
-  "type": "PieChart",
-  "props": {
-    "title": "Market Share",
-    "data": [
-      { "label": "Product A", "value": 45 },
-      { "label": "Product B", "value": 30 },
-      { "label": "Product C", "value": 25 }
-    ]
-  }
-}
-
-EXAMPLE - DONUT CHART:
-{
-  "type": "DonutChart",
-  "props": {
-    "title": "Budget Allocation",
-    "data": [
-      { "label": "Marketing", "value": 35 },
-      { "label": "Engineering", "value": 45 },
-      { "label": "Operations", "value": 20 }
-    ],
-    "innerValue": "$1.2M",
-    "innerLabel": "Total Budget"
-  }
-}
-
-CHART SELECTION GUIDE:
-- Comparing categories → BarChart
-- Trends over time → LineChart
-- Volume/magnitude over time → AreaChart
-- Part-to-whole (2-6 items) → PieChart or DonutChart
-- Correlation between variables → ScatterChart
-- Multi-dimensional comparison → RadarChart
+Every other chart type follows the same shape — pick it from the one-line
+description above and fill in the props listed with it.
 
 CONTENT GUIDELINES:
 - Outside the code block, describe trends and insights found in the data

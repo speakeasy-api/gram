@@ -32,13 +32,28 @@ var managedAssistantInstructions string
 
 const (
 	// managedAssistantModel is the default model for the platform-managed
-	// assistant. Kept aligned with the in-app default chat model.
-	managedAssistantModel = "anthropic/claude-opus-5"
+	// assistant. Deliberately a tier below the in-app default chat model
+	// (openrouter.DefaultChatModel): the side panel's workload is log search
+	// and tabular summarisation, where time-to-first-token dominates perceived
+	// quality and Opus' slower token rate is felt on every turn.
+	managedAssistantModel = "anthropic/claude-sonnet-5"
 
 	// Schema defaults for the assistants table, applied explicitly so the
 	// managed assistant's intent is visible at the call site.
-	managedAssistantWarmTTLSeconds int64 = 60
+	//
+	// The warm TTL governs how long the assistant's runtime VM survives after
+	// its last turn. It is a latency/cost dial: too short and an ordinary pause
+	// mid-conversation pays another cold boot; too long and idle VMs burn
+	// money. Five minutes covers the read-think-reply rhythm of a side panel.
+	managedAssistantWarmTTLSeconds int64 = 300
 	managedAssistantMaxConcurrency int64 = 10
+
+	// legacyManagedAssistantModel / legacyManagedAssistantWarmTTLSeconds are
+	// the previous defaults. Managed assistants provisioned before this change
+	// still carry them, and nothing else updates those rows — see
+	// ReconcileManagedAssistantDefaults.
+	legacyManagedAssistantModel                = "anthropic/claude-opus-5"
+	legacyManagedAssistantWarmTTLSeconds int64 = 60
 )
 
 // ErrManagedAssistantNameTaken is returned by EnableManagedAssistant when a
@@ -130,6 +145,28 @@ func (s *ServiceCore) GetManagedAssistant(ctx context.Context, projectID uuid.UU
 		return assistantRecord{}, err
 	}
 	return record, nil
+}
+
+// ReconcileManagedAssistantDefaults moves a project's managed assistant onto
+// the current platform defaults for model and warm TTL. The managed assistant
+// is platform-owned configuration, but its row is written once at provisioning
+// time and never revisited, so a change to the defaults would otherwise only
+// reach projects onboarded after the deploy. Values that no longer match a
+// known previous default are left alone.
+//
+// Returns the number of rows moved (0 or 1); callers treat this as best-effort.
+func (s *ServiceCore) ReconcileManagedAssistantDefaults(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	moved, err := assistantrepo.New(s.db).ReconcileManagedAssistantDefaults(ctx, assistantrepo.ReconcileManagedAssistantDefaultsParams{
+		LegacyModel:          legacyManagedAssistantModel,
+		Model:                managedAssistantModel,
+		LegacyWarmTtlSeconds: legacyManagedAssistantWarmTTLSeconds,
+		WarmTtlSeconds:       managedAssistantWarmTTLSeconds,
+		ProjectID:            projectID,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("reconcile managed assistant defaults: %w", err)
+	}
+	return moved, nil
 }
 
 // DisableManagedAssistant turns the managed assistant off for a project: it

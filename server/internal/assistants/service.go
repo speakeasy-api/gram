@@ -3001,6 +3001,27 @@ Two MCP auth events may appear in thread, each as <message-context> block with E
 
 - EventType "assistant_mcp_auth" reports result. Status "success" + still need server → call mcp_force_reconnect with server_id = MCPServerID, then continue task. Status "failed" → inform the user the auth attempt failed, include ErrorDescription if present.`
 
+// composeToolAddendum is source-agnostic guidance for the runner's `compose`
+// tool, which is how every other tool is reached: it runs a Lua script whose
+// `tool(name, input)` helper calls the catalog. Because a script can make any
+// number of calls, branch on their results and post-process them, an extra
+// compose call buys nothing the previous script could not have done — it just
+// costs another model round-trip over a transcript that grows each time. That
+// round-trip is the dominant term in assistant response latency, so the model
+// needs to be told to plan a turn as one script rather than a call-look-call
+// chain.
+const composeToolAddendum = `## Tool use
+
+Every tool runs through ` + "`compose`" + `, which executes a Lua script that calls the catalog via ` + "`tool(name, input)`" + `. A script can make as many calls as it likes, inspect their results, branch, loop, and reshape the output before returning.
+
+Plan each turn as ONE compose script. Every additional compose call is another full model round-trip, and it is the single biggest cause of a slow reply.
+
+- Independent lookups belong in the same script. If you need two breakdowns of the same question, call both there and return them together.
+- A discovery step and the query that depends on it belong in the same script: fetch the discovery result, branch on it in Lua, and run the follow-up call — do not return to yourself to decide.
+- Reduce in Lua, not in the transcript. Filter, aggregate, sort and cut to the rows you will actually cite. Whole-result dumps slow every later turn in the conversation, not just this one.
+- Set explicit limits and narrow time windows on any tool that takes them.
+- A second compose call is warranted only when what to do next genuinely depends on your judgement of the first result, not on a value the script could have read itself.`
+
 func composeInstructions(base string, thread assistantThreadRecord, skills []assistantSkillSnapshot) (string, error) {
 	adapter, err := getSourceAdapter(thread.SourceKind)
 	if err != nil {
@@ -3010,7 +3031,7 @@ func composeInstructions(base string, thread assistantThreadRecord, skills []ass
 	if err != nil {
 		return "", fmt.Errorf("load assistant thread context: %w", err)
 	}
-	parts := make([]string, 0, 4)
+	parts := make([]string, 0, 6)
 	if base != "" {
 		parts = append(parts, base)
 	}
@@ -3024,6 +3045,7 @@ func composeInstructions(base string, thread assistantThreadRecord, skills []ass
 		}
 		parts = append(parts, strings.Join(lines, "\n"))
 	}
+	parts = append(parts, composeToolAddendum)
 	parts = append(parts, mcpAuthAddendum)
 	if guidance := adapter.OutputChannelGuidance(); guidance != "" {
 		parts = append(parts, guidance)

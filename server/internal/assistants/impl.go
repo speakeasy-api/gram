@@ -315,6 +315,11 @@ func (s *Service) GetManagedAssistant(ctx context.Context, _ *gen.GetManagedAssi
 		}
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "get project assistant")
 	}
+	// This read is the dashboard dock resolving its transport on open, so it is
+	// the earliest moment we know a human is about to type. Boot the runtime now
+	// rather than on the first turn — off the request path, since the response
+	// gates the dock's render.
+	s.startRuntimeWarmupDetached(ctx, record)
 	view, err := toHTTPAssistant(record)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").LogError(ctx, s.logger)
@@ -399,6 +404,38 @@ func (s *Service) startRuntimeWarmup(ctx context.Context, record assistantRecord
 		// the first turn boots lazily instead of waiting out the reaper.
 		s.core.ReleaseWarmupRuntime(ctx, record.ProjectID, record.ID, result.ThreadID)
 	}
+}
+
+// startRuntimeWarmupDetached runs the managed assistant's default reconcile and
+// runtime warmup off the request path. Both are idempotent and both write, so
+// they must not ride the request context — it is cancelled as soon as the
+// response is flushed, which would leave a reserved-but-unsignalled runtime row
+// behind. Cheap in the steady state: the reconcile matches no rows once the
+// assistant is on current defaults, and the warmup returns ShouldSignal=false
+// while a live runtime row exists.
+func (s *Service) startRuntimeWarmupDetached(ctx context.Context, record assistantRecord) {
+	if record.Status != StatusActive {
+		return
+	}
+	detached := context.WithoutCancel(ctx)
+	logger := s.logger
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.ErrorContext(detached, "panic in assistant warmup",
+					attr.SlogAssistantID(record.ID.String()),
+					attr.SlogError(fmt.Errorf("%v", r)),
+				)
+			}
+		}()
+		if _, err := s.core.ReconcileManagedAssistantDefaults(detached, record.ProjectID); err != nil {
+			logger.WarnContext(detached, "reconcile project assistant defaults failed",
+				attr.SlogAssistantID(record.ID.String()),
+				attr.SlogError(err),
+			)
+		}
+		s.startRuntimeWarmup(detached, record)
+	}()
 }
 
 func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error, message string) error {

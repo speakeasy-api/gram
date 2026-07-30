@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -190,4 +191,74 @@ func TestEnableManagedAssistantFailsWhenNameTaken(t *testing.T) {
 	// The feature stays off — no mapping was created.
 	_, err = core.GetManagedAssistant(ctx, projectID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+// TestReconcileManagedAssistantDefaultsMovesLegacyRows: managed assistants are
+// written once at provisioning time, so a change to the platform defaults only
+// reaches older projects through the reconcile. It must move rows still sitting
+// on a previous default and leave a deliberately customised one alone.
+func TestReconcileManagedAssistantDefaultsMovesLegacyRows(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_managed_reconcile")
+	require.NoError(t, err)
+	ctx := t.Context()
+
+	core := newProvisioningCore(t, conn)
+	projectID := newProvisioningProject(t, conn, "managed-reconcile")
+
+	record, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1")
+	require.NoError(t, err)
+
+	// A freshly provisioned assistant is already on current defaults.
+	moved, err := core.ReconcileManagedAssistantDefaults(ctx, projectID)
+	require.NoError(t, err)
+	require.Zero(t, moved, "reconcile must be a no-op once the assistant is on current defaults")
+
+	// Rewind it to the previous defaults, as a project provisioned before the
+	// change would be.
+	queries := assistantrepo.New(conn)
+	_, err = queries.UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{
+		Name:           pgtype.Text{},
+		Model:          pgtype.Text{String: legacyManagedAssistantModel, Valid: true},
+		Instructions:   pgtype.Text{},
+		WarmTtlSeconds: pgtype.Int8{Int64: legacyManagedAssistantWarmTTLSeconds, Valid: true},
+		MaxConcurrency: pgtype.Int8{},
+		Status:         pgtype.Text{},
+		AssistantID:    record.ID,
+		ProjectID:      projectID,
+	})
+	require.NoError(t, err)
+
+	moved, err = core.ReconcileManagedAssistantDefaults(ctx, projectID)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, moved)
+
+	updated, err := core.GetManagedAssistant(ctx, projectID)
+	require.NoError(t, err)
+	require.Equal(t, managedAssistantModel, updated.Model)
+	require.EqualValues(t, managedAssistantWarmTTLSeconds, updated.WarmTTLSeconds)
+
+	// A model the operator chose is not a previous default, so it survives —
+	// but the warm TTL, still on a previous default, is moved independently.
+	_, err = queries.UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{
+		Name:           pgtype.Text{},
+		Model:          pgtype.Text{String: "openai/gpt-4o-mini", Valid: true},
+		Instructions:   pgtype.Text{},
+		WarmTtlSeconds: pgtype.Int8{Int64: legacyManagedAssistantWarmTTLSeconds, Valid: true},
+		MaxConcurrency: pgtype.Int8{},
+		Status:         pgtype.Text{},
+		AssistantID:    record.ID,
+		ProjectID:      projectID,
+	})
+	require.NoError(t, err)
+
+	moved, err = core.ReconcileManagedAssistantDefaults(ctx, projectID)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, moved)
+
+	customised, err := core.GetManagedAssistant(ctx, projectID)
+	require.NoError(t, err)
+	require.Equal(t, "openai/gpt-4o-mini", customised.Model, "an operator's model choice must survive reconcile")
+	require.EqualValues(t, managedAssistantWarmTTLSeconds, customised.WarmTTLSeconds)
 }

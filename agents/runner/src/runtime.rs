@@ -434,8 +434,14 @@ async fn spawn_thread(
         .build()
         .map_err(|e| RunnerError::AgentBuild(e.to_string()))?;
 
-    let session = SessionConfig::new(bootstrap.chat_id.clone())
-        .with_cache(PromptCacheRequest::automatic().with_retention(PromptCacheRetention::Short));
+    // Extended (rather than Short) retention: an assistant conversation is a
+    // human typing into a side panel, so gaps between turns routinely exceed
+    // the provider's short cache TTL. The cached prefix is large — system
+    // instructions, skills catalog, output-channel guidance and the Elements
+    // prompt blocks — so a miss costs a full reprocess on every resumed turn.
+    let session = SessionConfig::new(bootstrap.chat_id.clone()).with_cache(
+        PromptCacheRequest::automatic().with_retention(PromptCacheRetention::Extended),
+    );
     let driver = agent
         .start(session)
         .await
