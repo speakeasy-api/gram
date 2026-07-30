@@ -46,6 +46,16 @@ type Service interface {
 	UnmaskRiskResult(context.Context, *UnmaskRiskResultPayload) (res *RiskUnmaskResultResult, err error)
 	// List risk results grouped by chat session for the current project.
 	ListRiskResultsByChat(context.Context, *ListRiskResultsByChatPayload) (res *ListRiskResultsByChatResult, err error)
+	// Mark one or more risk results as manually-reviewed false positives. Distinct
+	// from exclusions: this suppresses the specific results picked, not future
+	// findings matching a rule.
+	MarkRiskResultsFalsePositive(context.Context, *MarkRiskResultsFalsePositivePayload) (err error)
+	// Undo a false-positive dismissal for one or more risk results.
+	UnmarkRiskResultsFalsePositive(context.Context, *UnmarkRiskResultsFalsePositivePayload) (err error)
+	// List risk results manually marked as false positive for the current project
+	// (the Dismissed tab). Kept separate from listRiskResults, which never returns
+	// dismissed results.
+	ListDismissedRiskResults(context.Context, *ListDismissedRiskResultsPayload) (res *ListRiskResultsResult, err error)
 	// Get risk overview metrics and trend data for the current project.
 	GetRiskOverview(context.Context, *GetRiskOverviewPayload) (res *RiskOverviewResult, err error)
 	// Return the canonical risk category definitions: metadata
@@ -175,7 +185,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [43]string{"createRiskPolicy", "listRiskPolicies", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
+var MethodNames = [46]string{"createRiskPolicy", "listRiskPolicies", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
 
 // AcknowledgeRiskPolicyChallengePayload is the payload type of the risk
 // service acknowledgeRiskPolicyChallenge method.
@@ -605,6 +615,18 @@ type ListCustomDetectionRulesResult struct {
 	Rules []*types.RiskCustomDetectionRule
 }
 
+// ListDismissedRiskResultsPayload is the payload type of the risk service
+// listDismissedRiskResults method.
+type ListDismissedRiskResultsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Cursor to fetch the next page of results.
+	Cursor *string
+	// Maximum number of results to return per page.
+	Limit *int
+}
+
 // ListRiskCategoriesPayload is the payload type of the risk service
 // listRiskCategories method.
 type ListRiskCategoriesPayload struct {
@@ -799,6 +821,18 @@ type ListRiskResultsResult struct {
 	TotalCount int64
 	// Cursor for the next page of results.
 	NextCursor *string
+}
+
+// MarkRiskResultsFalsePositivePayload is the payload type of the risk service
+// markRiskResultsFalsePositive method.
+type MarkRiskResultsFalsePositivePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// IDs of the risk results to mark as false positive.
+	ResultIds []string
+	// Optional free-text reason for the dismissal.
+	Reason *string
 }
 
 // PromptGuardrailEvalResult is the result type of the risk service
@@ -1199,6 +1233,16 @@ type TriggerRiskAnalysisPayload struct {
 	// (the recent-N drain budget). Pass 0 to request a full backfill of every
 	// unanalyzed message.
 	Limit int32
+}
+
+// UnmarkRiskResultsFalsePositivePayload is the payload type of the risk
+// service unmarkRiskResultsFalsePositive method.
+type UnmarkRiskResultsFalsePositivePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// IDs of the risk results to restore.
+	ResultIds []string
 }
 
 // UnmaskRiskResultPayload is the payload type of the risk service

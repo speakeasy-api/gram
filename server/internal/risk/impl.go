@@ -22,6 +22,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -128,6 +130,12 @@ type Service struct {
 	// endpoint when FlagRiskOverviewFromClickHouse is on for the org.
 	// Optional: when nil the overview always serves from Postgres.
 	findingsCH *chrepo.Queries
+	// findingsPub republishes an already-persisted finding onto the shared
+	// findings topic to append a ClickHouse state-change row when a result is
+	// manually marked/unmarked false positive (see mirrorFalsePositiveToClickHouse).
+	// Optional: when nil the ClickHouse mirror is skipped; Postgres remains the
+	// source of truth either way.
+	findingsPub gcp.Publisher[*riskv1.Finding]
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -168,6 +176,7 @@ func NewObserver(
 		builtinPresets:               nil,
 		promptJudge:                  nil,
 		findingsCH:                   nil,
+		findingsPub:                  nil,
 	}
 }
 
@@ -194,6 +203,7 @@ func NewService(
 	reconcileShadowMCPPolicyURLs ShadowMCPPolicyURLReconciler,
 	shadowMCPInventoryURLLookup ShadowMCPInventoryURLLookup,
 	findingsCH *chrepo.Queries,
+	findingsPub gcp.Publisher[*riskv1.Finding],
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -222,6 +232,7 @@ func NewService(
 		builtinPresets:               builtinPresets,
 		promptJudge:                  promptJudge,
 		findingsCH:                   findingsCH,
+		findingsPub:                  findingsPub,
 	}
 }
 
@@ -3894,6 +3905,10 @@ func foundRowToResult(
 		MatchRedacted: nil,
 		CreatedAt:     createdAt.Time.Format(time.RFC3339),
 		Replayed:      replayed,
+		// FalsePositiveAt is populated later by callers (ListDismissedRiskResults)
+		// that have a dismissal timestamp to attach; every other caller leaves it
+		// unset since listRiskResults never returns a dismissed result.
+		FalsePositiveAt: nil,
 	}
 }
 

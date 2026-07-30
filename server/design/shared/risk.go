@@ -284,6 +284,9 @@ var RiskResult = Type("RiskResult", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("replayed", Boolean, "True when the scanned message arrived as a replay from a device's offline spool after control-plane downtime — the finding was produced retroactively rather than from live traffic.")
+	Attribute("false_positive_at", String, "When this result was manually marked as a false positive. Null when not dismissed.", func() {
+		Format(FormatDateTime)
+	})
 
 	Required("id", "policy_id", "policy_version", "chat_message_id", "source", "created_at", "replayed")
 })

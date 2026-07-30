@@ -68,6 +68,7 @@ pubsub:
           string source = 15;
           double confidence = 16;
           string dead_letter_reason = 17;
+          string false_positive_at = 18;
         }
       type: PROTOCOL_BUFFER
   - labels:

@@ -447,6 +447,93 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListResultsByChat"}`)
 	})
 
+	Method("markRiskResultsFalsePositive", func() {
+		Description("Mark one or more risk results as manually-reviewed false positives. Distinct from exclusions: this suppresses the specific results picked, not future findings matching a rule.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("result_ids", ArrayOf(String), "IDs of the risk results to mark as false positive.", func() {
+				MinLength(1)
+			})
+			Attribute("reason", String, "Optional free-text reason for the dismissal.")
+			Required("result_ids")
+		})
+
+		HTTP(func() {
+			POST("/rpc/risk.markResultsFalsePositive")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "markRiskResultsFalsePositive")
+		Meta("openapi:extension:x-speakeasy-group", "risk.results")
+		Meta("openapi:extension:x-speakeasy-name-override", "markFalsePositive")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskMarkResultsFalsePositive", "type": "mutation"}`)
+	})
+
+	Method("unmarkRiskResultsFalsePositive", func() {
+		Description("Undo a false-positive dismissal for one or more risk results.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("result_ids", ArrayOf(String), "IDs of the risk results to restore.", func() {
+				MinLength(1)
+			})
+			Required("result_ids")
+		})
+
+		HTTP(func() {
+			POST("/rpc/risk.unmarkResultsFalsePositive")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "unmarkRiskResultsFalsePositive")
+		Meta("openapi:extension:x-speakeasy-group", "risk.results")
+		Meta("openapi:extension:x-speakeasy-name-override", "unmarkFalsePositive")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskUnmarkResultsFalsePositive", "type": "mutation"}`)
+	})
+
+	Method("listDismissedRiskResults", func() {
+		Description("List risk results manually marked as false positive for the current project (the Dismissed tab). Kept separate from listRiskResults, which never returns dismissed results.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("cursor", String, "Cursor to fetch the next page of results.")
+			Attribute("limit", Int, "Maximum number of results to return per page.", func() {
+				Minimum(1)
+				Maximum(200)
+			})
+		})
+
+		Result(ListRiskResultsResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.listDismissedResults")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("cursor")
+			Param("limit")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listDismissedRiskResults")
+		Meta("openapi:extension:x-speakeasy-group", "risk.results")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDismissed")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListDismissedResults", "type": "query"}`)
+	})
+
 	Method("getRiskOverview", func() {
 		Description("Get risk overview metrics and trend data for the current project.")
 

@@ -59,4 +59,7 @@ type RiskResult struct {
 	// spool after control-plane downtime — the finding was produced retroactively
 	// rather than from live traffic.
 	Replayed bool
+	// When this result was manually marked as a false positive. Null when not
+	// dismissed.
+	FalsePositiveAt *string
 }

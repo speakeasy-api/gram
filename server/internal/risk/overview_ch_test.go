@@ -200,6 +200,67 @@ func TestGetRiskOverview_ClickHouseParity(t *testing.T) {
 	require.Equal(t, int64(0), timeSeries["pii|"+bucket(109*time.Hour)])
 }
 
+// TestGetRiskOverview_ClickHouseDedupesAppendedDismissRow covers the case
+// mirrorFalsePositiveToClickHouse actually produces: a finding's original row
+// (false_positive_at NULL) plus a later-inserted row sharing the SAME id with
+// false_positive_at set. A naive "row satisfies false_positive_at IS NULL"
+// filter would still count the id via the stale original row; only picking
+// each id's most-recently-inserted row before filtering excludes it.
+func TestGetRiskOverview_ClickHouseDedupesAppendedDismissRow(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ti.flags.SetFlag(feature.FlagRiskOverviewFromClickHouse, authCtx.ActiveOrganizationID, true)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	now := time.Now().UTC()
+	from := now.AddDate(0, 0, -30).Truncate(24 * time.Hour)
+	to := from.AddDate(0, 0, 1)
+
+	chatID, msgID := seedChatWithUser(t, ti, projectID, orgID, "alice@example.com")
+
+	// A second, untouched finding so the assertion distinguishes "dedup works"
+	// from "nothing was counted at all".
+	live := chOverviewFinding(t, projectID, orgID, chatID, msgID, from.Add(2*time.Hour), "gitleaks", "secret.aws_access_token", "alice@example.com")
+	chQueries := chrepo.New(ti.chConn)
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{live}))
+
+	// The dismissed finding's original row and its later append, sharing one
+	// id. inserted_at is set explicitly (rather than left to the now64(9)
+	// default) so the append is unambiguously the latest row regardless of how
+	// fast the two INSERTs run.
+	dismissedID := uuid.Must(uuid.NewV7())
+	require.NoError(t, ti.chConn.Exec(ctx, `
+		INSERT INTO risk_findings (id, created_at, inserted_at, organization_id, project_id, rule_id, source, category, chat_id)
+		VALUES (?, ?, ?, ?, ?, 'secret.github_pat', 'gitleaks', 'secrets', ?)
+	`, dismissedID, from.Add(3*time.Hour), from.Add(3*time.Hour), orgID, projectID.String(), chatID.String()))
+	require.NoError(t, ti.chConn.Exec(ctx, `
+		INSERT INTO risk_findings (id, created_at, inserted_at, organization_id, project_id, rule_id, source, category, chat_id, false_positive_at)
+		VALUES (?, ?, ?, ?, ?, 'secret.github_pat', 'gitleaks', 'secrets', ?, ?)
+	`, dismissedID, from.Add(3*time.Hour), from.Add(4*time.Hour), orgID, projectID.String(), chatID.String(), from.Add(4*time.Hour)))
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	result, err := ti.service.GetRiskOverview(ctx, &gen.GetRiskOverviewPayload{
+		From: new(from.Format(time.RFC3339)),
+		To:   new(to.Format(time.RFC3339)),
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, int64(1), result.Findings, "the dismissed id's stale original row must not be counted")
+
+	categoryCounts := map[string]int64{}
+	for _, category := range result.TopCategories {
+		categoryCounts[category.Category] = category.Findings
+	}
+	require.Equal(t, int64(1), categoryCounts["secrets"])
+}
+
 // TestGetRiskOverview_ClickHouseUserEmailPrecedence covers the Go-side email
 // resolution that replaces the Postgres users join: a resolvable internal user
 // id wins over the external id, and the users lookup result merges groups.

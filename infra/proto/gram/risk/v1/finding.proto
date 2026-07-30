@@ -30,6 +30,12 @@ message Finding {
   double confidence = 16; // 0.0-1.0 confidence score
   string dead_letter_reason = 17; // Non-empty => dead-letter sentinel, not a real finding
 
+  // Set only when this message re-publishes an already-persisted finding to
+  // record a manual false-positive dismissal/undo (risk.markResultsFalsePositive
+  // / risk.unmarkResultsFalsePositive). Empty on every finding produced by a
+  // scanner. Must be UTC RFC3339 when present, e.g. 2023-01-01T00:00:00Z.
+  string false_positive_at = 18;
+
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {
       seconds: 604800 /* 7 days */

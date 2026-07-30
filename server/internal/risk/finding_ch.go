@@ -197,6 +197,20 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			category = string(categories.Classify(message.GetSource(), message.GetRuleId()))
 		}
 
+		// Set only on messages republished by risk.markResultsFalsePositive /
+		// risk.unmarkResultsFalsePositive to append a state-change row for an
+		// already-persisted finding (see mirrorFalsePositiveToClickHouse). Empty
+		// on every finding a scanner produces.
+		var falsePositiveAt *time.Time
+		if raw := message.GetFalsePositiveAt(); raw != "" {
+			if t, err := time.Parse(time.RFC3339, raw); err != nil {
+				logger.ErrorContext(ctx, "finding has invalid false_positive_at timestamp", attr.SlogError(err), attr.SlogValueString(raw))
+			} else {
+				utc := t.UTC()
+				falsePositiveAt = &utc
+			}
+		}
+
 		rows = append(rows, chrepo.RiskFindingRow{
 			ID:                       id,
 			CreatedAt:                createdAt.UTC(),
@@ -225,6 +239,7 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			FingerprintTenantHS256:   tenantHS256,
 			ExcludedAt:               excludedAt,
 			ExclusionID:              exclusionID,
+			FalsePositiveAt:          falsePositiveAt,
 		})
 	}
 

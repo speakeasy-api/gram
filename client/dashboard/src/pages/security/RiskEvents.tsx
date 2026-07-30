@@ -10,7 +10,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
 import { cn } from "@/lib/utils";
-import { showUndoToast } from "@/lib/toast-undo";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { getPresetRange } from "@/elements";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
@@ -24,11 +23,7 @@ import { History, Share2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
-import {
-  dismissFindings,
-  undoDismiss,
-  useDismissedIds,
-} from "./false-positive-demo-store";
+import { useDismissFinding } from "./useDismissFinding";
 import {
   CategoryLabel,
   EventMatchDialog,
@@ -258,21 +253,18 @@ export default function RiskEvents(): JSX.Element {
   const totalCount = resultsQuery.data?.pages[0]?.totalCount ?? results.length;
   const isInitialLoading = policiesLoading || resultsQuery.isLoading;
 
-  const dismissedIds = useDismissedIds();
+  const { dismiss, isOptimisticallyDismissed } = useDismissFinding();
   const visibleResults = useMemo(
-    () => results.filter((r) => !dismissedIds.has(r.id)),
-    [results, dismissedIds],
+    () => results.filter((r) => !isOptimisticallyDismissed(r.id)),
+    [results, isOptimisticallyDismissed],
   );
   const selection = useRowSelection(visibleResults, (r) => r.id);
   const handleDismissSelected = useCallback(() => {
     const toDismiss = selection.selectedItems;
     if (toDismiss.length === 0) return;
-    dismissFindings(toDismiss);
+    dismiss(toDismiss);
     selection.clear();
-    showUndoToast(`Marked ${toDismiss.length} as false positive`, () =>
-      toDismiss.forEach((r) => undoDismiss(r.id)),
-    );
-  }, [selection]);
+  }, [selection, dismiss]);
 
   const handleScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {

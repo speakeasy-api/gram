@@ -15,12 +15,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { MoreActions, type Action } from "@/components/ui/more-actions";
-import { showUndoToast } from "@/lib/toast-undo";
-import {
-  dismissFindings,
-  undoDismiss,
-  useDismissedIds,
-} from "@/pages/security/false-positive-demo-store";
+import { useDismissFinding } from "@/pages/security/useDismissFinding";
 import {
   collapseToMatchWindows,
   getMatchStrings,
@@ -359,14 +354,14 @@ export function RiskBadge({
    * to the default destructive badge. */
   trigger?: ReactElement;
 }): ReactNode {
-  const dismissedIds = useDismissedIds();
+  const { dismiss, isOptimisticallyDismissed } = useDismissFinding();
   const findings = useMemo(() => {
     const grouped = new Map<
       string,
       { result: RiskResult; spans: FindingSpan[]; count: number }
     >();
     for (const r of results) {
-      if (dismissedIds.has(r.id)) continue;
+      if (isOptimisticallyDismissed(r.id)) continue;
       const spans = spansOf(r);
       const key = `${r.source}|${r.ruleId ?? ""}|${spans
         .map((s) => `${s.field ?? ""}:${s.path ?? ""}:${s.match}`)
@@ -376,7 +371,7 @@ export function RiskBadge({
       else grouped.set(key, { result: r, spans, count: 1 });
     }
     return [...grouped.values()];
-  }, [results, dismissedIds]);
+  }, [results, isOptimisticallyDismissed]);
 
   return (
     <Popover>
@@ -409,12 +404,7 @@ export function RiskBadge({
           findings={findings.map((f) =>
             riskResultToTranscriptFinding({
               ...f,
-              onMarkFalsePositive: () => {
-                dismissFindings([f.result]);
-                showUndoToast("Marked as false positive", () =>
-                  undoDismiss(f.result.id),
-                );
-              },
+              onMarkFalsePositive: () => dismiss([f.result]),
             }),
           )}
         />

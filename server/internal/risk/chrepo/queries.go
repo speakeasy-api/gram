@@ -58,6 +58,11 @@ type RiskFindingRow struct {
 	// ClickHouse columns).
 	ExcludedAt  *time.Time `ch:"excluded_at"`
 	ExclusionID *uuid.UUID `ch:"exclusion_id"`
+
+	// FalsePositiveAt is set when a reviewer manually dismissed this finding
+	// (risk.markResultsFalsePositive), independent of ExcludedAt. Nil for a
+	// freshly-scanned finding or after risk.unmarkResultsFalsePositive.
+	FalsePositiveAt *time.Time `ch:"false_positive_at"`
 }
 
 // chNullable maps a nil pointer to an untyped nil interface so a Nullable
@@ -115,6 +120,7 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			"fingerprint_tenant_hs256",
 			"excluded_at",
 			"exclusion_id",
+			"false_positive_at",
 		)
 
 	for _, row := range rows {
@@ -151,6 +157,7 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			// the column binds as NULL.
 			chNullable(row.ExcludedAt),
 			chNullable(row.ExclusionID),
+			chNullable(row.FalsePositiveAt),
 		)
 	}
 

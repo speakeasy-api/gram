@@ -9,7 +9,6 @@ import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
-import { showUndoToast } from "@/lib/toast-undo";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { type DateRangePreset } from "@/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
@@ -37,11 +36,7 @@ import {
   RevealAllToggle,
   RuleLabel,
 } from "./risk-ui";
-import {
-  dismissFindings,
-  undoDismiss,
-  useDismissedIds,
-} from "./false-positive-demo-store";
+import { useDismissFinding } from "./useDismissFinding";
 
 const RISK_OVERVIEW_PRESETS: DateRangePreset[] = [
   "15m",
@@ -169,21 +164,18 @@ function RiskOverviewCategoryDetailContent() {
   const categoryMeta = RULE_CATEGORY_META[category as RuleCategory];
   const categoryLabel = categoryMeta?.label ?? category;
 
-  const dismissedIds = useDismissedIds();
+  const { dismiss, isOptimisticallyDismissed } = useDismissFinding();
   const visibleResults = useMemo(
-    () => results.filter((r) => !dismissedIds.has(r.id)),
-    [results, dismissedIds],
+    () => results.filter((r) => !isOptimisticallyDismissed(r.id)),
+    [results, isOptimisticallyDismissed],
   );
   const selection = useRowSelection(visibleResults, (r) => r.id);
   const handleDismissSelected = useCallback(() => {
     const toDismiss = selection.selectedItems;
     if (toDismiss.length === 0) return;
-    dismissFindings(toDismiss);
+    dismiss(toDismiss);
     selection.clear();
-    showUndoToast(`Marked ${toDismiss.length} as false positive`, () =>
-      toDismiss.forEach((r) => undoDismiss(r.id)),
-    );
-  }, [selection]);
+  }, [selection, dismiss]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const handleScroll = useCallback(
