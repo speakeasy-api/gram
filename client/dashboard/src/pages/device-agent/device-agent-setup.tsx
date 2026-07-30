@@ -593,6 +593,21 @@ function FleetIdentity() {
 
       <div>
         <SubHeading>Example managed.json</SubHeading>
+        {hasExistingAgentKey && !generatedToken && (
+          <Alert variant="destructive" className="mb-3">
+            <Icon name="triangle-alert" className="h-4 w-4" />
+            <AlertTitle>
+              Rotating this token will break your current MDM integration
+            </AlertTitle>
+            <AlertDescription>
+              Clicking <strong>Rotate token</strong> expires the token currently
+              deployed in your MDM settings. You must replace it with the new{" "}
+              <code>org_token</code> and propagate the updated configuration to
+              every managed device. Until then, policy syncing to end-user
+              devices will not work.
+            </AlertDescription>
+          </Alert>
+        )}
         <CodeBlock language="json" slots={slots}>
           {exampleManagedJson}
         </CodeBlock>
@@ -603,8 +618,10 @@ function FleetIdentity() {
           platform's equivalent) so one profile serves the whole fleet, or omit{" "}
           <code>email</code> and have each user run{" "}
           <code>speakeasy enroll</code>. Click{" "}
-          <strong className="text-foreground">Generate token</strong> in the
-          example to mint the <code>org_token</code>.
+          <strong className="text-foreground">
+            {hasExistingAgentKey ? "Rotate token" : "Generate token"}
+          </strong>{" "}
+          in the example to mint the <code>org_token</code>.
         </Type>
 
         <div className="mt-4 flex flex-col gap-3">
