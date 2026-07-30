@@ -30,6 +30,7 @@ import type { CustomDomainMcpEndpoint } from "@gram/client/models/components/cus
 import { useCustomDomainMcpEndpoints } from "@gram/client/react-query/customDomainMcpEndpoints";
 import { useCheckDomainHealthMutation } from "@gram/client/react-query/checkDomainHealth";
 import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
+import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
 import { invalidateAllListDomains } from "@gram/client/react-query/listDomains";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
 import { useUpdateDomainMutation } from "@gram/client/react-query/updateDomain";
@@ -461,7 +462,10 @@ function ChatGPTAppVerificationControl({
       const updatedToken = updatedDomain.openaiAppsChallengeToken ?? "";
       setToken(updatedToken);
       setError("");
-      await invalidateAllGetDomain(queryClient);
+      await Promise.all([
+        invalidateAllGetDomain(queryClient),
+        invalidateAllListDomains(queryClient),
+      ]);
       toast.success(
         updatedToken
           ? "ChatGPT app verification token saved"

@@ -257,7 +257,7 @@ func TestIngressProvisioner_Delete_EmptySecretNameSkipsSecret(t *testing.T) {
 	t.Parallel()
 	p, cs := newIngressProvisioner(t)
 
-	result, err := p.Setup(t.Context(), "nosecret.example.com", nil)
+	result, err := p.Apply(t.Context(), RouteConfig{Domain: "nosecret.example.com", IPAllowlist: nil, RootTarget: nil})
 	require.NoError(t, err)
 
 	require.NoError(t, p.Delete(t.Context(), result.ResourceName, ""))
