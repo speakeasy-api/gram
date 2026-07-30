@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -29,6 +30,15 @@ type OAuthServiceEnv struct {
 func NewOAuthServiceEnv(t *testing.T, cacheAdapter cache.Cache, enc *encryption.Client) *OAuthServiceEnv {
 	t.Helper()
 
+	return NewOAuthServiceEnvWithDB(t, nil, cacheAdapter, enc)
+}
+
+// NewOAuthServiceEnvWithDB is NewOAuthServiceEnv backed by a live database,
+// for tests exercising handlers that resolve a toolset before doing anything
+// else — the issuer gate on the proxy endpoints.
+func NewOAuthServiceEnvWithDB(t *testing.T, db *pgxpool.Pool, cacheAdapter cache.Cache, enc *encryption.Client) *OAuthServiceEnv {
+	t.Helper()
+
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
@@ -36,7 +46,7 @@ func NewOAuthServiceEnv(t *testing.T, cacheAdapter cache.Cache, enc *encryption.
 	serverURL, err := url.Parse("http://0.0.0.0")
 	require.NoError(t, err)
 
-	svc := oauth.NewService(logger, tracerProvider, meterProvider, nil, serverURL, cacheAdapter, enc, nil, nil, nil, nil)
+	svc := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cacheAdapter, enc, nil, nil, nil, nil)
 
 	return &OAuthServiceEnv{
 		TokenIssuer: NewTokenIssuer(t, cacheAdapter, enc),
