@@ -21,6 +21,8 @@ import (
 // forwarding logic, gram's hand-maintained copy must be re-synced — this test
 // fails when it isn't.
 func TestOpenCodeShimBodyMatchesAgentHooks(t *testing.T) {
+	t.Parallel()
+
 	fsys, err := install.Render(
 		install.Manifest{Command: []string{"speakeasy-hooks"}},
 		install.Target{Provider: agenthooks.ProviderOpenCode, Scope: install.ScopeProject, Dir: "."},
