@@ -95,9 +95,11 @@ type Service struct {
 	gramProvider              *providers.GramProvider
 	customProvider            *providers.CustomProvider
 	upstreamPKCEStorage       cache.TypedCacheObject[UpstreamPKCEVerifier]
+	pendingConsentStorage     cache.TypedCacheObject[PendingConsent]
 	guardianPolicy            *guardian.Policy
 	successPageTmpl           *template.Template
 	failurePageTmpl           *template.Template
+	consentPageTmpl           *template.Template
 	oauthStatusPageScriptHash string
 	oauthStatusPageScriptData []byte
 }
@@ -119,6 +121,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 	// Parse templates once during initialization
 	successPageTmpl := template.Must(template.New("oauth_success").Parse(oauthSuccessPageTmplData))
 	failurePageTmpl := template.Must(template.New("oauth_failure").Parse(oauthFailurePageTmplData))
+	consentPageTmpl := template.Must(template.New("oauth_consent").Parse(consentPageTmplData))
 
 	// Calculate content hash for success script (for cache busting)
 	hash := sha256.Sum256(oauthSuccessScriptData)
@@ -145,14 +148,16 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		identity:           identityResolver,
 
 		// OAuth providers
-		gramProvider:        gramProvider,
-		customProvider:      customProvider,
-		upstreamPKCEStorage: cache.NewTypedObjectCache[UpstreamPKCEVerifier](logger.With(attr.SlogCacheNamespace("upstream_pkce")), cacheImpl, cache.SuffixNone),
-		guardianPolicy:      guardianPolicy,
+		gramProvider:          gramProvider,
+		customProvider:        customProvider,
+		upstreamPKCEStorage:   cache.NewTypedObjectCache[UpstreamPKCEVerifier](logger.With(attr.SlogCacheNamespace("upstream_pkce")), cacheImpl, cache.SuffixNone),
+		pendingConsentStorage: cache.NewTypedObjectCache[PendingConsent](logger.With(attr.SlogCacheNamespace("oauth_pending_consent")), cacheImpl, cache.SuffixNone),
+		guardianPolicy:        guardianPolicy,
 
 		// HTML templates
 		successPageTmpl: successPageTmpl,
 		failurePageTmpl: failurePageTmpl,
+		consentPageTmpl: consentPageTmpl,
 
 		// Success page script with hash for cache busting
 		oauthStatusPageScriptHash: scriptHash,
@@ -179,6 +184,12 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	// OAuth 2.1 Token Endpoint
 	o11y.AttachHandler(mux, "POST", "/oauth/{mcpSlug}/token", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.handleToken).ServeHTTP(w, r)
+	})
+
+	// Consent decision. POST-only: the consent page itself is rendered
+	// inline by the authorization callback, not fetched from here.
+	o11y.AttachHandler(mux, "POST", "/oauth/{mcpSlug}/consent", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.handleConsent).ServeHTTP(w, r)
 	})
 
 	// OAuth Proxy DCR helper — performs Dynamic Client Registration against an
@@ -758,26 +769,52 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 	s.logger.InfoContext(ctx, "authorization grant created after external provider callback",
 		attr.SlogOAuthClientID(authReq.ClientID))
 
-	// Build authorization response and redirect back to client
+	// Build both terminal responses up front and park them server-side. The
+	// authorization code stays out of the front-channel until the user acts
+	// on the consent screen, so an upstream session that resumed without
+	// prompting still cannot complete the client's authorization on its own.
 	responseURL, err := s.grantManager.BuildAuthorizationResponse(ctx, grant, authReq.RedirectURI)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "failed to build authorization response").LogError(ctx, s.logger)
 	}
 
-	if provider.ProviderType == string(OAuthProxyProviderTypeGram) {
-		data := gramOAuthResultPageData{
-			RedirectURL:      template.URL(responseURL), // #nosec G203 // This has been checked and escaped
-			ScriptHash:       s.oauthStatusPageScriptHash,
-			ErrorDescription: "",
-			ErrorCode:        "",
-		}
+	denyURL, err := s.grantManager.BuildErrorResponse(ctx, authReq.RedirectURI, "access_denied", "The user denied the authorization request.", authReq.State)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build consent denial response").LogError(ctx, s.logger)
+	}
 
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := s.successPageTmpl.Execute(w, data); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to render oauth success page").LogError(ctx, s.logger)
-		}
-	} else {
-		http.Redirect(w, r, responseURL, http.StatusFound)
+	consentID := uuid.NewString()
+	if err := s.pendingConsentStorage.Store(ctx, PendingConsent{
+		ID:            consentID,
+		ToolsetID:     toolset.ID,
+		Code:          grant.Code,
+		ApproveURL:    responseURL,
+		DenyURL:       denyURL,
+		ClientID:      authReq.ClientID,
+		MCPSlug:       mcpSlug,
+		UseResultPage: provider.ProviderType == string(OAuthProxyProviderTypeGram),
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "store pending consent").LogError(ctx, s.logger)
+	}
+
+	// Client name is display-only; an unregistered-but-valid client falls
+	// back to its ID rather than failing the flow this late.
+	clientName := authReq.ClientID
+	if client, err := s.clientRegistration.GetClient(ctx, fullMCPURL, authReq.ClientID); err == nil && client.ClientName != "" {
+		clientName = client.ClientName
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.consentPageTmpl.Execute(w, consentPageData{
+		ConsentID:    consentID,
+		ClientName:   clientName,
+		MCPSlug:      mcpSlug,
+		MCPURL:       fullMCPURL,
+		RedirectURI:  authReq.RedirectURI,
+		ProviderSlug: provider.Slug,
+		Scopes:       strings.Fields(authReq.Scope),
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "render oauth consent page").LogError(ctx, s.logger)
 	}
 
 	return nil

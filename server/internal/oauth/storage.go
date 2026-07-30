@@ -143,3 +143,47 @@ func (v UpstreamPKCEVerifier) AdditionalCacheKeys() []string {
 func (v UpstreamPKCEVerifier) TTL() time.Duration {
 	return 10 * time.Minute
 }
+
+var _ cache.CacheableObject[PendingConsent] = (*PendingConsent)(nil)
+
+// PendingConsent parks a finished authorization server-side while the user
+// decides on the consent screen. The upstream callback mints the grant as
+// usual but does not hand the code to the MCP client, so both terminal URLs
+// are built up front and exactly one of them is ever served.
+//
+// Only the opaque ID traverses the front-channel. The MCP client cannot
+// influence either URL, which is what keeps the POST-back from becoming an
+// open redirect.
+type PendingConsent struct {
+	ID        string    `json:"id"`
+	ToolsetID uuid.UUID `json:"toolset_id"`
+	// Code is the authorization code embedded in ApproveURL, retained so a
+	// denial can revoke the grant it points at.
+	Code       string `json:"code"`
+	ApproveURL string `json:"approve_url"`
+	DenyURL    string `json:"deny_url"`
+	ClientID   string `json:"client_id"`
+	MCPSlug    string `json:"mcp_slug"`
+	// UseResultPage mirrors the callback's provider split: Gram-managed
+	// providers finish in a hosted status page that reports back and closes
+	// the popup, custom providers finish in a bare 302.
+	UseResultPage bool `json:"use_result_page"`
+}
+
+func PendingConsentCacheKey(id string) string {
+	return "oauthPendingConsent:" + id
+}
+
+func (p PendingConsent) CacheKey() string {
+	return PendingConsentCacheKey(p.ID)
+}
+
+func (p PendingConsent) AdditionalCacheKeys() []string {
+	return []string{}
+}
+
+func (p PendingConsent) TTL() time.Duration {
+	// Matches the grant expiration in GrantManager: once the code behind
+	// ApproveURL is dead there is nothing left to consent to.
+	return 10 * time.Minute
+}

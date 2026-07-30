@@ -323,6 +323,16 @@ func (gm *GrantManager) getGrant(ctx context.Context, toolsetId uuid.UUID, code 
 	return &grant, nil
 }
 
+// RevokeGrant drops a grant without redeeming it, so an authorization the
+// user declined on the consent screen leaves no code behind that the MCP
+// client could still exchange.
+func (gm *GrantManager) RevokeGrant(ctx context.Context, toolsetID uuid.UUID, code string) error {
+	if err := gm.grantStorage.DeleteByKey(ctx, GrantCacheKey(toolsetID, code)); err != nil {
+		return fmt.Errorf("revoke grant: %w", err)
+	}
+	return nil
+}
+
 func (gm *GrantManager) deleteGrant(ctx context.Context, grant Grant) error {
 	if err := gm.grantStorage.Delete(ctx, grant); err != nil {
 		return fmt.Errorf("failed to delete grant: %w", err)
