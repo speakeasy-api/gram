@@ -106,12 +106,12 @@ export default function SkillsList(): JSX.Element {
   const metricsBySkill = useMemo(
     () =>
       new Map(
-        insightsQuery.data?.insights.map((insight) => [
+        insightsQuery.data?.result.insights.map((insight) => [
           insight.skillId,
           insight.metrics,
         ]) ?? [],
       ),
-    [insightsQuery.data?.insights],
+    [insightsQuery.data?.result.insights],
   );
   const active =
     deferredSearch.trim().length > 0 ||

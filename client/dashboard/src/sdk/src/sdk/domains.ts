@@ -5,12 +5,14 @@
 import { domainsCheckHealth } from "../funcs/domainsCheckHealth.js";
 import { domainsDeleteDomain } from "../funcs/domainsDeleteDomain.js";
 import { domainsGetDomain } from "../funcs/domainsGetDomain.js";
+import { domainsListDomains } from "../funcs/domainsListDomains.js";
 import { domainsListMcpEndpoints } from "../funcs/domainsListMcpEndpoints.js";
 import { domainsRegisterDomain } from "../funcs/domainsRegisterDomain.js";
 import { domainsUpdateDomain } from "../funcs/domainsUpdateDomain.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CustomDomain } from "../models/components/customdomain.js";
 import { ListCustomDomainMcpEndpointsResult } from "../models/components/listcustomdomainmcpendpointsresult.js";
+import { ListCustomDomainsResult } from "../models/components/listcustomdomainsresult.js";
 import {
   CheckDomainHealthRequest,
   CheckDomainHealthSecurity,
@@ -27,6 +29,10 @@ import {
   ListCustomDomainMcpEndpointsRequest,
   ListCustomDomainMcpEndpointsSecurity,
 } from "../models/operations/listcustomdomainmcpendpoints.js";
+import {
+  ListDomainsRequest,
+  ListDomainsSecurity,
+} from "../models/operations/listdomains.js";
 import {
   RegisterDomainRequest,
   RegisterDomainSecurity,
@@ -88,6 +94,25 @@ export class Domains extends ClientSDK {
     options?: RequestOptions,
   ): Promise<CustomDomain> {
     return unwrapAsync(domainsGetDomain(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listDomains domains
+   *
+   * @remarks
+   * List the custom domains for an organization. The result is empty when no custom domain has been configured.
+   */
+  async listDomains(
+    request?: ListDomainsRequest | undefined,
+    security?: ListDomainsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListCustomDomainsResult> {
+    return unwrapAsync(domainsListDomains(
       this,
       request,
       security,

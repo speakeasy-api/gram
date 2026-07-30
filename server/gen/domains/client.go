@@ -16,6 +16,7 @@ import (
 // Client is the "domains" service client.
 type Client struct {
 	GetDomainEndpoint        goa.Endpoint
+	ListDomainsEndpoint      goa.Endpoint
 	CreateDomainEndpoint     goa.Endpoint
 	UpdateDomainEndpoint     goa.Endpoint
 	CheckHealthEndpoint      goa.Endpoint
@@ -24,9 +25,10 @@ type Client struct {
 }
 
 // NewClient initializes a "domains" service client given the endpoints.
-func NewClient(getDomain, createDomain, updateDomain, checkHealth, deleteDomain, listMcpEndpoints goa.Endpoint) *Client {
+func NewClient(getDomain, listDomains, createDomain, updateDomain, checkHealth, deleteDomain, listMcpEndpoints goa.Endpoint) *Client {
 	return &Client{
 		GetDomainEndpoint:        getDomain,
+		ListDomainsEndpoint:      listDomains,
 		CreateDomainEndpoint:     createDomain,
 		UpdateDomainEndpoint:     updateDomain,
 		CheckHealthEndpoint:      checkHealth,
@@ -55,6 +57,28 @@ func (c *Client) GetDomain(ctx context.Context, p *GetDomainPayload) (res *Custo
 		return
 	}
 	return ires.(*CustomDomain), nil
+}
+
+// ListDomains calls the "listDomains" endpoint of the "domains" service.
+// ListDomains may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListDomains(ctx context.Context, p *ListDomainsPayload) (res *ListCustomDomainsResult, err error) {
+	var ires any
+	ires, err = c.ListDomainsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListCustomDomainsResult), nil
 }
 
 // CreateDomain calls the "createDomain" endpoint of the "domains" service.
