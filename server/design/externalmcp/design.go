@@ -284,14 +284,16 @@ var MCPSetupGuide = Type("MCPSetupGuide", func() {
 	Attribute("add_server_flow", String, "How the server is meant to be added in Gram, when the guide states one (e.g., 'catalog', 'custom-remote')")
 	Attribute("aliases", ArrayOf(String), "Registry identifiers the guide is also published under")
 	Attribute("remotes", ArrayOf(MCPSetupGuideRemote), "Endpoints documented by the guide")
-	Attribute("matched_remote_ids", ArrayOf(String), "IDs of the documented endpoints the lookup matched. Empty when the lookup only identified the guide and not a specific endpoint, which is always the case for an 'alias' match.")
+	Attribute("matched_remote_id", String, "ID of the documented endpoint the lookup matched. Absent when the lookup identified the guide and not a specific endpoint, which is always the case for an 'alias' match.", func() {
+		Example("hosted")
+	})
 	Attribute("match_kind", String, "How the lookup matched this guide. The most specific kind, when both lookup keys matched it.", func() {
 		Enum("endpoint", "alias")
 	})
 	Attribute("external_markdown", String, "Markdown instructions for the setup work that happens in the upstream provider")
 	Attribute("speakeasy_markdown", String, "Markdown instructions for the setup work that happens in Gram")
 
-	Required("slug", "title", "summary", "aliases", "remotes", "matched_remote_ids", "match_kind", "external_markdown", "speakeasy_markdown")
+	Required("slug", "title", "summary", "aliases", "remotes", "match_kind", "external_markdown", "speakeasy_markdown")
 })
 
 var MCPSetupGuideRemote = Type("MCPSetupGuideRemote", func() {

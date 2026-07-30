@@ -22,10 +22,10 @@ type MCPSetupGuide struct {
 	Aliases []string
 	// Endpoints documented by the guide
 	Remotes []*MCPSetupGuideRemote
-	// IDs of the documented endpoints the lookup matched. Empty when the lookup
-	// only identified the guide and not a specific endpoint, which is always the
-	// case for an 'alias' match.
-	MatchedRemoteIds []string
+	// ID of the documented endpoint the lookup matched. Absent when the lookup
+	// identified the guide and not a specific endpoint, which is always the case
+	// for an 'alias' match.
+	MatchedRemoteID *string
 	// How the lookup matched this guide. The most specific kind, when both lookup
 	// keys matched it.
 	MatchKind string

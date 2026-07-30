@@ -1,6 +1,7 @@
 package externalmcp_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 	guides "github.com/speakeasy-api/mcp-setup-docs/go"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_registries"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -21,23 +23,18 @@ func setupDocsFixture(t *testing.T) (guides.Guide, string, guides.Remote) {
 	t.Helper()
 
 	for _, guide := range guides.Guides() {
-		for _, alias := range guide.Aliases {
-			byAlias := guides.Resolve(alias)
-			if len(byAlias) == 0 || byAlias[0].Kind != guides.MatchAlias {
-				continue
-			}
-			if !allMatchGuide(byAlias, guide.Slug) {
+		alias, ok := unambiguousAlias(guide)
+		if !ok {
+			continue
+		}
+
+		for _, remote := range guide.Remotes {
+			byURL := guides.ByURL(remote.URL)
+			if len(byURL) != 1 || byURL[0].Ref != (guides.ServerRef{Guide: guide.Slug, Remote: remote.ID}) {
 				continue
 			}
 
-			for _, remote := range guide.Remotes {
-				byURL := guides.ByURL(remote.URL)
-				if len(byURL) != 1 || byURL[0].Ref != (guides.ServerRef{Guide: guide.Slug, Remote: remote.ID}) {
-					continue
-				}
-
-				return guide, alias, remote
-			}
+			return guide, alias, remote
 		}
 	}
 
@@ -46,14 +43,22 @@ func setupDocsFixture(t *testing.T) (guides.Guide, string, guides.Remote) {
 	return guides.Guide{}, "", guides.Remote{}
 }
 
-func allMatchGuide(matches []guides.Match, slug guides.GuideSlug) bool {
-	for _, match := range matches {
-		if match.Ref.Guide != slug {
-			return false
+// unambiguousAlias returns a registry alias that resolves to this guide and to no
+// other.
+func unambiguousAlias(guide guides.Guide) (string, bool) {
+	for _, alias := range guide.Aliases {
+		matches := guides.Resolve(alias)
+		if len(matches) == 0 || matches[0].Kind != guides.MatchAlias {
+			continue
 		}
+		if slices.ContainsFunc(matches, func(m guides.Match) bool { return m.Ref.Guide != guide.Slug }) {
+			continue
+		}
+
+		return alias, true
 	}
 
-	return true
+	return "", false
 }
 
 func TestExternalMCP_GetSetupDocs_ByRegistrySpecifier(t *testing.T) {
@@ -139,7 +144,7 @@ func TestExternalMCP_GetSetupDocs_ByServerURL(t *testing.T) {
 	require.Len(t, result.Guides, 1)
 	require.Equal(t, string(guide.Slug), result.Guides[0].Slug)
 	require.Equal(t, "endpoint", result.Guides[0].MatchKind)
-	require.Equal(t, []string{string(remote.ID)}, result.Guides[0].MatchedRemoteIds)
+	require.Equal(t, string(remote.ID), conv.PtrValOr(result.Guides[0].MatchedRemoteID, ""))
 }
 
 // The catalog knows a server's endpoint URL and its registry identifier, so it
@@ -163,11 +168,11 @@ func TestExternalMCP_GetSetupDocs_BothKeysResolveToOneGuide(t *testing.T) {
 	// The identifier is resolved first, but the URL pinned an exact endpoint, so
 	// the more specific of the two matches wins the match kind.
 	require.Equal(t, "endpoint", result.Guides[0].MatchKind)
-	require.Contains(t, result.Guides[0].MatchedRemoteIds, string(remote.ID))
+	require.Equal(t, string(remote.ID), conv.PtrValOr(result.Guides[0].MatchedRemoteID, ""))
 }
 
-// A messy URL — surrounding whitespace, upper-case scheme, trailing slash —
-// still matches.
+// A messy URL still matches: surrounding whitespace, upper-case scheme, trailing
+// slash.
 func TestExternalMCP_GetSetupDocs_NormalizesServerURL(t *testing.T) {
 	t.Parallel()
 
@@ -202,13 +207,8 @@ func TestExternalMCP_GetSetupDocs_EndpointMatchOutranksGuideLevelMatch(t *testin
 		if guide.Slug == urlGuide.Slug {
 			continue
 		}
-		for _, alias := range guide.Aliases {
-			if m := guides.Resolve(alias); len(m) > 0 && m[0].Kind == guides.MatchAlias && allMatchGuide(m, guide.Slug) {
-				otherAlias, otherSlug = alias, guide.Slug
-				break
-			}
-		}
-		if otherAlias != "" {
+		if alias, ok := unambiguousAlias(guide); ok {
+			otherAlias, otherSlug = alias, guide.Slug
 			break
 		}
 	}
@@ -234,7 +234,7 @@ func TestExternalMCP_GetSetupDocs_EndpointMatchOutranksGuideLevelMatch(t *testin
 // unexposed SDK indexes used to break. Provenance is keyed by the section titles
 // of the upstream docs a guide was derived from, so it answered a lookup for one
 // vendor's server with another vendor's guide, and it also leaked an endpoint
-// into matched_remote_ids whenever a guide's docs happened to carry a section
+// into matched_remote_id whenever a guide's docs happened to carry a section
 // titled with the alias. So: no alias reports a kind other than "alias", and no
 // alias claims to have selected one of the guide's endpoints.
 func TestExternalMCP_GetSetupDocs_AliasLookupsSelectNoEndpoint(t *testing.T) {
@@ -258,7 +258,7 @@ func TestExternalMCP_GetSetupDocs_AliasLookupsSelectNoEndpoint(t *testing.T) {
 
 			for _, got := range result.Guides {
 				require.Equal(t, "alias", got.MatchKind, "alias %q matched guide %q", alias, got.Slug)
-				require.Empty(t, got.MatchedRemoteIds, "alias %q matched guide %q", alias, got.Slug)
+				require.Nil(t, got.MatchedRemoteID, "alias %q matched guide %q", alias, got.Slug)
 			}
 		}
 	}

@@ -1308,6 +1308,7 @@ func marshalTypesMCPSetupGuideToMCPSetupGuideResponseBody(v *types.MCPSetupGuide
 		Title:             v.Title,
 		Summary:           v.Summary,
 		AddServerFlow:     v.AddServerFlow,
+		MatchedRemoteID:   v.MatchedRemoteID,
 		MatchKind:         v.MatchKind,
 		ExternalMarkdown:  v.ExternalMarkdown,
 		SpeakeasyMarkdown: v.SpeakeasyMarkdown,
@@ -1331,14 +1332,6 @@ func marshalTypesMCPSetupGuideToMCPSetupGuideResponseBody(v *types.MCPSetupGuide
 		}
 	} else {
 		res.Remotes = []*MCPSetupGuideRemoteResponseBody{}
-	}
-	if v.MatchedRemoteIds != nil {
-		res.MatchedRemoteIds = make([]string, len(v.MatchedRemoteIds))
-		for i, val := range v.MatchedRemoteIds {
-			res.MatchedRemoteIds[i] = val
-		}
-	} else {
-		res.MatchedRemoteIds = []string{}
 	}
 
 	return res

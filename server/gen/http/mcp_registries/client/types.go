@@ -1121,10 +1121,10 @@ type MCPSetupGuideResponseBody struct {
 	Aliases []string `form:"aliases,omitempty" json:"aliases,omitempty" xml:"aliases,omitempty"`
 	// Endpoints documented by the guide
 	Remotes []*MCPSetupGuideRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
-	// IDs of the documented endpoints the lookup matched. Empty when the lookup
-	// only identified the guide and not a specific endpoint, which is always the
-	// case for an 'alias' match.
-	MatchedRemoteIds []string `form:"matched_remote_ids,omitempty" json:"matched_remote_ids,omitempty" xml:"matched_remote_ids,omitempty"`
+	// ID of the documented endpoint the lookup matched. Absent when the lookup
+	// identified the guide and not a specific endpoint, which is always the case
+	// for an 'alias' match.
+	MatchedRemoteID *string `form:"matched_remote_id,omitempty" json:"matched_remote_id,omitempty" xml:"matched_remote_id,omitempty"`
 	// How the lookup matched this guide. The most specific kind, when both lookup
 	// keys matched it.
 	MatchKind *string `form:"match_kind,omitempty" json:"match_kind,omitempty" xml:"match_kind,omitempty"`
@@ -3390,9 +3390,6 @@ func ValidateMCPSetupGuideResponseBody(body *MCPSetupGuideResponseBody) (err err
 	}
 	if body.Remotes == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("remotes", "body"))
-	}
-	if body.MatchedRemoteIds == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("matched_remote_ids", "body"))
 	}
 	if body.MatchKind == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("match_kind", "body"))

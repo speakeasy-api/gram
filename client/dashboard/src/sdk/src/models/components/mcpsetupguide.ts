@@ -46,9 +46,9 @@ export type MCPSetupGuide = {
    */
   matchKind: MatchKind;
   /**
-   * IDs of the documented endpoints the lookup matched. Empty when the lookup only identified the guide and not a specific endpoint, which is always the case for an 'alias' match.
+   * ID of the documented endpoint the lookup matched. Absent when the lookup identified the guide and not a specific endpoint, which is always the case for an 'alias' match.
    */
-  matchedRemoteIds: Array<string>;
+  matchedRemoteId?: string | undefined;
   /**
    * Endpoints documented by the guide
    */
@@ -86,7 +86,7 @@ export const MCPSetupGuide$inboundSchema: z.ZodMiniType<
     aliases: z.array(z.string()),
     external_markdown: z.string(),
     match_kind: MatchKind$inboundSchema,
-    matched_remote_ids: z.array(z.string()),
+    matched_remote_id: z.optional(z.string()),
     remotes: z.array(MCPSetupGuideRemote$inboundSchema),
     slug: z.string(),
     speakeasy_markdown: z.string(),
@@ -98,7 +98,7 @@ export const MCPSetupGuide$inboundSchema: z.ZodMiniType<
       "add_server_flow": "addServerFlow",
       "external_markdown": "externalMarkdown",
       "match_kind": "matchKind",
-      "matched_remote_ids": "matchedRemoteIds",
+      "matched_remote_id": "matchedRemoteId",
       "speakeasy_markdown": "speakeasyMarkdown",
     });
   }),

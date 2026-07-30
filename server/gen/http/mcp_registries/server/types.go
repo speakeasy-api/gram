@@ -1121,10 +1121,10 @@ type MCPSetupGuideResponseBody struct {
 	Aliases []string `form:"aliases" json:"aliases" xml:"aliases"`
 	// Endpoints documented by the guide
 	Remotes []*MCPSetupGuideRemoteResponseBody `form:"remotes" json:"remotes" xml:"remotes"`
-	// IDs of the documented endpoints the lookup matched. Empty when the lookup
-	// only identified the guide and not a specific endpoint, which is always the
-	// case for an 'alias' match.
-	MatchedRemoteIds []string `form:"matched_remote_ids" json:"matched_remote_ids" xml:"matched_remote_ids"`
+	// ID of the documented endpoint the lookup matched. Absent when the lookup
+	// identified the guide and not a specific endpoint, which is always the case
+	// for an 'alias' match.
+	MatchedRemoteID *string `form:"matched_remote_id,omitempty" json:"matched_remote_id,omitempty" xml:"matched_remote_id,omitempty"`
 	// How the lookup matched this guide. The most specific kind, when both lookup
 	// keys matched it.
 	MatchKind string `form:"match_kind" json:"match_kind" xml:"match_kind"`

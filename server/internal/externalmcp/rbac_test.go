@@ -38,13 +38,13 @@ func TestExternalMCP_RBAC_GetSetupDocs_DeniedWithNoGrants(t *testing.T) {
 	ctx, ti := newTestExternalMCPService(t)
 	ctx = authztest.WithExactGrants(t, ctx)
 
-	slug := "box"
+	specifier := "com.pulsemcp.mirror/box"
 	_, err := ti.service.GetSetupDocs(ctx, &gen.GetSetupDocsPayload{
 		SessionToken:      nil,
 		ApikeyToken:       nil,
 		ProjectSlugInput:  nil,
 		ServerURL:         nil,
-		RegistrySpecifier: &slug,
+		RegistrySpecifier: &specifier,
 	})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)

@@ -4354,7 +4354,7 @@ examples:
           registry_specifier: "com.pulsemcp.mirror/box"
       responses:
         "200":
-          application/json: {"guides": [{"aliases": [], "external_markdown": "<value>", "match_kind": "endpoint", "matched_remote_ids": ["<value 1>", "<value 2>", "<value 3>"], "remotes": [{"id": "hosted", "tenanted": false, "transport_type": "sse", "url": "https://blind-distinction.name/"}], "slug": "box", "speakeasy_markdown": "<value>", "summary": "<value>", "title": "Box"}]}
+          application/json: {"guides": [{"aliases": [], "external_markdown": "<value>", "match_kind": "endpoint", "remotes": [{"id": "hosted", "tenanted": false, "transport_type": "sse", "url": "https://blind-distinction.name/"}], "slug": "box", "speakeasy_markdown": "<value>", "summary": "<value>", "title": "Box"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

@@ -1369,6 +1369,7 @@ func unmarshalMCPSetupGuideResponseBodyToTypesMCPSetupGuide(v *MCPSetupGuideResp
 		Title:             *v.Title,
 		Summary:           *v.Summary,
 		AddServerFlow:     v.AddServerFlow,
+		MatchedRemoteID:   v.MatchedRemoteID,
 		MatchKind:         *v.MatchKind,
 		ExternalMarkdown:  *v.ExternalMarkdown,
 		SpeakeasyMarkdown: *v.SpeakeasyMarkdown,
@@ -1384,10 +1385,6 @@ func unmarshalMCPSetupGuideResponseBodyToTypesMCPSetupGuide(v *MCPSetupGuideResp
 			continue
 		}
 		res.Remotes[i] = unmarshalMCPSetupGuideRemoteResponseBodyToTypesMCPSetupGuideRemote(val)
-	}
-	res.MatchedRemoteIds = make([]string, len(v.MatchedRemoteIds))
-	for i, val := range v.MatchedRemoteIds {
-		res.MatchedRemoteIds[i] = val
 	}
 
 	return res

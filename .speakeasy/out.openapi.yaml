@@ -58321,11 +58321,10 @@ components:
           enum:
             - endpoint
             - alias
-        matched_remote_ids:
-          type: array
-          items:
-            type: string
-          description: IDs of the documented endpoints the lookup matched. Empty when the lookup only identified the guide and not a specific endpoint, which is always the case for an 'alias' match.
+        matched_remote_id:
+          type: string
+          description: ID of the documented endpoint the lookup matched. Absent when the lookup identified the guide and not a specific endpoint, which is always the case for an 'alias' match.
+          example: hosted
         remotes:
           type: array
           items:
@@ -58352,7 +58351,6 @@ components:
         - summary
         - aliases
         - remotes
-        - matched_remote_ids
         - match_kind
         - external_markdown
         - speakeasy_markdown
