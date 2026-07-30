@@ -170,6 +170,7 @@ server/internal/scanners/customruleanalyzer/handler.go
   s_3d388cbf35fcf4::t_cdfbafd39b9cce 102-103
 server/internal/risk/finding_ch.go
   s_3d388cbf35fcf4::t_534f09fcb05461 77-80,183-186,193-197,204-205,208,223-229,278-280,298-341
+  s_3d388cbf35fcf4::t_00501bf4184125 206-207,209-211
 pystreams/tests/test_risk_handler.py
   s_d91d1a4a046c46::t_e3f89b0b562a8a 170-193
 server/internal/scanners/promptinjection/handler.go
