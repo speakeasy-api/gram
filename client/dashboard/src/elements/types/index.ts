@@ -1052,6 +1052,12 @@ export interface ComposerConfig {
    * @default true
    */
   toolMentions?: boolean | ToolMentionsConfig;
+
+  /**
+   * Optional controlled skill picker rendered as an "Add context" affordance.
+   * Selected skill IDs are supplied to the caller's transport for the next turn.
+   */
+  skillContext?: SkillContextConfig;
 }
 
 /**
@@ -1085,6 +1091,22 @@ export interface ToolMentionsConfig {
   /** @default 10 */
   maxSuggestions?: number;
   placeholder?: string;
+}
+
+export interface ComposerSkill {
+  id: string;
+  name: string;
+  displayName: string;
+  summary?: string;
+}
+
+export interface SkillContextConfig {
+  skills: ComposerSkill[];
+  selectedSkillIds: string[];
+  onSelectedSkillIdsChange: (skillIds: string[]) => void;
+  loading?: boolean;
+  error?: boolean;
+  maxSelected?: number;
 }
 
 export interface SidecarConfig extends ExpandableConfig {
