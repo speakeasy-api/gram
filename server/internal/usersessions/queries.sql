@@ -115,7 +115,7 @@ WHERE c.user_session_client_id = cli.id
 RETURNING c.*;
 
 -- name: GetUserSessionClientByID :one
-SELECT cli.*, iss.project_id AS issuer_project_id
+SELECT cli.*
 FROM user_session_clients AS cli
 JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
 WHERE cli.id = @id AND iss.project_id = @project_id AND cli.deleted IS FALSE;

@@ -747,7 +747,8 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_RequiresC
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-	require.Equal(t, mcpaccess.ServerPermissionDeniedMessage, oopsErr.Error())
+	requestAccessURL := mcpaccess.AuthorizationChallengesURL(ti.siteURL, authCtx.OrganizationSlug)
+	require.Equal(t, mcpaccess.ServerPermissionDeniedMessage+"\n\nRequest access:\n"+requestAccessURL, oopsErr.Error())
 
 	select {
 	case <-upstreamHit:

@@ -1295,6 +1295,22 @@ func (q *Queries) DeleteSkillEditSuggestionChanges(ctx context.Context, arg Dele
 	return err
 }
 
+const deleteSkillEditSuggestionChangesByIDs = `-- name: DeleteSkillEditSuggestionChangesByIDs :exec
+DELETE FROM skill_edit_suggestion_changes
+WHERE project_id = $1
+  AND id = ANY ($2::uuid[])
+`
+
+type DeleteSkillEditSuggestionChangesByIDsParams struct {
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
+
+func (q *Queries) DeleteSkillEditSuggestionChangesByIDs(ctx context.Context, arg DeleteSkillEditSuggestionChangesByIDsParams) error {
+	_, err := q.db.Exec(ctx, deleteSkillEditSuggestionChangesByIDs, arg.ProjectID, arg.Ids)
+	return err
+}
+
 const deleteSkillVersionOrigin = `-- name: DeleteSkillVersionOrigin :exec
 DELETE FROM skill_version_origins
 WHERE project_id = $1
@@ -4278,6 +4294,7 @@ func (q *Queries) ListSkillFeedbackByID(ctx context.Context, arg ListSkillFeedba
 const listSkillSightingTimeline = `-- name: ListSkillSightingTimeline :many
 SELECT
   (date_trunc('day', so.seen_at AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')::timestamptz AS bucket_start,
+  so.skill_version_id,
   COUNT(*)::bigint AS activation_count
 FROM skill_observations so
 WHERE so.project_id = $1
@@ -4286,8 +4303,8 @@ WHERE so.project_id = $1
   AND so.reconcile_error_code IS NULL
   AND so.seen_at >= $3
   AND so.seen_at < $4
-GROUP BY bucket_start
-ORDER BY bucket_start ASC
+GROUP BY bucket_start, so.skill_version_id
+ORDER BY bucket_start ASC, so.skill_version_id ASC NULLS LAST
 `
 
 type ListSkillSightingTimelineParams struct {
@@ -4299,6 +4316,7 @@ type ListSkillSightingTimelineParams struct {
 
 type ListSkillSightingTimelineRow struct {
 	BucketStart     pgtype.Timestamptz
+	SkillVersionID  uuid.NullUUID
 	ActivationCount int64
 }
 
@@ -4316,7 +4334,7 @@ func (q *Queries) ListSkillSightingTimeline(ctx context.Context, arg ListSkillSi
 	var items []ListSkillSightingTimelineRow
 	for rows.Next() {
 		var i ListSkillSightingTimelineRow
-		if err := rows.Scan(&i.BucketStart, &i.ActivationCount); err != nil {
+		if err := rows.Scan(&i.BucketStart, &i.SkillVersionID, &i.ActivationCount); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * A UTC-day activation bucket for a skill.
+ * A UTC-day activation bucket for one attributed skill version.
  */
 export type SkillSightingTimelinePoint = {
   /**
@@ -20,6 +20,10 @@ export type SkillSightingTimelinePoint = {
    * Start of the UTC day.
    */
   bucketStart: Date;
+  /**
+   * The attributed skill version, absent when the observation could not be resolved to a version.
+   */
+  skillVersionId?: string | undefined;
 };
 
 /** @internal */
@@ -33,11 +37,13 @@ export const SkillSightingTimelinePoint$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    skill_version_id: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       "activation_count": "activationCount",
       "bucket_start": "bucketStart",
+      "skill_version_id": "skillVersionId",
     });
   }),
 );

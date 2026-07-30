@@ -79,7 +79,13 @@ Once everything is running, seed the local database with sample data:
 mise seed
 ```
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for more detail on local development, auth, and the CLI.
+To work on several branches at once, each git worktree can run its own full stack on its own ports:
+
+```bash
+wt switch --create my-feature
+```
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for more detail on local development, auth, worktrees, and the CLI.
 
 ## Contributing
 

@@ -35,7 +35,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/about"
 	"github.com/speakeasy-api/gram/server/internal/access"
-	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/agent"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/assets"
@@ -786,9 +785,8 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			accessStore := accesscontrol.NewRedisStore(cache.NewRedisCacheAdapter(redisClient), accesscontrol.AlphaTTL)
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, identityResolver, guardianPolicy)
-			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), accessStore, serverURL)
+			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), serverURL)
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL, siteURL, slackClient)
 
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
@@ -859,6 +857,7 @@ func newStartCommand() *cli.Command {
 				env,
 				posthogClient,
 				serverURL,
+				siteURL,
 				encryptionClient,
 				cache.NewRedisCacheAdapter(redisClient),
 				guardianPolicy,
@@ -1073,7 +1072,7 @@ func newStartCommand() *cli.Command {
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
 			roleManager := access.NewRoleManager(logger, db, roleClient, auditLogger)
-			access.Attach(mux, access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, productFeatures, auditLogger, c.String("jwt-signing-key"), accessStore, emailService, *siteURL))
+			access.Attach(mux, access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, productFeatures, auditLogger))
 			agent.Attach(mux, agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, serverURL.String()))
 			assistants.Attach(mux, assistantsSvc)
 			assistantmemories.Attach(mux, assistantmemories.NewService(
@@ -1171,7 +1170,11 @@ func newStartCommand() *cli.Command {
 			deploymentsService := deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient, authzEngine, auditLogger)
 			deployments.Attach(mux, deploymentsService)
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, auditLogger))
-			externalcredentials.Attach(mux, externalcredentials.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, gcpauth.NewResolver()))
+			// Hoisted so services that authenticate as a customer's GCP identity
+			// share one resolver instead of each constructing their own. Only the
+			// credentials service consumes it today.
+			gcpIdentityResolver := gcpauth.NewResolver()
+			externalcredentials.Attach(mux, externalcredentials.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentityResolver))
 			externalkeys.Attach(mux, externalkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			cliauth.Attach(mux, cliauth.NewService(logger, tracerProvider, db, sessionManager, authzEngine, redisClient, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
