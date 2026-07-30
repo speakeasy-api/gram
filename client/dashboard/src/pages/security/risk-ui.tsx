@@ -377,9 +377,20 @@ export function EventMatchDialog({
     return (
       <span className="flex min-w-0 items-center gap-1.5">
         <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
-          <Lock className="text-muted-foreground h-3 w-3 shrink-0" />
+          <Lock
+            role="img"
+            aria-label={REVEAL_DENIED_REASON}
+            className="text-muted-foreground h-3 w-3 shrink-0"
+          />
         </SimpleTooltip>
-        {summary ? <RationaleText text={summary} /> : null}
+        {/* The rationale reads as ordinary text, so without a label the lock is
+         * the only signal that the event itself is withheld. With no rationale
+         * to show, fall back to the same "Hidden" text MaskedMatch uses. */}
+        {summary ? (
+          <RationaleText text={summary} />
+        ) : (
+          <span className="text-muted-foreground text-xs">Hidden</span>
+        )}
       </span>
     );
   }

@@ -25,13 +25,12 @@ const SOURCE_TO_CATEGORY: ReadonlyMap<string, RuleCategory> = new Map<
 // `description` carries the judge's per-finding rationale instead of a static
 // rule blurb, and their `match` is the whole flagged event rather than a
 // substring.
-const JUDGE_SOURCES: ReadonlySet<string> = new Set([
-  "llm_judge",
-  "prompt_injection",
-]);
+export const JUDGE_SOURCES = ["llm_judge", "prompt_injection"] as const;
+
+const JUDGE_SOURCE_SET: ReadonlySet<string> = new Set(JUDGE_SOURCES);
 
 export function isJudgeSource(source: string | undefined): boolean {
-  return source !== undefined && JUDGE_SOURCES.has(source);
+  return source !== undefined && JUDGE_SOURCE_SET.has(source);
 }
 
 const ruleIdToCategory = new Map<string, RuleCategory>();

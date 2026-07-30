@@ -73,6 +73,16 @@ describe("EventMatchDialog", () => {
 
     expect(screen.getByText(RATIONALE)).toBeTruthy();
     expect(screen.queryByRole("button")).toBeNull();
+    // The rationale reads as ordinary text, so the withheld payload has to be
+    // announced by something.
+    expect(screen.getByRole("img", { name: /chat:read/ })).toBeTruthy();
+  });
+
+  it("falls back to visible Hidden text without chat:read and no rationale", () => {
+    hasScope.mockReturnValue(false);
+    renderCell(undefined);
+
+    expect(screen.getByText("Hidden")).toBeTruthy();
   });
 });
 
