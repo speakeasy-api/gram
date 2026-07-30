@@ -28,6 +28,7 @@ import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useProjectNavRoutes } from "@/hooks/useProjectNavRoutes";
 import type { ProjectNavRoute } from "@/hooks/useProjectNavRoutes";
+import { useOrgMemoryDeveloperToggle } from "@/hooks/useOrgMemoryDeveloperToggle";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
 import { cn, Icon, Stack } from "@speakeasy-api/moonshine";
@@ -74,10 +75,10 @@ export function AppSidebar({
   // cache is cleared), show a skeleton so the scope-gated nav doesn't flash empty.
   const { isLoading: rbacLoading } = useRBAC();
   const telemetry = useTelemetry();
+  const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
   const isAssistantsEnabled = telemetry.isFeatureEnabled("assistants") ?? false;
-  const isOrgMemoryEnabled = telemetry.isFeatureEnabled("org-memory") ?? false;
   // Default true: opt-out via PostHog org-group targeting on `gram-deployments-page`.
   const isDeploymentsPageEnabled =
     telemetry.isFeatureEnabled("gram-deployments-page") ?? true;

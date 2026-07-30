@@ -9,6 +9,7 @@ const testState = vi.hoisted(() => ({
     | undefined,
   projectId: "project_a",
   skillsEnabled: false,
+  orgMemoryEnabled: false,
 }));
 
 function route(title: string, url: string): AppRoute {
@@ -38,6 +39,7 @@ const routes = {
   insights: route("Insights", "insights"),
   logs: route("Logs", "logs"),
   mcp: route("MCP", "mcp"),
+  orgMemory: route("Org Memory", "org-memory"),
   playground: route("Playground", "playground"),
   plugins: route("Plugins", "plugins"),
   policyCenter: route("Risk Policies", "risk-policies"),
@@ -62,6 +64,10 @@ vi.mock("@/contexts/Telemetry", () => ({
 
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: testState.projectId }),
+}));
+
+vi.mock("./useOrgMemoryDeveloperToggle", () => ({
+  useOrgMemoryDeveloperToggle: () => [testState.orgMemoryEnabled, vi.fn()],
 }));
 
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
@@ -109,5 +115,21 @@ describe("useProjectNavRoutes", () => {
     expect(skills?.resourceId).toBe("project_a");
     expect(testState.productFeatureOptions?.staleTime).toBe(30_000);
     expect(testState.productFeatureOptions?.throwOnError).toBe(false);
+  });
+
+  it("only includes Org Memory when its session toggle is enabled", () => {
+    testState.orgMemoryEnabled = false;
+    const { result, rerender } = renderHook(() => useProjectNavRoutes());
+
+    expect(
+      result.current.some((entry) => entry.route === routes.orgMemory),
+    ).toBe(false);
+
+    testState.orgMemoryEnabled = true;
+    rerender();
+
+    expect(
+      result.current.some((entry) => entry.route === routes.orgMemory),
+    ).toBe(true);
   });
 });

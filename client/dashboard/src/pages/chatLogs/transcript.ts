@@ -293,7 +293,7 @@ export function buildTranscript(
 
 /** Chat-message ids backing a row — used for risk lookups (one row can span an
  * assistant tool_call message and its tool-result message). */
-function rowMessageIds(row: TranscriptRow): string[] {
+export function rowMessageIds(row: TranscriptRow): string[] {
   if (row.kind === "message") {
     return [row.message.id, ...row.attachments.map((a) => a.id)];
   }
@@ -454,6 +454,19 @@ export function displayItemRows(item: DisplayItem): TranscriptRow[] {
   if (item.type === "row") return [item.row];
   if (item.type === "toolGroup") return item.rows;
   return [];
+}
+
+/** Whether a rendered item contains the raw chat message being targeted. A
+ * tool group can contain several rows and each tool row can span its assistant
+ * call plus tool-result messages, so callers should use this instead of
+ * comparing display item IDs directly. */
+export function displayItemContainsMessage(
+  item: DisplayItem,
+  messageId: string,
+): boolean {
+  return displayItemRows(item).some((row) =>
+    rowMessageIds(row).includes(messageId),
+  );
 }
 
 /** Below this, a run of consecutive tool rows stays as individual rows — a lone

@@ -39,10 +39,12 @@ var (
 // the skill efficacy judge, so every session judge sees the same
 // prompt-injection-hardened shape.
 type JudgeInput struct {
-	OrgID      string
-	ProjectID  string
-	ChatID     uuid.UUID
-	Transcript efficacy.Transcript
+	EvaluationID uuid.UUID
+	OrgID        string
+	ProjectID    string
+	ChatID       uuid.UUID
+	AuthorID     string
+	Transcript   efficacy.Transcript
 }
 
 // Verdict is a judge's normalized answer. Score is the headline metric whose
@@ -73,6 +75,13 @@ type Judge interface {
 	// and score rows, so changing it orphans all three.
 	Name() string
 	Judge(ctx context.Context, in JudgeInput) (JudgeResult, error)
+}
+
+// ScorelessJudge performs its durable work inside Judge and does not publish a
+// verdict to the shared ClickHouse score sink. It still uses the common queue,
+// retry, and completion lifecycle.
+type ScorelessJudge interface {
+	SkipScoreSink() bool
 }
 
 // judgeNamePattern keeps judge names safe to use as settings keys, sink

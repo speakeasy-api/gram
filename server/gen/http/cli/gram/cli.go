@@ -26,6 +26,7 @@ import (
 	assistantsc "github.com/speakeasy-api/gram/server/gen/http/assistants/client"
 	auditlogsc "github.com/speakeasy-api/gram/server/gen/http/auditlogs/client"
 	authc "github.com/speakeasy-api/gram/server/gen/http/auth/client"
+	businessmemoriesc "github.com/speakeasy-api/gram/server/gen/http/business_memories/client"
 	chatc "github.com/speakeasy-api/gram/server/gen/http/chat/client"
 	chatsessionsc "github.com/speakeasy-api/gram/server/gen/http/chat_sessions/client"
 	cliauthc "github.com/speakeasy-api/gram/server/gen/http/cli_auth/client"
@@ -99,6 +100,7 @@ func UsageCommands() []string {
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
+		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
 		"chat (list-chats|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|submit-feedback|list-sources)",
 		"chat-sessions (create|revoke)",
 		"cli-auth (authorize|redeem)",
@@ -123,7 +125,7 @@ func UsageCommands() []string {
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link)",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
-		"admin-chat-analysis (get-settings|upsert-work-units-settings|trigger-analysis)",
+		"admin-chat-analysis (get-settings|upsert-work-units-settings|upsert-business-memory-settings|trigger-analysis)",
 		"admin-external-credentials (create-gcp-iam-platform-credential|list-platform-external-credentials|update-gcp-iam-platform-credential|get-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature)",
@@ -567,6 +569,24 @@ func ParseEndpoint(
 
 		authInfoFlags            = flag.NewFlagSet("info", flag.ExitOnError)
 		authInfoSessionTokenFlag = authInfoFlags.String("session-token", "", "")
+
+		businessMemoriesFlags = flag.NewFlagSet("business-memories", flag.ContinueOnError)
+
+		businessMemoriesListBusinessMemoriesFlags                = flag.NewFlagSet("list-business-memories", flag.ExitOnError)
+		businessMemoriesListBusinessMemoriesCursorFlag           = businessMemoriesListBusinessMemoriesFlags.String("cursor", "", "")
+		businessMemoriesListBusinessMemoriesLimitFlag            = businessMemoriesListBusinessMemoriesFlags.String("limit", "50", "")
+		businessMemoriesListBusinessMemoriesSessionTokenFlag     = businessMemoriesListBusinessMemoriesFlags.String("session-token", "", "")
+		businessMemoriesListBusinessMemoriesProjectSlugInputFlag = businessMemoriesListBusinessMemoriesFlags.String("project-slug-input", "", "")
+
+		businessMemoriesListBusinessMemoryContentScopesFlags                = flag.NewFlagSet("list-business-memory-content-scopes", flag.ExitOnError)
+		businessMemoriesListBusinessMemoryContentScopesSessionTokenFlag     = businessMemoriesListBusinessMemoryContentScopesFlags.String("session-token", "", "")
+		businessMemoriesListBusinessMemoryContentScopesProjectSlugInputFlag = businessMemoriesListBusinessMemoryContentScopesFlags.String("project-slug-input", "", "")
+
+		businessMemoriesSearchBusinessMemoriesFlags                = flag.NewFlagSet("search-business-memories", flag.ExitOnError)
+		businessMemoriesSearchBusinessMemoriesQueryFlag            = businessMemoriesSearchBusinessMemoriesFlags.String("query", "REQUIRED", "")
+		businessMemoriesSearchBusinessMemoriesLimitFlag            = businessMemoriesSearchBusinessMemoriesFlags.String("limit", "20", "")
+		businessMemoriesSearchBusinessMemoriesSessionTokenFlag     = businessMemoriesSearchBusinessMemoriesFlags.String("session-token", "", "")
+		businessMemoriesSearchBusinessMemoriesProjectSlugInputFlag = businessMemoriesSearchBusinessMemoriesFlags.String("project-slug-input", "", "")
 
 		chatFlags = flag.NewFlagSet("chat", flag.ContinueOnError)
 
@@ -1392,6 +1412,10 @@ func ParseEndpoint(
 		adminChatAnalysisUpsertWorkUnitsSettingsFlags            = flag.NewFlagSet("upsert-work-units-settings", flag.ExitOnError)
 		adminChatAnalysisUpsertWorkUnitsSettingsBodyFlag         = adminChatAnalysisUpsertWorkUnitsSettingsFlags.String("body", "REQUIRED", "")
 		adminChatAnalysisUpsertWorkUnitsSettingsSessionTokenFlag = adminChatAnalysisUpsertWorkUnitsSettingsFlags.String("session-token", "", "")
+
+		adminChatAnalysisUpsertBusinessMemorySettingsFlags            = flag.NewFlagSet("upsert-business-memory-settings", flag.ExitOnError)
+		adminChatAnalysisUpsertBusinessMemorySettingsBodyFlag         = adminChatAnalysisUpsertBusinessMemorySettingsFlags.String("body", "REQUIRED", "")
+		adminChatAnalysisUpsertBusinessMemorySettingsSessionTokenFlag = adminChatAnalysisUpsertBusinessMemorySettingsFlags.String("session-token", "", "")
 
 		adminChatAnalysisTriggerAnalysisFlags            = flag.NewFlagSet("trigger-analysis", flag.ExitOnError)
 		adminChatAnalysisTriggerAnalysisSessionTokenFlag = adminChatAnalysisTriggerAnalysisFlags.String("session-token", "", "")
@@ -3105,6 +3129,11 @@ func ParseEndpoint(
 	authRegisterFlags.Usage = authRegisterUsage
 	authInfoFlags.Usage = authInfoUsage
 
+	businessMemoriesFlags.Usage = businessMemoriesUsage
+	businessMemoriesListBusinessMemoriesFlags.Usage = businessMemoriesListBusinessMemoriesUsage
+	businessMemoriesListBusinessMemoryContentScopesFlags.Usage = businessMemoriesListBusinessMemoryContentScopesUsage
+	businessMemoriesSearchBusinessMemoriesFlags.Usage = businessMemoriesSearchBusinessMemoriesUsage
+
 	chatFlags.Usage = chatUsage
 	chatListChatsFlags.Usage = chatListChatsUsage
 	chatGetWorkUnitsTrendFlags.Usage = chatGetWorkUnitsTrendUsage
@@ -3305,6 +3334,7 @@ func ParseEndpoint(
 	adminChatAnalysisFlags.Usage = adminChatAnalysisUsage
 	adminChatAnalysisGetSettingsFlags.Usage = adminChatAnalysisGetSettingsUsage
 	adminChatAnalysisUpsertWorkUnitsSettingsFlags.Usage = adminChatAnalysisUpsertWorkUnitsSettingsUsage
+	adminChatAnalysisUpsertBusinessMemorySettingsFlags.Usage = adminChatAnalysisUpsertBusinessMemorySettingsUsage
 	adminChatAnalysisTriggerAnalysisFlags.Usage = adminChatAnalysisTriggerAnalysisUsage
 
 	adminExternalCredentialsFlags.Usage = adminExternalCredentialsUsage
@@ -3674,6 +3704,8 @@ func ParseEndpoint(
 			svcf = auditlogsFlags
 		case "auth":
 			svcf = authFlags
+		case "business-memories":
+			svcf = businessMemoriesFlags
 		case "chat":
 			svcf = chatFlags
 		case "chat-sessions":
@@ -4056,6 +4088,19 @@ func ParseEndpoint(
 
 			case "info":
 				epf = authInfoFlags
+
+			}
+
+		case "business-memories":
+			switch epn {
+			case "list-business-memories":
+				epf = businessMemoriesListBusinessMemoriesFlags
+
+			case "list-business-memory-content-scopes":
+				epf = businessMemoriesListBusinessMemoryContentScopesFlags
+
+			case "search-business-memories":
+				epf = businessMemoriesSearchBusinessMemoriesFlags
 
 			}
 
@@ -4609,6 +4654,9 @@ func ParseEndpoint(
 
 			case "upsert-work-units-settings":
 				epf = adminChatAnalysisUpsertWorkUnitsSettingsFlags
+
+			case "upsert-business-memory-settings":
+				epf = adminChatAnalysisUpsertBusinessMemorySettingsFlags
 
 			case "trigger-analysis":
 				epf = adminChatAnalysisTriggerAnalysisFlags
@@ -5839,6 +5887,19 @@ func ParseEndpoint(
 				endpoint = c.Info()
 				data, err = authc.BuildInfoPayload(*authInfoSessionTokenFlag)
 			}
+		case "business-memories":
+			c := businessmemoriesc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-business-memories":
+				endpoint = c.ListBusinessMemories()
+				data, err = businessmemoriesc.BuildListBusinessMemoriesPayload(*businessMemoriesListBusinessMemoriesCursorFlag, *businessMemoriesListBusinessMemoriesLimitFlag, *businessMemoriesListBusinessMemoriesSessionTokenFlag, *businessMemoriesListBusinessMemoriesProjectSlugInputFlag)
+			case "list-business-memory-content-scopes":
+				endpoint = c.ListBusinessMemoryContentScopes()
+				data, err = businessmemoriesc.BuildListBusinessMemoryContentScopesPayload(*businessMemoriesListBusinessMemoryContentScopesSessionTokenFlag, *businessMemoriesListBusinessMemoryContentScopesProjectSlugInputFlag)
+			case "search-business-memories":
+				endpoint = c.SearchBusinessMemories()
+				data, err = businessmemoriesc.BuildSearchBusinessMemoriesPayload(*businessMemoriesSearchBusinessMemoriesQueryFlag, *businessMemoriesSearchBusinessMemoriesLimitFlag, *businessMemoriesSearchBusinessMemoriesSessionTokenFlag, *businessMemoriesSearchBusinessMemoriesProjectSlugInputFlag)
+			}
 		case "chat":
 			c := chatc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -6391,6 +6452,9 @@ func ParseEndpoint(
 			case "upsert-work-units-settings":
 				endpoint = c.UpsertWorkUnitsSettings()
 				data, err = adminchatanalysisc.BuildUpsertWorkUnitsSettingsPayload(*adminChatAnalysisUpsertWorkUnitsSettingsBodyFlag, *adminChatAnalysisUpsertWorkUnitsSettingsSessionTokenFlag)
+			case "upsert-business-memory-settings":
+				endpoint = c.UpsertBusinessMemorySettings()
+				data, err = adminchatanalysisc.BuildUpsertBusinessMemorySettingsPayload(*adminChatAnalysisUpsertBusinessMemorySettingsBodyFlag, *adminChatAnalysisUpsertBusinessMemorySettingsSessionTokenFlag)
 			case "trigger-analysis":
 				endpoint = c.TriggerAnalysis()
 				data, err = adminchatanalysisc.BuildTriggerAnalysisPayload(*adminChatAnalysisTriggerAnalysisSessionTokenFlag)
@@ -9108,6 +9172,87 @@ func authInfoUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth info --session-token \"abc123\"")
+}
+
+// businessMemoriesUsage displays the usage of the business-memories command
+// and its subcommands.
+func businessMemoriesUsage() {
+	fmt.Fprintln(os.Stderr, `Inspect and semantically search business memories.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] business-memories COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-business-memories: List memories extracted for the active project. Requires organization admin.`)
+	fmt.Fprintln(os.Stderr, `    list-business-memory-content-scopes: List the complete content-scope tree and distinct-memory counts for the active project. Requires organization admin.`)
+	fmt.Fprintln(os.Stderr, `    search-business-memories: Run semantic search over active memories in the active project. Requires organization admin.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s business-memories COMMAND --help\n", os.Args[0])
+}
+func businessMemoriesListBusinessMemoriesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] business-memories list-business-memories", os.Args[0])
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List memories extracted for the active project. Requires organization admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "business-memories list-business-memories --cursor \"abc123\" --limit 2 --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func businessMemoriesListBusinessMemoryContentScopesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] business-memories list-business-memory-content-scopes", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the complete content-scope tree and distinct-memory counts for the active project. Requires organization admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "business-memories list-business-memory-content-scopes --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func businessMemoriesSearchBusinessMemoriesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] business-memories search-business-memories", os.Args[0])
+	fmt.Fprint(os.Stderr, " -query STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Run semantic search over active memories in the active project. Requires organization admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -query STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "business-memories search-business-memories --query \"aa\" --limit 2 --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // chatUsage displays the usage of the chat command and its subcommands.
@@ -12825,6 +12970,7 @@ func adminChatAnalysisUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-settings: Get the active organization's chat analysis settings. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    upsert-work-units-settings: Create or replace the active organization's chat analysis settings. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    upsert-business-memory-settings: Create or replace the active organization's business-memory extraction settings. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    trigger-analysis: Wake the chat analysis coordinator for every project in the active organization, instead of waiting for the periodic sweep. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -12866,6 +13012,26 @@ func adminChatAnalysisUpsertWorkUnitsSettingsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-chat-analysis upsert-work-units-settings --body '{\n      \"work_units_daily_cap\": 1,\n      \"work_units_enabled\": false\n   }' --session-token \"abc123\"")
+}
+
+func adminChatAnalysisUpsertBusinessMemorySettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-chat-analysis upsert-business-memory-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create or replace the active organization's business-memory extraction settings. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-chat-analysis upsert-business-memory-settings --body '{\n      \"business_memory_daily_cap\": 1,\n      \"business_memory_enabled\": false\n   }' --session-token \"abc123\"")
 }
 
 func adminChatAnalysisTriggerAnalysisUsage() {

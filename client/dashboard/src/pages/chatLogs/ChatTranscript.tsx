@@ -57,6 +57,7 @@ import {
 } from "./claudeUsage";
 import {
   argsToString,
+  displayItemContainsMessage,
   type DisplayItem,
   findQueryRanges,
   messageText,
@@ -1082,6 +1083,9 @@ export interface TranscriptPagination {
     fieldKey: SearchFieldKey;
     indexInField: number;
   } | null;
+  /** Raw chat-message ID to persistently highlight. Used by provenance links
+   * that open a session at one cited transcript message. */
+  focusedMessageId?: string | null;
 }
 
 /** A break in the transcript — messages are missing here. Renders a prominent
@@ -1431,22 +1435,33 @@ export function ChatTranscript({
           className="relative w-full"
           style={{ height: `${virtualizer.getTotalSize()}px` }}
         >
-          {virtualizer.getVirtualItems().map((virtualRow) => (
-            <div
-              key={virtualRow.key}
-              data-index={virtualRow.index}
-              ref={virtualizer.measureElement}
-              className="absolute top-0 left-0 w-full"
-              style={{ transform: `translateY(${virtualRow.start}px)` }}
-            >
-              <DisplayItemView
-                item={items[virtualRow.index]!}
-                index={virtualRow.index}
-                ctx={ctx}
-                pagination={pagination}
-              />
-            </div>
-          ))}
+          {virtualizer.getVirtualItems().map((virtualRow) => {
+            const item = items[virtualRow.index]!;
+            const focused =
+              pagination.focusedMessageId != null &&
+              displayItemContainsMessage(item, pagination.focusedMessageId);
+            return (
+              <div
+                key={virtualRow.key}
+                data-index={virtualRow.index}
+                data-focused-message={focused ? "true" : undefined}
+                ref={virtualizer.measureElement}
+                className={cn(
+                  "absolute top-0 left-0 w-full rounded-lg transition-colors",
+                  focused &&
+                    "bg-amber-500/10 ring-1 ring-inset ring-amber-500/40",
+                )}
+                style={{ transform: `translateY(${virtualRow.start}px)` }}
+              >
+                <DisplayItemView
+                  item={item}
+                  index={virtualRow.index}
+                  ctx={ctx}
+                  pagination={pagination}
+                />
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

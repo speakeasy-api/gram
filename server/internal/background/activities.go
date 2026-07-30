@@ -30,6 +30,7 @@ import (
 	spend_rules "github.com/speakeasy-api/gram/server/internal/background/activities/spend_rules"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/businessmemory"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
@@ -234,6 +235,7 @@ func NewActivities(
 	// chat_analysis_settings row.
 	chatAnalysisJudges, err := analysis.NewJudges(
 		analysis.NewWorkUnitsJudge(logger, tracerProvider, chatClient, judgeRateLimiter),
+		businessmemory.NewJudge(logger, tracerProvider, db, chatClient, judgeRateLimiter),
 	)
 	if err != nil {
 		panic(fmt.Errorf("new chat analysis judges: %w", err))
