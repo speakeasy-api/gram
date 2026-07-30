@@ -125,8 +125,9 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		Audience: target.audience,
 		Issuer:   target.issuerURL,
 		Lifetime: mintAccessTokenLifetime,
-		// No DCR-registered client — this mint bypasses the OAuth dance.
-		ClientID: "",
+		// No DCR-registered client — this mint bypasses the OAuth dance, so the
+		// session is attributed to our own surface rather than left unlabelled.
+		ClientID: FirstPartyClientID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "mint session jwt").LogError(ctx, s.logger)

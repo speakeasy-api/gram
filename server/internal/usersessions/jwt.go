@@ -47,10 +47,26 @@ type SessionClaims struct {
 	// this one is established by the authorization flow rather than
 	// self-reported.
 	//
-	// Empty on tokens minted outside an OAuth client flow, and on tokens
-	// minted before this claim existed — readers must treat it as optional.
+	// Mint paths with no registered client stamp FirstPartyClientID instead.
+	// Empty only on tokens minted before this claim existed, so readers must
+	// still treat it as optional.
 	ClientID string `json:"client_id,omitempty"`
 }
+
+// FirstPartyClientID is the `client_id` stamped on sessions minted for our own
+// surfaces, which have no registered OAuth client because they never run the
+// authorization dance.
+//
+// A deliberate departure from RFC 9068, where `client_id` names a registered
+// client. Leaving it empty is indistinguishable from "unknown", and a reader
+// asking who called cannot tell a first-party session from an old token minted
+// before the claim existed. A URN says it outright.
+//
+// Deliberately not a resolvable URL: an `https://…` value would be read as an
+// OAuth Client ID Metadata Document, which requires the client_id to equal a
+// URL serving that document (see `user_session_clients.client_id_metadata_uri`).
+// This resolves to nothing and should never be looked up.
+const FirstPartyClientID = "client:first-party"
 
 // JWTSigningKeyFlag is the CLI flag (and env var via GRAM_JWT_SIGNING_KEY)
 // that supplies the HMAC secret to NewSigner at server boot. Defining the
