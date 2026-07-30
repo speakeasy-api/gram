@@ -133,3 +133,16 @@ UPDATE custom_domains
 SET deleted_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND deleted IS FALSE;
+
+-- name: DisableCustomDomainForHealth :one
+-- Clearing activated drops the domain from health sweeps; clearing verified
+-- puts it back into the dashboard reverify flow. Caller tears down k8s.
+UPDATE custom_domains
+SET
+    verified = FALSE,
+    activated = FALSE,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+RETURNING id;

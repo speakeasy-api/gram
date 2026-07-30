@@ -262,3 +262,41 @@ func TestHealthIssueMessageCertificateProblemsAreManagedByGram(t *testing.T) {
 		)
 	}
 }
+
+func TestShouldAutoDisableRequiresAllThresholds(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 7, 27, 12, 0, 0, 0, time.UTC)
+	eightDaysAgo := now.Add(-8 * 24 * time.Hour)
+	sixDaysAgo := now.Add(-6 * 24 * time.Hour)
+
+	eligible := HealthState{
+		Status:               HealthStatusUnhealthy,
+		Issue:                HealthIssueDNSTargetMismatch,
+		CheckedAt:            &now,
+		UnhealthySince:       &eightDaysAgo,
+		CertificateExpiresAt: nil,
+		ConsecutiveFailures:  AutoDisableConsecutiveFailures,
+	}
+	require.True(t, ShouldAutoDisable(eligible, now))
+
+	belowFailures := eligible
+	belowFailures.ConsecutiveFailures = AutoDisableConsecutiveFailures - 1
+	require.False(t, ShouldAutoDisable(belowFailures, now), "needs the full failure count")
+
+	tooRecent := eligible
+	tooRecent.UnhealthySince = &sixDaysAgo
+	require.False(t, ShouldAutoDisable(tooRecent, now), "needs a full week unhealthy")
+
+	gramSide := eligible
+	gramSide.Issue = HealthIssueCheckFailed
+	require.False(t, ShouldAutoDisable(gramSide, now), "check_failed never disables")
+
+	healthy := eligible
+	healthy.Status = HealthStatusHealthy
+	require.False(t, ShouldAutoDisable(healthy, now))
+
+	noAnchor := eligible
+	noAnchor.UnhealthySince = nil
+	require.False(t, ShouldAutoDisable(noAnchor, now))
+}

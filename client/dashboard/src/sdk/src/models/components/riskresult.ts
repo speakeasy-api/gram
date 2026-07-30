@@ -63,10 +63,6 @@ export type RiskResult = {
    */
   policyVersion: number;
   /**
-   * True when the scanned message arrived as a replay from a device's offline spool after control-plane downtime — the finding was produced retroactively rather than from live traffic.
-   */
-  replayed: boolean;
-  /**
    * The matched rule identifier.
    */
   ruleId?: string | undefined;
@@ -112,7 +108,6 @@ export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
       match_redacted: z.optional(z.string()),
       policy_id: z.string(),
       policy_version: z.int(),
-      replayed: z.boolean(),
       rule_id: z.optional(z.string()),
       source: z.string(),
       spans: z.optional(z.array(RiskSpan$inboundSchema)),
