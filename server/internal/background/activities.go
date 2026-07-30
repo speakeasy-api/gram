@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
+	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -75,6 +76,9 @@ type Publishers struct {
 	// publisher on it (see risk_analysis.batchOnlyFindingSources).
 	RiskFindings  gcp.Publisher[*riskv1.Finding]
 	TelemetryLogs gcp.Publisher[*telemetryv1.LogRecord]
+	// AuthzChallenges is the topic the streams ChallengeCHWriter consumes to
+	// insert authz_challenges rows into ClickHouse.
+	AuthzChallenges gcp.Publisher[*authzv1.ChallengeRow]
 }
 
 type Activities struct {

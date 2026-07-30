@@ -173,6 +173,12 @@ linters:
         linters:
           - forbidigo
         text: GG008|GG009
+      # NewNoopChallengePublisher builds the inert authz challenge publisher
+      # from a noop tracer provider for tests and processes that do not publish.
+      - path: internal/authz/challenge_publisher\.go
+        linters:
+          - forbidigo
+        text: GG008
       # logger.go is the one sanctioned place that calls InsertAuditLog directly;
       # all other callers must go through (*audit.Logger).log().
       - path: internal/audit/logger\.go|_test\.go

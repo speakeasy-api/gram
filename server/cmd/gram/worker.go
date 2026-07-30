@@ -535,10 +535,11 @@ func newWorkerCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, chShutdown)
 
 			// we don't require a real workOS client for workers as they bypass RBAC
+			authzChallengePublisher := authz.NewChallengePublisher(logger, tracerProvider, publishers.AuthzChallenges)
 			authzEngine := authz.NewEngine(
 				logger,
 				db,
-				chDB,
+				authzChallengePublisher,
 				rbacEnabled,
 				challengeLoggingEnabled,
 				workos.NewStubClient(),

@@ -674,15 +674,6 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create access role provider: %w", err)
 			}
-			authzEngine := authz.NewEngine(
-				logger,
-				db,
-				chDB,
-				rbacEnabled,
-				challengeLoggingEnabled,
-				roleClient,
-				authz.EngineOpts{DevMode: c.String("environment") == "local"},
-			)
 
 			_, psbroker, pubsubShutdown, err := newPubSubClient(ctx, c, logger)
 			if err != nil {
@@ -704,6 +695,17 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create publishers: %w", err)
 			}
+
+			authzChallengePublisher := authz.NewChallengePublisher(logger, tracerProvider, publishers.AuthzChallenges)
+			authzEngine := authz.NewEngine(
+				logger,
+				db,
+				authzChallengePublisher,
+				rbacEnabled,
+				challengeLoggingEnabled,
+				roleClient,
+				authz.EngineOpts{DevMode: c.String("environment") == "local"},
+			)
 
 			telemetryLogPublisher := tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs)
 

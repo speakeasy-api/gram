@@ -185,9 +185,7 @@ func TestService_ListGrants_RBACDisabledReturnsFullAccess(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	ti.service.authz = authz.NewEngine(ti.service.logger, ti.conn, chConn, authztest.RBACAlwaysDisabled, authztest.ChallengeLoggingAlwaysDisabled, ti.roles)
+	ti.service.authz = authz.NewEngine(ti.service.logger, ti.conn, authz.NewNoopChallengePublisher(ti.service.logger), authztest.RBACAlwaysDisabled, authztest.ChallengeLoggingAlwaysDisabled, ti.roles)
 
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)

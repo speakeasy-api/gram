@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
@@ -41,11 +40,17 @@ type challengeLogger struct {
 	FilterAllowedCount   uint32
 }
 
-// Log writes the challenge to ClickHouse via the supplied connection. The
+// Log publishes the challenge to Pub/Sub via the supplied publisher. The
+// streams ChallengeCHWriter consumer inserts the row into ClickHouse. The
 // write is gated behind the ChallengeLoggingEnabled feature check — if the
 // feature is not enabled for the org (or the check fails), the call is a
-// no-op. Errors are logged at warn level and never bubble back to the caller.
-func (l challengeLogger) Log(ctx context.Context, conn clickhouse.Conn, logger *slog.Logger, isEnabled ChallengeLoggingEnabled) {
+// no-op. Publish failures are logged asynchronously and never bubble back to
+// the caller, so authz decisions stay off the ClickHouse pool.
+func (l challengeLogger) Log(ctx context.Context, publisher *ChallengePublisher, logger *slog.Logger, isEnabled ChallengeLoggingEnabled) {
+	if publisher == nil {
+		return
+	}
+
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return
@@ -163,11 +168,7 @@ func (l challengeLogger) Log(ctx context.Context, conn clickhouse.Conn, logger *
 		FilterAllowedCount:   l.FilterAllowedCount,
 	}
 
-	if err := authzrepo.New(conn).InsertChallenge(ctx, row); err != nil {
-		logger.WarnContext(ctx, "failed to write authz challenge row",
-			attr.SlogError(err),
-		)
-	}
+	publisher.PublishChallenge(ctx, row)
 }
 
 func marshalSelector(v Selector) string {
