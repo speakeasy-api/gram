@@ -4077,6 +4077,24 @@ paths:
           schema:
             description: API Key header
             type: string
+        - allowEmptyValue: true
+          description: Hardware serial number of the machine the agent runs on, when it can be read. Lets device coverage attest this specific machine rather than its assigned user.
+          example: C02XK1ABCDEF
+          in: header
+          name: Gram-Device-Serial
+          schema:
+            description: Hardware serial number of the machine the agent runs on, when it can be read. Lets device coverage attest this specific machine rather than its assigned user.
+            example: C02XK1ABCDEF
+            type: string
+        - allowEmptyValue: true
+          description: Hostname of the machine the agent runs on, when it can be read.
+          example: dev-macbook-pro
+          in: header
+          name: Gram-Device-Hostname
+          schema:
+            description: Hostname of the machine the agent runs on, when it can be read.
+            example: dev-macbook-pro
+            type: string
       responses:
         "200":
           content:

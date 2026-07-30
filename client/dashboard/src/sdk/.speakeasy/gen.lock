@@ -4093,6 +4093,9 @@ examples:
       parameters:
         query:
           email: "dev@acme.corp"
+        header:
+          Gram-Device-Serial: "C02XK1ABCDEF"
+          Gram-Device-Hostname: "dev-macbook-pro"
       responses:
         "200":
           application/json: {"etag": "<value>", "marketplaces": [], "plugins": []}

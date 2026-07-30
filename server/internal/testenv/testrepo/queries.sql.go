@@ -588,6 +588,51 @@ func (q *Queries) ListDeploymentHTTPTools(ctx context.Context, deploymentID uuid
 	return items, nil
 }
 
+const listDeviceAgentDeviceSyncsFixture = `-- name: ListDeviceAgentDeviceSyncsFixture :many
+SELECT organization_id, serial_number, email, hostname, first_seen_at, last_seen_at
+FROM device_agent_device_syncs
+WHERE organization_id = $1
+ORDER BY serial_number ASC
+`
+
+type ListDeviceAgentDeviceSyncsFixtureRow struct {
+	OrganizationID string
+	SerialNumber   string
+	Email          string
+	Hostname       pgtype.Text
+	FirstSeenAt    pgtype.Timestamptz
+	LastSeenAt     pgtype.Timestamptz
+}
+
+// Reads back per-device agent heartbeats so tests can assert the write path;
+// there is no production reader until the coverage join lands.
+func (q *Queries) ListDeviceAgentDeviceSyncsFixture(ctx context.Context, organizationID string) ([]ListDeviceAgentDeviceSyncsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listDeviceAgentDeviceSyncsFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDeviceAgentDeviceSyncsFixtureRow
+	for rows.Next() {
+		var i ListDeviceAgentDeviceSyncsFixtureRow
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.SerialNumber,
+			&i.Email,
+			&i.Hostname,
+			&i.FirstSeenAt,
+			&i.LastSeenAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRiskResultsAll = `-- name: ListRiskResultsAll :many
 SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
 FROM risk_results
