@@ -224,6 +224,7 @@ trackedFiles:
   src/funcs/mcpMetadataSet.ts: {}
   src/funcs/mcpRegistriesClearCache.ts: {}
   src/funcs/mcpRegistriesGetServerDetails.ts: {}
+  src/funcs/mcpRegistriesGetSetupDocs.ts: {}
   src/funcs/mcpRegistriesListCatalog.ts: {}
   src/funcs/mcpRegistriesListRegistries.ts: {}
   src/funcs/mcpServersAddToolMetadataBatch.ts: {}
@@ -722,6 +723,7 @@ trackedFiles:
   src/models/components/getprojectresult.ts: {}
   src/models/components/getprompttemplateresult.ts: {}
   src/models/components/getriskpolicychallengeresponsebody.ts: {}
+  src/models/components/getsetupdocsresponsebody.ts: {}
   src/models/components/getsignedasseturlform.ts: {}
   src/models/components/getskillresult.ts: {}
   src/models/components/gettoolusagefilteroptionspayload.ts: {}
@@ -878,6 +880,8 @@ trackedFiles:
   src/models/components/mcpregistry.ts: {}
   src/models/components/mcpserver.ts: {}
   src/models/components/mcpserveractivity.ts: {}
+  src/models/components/mcpsetupguide.ts: {}
+  src/models/components/mcpsetupguideremote.ts: {}
   src/models/components/migrateissuerrequestbody.ts: {}
   src/models/components/migratelegacygramregistrationsform.ts: {}
   src/models/components/migratelegacygramregistrationsresult.ts: {}
@@ -1415,6 +1419,7 @@ trackedFiles:
   src/models/operations/getmcpserver.ts: {}
   src/models/operations/getmcpserveractivity.ts: {}
   src/models/operations/getmcpserverdetails.ts: {}
+  src/models/operations/getmcpsetupdocs.ts: {}
   src/models/operations/getobservabilityoverview.ts: {}
   src/models/operations/getonboardingstatus.ts: {}
   src/models/operations/getorganization.ts: {}
@@ -1913,6 +1918,8 @@ trackedFiles:
   src/react-query/getGcpKmsKey.ts: {}
   src/react-query/getHooksSummary.core.ts: {}
   src/react-query/getHooksSummary.ts: {}
+  src/react-query/getMCPSetupDocs.core.ts: {}
+  src/react-query/getMCPSetupDocs.ts: {}
   src/react-query/getMcpEndpoint.core.ts: {}
   src/react-query/getMcpEndpoint.ts: {}
   src/react-query/getMcpMetadata.core.ts: {}
@@ -4339,6 +4346,19 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getMCPSetupDocs:
+    speakeasy-default-get-MCP-setup-docs:
+      parameters:
+        query:
+          server_url: "https://mcp.box.com"
+          registry_specifier: "com.pulsemcp.mirror/box"
+      responses:
+        "200":
+          application/json: {"guides": [{"aliases": [], "external_markdown": "<value>", "match_kind": "endpoint", "matched_remote_ids": ["<value 1>", "<value 2>", "<value 3>"], "remotes": [{"id": "hosted", "tenanted": false, "transport_type": "sse", "url": "https://blind-distinction.name/"}], "slug": "box", "speakeasy_markdown": "<value>", "summary": "<value>", "title": "Box"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getManagedAssistant:
     speakeasy-default-get-managed-assistant:
       responses:

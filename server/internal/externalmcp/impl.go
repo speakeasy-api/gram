@@ -286,8 +286,8 @@ func (s *Service) GetSetupDocs(ctx context.Context, payload *gen.GetSetupDocsPay
 		return nil, fmt.Errorf("require project read: %w", err)
 	}
 
-	registrySpecifier := strings.TrimSpace(conv.PtrValOrEmpty(payload.RegistrySpecifier, ""))
-	serverURL := strings.TrimSpace(conv.PtrValOrEmpty(payload.ServerURL, ""))
+	registrySpecifier := strings.TrimSpace(conv.PtrValOr(payload.RegistrySpecifier, ""))
+	serverURL := strings.TrimSpace(conv.PtrValOr(payload.ServerURL, ""))
 	if registrySpecifier == "" && serverURL == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "at least one of server_url or registry_specifier must be provided").LogError(ctx, s.logger)
 	}

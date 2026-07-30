@@ -18622,6 +18622,123 @@ paths:
       tags:
         - mcpRegistries
       x-speakeasy-name-override: getServerDetails
+  /rpc/mcpRegistries.getSetupDocs:
+    get:
+      description: Get the published setup documentation for an upstream MCP server, located by endpoint URL and/or registry identifier
+      operationId: getMCPSetupDocs
+      parameters:
+        - allowEmptyValue: true
+          description: URL of the upstream MCP server endpoint
+          example: https://mcp.box.com
+          in: query
+          name: server_url
+          schema:
+            description: URL of the upstream MCP server endpoint
+            example: https://mcp.box.com
+            type: string
+        - allowEmptyValue: true
+          description: Registry identifier for the server (e.g., 'com.pulsemcp.mirror/box')
+          example: com.pulsemcp.mirror/box
+          in: query
+          name: registry_specifier
+          schema:
+            description: Registry identifier for the server (e.g., 'com.pulsemcp.mirror/box')
+            example: com.pulsemcp.mirror/box
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetSetupDocsResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getSetupDocs mcpRegistries
+      tags:
+        - mcpRegistries
+      x-speakeasy-name-override: getSetupDocs
+      x-speakeasy-react-hook:
+        name: GetMCPSetupDocs
   /rpc/mcpRegistries.listCatalog:
     get:
       description: List available MCP servers from configured registries
@@ -55457,6 +55574,16 @@ components:
       required:
         - message
         - acknowledged
+    GetSetupDocsResponseBody:
+      type: object
+      properties:
+        guides:
+          type: array
+          items:
+            $ref: '#/components/schemas/MCPSetupGuide'
+          description: Matching setup guides, most specific match first. Empty when no guide has been published for the server.
+      required:
+        - guides
     GetSignedAssetURLForm:
       type: object
       properties:
@@ -58174,6 +58301,90 @@ components:
         - id
         - name
         - url
+    MCPSetupGuide:
+      type: object
+      properties:
+        add_server_flow:
+          type: string
+          description: How the server is meant to be added in Gram, when the guide states one (e.g., 'catalog', 'custom-remote')
+        aliases:
+          type: array
+          items:
+            type: string
+          description: Registry identifiers the guide is also published under
+        external_markdown:
+          type: string
+          description: Markdown instructions for the setup work that happens in the upstream provider
+        match_kind:
+          type: string
+          description: How the lookup matched this guide
+          enum:
+            - server_ref
+            - slug
+            - alias
+            - provenance
+            - endpoint
+        matched_remote_ids:
+          type: array
+          items:
+            type: string
+          description: IDs of the documented endpoints the lookup matched. Empty when the lookup only identified the guide and not a specific endpoint.
+        remotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/MCPSetupGuideRemote'
+          description: Endpoints documented by the guide
+        slug:
+          type: string
+          description: Stable identifier of the guide
+          example: box
+        speakeasy_markdown:
+          type: string
+          description: Markdown instructions for the setup work that happens in Gram
+        summary:
+          type: string
+          description: One-line summary of what the guide covers
+        title:
+          type: string
+          description: Display title of the guide
+          example: Box
+      description: Published setup documentation for an upstream MCP server
+      required:
+        - slug
+        - title
+        - summary
+        - aliases
+        - remotes
+        - matched_remote_ids
+        - match_kind
+        - external_markdown
+        - speakeasy_markdown
+    MCPSetupGuideRemote:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Stable identifier of the endpoint within the guide
+          example: hosted
+        tenanted:
+          type: boolean
+          description: Whether the endpoint URL is customer-specific and has to be filled in per tenant
+        transport_type:
+          type: string
+          description: Transport type (sse or streamable-http)
+          enum:
+            - sse
+            - streamable-http
+        url:
+          type: string
+          description: URL of the endpoint
+          format: uri
+      description: An MCP server endpoint documented by a setup guide
+      required:
+        - id
+        - url
+        - transport_type
+        - tenanted
     ManagedDevice:
       type: object
       properties:
