@@ -992,9 +992,20 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat entry totals").LogError(ctx, s.logger)
 	}
 
+	// Anchor the content-part fetch to the page being returned. Each part costs
+	// an asset read below, so fetching the whole chat would re-read every
+	// attachment body on every page request.
+	pageMessageIDs := make([]uuid.UUID, 0, len(resultMessages))
+	for _, m := range resultMessages {
+		if id, err := uuid.Parse(m.ID); err == nil {
+			pageMessageIDs = append(pageMessageIDs, id)
+		}
+	}
+
 	contentPartRows, err := s.repo.ListChatContentPartsByChatID(ctx, repo.ListChatContentPartsByChatIDParams{
-		ChatID:    chat.ID,
-		ProjectID: *authCtx.ProjectID,
+		ChatID:               chat.ID,
+		ProjectID:            *authCtx.ProjectID,
+		ParentChatMessageIds: pageMessageIDs,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat content parts").LogError(ctx, s.logger)

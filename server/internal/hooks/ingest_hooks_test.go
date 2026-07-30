@@ -1159,8 +1159,9 @@ func TestIngest_PersistsPromptAttachmentsAsScannableToolRows(t *testing.T) {
 	require.False(t, secondPromptRow.MessageID.Valid, "hash match must not stamp the newer unrelated prompt")
 
 	parts, err := chatRepo.New(ti.conn).ListChatContentPartsByChatID(ctx, chatRepo.ListChatContentPartsByChatIDParams{
-		ChatID:    chatID,
-		ProjectID: *authCtx.ProjectID,
+		ChatID:               chatID,
+		ProjectID:            *authCtx.ProjectID,
+		ParentChatMessageIds: []uuid.UUID{promptRow.ID, secondPromptRow.ID},
 	})
 	require.NoError(t, err)
 	require.Len(t, parts, 1)

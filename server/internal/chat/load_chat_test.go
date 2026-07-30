@@ -3,6 +3,7 @@ package chat_test
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"testing"
 	"time"
 
@@ -202,6 +203,82 @@ func TestLoadChat_ContentPartAssetReadFailureLeavesTranscriptIntact(t *testing.T
 	require.Contains(t, partsByDisplayPath, "missing.txt")
 	require.Equal(t, validContent, partsByDisplayPath["valid.txt"].Content)
 	require.Empty(t, partsByDisplayPath["missing.txt"].Content)
+}
+
+// TestLoadChat_ContentPartsScopedToPage asserts a page only carries the content
+// parts it can anchor. Each part costs an asset read, so returning parts whose
+// parent is off-page would re-read every attachment body in the chat on every
+// page request. Unparented parts are exempt: the client places them by time
+// proximity and has no id to match on.
+func TestLoadChat_ContentPartsScopedToPage(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatServiceRBACDisabled(t)
+	ctx := initSessionCtx(t, ti)
+	chatID := seedChat(t, ctx, ti, "u", "", "paged content parts")
+
+	olderMsgID := seedMessageContent(t, ctx, ti, chatID, "older prompt")
+	newerMsgID := seedMessageContent(t, ctx, ti, chatID, "newer prompt")
+
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, ti.assets)
+	t.Cleanup(func() { _ = shutdown(t.Context()) })
+	assetURL, err := writer.WriteContentPartAsset(ctx, ti.projectID, chatID, []byte("attachment body"))
+	require.NoError(t, err)
+
+	createdAt := pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
+	newPart := func(parent uuid.NullUUID, displayPath string) repo.CreateChatContentPartParams {
+		return repo.CreateChatContentPartParams{
+			ChatID:              chatID,
+			ProjectID:           ti.projectID,
+			Kind:                message.PromptAttachment,
+			ContentAssetUrl:     assetURL,
+			ExternalID:          pgtype.Text{String: displayPath, Valid: true},
+			ParentChatMessageID: parent,
+			Version:             pgtype.Int4{},
+			Source:              pgtype.Text{},
+			Metadata:            []byte(`{"display_path":"` + displayPath + `","kind":"file"}`),
+			RiskAnalyzedAt:      pgtype.Timestamptz{},
+			CreatedAt:           createdAt,
+		}
+	}
+	_, err = repo.New(ti.conn).CreateChatContentPart(ctx, []repo.CreateChatContentPartParams{
+		newPart(uuid.NullUUID{UUID: olderMsgID, Valid: true}, "older.txt"),
+		newPart(uuid.NullUUID{UUID: newerMsgID, Valid: true}, "newer.txt"),
+		newPart(uuid.NullUUID{}, "unparented.txt"),
+	})
+	require.NoError(t, err)
+
+	displayPaths := func(parts []*gen.ChatContentPart) []string {
+		out := make([]string, 0, len(parts))
+		for _, part := range parts {
+			var metadata struct {
+				DisplayPath string `json:"display_path"`
+			}
+			require.NoError(t, json.Unmarshal(part.Metadata, &metadata))
+			out = append(out, metadata.DisplayPath)
+		}
+		slices.Sort(out)
+		return out
+	}
+
+	// Newest page holds only the newer message, so the older message's part
+	// must not be fetched. The unparented part still comes back.
+	p := loadPayload(chatID.String())
+	p.Limit = 1
+	newest, err := ti.service.LoadChat(ctx, p)
+	require.NoError(t, err)
+	require.Len(t, newest.Messages, 1)
+	require.Equal(t, newerMsgID.String(), newest.Messages[0].ID)
+	require.Equal(t, []string{"newer.txt", "unparented.txt"}, displayPaths(newest.ContentParts))
+
+	// Paging back to the older message swaps which parented part is carried.
+	p = loadPayload(chatID.String())
+	p.Limit = 1
+	p.BeforeSeq = &newest.Messages[0].Seq
+	older, err := ti.service.LoadChat(ctx, p)
+	require.NoError(t, err)
+	require.Len(t, older.Messages, 1)
+	require.Equal(t, olderMsgID.String(), older.Messages[0].ID)
+	require.Equal(t, []string{"older.txt", "unparented.txt"}, displayPaths(older.ContentParts))
 }
 
 // isRiskAt reports the is_risk flag of the message with this seq (false when the
