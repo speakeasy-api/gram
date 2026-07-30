@@ -3150,7 +3150,7 @@ CREATE INDEX IF NOT EXISTS assistant_memories_tags_gin
 -- retaining explicit structural/content scope fields for later retrieval.
 CREATE TABLE IF NOT EXISTS business_memories (
   id                     uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id             uuid NOT NULL,
+  project_id             uuid,
   organization_id        TEXT NOT NULL,
   body                   TEXT NOT NULL,
   memory_type            TEXT NOT NULL,
@@ -3184,11 +3184,18 @@ CREATE TABLE IF NOT EXISTS business_memories (
 CREATE UNIQUE INDEX IF NOT EXISTS business_memories_source_candidate_key
   ON business_memories (source_evaluation_id, source_candidate_index);
 
+CREATE INDEX IF NOT EXISTS business_memories_project_id_idx
+  ON business_memories (project_id);
+
 CREATE INDEX IF NOT EXISTS business_memories_project_created_at_idx
   ON business_memories (project_id, created_at DESC, id DESC)
   WHERE deleted IS FALSE;
 
-CREATE INDEX IF NOT EXISTS business_memories_embedding_hnsw
+CREATE INDEX IF NOT EXISTS business_memories_content_scope_gin_idx
+  ON business_memories USING gin (content_scope)
+  WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS business_memories_embedding_hnsw_idx
   ON business_memories USING hnsw (embedding halfvec_cosine_ops)
   WHERE deleted IS FALSE AND lifecycle_state = 'active';
 

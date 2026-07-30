@@ -308,7 +308,7 @@ type BillingMetadatum struct {
 
 type BusinessMemory struct {
 	ID                   uuid.UUID
-	ProjectID            uuid.UUID
+	ProjectID            uuid.NullUUID
 	OrganizationID       string
 	Body                 string
 	MemoryType           string

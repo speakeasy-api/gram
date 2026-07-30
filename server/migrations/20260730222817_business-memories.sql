@@ -1,7 +1,7 @@
 -- Create "business_memories" table
 CREATE TABLE "business_memories" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
-  "project_id" uuid NOT NULL,
+  "project_id" uuid NULL,
   "organization_id" text NOT NULL,
   "body" text NOT NULL,
   "memory_type" text NOT NULL,
@@ -27,9 +27,13 @@ CREATE TABLE "business_memories" (
   CONSTRAINT "business_memories_source_evaluation_id_fkey" FOREIGN KEY ("source_evaluation_id") REFERENCES "chat_analysis_evaluations" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
   CONSTRAINT "business_memories_body_size_check" CHECK (octet_length(body) <= 8192)
 );
--- Create index "business_memories_embedding_hnsw" to table: "business_memories"
-CREATE INDEX "business_memories_embedding_hnsw" ON "business_memories" USING hnsw ("embedding" halfvec_cosine_ops) WHERE ((deleted IS FALSE) AND (lifecycle_state = 'active'::text));
+-- Create index "business_memories_content_scope_gin_idx" to table: "business_memories"
+CREATE INDEX "business_memories_content_scope_gin_idx" ON "business_memories" USING gin ("content_scope") WHERE (deleted IS FALSE);
+-- Create index "business_memories_embedding_hnsw_idx" to table: "business_memories"
+CREATE INDEX "business_memories_embedding_hnsw_idx" ON "business_memories" USING hnsw ("embedding" halfvec_cosine_ops) WHERE ((deleted IS FALSE) AND (lifecycle_state = 'active'::text));
 -- Create index "business_memories_project_created_at_idx" to table: "business_memories"
 CREATE INDEX "business_memories_project_created_at_idx" ON "business_memories" ("project_id", "created_at" DESC, "id" DESC) WHERE (deleted IS FALSE);
+-- Create index "business_memories_project_id_idx" to table: "business_memories"
+CREATE INDEX "business_memories_project_id_idx" ON "business_memories" ("project_id");
 -- Create index "business_memories_source_candidate_key" to table: "business_memories"
 CREATE UNIQUE INDEX "business_memories_source_candidate_key" ON "business_memories" ("source_evaluation_id", "source_candidate_index");
