@@ -336,11 +336,21 @@ export function fromGram(
           req.params._meta?.["io.modelcontextprotocol/clientInfo"],
         ) ?? normalizeClientInfo(server.getClientVersion());
 
+      // The OAuth client, in contrast, is established by the authorization
+      // flow. Gram stamps it on `_meta` when it fronts this server.
+      const rawOAuthClientId = req.params._meta?.["gram.ai/oauth-client-id"];
+      const oauthClientId =
+        typeof rawOAuthClientId === "string" && rawOAuthClientId !== ""
+          ? rawOAuthClientId
+          : undefined;
+
       let resp: Response;
       try {
         resp = (await g.handleToolCall({ name, input: args } as any, {
           signal: extra.signal,
           clientInfo,
+          oauthClientId,
+          meta: req.params._meta,
         })) as Response;
       } catch (err) {
         // `ctx.fail()` and input validation failures reject with a `Response`

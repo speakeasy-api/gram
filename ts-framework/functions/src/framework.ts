@@ -161,6 +161,17 @@ export interface MCPClientInfo {
   version: string;
 }
 
+/**
+ * What is known about the caller of a single tool call. Every field is
+ * optional: a caller may report an identity without authenticating, or the
+ * reverse, and a direct (non-MCP) invocation has neither.
+ */
+export interface ToolCaller {
+  clientInfo?: MCPClientInfo;
+  oauthClientId?: string;
+  meta?: Record<string, unknown>;
+}
+
 class ToolContext<Env> {
   /**
    * The parsed environment variables available to the tool.
@@ -180,10 +191,24 @@ class ToolContext<Env> {
    * observability and convenience, never for authorization.
    */
   readonly clientInfo?: MCPClientInfo;
-  constructor(signal: AbortSignal, env: Env, clientInfo?: MCPClientInfo) {
+  /**
+   * The OAuth client the caller authenticated as, when the call arrived over
+   * an authenticated MCP connection. Unlike `clientInfo` this is established
+   * by the authorization flow rather than self-reported, so it is the
+   * identity to reach for when the answer has to be trustworthy.
+   */
+  readonly oauthClientId?: string;
+  /**
+   * The raw `_meta` block that accompanied the call, for keys this SDK does
+   * not model yet. Prefer the named fields above where they exist.
+   */
+  readonly meta?: Record<string, unknown>;
+  constructor(signal: AbortSignal, env: Env, caller?: ToolCaller) {
     this.signal = signal;
     this.env = env;
-    this.clientInfo = clientInfo;
+    this.clientInfo = caller?.clientInfo;
+    this.oauthClientId = caller?.oauthClientId;
+    this.meta = caller?.meta;
   }
 
   /**
@@ -496,7 +521,7 @@ export class Gram<
       name: TName;
       input: InferInput<TTools[TName]>;
     },
-    options?: { signal?: AbortSignal; clientInfo?: MCPClientInfo },
+    options?: { signal?: AbortSignal } & ToolCaller,
   ): Promise<InferResult<TTools[TName]>> {
     const tool = this.#tools.get(request.name);
     if (!tool) {
@@ -508,7 +533,7 @@ export class Gram<
     const ctx = new ToolContext(
       options?.signal || new AbortController().signal,
       envSchema.parse(tool.inputEnv ?? process.env),
-      options?.clientInfo,
+      options,
     );
 
     const schema = zm.object(tool.inputSchema);
