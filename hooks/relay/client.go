@@ -60,6 +60,9 @@ type ingestResult struct {
 	// org_settings effects; nil when the server sent none.
 	failOpen     *bool
 	skillCapture *skillCapture
+	// err preserves the SDK or transport failure for local diagnostics. It is
+	// never returned to providers or persisted in the offline spool.
+	err error
 }
 
 // accepted reports a definitive 2xx exchange — the server stored (or
@@ -213,7 +216,7 @@ func (cl *client) send(ctx context.Context, c creds, body components.IngestReque
 		}
 	}
 
-	out := ingestResult{statusCode: res.StatusCode, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil}
+	out := ingestResult{statusCode: res.StatusCode, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil, err: nil}
 	if res.IngestHookResult != nil {
 		out.decision = decision{
 			Decision: string(res.IngestHookResult.Decision),
@@ -249,6 +252,7 @@ func interpretError(err error) ingestResult {
 			authRejected: status == http.StatusUnauthorized || status == http.StatusForbidden,
 			failOpen:     nil,
 			skillCapture: nil,
+			err:          err,
 		}
 	}
 	var apiErr *apierrors.APIError
@@ -265,6 +269,7 @@ func interpretError(err error) ingestResult {
 				authRejected: false,
 				failOpen:     nil,
 				skillCapture: nil,
+				err:          err,
 			}
 		}
 		return ingestResult{
@@ -273,9 +278,10 @@ func interpretError(err error) ingestResult {
 			authRejected: apiErr.StatusCode == http.StatusUnauthorized || apiErr.StatusCode == http.StatusForbidden,
 			failOpen:     nil,
 			skillCapture: nil,
+			err:          err,
 		}
 	}
-	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil}
+	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil, err: err}
 }
 
 func validRawSHA256(value string) bool {

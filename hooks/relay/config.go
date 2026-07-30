@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -48,8 +49,9 @@ type Config struct {
 	// the fail-open posture (unreachable/5xx allow); explicit deny decisions
 	// and credential failures enforce regardless. New plugins never set it.
 	Nonblocking bool
-	// DebugLog, when set, appends one diagnostic line per event. It travels as a
-	// command flag so it survives providers that scrub the hook environment.
+	// DebugLog is the file that receives hook and runner diagnostics. LoadConfig
+	// defaults it beneath the per-user hooks state directory; the command flag
+	// remains available for providers that scrub the hook environment.
 	DebugLog string
 	// ConfigPath records the speakeasy.json the config was loaded from, so the
 	// login nudge can point the sign-in command at the same deployment identity
@@ -182,7 +184,21 @@ func LoadConfig(defaults Config) Config {
 	if os.Getenv("GRAM_HOOKS_NONBLOCKING") != "" || os.Getenv("GRAM_HOOKS_OBSERVABILITY_MODE") != "" {
 		cfg.Nonblocking = true
 	}
+	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_DEBUG_LOG")); v != "" {
+		cfg.DebugLog = v
+	}
+	if cfg.DebugLog == "" {
+		cfg.DebugLog = defaultDebugLogPath()
+	}
 	cfg.ServerURL = strings.TrimRight(cfg.ServerURL, "/")
 	cfg.SiteURL = strings.TrimRight(cfg.SiteURL, "/")
 	return cfg
+}
+
+func defaultDebugLogPath() string {
+	stateDir := hooksStateDir()
+	if stateDir == "" {
+		return ""
+	}
+	return filepath.Join(stateDir, "speakeasy-hooks.log")
 }
