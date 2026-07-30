@@ -66,6 +66,12 @@ type fakeDrata struct {
 	// existingConnections is the collection the list endpoint returns, as
 	// {id, clientAlias} maps — pre-seed to exercise find-existing.
 	existingConnections []map[string]any
+	// connectionsPageForever makes the list endpoint hand back an advancing,
+	// never-null cursor with no match, driving the page-cap guard.
+	connectionsPageForever bool
+	// connectionsCursorFrozen makes the list endpoint return the same non-null
+	// cursor every time, driving the non-advancing-cursor guard.
+	connectionsCursorFrozen bool
 	// createdConnections records the bodies POSTed to the collection endpoint,
 	// so provisioning tests can assert the schema and workspace sent.
 	createdConnections []map[string]any
@@ -78,24 +84,26 @@ type fakeDrata struct {
 func newFakeDrata(t *testing.T) *fakeDrata {
 	t.Helper()
 	f := &fakeDrata{
-		t:                   t,
-		apiKey:              "test-api-key",
-		resourceIDs:         []string{testResourceID},
-		mu:                  sync.Mutex{},
-		sessions:            map[string][]map[string]any{},
-		sessionStatus:       map[string]string{},
-		ignoreStatusFilter:  false,
-		failComplete:        false,
-		rejectRecordID:      "",
-		records:             nil,
-		uploadRequests:      0,
-		completed:           nil,
-		canceled:            nil,
-		deletedRecords:      nil,
-		existingConnections: nil,
-		createdConnections:  nil,
-		nextConnID:          900,
-		server:              nil,
+		t:                       t,
+		apiKey:                  "test-api-key",
+		resourceIDs:             []string{testResourceID},
+		mu:                      sync.Mutex{},
+		sessions:                map[string][]map[string]any{},
+		sessionStatus:           map[string]string{},
+		ignoreStatusFilter:      false,
+		failComplete:            false,
+		rejectRecordID:          "",
+		records:                 nil,
+		uploadRequests:          0,
+		completed:               nil,
+		canceled:                nil,
+		deletedRecords:          nil,
+		existingConnections:     nil,
+		connectionsPageForever:  false,
+		connectionsCursorFrozen: false,
+		createdConnections:      nil,
+		nextConnID:              900,
+		server:                  nil,
 	}
 
 	connBase := "/public/v2/custom-connections/" + testConnectionID
@@ -113,6 +121,20 @@ func newFakeDrata(t *testing.T) *fakeDrata {
 		}
 		switch r.Method {
 		case http.MethodGet:
+			if f.connectionsPageForever {
+				offset := 0
+				if raw := r.URL.Query().Get("cursor"); raw != "" {
+					offset, _ = strconv.Atoi(raw)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprintf(w, `{"data": [], "pagination": {"cursor": %q}}`, strconv.Itoa(offset+1))
+				return
+			}
+			if f.connectionsCursorFrozen {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprint(w, `{"data": [], "pagination": {"cursor": "frozen"}}`)
+				return
+			}
 			// Paginate by the requested limit so find-existing's cursor-following
 			// is exercised: a connection past the first page must still be found.
 			limit := 200
@@ -872,6 +894,34 @@ func TestProvisionFindsConnectionOnLaterPage(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "9999", out[fieldConnectionID], "cursor-following finds the connection past the first page")
 	require.Empty(t, fake.createdConnections, "a matching connection must never be duplicated")
+}
+
+func TestProvisionFailsWhenScanExceedsPageCap(t *testing.T) {
+	t.Parallel()
+
+	// The list never ends and never matches: reaching the page cap must fail
+	// the provision, not fall through to create a duplicate on every connect.
+	fake := newFakeDrata(t)
+	fake.connectionsPageForever = true
+	s := fake.newSink(t)
+
+	_, err := s.Provision(t.Context(), testOrgID, fake.creds(), providers.Settings{fieldRegion: "us"})
+	require.ErrorContains(t, err, "exceeded")
+	require.Empty(t, fake.createdConnections, "hitting the cap must not create a connection")
+}
+
+func TestProvisionFailsWhenCursorStuck(t *testing.T) {
+	t.Parallel()
+
+	// A cursor that never advances can't prove absence: fail rather than
+	// duplicate.
+	fake := newFakeDrata(t)
+	fake.connectionsCursorFrozen = true
+	s := fake.newSink(t)
+
+	_, err := s.Provision(t.Context(), testOrgID, fake.creds(), providers.Settings{fieldRegion: "us"})
+	require.ErrorContains(t, err, "did not advance")
+	require.Empty(t, fake.createdConnections, "a stuck cursor must not create a connection")
 }
 
 func TestProvisionNoOpWhenConfigured(t *testing.T) {

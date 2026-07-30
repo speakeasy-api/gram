@@ -122,10 +122,11 @@ const (
 	// connectionListLimit is the page size for the find-existing lookup.
 	connectionListLimit = 200
 
-	// maxConnectionListPages bounds how far find-existing pages before giving
-	// up (and creating a fresh connection). 50 × the page size is far more
-	// connections than any tenant realistically has; the bound only exists so a
-	// cursor that never clears cannot loop forever.
+	// maxConnectionListPages bounds how far find-existing pages before it fails
+	// the provision (reaching the cap is treated as unproven-absence, not
+	// not-found, so it never silently creates a duplicate). 50 × the page size
+	// is far more connections than any tenant realistically has; the bound only
+	// exists so a cursor that never clears cannot loop forever.
 	maxConnectionListPages = 50
 )
 
@@ -470,11 +471,18 @@ func parseWorkspaceID(settings providers.Settings) (int, error) {
 }
 
 // findConnectionByName returns the id of an existing custom connection whose
-// display name matches, or "" when none exists. Reusing a prior Gram-created
-// connection is what keeps provisioning idempotent across re-saves — so the
-// lookup follows the pagination cursor: a customer with more connections than
-// one page could carry the Gram one onto a later page, and missing it there
-// would create a duplicate on every save.
+// display name matches, or "" when the scan reaches the genuine last page
+// without one. Reusing a prior Gram-created connection is what keeps
+// provisioning idempotent across re-saves — so the lookup follows the
+// pagination cursor: a customer with more connections than one page could carry
+// the Gram one onto a later page, and missing it there would create a duplicate
+// on every save.
+//
+// Only a null cursor (the true end of the list) counts as "not found"; a scan
+// that hits the page cap or a cursor that won't advance leaves the connection's
+// existence unproven, so it returns an error rather than "" — reporting "not
+// found" there would create a duplicate on every connect, the exact bug the
+// pagination is here to prevent.
 func (s *sink) findConnectionByName(ctx context.Context, creds providers.Credentials, base, name string) (string, error) {
 	cursor := ""
 	for range maxConnectionListPages {
@@ -511,14 +519,21 @@ func (s *sink) findConnectionByName(ctx context.Context, creds providers.Credent
 		if list.Pagination.Cursor != nil {
 			next = *list.Pagination.Cursor
 		}
-		// Stop on the last page, or if the cursor fails to advance (a defensive
-		// guard against a mispaged response looping forever).
-		if next == "" || next == cursor {
+		if next == "" {
+			// True end of the list, no match: the connection does not exist and
+			// the caller creates it.
 			return "", nil
+		}
+		if next == cursor {
+			// A cursor that won't advance can't prove the connection is absent;
+			// fail rather than fall through and risk a duplicate.
+			return "", fmt.Errorf("connection list cursor did not advance")
 		}
 		cursor = next
 	}
-	return "", nil
+	// Ran out of pages before reaching the end: a match could still be beyond
+	// the cap, so this is unproven-absence, not not-found. Fail loudly.
+	return "", fmt.Errorf("connection list exceeded %d pages", maxConnectionListPages)
 }
 
 // createConnection creates the dedicated Custom Connection with the exact
