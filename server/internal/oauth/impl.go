@@ -51,6 +51,12 @@ var (
 	errToolsetNotFound      = errors.New("toolset not found")
 	errCustomDomainNotFound = errors.New("custom domain not found")
 	errOAuthUnavailable     = errors.New("oauth unavailable for private mcp server")
+	// errProxyRetired marks a toolset that has moved to a user_session_issuer.
+	// Attaching an issuer previously only stopped NEW authorizations: the proxy
+	// endpoints kept serving, so clients holding proxy refresh tokens went on
+	// exchanging them indefinitely, outside the issuer's consent, session
+	// duration and revocation. Migrated toolsets now refuse the proxy outright.
+	errProxyRetired = errors.New("oauth proxy retired for issuer-gated mcp server")
 )
 
 //go:embed hosted_oauth_success_page.html.tmpl
@@ -237,6 +243,13 @@ func (s *Service) loadToolsetFromCurrentURLContext(ctx context.Context, mcpSlug 
 		return nil, "", errOAuthUnavailable
 	}
 
+	// Discovery already advertises the issuer's endpoints for these toolsets
+	// (see mcp.serveAuthorizationServerMetadata), so a client turned away here
+	// re-discovers and completes on the issuer-gated path.
+	if toolset.UserSessionIssuerID.Valid {
+		return nil, "", errProxyRetired
+	}
+
 	return &toolset, mcpURL, nil
 }
 
@@ -284,7 +297,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	// Load toolset from MCP slug
 	toolset, fullMCPURL, err := s.loadToolsetFromCurrentURLContext(ctx, mcpSlug)
 	switch {
-	case errors.Is(err, errToolsetNotFound), errors.Is(err, errOAuthUnavailable):
+	case errors.Is(err, errToolsetNotFound), errors.Is(err, errOAuthUnavailable), errors.Is(err, errProxyRetired):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to load authorization details for mcp server").LogError(ctx, s.logger)
@@ -491,6 +504,23 @@ func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 
 	toolset, fullMCPURL, err := s.loadToolsetFromCurrentURLContext(ctx, mcpSlug)
 	switch {
+	case errors.Is(err, errProxyRetired):
+		// RFC 6749 §5.2: invalid_grant is the signal a client acts on by
+		// discarding its tokens and re-running authorization. A 404 here would
+		// read as "server gone" and strand the client on a dead refresh token
+		// instead of moving it onto the issuer-gated path.
+		s.logger.InfoContext(ctx, "refused proxy token exchange for issuer-gated mcp server",
+			attr.SlogToolsetMCPSlug(mcpSlug))
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		if err := json.NewEncoder(w).Encode(map[string]string{
+			"error":             "invalid_grant",
+			"error_description": "This MCP server has moved to a new authorization server. Re-authorize to continue.",
+		}); err != nil {
+			s.logger.ErrorContext(ctx, "failed to encode invalid_grant response", attr.SlogError(err))
+		}
+		return nil
 	case errors.Is(err, errToolsetNotFound), errors.Is(err, errOAuthUnavailable):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
@@ -551,7 +581,7 @@ func (s *Service) handleClientRegistration(w http.ResponseWriter, r *http.Reques
 
 	_, fullMcpURL, err := s.loadToolsetFromCurrentURLContext(ctx, mcpSlug)
 	switch {
-	case errors.Is(err, errToolsetNotFound), errors.Is(err, errOAuthUnavailable):
+	case errors.Is(err, errToolsetNotFound), errors.Is(err, errOAuthUnavailable), errors.Is(err, errProxyRetired):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to load client registration details for mcp server").LogError(ctx, s.logger)
