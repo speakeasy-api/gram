@@ -74,8 +74,8 @@ func VerdictSchema() map[string]any {
 	}
 }
 
-// Stabilized is the code-owned typed result. Vote fields exist only for the
-// optional multi-sample override.
+// Stabilized is the code-owned typed result. Vote fields carry the offline
+// evaluator's multi-sample sweeps; production judges one sample per event.
 type Stabilized struct {
 	IsInjection   bool
 	DirectiveKind string
@@ -113,9 +113,10 @@ func StabilizeSingle(verdict Verdict) Stabilized {
 	}
 }
 
-// Aggregate applies a strict majority to the configured sample set. A zero
-// Verdict represents an errored, timed-out, rate-limited, or malformed sample
-// and therefore counts against the majority as a safe vote.
+// Aggregate applies a strict majority to a multi-sample sweep. Only the offline
+// evaluator samples more than once. A zero Verdict represents an errored,
+// timed-out, rate-limited, or malformed sample and therefore counts against the
+// majority as a safe vote.
 func Aggregate(verdicts []Verdict) Stabilized {
 	positive := make([]Verdict, 0, len(verdicts))
 	for _, verdict := range verdicts {

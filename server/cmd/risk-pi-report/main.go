@@ -286,7 +286,7 @@ type options struct {
 
 const (
 	// defaultJudgeModel is the report's judge model when none is provided.
-	defaultJudgeModel = piopenrouter.DefaultModel
+	defaultJudgeModel = piopenrouter.Model
 	// judgeConcurrency bounds concurrent logical events without turning the
 	// benchmark into a provider load test.
 	defaultJudgeConcurrency = 4
@@ -324,7 +324,7 @@ func parseFlags() options {
 	flag.StringVar(&opts.judgeModel, "judge-model", defaultJudgeModel, "OpenRouter model id for the judge (must be allowlisted)")
 	flag.IntVar(&opts.judgeConcurrency, "judge-concurrency", defaultJudgeConcurrency, "max concurrent logical events")
 	flag.StringVar(&opts.sources, "sources", "", "comma-separated source substrings to keep (empty = all); use to judge a cheap iteration slice")
-	flag.StringVar(&opts.reasoning, "reasoning", piopenrouter.DefaultReasoningEffort, "OpenRouter reasoning effort for the judge call")
+	flag.StringVar(&opts.reasoning, "reasoning", piopenrouter.ReasoningEffort, "OpenRouter reasoning effort for the judge call")
 	flag.StringVar(&opts.extraCorpus, "extra-corpus", "", "absolute path to an additional local JSONL corpus; never loaded by default")
 	flag.IntVar(&opts.repeats, "repeats", 1, "number of complete repeated trials")
 	flag.IntVar(&opts.samples, "samples", piopenrouter.SamplesPerEvent, "physical judge calls per event; production defaults to one")
@@ -1144,7 +1144,7 @@ func judgeVote(ctx context.Context, client openrouter.CompletionClient, model, r
 	}
 	temp := 0.0
 	messages := []or.ChatMessages{
-		piopenrouter.TypedSystemMessage(),
+		piopenrouter.SystemMessage(),
 		or.CreateChatMessagesUser(or.ChatUserMessage{Role: or.ChatUserMessageRoleUser, Content: or.CreateChatUserMessageContentStr(string(payload)), Name: nil}),
 	}
 

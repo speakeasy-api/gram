@@ -58,7 +58,6 @@ func (e *recordingPIEngine) Classify(_ context.Context, req promptinjection.Requ
 	for i := range results {
 		results[i] = promptinjection.Result{
 			Label:         promptinjection.LabelInjection,
-			Score:         1,
 			Rationale:     "test prompt injection",
 			DirectiveKind: "",
 			Target:        "",

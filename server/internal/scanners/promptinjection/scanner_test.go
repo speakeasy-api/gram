@@ -38,7 +38,7 @@ func (f *fakeEngine) classify(_ context.Context, req promptinjection.Request) ([
 	if len(f.results) == 0 {
 		out := make([]promptinjection.Result, len(req.Messages))
 		for i := range out {
-			out[i] = promptinjection.Result{Label: promptinjection.LabelSafe, Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false}
+			out[i] = promptinjection.Result{Label: promptinjection.LabelSafe, Rationale: "", DirectiveKind: "", Target: "", Operational: false}
 		}
 		return out, nil
 	}
@@ -72,7 +72,7 @@ func mkMsgs(texts ...string) []judgemessage.Message {
 func TestPromptInjectionScanner_EngineInjectionEmitsFinding(t *testing.T) {
 	t.Parallel()
 	fc := &fakeEngine{
-		results: []promptinjection.Result{{Label: promptinjection.LabelInjection, Score: 0.7, Rationale: "bad prompt", DirectiveKind: "", Target: "", Operational: false}},
+		results: []promptinjection.Result{{Label: promptinjection.LabelInjection, Rationale: "bad prompt", DirectiveKind: "", Target: "", Operational: false}},
 	}
 	s := newScanner(t, fc)
 
@@ -81,7 +81,6 @@ func TestPromptInjectionScanner_EngineInjectionEmitsFinding(t *testing.T) {
 	require.Len(t, findings, 1)
 	assert.Equal(t, promptinjection.Rule, findings[0].RuleID)
 	assert.Equal(t, "bad prompt", findings[0].Description)
-	assert.InDelta(t, 0.7, findings[0].Confidence, 0.001)
 	assert.True(t, hasTag(findings[0].Tags, "llm-judge"))
 	assert.True(t, hasTag(findings[0].Tags, "layer-1"))
 	assert.Equal(t, []string{"user-scan-1"}, fc.lastReq.UserIDs)
@@ -91,7 +90,7 @@ func TestPromptInjectionScanner_EngineInjectionEmitsFinding(t *testing.T) {
 func TestPromptInjectionScanner_EngineSafeLabelEmitsNoFinding(t *testing.T) {
 	t.Parallel()
 	fc := &fakeEngine{
-		results: []promptinjection.Result{{Label: promptinjection.LabelSafe, Score: 0.99, Rationale: "", DirectiveKind: "", Target: "", Operational: false}},
+		results: []promptinjection.Result{{Label: promptinjection.LabelSafe, Rationale: "", DirectiveKind: "", Target: "", Operational: false}},
 	}
 	s := newScanner(t, fc)
 
@@ -107,7 +106,6 @@ func TestPromptInjectionScanner_TypedMetadataFlowsToFinding(t *testing.T) {
 	fc := &fakeEngine{
 		results: []promptinjection.Result{{
 			Label:         promptinjection.LabelInjection,
-			Score:         0,
 			Rationale:     "ambiguous directive",
 			DirectiveKind: "guarded_secret_extraction",
 			Target:        "unclear",
@@ -142,8 +140,8 @@ func TestPromptInjectionScanner_EngineMismatchedResultCountEmitsNoFinding(t *tes
 	t.Parallel()
 	fc := &fakeEngine{
 		results: []promptinjection.Result{
-			{Label: promptinjection.LabelInjection, Score: 0.7, Rationale: "", DirectiveKind: "", Target: "", Operational: false},
-			{Label: promptinjection.LabelInjection, Score: 0.8, Rationale: "", DirectiveKind: "", Target: "", Operational: false},
+			{Label: promptinjection.LabelInjection, Rationale: "", DirectiveKind: "", Target: "", Operational: false},
+			{Label: promptinjection.LabelInjection, Rationale: "", DirectiveKind: "", Target: "", Operational: false},
 		},
 	}
 	s := newScanner(t, fc)
@@ -179,9 +177,9 @@ func TestPromptInjectionScanner_BatchEngineFindings(t *testing.T) {
 	t.Parallel()
 	fc := &fakeEngine{
 		results: []promptinjection.Result{
-			{Label: promptinjection.LabelInjection, Score: 0.95, Rationale: "", DirectiveKind: "", Target: "", Operational: false},
-			{Label: promptinjection.LabelSafe, Score: 0.04, Rationale: "", DirectiveKind: "", Target: "", Operational: false},
-			{Label: promptinjection.LabelInjection, Score: 0.92, Rationale: "", DirectiveKind: "", Target: "", Operational: false},
+			{Label: promptinjection.LabelInjection, Rationale: "", DirectiveKind: "", Target: "", Operational: false},
+			{Label: promptinjection.LabelSafe, Rationale: "", DirectiveKind: "", Target: "", Operational: false},
+			{Label: promptinjection.LabelInjection, Rationale: "", DirectiveKind: "", Target: "", Operational: false},
 		},
 	}
 	s := newScanner(t, fc)
@@ -243,7 +241,7 @@ func TestPromptInjectionScanner_BatchEngineErrorEmitsNoFindings(t *testing.T) {
 func TestPromptInjectionScanner_BatchMismatchedResultCountEmitsNoFindings(t *testing.T) {
 	t.Parallel()
 	fc := &fakeEngine{
-		results: []promptinjection.Result{{Label: promptinjection.LabelInjection, Score: 0.95, Rationale: "", DirectiveKind: "", Target: "", Operational: false}},
+		results: []promptinjection.Result{{Label: promptinjection.LabelInjection, Rationale: "", DirectiveKind: "", Target: "", Operational: false}},
 	}
 	s := newScanner(t, fc)
 
@@ -261,7 +259,7 @@ func TestPromptInjectionScanner_BatchMismatchedResultCountEmitsNoFindings(t *tes
 func TestPromptInjectionScanner_BatchSkipsEmptyMessageFinding(t *testing.T) {
 	t.Parallel()
 	fc := &fakeEngine{
-		results: []promptinjection.Result{{Label: promptinjection.LabelInjection, Score: 0.91, Rationale: "", DirectiveKind: "", Target: "", Operational: false}},
+		results: []promptinjection.Result{{Label: promptinjection.LabelInjection, Rationale: "", DirectiveKind: "", Target: "", Operational: false}},
 	}
 	s := newScanner(t, fc)
 
@@ -277,7 +275,7 @@ func TestPromptInjectionScanner_BatchSkipsEmptyMessageFinding(t *testing.T) {
 func TestPromptInjectionScanner_BatchKeepsEmptyTextToolCallFinding(t *testing.T) {
 	t.Parallel()
 	fc := &fakeEngine{
-		results: []promptinjection.Result{{Label: promptinjection.LabelInjection, Score: 0.91, Rationale: "", DirectiveKind: "", Target: "", Operational: false}},
+		results: []promptinjection.Result{{Label: promptinjection.LabelInjection, Rationale: "", DirectiveKind: "", Target: "", Operational: false}},
 	}
 	s := newScanner(t, fc)
 

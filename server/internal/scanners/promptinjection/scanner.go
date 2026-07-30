@@ -33,10 +33,7 @@ type Request struct {
 }
 
 type Result struct {
-	Label string
-	// Score retains the legacy binary judge's confidence semantics. Typed
-	// verdicts leave it zero and carry their evidence in the fields below.
-	Score         float64
+	Label         string
 	Rationale     string
 	DirectiveKind string
 	Target        string
@@ -48,7 +45,7 @@ type Classifier func(ctx context.Context, req Request) ([]Result, error)
 func NoopClassifier(_ context.Context, req Request) ([]Result, error) {
 	results := make([]Result, len(req.Messages))
 	for i := range results {
-		results[i] = Result{Label: LabelSafe, Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false}
+		results[i] = Result{Label: LabelSafe, Rationale: "", DirectiveKind: "", Target: "", Operational: false}
 	}
 	return results, nil
 }
@@ -161,14 +158,15 @@ func (s *Scanner) findingFromResult(text string, r Result) *scanners.Finding {
 		)
 	}
 	return &scanners.Finding{
-		RuleID:              ruleID,
-		Description:         description,
-		Match:               text,
-		StartPos:            0,
-		EndPos:              len(text),
-		Tags:                tags,
-		Source:              Source,
-		Confidence:          r.Score,
+		RuleID:      ruleID,
+		Description: description,
+		Match:       text,
+		StartPos:    0,
+		EndPos:      len(text),
+		Tags:        tags,
+		Source:      Source,
+		// The typed judge carries its evidence in tags, not a confidence score.
+		Confidence:          0,
 		DeadLetterReason:    "",
 		McpLookupToolCallID: "",
 		SpanGroupKey:        "",

@@ -61,7 +61,6 @@ func TestHandle_PublishesPromptInjectionFinding(t *testing.T) {
 		require.Equal(t, []string{"user-1"}, req.UserIDs)
 		return []promptinjection.Result{{
 			Label:         promptinjection.LabelInjection,
-			Score:         0.95,
 			Rationale:     "Detected a prompt injection attempt.",
 			DirectiveKind: "",
 			Target:        "",
@@ -91,7 +90,7 @@ func TestHandle_PublishesPromptInjectionFinding(t *testing.T) {
 	require.Equal(t, "msg-1", f.GetChatMessageId())
 	require.Equal(t, int64(3), f.GetRiskPolicyVersion())
 	require.NotEmpty(t, f.GetId())
-	require.InDelta(t, 0.95, f.GetConfidence(), 0.0001)
+	require.Zero(t, f.GetConfidence(), "the typed judge carries evidence in tags, not a score")
 }
 
 func TestHandle_CleanPromptInjectionContentPublishesNothing(t *testing.T) {
@@ -116,7 +115,6 @@ func TestHandle_PassesPublishedTrajectoryToScanner(t *testing.T) {
 		require.Equal(t, "untrusted tool result", req.Trajectories[0].RecentUntrustedContent)
 		return []promptinjection.Result{{
 			Label:         promptinjection.LabelSafe,
-			Score:         0,
 			Rationale:     "",
 			DirectiveKind: "",
 			Target:        "",

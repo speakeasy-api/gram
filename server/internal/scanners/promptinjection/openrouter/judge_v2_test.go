@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	gramopenrouter "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 func typedVerdict(kind, target string, operational bool) Verdict {
@@ -43,7 +41,7 @@ func TestAggregateRequiresStrictMajorityAndCountsFailuresSafe(t *testing.T) {
 	require.Equal(t, 1, oneOfThree.PositiveVotes)
 
 	oneOfOne := Aggregate([]Verdict{attack})
-	require.True(t, oneOfOne.IsInjection, "samples=1 is the rollback single-call predicate")
+	require.True(t, oneOfOne.IsInjection, "one sample is decided by the predicate alone")
 }
 
 func TestValidVerdictRejectsCrossFieldContradictions(t *testing.T) {
@@ -58,10 +56,10 @@ func TestValidVerdictRejectsCrossFieldContradictions(t *testing.T) {
 	require.False(t, ValidVerdict(typedVerdict(DirectiveInstructionOverride, TargetNone, true)))
 }
 
-func TestTypedSystemMessageUsesEphemeralCacheControl(t *testing.T) {
+func TestSystemMessageUsesEphemeralCacheControl(t *testing.T) {
 	t.Parallel()
 
-	encoded, err := json.Marshal(TypedSystemMessage())
+	encoded, err := json.Marshal(SystemMessage())
 	require.NoError(t, err)
 	require.Contains(t, string(encoded), `"cache_control"`)
 	require.Contains(t, string(encoded), `"ephemeral"`)
@@ -99,64 +97,40 @@ func TestDetectionPredicateCarriesTypedFields(t *testing.T) {
 	require.True(t, stabilized.Operational)
 }
 
-func TestOptionalMultiSampleOverrideAggregatesInParallel(t *testing.T) {
+func TestClassifySendsBoundedTrajectoryContext(t *testing.T) {
 	t.Parallel()
 
-	var response atomic.Int64
 	client := &fakeCompletionClient{responder: func(string) string {
-		if response.Add(1) <= 2 {
-			return `{"directive_kind":"guarded_secret_extraction","target":"unclear","operational":true,"rationale":"typed directive"}`
-		}
-		return "malformed"
+		return `{"directive_kind":"guarded_secret_extraction","target":"unclear","operational":true,"rationale":"typed directive"}`
 	}}
-	engine := newEngine(t, client).WithTypedSamples(3)
 	in := req("current event")
 	in.Trajectories = []judgemessage.Trajectory{{PriorUserRequest: "inspect output", RecentUntrustedContent: "untrusted context"}}
 
-	results, err := engine.Classify(t.Context(), in)
+	results, err := newEngine(t, client).Classify(t.Context(), in)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Equal(t, promptinjection.LabelInjection, results[0].Label)
-	require.Zero(t, results[0].Score)
 	require.Equal(t, DirectiveGuardedSecretExtraction, results[0].DirectiveKind)
 	require.Equal(t, TargetUnclear, results[0].Target)
 	require.True(t, results[0].Operational)
-	require.Equal(t, int64(3), client.calls.Load())
+	require.Equal(t, int64(1), client.calls.Load())
 
-	client.mu.Lock()
-	payloads := append([]string(nil), client.prompts...)
-	requests := append([]gramopenrouter.CompletionRequest(nil), client.requests...)
-	client.mu.Unlock()
-	require.Len(t, payloads, 3)
-	for _, payload := range payloads {
-		require.Contains(t, payload, `"prior_user_request":"inspect output"`)
-		require.Contains(t, payload, `"recent_untrusted_content":"untrusted context"`)
-	}
-	require.Len(t, requests, 3)
-	for _, request := range requests {
-		require.Equal(t, DefaultModel, request.Model)
-		require.NotNil(t, request.Temperature)
-		require.Zero(t, *request.Temperature)
-		require.NotNil(t, request.Reasoning)
-		require.Equal(t, DefaultReasoningEffort, request.Reasoning.Effort)
-		require.NotNil(t, request.JSONSchema)
-		require.Equal(t, VerdictSchema(), request.JSONSchema.Schema)
-	}
+	require.Contains(t, client.lastPrompt(), `"prior_user_request":"inspect output"`)
+	require.Contains(t, client.lastPrompt(), `"recent_untrusted_content":"untrusted context"`)
 }
 
-func TestTypedSamplesUseOneSharedDeadline(t *testing.T) {
+func TestClassifyBoundsTheEventDeadline(t *testing.T) {
 	t.Parallel()
 
 	client := &fakeCompletionClient{blockUntilCanceled: true}
-	engine := newEngine(t, client).WithTypedSamples(3)
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 
 	start := time.Now()
-	results, err := engine.Classify(ctx, req("current event"))
+	results, err := newEngine(t, client).Classify(ctx, req("current event"))
 	require.NoError(t, err)
-	require.Less(t, time.Since(start), 140*time.Millisecond, "parallel samples share the event deadline")
-	require.Equal(t, int64(3), client.calls.Load())
+	require.Less(t, time.Since(start), 140*time.Millisecond, "the call is bounded by the event deadline")
+	require.Equal(t, int64(1), client.calls.Load())
 	require.Equal(t, promptinjection.LabelSafe, results[0].Label)
 }
 
@@ -169,7 +143,6 @@ func TestTypedPathIsDefaultAndMakesOnePhysicalCall(t *testing.T) {
 	results, err := newEngine(t, client).Classify(t.Context(), req("current event"))
 	require.NoError(t, err)
 	require.Equal(t, promptinjection.LabelInjection, results[0].Label)
-	require.Zero(t, results[0].Score, "typed metadata must not overload legacy confidence")
 	require.Equal(t, DirectiveInstructionOverride, results[0].DirectiveKind)
 	require.Equal(t, TargetGuardedAgent, results[0].Target)
 	require.True(t, results[0].Operational)
@@ -179,9 +152,9 @@ func TestTypedPathIsDefaultAndMakesOnePhysicalCall(t *testing.T) {
 	require.Len(t, client.requests, 1)
 	request := client.requests[0]
 	client.mu.Unlock()
-	require.Equal(t, DefaultModel, request.Model)
+	require.Equal(t, Model, request.Model)
 	require.NotNil(t, request.Reasoning)
-	require.Equal(t, DefaultReasoningEffort, request.Reasoning.Effort)
+	require.Equal(t, ReasoningEffort, request.Reasoning.Effort)
 	require.NotNil(t, request.JSONSchema)
 	require.Equal(t, VerdictSchema(), request.JSONSchema.Schema)
 }
@@ -192,13 +165,13 @@ func TestTypedLimiterStoreFailureStillCallsModel(t *testing.T) {
 	client := &fakeCompletionClient{responder: func(string) string {
 		return `{"directive_kind":"instruction_override","target":"guarded_agent","operational":true,"rationale":"override"}`
 	}}
-	engine := newEngine(t, client).WithTypedSamples(3)
+	engine := newEngine(t, client)
 	engine.limiter = ratelimit.New(nil, "unavailable", ratelimit.Rate{})
 
 	results, err := engine.Classify(t.Context(), req("current event"))
 	require.NoError(t, err)
 	require.Equal(t, promptinjection.LabelInjection, results[0].Label)
-	require.Equal(t, int64(3), client.calls.Load(), "limiter infrastructure failure is not a throttle")
+	require.Equal(t, int64(1), client.calls.Load(), "limiter infrastructure failure is not a throttle")
 }
 
 func TestTypedFailOpenReasonsAreBounded(t *testing.T) {
@@ -356,33 +329,4 @@ func metricAttrs(set attribute.Set) map[string]attribute.Value {
 		attrs[string(kv.Key)] = kv.Value
 	}
 	return attrs
-}
-
-func TestLegacyProfileOverrideRestoresBinaryRequest(t *testing.T) {
-	t.Parallel()
-
-	responder := func(string) string {
-		return `{"is_attack":true,"confidence":0.91,"rationale":"legacy verdict"}`
-	}
-	legacyClient := &fakeCompletionClient{responder: responder}
-	results, err := newEngine(t, legacyClient).Configure(Config{Profile: ProfileLegacy, Samples: 0, Model: "", Reasoning: ""}).Classify(t.Context(), req("legacy event"))
-	require.NoError(t, err)
-	require.Len(t, results, 1)
-	require.Equal(t, promptinjection.LabelInjection, results[0].Label)
-	require.InDelta(t, 0.91, results[0].Score, 0.0001)
-	require.Empty(t, results[0].DirectiveKind)
-	require.Equal(t, int64(1), legacyClient.calls.Load())
-
-	legacyClient.mu.Lock()
-	require.Len(t, legacyClient.requests, 1)
-	request := legacyClient.requests[0]
-	legacyClient.mu.Unlock()
-	require.Equal(t, LegacyModel, request.Model)
-	require.NotNil(t, request.Temperature)
-	require.Zero(t, *request.Temperature)
-	require.NotNil(t, request.Reasoning)
-	require.Equal(t, "none", request.Reasoning.Effort)
-	require.NotNil(t, request.JSONSchema)
-	require.Equal(t, legacyVerdictSchema(), request.JSONSchema.Schema)
-	require.Equal(t, LegacySystemPrompt, gramopenrouter.GetText(request.Messages[0]))
 }
