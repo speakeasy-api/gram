@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
+	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -677,6 +678,53 @@ func TestFindingCHWriter_HandleBatch_IgnoresParentMessageFromAnotherChat(t *test
 	require.Equal(t, ownChatID, rows[0].ChatID)
 	require.Equal(t, "own-chat-user", rows[0].UserID)
 	require.Equal(t, "own-chat-user@example.com", rows[0].ExternalUserID)
+}
+
+// Nothing in the schema keeps a part's project_id in step with its chat's, so a
+// part claiming one project while its chat sits in another must resolve no
+// attribution at all: otherwise the caller's per-finding project check would be
+// comparing against a project id the chat never belonged to.
+func TestFindingCHWriter_HandleBatch_RejectsPartWhoseChatIsInAnotherProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "other-attr-" + uuid.New().String()[:8]
+	otherProject, err := projectsRepo.New(ti.conn).CreateProject(ctx, projectsRepo.CreateProjectParams{
+		Name:           slug,
+		Slug:           slug,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	queries := riskrepo.New(ti.conn)
+	// The chat lives in the other project while the part claims the caller's.
+	foreignChatID, err := queries.CreateChatForTest(t.Context(), riskrepo.CreateChatForTestParams{
+		ProjectID:      otherProject.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText("foreign-project-user"),
+		ExternalUserID: conv.ToPGText("foreign-project-user@example.com"),
+	})
+	require.NoError(t, err)
+
+	contentPartID, err := queries.CreateChatContentPartForTest(t.Context(), riskrepo.CreateChatContentPartForTestParams{
+		ChatID:              foreignChatID,
+		ProjectID:           uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		Kind:                "prompt_attachment",
+		ContentAssetUrl:     "file:///attachment.txt",
+		ParentChatMessageID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+
+	rows, err := queries.GetChatContentPartAttribution(t.Context(), riskrepo.GetChatContentPartAttributionParams{
+		Ids:        []uuid.UUID{contentPartID},
+		ProjectIds: []uuid.UUID{*authCtx.ProjectID},
+	})
+	require.NoError(t, err)
+	require.Empty(t, rows)
 }
 
 // chMessagesInsertedPoint returns the single data point for the CH

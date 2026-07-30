@@ -1236,6 +1236,17 @@ LEFT JOIN chats c
 WHERE ccp.id = ANY($1::uuid[])
   AND ccp.project_id = ANY($2::uuid[])
   AND ccp.deleted IS FALSE
+  -- Nothing in the schema ties a part's project_id to its chat's, so a part
+  -- pointing at a chat in another project is rejected outright rather than
+  -- attributed. Constraining the chats join alone would not be enough: the
+  -- parent message is reached through ccp.chat_id, so its user ids would still
+  -- come from the foreign chat.
+  AND EXISTS (
+    SELECT 1
+    FROM chats pc
+    WHERE pc.id = ccp.chat_id
+      AND pc.project_id = ccp.project_id
+  )
 `
 
 type GetChatContentPartAttributionParams struct {
