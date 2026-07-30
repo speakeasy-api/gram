@@ -1,0 +1,21 @@
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_04263b488f3f01::t_31776adc2554f8 367-377
+server/internal/background/activities/risk_analysis/batch_messages.go
+  s_04263b488f3f01::t_31776adc2554f8 100-101,103-113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.18",
+  "base_commit_sha": "00e5731d3a449ebfc110bfc1cb86c888514fd167",
+  "prompts": {},
+  "sessions": {
+    "s_04263b488f3f01": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "18c56efd-1b07-4a37-8cd2-0c721e41a167",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
