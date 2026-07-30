@@ -2,10 +2,13 @@ import { useOrganization } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
-import type { ReactNode } from "react";
+import { useOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
+import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
 import { InfoField, InfoSection, InfoText } from "../../detailFields";
 import { isAbsoluteHttpUrl } from "../../issuerDocumentationLinks";
+import { issuerDisplayName } from "../../issuerDisplay";
+import { OAuthFlowDiagram, type IssuerFlowData } from "../../OAuthFlowDiagram";
 
 // ProjectValue renders the owning project for an issuer: "—" for an
 // organizational issuer (no project_id), otherwise the project's slug linked to
@@ -74,6 +77,34 @@ export function OverviewTab({
 }: {
   issuer: RemoteSessionIssuer;
 }): JSX.Element {
+  // Fetch clients to aggregate counts for the flow diagram
+  const { data: clientsData } = useOrganizationRemoteSessionClients({
+    issuerId: issuer.id,
+  });
+
+  // Aggregate counts across all clients
+  const flowCounts = useMemo(() => {
+    const clients = clientsData?.result.items ?? [];
+    const clientCount = clients.length;
+    const mcpServerCount = clients.reduce(
+      (sum, c) => sum + c.mcpServerCount,
+      0,
+    );
+    const sessionCount = clients.reduce(
+      (sum, c) => sum + c.activeSessionCount,
+      0,
+    );
+    return { clientCount, mcpServerCount, sessionCount };
+  }, [clientsData]);
+
+  const flowData: IssuerFlowData = {
+    issuerName: issuerDisplayName(issuer),
+    issuerUrl: issuer.issuer,
+    clientCount: flowCounts.clientCount,
+    mcpServerCount: flowCounts.mcpServerCount,
+    sessionCount: flowCounts.sessionCount,
+  };
+
   const endpoint = (value: string | undefined): ReactNode => (
     <InfoText mono>{value || "—"}</InfoText>
   );
@@ -88,6 +119,12 @@ export function OverviewTab({
 
   return (
     <div className="max-w-3xl space-y-8">
+      <section>
+        <h3 className="text-muted-foreground mb-3 text-xs font-medium tracking-wide uppercase">
+          OAuth Flow
+        </h3>
+        <OAuthFlowDiagram variant="issuer" data={flowData} />
+      </section>
       <div className="grid items-start gap-8 sm:grid-cols-2">
         <InfoSection title="Essentials">
           <InfoField label="Name">

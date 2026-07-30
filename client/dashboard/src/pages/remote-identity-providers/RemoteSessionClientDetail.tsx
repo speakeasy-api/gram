@@ -129,7 +129,7 @@ export default function RemoteSessionClientDetail(): JSX.Element {
 
             <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
               <TabsContent value="overview" className="mt-0">
-                {client && <OverviewTab client={client} />}
+                {client && <OverviewTab client={client} issuer={issuer} />}
               </TabsContent>
               <TabsContent value="mcp-servers" className="mt-0">
                 <McpServersTab clientId={clientId} />
