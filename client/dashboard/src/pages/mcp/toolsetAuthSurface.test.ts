@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Toolset } from "@/lib/toolTypes";
 import {
+  canConfigureExternalOAuth,
   externalOauthIssuerUrl,
   getOAuthParadigm,
   isUserSessionIssuerWired,
@@ -92,6 +93,54 @@ describe("toolsetConvertAction", () => {
 
   it("offers no convert path without a legacy paradigm", () => {
     expect(toolsetConvertAction(null)).toBeNull();
+  });
+});
+
+describe("canConfigureExternalOAuth", () => {
+  const eligibleToolset = {
+    mcpEnabled: true,
+    mcpIsPublic: true,
+    oauthEnablementMetadata: { oauth2SecurityCount: 1 },
+  } as unknown as Toolset;
+
+  it("allows external OAuth for an enabled public server with an OAuth authorization code flow", () => {
+    expect(canConfigureExternalOAuth(eligibleToolset, false)).toBe(true);
+  });
+
+  it("allows external OAuth when an attached external MCP source requires it", () => {
+    const externalMcpToolset = {
+      ...eligibleToolset,
+      oauthEnablementMetadata: { oauth2SecurityCount: 0 },
+    } as unknown as Toolset;
+
+    expect(canConfigureExternalOAuth(externalMcpToolset, true)).toBe(true);
+  });
+
+  it("does not expose external OAuth for disabled or private servers", () => {
+    expect(
+      canConfigureExternalOAuth(
+        { ...eligibleToolset, mcpEnabled: false } as Toolset,
+        true,
+      ),
+    ).toBe(false);
+    expect(
+      canConfigureExternalOAuth(
+        { ...eligibleToolset, mcpIsPublic: false } as Toolset,
+        true,
+      ),
+    ).toBe(false);
+  });
+
+  it("does not expose external OAuth without an eligible tool or source", () => {
+    expect(
+      canConfigureExternalOAuth(
+        {
+          ...eligibleToolset,
+          oauthEnablementMetadata: { oauth2SecurityCount: 0 },
+        } as unknown as Toolset,
+        false,
+      ),
+    ).toBe(false);
   });
 });
 
