@@ -39,14 +39,32 @@ const rows = findings.map((finding) => {
   return { ...finding, file };
 });
 
+// Workflow commands are newline-delimited and `::`-separated, so any of those
+// characters in a finding would truncate the annotation or inject a new one.
+// See https://docs.github.com/actions/reference/workflow-commands-for-github-actions
+// `%` goes first — it is the escape character.
+function escapeData(value) {
+  return String(value ?? "")
+    .replaceAll("%", "%25")
+    .replaceAll("\r", "%0D")
+    .replaceAll("\n", "%0A");
+}
+
+function escapeProperty(value) {
+  return escapeData(value).replaceAll(":", "%3A").replaceAll(",", "%2C");
+}
+
 for (const row of rows) {
   // `warning` findings are still failures — the job's job is to keep new slop
   // out. The annotation level only controls how GitHub renders it.
   const level = row.severity === "error" ? "error" : "warning";
   const message = `${row.name}: ${row.description}${row.snippet ? ` (${row.snippet})` : ""}`;
-  console.log(
-    `::${level} file=${row.file},line=${row.line ?? 1},title=impeccable/${row.antipattern}::${message}`,
-  );
+  const props = [
+    `file=${escapeProperty(row.file)}`,
+    `line=${row.line ?? 1}`,
+    `title=${escapeProperty(`impeccable/${row.antipattern}`)}`,
+  ].join(",");
+  console.log(`::${level} ${props}::${escapeData(message)}`);
 }
 
 const table = rows

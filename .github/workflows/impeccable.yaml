@@ -33,6 +33,8 @@ jobs:
   detect-ui-slop:
     name: Detect UI anti-patterns
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    # The scan itself takes ~3s; this only guards against a hung npx install.
+    timeout-minutes: 5
     steps:
       - name: Checkout source code
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
