@@ -75,7 +75,7 @@ func TestComposeInstructions_IncludesSkillsBeforeMCPAuthInOrder(t *testing.T) {
 	beta := strings.Index(instructions, `Name: "beta"`)
 	auth := strings.Index(instructions, "## MCP authentication")
 	require.True(t, base >= 0 && skills > base && alpha > skills && beta > alpha && auth > beta)
-	require.Contains(t, instructions, `Call mcp__p-assistants_skills_load with name "alpha" before relying on this skill.`)
+	require.Contains(t, instructions, `Unless this turn already includes a <skill-context> for this skill, call mcp__p-assistants_skills_load with name "alpha" before relying on this skill.`)
 	require.Contains(t, instructions, "<skill-content> is already loaded and takes precedence for that turn")
 	require.Contains(t, instructions, "Do not call mcp__p-assistants_skills_load for that skill in that turn.")
 }
