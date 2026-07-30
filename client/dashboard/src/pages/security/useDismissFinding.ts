@@ -23,6 +23,28 @@ function chunk<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
+/** Runs `mutateAsync` once per MAX_BATCH-sized chunk of `ids`, one batch at a
+ * time (not concurrently — a selection of several thousand ids should not
+ * turn into a burst of concurrent DB/audit writes). A failed batch doesn't
+ * stop the remaining ones; the caller gets back which ids landed on each
+ * side so it can roll back optimistic state and report partial failure. */
+async function runBatched(
+  ids: string[],
+  mutateAsync: (batchIds: string[]) => Promise<unknown>,
+): Promise<{ succeededIds: string[]; failedIds: string[] }> {
+  const succeededIds: string[] = [];
+  const failedIds: string[] = [];
+  for (const batchIds of chunk(ids, MAX_BATCH)) {
+    try {
+      await mutateAsync(batchIds);
+      succeededIds.push(...batchIds);
+    } catch {
+      failedIds.push(...batchIds);
+    }
+  }
+  return { succeededIds, failedIds };
+}
+
 /** Bulk/single mark-false-positive with optimistic hide + undo toast, shared
  * by the risk overview category table, the risk events log, and the chat
  * session risk popover. Real mutations, not the AIS-321 UX-demo store: a
@@ -81,23 +103,24 @@ export function useDismissFinding(): {
   const undo = useCallback(
     (ids: string[]) => {
       removeOptimistic(ids);
-      unmarkMutation.mutate(
-        {
+      void runBatched(ids, (batchIds) =>
+        unmarkMutation.mutateAsync({
           request: {
-            unmarkRiskResultsFalsePositiveRequestBody: { resultIds: ids },
+            unmarkRiskResultsFalsePositiveRequestBody: { resultIds: batchIds },
           },
-        },
-        {
-          onSuccess: invalidateLists,
-          onError: () => {
-            // Put the ids back: the mark stayed in effect server-side, so the
-            // optimistic hide must too, or the row would look restored while
-            // still dismissed.
-            addOptimistic(ids);
-            toast.error("Failed to undo — the finding is still dismissed.");
-          },
-        },
-      );
+        }),
+      ).then(({ succeededIds, failedIds }) => {
+        if (succeededIds.length > 0) {
+          invalidateLists();
+        }
+        if (failedIds.length > 0) {
+          // Put the failed ids back: the mark stayed in effect server-side,
+          // so the optimistic hide must too, or the row would look restored
+          // while still dismissed.
+          addOptimistic(failedIds);
+          toast.error("Failed to undo — the finding is still dismissed.");
+        }
+      });
     },
     [unmarkMutation, invalidateLists, removeOptimistic, addOptimistic],
   );
@@ -108,36 +131,16 @@ export function useDismissFinding(): {
       if (ids.length === 0) return;
       addOptimistic(ids);
 
-      const batches = chunk(ids, MAX_BATCH);
-      void Promise.allSettled(
-        batches.map((batchIds) =>
-          markMutation
-            .mutateAsync({
-              request: {
-                markRiskResultsFalsePositiveRequestBody: {
-                  resultIds: batchIds,
-                  reason,
-                },
-              },
-            })
-            .then(
-              () => ({ batchIds, ok: true as const }),
-              () => ({ batchIds, ok: false as const }),
-            ),
-        ),
-      ).then((settled) => {
-        const outcomes = settled.map((s) =>
-          s.status === "fulfilled"
-            ? s.value
-            : { batchIds: [] as string[], ok: false as const },
-        );
-        const failedIds = outcomes
-          .filter((o) => !o.ok)
-          .flatMap((o) => o.batchIds);
-        const succeededIds = outcomes
-          .filter((o) => o.ok)
-          .flatMap((o) => o.batchIds);
-
+      void runBatched(ids, (batchIds) =>
+        markMutation.mutateAsync({
+          request: {
+            markRiskResultsFalsePositiveRequestBody: {
+              resultIds: batchIds,
+              reason,
+            },
+          },
+        }),
+      ).then(({ succeededIds, failedIds }) => {
         if (failedIds.length > 0) {
           removeOptimistic(failedIds);
           toast.error(

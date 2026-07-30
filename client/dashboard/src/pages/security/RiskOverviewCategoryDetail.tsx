@@ -226,21 +226,15 @@ function RiskOverviewCategoryDetailContent() {
                 // absent from that ranking for two different reasons that
                 // look identical from here — it has zero findings, or it
                 // simply isn't top-ranked — so falling back to totalCount
-                // unconditionally is wrong in both directions: totalCount is
-                // project-wide (not category-scoped) server-side, so it both
-                // under-represents a genuinely large unranked category and
-                // keeps showing a stale nonzero number after every finding in
-                // a small one is dismissed. Once resultsQuery has loaded every
-                // page for this category (no hasNextPage left), its own
-                // length is an exact category-filtered count and is always
-                // preferred; only fall back to the imprecise totalCount while
-                // still paginating an unranked category.
+                // unconditionally is wrong: totalCount comes from resultsQuery,
+                // which is filtered by ruleFilter when a rule is selected, so
+                // it would understate the category's true total. ruleBreakdownQuery
+                // is always category-scoped and never filtered by ruleFilter, so
+                // its server-computed total is the correct unranked fallback.
                 value={
                   overviewCategory
                     ? overviewCategory.findings
-                    : !resultsQuery.hasNextPage
-                      ? results.length
-                      : totalCount
+                    : (ruleBreakdownQuery.data?.total ?? totalCount)
                 }
                 format="compact"
                 icon="flag"

@@ -240,6 +240,7 @@ func TestMarkRiskResultsFalsePositive_ContentPartAnchoredFindingIsListable(t *te
 	require.NoError(t, err)
 	require.Len(t, dismissed.Results, 1, "a content-part-anchored dismissal must still be listable")
 	require.Equal(t, resultID.String(), dismissed.Results[0].ID)
+	require.NotNil(t, dismissed.Results[0].FalsePositiveAt)
 
 	err = ti.service.UnmarkRiskResultsFalsePositive(ctx, &gen.UnmarkRiskResultsFalsePositivePayload{
 		ResultIds: []string{resultID.String()},
