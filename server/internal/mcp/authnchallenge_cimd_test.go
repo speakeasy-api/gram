@@ -571,3 +571,31 @@ func TestOAuthCIMD_ConsentNoLoopbackWarningForSameOriginRedirect(t *testing.T) {
 	require.Contains(t, cw.Body.String(), "Client verified from")
 	require.NotContains(t, cw.Body.String(), "local address on your")
 }
+
+// TestOAuthCIMD_LoopbackEncodedPathRejected: the variable-port exception
+// compares escaped components, so a percent-encoding variant of a registered
+// path must not match.
+func TestOAuthCIMD_LoopbackEncodedPathRejected(t *testing.T) {
+	t.Parallel()
+
+	_, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+
+	// The document registers /callback; /%63allback decodes to the same
+	// path but is a different URI byte-for-byte.
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/%63allback", pkceChallenge(pkceVerifier(t)))
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
+}
+
+// TestOAuthCIMD_LoopbackFragmentRejected: a fragment on the requested
+// redirect_uri (prohibited by RFC 6749 section 3.1.2) must not match a
+// registered URI without one.
+func TestOAuthCIMD_LoopbackFragmentRejected(t *testing.T) {
+	t.Parallel()
+
+	_, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback#frag", pkceChallenge(pkceVerifier(t)))
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
+}

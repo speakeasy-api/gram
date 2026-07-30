@@ -143,11 +143,11 @@ func (s *Service) userSessionCIMDEnabled(ctx context.Context, logger *slog.Logge
 // loopback redirects, the port is ignored. RFC 8252 requires the AS to allow
 // variable loopback ports for native apps — Claude Code binds an OS-assigned
 // ephemeral port per invocation — and RFC 9700 preserves that carve-out. The
-// port is the ONLY component allowed to vary: host, path, and query must
-// match, and neither side may carry userinfo — otherwise an attacker-crafted
-// authorize URL could inject extra query parameters (or browser-sent Basic
-// credentials) into the legitimate client's local callback. DCR rows keep
-// byte-exact matching.
+// port is the ONLY component allowed to vary: every other component must
+// match in escaped form, and neither side may carry userinfo — otherwise an
+// attacker-crafted authorize URL could inject extra query parameters, an
+// encoding-variant path, or browser-sent Basic credentials into the
+// legitimate client's local callback. DCR rows keep byte-exact matching.
 func redirectURIMatches(client *usersessions_repo.UserSessionClient, requested string) bool {
 	if slices.Contains(client.RedirectUris, requested) {
 		return true
@@ -165,11 +165,25 @@ func redirectURIMatches(client *usersessions_repo.UserSessionClient, requested s
 		if err != nil || registeredURL.User != nil || !cimd.IsLoopbackRedirectURI(registeredURL) {
 			continue
 		}
-		if strings.EqualFold(registeredURL.Hostname(), requestedURL.Hostname()) &&
-			registeredURL.Path == requestedURL.Path &&
-			registeredURL.RawQuery == requestedURL.RawQuery {
+		if loopbackRedirectEqualIgnoringPort(registeredURL, requestedURL) {
 			return true
 		}
 	}
 	return false
+}
+
+// loopbackRedirectEqualIgnoringPort reports whether two parsed loopback
+// redirect URIs are identical except for the port. Rebuilding each URI with
+// the port stripped and the host lowercased, then comparing the resulting
+// strings, covers every component in escaped form — scheme, host, path,
+// query, and fragment — so a percent-encoding variant (e.g. /%63allback for
+// a registered /callback) or an added fragment cannot slip through the
+// variable-port exception.
+func loopbackRedirectEqualIgnoringPort(a, b *url.URL) bool {
+	stripPort := func(u *url.URL) string {
+		c := *u
+		c.Host = strings.ToLower(c.Hostname())
+		return c.String()
+	}
+	return stripPort(a) == stripPort(b)
 }
