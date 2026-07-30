@@ -108,6 +108,22 @@ func newFakeVanta(t *testing.T) *fakeVanta {
 		f.putRequests++
 		f.lastResourceID = envelope.ResourceID
 
+		// Mirror Vanta's base-schema validation: the CustomResource base
+		// requires uniqueId, displayName, and externalUrl at the top level,
+		// and — because the console cannot author an optionalProperties
+		// schema — every declared custom property, including
+		// agent_last_seen_at, is required. A real omission 400s at sync; the
+		// fake asserts so a sink regression fails here rather than in prod.
+		for _, res := range envelope.Resources {
+			for _, base := range []string{"uniqueId", "displayName", "externalUrl"} {
+				_, ok := res[base]
+				assert.Truef(t, ok, "resource missing required base field %q", base)
+			}
+			props, _ := res["customProperties"].(map[string]any)
+			_, ok := props["agent_last_seen_at"]
+			assert.True(t, ok, "customProperties missing required agent_last_seen_at")
+		}
+
 		if f.respondEmpty {
 			f.respondEmpty = false
 			w.Header().Set("Content-Type", "application/json")
@@ -187,6 +203,7 @@ func TestPushCoverageFullStateReplace(t *testing.T) {
 	first := fake.resources[0]
 	require.Equal(t, "dev-0001", first["uniqueId"])
 	require.Equal(t, "mac-0001", first["displayName"])
+	require.Equal(t, "https://app.getgram.ai", first["externalUrl"], "Vanta's base schema requires externalUrl on every resource")
 	props, ok := first["customProperties"].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, "SER0001", props["serial_number"])
@@ -369,8 +386,10 @@ func TestUnassignedDeviceResource(t *testing.T) {
 	require.True(t, ok)
 	require.Empty(t, props["assigned_user_email"])
 	require.Equal(t, false, props["agent_active"])
-	_, present := props["agent_last_seen_at"]
-	require.False(t, present, "a never-seen agent omits the property — null or a zero timestamp would overclaim")
+	require.Equal(t, "https://app.getgram.ai", resource["externalUrl"])
+	lastSeen, present := props["agent_last_seen_at"]
+	require.True(t, present, "the property is always present — Vanta's console cannot mark it optional, so an omitted field is rejected")
+	require.Empty(t, lastSeen, "a never-seen agent sends an empty string — honestly unknown, not a fabricated timestamp")
 }
 
 // TestPushCoverageEmitsAttestationPerResource is the Vanta twin: the custom
@@ -417,8 +436,9 @@ func TestPushCoverageEmitsAttestationPerResource(t *testing.T) {
 
 	require.Equal(t, "user", byID["dev-user-only"]["agent_attestation"])
 	require.Equal(t, false, byID["dev-user-only"]["agent_active"])
-	_, present := byID["dev-user-only"]["agent_last_seen_at"]
-	require.False(t, present, "a never-seen agent omits the timestamp rather than sending null or a zero time")
+	lastSeen, present := byID["dev-user-only"]["agent_last_seen_at"]
+	require.True(t, present, "the property is always present — an omitted field is rejected at sync")
+	require.Empty(t, lastSeen, "a never-seen agent sends an empty string, not a fabricated timestamp")
 
 	for _, props := range byID {
 		require.NotContains(t, props, "assigned_user_agent_active")

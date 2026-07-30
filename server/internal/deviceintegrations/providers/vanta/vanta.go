@@ -16,11 +16,16 @@
 // somewhere (matched on email). Both can appear in one push — a machine whose
 // agent cannot read a serial stays user-attested even for an org on
 // device-level matching — so the strength cannot be stated once for the whole
-// resource set. agent_last_seen_at is omitted when no agent has ever synced.
-// The ticket suggested
-// Vanta's built-in Computer resource kind, but built-in kinds carry fixed
-// schemas that cannot express these properties; a Custom Resource is what
-// lets the Custom Test attest exactly what we can prove.
+// resource set. agent_last_seen_at is an empty string when no agent has ever
+// synced: Vanta's console cannot author a JTD optionalProperties schema, so
+// the customer-defined record schema marks every property required and an
+// omitted field is rejected at sync; an empty string reads as "unknown"
+// without fabricating a heartbeat. The ticket suggested Vanta's built-in
+// Computer resource kind, but built-in kinds carry fixed schemas that cannot
+// express these properties; a Custom Resource is what lets the Custom Test
+// attest exactly what we can prove. Every record must also carry a top-level
+// externalUrl — Vanta's base schema requires it alongside uniqueId and
+// displayName.
 //
 // Endpoints used (Vanta documents a single global API host):
 //
@@ -232,14 +237,22 @@ func (s *sink) TestConnection(ctx context.Context, creds providers.Credentials, 
 	return nil
 }
 
+// externalURL is the required base-field link on every pushed resource.
+// Vanta's CustomResource base schema mandates uniqueId, displayName, AND
+// externalUrl — an omitted externalUrl is rejected with 400 "must have
+// property 'externalUrl'". There is no per-device dashboard deep link
+// available in the snapshot (no org slug), so every record carries the same
+// product URL; uniqueId, not this field, is the dedup key.
+const externalURL = "https://app.getgram.ai"
+
 // coverageResource is one device in the pushed full-state set. Base fields
-// (uniqueId, displayName) sit at the top level per Vanta's resource
-// envelope; the evidence properties live in customProperties, named to scope
-// the attestation to the assigned user. A never-seen agent omits the
-// last-seen property entirely rather than sending null or a zero timestamp.
+// (uniqueId, displayName, externalUrl) sit at the top level per Vanta's
+// resource envelope; the evidence properties live in customProperties, named
+// to scope the attestation to the assigned user.
 type coverageResource struct {
 	UniqueID         string           `json:"uniqueId"`
 	DisplayName      string           `json:"displayName"`
+	ExternalURL      string           `json:"externalUrl"`
 	CustomProperties coverageProperty `json:"customProperties"`
 }
 
@@ -252,8 +265,15 @@ type coverageProperty struct {
 	// means this machine's own agent reported in, "user" means only that its
 	// assigned user runs one somewhere. Both can appear in one push, so the
 	// strength cannot be stated once for the whole resource set.
-	AgentAttestation string  `json:"agent_attestation"`
-	AgentLastSeenAt  *string `json:"agent_last_seen_at,omitempty"`
+	AgentAttestation string `json:"agent_attestation"`
+	// AgentLastSeenAt is always present, empty string when no agent has ever
+	// synced. It is NOT omitted for a never-seen agent: Vanta's console
+	// cannot express a JTD optionalProperties schema, so the customer-defined
+	// record schema marks every property required, and an omitted field is
+	// rejected. An empty string is honestly "unknown" — unlike a null or a
+	// zero timestamp, it fabricates no heartbeat — so it satisfies the
+	// required-property rule without overstating coverage.
+	AgentLastSeenAt string `json:"agent_last_seen_at"`
 }
 
 func buildResources(snapshot providers.CoverageSnapshot) ([]coverageResource, error) {
@@ -270,10 +290,12 @@ func buildResources(snapshot providers.CoverageSnapshot) ([]coverageResource, er
 			return nil, fmt.Errorf("duplicate device external id %q in coverage snapshot", d.ExternalID)
 		}
 		seen[d.ExternalID] = true
-		var lastSeen *string
+		// Empty string, not a zero timestamp, when no agent has ever synced:
+		// the field is required by the customer's schema but must not imply a
+		// heartbeat that never happened.
+		lastSeen := ""
 		if !d.AgentLastSeenAt.IsZero() {
-			formatted := d.AgentLastSeenAt.UTC().Format(time.RFC3339)
-			lastSeen = &formatted
+			lastSeen = d.AgentLastSeenAt.UTC().Format(time.RFC3339)
 		}
 		displayName := d.Hostname
 		if displayName == "" {
@@ -282,6 +304,7 @@ func buildResources(snapshot providers.CoverageSnapshot) ([]coverageResource, er
 		resources = append(resources, coverageResource{
 			UniqueID:    d.ExternalID,
 			DisplayName: displayName,
+			ExternalURL: externalURL,
 			CustomProperties: coverageProperty{
 				SerialNumber:      d.SerialNumber,
 				Hostname:          d.Hostname,
