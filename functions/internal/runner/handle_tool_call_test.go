@@ -77,6 +77,41 @@ func TestCallToolPayload_OmitsMetaWhenAbsent(t *testing.T) {
 	require.NotContains(t, string(encoded), "_meta")
 }
 
+// TestCallToolPayload_PartialCallerIdentity covers the shape most production
+// traffic actually has. A public MCP server authenticates nobody, so calls
+// arrive with a reported client and no OAuth client; an authenticated caller
+// that never reported a name is the mirror image. Neither half depends on the
+// other being present, and the absent one leaves no key behind.
+func TestCallToolPayload_PartialCallerIdentity(t *testing.T) {
+	t.Parallel()
+
+	var clientOnly CallToolPayload
+	require.NoError(t, json.Unmarshal([]byte(`{
+	  "name": "whoami",
+	  "input": {},
+	  "_meta": {"io.modelcontextprotocol/clientInfo": {"name": "claude-code", "version": "2.1"}}
+	}`), &clientOnly))
+	require.Equal(t, &MCPClientInfo{Name: "claude-code", Version: "2.1"}, clientOnly.Meta.ClientInfo)
+	require.Empty(t, clientOnly.Meta.OAuthClientID)
+
+	encoded, err := json.Marshal(clientOnly)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "oauth-client-id")
+
+	var oauthOnly CallToolPayload
+	require.NoError(t, json.Unmarshal([]byte(`{
+	  "name": "whoami",
+	  "input": {},
+	  "_meta": {"gram.ai/oauth-client-id": "client-abc"}
+	}`), &oauthOnly))
+	require.Nil(t, oauthOnly.Meta.ClientInfo)
+	require.Equal(t, "client-abc", oauthOnly.Meta.OAuthClientID)
+
+	encoded, err = json.Marshal(oauthOnly)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "clientInfo")
+}
+
 // echoCallerBundle returns whatever the entrypoint hands it as a second
 // argument, which is how a tool sees its caller.
 const echoCallerBundle = `
@@ -120,6 +155,34 @@ func TestCallTool_DeliversCallerIdentityToUserCode(t *testing.T) {
 	    "gram.ai/oauth-client-id": "client-abc"
 	  }
 	}`, recorder.Body.String())
+}
+
+// TestCallTool_ClientWithoutOAuthReachesUserCode runs the public-MCP shape all
+// the way into user code: an absent OAuth client must arrive as undefined, not
+// as an empty string a tool might mistake for a real id.
+func TestCallTool_ClientWithoutOAuthReachesUserCode(t *testing.T) {
+	t.Parallel()
+
+	svc := benchService(t, echoCallerBundle)
+	recorder := httptest.NewRecorder()
+
+	err := svc.callTool(t.Context(), svc.logger, CallToolPayload{
+		ToolName:    "whoami",
+		Input:       json.RawMessage(`{}`),
+		Environment: nil,
+		Meta: &ToolCallMeta{
+			ClientInfo:    &MCPClientInfo{Name: "claude-code", Version: "2.1"},
+			OAuthClientID: "",
+		},
+	}, recorder)
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.JSONEq(t, `{
+	  "clientInfo": {"name": "claude-code", "version": "2.1"},
+	  "meta": {"io.modelcontextprotocol/clientInfo": {"name": "claude-code", "version": "2.1"}}
+	}`, recorder.Body.String())
+	require.NotContains(t, recorder.Body.String(), "oauthClientId")
 }
 
 func TestCallTool_UnknownCallerReachesUserCodeAsEmpty(t *testing.T) {
