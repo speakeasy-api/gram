@@ -724,7 +724,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	}
 
 	// Gate dashboard access on chat:read. The check is a no-op unless RBAC is
-	// enforced for the org (enterprise + feature flag + session). Members can
+	// enforced for the org (feature flag + session). Members can
 	// always read sessions they own, so bypass the scope check for the owner;
 	// reading anyone else's session requires an unrestricted chat:read grant,
 	// which only admins hold. The managed-assistant runtime is exempt — it

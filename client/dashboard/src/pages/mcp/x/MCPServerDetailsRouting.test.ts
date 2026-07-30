@@ -112,15 +112,14 @@ describe("activeTabFromPath", () => {
 
 describe("initialTabFromHash", () => {
   it("maps the legacy authentication hash to settings", () => {
-    expect(initialTabFromHash("#authentication", true)).toBe("settings");
+    expect(initialTabFromHash("#authentication")).toBe("settings");
   });
 
   it("maps the legacy tools hash to inspect", () => {
-    expect(initialTabFromHash("#tools", true)).toBe("inspect");
+    expect(initialTabFromHash("#tools")).toBe("inspect");
   });
 
-  it("keeps team access behind the RBAC feature flag", () => {
-    expect(initialTabFromHash("#team-access", false)).toBe("overview");
-    expect(initialTabFromHash("#team-access", true)).toBe("team-access");
+  it("supports team access", () => {
+    expect(initialTabFromHash("#team-access")).toBe("team-access");
   });
 });

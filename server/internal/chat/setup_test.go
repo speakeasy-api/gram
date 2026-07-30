@@ -60,16 +60,14 @@ type chatTestInstance struct {
 	assets    assets.BlobStore
 }
 
-// newTestChatService builds a chat service with RBAC enforcement enabled for
-// the org. Use authztest.WithExactGrants to grant org:admin in tests that need
-// project-wide visibility.
+// newTestChatService builds a chat service with RBAC enforcement enabled.
 func newTestChatService(t *testing.T) *chatTestInstance {
 	t.Helper()
 	return newTestChatServiceWithRBAC(t, authztest.RBACAlwaysEnabled)
 }
 
 // newTestChatServiceRBACDisabled builds a chat service whose org has the RBAC
-// feature flag off, so ShouldEnforce returns false even for enterprise callers.
+// feature flag off, so ShouldEnforce returns false for session callers.
 func newTestChatServiceRBACDisabled(t *testing.T) *chatTestInstance {
 	t.Helper()
 	return newTestChatServiceWithRBAC(t, authztest.RBACAlwaysDisabled)

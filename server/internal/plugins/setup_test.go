@@ -84,7 +84,7 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	authCtx.AccountType = "enterprise"
@@ -136,7 +136,7 @@ func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.G
 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	authCtx.AccountType = "enterprise"

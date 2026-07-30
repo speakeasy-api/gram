@@ -193,8 +193,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
-
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	sig := &signalerStub{}
 
 	chConn, err := infra.NewClickhouseClient(t)
@@ -244,8 +243,6 @@ func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-	authCtx.AccountType = "enterprise"
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	principal := urn.NewPrincipal(urn.PrincipalTypeRole, "risk-rbac-grants-"+uuid.NewString())
 	for _, grant := range grants {

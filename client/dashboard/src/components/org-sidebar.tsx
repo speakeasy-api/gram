@@ -54,7 +54,7 @@ export function OrgSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>): React.JSX.Element {
   const orgRoutes = useOrgRoutes();
-  const { isRbacEnabled, isLoading: rbacLoading } = useRBAC();
+  const { isLoading: rbacLoading } = useRBAC();
   const telemetry = useTelemetry();
   const { data: productFeatures } = useProductFeatures(undefined, undefined, {
     staleTime: 30_000,
@@ -193,9 +193,7 @@ export function OrgSidebar({
                   ...(isDeviceAgentEnabled
                     ? [{ item: orgRoutes.deviceAgent, scope: orgReadOrAdmin }]
                     : []),
-                  ...(isRbacEnabled
-                    ? [{ item: orgRoutes.access, scope: orgReadOrAdmin }]
-                    : []),
+                  { item: orgRoutes.access, scope: orgReadOrAdmin },
                 ]}
               />
 

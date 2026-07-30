@@ -160,8 +160,7 @@ func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.
 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-test"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
-
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	serverURL, err := url.Parse("http://0.0.0.0")
 	require.NoError(t, err)
 

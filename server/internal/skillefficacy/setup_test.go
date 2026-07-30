@@ -68,7 +68,7 @@ func newTestServiceWithInsights(t *testing.T, insights skillefficacy.InsightsRea
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
