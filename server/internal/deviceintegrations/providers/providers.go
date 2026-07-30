@@ -212,17 +212,21 @@ type EvidenceSink interface {
 // perform one-time vendor-side setup during connect — creating the object it
 // will read from or push to (e.g. a Drata Custom Connection) so the customer
 // does not have to hand-craft it against the vendor API. The framework calls
-// Provision from the connect flow before the config is persisted and stores
-// the returned Settings, so a provider can hand back the id of whatever it
-// created (a connection id, a resource id) for later syncs to use.
+// Provision during the config upsert, after credentials and settings are
+// merged with any stored values, and stores the returned Settings — so a
+// provider can hand back the id of whatever it created (a connection id, a
+// resource id) for later syncs to use.
 //
 // Two hard requirements:
 //   - Idempotent (find-or-create): a re-save must reuse the existing vendor
 //     object, never create a duplicate. Return the settings unchanged when
 //     nothing needs provisioning.
-//   - Side-effect-only on the vendor: Provision runs OUTSIDE the config
-//     transaction, so it must not assume any Gram-side state beyond the creds
-//     and settings it is handed.
+//   - Self-contained on the vendor: Provision must work from only the creds and
+//     settings it is handed. It runs inside the config-upsert transaction (under
+//     the same advisory lock that serializes upserts), so it must not read
+//     Gram-side state that the not-yet-committed transaction would not see, and
+//     it must not block on slow vendor I/O longer than the upsert can hold that
+//     lock — see provisionTimeout in impl.go.
 type Provisioner interface {
 	Provision(ctx context.Context, creds Credentials, settings Settings) (Settings, error)
 }

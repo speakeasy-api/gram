@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -111,14 +112,35 @@ func newFakeDrata(t *testing.T) *fakeDrata {
 		}
 		switch r.Method {
 		case http.MethodGet:
+			// Paginate by the requested limit so find-existing's cursor-following
+			// is exercised: a connection past the first page must still be found.
+			limit := 200
+			if raw := r.URL.Query().Get("limit"); raw != "" {
+				if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+					limit = parsed
+				}
+			}
+			offset := 0
+			if raw := r.URL.Query().Get("cursor"); raw != "" {
+				parsed, err := strconv.Atoi(raw)
+				assert.NoError(f.t, err, "cursor is the opaque token the fake handed back")
+				offset = parsed
+			}
 			f.mu.Lock()
-			items := []byte("[]")
-			if f.existingConnections != nil {
-				items, _ = json.Marshal(f.existingConnections)
+			all := f.existingConnections
+			end := min(offset+limit, len(all))
+			page := []map[string]any{}
+			if offset < len(all) {
+				page = all[offset:end]
 			}
 			f.mu.Unlock()
+			items, _ := json.Marshal(page)
+			cursor := "null"
+			if end < len(all) {
+				cursor = strconv.Quote(strconv.Itoa(end))
+			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprintf(w, `{"data": %s}`, items)
+			_, _ = fmt.Fprintf(w, `{"data": %s, "pagination": {"cursor": %s}}`, items, cursor)
 		case http.MethodPost:
 			var body map[string]any
 			assert.NoError(f.t, json.NewDecoder(r.Body).Decode(&body))
@@ -798,6 +820,31 @@ func TestProvisionReusesExistingConnection(t *testing.T) {
 	out, err := s.Provision(t.Context(), fake.creds(), providers.Settings{fieldRegion: "us"})
 	require.NoError(t, err)
 	require.Equal(t, "777", out[fieldConnectionID], "reuses the existing Gram connection by name")
+	require.Empty(t, fake.createdConnections, "a matching connection must never be duplicated")
+}
+
+func TestProvisionFindsConnectionOnLaterPage(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeDrata(t)
+	// A tenant with more connections than one page fits, with the Gram
+	// connection last: a single-page lookup would miss it and duplicate on
+	// every save. The lookup must follow the cursor to find it.
+	for i := range connectionListLimit + 5 {
+		fake.existingConnections = append(fake.existingConnections, map[string]any{
+			"id":          1000 + i,
+			"clientAlias": fmt.Sprintf("Other Connection %d", i),
+		})
+	}
+	fake.existingConnections = append(fake.existingConnections, map[string]any{
+		"id":          9999,
+		"clientAlias": provisionConnectionName,
+	})
+	s := fake.newSink(t)
+
+	out, err := s.Provision(t.Context(), fake.creds(), providers.Settings{fieldRegion: "us"})
+	require.NoError(t, err)
+	require.Equal(t, "9999", out[fieldConnectionID], "cursor-following finds the connection past the first page")
 	require.Empty(t, fake.createdConnections, "a matching connection must never be duplicated")
 }
 

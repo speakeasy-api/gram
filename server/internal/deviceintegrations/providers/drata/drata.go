@@ -114,10 +114,14 @@ const (
 	// displayNameKey names the record field Drata shows as each row's label.
 	displayNameKey = "hostname"
 
-	// connectionListLimit bounds the find-existing lookup. A customer's
-	// dedicated Gram connection is created once; a page this size comfortably
-	// covers finding it without paginating.
+	// connectionListLimit is the page size for the find-existing lookup.
 	connectionListLimit = 200
+
+	// maxConnectionListPages bounds how far find-existing pages before giving
+	// up (and creating a fresh connection). 50 × the page size is far more
+	// connections than any tenant realistically has; the bound only exists so a
+	// cursor that never clears cannot loop forever.
+	maxConnectionListPages = 50
 )
 
 // defaultRegions allowlists the customer-selectable Drata regions. Deriving
@@ -450,28 +454,52 @@ func parseWorkspaceID(settings providers.Settings) (int, error) {
 
 // findConnectionByName returns the id of an existing custom connection whose
 // display name matches, or "" when none exists. Reusing a prior Gram-created
-// connection is what keeps provisioning idempotent across re-saves.
+// connection is what keeps provisioning idempotent across re-saves — so the
+// lookup follows the pagination cursor: a customer with more connections than
+// one page could carry the Gram one onto a later page, and missing it there
+// would create a duplicate on every save.
 func (s *sink) findConnectionByName(ctx context.Context, creds providers.Credentials, base, name string) (string, error) {
-	body, err := s.doJSON(ctx, creds, http.MethodGet, base+"/public/v2/custom-connections?limit="+strconv.Itoa(connectionListLimit), nil)
-	if err != nil {
-		return "", err
-	}
-	var list struct {
-		Data []struct {
-			ID flexID `json:"id"`
-			// Drata echoes the create-time "name" back as "clientAlias"; match
-			// either so the lookup is robust to which the list endpoint returns.
-			ClientAlias string `json:"clientAlias"`
-			Name        string `json:"name"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(body, &list); err != nil {
-		return "", fmt.Errorf("decode connection list: %w", err)
-	}
-	for _, c := range list.Data {
-		if c.ClientAlias == name || c.Name == name {
-			return string(c.ID), nil
+	cursor := ""
+	for range maxConnectionListPages {
+		requestURL := base + "/public/v2/custom-connections?limit=" + strconv.Itoa(connectionListLimit)
+		if cursor != "" {
+			requestURL += "&cursor=" + url.QueryEscape(cursor)
 		}
+		body, err := s.doJSON(ctx, creds, http.MethodGet, requestURL, nil)
+		if err != nil {
+			return "", err
+		}
+		var list struct {
+			Data []struct {
+				ID flexID `json:"id"`
+				// Drata echoes the create-time "name" back as "clientAlias";
+				// match either so the lookup is robust to which the list
+				// endpoint returns.
+				ClientAlias string `json:"clientAlias"`
+				Name        string `json:"name"`
+			} `json:"data"`
+			Pagination struct {
+				Cursor *string `json:"cursor"`
+			} `json:"pagination"`
+		}
+		if err := json.Unmarshal(body, &list); err != nil {
+			return "", fmt.Errorf("decode connection list: %w", err)
+		}
+		for _, c := range list.Data {
+			if c.ClientAlias == name || c.Name == name {
+				return string(c.ID), nil
+			}
+		}
+		next := ""
+		if list.Pagination.Cursor != nil {
+			next = *list.Pagination.Cursor
+		}
+		// Stop on the last page, or if the cursor fails to advance (a defensive
+		// guard against a mispaged response looping forever).
+		if next == "" || next == cursor {
+			return "", nil
+		}
+		cursor = next
 	}
 	return "", nil
 }

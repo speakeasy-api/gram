@@ -46,9 +46,12 @@ const (
 	testConnectionTimeout = 10 * time.Second
 
 	// provisionTimeout bounds the synchronous connect-time provisioning call
-	// (creating a vendor-side connection/resource). Larger than the probe: it
-	// may list then create, but still short enough to fail a broken save fast.
-	provisionTimeout = 20 * time.Second
+	// (creating a vendor-side connection/resource). It runs inside the config
+	// upsert while the per-config advisory lock is held, so it is deliberately
+	// tight: a hung vendor must not pin that lock (and the Postgres transaction)
+	// for long. It still allows the list-then-create round trips that a
+	// find-or-create provisioner makes.
+	provisionTimeout = 10 * time.Second
 
 	// activeWindow is the freshness window for the coverage buckets: an
 	// assigned user counts as agent-active when their heartbeat is within
