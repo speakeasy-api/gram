@@ -22,8 +22,8 @@ export type TriggersQueryData = ListTriggerInstancesResult;
 export function prefetchTriggers(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListTriggerInstancesRequest | undefined,
-  security?: ListTriggerInstancesSecurity | undefined,
+  request?: ListTriggerInstancesRequest  ,
+  security?: ListTriggerInstancesSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchTriggers(
 
 export function buildTriggersQuery(
   client$: GramCore,
-  request?: ListTriggerInstancesRequest | undefined,
-  security?: ListTriggerInstancesSecurity | undefined,
+  request?: ListTriggerInstancesRequest  ,
+  security?: ListTriggerInstancesSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

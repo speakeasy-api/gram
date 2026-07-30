@@ -1,12 +1,12 @@
 import { Page } from "@/components/page-layout";
 import { LogDataRetentionBanner } from "@/components/observe/LoggingPageHeader";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
-import { Switch } from "@/components/ui/switch";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { Switch } from "@/components/ui/Switch";
+import { Type } from "@/components/ui/Type";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/Stack";
 import { Eye, FileText, LogIn, Monitor, Unplug } from "lucide-react";
 import { useState } from "react";
 import { OtelForwardingSection } from "./OtelForwardingSection";

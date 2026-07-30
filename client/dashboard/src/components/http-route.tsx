@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { HttpMethodColors } from "@/components/http-method-colors";
-import { Type } from "./ui/type";
+import { Type } from "@/components/ui/Type";
 
 export const HttpRoute = ({
   method,

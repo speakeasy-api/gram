@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function telemetryCaptureEvent(
   client: GramCore,
   request: CaptureEventRequest,
-  security?: CaptureEventSecurity | undefined,
+  security?: CaptureEventSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function telemetryCaptureEvent(
 async function $do(
   client: GramCore,
   request: CaptureEventRequest,
-  security?: CaptureEventSecurity | undefined,
+  security?: CaptureEventSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

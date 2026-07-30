@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function accessListMembers(
   client: GramCore,
-  request?: ListMembersRequest | undefined,
-  security?: ListMembersSecurity | undefined,
+  request?: ListMembersRequest  ,
+  security?: ListMembersSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function accessListMembers(
 
 async function $do(
   client: GramCore,
-  request?: ListMembersRequest | undefined,
-  security?: ListMembersSecurity | undefined,
+  request?: ListMembersRequest  ,
+  security?: ListMembersSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

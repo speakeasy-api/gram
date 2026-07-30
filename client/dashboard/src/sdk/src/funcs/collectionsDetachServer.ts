@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function collectionsDetachServer(
   client: GramCore,
   request: DetachServerFromCollectionRequest,
-  security?: DetachServerFromCollectionSecurity | undefined,
+  security?: DetachServerFromCollectionSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function collectionsDetachServer(
 async function $do(
   client: GramCore,
   request: DetachServerFromCollectionRequest,
-  security?: DetachServerFromCollectionSecurity | undefined,
+  security?: DetachServerFromCollectionSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

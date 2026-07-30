@@ -63,7 +63,7 @@ export type SearchUsersQueryError =
  */
 export function useSearchUsers(
   request: SearchUsersRequest,
-  security?: SearchUsersSecurity | undefined,
+  security?: SearchUsersSecurity  ,
   options?: QueryHookOptions<SearchUsersQueryData, SearchUsersQueryError>,
 ): UseQueryResult<SearchUsersQueryData, SearchUsersQueryError> {
   const client = useGramContext();
@@ -86,7 +86,7 @@ export function useSearchUsers(
  */
 export function useSearchUsersSuspense(
   request: SearchUsersRequest,
-  security?: SearchUsersSecurity | undefined,
+  security?: SearchUsersSecurity  ,
   options?: SuspenseQueryHookOptions<
     SearchUsersQueryData,
     SearchUsersQueryError

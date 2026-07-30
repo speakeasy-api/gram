@@ -66,8 +66,8 @@ export type RemoteSessionIssuerQueryError =
  * The issuer URL is canonicalized before matching: scheme and host are lowercased, the scheme's default port is dropped, and trailing slashes are stripped. http and https are deliberately NOT equated, path case is significant, and a URL carrying a query or fragment is rejected (RFC 8414 forbids both on issuer identifiers). Canonicalization applies to the supplied URL only, never to stored values, so an issuer recorded with an unusual spelling may not be found and a duplicate is created instead, which is the safe direction to fail.
  */
 export function useRemoteSessionIssuer(
-  request?: GetRemoteSessionIssuerRequest | undefined,
-  security?: GetRemoteSessionIssuerSecurity | undefined,
+  request?: GetRemoteSessionIssuerRequest  ,
+  security?: GetRemoteSessionIssuerSecurity  ,
   options?: QueryHookOptions<
     RemoteSessionIssuerQueryData,
     RemoteSessionIssuerQueryError
@@ -96,8 +96,8 @@ export function useRemoteSessionIssuer(
  * The issuer URL is canonicalized before matching: scheme and host are lowercased, the scheme's default port is dropped, and trailing slashes are stripped. http and https are deliberately NOT equated, path case is significant, and a URL carrying a query or fragment is rejected (RFC 8414 forbids both on issuer identifiers). Canonicalization applies to the supplied URL only, never to stored values, so an issuer recorded with an unusual spelling may not be found and a duplicate is created instead, which is the safe direction to fail.
  */
 export function useRemoteSessionIssuerSuspense(
-  request?: GetRemoteSessionIssuerRequest | undefined,
-  security?: GetRemoteSessionIssuerSecurity | undefined,
+  request?: GetRemoteSessionIssuerRequest  ,
+  security?: GetRemoteSessionIssuerSecurity  ,
   options?: SuspenseQueryHookOptions<
     RemoteSessionIssuerQueryData,
     RemoteSessionIssuerQueryError

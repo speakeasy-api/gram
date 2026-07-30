@@ -1,8 +1,9 @@
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
-import { DotRow } from "@/components/ui/dot-row";
-import { Type } from "@/components/ui/type";
+import { DotRow } from "@/components/ui/DotRow";
+import { Type } from "@/components/ui/Type";
 import { cn } from "@/lib/utils";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { ArrowRight, Check } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";

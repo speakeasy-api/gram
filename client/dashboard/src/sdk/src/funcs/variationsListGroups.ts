@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function variationsListGroups(
   client: GramCore,
-  request?: ListToolVariationGroupsRequest | undefined,
-  security?: ListToolVariationGroupsSecurity | undefined,
+  request?: ListToolVariationGroupsRequest  ,
+  security?: ListToolVariationGroupsSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function variationsListGroups(
 
 async function $do(
   client: GramCore,
-  request?: ListToolVariationGroupsRequest | undefined,
-  security?: ListToolVariationGroupsSecurity | undefined,
+  request?: ListToolVariationGroupsRequest  ,
+  security?: ListToolVariationGroupsSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

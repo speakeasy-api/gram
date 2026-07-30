@@ -44,7 +44,7 @@ import { Result } from "../types/fp.js";
 export function chatLoad(
   client: GramCore,
   request: LoadChatRequest,
-  security?: LoadChatSecurity | undefined,
+  security?: LoadChatSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -71,7 +71,7 @@ export function chatLoad(
 async function $do(
   client: GramCore,
   request: LoadChatRequest,
-  security?: LoadChatSecurity | undefined,
+  security?: LoadChatSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

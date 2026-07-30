@@ -1,16 +1,16 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
+import { Heading } from "@/components/ui/Heading";
 import {
   PageTabsList,
   PageTabsTrigger,
   Tabs,
   TabsContent,
-} from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tabs";
+import { Type } from "@/components/ui/Type";
 import { useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
-import { Alert } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { Link, Navigate, useLocation, useNavigate } from "react-router";

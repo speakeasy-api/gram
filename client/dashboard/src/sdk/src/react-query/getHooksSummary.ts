@@ -63,7 +63,7 @@ export type GetHooksSummaryQueryError =
  */
 export function useGetHooksSummary(
   request: GetHooksSummaryRequest,
-  security?: GetHooksSummarySecurity | undefined,
+  security?: GetHooksSummarySecurity  ,
   options?: QueryHookOptions<
     GetHooksSummaryQueryData,
     GetHooksSummaryQueryError
@@ -89,7 +89,7 @@ export function useGetHooksSummary(
  */
 export function useGetHooksSummarySuspense(
   request: GetHooksSummaryRequest,
-  security?: GetHooksSummarySecurity | undefined,
+  security?: GetHooksSummarySecurity  ,
   options?: SuspenseQueryHookOptions<
     GetHooksSummaryQueryData,
     GetHooksSummaryQueryError

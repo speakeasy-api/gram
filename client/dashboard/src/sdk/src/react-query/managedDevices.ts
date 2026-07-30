@@ -81,8 +81,8 @@ export type ManagedDevicesQueryError =
  * Page through the org's synced MDM device inventory, newest first, with each device's coverage bucket.
  */
 export function useManagedDevices(
-  request?: ListManagedDevicesRequest | undefined,
-  security?: ListManagedDevicesSecurity | undefined,
+  request?: ListManagedDevicesRequest  ,
+  security?: ListManagedDevicesSecurity  ,
   options?: QueryHookOptions<ManagedDevicesQueryData, ManagedDevicesQueryError>,
 ): UseQueryResult<ManagedDevicesQueryData, ManagedDevicesQueryError> {
   const client = useGramContext();
@@ -104,8 +104,8 @@ export function useManagedDevices(
  * Page through the org's synced MDM device inventory, newest first, with each device's coverage bucket.
  */
 export function useManagedDevicesSuspense(
-  request?: ListManagedDevicesRequest | undefined,
-  security?: ListManagedDevicesSecurity | undefined,
+  request?: ListManagedDevicesRequest  ,
+  security?: ListManagedDevicesSecurity  ,
   options?: SuspenseQueryHookOptions<
     ManagedDevicesQueryData,
     ManagedDevicesQueryError
@@ -130,8 +130,8 @@ export function useManagedDevicesSuspense(
  * Page through the org's synced MDM device inventory, newest first, with each device's coverage bucket.
  */
 export function useManagedDevicesInfinite(
-  request?: ListManagedDevicesRequest | undefined,
-  security?: ListManagedDevicesSecurity | undefined,
+  request?: ListManagedDevicesRequest  ,
+  security?: ListManagedDevicesSecurity  ,
   options?: InfiniteQueryHookOptions<
     ManagedDevicesInfiniteQueryData,
     ManagedDevicesQueryError
@@ -167,8 +167,8 @@ export function useManagedDevicesInfinite(
  * Page through the org's synced MDM device inventory, newest first, with each device's coverage bucket.
  */
 export function useManagedDevicesInfiniteSuspense(
-  request?: ListManagedDevicesRequest | undefined,
-  security?: ListManagedDevicesSecurity | undefined,
+  request?: ListManagedDevicesRequest  ,
+  security?: ListManagedDevicesSecurity  ,
   options?: SuspenseInfiniteQueryHookOptions<
     ManagedDevicesInfiniteQueryData,
     ManagedDevicesQueryError

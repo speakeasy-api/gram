@@ -26,7 +26,7 @@ export class Agent extends ClientSDK {
    */
   async getPlugins(
     request: GetAgentPluginsRequest,
-    security?: GetAgentPluginsSecurity | undefined,
+    security?: GetAgentPluginsSecurity  ,
     options?: RequestOptions,
   ): Promise<GetPluginsResult> {
     return unwrapAsync(agentGetPlugins(
@@ -44,8 +44,8 @@ export class Agent extends ClientSDK {
    * List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.
    */
   async listSyncedUsers(
-    request?: ListSyncedAgentUsersRequest | undefined,
-    security?: ListSyncedAgentUsersSecurity | undefined,
+    request?: ListSyncedAgentUsersRequest  ,
+    security?: ListSyncedAgentUsersSecurity  ,
     options?: RequestOptions,
   ): Promise<ListSyncedUsersResult> {
     return unwrapAsync(agentListSyncedUsers(

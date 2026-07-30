@@ -2,10 +2,11 @@ import {
   PoweredBySpeakeasyBadge,
   ToolCollectionBadge,
 } from "@/components/tool-collection-badge";
-import { DotCard } from "@/components/ui/dot-card";
-import { Type } from "@/components/ui/type";
+import { DotCard } from "@/components/ui/DotCard";
+import { Type } from "@/components/ui/Type";
 import { cn } from "@/lib/utils";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { ArrowRight, Check } from "lucide-react";
 import { Link } from "react-router";
 import type { PulseMCPServer } from "./hooks";

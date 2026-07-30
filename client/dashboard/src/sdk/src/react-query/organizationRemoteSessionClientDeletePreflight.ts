@@ -65,7 +65,7 @@ export function useOrganizationRemoteSessionClientDeletePreflight(
   request: GetOrganizationRemoteSessionClientDeletePreflightRequest,
   security?:
     | GetOrganizationRemoteSessionClientDeletePreflightSecurity
-    | undefined,
+     ,
   options?: QueryHookOptions<
     OrganizationRemoteSessionClientDeletePreflightQueryData,
     OrganizationRemoteSessionClientDeletePreflightQueryError
@@ -96,7 +96,7 @@ export function useOrganizationRemoteSessionClientDeletePreflightSuspense(
   request: GetOrganizationRemoteSessionClientDeletePreflightRequest,
   security?:
     | GetOrganizationRemoteSessionClientDeletePreflightSecurity
-    | undefined,
+     ,
   options?: SuspenseQueryHookOptions<
     OrganizationRemoteSessionClientDeletePreflightQueryData,
     OrganizationRemoteSessionClientDeletePreflightQueryError

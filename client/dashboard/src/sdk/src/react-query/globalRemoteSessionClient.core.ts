@@ -23,7 +23,7 @@ export function prefetchGlobalRemoteSessionClient(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetGlobalRemoteSessionClientRequest,
-  security?: GetGlobalRemoteSessionClientSecurity | undefined,
+  security?: GetGlobalRemoteSessionClientSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchGlobalRemoteSessionClient(
 export function buildGlobalRemoteSessionClientQuery(
   client$: GramCore,
   request: GetGlobalRemoteSessionClientRequest,
-  security?: GetGlobalRemoteSessionClientSecurity | undefined,
+  security?: GetGlobalRemoteSessionClientSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

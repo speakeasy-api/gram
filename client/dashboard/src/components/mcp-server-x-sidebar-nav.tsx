@@ -7,8 +7,8 @@ import {
   McpServerReadinessBar,
   type ReadinessCheck,
 } from "@/components/mcp-server-readiness-bar";
-import { CopyButton } from "@/components/ui/copy-button";
-import { Type } from "@/components/ui/type";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Type } from "@/components/ui/Type";
 import {
   getMcpServerArgs,
   remoteMcpRouteParam,
@@ -238,7 +238,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
             </Type>
             <CopyButton
               text={mcpUrl}
-              size="inline"
+              size="xs"
               tooltip="Copy URL"
               className="mt-[-2px] shrink-0"
             />
@@ -259,7 +259,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
             </Type>
             <CopyButton
               text={upstreamUrl}
-              size="inline"
+              size="xs"
               tooltip="Copy upstream URL"
               className="mt-[-2px] shrink-0"
             />

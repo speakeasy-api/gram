@@ -62,8 +62,8 @@ export type ListGcpKmsKeysQueryError =
  * List the organization's GCP KMS external keys. Requires org:read.
  */
 export function useListGcpKmsKeys(
-  request?: ListGcpKmsKeysRequest | undefined,
-  security?: ListGcpKmsKeysSecurity | undefined,
+  request?: ListGcpKmsKeysRequest  ,
+  security?: ListGcpKmsKeysSecurity  ,
   options?: QueryHookOptions<ListGcpKmsKeysQueryData, ListGcpKmsKeysQueryError>,
 ): UseQueryResult<ListGcpKmsKeysQueryData, ListGcpKmsKeysQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useListGcpKmsKeys(
  * List the organization's GCP KMS external keys. Requires org:read.
  */
 export function useListGcpKmsKeysSuspense(
-  request?: ListGcpKmsKeysRequest | undefined,
-  security?: ListGcpKmsKeysSecurity | undefined,
+  request?: ListGcpKmsKeysRequest  ,
+  security?: ListGcpKmsKeysSecurity  ,
   options?: SuspenseQueryHookOptions<
     ListGcpKmsKeysQueryData,
     ListGcpKmsKeysQueryError

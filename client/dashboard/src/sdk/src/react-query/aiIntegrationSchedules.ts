@@ -63,7 +63,7 @@ export type AiIntegrationSchedulesQueryError =
  */
 export function useAiIntegrationSchedules(
   request: ListAIIntegrationSchedulesRequest,
-  security?: ListAIIntegrationSchedulesSecurity | undefined,
+  security?: ListAIIntegrationSchedulesSecurity  ,
   options?: QueryHookOptions<
     AiIntegrationSchedulesQueryData,
     AiIntegrationSchedulesQueryError
@@ -92,7 +92,7 @@ export function useAiIntegrationSchedules(
  */
 export function useAiIntegrationSchedulesSuspense(
   request: ListAIIntegrationSchedulesRequest,
-  security?: ListAIIntegrationSchedulesSecurity | undefined,
+  security?: ListAIIntegrationSchedulesSecurity  ,
   options?: SuspenseQueryHookOptions<
     AiIntegrationSchedulesQueryData,
     AiIntegrationSchedulesQueryError

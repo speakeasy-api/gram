@@ -47,7 +47,7 @@ export class AdminExternalCredentials extends ClientSDK {
    */
   async createGcpIam(
     request: CreateGcpIamPlatformCredentialRequest,
-    security?: CreateGcpIamPlatformCredentialSecurity | undefined,
+    security?: CreateGcpIamPlatformCredentialSecurity  ,
     options?: RequestOptions,
   ): Promise<GcpIamCredential> {
     return unwrapAsync(adminExternalCredentialsCreateGcpIam(
@@ -66,7 +66,7 @@ export class AdminExternalCredentials extends ClientSDK {
    */
   async deleteGcpIam(
     request: DeleteGcpIamPlatformCredentialRequest,
-    security?: DeleteGcpIamPlatformCredentialSecurity | undefined,
+    security?: DeleteGcpIamPlatformCredentialSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(adminExternalCredentialsDeleteGcpIam(
@@ -85,7 +85,7 @@ export class AdminExternalCredentials extends ClientSDK {
    */
   async getGcpIam(
     request: GetGcpIamPlatformCredentialRequest,
-    security?: GetGcpIamPlatformCredentialSecurity | undefined,
+    security?: GetGcpIamPlatformCredentialSecurity  ,
     options?: RequestOptions,
   ): Promise<GcpIamCredential> {
     return unwrapAsync(adminExternalCredentialsGetGcpIam(
@@ -103,8 +103,8 @@ export class AdminExternalCredentials extends ClientSDK {
    * List the platform external credentials (provider-independent summary). Optionally filter by provider. Requires platform admin.
    */
   async list(
-    request?: ListPlatformExternalCredentialsRequest | undefined,
-    security?: ListPlatformExternalCredentialsSecurity | undefined,
+    request?: ListPlatformExternalCredentialsRequest  ,
+    security?: ListPlatformExternalCredentialsSecurity  ,
     options?: RequestOptions,
   ): Promise<ListExternalCredentialsResult> {
     return unwrapAsync(adminExternalCredentialsList(
@@ -123,7 +123,7 @@ export class AdminExternalCredentials extends ClientSDK {
    */
   async updateGcpIam(
     request: UpdateGcpIamPlatformCredentialRequest,
-    security?: UpdateGcpIamPlatformCredentialSecurity | undefined,
+    security?: UpdateGcpIamPlatformCredentialSecurity  ,
     options?: RequestOptions,
   ): Promise<GcpIamCredential> {
     return unwrapAsync(adminExternalCredentialsUpdateGcpIam(
@@ -142,7 +142,7 @@ export class AdminExternalCredentials extends ClientSDK {
    */
   async verifyGcpIam(
     request: VerifyGcpIamPlatformCredentialRequest,
-    security?: VerifyGcpIamPlatformCredentialSecurity | undefined,
+    security?: VerifyGcpIamPlatformCredentialSecurity  ,
     options?: RequestOptions,
   ): Promise<VerifyPlatformCredentialResult> {
     return unwrapAsync(adminExternalCredentialsVerifyGcpIam(

@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function projectsSetOrganizationWhitelist(
   client: GramCore,
   request: SetOrganizationWhitelistRequest,
-  security?: SetOrganizationWhitelistSecurity | undefined,
+  security?: SetOrganizationWhitelistSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function projectsSetOrganizationWhitelist(
 async function $do(
   client: GramCore,
   request: SetOrganizationWhitelistRequest,
-  security?: SetOrganizationWhitelistSecurity | undefined,
+  security?: SetOrganizationWhitelistSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

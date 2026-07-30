@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function hooksHooksNumberCursor(
   client: GramCore,
   request: HooksNumberCursorRequest,
-  security?: HooksNumberCursorSecurity | undefined,
+  security?: HooksNumberCursorSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function hooksHooksNumberCursor(
 async function $do(
   client: GramCore,
   request: HooksNumberCursorRequest,
-  security?: HooksNumberCursorSecurity | undefined,
+  security?: HooksNumberCursorSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

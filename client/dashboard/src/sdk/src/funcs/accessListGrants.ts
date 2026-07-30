@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function accessListGrants(
   client: GramCore,
-  request?: ListGrantsRequest | undefined,
-  security?: ListGrantsSecurity | undefined,
+  request?: ListGrantsRequest  ,
+  security?: ListGrantsSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function accessListGrants(
 
 async function $do(
   client: GramCore,
-  request?: ListGrantsRequest | undefined,
-  security?: ListGrantsSecurity | undefined,
+  request?: ListGrantsRequest  ,
+  security?: ListGrantsSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

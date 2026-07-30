@@ -22,8 +22,8 @@ export type ActiveDeploymentQueryData = GetActiveDeploymentResult;
 export function prefetchActiveDeployment(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetActiveDeploymentRequest | undefined,
-  security?: GetActiveDeploymentSecurity | undefined,
+  request?: GetActiveDeploymentRequest  ,
+  security?: GetActiveDeploymentSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchActiveDeployment(
 
 export function buildActiveDeploymentQuery(
   client$: GramCore,
-  request?: GetActiveDeploymentRequest | undefined,
-  security?: GetActiveDeploymentSecurity | undefined,
+  request?: GetActiveDeploymentRequest  ,
+  security?: GetActiveDeploymentSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

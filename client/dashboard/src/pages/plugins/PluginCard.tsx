@@ -1,22 +1,22 @@
 import { CardContextMenu } from "@/components/card-context-menu";
-import { DotCard } from "@/components/ui/dot-card";
-import type { Action } from "@/components/ui/more-actions";
-import { Type } from "@/components/ui/type";
+import { DotCard } from "@/components/ui/DotCard";
+import type { Action } from "@/components/ui/MoreActions";
+import { Type } from "@/components/ui/Type";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
 import { ArrowRight, Puzzle, Server } from "lucide-react";
 import { Fragment, useState } from "react";
 import { Link, useNavigate } from "react-router";

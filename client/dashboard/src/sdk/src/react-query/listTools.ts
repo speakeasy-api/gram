@@ -63,8 +63,8 @@ export type ListToolsQueryError =
  * List all tools for a project
  */
 export function useListTools(
-  request?: ListToolsRequest | undefined,
-  security?: ListToolsSecurity | undefined,
+  request?: ListToolsRequest  ,
+  security?: ListToolsSecurity  ,
   options?: QueryHookOptions<ListToolsQueryData, ListToolsQueryError>,
 ): UseQueryResult<ListToolsQueryData, ListToolsQueryError> {
   const client = useGramContext();
@@ -86,8 +86,8 @@ export function useListTools(
  * List all tools for a project
  */
 export function useListToolsSuspense(
-  request?: ListToolsRequest | undefined,
-  security?: ListToolsSecurity | undefined,
+  request?: ListToolsRequest  ,
+  security?: ListToolsSecurity  ,
   options?: SuspenseQueryHookOptions<ListToolsQueryData, ListToolsQueryError>,
 ): UseSuspenseQueryResult<ListToolsQueryData, ListToolsQueryError> {
   const client = useGramContext();

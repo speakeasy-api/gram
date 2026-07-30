@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function deploymentsGetById(
   client: GramCore,
   request: GetDeploymentRequest,
-  security?: GetDeploymentSecurity | undefined,
+  security?: GetDeploymentSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function deploymentsGetById(
 async function $do(
   client: GramCore,
   request: GetDeploymentRequest,
-  security?: GetDeploymentSecurity | undefined,
+  security?: GetDeploymentSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

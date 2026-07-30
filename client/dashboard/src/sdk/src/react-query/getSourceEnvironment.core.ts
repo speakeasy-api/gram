@@ -24,7 +24,7 @@ export function prefetchGetSourceEnvironment(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetSourceEnvironmentRequest,
-  security?: GetSourceEnvironmentSecurity | undefined,
+  security?: GetSourceEnvironmentSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -40,7 +40,7 @@ export function prefetchGetSourceEnvironment(
 export function buildGetSourceEnvironmentQuery(
   client$: GramCore,
   request: GetSourceEnvironmentRequest,
-  security?: GetSourceEnvironmentSecurity | undefined,
+  security?: GetSourceEnvironmentSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

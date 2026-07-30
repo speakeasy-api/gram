@@ -1,8 +1,8 @@
 import { Page } from "@/components/page-layout";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Type } from "@/components/ui/Type";
 import { useOrganization } from "@/contexts/Auth";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -12,7 +12,8 @@ import {
 } from "@gram/client/react-query/getTokensUnderManagement.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { useSetBillingMetadataMutation } from "@gram/client/react-query/setBillingMetadata.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";

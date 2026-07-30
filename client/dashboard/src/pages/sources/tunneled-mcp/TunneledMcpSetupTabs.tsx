@@ -1,11 +1,11 @@
 import { CodeBlock, type CodeBlockSlot } from "@/components/code";
 import { McpSidebarInfoLabel } from "@/components/mcp-sidebar-nav-shell";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/Tabs";
+import { Type } from "@/components/ui/Type";
 import { cn, tunnelGatewayURL } from "@/lib/utils";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import { useEffect, useRef, useState } from "react";
 
 const DEFAULT_MCP_URL = "https://placeholder.net/mcp";

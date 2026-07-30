@@ -24,8 +24,8 @@ export type HooksServerNamesListServerNameOverridesQueryData = Array<
 export function prefetchHooksServerNamesListServerNameOverrides(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListServerNameOverridesRequest | undefined,
-  security?: ListServerNameOverridesSecurity | undefined,
+  request?: ListServerNameOverridesRequest  ,
+  security?: ListServerNameOverridesSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -40,8 +40,8 @@ export function prefetchHooksServerNamesListServerNameOverrides(
 
 export function buildHooksServerNamesListServerNameOverridesQuery(
   client$: GramCore,
-  request?: ListServerNameOverridesRequest | undefined,
-  security?: ListServerNameOverridesSecurity | undefined,
+  request?: ListServerNameOverridesRequest  ,
+  security?: ListServerNameOverridesSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

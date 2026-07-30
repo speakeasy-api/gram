@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function assistantsEnsureManaged(
   client: GramCore,
-  request?: EnsureManagedAssistantRequest | undefined,
-  security?: EnsureManagedAssistantSecurity | undefined,
+  request?: EnsureManagedAssistantRequest  ,
+  security?: EnsureManagedAssistantSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function assistantsEnsureManaged(
 
 async function $do(
   client: GramCore,
-  request?: EnsureManagedAssistantRequest | undefined,
-  security?: EnsureManagedAssistantSecurity | undefined,
+  request?: EnsureManagedAssistantRequest  ,
+  security?: EnsureManagedAssistantSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

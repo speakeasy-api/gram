@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function adminChatAnalysisGetSettings(
   client: GramCore,
-  request?: GetChatAnalysisSettingsRequest | undefined,
-  security?: GetChatAnalysisSettingsSecurity | undefined,
+  request?: GetChatAnalysisSettingsRequest  ,
+  security?: GetChatAnalysisSettingsSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function adminChatAnalysisGetSettings(
 
 async function $do(
   client: GramCore,
-  request?: GetChatAnalysisSettingsRequest | undefined,
-  security?: GetChatAnalysisSettingsSecurity | undefined,
+  request?: GetChatAnalysisSettingsRequest  ,
+  security?: GetChatAnalysisSettingsSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

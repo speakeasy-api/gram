@@ -1,12 +1,14 @@
 import { Page } from "@/components/page-layout";
-import { Button, Icon } from "@speakeasy-api/moonshine";
-import { Combobox } from "@/components/ui/combobox";
-import { SkeletonCode } from "@/components/ui/skeleton";
-import { TextArea } from "@/components/ui/textarea";
-import { Type } from "@/components/ui/type";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { Combobox } from "@/components/ui/Combobox";
+import { SkeletonCode } from "@/components/ui/Skeleton";
+import { TextArea } from "@/components/ui/Textarea";
+import { Type } from "@/components/ui/Type";
 import { useProject } from "@/contexts/Auth";
 import { capitalize } from "@/lib/utils";
-import { CodeSnippet, Stack } from "@speakeasy-api/moonshine";
+import { CodeSnippet } from "@/components/ui/CodeSnippet";
+import { Stack } from "@/components/ui/Stack";
 import { AgentifyProvider } from "../playground/Agentify";
 import { useAgentify } from "../playground/useAgentify";
 import {

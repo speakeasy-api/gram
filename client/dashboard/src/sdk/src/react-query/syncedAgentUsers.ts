@@ -62,8 +62,8 @@ export type SyncedAgentUsersQueryError =
  * List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.
  */
 export function useSyncedAgentUsers(
-  request?: ListSyncedAgentUsersRequest | undefined,
-  security?: ListSyncedAgentUsersSecurity | undefined,
+  request?: ListSyncedAgentUsersRequest  ,
+  security?: ListSyncedAgentUsersSecurity  ,
   options?: QueryHookOptions<
     SyncedAgentUsersQueryData,
     SyncedAgentUsersQueryError
@@ -88,8 +88,8 @@ export function useSyncedAgentUsers(
  * List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.
  */
 export function useSyncedAgentUsersSuspense(
-  request?: ListSyncedAgentUsersRequest | undefined,
-  security?: ListSyncedAgentUsersSecurity | undefined,
+  request?: ListSyncedAgentUsersRequest  ,
+  security?: ListSyncedAgentUsersSecurity  ,
   options?: SuspenseQueryHookOptions<
     SyncedAgentUsersQueryData,
     SyncedAgentUsersQueryError

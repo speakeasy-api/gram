@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function organizationRemoteSessionIssuersCreate(
   client: GramCore,
   request: CreateOrganizationRemoteSessionIssuerRequest,
-  security?: CreateOrganizationRemoteSessionIssuerSecurity | undefined,
+  security?: CreateOrganizationRemoteSessionIssuerSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function organizationRemoteSessionIssuersCreate(
 async function $do(
   client: GramCore,
   request: CreateOrganizationRemoteSessionIssuerRequest,
-  security?: CreateOrganizationRemoteSessionIssuerSecurity | undefined,
+  security?: CreateOrganizationRemoteSessionIssuerSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

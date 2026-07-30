@@ -61,8 +61,8 @@ export class Deployments extends ClientSDK {
    * Get the active deployment for a project.
    */
   async active(
-    request?: GetActiveDeploymentRequest | undefined,
-    security?: GetActiveDeploymentSecurity | undefined,
+    request?: GetActiveDeploymentRequest  ,
+    security?: GetActiveDeploymentSecurity  ,
     options?: RequestOptions,
   ): Promise<GetActiveDeploymentResult> {
     return unwrapAsync(deploymentsActive(
@@ -81,7 +81,7 @@ export class Deployments extends ClientSDK {
    */
   async create(
     request: CreateDeploymentRequest,
-    security?: CreateDeploymentSecurity | undefined,
+    security?: CreateDeploymentSecurity  ,
     options?: RequestOptions,
   ): Promise<CreateDeploymentResult> {
     return unwrapAsync(deploymentsCreate(
@@ -100,7 +100,7 @@ export class Deployments extends ClientSDK {
    */
   async evolveDeployment(
     request: EvolveDeploymentRequest,
-    security?: EvolveDeploymentSecurity | undefined,
+    security?: EvolveDeploymentSecurity  ,
     options?: RequestOptions,
   ): Promise<EvolveResult> {
     return unwrapAsync(deploymentsEvolveDeployment(
@@ -119,7 +119,7 @@ export class Deployments extends ClientSDK {
    */
   async getById(
     request: GetDeploymentRequest,
-    security?: GetDeploymentSecurity | undefined,
+    security?: GetDeploymentSecurity  ,
     options?: RequestOptions,
   ): Promise<GetDeploymentResult> {
     return unwrapAsync(deploymentsGetById(
@@ -137,8 +137,8 @@ export class Deployments extends ClientSDK {
    * Get the latest deployment for a project.
    */
   async latest(
-    request?: GetLatestDeploymentRequest | undefined,
-    security?: GetLatestDeploymentSecurity | undefined,
+    request?: GetLatestDeploymentRequest  ,
+    security?: GetLatestDeploymentSecurity  ,
     options?: RequestOptions,
   ): Promise<GetLatestDeploymentResult> {
     return unwrapAsync(deploymentsLatest(
@@ -156,8 +156,8 @@ export class Deployments extends ClientSDK {
    * List all deployments in descending order of creation.
    */
   async list(
-    request?: ListDeploymentsRequest | undefined,
-    security?: ListDeploymentsSecurity | undefined,
+    request?: ListDeploymentsRequest  ,
+    security?: ListDeploymentsSecurity  ,
     options?: RequestOptions,
   ): Promise<ListDeploymentResult> {
     return unwrapAsync(deploymentsList(
@@ -176,7 +176,7 @@ export class Deployments extends ClientSDK {
    */
   async logs(
     request: GetDeploymentLogsRequest,
-    security?: GetDeploymentLogsSecurity | undefined,
+    security?: GetDeploymentLogsSecurity  ,
     options?: RequestOptions,
   ): Promise<GetDeploymentLogsResult> {
     return unwrapAsync(deploymentsLogs(
@@ -195,7 +195,7 @@ export class Deployments extends ClientSDK {
    */
   async redeployDeployment(
     request: RedeployDeploymentRequest,
-    security?: RedeployDeploymentSecurity | undefined,
+    security?: RedeployDeploymentSecurity  ,
     options?: RequestOptions,
   ): Promise<RedeployResult> {
     return unwrapAsync(deploymentsRedeployDeployment(

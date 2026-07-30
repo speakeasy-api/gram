@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function riskCustomRulesUpdate(
   client: GramCore,
   request: UpdateCustomDetectionRuleRequest,
-  security?: UpdateCustomDetectionRuleSecurity | undefined,
+  security?: UpdateCustomDetectionRuleSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function riskCustomRulesUpdate(
 async function $do(
   client: GramCore,
   request: UpdateCustomDetectionRuleRequest,
-  security?: UpdateCustomDetectionRuleSecurity | undefined,
+  security?: UpdateCustomDetectionRuleSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

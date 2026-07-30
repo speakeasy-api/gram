@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function projectsRead(
   client: GramCore,
   request: GetProjectRequest,
-  security?: GetProjectSecurity | undefined,
+  security?: GetProjectSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function projectsRead(
 async function $do(
   client: GramCore,
   request: GetProjectRequest,
-  security?: GetProjectSecurity | undefined,
+  security?: GetProjectSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

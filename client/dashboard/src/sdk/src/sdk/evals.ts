@@ -37,7 +37,7 @@ export class Evals extends ClientSDK {
    */
   async deleteReview(
     request: DeleteRiskEvalReviewRequest,
-    security?: DeleteRiskEvalReviewSecurity | undefined,
+    security?: DeleteRiskEvalReviewSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(riskEvalsDeleteReview(
@@ -56,7 +56,7 @@ export class Evals extends ClientSDK {
    */
   async evaluate(
     request: EvaluatePromptGuardrailRequest,
-    security?: EvaluatePromptGuardrailSecurity | undefined,
+    security?: EvaluatePromptGuardrailSecurity  ,
     options?: RequestOptions,
   ): Promise<PromptGuardrailEvalResult> {
     return unwrapAsync(riskEvalsEvaluate(
@@ -75,7 +75,7 @@ export class Evals extends ClientSDK {
    */
   async listReviews(
     request: ListRiskEvalReviewsRequest,
-    security?: ListRiskEvalReviewsSecurity | undefined,
+    security?: ListRiskEvalReviewsSecurity  ,
     options?: RequestOptions,
   ): Promise<ListRiskEvalReviewsResult> {
     return unwrapAsync(riskEvalsListReviews(
@@ -94,7 +94,7 @@ export class Evals extends ClientSDK {
    */
   async saveReview(
     request: SaveRiskEvalReviewRequest,
-    security?: SaveRiskEvalReviewSecurity | undefined,
+    security?: SaveRiskEvalReviewSecurity  ,
     options?: RequestOptions,
   ): Promise<RiskPolicyEvalReview> {
     return unwrapAsync(riskEvalsSaveReview(

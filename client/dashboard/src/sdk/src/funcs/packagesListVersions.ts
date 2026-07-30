@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function packagesListVersions(
   client: GramCore,
   request: ListVersionsRequest,
-  security?: ListVersionsSecurity | undefined,
+  security?: ListVersionsSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function packagesListVersions(
 async function $do(
   client: GramCore,
   request: ListVersionsRequest,
-  security?: ListVersionsSecurity | undefined,
+  security?: ListVersionsSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

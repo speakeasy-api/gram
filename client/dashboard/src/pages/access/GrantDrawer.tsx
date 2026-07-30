@@ -4,16 +4,17 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Type } from "@/components/ui/Type";
 import { cn } from "@/lib/utils";
 import type { Role } from "@gram/client/models/components/role.js";
 import { ResolveChallengeFormResolutionType } from "@gram/client/models/components/resolvechallengeform.js";
 import { invalidateAllChallenges } from "@gram/client/react-query/challenges.js";
 import { useResolveChallengeMutation } from "@gram/client/react-query/resolveChallenge.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, ChevronRight, Plus, Users } from "lucide-react";
 import { useState } from "react";

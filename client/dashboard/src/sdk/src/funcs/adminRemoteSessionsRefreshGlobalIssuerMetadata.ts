@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function adminRemoteSessionsRefreshGlobalIssuerMetadata(
   client: GramCore,
   request: RefreshGlobalRemoteSessionIssuerMetadataRequest,
-  security?: RefreshGlobalRemoteSessionIssuerMetadataSecurity | undefined,
+  security?: RefreshGlobalRemoteSessionIssuerMetadataSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function adminRemoteSessionsRefreshGlobalIssuerMetadata(
 async function $do(
   client: GramCore,
   request: RefreshGlobalRemoteSessionIssuerMetadataRequest,
-  security?: RefreshGlobalRemoteSessionIssuerMetadataSecurity | undefined,
+  security?: RefreshGlobalRemoteSessionIssuerMetadataSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

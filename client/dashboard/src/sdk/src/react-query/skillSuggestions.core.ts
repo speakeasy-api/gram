@@ -34,8 +34,8 @@ export type SkillSuggestionsPageParams = PageIterator<
 export function prefetchSkillSuggestions(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListSkillSuggestionsRequest | undefined,
-  security?: ListSkillSuggestionsSecurity | undefined,
+  request?: ListSkillSuggestionsRequest  ,
+  security?: ListSkillSuggestionsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -51,8 +51,8 @@ export function prefetchSkillSuggestions(
 export function prefetchSkillSuggestionsInfinite(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListSkillSuggestionsRequest | undefined,
-  security?: ListSkillSuggestionsSecurity | undefined,
+  request?: ListSkillSuggestionsRequest  ,
+  security?: ListSkillSuggestionsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -70,8 +70,8 @@ export function prefetchSkillSuggestionsInfinite(
 
 export function buildSkillSuggestionsQuery(
   client$: GramCore,
-  request?: ListSkillSuggestionsRequest | undefined,
-  security?: ListSkillSuggestionsSecurity | undefined,
+  request?: ListSkillSuggestionsRequest  ,
+  security?: ListSkillSuggestionsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -114,8 +114,8 @@ export function buildSkillSuggestionsQuery(
 
 export function buildSkillSuggestionsInfiniteQuery(
   client$: GramCore,
-  request?: ListSkillSuggestionsRequest | undefined,
-  security?: ListSkillSuggestionsSecurity | undefined,
+  request?: ListSkillSuggestionsRequest  ,
+  security?: ListSkillSuggestionsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

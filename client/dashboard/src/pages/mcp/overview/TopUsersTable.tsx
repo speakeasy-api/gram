@@ -1,13 +1,13 @@
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
-import { Heading } from "@/components/ui/heading";
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Type } from "@/components/ui/Type";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { telemetryGetToolUsageUsers } from "@gram/client/funcs/telemetryGetToolUsageUsers";
 import type { GetToolUsageUsersResult } from "@gram/client/models/components/gettoolusageusersresult.js";
 import { useGramContext } from "@gram/client/react-query/_context";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Column, Table } from "@speakeasy-api/moonshine";
+import { Column, Table } from "@/components/ui/Table";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 

@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function mcpEndpointsCreate(
   client: GramCore,
   request: CreateMcpEndpointRequest,
-  security?: CreateMcpEndpointSecurity | undefined,
+  security?: CreateMcpEndpointSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function mcpEndpointsCreate(
 async function $do(
   client: GramCore,
   request: CreateMcpEndpointRequest,
-  security?: CreateMcpEndpointSecurity | undefined,
+  security?: CreateMcpEndpointSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

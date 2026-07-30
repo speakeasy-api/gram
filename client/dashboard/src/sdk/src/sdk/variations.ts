@@ -43,8 +43,8 @@ export class Variations extends ClientSDK {
    * Ensure the project-default (global) tool variation group exists, returning it. Idempotent: returns the existing group unchanged when present, otherwise creates it. Takes no parameters and only manages the single project-default group.
    */
   async createGlobal(
-    request?: CreateGlobalToolVariationGroupRequest | undefined,
-    security?: CreateGlobalToolVariationGroupSecurity | undefined,
+    request?: CreateGlobalToolVariationGroupRequest  ,
+    security?: CreateGlobalToolVariationGroupSecurity  ,
     options?: RequestOptions,
   ): Promise<ToolVariationGroupResult> {
     return unwrapAsync(variationsCreateGlobal(
@@ -63,7 +63,7 @@ export class Variations extends ClientSDK {
    */
   async deleteGlobal(
     request: DeleteGlobalVariationRequest,
-    security?: DeleteGlobalVariationSecurity | undefined,
+    security?: DeleteGlobalVariationSecurity  ,
     options?: RequestOptions,
   ): Promise<DeleteGlobalToolVariationResult> {
     return unwrapAsync(variationsDeleteGlobal(
@@ -81,8 +81,8 @@ export class Variations extends ClientSDK {
    * List globally defined tool variations.
    */
   async listGlobal(
-    request?: ListGlobalVariationsRequest | undefined,
-    security?: ListGlobalVariationsSecurity | undefined,
+    request?: ListGlobalVariationsRequest  ,
+    security?: ListGlobalVariationsSecurity  ,
     options?: RequestOptions,
   ): Promise<ListVariationsResult> {
     return unwrapAsync(variationsListGlobal(
@@ -100,8 +100,8 @@ export class Variations extends ClientSDK {
    * List the tool variation groups visible to the project. In v1 this returns the project-default group when it exists, or an empty list otherwise.
    */
   async listGroups(
-    request?: ListToolVariationGroupsRequest | undefined,
-    security?: ListToolVariationGroupsSecurity | undefined,
+    request?: ListToolVariationGroupsRequest  ,
+    security?: ListToolVariationGroupsSecurity  ,
     options?: RequestOptions,
   ): Promise<ListToolVariationGroupsResult> {
     return unwrapAsync(variationsListGroups(
@@ -120,7 +120,7 @@ export class Variations extends ClientSDK {
    */
   async upsertGlobal(
     request: UpsertGlobalVariationRequest,
-    security?: UpsertGlobalVariationSecurity | undefined,
+    security?: UpsertGlobalVariationSecurity  ,
     options?: RequestOptions,
   ): Promise<UpsertGlobalToolVariationResult> {
     return unwrapAsync(variationsUpsertGlobal(

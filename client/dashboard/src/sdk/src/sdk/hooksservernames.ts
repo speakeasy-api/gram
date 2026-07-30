@@ -30,7 +30,7 @@ export class HooksServerNames extends ClientSDK {
    */
   async deleteServerNameOverride(
     request: DeleteServerNameOverrideRequest,
-    security?: DeleteServerNameOverrideSecurity | undefined,
+    security?: DeleteServerNameOverrideSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(hooksServerNamesDeleteServerNameOverride(
@@ -48,8 +48,8 @@ export class HooksServerNames extends ClientSDK {
    * List all server name display overrides for a project
    */
   async listServerNameOverrides(
-    request?: ListServerNameOverridesRequest | undefined,
-    security?: ListServerNameOverridesSecurity | undefined,
+    request?: ListServerNameOverridesRequest  ,
+    security?: ListServerNameOverridesSecurity  ,
     options?: RequestOptions,
   ): Promise<Array<ServerNameOverride>> {
     return unwrapAsync(hooksServerNamesListServerNameOverrides(
@@ -68,7 +68,7 @@ export class HooksServerNames extends ClientSDK {
    */
   async upsertServerNameOverride(
     request: UpsertServerNameOverrideRequest,
-    security?: UpsertServerNameOverrideSecurity | undefined,
+    security?: UpsertServerNameOverrideSecurity  ,
     options?: RequestOptions,
   ): Promise<ServerNameOverride> {
     return unwrapAsync(hooksServerNamesUpsertServerNameOverride(

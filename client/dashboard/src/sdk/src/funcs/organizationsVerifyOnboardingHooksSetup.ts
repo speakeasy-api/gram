@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function organizationsVerifyOnboardingHooksSetup(
   client: GramCore,
-  request?: VerifyOnboardingHooksSetupRequest | undefined,
-  security?: VerifyOnboardingHooksSetupSecurity | undefined,
+  request?: VerifyOnboardingHooksSetupRequest  ,
+  security?: VerifyOnboardingHooksSetupSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function organizationsVerifyOnboardingHooksSetup(
 
 async function $do(
   client: GramCore,
-  request?: VerifyOnboardingHooksSetupRequest | undefined,
-  security?: VerifyOnboardingHooksSetupSecurity | undefined,
+  request?: VerifyOnboardingHooksSetupRequest  ,
+  security?: VerifyOnboardingHooksSetupSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

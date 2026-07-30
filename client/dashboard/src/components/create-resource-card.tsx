@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { Plus } from "lucide-react";
-import { DotCard } from "./ui/dot-card";
-import { Type } from "./ui/type";
+import { DotCard } from "@/components/ui/DotCard";
+import { Type } from "@/components/ui/Type";
 
 type CreateResourceCardProps = {
   title: React.ReactNode;

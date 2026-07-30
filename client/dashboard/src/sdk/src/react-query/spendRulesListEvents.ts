@@ -63,8 +63,8 @@ export type SpendRulesListEventsQueryError =
  * List warning and breach events emitted by budget rule evaluation, most recent first.
  */
 export function useSpendRulesListEvents(
-  request?: ListSpendRuleEventsRequest | undefined,
-  security?: ListSpendRuleEventsSecurity | undefined,
+  request?: ListSpendRuleEventsRequest  ,
+  security?: ListSpendRuleEventsSecurity  ,
   options?: QueryHookOptions<
     SpendRulesListEventsQueryData,
     SpendRulesListEventsQueryError
@@ -92,8 +92,8 @@ export function useSpendRulesListEvents(
  * List warning and breach events emitted by budget rule evaluation, most recent first.
  */
 export function useSpendRulesListEventsSuspense(
-  request?: ListSpendRuleEventsRequest | undefined,
-  security?: ListSpendRuleEventsSecurity | undefined,
+  request?: ListSpendRuleEventsRequest  ,
+  security?: ListSpendRuleEventsSecurity  ,
   options?: SuspenseQueryHookOptions<
     SpendRulesListEventsQueryData,
     SpendRulesListEventsQueryError

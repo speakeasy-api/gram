@@ -63,7 +63,7 @@ export type OrganizationRemoteSessionClientQueryError =
  */
 export function useOrganizationRemoteSessionClient(
   request: GetOrganizationRemoteSessionClientRequest,
-  security?: GetOrganizationRemoteSessionClientSecurity | undefined,
+  security?: GetOrganizationRemoteSessionClientSecurity  ,
   options?: QueryHookOptions<
     OrganizationRemoteSessionClientQueryData,
     OrganizationRemoteSessionClientQueryError
@@ -92,7 +92,7 @@ export function useOrganizationRemoteSessionClient(
  */
 export function useOrganizationRemoteSessionClientSuspense(
   request: GetOrganizationRemoteSessionClientRequest,
-  security?: GetOrganizationRemoteSessionClientSecurity | undefined,
+  security?: GetOrganizationRemoteSessionClientSecurity  ,
   options?: SuspenseQueryHookOptions<
     OrganizationRemoteSessionClientQueryData,
     OrganizationRemoteSessionClientQueryError

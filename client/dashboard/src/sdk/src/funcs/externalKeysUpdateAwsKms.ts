@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function externalKeysUpdateAwsKms(
   client: GramCore,
   request: UpdateAwsKmsKeyRequest,
-  security?: UpdateAwsKmsKeySecurity | undefined,
+  security?: UpdateAwsKmsKeySecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function externalKeysUpdateAwsKms(
 async function $do(
   client: GramCore,
   request: UpdateAwsKmsKeyRequest,
-  security?: UpdateAwsKmsKeySecurity | undefined,
+  security?: UpdateAwsKmsKeySecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

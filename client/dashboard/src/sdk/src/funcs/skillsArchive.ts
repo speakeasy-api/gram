@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function skillsArchive(
   client: GramCore,
   request: ArchiveSkillRequest,
-  security?: ArchiveSkillSecurity | undefined,
+  security?: ArchiveSkillSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function skillsArchive(
 async function $do(
   client: GramCore,
   request: ArchiveSkillRequest,
-  security?: ArchiveSkillSecurity | undefined,
+  security?: ArchiveSkillSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

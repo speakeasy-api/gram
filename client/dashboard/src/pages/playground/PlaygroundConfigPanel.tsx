@@ -1,22 +1,22 @@
 import { AnnotationBadges } from "@/components/tool-list/AnnotationBadges";
 import { MethodBadge } from "@/components/tool-list/MethodBadge";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Label } from "@/components/ui/label";
+} from "@/components/ui/Collapsible";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Slider } from "@/components/ui/Slider";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Type } from "@/components/ui/Type";
 import { AVAILABLE_MODELS } from "@/lib/models";
 import { cn } from "@/lib/utils";
 import { Tool, getToolSourceLabel } from "@/lib/toolTypes";
@@ -30,8 +30,8 @@ import {
   SquareFunction,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { McpIcon } from "@/components/ui/mcp-icon";
-import { Badge } from "@speakeasy-api/moonshine";
+import { McpIcon } from "@/components/ui/McpIcon";
+import { Badge } from "@/components/ui/Badge";
 
 interface ToolsetInfo {
   name: string;
@@ -361,7 +361,7 @@ export function PlaygroundConfigPanel({
             {onOpenToolsModal && (
               <Button
                 size="sm"
-                variant="ghost"
+                variant="tertiary"
                 className="h-6 px-2"
                 onClick={(e: React.MouseEvent) => {
                   e.stopPropagation();

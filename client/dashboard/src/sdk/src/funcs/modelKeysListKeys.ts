@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function modelKeysListKeys(
   client: GramCore,
-  request?: ListModelProviderKeysRequest | undefined,
-  security?: ListModelProviderKeysSecurity | undefined,
+  request?: ListModelProviderKeysRequest  ,
+  security?: ListModelProviderKeysSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function modelKeysListKeys(
 
 async function $do(
   client: GramCore,
-  request?: ListModelProviderKeysRequest | undefined,
-  security?: ListModelProviderKeysSecurity | undefined,
+  request?: ListModelProviderKeysRequest  ,
+  security?: ListModelProviderKeysSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

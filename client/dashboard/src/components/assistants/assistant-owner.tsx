@@ -1,6 +1,6 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Type } from "@/components/ui/Type";
 import { cn } from "@/lib/utils";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { User, UserX } from "lucide-react";

@@ -62,8 +62,8 @@ export type OnboardingStatusQueryError =
  * Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.
  */
 export function useOnboardingStatus(
-  request?: GetOnboardingStatusRequest | undefined,
-  security?: GetOnboardingStatusSecurity | undefined,
+  request?: GetOnboardingStatusRequest  ,
+  security?: GetOnboardingStatusSecurity  ,
   options?: QueryHookOptions<
     OnboardingStatusQueryData,
     OnboardingStatusQueryError
@@ -88,8 +88,8 @@ export function useOnboardingStatus(
  * Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.
  */
 export function useOnboardingStatusSuspense(
-  request?: GetOnboardingStatusRequest | undefined,
-  security?: GetOnboardingStatusSecurity | undefined,
+  request?: GetOnboardingStatusRequest  ,
+  security?: GetOnboardingStatusSecurity  ,
   options?: SuspenseQueryHookOptions<
     OnboardingStatusQueryData,
     OnboardingStatusQueryError

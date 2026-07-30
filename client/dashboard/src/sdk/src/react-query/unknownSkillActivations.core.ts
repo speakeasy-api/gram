@@ -35,8 +35,8 @@ export type UnknownSkillActivationsPageParams = PageIterator<
 export function prefetchUnknownSkillActivations(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListUnknownSkillActivationsRequest | undefined,
-  security?: ListUnknownSkillActivationsSecurity | undefined,
+  request?: ListUnknownSkillActivationsRequest  ,
+  security?: ListUnknownSkillActivationsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -52,8 +52,8 @@ export function prefetchUnknownSkillActivations(
 export function prefetchUnknownSkillActivationsInfinite(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListUnknownSkillActivationsRequest | undefined,
-  security?: ListUnknownSkillActivationsSecurity | undefined,
+  request?: ListUnknownSkillActivationsRequest  ,
+  security?: ListUnknownSkillActivationsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -72,8 +72,8 @@ export function prefetchUnknownSkillActivationsInfinite(
 
 export function buildUnknownSkillActivationsQuery(
   client$: GramCore,
-  request?: ListUnknownSkillActivationsRequest | undefined,
-  security?: ListUnknownSkillActivationsSecurity | undefined,
+  request?: ListUnknownSkillActivationsRequest  ,
+  security?: ListUnknownSkillActivationsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -115,8 +115,8 @@ export function buildUnknownSkillActivationsQuery(
 
 export function buildUnknownSkillActivationsInfiniteQuery(
   client$: GramCore,
-  request?: ListUnknownSkillActivationsRequest | undefined,
-  security?: ListUnknownSkillActivationsSecurity | undefined,
+  request?: ListUnknownSkillActivationsRequest  ,
+  security?: ListUnknownSkillActivationsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

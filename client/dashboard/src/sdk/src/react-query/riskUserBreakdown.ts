@@ -63,7 +63,7 @@ export type RiskUserBreakdownQueryError =
  */
 export function useRiskUserBreakdown(
   request: GetRiskUserBreakdownRequest,
-  security?: GetRiskUserBreakdownSecurity | undefined,
+  security?: GetRiskUserBreakdownSecurity  ,
   options?: QueryHookOptions<
     RiskUserBreakdownQueryData,
     RiskUserBreakdownQueryError
@@ -89,7 +89,7 @@ export function useRiskUserBreakdown(
  */
 export function useRiskUserBreakdownSuspense(
   request: GetRiskUserBreakdownRequest,
-  security?: GetRiskUserBreakdownSecurity | undefined,
+  security?: GetRiskUserBreakdownSecurity  ,
   options?: SuspenseQueryHookOptions<
     RiskUserBreakdownQueryData,
     RiskUserBreakdownQueryError

@@ -22,8 +22,8 @@ export type UserSessionIssuerQueryData = UserSessionIssuer;
 export function prefetchUserSessionIssuer(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetUserSessionIssuerRequest | undefined,
-  security?: GetUserSessionIssuerSecurity | undefined,
+  request?: GetUserSessionIssuerRequest  ,
+  security?: GetUserSessionIssuerSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchUserSessionIssuer(
 
 export function buildUserSessionIssuerQuery(
   client$: GramCore,
-  request?: GetUserSessionIssuerRequest | undefined,
-  security?: GetUserSessionIssuerSecurity | undefined,
+  request?: GetUserSessionIssuerRequest  ,
+  security?: GetUserSessionIssuerSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

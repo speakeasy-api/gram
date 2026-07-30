@@ -20,7 +20,7 @@ export function prefetchTelemetryQuery(
   queryClient: QueryClient,
   client$: GramCore,
   request: QueryRequest,
-  security?: QuerySecurity | undefined,
+  security?: QuerySecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,7 +36,7 @@ export function prefetchTelemetryQuery(
 export function buildTelemetryQueryQuery(
   client$: GramCore,
   request: QueryRequest,
-  security?: QuerySecurity | undefined,
+  security?: QuerySecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

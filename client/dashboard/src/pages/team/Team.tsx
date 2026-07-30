@@ -1,16 +1,16 @@
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
-import { Dialog } from "@/components/ui/dialog";
-import { Heading } from "@/components/ui/heading";
+import { Dialog } from "@/components/ui/Dialog";
+import { Heading } from "@/components/ui/Heading";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Type } from "@/components/ui/Type";
 import { useOrganization, useUser } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
 import { formatDistanceToNow } from "date-fns";
@@ -31,21 +31,20 @@ import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { OrganizationInvitation } from "@gram/client/models/components/organizationinvitation.js";
 import { OrganizationUser } from "@gram/client/models/components/organizationuser.js";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import {
-  Alert,
-  Button,
-  Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Icon,
-  Input,
-  Stack,
-  Table,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
+import { Input } from "@/components/ui/Input";
+import { Stack } from "@/components/ui/Stack";
+import { Column, Table } from "@/components/ui/Table";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
@@ -68,7 +67,7 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+} from "@/components/ui/ContextMenu";
 import { useOrgRoutes } from "@/routes";
 import { cn } from "@/lib/utils";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
@@ -943,8 +942,8 @@ function TeamInner() {
               type="text"
               placeholder="Search members..."
               value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
+              onChange={(value) => {
+                setSearch(value);
                 setPage(0);
               }}
               className="mb-4 w-full py-2 pl-9 text-sm"

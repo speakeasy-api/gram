@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function usageSetBillingMetadata(
   client: GramCore,
   request: SetBillingMetadataRequest,
-  security?: SetBillingMetadataSecurity | undefined,
+  security?: SetBillingMetadataSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function usageSetBillingMetadata(
 async function $do(
   client: GramCore,
   request: SetBillingMetadataRequest,
-  security?: SetBillingMetadataSecurity | undefined,
+  security?: SetBillingMetadataSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

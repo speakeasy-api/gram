@@ -1,7 +1,7 @@
-import { CopyButton } from "@/components/ui/copy-button";
-import { DotCard } from "@/components/ui/dot-card";
-import { Button } from "@/components/ui/button";
-import { Type } from "@/components/ui/type";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { DotCard } from "@/components/ui/DotCard";
+import { Button } from "@/components/ui/Button";
+import { Type } from "@/components/ui/Type";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { useRoutes } from "@/routes";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
@@ -22,7 +22,7 @@ import {
   useExternalMcpOAuthConfigStatus,
 } from "../sources/sources-hooks";
 import { ToolCollectionBadge } from "../tool-collection-badge";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 
 export function MCPCard({
   toolset,
@@ -118,7 +118,7 @@ export function MCPCard({
           {installPageUrl && (
             <CopyButton
               text={installPageUrl}
-              size="icon-sm"
+              size="sm"
               icon={Link2}
               tooltip="Copy install page URL"
             />
@@ -126,8 +126,8 @@ export function MCPCard({
           {installSourceTooltip && (
             <Button
               type="button"
-              variant="ghost"
-              size="icon-sm"
+              variant="tertiary"
+              size="sm"
               tooltip={installSourceTooltip}
               aria-label={installSourceTooltip}
               onClick={(e) => e.stopPropagation()}

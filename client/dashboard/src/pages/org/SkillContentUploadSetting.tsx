@@ -1,6 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
-import { Switch } from "@/components/ui/switch";
-import { Type } from "@/components/ui/type";
+import { Switch } from "@/components/ui/Switch";
+import { Type } from "@/components/ui/Type";
 import { handleAPIError } from "@/lib/errors";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
@@ -8,7 +8,7 @@ import {
   invalidateAllProductFeatures,
   useProductFeatures,
 } from "@gram/client/react-query/productFeatures.js";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
 

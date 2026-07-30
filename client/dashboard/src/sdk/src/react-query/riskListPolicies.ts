@@ -62,8 +62,8 @@ export type RiskListPoliciesQueryError =
  * List all risk analysis policies for the current project.
  */
 export function useRiskListPolicies(
-  request?: ListRiskPoliciesRequest | undefined,
-  security?: ListRiskPoliciesSecurity | undefined,
+  request?: ListRiskPoliciesRequest  ,
+  security?: ListRiskPoliciesSecurity  ,
   options?: QueryHookOptions<
     RiskListPoliciesQueryData,
     RiskListPoliciesQueryError
@@ -88,8 +88,8 @@ export function useRiskListPolicies(
  * List all risk analysis policies for the current project.
  */
 export function useRiskListPoliciesSuspense(
-  request?: ListRiskPoliciesRequest | undefined,
-  security?: ListRiskPoliciesSecurity | undefined,
+  request?: ListRiskPoliciesRequest  ,
+  security?: ListRiskPoliciesSecurity  ,
   options?: SuspenseQueryHookOptions<
     RiskListPoliciesQueryData,
     RiskListPoliciesQueryError

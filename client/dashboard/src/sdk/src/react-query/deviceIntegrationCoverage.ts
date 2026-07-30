@@ -62,8 +62,8 @@ export type DeviceIntegrationCoverageQueryError =
  * Summarize agent coverage across the org's connected MDM inventories, optionally scoped to one provider.
  */
 export function useDeviceIntegrationCoverage(
-  request?: GetDeviceIntegrationCoverageRequest | undefined,
-  security?: GetDeviceIntegrationCoverageSecurity | undefined,
+  request?: GetDeviceIntegrationCoverageRequest  ,
+  security?: GetDeviceIntegrationCoverageSecurity  ,
   options?: QueryHookOptions<
     DeviceIntegrationCoverageQueryData,
     DeviceIntegrationCoverageQueryError
@@ -91,8 +91,8 @@ export function useDeviceIntegrationCoverage(
  * Summarize agent coverage across the org's connected MDM inventories, optionally scoped to one provider.
  */
 export function useDeviceIntegrationCoverageSuspense(
-  request?: GetDeviceIntegrationCoverageRequest | undefined,
-  security?: GetDeviceIntegrationCoverageSecurity | undefined,
+  request?: GetDeviceIntegrationCoverageRequest  ,
+  security?: GetDeviceIntegrationCoverageSecurity  ,
   options?: SuspenseQueryHookOptions<
     DeviceIntegrationCoverageQueryData,
     DeviceIntegrationCoverageQueryError

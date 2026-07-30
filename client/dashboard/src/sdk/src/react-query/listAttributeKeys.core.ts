@@ -23,7 +23,7 @@ export function prefetchListAttributeKeys(
   queryClient: QueryClient,
   client$: GramCore,
   request: ListAttributeKeysRequest,
-  security?: ListAttributeKeysSecurity | undefined,
+  security?: ListAttributeKeysSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchListAttributeKeys(
 export function buildListAttributeKeysQuery(
   client$: GramCore,
   request: ListAttributeKeysRequest,
-  security?: ListAttributeKeysSecurity | undefined,
+  security?: ListAttributeKeysSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

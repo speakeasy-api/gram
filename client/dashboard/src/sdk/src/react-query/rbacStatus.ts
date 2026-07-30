@@ -62,8 +62,8 @@ export type RbacStatusQueryError =
  * Returns whether RBAC is currently enabled for the current organization.
  */
 export function useRbacStatus(
-  request?: GetRBACStatusRequest | undefined,
-  security?: GetRBACStatusSecurity | undefined,
+  request?: GetRBACStatusRequest  ,
+  security?: GetRBACStatusSecurity  ,
   options?: QueryHookOptions<RbacStatusQueryData, RbacStatusQueryError>,
 ): UseQueryResult<RbacStatusQueryData, RbacStatusQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useRbacStatus(
  * Returns whether RBAC is currently enabled for the current organization.
  */
 export function useRbacStatusSuspense(
-  request?: GetRBACStatusRequest | undefined,
-  security?: GetRBACStatusSecurity | undefined,
+  request?: GetRBACStatusRequest  ,
+  security?: GetRBACStatusSecurity  ,
   options?: SuspenseQueryHookOptions<RbacStatusQueryData, RbacStatusQueryError>,
 ): UseSuspenseQueryResult<RbacStatusQueryData, RbacStatusQueryError> {
   const client = useGramContext();

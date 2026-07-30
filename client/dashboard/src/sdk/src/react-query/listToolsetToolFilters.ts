@@ -63,7 +63,7 @@ export type ListToolsetToolFiltersQueryError =
  */
 export function useListToolsetToolFilters(
   request: ListToolsetToolFiltersRequest,
-  security?: ListToolsetToolFiltersSecurity | undefined,
+  security?: ListToolsetToolFiltersSecurity  ,
   options?: QueryHookOptions<
     ListToolsetToolFiltersQueryData,
     ListToolsetToolFiltersQueryError
@@ -92,7 +92,7 @@ export function useListToolsetToolFilters(
  */
 export function useListToolsetToolFiltersSuspense(
   request: ListToolsetToolFiltersRequest,
-  security?: ListToolsetToolFiltersSecurity | undefined,
+  security?: ListToolsetToolFiltersSecurity  ,
   options?: SuspenseQueryHookOptions<
     ListToolsetToolFiltersQueryData,
     ListToolsetToolFiltersQueryError

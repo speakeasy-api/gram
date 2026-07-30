@@ -1,17 +1,18 @@
-import { Heading } from "@/components/ui/heading";
+import { Heading } from "@/components/ui/Heading";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Type } from "@/components/ui/Type";
 import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useDeploymentSuspense } from "@gram/client/react-query/deployment.js";
 import { useDeploymentLogsSuspense } from "@gram/client/react-query/deploymentLogs.js";
-import { Icon, Input } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
+import { Input } from "@/components/ui/Input";
 import React, {
   useCallback,
   useDeferredValue,
@@ -704,7 +705,7 @@ export const LogsTabContent = ({
                 type="text"
                 placeholder="Search logs"
                 value={searchQuery}
-                onChange={(e) => handleSearchChange(e.target.value)}
+                onChange={handleSearchChange}
                 onFocus={() => setSearchInputFocused(true)}
                 onBlur={() => setSearchInputFocused(false)}
                 className="w-48 rounded-sm py-1 pr-16 pl-7 text-xs"

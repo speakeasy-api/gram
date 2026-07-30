@@ -63,7 +63,7 @@ export type GetGcpKmsKeyQueryError =
  */
 export function useGetGcpKmsKey(
   request: GetGcpKmsKeyRequest,
-  security?: GetGcpKmsKeySecurity | undefined,
+  security?: GetGcpKmsKeySecurity  ,
   options?: QueryHookOptions<GetGcpKmsKeyQueryData, GetGcpKmsKeyQueryError>,
 ): UseQueryResult<GetGcpKmsKeyQueryData, GetGcpKmsKeyQueryError> {
   const client = useGramContext();
@@ -86,7 +86,7 @@ export function useGetGcpKmsKey(
  */
 export function useGetGcpKmsKeySuspense(
   request: GetGcpKmsKeyRequest,
-  security?: GetGcpKmsKeySecurity | undefined,
+  security?: GetGcpKmsKeySecurity  ,
   options?: SuspenseQueryHookOptions<
     GetGcpKmsKeyQueryData,
     GetGcpKmsKeyQueryError

@@ -23,7 +23,7 @@ export function prefetchGetGcpIamCredential(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetGcpIamCredentialRequest,
-  security?: GetGcpIamCredentialSecurity | undefined,
+  security?: GetGcpIamCredentialSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchGetGcpIamCredential(
 export function buildGetGcpIamCredentialQuery(
   client$: GramCore,
   request: GetGcpIamCredentialRequest,
-  security?: GetGcpIamCredentialSecurity | undefined,
+  security?: GetGcpIamCredentialSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

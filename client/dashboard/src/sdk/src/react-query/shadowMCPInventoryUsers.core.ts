@@ -24,7 +24,7 @@ export function prefetchShadowMCPInventoryUsers(
   queryClient: QueryClient,
   client$: GramCore,
   request: ListShadowMCPInventoryUsersRequest,
-  security?: ListShadowMCPInventoryUsersSecurity | undefined,
+  security?: ListShadowMCPInventoryUsersSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -40,7 +40,7 @@ export function prefetchShadowMCPInventoryUsers(
 export function buildShadowMCPInventoryUsersQuery(
   client$: GramCore,
   request: ListShadowMCPInventoryUsersRequest,
-  security?: ListShadowMCPInventoryUsersSecurity | undefined,
+  security?: ListShadowMCPInventoryUsersSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

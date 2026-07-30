@@ -1,14 +1,14 @@
 import { DetailHero } from "@/components/detail-hero";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
+import { Heading } from "@/components/ui/Heading";
 import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
   TabsList,
-} from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tabs";
+import { Type } from "@/components/ui/Type";
 import { useOrgRoutes } from "@/routes";
 import { useOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
 import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";

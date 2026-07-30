@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function mcpEndpointsUpdate(
   client: GramCore,
   request: UpdateMcpEndpointRequest,
-  security?: UpdateMcpEndpointSecurity | undefined,
+  security?: UpdateMcpEndpointSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function mcpEndpointsUpdate(
 async function $do(
   client: GramCore,
   request: UpdateMcpEndpointRequest,
-  security?: UpdateMcpEndpointSecurity | undefined,
+  security?: UpdateMcpEndpointSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

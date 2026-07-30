@@ -22,8 +22,8 @@ export type MarketplaceSettingsQueryData = MarketplaceSettingsResult;
 export function prefetchMarketplaceSettings(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetMarketplaceSettingsRequest | undefined,
-  security?: GetMarketplaceSettingsSecurity | undefined,
+  request?: GetMarketplaceSettingsRequest  ,
+  security?: GetMarketplaceSettingsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchMarketplaceSettings(
 
 export function buildMarketplaceSettingsQuery(
   client$: GramCore,
-  request?: GetMarketplaceSettingsRequest | undefined,
-  security?: GetMarketplaceSettingsSecurity | undefined,
+  request?: GetMarketplaceSettingsRequest  ,
+  security?: GetMarketplaceSettingsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

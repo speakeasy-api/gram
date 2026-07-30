@@ -22,8 +22,8 @@ export type ListIntegrationsQueryData = ListIntegrationsResult;
 export function prefetchListIntegrations(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListIntegrationsRequest | undefined,
-  security?: ListIntegrationsSecurity | undefined,
+  request?: ListIntegrationsRequest  ,
+  security?: ListIntegrationsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListIntegrations(
 
 export function buildListIntegrationsQuery(
   client$: GramCore,
-  request?: ListIntegrationsRequest | undefined,
-  security?: ListIntegrationsSecurity | undefined,
+  request?: ListIntegrationsRequest  ,
+  security?: ListIntegrationsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

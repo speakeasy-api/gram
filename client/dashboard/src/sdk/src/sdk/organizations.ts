@@ -92,8 +92,8 @@ export class Organizations extends ClientSDK {
    * Create a webhook portal session.
    */
   async createPortalSession(
-    request?: CreatePortalSessionRequest | undefined,
-    security?: CreatePortalSessionSecurity | undefined,
+    request?: CreatePortalSessionRequest  ,
+    security?: CreatePortalSessionSecurity  ,
     options?: RequestOptions,
   ): Promise<CreatePortalSessionResult> {
     return unwrapAsync(organizationsCreatePortalSession(
@@ -111,8 +111,8 @@ export class Organizations extends ClientSDK {
    * Disable  webhooks for the active organization.
    */
   async disableWebhooks(
-    request?: DisableWebhooksRequest | undefined,
-    security?: DisableWebhooksSecurity | undefined,
+    request?: DisableWebhooksRequest  ,
+    security?: DisableWebhooksSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(organizationsDisableWebhooks(
@@ -130,8 +130,8 @@ export class Organizations extends ClientSDK {
    * Enable  webhooks for the active organization.
    */
   async enableWebhooks(
-    request?: EnableWebhooksRequest | undefined,
-    security?: EnableWebhooksSecurity | undefined,
+    request?: EnableWebhooksRequest  ,
+    security?: EnableWebhooksSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(organizationsEnableWebhooks(
@@ -150,7 +150,7 @@ export class Organizations extends ClientSDK {
    */
   async generateWorkOSAdminPortalLink(
     request: GenerateWorkOSAdminPortalLinkRequest,
-    security?: GenerateWorkOSAdminPortalLinkSecurity | undefined,
+    security?: GenerateWorkOSAdminPortalLinkSecurity  ,
     options?: RequestOptions,
   ): Promise<GenerateWorkOSAdminPortalLinkResult> {
     return unwrapAsync(organizationsGenerateWorkOSAdminPortalLink(
@@ -168,8 +168,8 @@ export class Organizations extends ClientSDK {
    * Get the active organization from the session.
    */
   async get(
-    request?: GetOrganizationRequest | undefined,
-    security?: GetOrganizationSecurity | undefined,
+    request?: GetOrganizationRequest  ,
+    security?: GetOrganizationSecurity  ,
     options?: RequestOptions,
   ): Promise<Organization> {
     return unwrapAsync(organizationsGet(
@@ -187,8 +187,8 @@ export class Organizations extends ClientSDK {
    * Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.
    */
   async getOnboardingStatus(
-    request?: GetOnboardingStatusRequest | undefined,
-    security?: GetOnboardingStatusSecurity | undefined,
+    request?: GetOnboardingStatusRequest  ,
+    security?: GetOnboardingStatusSecurity  ,
     options?: RequestOptions,
   ): Promise<OnboardingStatusResult> {
     return unwrapAsync(organizationsGetOnboardingStatus(
@@ -206,8 +206,8 @@ export class Organizations extends ClientSDK {
    * List pending WorkOS invitations for the active organization.
    */
   async listInvites(
-    request?: ListInvitesRequest | undefined,
-    security?: ListInvitesSecurity | undefined,
+    request?: ListInvitesRequest  ,
+    security?: ListInvitesSecurity  ,
     options?: RequestOptions,
   ): Promise<ListInvitesResult> {
     return unwrapAsync(organizationsListInvites(
@@ -225,8 +225,8 @@ export class Organizations extends ClientSDK {
    * List users in the active organization from Gram organization_user_relationships.
    */
   async listUsers(
-    request?: ListOrganizationUsersRequest | undefined,
-    security?: ListOrganizationUsersSecurity | undefined,
+    request?: ListOrganizationUsersRequest  ,
+    security?: ListOrganizationUsersSecurity  ,
     options?: RequestOptions,
   ): Promise<ListUsersResult> {
     return unwrapAsync(organizationsListUsers(
@@ -245,7 +245,7 @@ export class Organizations extends ClientSDK {
    */
   async removeUser(
     request: RemoveOrganizationUserRequest,
-    security?: RemoveOrganizationUserSecurity | undefined,
+    security?: RemoveOrganizationUserSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(organizationsRemoveUser(
@@ -264,7 +264,7 @@ export class Organizations extends ClientSDK {
    */
   async revokeInvite(
     request: RevokeInviteRequest,
-    security?: RevokeInviteSecurity | undefined,
+    security?: RevokeInviteSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(organizationsRevokeInvite(
@@ -283,7 +283,7 @@ export class Organizations extends ClientSDK {
    */
   async sendEnterpriseAdminOnboardingEmail(
     request: SendEnterpriseAdminOnboardingEmailRequest,
-    security?: SendEnterpriseAdminOnboardingEmailSecurity | undefined,
+    security?: SendEnterpriseAdminOnboardingEmailSecurity  ,
     options?: RequestOptions,
   ): Promise<SendEnterpriseAdminOnboardingEmailResult> {
     return unwrapAsync(organizationsSendEnterpriseAdminOnboardingEmail(
@@ -302,7 +302,7 @@ export class Organizations extends ClientSDK {
    */
   async sendInvite(
     request: SendInviteRequest,
-    security?: SendInviteSecurity | undefined,
+    security?: SendInviteSecurity  ,
     options?: RequestOptions,
   ): Promise<OrganizationInvitation> {
     return unwrapAsync(organizationsSendInvite(
@@ -321,7 +321,7 @@ export class Organizations extends ClientSDK {
    */
   async updateInviteRole(
     request: UpdateInviteRoleRequest,
-    security?: UpdateInviteRoleSecurity | undefined,
+    security?: UpdateInviteRoleSecurity  ,
     options?: RequestOptions,
   ): Promise<OrganizationInvitation> {
     return unwrapAsync(organizationsUpdateInviteRole(
@@ -339,8 +339,8 @@ export class Organizations extends ClientSDK {
    * Return recent hook events for the active organization so the onboarding wizard can confirm that Claude Code, Cursor, or Codex instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
    */
   async verifyOnboardingHooksSetup(
-    request?: VerifyOnboardingHooksSetupRequest | undefined,
-    security?: VerifyOnboardingHooksSetupSecurity | undefined,
+    request?: VerifyOnboardingHooksSetupRequest  ,
+    security?: VerifyOnboardingHooksSetupSecurity  ,
     options?: RequestOptions,
   ): Promise<VerifyOnboardingHooksSetupResult> {
     return unwrapAsync(organizationsVerifyOnboardingHooksSetup(

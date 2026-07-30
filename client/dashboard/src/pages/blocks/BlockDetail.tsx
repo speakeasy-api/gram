@@ -1,10 +1,12 @@
 import { GramLogo } from "@/components/gram-logo";
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import { useSession } from "@/contexts/Auth";
 import { buildLoginRedirectURL } from "@/lib/utils";
 import { useRiskGetBlock } from "@gram/client/react-query/riskGetBlock.js";
 import { useRiskSubmitBlockFeedbackMutation } from "@gram/client/react-query/riskSubmitBlockFeedback.js";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { ThumbsDown, ThumbsUp } from "lucide-react";
 import { useEffect } from "react";
 import { useParams } from "react-router";

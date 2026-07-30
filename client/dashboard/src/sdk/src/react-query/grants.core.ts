@@ -22,8 +22,8 @@ export type GrantsQueryData = ListUserGrantsResult;
 export function prefetchGrants(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListGrantsRequest | undefined,
-  security?: ListGrantsSecurity | undefined,
+  request?: ListGrantsRequest  ,
+  security?: ListGrantsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchGrants(
 
 export function buildGrantsQuery(
   client$: GramCore,
-  request?: ListGrantsRequest | undefined,
-  security?: ListGrantsSecurity | undefined,
+  request?: ListGrantsRequest  ,
+  security?: ListGrantsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

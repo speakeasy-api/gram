@@ -63,7 +63,7 @@ export type GetAwsIamCredentialQueryError =
  */
 export function useGetAwsIamCredential(
   request: GetAwsIamCredentialRequest,
-  security?: GetAwsIamCredentialSecurity | undefined,
+  security?: GetAwsIamCredentialSecurity  ,
   options?: QueryHookOptions<
     GetAwsIamCredentialQueryData,
     GetAwsIamCredentialQueryError
@@ -89,7 +89,7 @@ export function useGetAwsIamCredential(
  */
 export function useGetAwsIamCredentialSuspense(
   request: GetAwsIamCredentialRequest,
-  security?: GetAwsIamCredentialSecurity | undefined,
+  security?: GetAwsIamCredentialSecurity  ,
   options?: SuspenseQueryHookOptions<
     GetAwsIamCredentialQueryData,
     GetAwsIamCredentialQueryError

@@ -1,6 +1,6 @@
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
-import { Checkbox } from "@/components/ui/checkbox";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import {
   Sheet,
   SheetContent,
@@ -8,8 +8,8 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Type } from "@/components/ui/Type";
 import { cn } from "@/lib/utils";
 import {
   ALLOW_RULE_POLICY_REQUIRED,
@@ -19,15 +19,15 @@ import type { AccessMember } from "@gram/client/models/components/accessmember.j
 import type { Role } from "@gram/client/models/components/role.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
 import { useEffect, useState } from "react";
 
 export type ShadowMCPPolicy = Pick<

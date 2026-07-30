@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function skillsDismissSuggestion(
   client: GramCore,
   request: DismissSkillSuggestionRequest,
-  security?: DismissSkillSuggestionSecurity | undefined,
+  security?: DismissSkillSuggestionSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function skillsDismissSuggestion(
 async function $do(
   client: GramCore,
   request: DismissSkillSuggestionRequest,
-  security?: DismissSkillSuggestionSecurity | undefined,
+  security?: DismissSkillSuggestionSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

@@ -22,8 +22,8 @@ export type OnboardingStatusQueryData = OnboardingStatusResult;
 export function prefetchOnboardingStatus(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetOnboardingStatusRequest | undefined,
-  security?: GetOnboardingStatusSecurity | undefined,
+  request?: GetOnboardingStatusRequest  ,
+  security?: GetOnboardingStatusSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchOnboardingStatus(
 
 export function buildOnboardingStatusQuery(
   client$: GramCore,
-  request?: GetOnboardingStatusRequest | undefined,
-  security?: GetOnboardingStatusSecurity | undefined,
+  request?: GetOnboardingStatusRequest  ,
+  security?: GetOnboardingStatusSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

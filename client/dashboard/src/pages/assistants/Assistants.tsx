@@ -5,17 +5,17 @@ import { AssistantActivitySparkline } from "@/components/assistants/activity-spa
 import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
 import { CardContextMenu } from "@/components/card-context-menu";
-import { Badge } from "@/components/ui/badge";
-import { DotCard } from "@/components/ui/dot-card";
-import { Action, MoreActions } from "@/components/ui/more-actions";
-import { SearchBar } from "@/components/ui/search-bar";
+import { Badge } from "@/components/ui/Badge";
+import { DotCard } from "@/components/ui/DotCard";
+import { Action, MoreActions } from "@/components/ui/MoreActions";
+import { SearchBar } from "@/components/ui/SearchBar";
 import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
   TabsList,
-} from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tabs";
+import { Type } from "@/components/ui/Type";
 import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
 import { Assistant } from "@gram/client/models/components/assistant.js";
@@ -24,7 +24,9 @@ import {
   invalidateAllAssistantsList,
   useAssistantsList,
 } from "@gram/client/react-query/assistantsList.js";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { Bot, Boxes, Cpu, Plus } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
@@ -275,14 +277,14 @@ function AssistantToolsets({ assistant }: { assistant: Assistant }) {
         {visible.map((toolset) => (
           <Badge
             key={toolset.toolsetSlug}
-            variant="outline"
+            variant="neutral"
             className="max-w-[10rem]"
             title={toolset.toolsetSlug}
           >
             <span className="min-w-0 truncate">{toolset.toolsetSlug}</span>
           </Badge>
         ))}
-        {overflow > 0 && <Badge variant="outline">+{overflow}</Badge>}
+        {overflow > 0 && <Badge variant="neutral">+{overflow}</Badge>}
       </div>
     </div>
   );

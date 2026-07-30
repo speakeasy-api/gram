@@ -1,10 +1,10 @@
-import { Button } from "@/components/ui/button";
-import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/Button";
+import { Heading } from "@/components/ui/Heading";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import { RequireScope } from "@/components/require-scope";
-import { Switch } from "@/components/ui/switch";
-import { Type } from "@/components/ui/type";
+import { Switch } from "@/components/ui/Switch";
+import { Type } from "@/components/ui/Type";
 import {
   invalidateAllOtelForwardingConfig,
   useOtelForwardingConfig,
@@ -12,7 +12,7 @@ import {
 import { useUpsertOtelForwardingConfigMutation } from "@gram/client/react-query/upsertOtelForwardingConfig";
 import { useDeleteOtelForwardingConfigMutation } from "@gram/client/react-query/deleteOtelForwardingConfig";
 import type { OtelForwardingHeader } from "@gram/client/models/components/otelforwardingheader.js";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Send, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -189,7 +189,7 @@ export function OtelForwardingSection(): JSX.Element {
             <Label>Headers</Label>
             <RequireScope scope="org:admin" level="component">
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={() => setHeaders((prev) => [...prev, blankRow()])}
                 disabled={isLoading || isMutating}
@@ -234,7 +234,7 @@ export function OtelForwardingSection(): JSX.Element {
         <Stack direction="horizontal" justify="space-between" align="center">
           <RequireScope scope="org:admin" level="component">
             <Button
-              variant="destructive"
+              variant="destructive-primary"
               size="sm"
               onClick={handleDelete}
               disabled={!isConfigured || isMutating}
@@ -283,7 +283,7 @@ function HeaderRow({
         className="flex-1"
       />
       <Button
-        variant="ghost"
+        variant="tertiary"
         size="sm"
         onClick={onRemove}
         disabled={disabled}

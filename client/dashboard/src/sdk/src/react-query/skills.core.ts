@@ -37,8 +37,8 @@ export type SkillsPageParams = PageIterator<
 export function prefetchSkills(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListSkillsRequest | undefined,
-  security?: ListSkillsSecurity | undefined,
+  request?: ListSkillsRequest  ,
+  security?: ListSkillsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -54,8 +54,8 @@ export function prefetchSkills(
 export function prefetchSkillsInfinite(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListSkillsRequest | undefined,
-  security?: ListSkillsSecurity | undefined,
+  request?: ListSkillsRequest  ,
+  security?: ListSkillsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -73,8 +73,8 @@ export function prefetchSkillsInfinite(
 
 export function buildSkillsQuery(
   client$: GramCore,
-  request?: ListSkillsRequest | undefined,
-  security?: ListSkillsSecurity | undefined,
+  request?: ListSkillsRequest  ,
+  security?: ListSkillsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -116,8 +116,8 @@ export function buildSkillsQuery(
 
 export function buildSkillsInfiniteQuery(
   client$: GramCore,
-  request?: ListSkillsRequest | undefined,
-  security?: ListSkillsSecurity | undefined,
+  request?: ListSkillsRequest  ,
+  security?: ListSkillsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

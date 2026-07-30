@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function telemetryGetUserMetricsSummary(
   client: GramCore,
   request: GetUserMetricsSummaryRequest,
-  security?: GetUserMetricsSummarySecurity | undefined,
+  security?: GetUserMetricsSummarySecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function telemetryGetUserMetricsSummary(
 async function $do(
   client: GramCore,
   request: GetUserMetricsSummaryRequest,
-  security?: GetUserMetricsSummarySecurity | undefined,
+  security?: GetUserMetricsSummarySecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

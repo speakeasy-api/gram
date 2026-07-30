@@ -6,16 +6,16 @@ import {
   AlertDescription,
   AlertTitle,
   ErrorAlert,
-} from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+} from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Dialog } from "@/components/ui/dialog";
-import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Collapsible";
+import { Dialog } from "@/components/ui/Dialog";
+import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
+import { Type } from "@/components/ui/Type";
 import { useProject } from "@/contexts/Auth";
 import { Markdown } from "@/elements/components/Markdown";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -30,7 +30,9 @@ import type { SkillInsightPoint } from "@gram/client/models/components/skillinsi
 import type { SkillVersionInsight } from "@gram/client/models/components/skillversioninsight.js";
 import type { GetSkillResult } from "@gram/client/models/components/getskillresult.js";
 import { useSkillEfficacyInsights } from "@gram/client/react-query/skillEfficacyInsights.js";
-import { Badge, type Column, Icon, Table } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
+import { type Column, Table } from "@/components/ui/Table";
 import {
   CategoryScale,
   Chart as ChartJS,
@@ -353,7 +355,7 @@ function ScoredSessions({
               />
               <Button
                 size="sm"
-                variant="outline"
+                variant="secondary"
                 onClick={() => void query.refetch()}
               >
                 Retry
@@ -370,7 +372,7 @@ function ScoredSessions({
             <div className="flex items-center justify-center gap-3 border-t pt-3">
               <Button
                 size="sm"
-                variant="outline"
+                variant="secondary"
                 disabled={pageIndex === 0 || query.isFetching}
                 onClick={() => setCursors((current) => current.slice(0, -1))}
               >
@@ -381,7 +383,7 @@ function ScoredSessions({
               </Type>
               <Button
                 size="sm"
-                variant="outline"
+                variant="secondary"
                 disabled={!query.data?.result.nextCursor || query.isFetching}
                 onClick={() => {
                   const nextCursor = query.data?.result.nextCursor;
@@ -403,7 +405,7 @@ function MethodologyDialog(): JSX.Element {
   return (
     <Dialog>
       <Dialog.Trigger asChild>
-        <Button variant="link" size="inline" className="h-auto p-0">
+        <Button variant="tertiary" size="xs" className="h-auto p-0">
           View methodology
         </Button>
       </Dialog.Trigger>
@@ -439,7 +441,7 @@ export function RegressionWarning({
           {formatCount(signal.predecessorScoredSessions)} scored sessions.
         </p>
         {signal.predecessorVersionId && (
-          <Button size="sm" variant="outline" asChild>
+          <Button size="sm" variant="secondary" asChild>
             <Link
               to={`${routes.skills.detail.href(skillId)}#version-${signal.predecessorVersionId}`}
             >

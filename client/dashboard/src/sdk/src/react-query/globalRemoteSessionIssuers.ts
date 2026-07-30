@@ -80,8 +80,8 @@ export type GlobalRemoteSessionIssuersQueryError =
  * List global remote_session_issuers. Requires platform admin.
  */
 export function useGlobalRemoteSessionIssuers(
-  request?: ListGlobalRemoteSessionIssuersRequest | undefined,
-  security?: ListGlobalRemoteSessionIssuersSecurity | undefined,
+  request?: ListGlobalRemoteSessionIssuersRequest  ,
+  security?: ListGlobalRemoteSessionIssuersSecurity  ,
   options?: QueryHookOptions<
     GlobalRemoteSessionIssuersQueryData,
     GlobalRemoteSessionIssuersQueryError
@@ -109,8 +109,8 @@ export function useGlobalRemoteSessionIssuers(
  * List global remote_session_issuers. Requires platform admin.
  */
 export function useGlobalRemoteSessionIssuersSuspense(
-  request?: ListGlobalRemoteSessionIssuersRequest | undefined,
-  security?: ListGlobalRemoteSessionIssuersSecurity | undefined,
+  request?: ListGlobalRemoteSessionIssuersRequest  ,
+  security?: ListGlobalRemoteSessionIssuersSecurity  ,
   options?: SuspenseQueryHookOptions<
     GlobalRemoteSessionIssuersQueryData,
     GlobalRemoteSessionIssuersQueryError
@@ -138,8 +138,8 @@ export function useGlobalRemoteSessionIssuersSuspense(
  * List global remote_session_issuers. Requires platform admin.
  */
 export function useGlobalRemoteSessionIssuersInfinite(
-  request?: ListGlobalRemoteSessionIssuersRequest | undefined,
-  security?: ListGlobalRemoteSessionIssuersSecurity | undefined,
+  request?: ListGlobalRemoteSessionIssuersRequest  ,
+  security?: ListGlobalRemoteSessionIssuersSecurity  ,
   options?: InfiniteQueryHookOptions<
     GlobalRemoteSessionIssuersInfiniteQueryData,
     GlobalRemoteSessionIssuersQueryError
@@ -181,8 +181,8 @@ export function useGlobalRemoteSessionIssuersInfinite(
  * List global remote_session_issuers. Requires platform admin.
  */
 export function useGlobalRemoteSessionIssuersInfiniteSuspense(
-  request?: ListGlobalRemoteSessionIssuersRequest | undefined,
-  security?: ListGlobalRemoteSessionIssuersSecurity | undefined,
+  request?: ListGlobalRemoteSessionIssuersRequest  ,
+  security?: ListGlobalRemoteSessionIssuersSecurity  ,
   options?: SuspenseInfiniteQueryHookOptions<
     GlobalRemoteSessionIssuersInfiniteQueryData,
     GlobalRemoteSessionIssuersQueryError

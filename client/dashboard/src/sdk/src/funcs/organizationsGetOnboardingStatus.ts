@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function organizationsGetOnboardingStatus(
   client: GramCore,
-  request?: GetOnboardingStatusRequest | undefined,
-  security?: GetOnboardingStatusSecurity | undefined,
+  request?: GetOnboardingStatusRequest  ,
+  security?: GetOnboardingStatusSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function organizationsGetOnboardingStatus(
 
 async function $do(
   client: GramCore,
-  request?: GetOnboardingStatusRequest | undefined,
-  security?: GetOnboardingStatusSecurity | undefined,
+  request?: GetOnboardingStatusRequest  ,
+  security?: GetOnboardingStatusSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

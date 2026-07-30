@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import {

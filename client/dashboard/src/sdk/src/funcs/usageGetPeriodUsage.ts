@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function usageGetPeriodUsage(
   client: GramCore,
-  request?: GetPeriodUsageRequest | undefined,
-  security?: GetPeriodUsageSecurity | undefined,
+  request?: GetPeriodUsageRequest  ,
+  security?: GetPeriodUsageSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function usageGetPeriodUsage(
 
 async function $do(
   client: GramCore,
-  request?: GetPeriodUsageRequest | undefined,
-  security?: GetPeriodUsageSecurity | undefined,
+  request?: GetPeriodUsageRequest  ,
+  security?: GetPeriodUsageSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

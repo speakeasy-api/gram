@@ -1,9 +1,9 @@
 import { RequireScope } from "@/components/require-scope";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Type } from "@/components/ui/Type";
 import { useProject } from "@/contexts/Auth";
 import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
 import type { SkillVersion } from "@gram/client/models/components/skillversion.js";
@@ -136,7 +136,7 @@ export function SuggestedSkillEditSection({
                 title="Unable to load the suggested edit"
                 error={review.loadError}
               />
-              <Button size="sm" variant="outline" onClick={review.retry}>
+              <Button size="sm" variant="secondary" onClick={review.retry}>
                 Retry
               </Button>
             </div>
@@ -156,7 +156,7 @@ export function SuggestedSkillEditSection({
               {review.uncertain && (
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="secondary"
                   onClick={() => void review.refresh()}
                 >
                   Refresh suggestion
@@ -178,7 +178,7 @@ export function SuggestedSkillEditSection({
                 <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant="secondary"
                     disabled={review.actionsDisabled}
                     onClick={() => setReviewOpen(true)}
                   >

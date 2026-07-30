@@ -1,7 +1,8 @@
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { Type } from "@/components/ui/Type";
 import { useMembers } from "@gram/client/react-query/members.js";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { useOrgRoutes } from "@/routes";
 import { Users } from "lucide-react";
 

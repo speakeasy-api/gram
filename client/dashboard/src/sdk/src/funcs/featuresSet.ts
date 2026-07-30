@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function featuresSet(
   client: GramCore,
   request: SetProductFeatureRequest,
-  security?: SetProductFeatureSecurity | undefined,
+  security?: SetProductFeatureSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function featuresSet(
 async function $do(
   client: GramCore,
   request: SetProductFeatureRequest,
-  security?: SetProductFeatureSecurity | undefined,
+  security?: SetProductFeatureSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

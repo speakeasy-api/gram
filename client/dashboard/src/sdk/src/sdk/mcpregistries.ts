@@ -37,7 +37,7 @@ export class McpRegistries extends ClientSDK {
    */
   async clearCache(
     request: ClearMCPRegistryCacheRequest,
-    security?: ClearMCPRegistryCacheSecurity | undefined,
+    security?: ClearMCPRegistryCacheSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(mcpRegistriesClearCache(
@@ -56,7 +56,7 @@ export class McpRegistries extends ClientSDK {
    */
   async getServerDetails(
     request: GetMCPServerDetailsRequest,
-    security?: GetMCPServerDetailsSecurity | undefined,
+    security?: GetMCPServerDetailsSecurity  ,
     options?: RequestOptions,
   ): Promise<ExternalMCPServer> {
     return unwrapAsync(mcpRegistriesGetServerDetails(
@@ -74,8 +74,8 @@ export class McpRegistries extends ClientSDK {
    * List available MCP servers from configured registries
    */
   async listCatalog(
-    request?: ListMCPCatalogRequest | undefined,
-    security?: ListMCPCatalogSecurity | undefined,
+    request?: ListMCPCatalogRequest  ,
+    security?: ListMCPCatalogSecurity  ,
     options?: RequestOptions,
   ): Promise<ListCatalogResponseBody> {
     return unwrapAsync(mcpRegistriesListCatalog(
@@ -93,8 +93,8 @@ export class McpRegistries extends ClientSDK {
    * List all MCP registries (admin only)
    */
   async listRegistries(
-    request?: ListMCPRegistriesRequest | undefined,
-    security?: ListMCPRegistriesSecurity | undefined,
+    request?: ListMCPRegistriesRequest  ,
+    security?: ListMCPRegistriesSecurity  ,
     options?: RequestOptions,
   ): Promise<ListRegistriesResponseBody> {
     return unwrapAsync(mcpRegistriesListRegistries(

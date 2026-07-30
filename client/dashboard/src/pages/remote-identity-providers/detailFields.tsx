@@ -1,5 +1,5 @@
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { Type } from "@/components/ui/Type";
 import type { ReactNode } from "react";
 
 // Shared read-only field primitives for the org-admin Remote Identity Provider

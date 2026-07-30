@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function environmentsCreate(
   client: GramCore,
   request: CreateEnvironmentRequest,
-  security?: CreateEnvironmentSecurity | undefined,
+  security?: CreateEnvironmentSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function environmentsCreate(
 async function $do(
   client: GramCore,
   request: CreateEnvironmentRequest,
-  security?: CreateEnvironmentSecurity | undefined,
+  security?: CreateEnvironmentSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

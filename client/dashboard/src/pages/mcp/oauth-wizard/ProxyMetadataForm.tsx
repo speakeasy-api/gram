@@ -1,8 +1,9 @@
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Link } from "@/components/ui/link";
-import { Type } from "@/components/ui/type";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { Link } from "@/components/ui/Link";
+import { Type } from "@/components/ui/Type";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 
 import { WizardContext } from "./machine";
 import type { ProxyFormKey } from "./machine-types";
@@ -28,10 +29,7 @@ export function ProxyMetadataForm(): JSX.Element {
           </Type>
           <Type muted small className="mb-4 font-medium">
             Getting proxy settings correct can be tricky. Need help?
-            <Link
-              external
-              to="https://calendly.com/d/ctgg-5dv-3kw/intro-to-gram-call"
-            >
+            <Link href="https://calendly.com/d/ctgg-5dv-3kw/intro-to-gram-call">
               Book a meeting
             </Link>
           </Type>

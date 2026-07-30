@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function modelKeysUpsertKey(
   client: GramCore,
   request: UpsertModelProviderKeyRequest,
-  security?: UpsertModelProviderKeySecurity | undefined,
+  security?: UpsertModelProviderKeySecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function modelKeysUpsertKey(
 async function $do(
   client: GramCore,
   request: UpsertModelProviderKeyRequest,
-  security?: UpsertModelProviderKeySecurity | undefined,
+  security?: UpsertModelProviderKeySecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

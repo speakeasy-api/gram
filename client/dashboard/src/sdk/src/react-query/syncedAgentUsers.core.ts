@@ -22,8 +22,8 @@ export type SyncedAgentUsersQueryData = ListSyncedUsersResult;
 export function prefetchSyncedAgentUsers(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListSyncedAgentUsersRequest | undefined,
-  security?: ListSyncedAgentUsersSecurity | undefined,
+  request?: ListSyncedAgentUsersRequest  ,
+  security?: ListSyncedAgentUsersSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchSyncedAgentUsers(
 
 export function buildSyncedAgentUsersQuery(
   client$: GramCore,
-  request?: ListSyncedAgentUsersRequest | undefined,
-  security?: ListSyncedAgentUsersSecurity | undefined,
+  request?: ListSyncedAgentUsersRequest  ,
+  security?: ListSyncedAgentUsersSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

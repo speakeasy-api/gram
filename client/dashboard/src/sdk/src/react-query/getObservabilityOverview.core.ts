@@ -23,7 +23,7 @@ export function prefetchGetObservabilityOverview(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetObservabilityOverviewRequest,
-  security?: GetObservabilityOverviewSecurity | undefined,
+  security?: GetObservabilityOverviewSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchGetObservabilityOverview(
 export function buildGetObservabilityOverviewQuery(
   client$: GramCore,
   request: GetObservabilityOverviewRequest,
-  security?: GetObservabilityOverviewSecurity | undefined,
+  security?: GetObservabilityOverviewSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

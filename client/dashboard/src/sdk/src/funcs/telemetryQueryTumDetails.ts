@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function telemetryQueryTumDetails(
   client: GramCore,
   request: QueryTumDetailsRequest,
-  security?: QueryTumDetailsSecurity | undefined,
+  security?: QueryTumDetailsSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function telemetryQueryTumDetails(
 async function $do(
   client: GramCore,
   request: QueryTumDetailsRequest,
-  security?: QueryTumDetailsSecurity | undefined,
+  security?: QueryTumDetailsSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

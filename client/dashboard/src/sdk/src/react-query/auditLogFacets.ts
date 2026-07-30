@@ -62,8 +62,8 @@ export type AuditLogFacetsQueryError =
  * List available audit log facet values across organization and projects.
  */
 export function useAuditLogFacets(
-  request?: ListAuditLogFacetsRequest | undefined,
-  security?: ListAuditLogFacetsSecurity | undefined,
+  request?: ListAuditLogFacetsRequest  ,
+  security?: ListAuditLogFacetsSecurity  ,
   options?: QueryHookOptions<AuditLogFacetsQueryData, AuditLogFacetsQueryError>,
 ): UseQueryResult<AuditLogFacetsQueryData, AuditLogFacetsQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useAuditLogFacets(
  * List available audit log facet values across organization and projects.
  */
 export function useAuditLogFacetsSuspense(
-  request?: ListAuditLogFacetsRequest | undefined,
-  security?: ListAuditLogFacetsSecurity | undefined,
+  request?: ListAuditLogFacetsRequest  ,
+  security?: ListAuditLogFacetsSecurity  ,
   options?: SuspenseQueryHookOptions<
     AuditLogFacetsQueryData,
     AuditLogFacetsQueryError

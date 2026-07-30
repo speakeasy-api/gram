@@ -2,11 +2,11 @@ import {
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
-} from "@/components/ui/hover-card";
+} from "@/components/ui/HoverCard";
 import { CardContextMenu } from "@/components/card-context-menu";
-import { DotCard } from "@/components/ui/dot-card";
-import { MoreActions } from "@/components/ui/more-actions";
-import { Type } from "@/components/ui/type";
+import { DotCard } from "@/components/ui/DotCard";
+import { MoreActions } from "@/components/ui/MoreActions";
+import { Type } from "@/components/ui/Type";
 import { useRBAC } from "@/hooks/useRBAC";
 import {
   formatRemoteMcpUrlForDisplay,
@@ -17,7 +17,7 @@ import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components/asset.js";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { HoverCardPortal } from "@radix-ui/react-hover-card";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import { ArrowRight, CircleAlertIcon, FileCode, Network } from "lucide-react";
 
 export type NamedAsset =

@@ -10,7 +10,7 @@ import { NAV_LOADING_DURATION_MS, NavButton } from "./nav-menu";
 
 // Stub sidebar primitives to prevent real Radix/Tailwind sidebar from
 // loading. NavButton doesn't render these but nav-menu.tsx imports them.
-vi.mock("@/components/ui/sidebar", () => ({
+vi.mock("@/components/ui/Sidebar", () => ({
   SidebarMenu: ({ children }: { children: React.ReactNode }) => (
     <ul>{children}</ul>
   ),
@@ -42,7 +42,7 @@ vi.mock("react-router", () => ({
 
 // Type renders as a plain span; className is forwarded so tests can observe
 // loading state via the nav-shimmer class that NavButton applies.
-vi.mock("./ui/type", () => ({
+vi.mock("@/components/ui/Type", () => ({
   Type: ({
     children,
     className,

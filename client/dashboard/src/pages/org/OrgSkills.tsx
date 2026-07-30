@@ -1,7 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { Type } from "@/components/ui/Type";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { SkillContentUploadSetting } from "./SkillContentUploadSetting";
 import { SkillEfficacySettingsSection } from "./SkillEfficacySettingsSection";

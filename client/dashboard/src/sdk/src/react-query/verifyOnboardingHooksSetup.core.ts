@@ -23,8 +23,8 @@ export type VerifyOnboardingHooksSetupQueryData =
 export function prefetchVerifyOnboardingHooksSetup(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: VerifyOnboardingHooksSetupRequest | undefined,
-  security?: VerifyOnboardingHooksSetupSecurity | undefined,
+  request?: VerifyOnboardingHooksSetupRequest  ,
+  security?: VerifyOnboardingHooksSetupSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,8 +39,8 @@ export function prefetchVerifyOnboardingHooksSetup(
 
 export function buildVerifyOnboardingHooksSetupQuery(
   client$: GramCore,
-  request?: VerifyOnboardingHooksSetupRequest | undefined,
-  security?: VerifyOnboardingHooksSetupSecurity | undefined,
+  request?: VerifyOnboardingHooksSetupRequest  ,
+  security?: VerifyOnboardingHooksSetupSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

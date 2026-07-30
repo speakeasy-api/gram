@@ -1,17 +1,18 @@
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Link } from "@/components/ui/link";
-import { TextArea } from "@/components/ui/textarea";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Collapsible";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { Link } from "@/components/ui/Link";
+import { TextArea } from "@/components/ui/Textarea";
+import { Type } from "@/components/ui/Type";
 import { useSdkClient } from "@/contexts/Sdk";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useMutation } from "@tanstack/react-query";
 import { CheckCircle2, ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -333,8 +334,8 @@ export function ExternalOAuthForm({
             Configure your MCP server to use an external authorization server if
             your API fits the very specific MCP OAuth requirements.{" "}
             <Link
-              external
-              to="https://docs.getgram.ai/host-mcp/adding-oauth#authorization-code"
+              href="https://docs.getgram.ai/host-mcp/adding-oauth#authorization-code"
+              target="_blank"
             >
               Docs
             </Link>
@@ -369,7 +370,7 @@ export function ExternalOAuthForm({
             </Stack>
 
             {feedback?.kind === "error" && (
-              <Alert variant="destructive">
+              <Alert variant="error">
                 <AlertTitle>Configuration could not be verified</AlertTitle>
                 <AlertDescription>
                   <Stack gap={2}>

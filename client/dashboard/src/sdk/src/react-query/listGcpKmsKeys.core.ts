@@ -22,8 +22,8 @@ export type ListGcpKmsKeysQueryData = ListExternalKeysResult;
 export function prefetchListGcpKmsKeys(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListGcpKmsKeysRequest | undefined,
-  security?: ListGcpKmsKeysSecurity | undefined,
+  request?: ListGcpKmsKeysRequest  ,
+  security?: ListGcpKmsKeysSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListGcpKmsKeys(
 
 export function buildListGcpKmsKeysQuery(
   client$: GramCore,
-  request?: ListGcpKmsKeysRequest | undefined,
-  security?: ListGcpKmsKeysSecurity | undefined,
+  request?: ListGcpKmsKeysRequest  ,
+  security?: ListGcpKmsKeysSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

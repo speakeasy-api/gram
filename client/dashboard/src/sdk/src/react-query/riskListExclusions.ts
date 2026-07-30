@@ -62,8 +62,8 @@ export type RiskListExclusionsQueryError =
  * List risk exclusions for the current project. Optionally filter to a single policy.
  */
 export function useRiskListExclusions(
-  request?: ListRiskExclusionsRequest | undefined,
-  security?: ListRiskExclusionsSecurity | undefined,
+  request?: ListRiskExclusionsRequest  ,
+  security?: ListRiskExclusionsSecurity  ,
   options?: QueryHookOptions<
     RiskListExclusionsQueryData,
     RiskListExclusionsQueryError
@@ -88,8 +88,8 @@ export function useRiskListExclusions(
  * List risk exclusions for the current project. Optionally filter to a single policy.
  */
 export function useRiskListExclusionsSuspense(
-  request?: ListRiskExclusionsRequest | undefined,
-  security?: ListRiskExclusionsSecurity | undefined,
+  request?: ListRiskExclusionsRequest  ,
+  security?: ListRiskExclusionsSecurity  ,
   options?: SuspenseQueryHookOptions<
     RiskListExclusionsQueryData,
     RiskListExclusionsQueryError

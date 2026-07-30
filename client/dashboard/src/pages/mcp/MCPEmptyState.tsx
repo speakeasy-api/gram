@@ -1,5 +1,5 @@
 import { Page } from "@/components/page-layout";
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import { Network } from "lucide-react";
 
 export function MCPEmptyState({ cta }: { cta?: React.ReactNode }): JSX.Element {

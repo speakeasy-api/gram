@@ -1,6 +1,6 @@
 import { type SourceTelemetrySummary } from "@/components/sources/sourceTelemetrySummary";
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { Type } from "@/components/ui/Type";
 import type { ToolMetric } from "@gram/client/models/components/toolmetric.js";
 
 // Brand-inspired muted palette (from moonshine gradient colors). Defined here

@@ -63,7 +63,7 @@ export type ListTunneledMcpServerConnectionsQueryError =
  */
 export function useListTunneledMcpServerConnections(
   request: ListTunneledMcpServerConnectionsRequest,
-  security?: ListTunneledMcpServerConnectionsSecurity | undefined,
+  security?: ListTunneledMcpServerConnectionsSecurity  ,
   options?: QueryHookOptions<
     ListTunneledMcpServerConnectionsQueryData,
     ListTunneledMcpServerConnectionsQueryError
@@ -92,7 +92,7 @@ export function useListTunneledMcpServerConnections(
  */
 export function useListTunneledMcpServerConnectionsSuspense(
   request: ListTunneledMcpServerConnectionsRequest,
-  security?: ListTunneledMcpServerConnectionsSecurity | undefined,
+  security?: ListTunneledMcpServerConnectionsSecurity  ,
   options?: SuspenseQueryHookOptions<
     ListTunneledMcpServerConnectionsQueryData,
     ListTunneledMcpServerConnectionsQueryError

@@ -35,7 +35,7 @@ export function prefetchListAssistantMemories(
   queryClient: QueryClient,
   client$: GramCore,
   request: ListAssistantMemoriesRequest,
-  security?: ListAssistantMemoriesSecurity | undefined,
+  security?: ListAssistantMemoriesSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -52,7 +52,7 @@ export function prefetchListAssistantMemoriesInfinite(
   queryClient: QueryClient,
   client$: GramCore,
   request: ListAssistantMemoriesRequest,
-  security?: ListAssistantMemoriesSecurity | undefined,
+  security?: ListAssistantMemoriesSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -71,7 +71,7 @@ export function prefetchListAssistantMemoriesInfinite(
 export function buildListAssistantMemoriesQuery(
   client$: GramCore,
   request: ListAssistantMemoriesRequest,
-  security?: ListAssistantMemoriesSecurity | undefined,
+  security?: ListAssistantMemoriesSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -116,7 +116,7 @@ export function buildListAssistantMemoriesQuery(
 export function buildListAssistantMemoriesInfiniteQuery(
   client$: GramCore,
   request: ListAssistantMemoriesRequest,
-  security?: ListAssistantMemoriesSecurity | undefined,
+  security?: ListAssistantMemoriesSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

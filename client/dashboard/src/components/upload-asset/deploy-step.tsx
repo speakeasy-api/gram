@@ -2,7 +2,7 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+} from "@/components/ui/Collapsible";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools } from "@/hooks/toolTypes";
@@ -11,11 +11,12 @@ import { useRoutes } from "@/routes";
 import { Deployment } from "@gram/client/models/components/deployment.js";
 import { DeploymentLogEvent } from "@gram/client/models/components/deploymentlogevent.js";
 import { useDeploymentLogs } from "@gram/client/react-query/deploymentLogs.js";
-import { Alert, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Stack } from "@/components/ui/Stack";
 import { ChevronDownIcon, ExternalLinkIcon } from "lucide-react";
 import React from "react";
-import { Spinner } from "../ui/spinner";
-import { Type } from "../ui/type";
+import { Spinner } from "@/components/ui/Spinner";
+import { Type } from "@/components/ui/Type";
 import { useStep } from "./step/use-step";
 import { useStepper } from "./stepper/use-stepper";
 

@@ -63,8 +63,8 @@ export type ListPlatformExternalCredentialsQueryError =
  * List the platform external credentials (provider-independent summary). Optionally filter by provider. Requires platform admin.
  */
 export function useListPlatformExternalCredentials(
-  request?: ListPlatformExternalCredentialsRequest | undefined,
-  security?: ListPlatformExternalCredentialsSecurity | undefined,
+  request?: ListPlatformExternalCredentialsRequest  ,
+  security?: ListPlatformExternalCredentialsSecurity  ,
   options?: QueryHookOptions<
     ListPlatformExternalCredentialsQueryData,
     ListPlatformExternalCredentialsQueryError
@@ -92,8 +92,8 @@ export function useListPlatformExternalCredentials(
  * List the platform external credentials (provider-independent summary). Optionally filter by provider. Requires platform admin.
  */
 export function useListPlatformExternalCredentialsSuspense(
-  request?: ListPlatformExternalCredentialsRequest | undefined,
-  security?: ListPlatformExternalCredentialsSecurity | undefined,
+  request?: ListPlatformExternalCredentialsRequest  ,
+  security?: ListPlatformExternalCredentialsSecurity  ,
   options?: SuspenseQueryHookOptions<
     ListPlatformExternalCredentialsQueryData,
     ListPlatformExternalCredentialsQueryError

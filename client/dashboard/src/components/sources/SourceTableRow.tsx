@@ -1,7 +1,7 @@
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
-import { DotRow } from "@/components/ui/dot-row";
-import { MoreActions } from "@/components/ui/more-actions";
-import { Type } from "@/components/ui/type";
+import { DotRow } from "@/components/ui/DotRow";
+import { MoreActions } from "@/components/ui/MoreActions";
+import { Type } from "@/components/ui/Type";
 import { useRBAC } from "@/hooks/useRBAC";
 import {
   formatRemoteMcpDisplay,
@@ -9,7 +9,7 @@ import {
   sourceTypeToUrnKind,
 } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import { CircleAlertIcon, FileCode, Network } from "lucide-react";
 import type { NamedAsset } from "./SourceCard";
 

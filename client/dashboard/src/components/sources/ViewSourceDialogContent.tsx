@@ -1,6 +1,7 @@
-import { Button, Dialog } from "@speakeasy-api/moonshine";
-import { Type } from "@/components/ui/type";
-import { SkeletonCode } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Type } from "@/components/ui/Type";
+import { SkeletonCode } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import MonacoEditorLazy from "../monaco-editor.lazy";

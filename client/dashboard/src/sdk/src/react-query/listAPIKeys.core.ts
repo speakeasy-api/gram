@@ -22,8 +22,8 @@ export type ListAPIKeysQueryData = ListKeysResult;
 export function prefetchListAPIKeys(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListAPIKeysRequest | undefined,
-  security?: ListAPIKeysSecurity | undefined,
+  request?: ListAPIKeysRequest  ,
+  security?: ListAPIKeysSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListAPIKeys(
 
 export function buildListAPIKeysQuery(
   client$: GramCore,
-  request?: ListAPIKeysRequest | undefined,
-  security?: ListAPIKeysSecurity | undefined,
+  request?: ListAPIKeysRequest  ,
+  security?: ListAPIKeysSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

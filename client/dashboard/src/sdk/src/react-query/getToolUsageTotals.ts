@@ -63,7 +63,7 @@ export type GetToolUsageTotalsQueryError =
  */
 export function useGetToolUsageTotals(
   request: GetToolUsageTotalsRequest,
-  security?: GetToolUsageTotalsSecurity | undefined,
+  security?: GetToolUsageTotalsSecurity  ,
   options?: QueryHookOptions<
     GetToolUsageTotalsQueryData,
     GetToolUsageTotalsQueryError
@@ -89,7 +89,7 @@ export function useGetToolUsageTotals(
  */
 export function useGetToolUsageTotalsSuspense(
   request: GetToolUsageTotalsRequest,
-  security?: GetToolUsageTotalsSecurity | undefined,
+  security?: GetToolUsageTotalsSecurity  ,
   options?: SuspenseQueryHookOptions<
     GetToolUsageTotalsQueryData,
     GetToolUsageTotalsQueryError

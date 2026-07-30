@@ -62,8 +62,8 @@ export type SpendRulesListRulesQueryError =
  * List all budget rules for the current organization.
  */
 export function useSpendRulesListRules(
-  request?: ListSpendRulesRequest | undefined,
-  security?: ListSpendRulesSecurity | undefined,
+  request?: ListSpendRulesRequest  ,
+  security?: ListSpendRulesSecurity  ,
   options?: QueryHookOptions<
     SpendRulesListRulesQueryData,
     SpendRulesListRulesQueryError
@@ -88,8 +88,8 @@ export function useSpendRulesListRules(
  * List all budget rules for the current organization.
  */
 export function useSpendRulesListRulesSuspense(
-  request?: ListSpendRulesRequest | undefined,
-  security?: ListSpendRulesSecurity | undefined,
+  request?: ListSpendRulesRequest  ,
+  security?: ListSpendRulesSecurity  ,
   options?: SuspenseQueryHookOptions<
     SpendRulesListRulesQueryData,
     SpendRulesListRulesQueryError

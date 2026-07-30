@@ -22,8 +22,8 @@ export type SkillEfficacySettingsQueryData = SkillEfficacySettings;
 export function prefetchSkillEfficacySettings(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetSkillEfficacySettingsRequest | undefined,
-  security?: GetSkillEfficacySettingsSecurity | undefined,
+  request?: GetSkillEfficacySettingsRequest  ,
+  security?: GetSkillEfficacySettingsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchSkillEfficacySettings(
 
 export function buildSkillEfficacySettingsQuery(
   client$: GramCore,
-  request?: GetSkillEfficacySettingsRequest | undefined,
-  security?: GetSkillEfficacySettingsSecurity | undefined,
+  request?: GetSkillEfficacySettingsRequest  ,
+  security?: GetSkillEfficacySettingsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

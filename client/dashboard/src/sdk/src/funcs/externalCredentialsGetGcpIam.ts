@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function externalCredentialsGetGcpIam(
   client: GramCore,
   request: GetGcpIamCredentialRequest,
-  security?: GetGcpIamCredentialSecurity | undefined,
+  security?: GetGcpIamCredentialSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function externalCredentialsGetGcpIam(
 async function $do(
   client: GramCore,
   request: GetGcpIamCredentialRequest,
-  security?: GetGcpIamCredentialSecurity | undefined,
+  security?: GetGcpIamCredentialSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

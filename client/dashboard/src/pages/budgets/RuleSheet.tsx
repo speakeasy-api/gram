@@ -1,15 +1,15 @@
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import {
   Sheet,
   SheetContent,
@@ -17,9 +17,9 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { TextArea } from "@/components/ui/textarea";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { TextArea } from "@/components/ui/Textarea";
+import { Type } from "@/components/ui/Type";
 import { Archive, Check, Loader2, Search, Users } from "lucide-react";
 import { useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
 import {
@@ -416,7 +416,7 @@ function RuleForm({
       <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
         {onArchive ? (
           <Button
-            variant="ghost"
+            variant="tertiary"
             size="sm"
             onClick={onArchive}
             disabled={submitting}
@@ -449,7 +449,7 @@ function RuleForm({
               Cancel
             </Button>
             <Button
-              variant="destructive"
+              variant="destructive-primary"
               onClick={handleConfirmSubmit}
               disabled={submitting}
             >

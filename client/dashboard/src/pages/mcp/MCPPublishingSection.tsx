@@ -1,12 +1,13 @@
 import { Block, BlockInner } from "@/components/block";
 import { RequireScope } from "@/components/require-scope";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Type } from "@/components/ui/type";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Type } from "@/components/ui/Type";
 import {
   usePublishing,
   type PublishingTarget,
 } from "@/pages/mcp/usePublishing";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { PageSection } from "./MCPDetails";
 
 export function MCPPublishingSection({

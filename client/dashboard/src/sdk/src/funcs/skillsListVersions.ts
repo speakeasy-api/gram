@@ -51,7 +51,7 @@ import {
 export function skillsListVersions(
   client: GramCore,
   request: ListSkillVersionsRequest,
-  security?: ListSkillVersionsSecurity | undefined,
+  security?: ListSkillVersionsSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   PageIterator<
@@ -81,7 +81,7 @@ export function skillsListVersions(
 async function $do(
   client: GramCore,
   request: ListSkillVersionsRequest,
-  security?: ListSkillVersionsSecurity | undefined,
+  security?: ListSkillVersionsSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

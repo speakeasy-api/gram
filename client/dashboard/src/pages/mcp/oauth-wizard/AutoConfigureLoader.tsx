@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import { Loader2 } from "lucide-react";
 
 export function AutoConfigureLoader(): JSX.Element {

@@ -1,10 +1,11 @@
 import { InfoField, InfoSection, InfoText } from "@/components/detail-fields";
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import { HumanizeDateTime } from "@/lib/dates";
 import type { GcpIamCredential } from "@gram/client/models/components/gcpiamcredential.js";
 import type { VerifyPlatformCredentialResult } from "@gram/client/models/components/verifyplatformcredentialresult.js";
 import { useVerifyGcpIamPlatformCredentialMutation } from "@gram/client/react-query/verifyGcpIamPlatformCredential";
-import { Alert, Button } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import { useState } from "react";
 import { gcpAuthMode, providerLabel, verifySourceLabel } from "../providers";
 

@@ -1,14 +1,14 @@
 import { RequireScope } from "@/components/require-scope";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Input } from "@/components/ui/Input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Type } from "@/components/ui/Type";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import { catalogHeadersForRemoteUrl } from "@/pages/catalog/remotes";
@@ -25,7 +25,10 @@ import {
   useRemoteMcpServerHeaders,
 } from "@gram/client/react-query/remoteMcpServerHeaders.js";
 import { useUpdateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/updateRemoteMcpServerHeader.js";
-import { Alert, Badge, Button, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Eye, EyeOff, Loader2, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";

@@ -24,7 +24,7 @@ export function prefetchSkillSuggestionFeedback(
   queryClient: QueryClient,
   client$: GramCore,
   request: ListSkillSuggestionFeedbackRequest,
-  security?: ListSkillSuggestionFeedbackSecurity | undefined,
+  security?: ListSkillSuggestionFeedbackSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -40,7 +40,7 @@ export function prefetchSkillSuggestionFeedback(
 export function buildSkillSuggestionFeedbackQuery(
   client$: GramCore,
   request: ListSkillSuggestionFeedbackRequest,
-  security?: ListSkillSuggestionFeedbackSecurity | undefined,
+  security?: ListSkillSuggestionFeedbackSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

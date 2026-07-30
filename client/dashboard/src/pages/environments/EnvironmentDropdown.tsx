@@ -1,5 +1,5 @@
-import { Type } from "@/components/ui/type";
-import { Combobox } from "@/components/ui/combobox";
+import { Type } from "@/components/ui/Type";
+import { Combobox } from "@/components/ui/Combobox";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import { cn } from "@/lib/utils";
 import { useMemo } from "react";

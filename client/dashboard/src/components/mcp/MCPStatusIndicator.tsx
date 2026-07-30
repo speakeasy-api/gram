@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import { cn } from "@/lib/utils";
 
 interface MCPStatusIndicatorProps {

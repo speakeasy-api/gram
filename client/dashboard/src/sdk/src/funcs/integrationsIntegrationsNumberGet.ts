@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function integrationsIntegrationsNumberGet(
   client: GramCore,
-  request?: IntegrationsNumberGetRequest | undefined,
-  security?: IntegrationsNumberGetSecurity | undefined,
+  request?: IntegrationsNumberGetRequest  ,
+  security?: IntegrationsNumberGetSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function integrationsIntegrationsNumberGet(
 
 async function $do(
   client: GramCore,
-  request?: IntegrationsNumberGetRequest | undefined,
-  security?: IntegrationsNumberGetSecurity | undefined,
+  request?: IntegrationsNumberGetRequest  ,
+  security?: IntegrationsNumberGetSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

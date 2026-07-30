@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function assistantMemoriesDelete(
   client: GramCore,
   request: DeleteAssistantMemoryRequest,
-  security?: DeleteAssistantMemorySecurity | undefined,
+  security?: DeleteAssistantMemorySecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function assistantMemoriesDelete(
 async function $do(
   client: GramCore,
   request: DeleteAssistantMemoryRequest,
-  security?: DeleteAssistantMemorySecurity | undefined,
+  security?: DeleteAssistantMemorySecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

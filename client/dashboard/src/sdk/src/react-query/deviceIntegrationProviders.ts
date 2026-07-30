@@ -62,8 +62,8 @@ export type DeviceIntegrationProvidersQueryError =
  * List the providers the device integrations framework supports, including the credential fields each needs.
  */
 export function useDeviceIntegrationProviders(
-  request?: ListDeviceIntegrationProvidersRequest | undefined,
-  security?: ListDeviceIntegrationProvidersSecurity | undefined,
+  request?: ListDeviceIntegrationProvidersRequest  ,
+  security?: ListDeviceIntegrationProvidersSecurity  ,
   options?: QueryHookOptions<
     DeviceIntegrationProvidersQueryData,
     DeviceIntegrationProvidersQueryError
@@ -91,8 +91,8 @@ export function useDeviceIntegrationProviders(
  * List the providers the device integrations framework supports, including the credential fields each needs.
  */
 export function useDeviceIntegrationProvidersSuspense(
-  request?: ListDeviceIntegrationProvidersRequest | undefined,
-  security?: ListDeviceIntegrationProvidersSecurity | undefined,
+  request?: ListDeviceIntegrationProvidersRequest  ,
+  security?: ListDeviceIntegrationProvidersSecurity  ,
   options?: SuspenseQueryHookOptions<
     DeviceIntegrationProvidersQueryData,
     DeviceIntegrationProvidersQueryError

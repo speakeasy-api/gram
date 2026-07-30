@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function riskExclusionsListBuiltinExclusions(
   client: GramCore,
-  request?: ListBuiltinExclusionsRequest | undefined,
-  security?: ListBuiltinExclusionsSecurity | undefined,
+  request?: ListBuiltinExclusionsRequest  ,
+  security?: ListBuiltinExclusionsSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function riskExclusionsListBuiltinExclusions(
 
 async function $do(
   client: GramCore,
-  request?: ListBuiltinExclusionsRequest | undefined,
-  security?: ListBuiltinExclusionsSecurity | undefined,
+  request?: ListBuiltinExclusionsRequest  ,
+  security?: ListBuiltinExclusionsSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

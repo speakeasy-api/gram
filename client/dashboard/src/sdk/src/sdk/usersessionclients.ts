@@ -32,7 +32,7 @@ export class UserSessionClients extends ClientSDK {
    */
   async get(
     request: GetUserSessionClientRequest,
-    security?: GetUserSessionClientSecurity | undefined,
+    security?: GetUserSessionClientSecurity  ,
     options?: RequestOptions,
   ): Promise<UserSessionClient> {
     return unwrapAsync(userSessionClientsGet(
@@ -50,8 +50,8 @@ export class UserSessionClients extends ClientSDK {
    * List user_session_clients in the caller's project.
    */
   async list(
-    request?: ListUserSessionClientsRequest | undefined,
-    security?: ListUserSessionClientsSecurity | undefined,
+    request?: ListUserSessionClientsRequest  ,
+    security?: ListUserSessionClientsSecurity  ,
     options?: RequestOptions,
   ): Promise<PageIterator<ListUserSessionClientsResponse, { cursor: string }>> {
     return unwrapResultIterator(userSessionClientsList(
@@ -70,7 +70,7 @@ export class UserSessionClients extends ClientSDK {
    */
   async revoke(
     request: RevokeUserSessionClientRequest,
-    security?: RevokeUserSessionClientSecurity | undefined,
+    security?: RevokeUserSessionClientSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(userSessionClientsRevoke(

@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function mcpEndpointsList(
   client: GramCore,
-  request?: ListMcpEndpointsRequest | undefined,
-  security?: ListMcpEndpointsSecurity | undefined,
+  request?: ListMcpEndpointsRequest  ,
+  security?: ListMcpEndpointsSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function mcpEndpointsList(
 
 async function $do(
   client: GramCore,
-  request?: ListMcpEndpointsRequest | undefined,
-  security?: ListMcpEndpointsSecurity | undefined,
+  request?: ListMcpEndpointsRequest  ,
+  security?: ListMcpEndpointsSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

@@ -63,7 +63,7 @@ export type SkillSuggestionFeedbackQueryError =
  */
 export function useSkillSuggestionFeedback(
   request: ListSkillSuggestionFeedbackRequest,
-  security?: ListSkillSuggestionFeedbackSecurity | undefined,
+  security?: ListSkillSuggestionFeedbackSecurity  ,
   options?: QueryHookOptions<
     SkillSuggestionFeedbackQueryData,
     SkillSuggestionFeedbackQueryError
@@ -92,7 +92,7 @@ export function useSkillSuggestionFeedback(
  */
 export function useSkillSuggestionFeedbackSuspense(
   request: ListSkillSuggestionFeedbackRequest,
-  security?: ListSkillSuggestionFeedbackSecurity | undefined,
+  security?: ListSkillSuggestionFeedbackSecurity  ,
   options?: SuspenseQueryHookOptions<
     SkillSuggestionFeedbackQueryData,
     SkillSuggestionFeedbackQueryError

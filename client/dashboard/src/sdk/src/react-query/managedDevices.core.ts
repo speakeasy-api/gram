@@ -35,8 +35,8 @@ export type ManagedDevicesPageParams = PageIterator<
 export function prefetchManagedDevices(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListManagedDevicesRequest | undefined,
-  security?: ListManagedDevicesSecurity | undefined,
+  request?: ListManagedDevicesRequest  ,
+  security?: ListManagedDevicesSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -52,8 +52,8 @@ export function prefetchManagedDevices(
 export function prefetchManagedDevicesInfinite(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListManagedDevicesRequest | undefined,
-  security?: ListManagedDevicesSecurity | undefined,
+  request?: ListManagedDevicesRequest  ,
+  security?: ListManagedDevicesSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -71,8 +71,8 @@ export function prefetchManagedDevicesInfinite(
 
 export function buildManagedDevicesQuery(
   client$: GramCore,
-  request?: ListManagedDevicesRequest | undefined,
-  security?: ListManagedDevicesSecurity | undefined,
+  request?: ListManagedDevicesRequest  ,
+  security?: ListManagedDevicesSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -113,8 +113,8 @@ export function buildManagedDevicesQuery(
 
 export function buildManagedDevicesInfiniteQuery(
   client$: GramCore,
-  request?: ListManagedDevicesRequest | undefined,
-  security?: ListManagedDevicesSecurity | undefined,
+  request?: ListManagedDevicesRequest  ,
+  security?: ListManagedDevicesSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

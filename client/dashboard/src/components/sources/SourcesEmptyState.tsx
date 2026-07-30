@@ -1,15 +1,15 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
+import { Button } from "@/components/ui/Button";
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
 import {
   ChevronDown,
   Code,

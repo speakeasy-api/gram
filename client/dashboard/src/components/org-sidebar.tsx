@@ -8,14 +8,14 @@ import {
   SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
-} from "@/components/ui/sidebar";
+} from "@/components/ui/Sidebar";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { AppRoute, useOrgRoutes } from "@/routes";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
 import * as React from "react";
 import { Link } from "react-router";
 import { GramLogo } from "./gram-logo";

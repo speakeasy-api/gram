@@ -1,5 +1,5 @@
-import { Type } from "@/components/ui/type";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Type } from "@/components/ui/Type";
+import { Stack } from "@/components/ui/Stack";
 import { toast } from "sonner";
 
 interface ErrorHandlerOptions {

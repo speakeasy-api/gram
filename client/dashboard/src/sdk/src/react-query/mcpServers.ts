@@ -62,8 +62,8 @@ export type McpServersQueryError =
  * List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
  */
 export function useMcpServers(
-  request?: ListMcpServersRequest | undefined,
-  security?: ListMcpServersSecurity | undefined,
+  request?: ListMcpServersRequest  ,
+  security?: ListMcpServersSecurity  ,
   options?: QueryHookOptions<McpServersQueryData, McpServersQueryError>,
 ): UseQueryResult<McpServersQueryData, McpServersQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useMcpServers(
  * List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
  */
 export function useMcpServersSuspense(
-  request?: ListMcpServersRequest | undefined,
-  security?: ListMcpServersSecurity | undefined,
+  request?: ListMcpServersRequest  ,
+  security?: ListMcpServersSecurity  ,
   options?: SuspenseQueryHookOptions<McpServersQueryData, McpServersQueryError>,
 ): UseSuspenseQueryResult<McpServersQueryData, McpServersQueryError> {
   const client = useGramContext();

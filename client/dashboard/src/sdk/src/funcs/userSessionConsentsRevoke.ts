@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function userSessionConsentsRevoke(
   client: GramCore,
   request: RevokeUserSessionConsentRequest,
-  security?: RevokeUserSessionConsentSecurity | undefined,
+  security?: RevokeUserSessionConsentSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function userSessionConsentsRevoke(
 async function $do(
   client: GramCore,
   request: RevokeUserSessionConsentRequest,
-  security?: RevokeUserSessionConsentSecurity | undefined,
+  security?: RevokeUserSessionConsentSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

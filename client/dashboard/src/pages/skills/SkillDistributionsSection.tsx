@@ -1,8 +1,8 @@
 import { RequireScope } from "@/components/require-scope";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Type } from "@/components/ui/Type";
 import { useProject } from "@/contexts/Auth";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
@@ -12,7 +12,7 @@ import {
   useSkillDistributionsInfinite,
 } from "@gram/client/react-query/skillDistributions.js";
 import { useUndistributeSkillMutation } from "@gram/client/react-query/undistributeSkill.js";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import { useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { useMemo } from "react";
@@ -119,8 +119,8 @@ export function SkillDistributionsSection({
                 >
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="icon-sm"
+                    variant="tertiary"
+                    size="sm"
                     tooltip="Remove from plugin"
                     aria-label={`Remove from ${distribution.pluginName}`}
                     className="hover:text-destructive"
@@ -138,7 +138,7 @@ export function SkillDistributionsSection({
 
       {distributionsQuery.hasNextPage && (
         <Button
-          variant="outline"
+          variant="secondary"
           size="sm"
           disabled={distributionsQuery.isFetchingNextPage}
           onClick={() => void distributionsQuery.fetchNextPage()}

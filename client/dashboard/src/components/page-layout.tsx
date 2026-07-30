@@ -4,16 +4,17 @@ import { cn } from "@/lib/utils.ts";
 import { useIsProjectEmpty } from "@/pages/onboarding/upload-openapi-utils";
 import { InitialChoiceStep } from "@/components/onboarding-choice-step.tsx";
 import { useRoutes } from "@/routes.tsx";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import React, { ReactElement } from "react";
 import { ContentErrorBoundary } from "./content-error-boundary.tsx";
 import { PageHeader } from "./page-header.tsx";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
-import { Heading } from "./ui/heading.tsx";
-import { MoreActions } from "./ui/more-actions.tsx";
-import { Toolbar } from "./ui/toolbar.tsx";
-import { Type } from "./ui/type.tsx";
-import { XYFade } from "./ui/xy-fade.tsx";
+import { Heading } from "@/components/ui/Heading";
+import { MoreActions } from "@/components/ui/MoreActions";
+import { Toolbar } from "@/components/ui/Toolbar";
+import { Type } from "@/components/ui/Type";
+import { XYFade } from "@/components/ui/XyFade";
 
 function PageLayout({ children }: { children: React.ReactNode }) {
   return (

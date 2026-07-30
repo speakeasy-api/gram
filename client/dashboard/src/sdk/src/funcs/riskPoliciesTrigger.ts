@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function riskPoliciesTrigger(
   client: GramCore,
   request: TriggerRiskAnalysisRequest,
-  security?: TriggerRiskAnalysisSecurity | undefined,
+  security?: TriggerRiskAnalysisSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function riskPoliciesTrigger(
 async function $do(
   client: GramCore,
   request: TriggerRiskAnalysisRequest,
-  security?: TriggerRiskAnalysisSecurity | undefined,
+  security?: TriggerRiskAnalysisSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

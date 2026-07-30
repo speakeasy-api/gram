@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function environmentsClone(
   client: GramCore,
   request: CloneEnvironmentRequest,
-  security?: CloneEnvironmentSecurity | undefined,
+  security?: CloneEnvironmentSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function environmentsClone(
 async function $do(
   client: GramCore,
   request: CloneEnvironmentRequest,
-  security?: CloneEnvironmentSecurity | undefined,
+  security?: CloneEnvironmentSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

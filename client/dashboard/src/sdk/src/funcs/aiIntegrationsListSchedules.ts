@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function aiIntegrationsListSchedules(
   client: GramCore,
   request: ListAIIntegrationSchedulesRequest,
-  security?: ListAIIntegrationSchedulesSecurity | undefined,
+  security?: ListAIIntegrationSchedulesSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function aiIntegrationsListSchedules(
 async function $do(
   client: GramCore,
   request: ListAIIntegrationSchedulesRequest,
-  security?: ListAIIntegrationSchedulesSecurity | undefined,
+  security?: ListAIIntegrationSchedulesSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

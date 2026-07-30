@@ -62,8 +62,8 @@ export type ListAllowedOriginsQueryError =
  * List allowed origins for a project.
  */
 export function useListAllowedOrigins(
-  request?: ListAllowedOriginsRequest | undefined,
-  security?: ListAllowedOriginsSecurity | undefined,
+  request?: ListAllowedOriginsRequest  ,
+  security?: ListAllowedOriginsSecurity  ,
   options?: QueryHookOptions<
     ListAllowedOriginsQueryData,
     ListAllowedOriginsQueryError
@@ -88,8 +88,8 @@ export function useListAllowedOrigins(
  * List allowed origins for a project.
  */
 export function useListAllowedOriginsSuspense(
-  request?: ListAllowedOriginsRequest | undefined,
-  security?: ListAllowedOriginsSecurity | undefined,
+  request?: ListAllowedOriginsRequest  ,
+  security?: ListAllowedOriginsSecurity  ,
   options?: SuspenseQueryHookOptions<
     ListAllowedOriginsQueryData,
     ListAllowedOriginsQueryError

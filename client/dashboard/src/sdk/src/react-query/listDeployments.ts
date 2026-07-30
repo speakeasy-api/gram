@@ -62,8 +62,8 @@ export type ListDeploymentsQueryError =
  * List all deployments in descending order of creation.
  */
 export function useListDeployments(
-  request?: ListDeploymentsRequest | undefined,
-  security?: ListDeploymentsSecurity | undefined,
+  request?: ListDeploymentsRequest  ,
+  security?: ListDeploymentsSecurity  ,
   options?: QueryHookOptions<
     ListDeploymentsQueryData,
     ListDeploymentsQueryError
@@ -88,8 +88,8 @@ export function useListDeployments(
  * List all deployments in descending order of creation.
  */
 export function useListDeploymentsSuspense(
-  request?: ListDeploymentsRequest | undefined,
-  security?: ListDeploymentsSecurity | undefined,
+  request?: ListDeploymentsRequest  ,
+  security?: ListDeploymentsSecurity  ,
   options?: SuspenseQueryHookOptions<
     ListDeploymentsQueryData,
     ListDeploymentsQueryError

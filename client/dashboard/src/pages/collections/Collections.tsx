@@ -1,8 +1,9 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { CreateResourceCard } from "@/components/create-resource-card";
-import { Type } from "@/components/ui/type";
-import { Input, Stack } from "@speakeasy-api/moonshine";
+import { Type } from "@/components/ui/Type";
+import { Input } from "@/components/ui/Input";
+import { Stack } from "@/components/ui/Stack";
 import { Search, X } from "lucide-react";
 import { useState } from "react";
 import { Outlet, useNavigate } from "react-router";
@@ -50,9 +51,7 @@ function CollectionsInner() {
               <Input
                 placeholder="Search collections..."
                 value={searchQuery}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setSearchQuery(e.target.value)
-                }
+                onChange={setSearchQuery}
                 className="h-10 pr-9 pl-10"
               />
               {searchQuery && (

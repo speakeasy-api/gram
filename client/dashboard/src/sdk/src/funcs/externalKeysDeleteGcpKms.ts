@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function externalKeysDeleteGcpKms(
   client: GramCore,
   request: DeleteGcpKmsKeyRequest,
-  security?: DeleteGcpKmsKeySecurity | undefined,
+  security?: DeleteGcpKmsKeySecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function externalKeysDeleteGcpKms(
 async function $do(
   client: GramCore,
   request: DeleteGcpKmsKeyRequest,
-  security?: DeleteGcpKmsKeySecurity | undefined,
+  security?: DeleteGcpKmsKeySecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

@@ -63,7 +63,7 @@ export type ServeOpenAPIv3QueryError =
  */
 export function useServeOpenAPIv3(
   request: ServeOpenAPIv3Request,
-  security?: ServeOpenAPIv3Security | undefined,
+  security?: ServeOpenAPIv3Security  ,
   options?: QueryHookOptions<ServeOpenAPIv3QueryData, ServeOpenAPIv3QueryError>,
 ): UseQueryResult<ServeOpenAPIv3QueryData, ServeOpenAPIv3QueryError> {
   const client = useGramContext();
@@ -86,7 +86,7 @@ export function useServeOpenAPIv3(
  */
 export function useServeOpenAPIv3Suspense(
   request: ServeOpenAPIv3Request,
-  security?: ServeOpenAPIv3Security | undefined,
+  security?: ServeOpenAPIv3Security  ,
   options?: SuspenseQueryHookOptions<
     ServeOpenAPIv3QueryData,
     ServeOpenAPIv3QueryError

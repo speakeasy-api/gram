@@ -63,7 +63,7 @@ export type ListHooksTracesQueryError =
  */
 export function useListHooksTraces(
   request: ListHooksTracesRequest,
-  security?: ListHooksTracesSecurity | undefined,
+  security?: ListHooksTracesSecurity  ,
   options?: QueryHookOptions<
     ListHooksTracesQueryData,
     ListHooksTracesQueryError
@@ -89,7 +89,7 @@ export function useListHooksTraces(
  */
 export function useListHooksTracesSuspense(
   request: ListHooksTracesRequest,
-  security?: ListHooksTracesSecurity | undefined,
+  security?: ListHooksTracesSecurity  ,
   options?: SuspenseQueryHookOptions<
     ListHooksTracesQueryData,
     ListHooksTracesQueryError

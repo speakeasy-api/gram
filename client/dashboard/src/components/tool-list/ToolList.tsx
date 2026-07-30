@@ -1,9 +1,9 @@
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { MoreActions } from "@/components/ui/more-actions";
-import { TextArea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { MoreActions } from "@/components/ui/MoreActions";
+import { TextArea } from "@/components/ui/Textarea";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { TagsVariationEditor } from "@/components/tool-variation-tags-editor";
 import { useCommandPalette } from "@/contexts/CommandPalette";
@@ -12,9 +12,10 @@ import { ToolUpdateFields } from "@/hooks/useToolUpdate";
 import { TOOL_NAME_REGEX } from "@/lib/constants";
 import { Tool, Toolset, isHttpTool } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { Label } from "@/components/ui/Label";
+import { Switch } from "@/components/ui/Switch";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import {
   ChevronDown,
   FileCode,
@@ -25,9 +26,9 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnnotationBadges } from "./AnnotationBadges";
 import { ToolVariationBadge } from "../tool-variation-badge";
-import { McpIcon } from "../ui/mcp-icon";
-import { SimpleTooltip } from "../ui/tooltip";
-import { Type } from "../ui/type";
+import { McpIcon } from "@/components/ui/McpIcon";
+import { SimpleTooltip } from "../ui/Tooltip";
+import { Type } from "@/components/ui/Type";
 import { MethodBadge } from "./MethodBadge";
 import { SubtoolsBadge } from "./SubtoolsBadge";
 
@@ -654,7 +655,7 @@ function ToolRow({
           </div>
           <Dialog.Footer>
             <Button
-              variant="ghost"
+              variant="tertiary"
               onClick={() => setEditDialogOpen(false)}
               disabled={isUpdating}
             >
@@ -1157,7 +1158,7 @@ export function ToolList({
               </kbd>
               <span className="text-muted-foreground text-sm">for actions</span>
             </div>
-            <Button variant="outline" onClick={handleCancel}>
+            <Button variant="secondary" onClick={handleCancel}>
               Cancel
             </Button>
           </div>

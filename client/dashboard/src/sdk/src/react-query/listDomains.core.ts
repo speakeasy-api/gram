@@ -22,8 +22,8 @@ export type ListDomainsQueryData = ListCustomDomainsResult;
 export function prefetchListDomains(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListDomainsRequest | undefined,
-  security?: ListDomainsSecurity | undefined,
+  request?: ListDomainsRequest  ,
+  security?: ListDomainsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListDomains(
 
 export function buildListDomainsQuery(
   client$: GramCore,
-  request?: ListDomainsRequest | undefined,
-  security?: ListDomainsSecurity | undefined,
+  request?: ListDomainsRequest  ,
+  security?: ListDomainsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -63,7 +63,7 @@ export type RiskRuleBreakdownQueryError =
  */
 export function useRiskRuleBreakdown(
   request: GetRiskRuleBreakdownRequest,
-  security?: GetRiskRuleBreakdownSecurity | undefined,
+  security?: GetRiskRuleBreakdownSecurity  ,
   options?: QueryHookOptions<
     RiskRuleBreakdownQueryData,
     RiskRuleBreakdownQueryError
@@ -89,7 +89,7 @@ export function useRiskRuleBreakdown(
  */
 export function useRiskRuleBreakdownSuspense(
   request: GetRiskRuleBreakdownRequest,
-  security?: GetRiskRuleBreakdownSecurity | undefined,
+  security?: GetRiskRuleBreakdownSecurity  ,
   options?: SuspenseQueryHookOptions<
     RiskRuleBreakdownQueryData,
     RiskRuleBreakdownQueryError

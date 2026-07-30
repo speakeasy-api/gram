@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function packagesPublish(
   client: GramCore,
   request: PublishRequest,
-  security?: PublishSecurity | undefined,
+  security?: PublishSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function packagesPublish(
 async function $do(
   client: GramCore,
   request: PublishRequest,
-  security?: PublishSecurity | undefined,
+  security?: PublishSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

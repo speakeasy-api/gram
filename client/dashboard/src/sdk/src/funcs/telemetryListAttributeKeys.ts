@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function telemetryListAttributeKeys(
   client: GramCore,
   request: ListAttributeKeysRequest,
-  security?: ListAttributeKeysSecurity | undefined,
+  security?: ListAttributeKeysSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function telemetryListAttributeKeys(
 async function $do(
   client: GramCore,
   request: ListAttributeKeysRequest,
-  security?: ListAttributeKeysSecurity | undefined,
+  security?: ListAttributeKeysSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

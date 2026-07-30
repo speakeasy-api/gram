@@ -1,6 +1,6 @@
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import { cn } from "@/lib/utils";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import type { LucideIcon } from "lucide-react";
 import type { JSX, ReactNode } from "react";
 import {

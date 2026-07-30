@@ -1,11 +1,11 @@
 import { cn } from "@/lib/utils";
 import { useAssetImageUploadHandler } from "@/components/useAssetImageUploadHandler";
 import { Asset } from "@gram/client/models/components/asset.js";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/Stack";
 import { Loader2, UploadIcon } from "lucide-react";
 import { useState } from "react";
 import { AssetImage } from "./asset-image";
-import { Type } from "./ui/type";
+import { Type } from "@/components/ui/Type";
 
 export function ImageUpload({
   onUpload,

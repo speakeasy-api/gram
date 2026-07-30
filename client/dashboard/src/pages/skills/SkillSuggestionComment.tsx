@@ -1,14 +1,15 @@
 import { RequireScope } from "@/components/require-scope";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Type } from "@/components/ui/Type";
 import { useProject } from "@/contexts/Auth";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import type { SkillEditSuggestionChange } from "@gram/client/models/components/skilleditsuggestionchange.js";
 import { useSkillSuggestionFeedback } from "@gram/client/react-query/skillSuggestionFeedback.js";
-import { Badge, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
 import { useState } from "react";
 
 export type SkillSuggestionActions = {

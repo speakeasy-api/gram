@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function chatCreditUsage(
   client: GramCore,
-  request?: CreditUsageRequest | undefined,
-  security?: CreditUsageSecurity | undefined,
+  request?: CreditUsageRequest  ,
+  security?: CreditUsageSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function chatCreditUsage(
 
 async function $do(
   client: GramCore,
-  request?: CreditUsageRequest | undefined,
-  security?: CreditUsageSecurity | undefined,
+  request?: CreditUsageRequest  ,
+  security?: CreditUsageSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

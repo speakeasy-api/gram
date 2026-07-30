@@ -51,7 +51,7 @@ import {
 export function assistantMemoriesList(
   client: GramCore,
   request: ListAssistantMemoriesRequest,
-  security?: ListAssistantMemoriesSecurity | undefined,
+  security?: ListAssistantMemoriesSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   PageIterator<
@@ -81,7 +81,7 @@ export function assistantMemoriesList(
 async function $do(
   client: GramCore,
   request: ListAssistantMemoriesRequest,
-  security?: ListAssistantMemoriesSecurity | undefined,
+  security?: ListAssistantMemoriesSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

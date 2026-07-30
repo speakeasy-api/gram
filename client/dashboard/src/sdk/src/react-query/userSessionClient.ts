@@ -63,7 +63,7 @@ export type UserSessionClientQueryError =
  */
 export function useUserSessionClient(
   request: GetUserSessionClientRequest,
-  security?: GetUserSessionClientSecurity | undefined,
+  security?: GetUserSessionClientSecurity  ,
   options?: QueryHookOptions<
     UserSessionClientQueryData,
     UserSessionClientQueryError
@@ -89,7 +89,7 @@ export function useUserSessionClient(
  */
 export function useUserSessionClientSuspense(
   request: GetUserSessionClientRequest,
-  security?: GetUserSessionClientSecurity | undefined,
+  security?: GetUserSessionClientSecurity  ,
   options?: SuspenseQueryHookOptions<
     UserSessionClientQueryData,
     UserSessionClientQueryError

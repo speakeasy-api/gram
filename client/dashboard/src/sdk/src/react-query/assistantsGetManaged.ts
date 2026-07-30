@@ -62,8 +62,8 @@ export type AssistantsGetManagedQueryError =
  * Get the project's built-in Project Assistant if it exists. Returns 404 when no managed assistant has been provisioned yet — call ensureManagedAssistant to create one.
  */
 export function useAssistantsGetManaged(
-  request?: GetManagedAssistantRequest | undefined,
-  security?: GetManagedAssistantSecurity | undefined,
+  request?: GetManagedAssistantRequest  ,
+  security?: GetManagedAssistantSecurity  ,
   options?: QueryHookOptions<
     AssistantsGetManagedQueryData,
     AssistantsGetManagedQueryError
@@ -91,8 +91,8 @@ export function useAssistantsGetManaged(
  * Get the project's built-in Project Assistant if it exists. Returns 404 when no managed assistant has been provisioned yet — call ensureManagedAssistant to create one.
  */
 export function useAssistantsGetManagedSuspense(
-  request?: GetManagedAssistantRequest | undefined,
-  security?: GetManagedAssistantSecurity | undefined,
+  request?: GetManagedAssistantRequest  ,
+  security?: GetManagedAssistantSecurity  ,
   options?: SuspenseQueryHookOptions<
     AssistantsGetManagedQueryData,
     AssistantsGetManagedQueryError

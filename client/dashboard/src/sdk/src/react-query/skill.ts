@@ -58,7 +58,7 @@ export type SkillQueryError =
  */
 export function useSkill(
   request: GetSkillRequest,
-  security?: GetSkillSecurity | undefined,
+  security?: GetSkillSecurity  ,
   options?: QueryHookOptions<SkillQueryData, SkillQueryError>,
 ): UseQueryResult<SkillQueryData, SkillQueryError> {
   const client = useGramContext();
@@ -81,7 +81,7 @@ export function useSkill(
  */
 export function useSkillSuspense(
   request: GetSkillRequest,
-  security?: GetSkillSecurity | undefined,
+  security?: GetSkillSecurity  ,
   options?: SuspenseQueryHookOptions<SkillQueryData, SkillQueryError>,
 ): UseSuspenseQueryResult<SkillQueryData, SkillQueryError> {
   const client = useGramContext();

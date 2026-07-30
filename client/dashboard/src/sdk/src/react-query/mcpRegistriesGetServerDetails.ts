@@ -63,7 +63,7 @@ export type McpRegistriesGetServerDetailsQueryError =
  */
 export function useMcpRegistriesGetServerDetails(
   request: GetMCPServerDetailsRequest,
-  security?: GetMCPServerDetailsSecurity | undefined,
+  security?: GetMCPServerDetailsSecurity  ,
   options?: QueryHookOptions<
     McpRegistriesGetServerDetailsQueryData,
     McpRegistriesGetServerDetailsQueryError
@@ -92,7 +92,7 @@ export function useMcpRegistriesGetServerDetails(
  */
 export function useMcpRegistriesGetServerDetailsSuspense(
   request: GetMCPServerDetailsRequest,
-  security?: GetMCPServerDetailsSecurity | undefined,
+  security?: GetMCPServerDetailsSecurity  ,
   options?: SuspenseQueryHookOptions<
     McpRegistriesGetServerDetailsQueryData,
     McpRegistriesGetServerDetailsQueryError

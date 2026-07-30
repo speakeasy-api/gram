@@ -63,7 +63,7 @@ export type PluginQueryError =
  */
 export function usePlugin(
   request: GetPluginRequest,
-  security?: GetPluginSecurity | undefined,
+  security?: GetPluginSecurity  ,
   options?: QueryHookOptions<PluginQueryData, PluginQueryError>,
 ): UseQueryResult<PluginQueryData, PluginQueryError> {
   const client = useGramContext();
@@ -86,7 +86,7 @@ export function usePlugin(
  */
 export function usePluginSuspense(
   request: GetPluginRequest,
-  security?: GetPluginSecurity | undefined,
+  security?: GetPluginSecurity  ,
   options?: SuspenseQueryHookOptions<PluginQueryData, PluginQueryError>,
 ): UseSuspenseQueryResult<PluginQueryData, PluginQueryError> {
   const client = useGramContext();

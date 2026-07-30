@@ -35,8 +35,8 @@ export type UserSessionsPageParams = PageIterator<
 export function prefetchUserSessions(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListUserSessionsRequest | undefined,
-  security?: ListUserSessionsSecurity | undefined,
+  request?: ListUserSessionsRequest  ,
+  security?: ListUserSessionsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -52,8 +52,8 @@ export function prefetchUserSessions(
 export function prefetchUserSessionsInfinite(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListUserSessionsRequest | undefined,
-  security?: ListUserSessionsSecurity | undefined,
+  request?: ListUserSessionsRequest  ,
+  security?: ListUserSessionsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -71,8 +71,8 @@ export function prefetchUserSessionsInfinite(
 
 export function buildUserSessionsQuery(
   client$: GramCore,
-  request?: ListUserSessionsRequest | undefined,
-  security?: ListUserSessionsSecurity | undefined,
+  request?: ListUserSessionsRequest  ,
+  security?: ListUserSessionsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -116,8 +116,8 @@ export function buildUserSessionsQuery(
 
 export function buildUserSessionsInfiniteQuery(
   client$: GramCore,
-  request?: ListUserSessionsRequest | undefined,
-  security?: ListUserSessionsSecurity | undefined,
+  request?: ListUserSessionsRequest  ,
+  security?: ListUserSessionsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

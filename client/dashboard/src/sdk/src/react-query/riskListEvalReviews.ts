@@ -63,7 +63,7 @@ export type RiskListEvalReviewsQueryError =
  */
 export function useRiskListEvalReviews(
   request: ListRiskEvalReviewsRequest,
-  security?: ListRiskEvalReviewsSecurity | undefined,
+  security?: ListRiskEvalReviewsSecurity  ,
   options?: QueryHookOptions<
     RiskListEvalReviewsQueryData,
     RiskListEvalReviewsQueryError
@@ -89,7 +89,7 @@ export function useRiskListEvalReviews(
  */
 export function useRiskListEvalReviewsSuspense(
   request: ListRiskEvalReviewsRequest,
-  security?: ListRiskEvalReviewsSecurity | undefined,
+  security?: ListRiskEvalReviewsSecurity  ,
   options?: SuspenseQueryHookOptions<
     RiskListEvalReviewsQueryData,
     RiskListEvalReviewsQueryError

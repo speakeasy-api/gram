@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function hooksServerNamesUpsertServerNameOverride(
   client: GramCore,
   request: UpsertServerNameOverrideRequest,
-  security?: UpsertServerNameOverrideSecurity | undefined,
+  security?: UpsertServerNameOverrideSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function hooksServerNamesUpsertServerNameOverride(
 async function $do(
   client: GramCore,
   request: UpsertServerNameOverrideRequest,
-  security?: UpsertServerNameOverrideSecurity | undefined,
+  security?: UpsertServerNameOverrideSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

@@ -23,7 +23,7 @@ export function prefetchServeOpenAPIv3(
   queryClient: QueryClient,
   client$: GramCore,
   request: ServeOpenAPIv3Request,
-  security?: ServeOpenAPIv3Security | undefined,
+  security?: ServeOpenAPIv3Security  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchServeOpenAPIv3(
 export function buildServeOpenAPIv3Query(
   client$: GramCore,
   request: ServeOpenAPIv3Request,
-  security?: ServeOpenAPIv3Security | undefined,
+  security?: ServeOpenAPIv3Security  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

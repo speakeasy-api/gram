@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function skillsGet(
   client: GramCore,
   request: GetSkillRequest,
-  security?: GetSkillSecurity | undefined,
+  security?: GetSkillSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function skillsGet(
 async function $do(
   client: GramCore,
   request: GetSkillRequest,
-  security?: GetSkillSecurity | undefined,
+  security?: GetSkillSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

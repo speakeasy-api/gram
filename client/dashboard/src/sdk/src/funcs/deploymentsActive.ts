@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function deploymentsActive(
   client: GramCore,
-  request?: GetActiveDeploymentRequest | undefined,
-  security?: GetActiveDeploymentSecurity | undefined,
+  request?: GetActiveDeploymentRequest  ,
+  security?: GetActiveDeploymentSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function deploymentsActive(
 
 async function $do(
   client: GramCore,
-  request?: GetActiveDeploymentRequest | undefined,
-  security?: GetActiveDeploymentSecurity | undefined,
+  request?: GetActiveDeploymentRequest  ,
+  security?: GetActiveDeploymentSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

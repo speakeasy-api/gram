@@ -62,8 +62,8 @@ export type VerifyOnboardingHooksSetupQueryError =
  * Return recent hook events for the active organization so the onboarding wizard can confirm that Claude Code, Cursor, or Codex instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
  */
 export function useVerifyOnboardingHooksSetup(
-  request?: VerifyOnboardingHooksSetupRequest | undefined,
-  security?: VerifyOnboardingHooksSetupSecurity | undefined,
+  request?: VerifyOnboardingHooksSetupRequest  ,
+  security?: VerifyOnboardingHooksSetupSecurity  ,
   options?: QueryHookOptions<
     VerifyOnboardingHooksSetupQueryData,
     VerifyOnboardingHooksSetupQueryError
@@ -91,8 +91,8 @@ export function useVerifyOnboardingHooksSetup(
  * Return recent hook events for the active organization so the onboarding wizard can confirm that Claude Code, Cursor, or Codex instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
  */
 export function useVerifyOnboardingHooksSetupSuspense(
-  request?: VerifyOnboardingHooksSetupRequest | undefined,
-  security?: VerifyOnboardingHooksSetupSecurity | undefined,
+  request?: VerifyOnboardingHooksSetupRequest  ,
+  security?: VerifyOnboardingHooksSetupSecurity  ,
   options?: SuspenseQueryHookOptions<
     VerifyOnboardingHooksSetupQueryData,
     VerifyOnboardingHooksSetupQueryError

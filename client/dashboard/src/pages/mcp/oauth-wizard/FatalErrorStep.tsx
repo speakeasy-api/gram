@@ -1,7 +1,7 @@
-import { Dialog } from "@/components/ui/dialog";
-import { Type } from "@/components/ui/type";
+import { Dialog } from "@/components/ui/Dialog";
+import { Type } from "@/components/ui/Type";
 import { useRoutes } from "@/routes";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { AlertTriangle } from "lucide-react";
 
 export function FatalErrorStep({

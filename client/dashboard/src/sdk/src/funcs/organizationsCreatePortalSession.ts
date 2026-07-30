@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function organizationsCreatePortalSession(
   client: GramCore,
-  request?: CreatePortalSessionRequest | undefined,
-  security?: CreatePortalSessionSecurity | undefined,
+  request?: CreatePortalSessionRequest  ,
+  security?: CreatePortalSessionSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function organizationsCreatePortalSession(
 
 async function $do(
   client: GramCore,
-  request?: CreatePortalSessionRequest | undefined,
-  security?: CreatePortalSessionSecurity | undefined,
+  request?: CreatePortalSessionRequest  ,
+  security?: CreatePortalSessionSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

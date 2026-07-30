@@ -1,8 +1,9 @@
 import { RequireScope } from "@/components/require-scope";
-import { Switch } from "@/components/ui/switch";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Switch } from "@/components/ui/Switch";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Type } from "@/components/ui/Type";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { ChevronDown, PlugZap, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import {

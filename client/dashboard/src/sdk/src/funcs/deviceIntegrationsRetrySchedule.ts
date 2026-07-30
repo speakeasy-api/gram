@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function deviceIntegrationsRetrySchedule(
   client: GramCore,
   request: RetryDeviceIntegrationScheduleRequest,
-  security?: RetryDeviceIntegrationScheduleSecurity | undefined,
+  security?: RetryDeviceIntegrationScheduleSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function deviceIntegrationsRetrySchedule(
 async function $do(
   client: GramCore,
   request: RetryDeviceIntegrationScheduleRequest,
-  security?: RetryDeviceIntegrationScheduleSecurity | undefined,
+  security?: RetryDeviceIntegrationScheduleSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

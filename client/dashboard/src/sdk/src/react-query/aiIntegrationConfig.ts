@@ -63,7 +63,7 @@ export type AiIntegrationConfigQueryError =
  */
 export function useAiIntegrationConfig(
   request: GetAIIntegrationConfigRequest,
-  security?: GetAIIntegrationConfigSecurity | undefined,
+  security?: GetAIIntegrationConfigSecurity  ,
   options?: QueryHookOptions<
     AiIntegrationConfigQueryData,
     AiIntegrationConfigQueryError
@@ -89,7 +89,7 @@ export function useAiIntegrationConfig(
  */
 export function useAiIntegrationConfigSuspense(
   request: GetAIIntegrationConfigRequest,
-  security?: GetAIIntegrationConfigSecurity | undefined,
+  security?: GetAIIntegrationConfigSecurity  ,
   options?: SuspenseQueryHookOptions<
     AiIntegrationConfigQueryData,
     AiIntegrationConfigQueryError

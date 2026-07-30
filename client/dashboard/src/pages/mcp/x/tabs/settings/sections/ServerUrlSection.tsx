@@ -5,13 +5,13 @@ import {
   FieldError,
   FieldGroup,
   FieldLabel,
-} from "@/components/ui/field";
+} from "@/components/ui/Field";
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupInput,
-} from "@/components/ui/input-group";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/InputGroup";
+import { Type } from "@/components/ui/Type";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useCustomDomains } from "@/hooks/useToolsetUrl";
@@ -23,7 +23,9 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useDeleteMcpEndpointMutation } from "@gram/client/react-query/deleteMcpEndpoint.js";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useUpdateMcpEndpointMutation } from "@gram/client/react-query/updateMcpEndpoint.js";
-import { Button, Dialog, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, SaveIcon, Trash2, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";

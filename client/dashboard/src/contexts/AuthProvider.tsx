@@ -9,8 +9,8 @@ import {
   SidebarHeader,
   SidebarInset,
   SidebarProvider,
-} from "@/components/ui/sidebar";
-import { Skeleton } from "@/components/ui/skeleton";
+} from "@/components/ui/Sidebar";
+import { Skeleton } from "@/components/ui/Skeleton";
 import BookDemo from "@/pages/demo/BookDemo";
 import SwitchOrg from "@/pages/demo/SwitchOrg";
 import { useQueryClient } from "@tanstack/react-query";

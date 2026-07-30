@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function userSessionIssuersMigrateLegacyGramRegistrations(
   client: GramCore,
   request: MigrateLegacyGramRegistrationsRequest,
-  security?: MigrateLegacyGramRegistrationsSecurity | undefined,
+  security?: MigrateLegacyGramRegistrationsSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function userSessionIssuersMigrateLegacyGramRegistrations(
 async function $do(
   client: GramCore,
   request: MigrateLegacyGramRegistrationsRequest,
-  security?: MigrateLegacyGramRegistrationsSecurity | undefined,
+  security?: MigrateLegacyGramRegistrationsSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

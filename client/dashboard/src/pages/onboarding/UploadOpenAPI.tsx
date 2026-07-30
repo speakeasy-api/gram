@@ -1,7 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import DeployStep from "@/components/upload-asset/deploy-step";
 import NameDeploymentStep from "@/components/upload-asset/name-deployment-step";
 import UploadAssetStep from "@/components/upload-asset/step";
@@ -9,8 +9,9 @@ import UploadAssetStepper from "@/components/upload-asset/stepper";
 import { useStepper } from "@/components/upload-asset/stepper/use-stepper";
 import UploadFileStep from "@/components/upload-asset/upload-file-step";
 import { useRoutes } from "@/routes";
-import { Heading } from "@/components/ui/heading";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Heading } from "@/components/ui/Heading";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { ArrowRightIcon, FileTextIcon, RefreshCcwIcon } from "lucide-react";
 
 export default function UploadOpenAPI(): JSX.Element {

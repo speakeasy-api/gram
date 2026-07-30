@@ -15,17 +15,17 @@ import {
   SecondaryRouteAction,
 } from "@/components/route-not-found-state";
 import { ToolList } from "@/components/tool-list";
-import { Dialog } from "@/components/ui/dialog";
-import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { MultiSelect } from "@/components/ui/multi-select";
+import { Dialog } from "@/components/ui/Dialog";
+import { Heading } from "@/components/ui/Heading";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { MultiSelect } from "@/components/ui/MultiSelect";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tooltip";
+import { Type } from "@/components/ui/Type";
 import { RequireScope } from "@/components/require-scope";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -68,16 +68,16 @@ import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets
 import { useRemoveOAuthServerMutation } from "@gram/client/react-query/removeOAuthServer.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-  Stack,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,

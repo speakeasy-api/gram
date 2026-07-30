@@ -7,16 +7,16 @@ import {
   SourceInfoRow,
   SourceInfoTable,
 } from "@/components/sources/SourceInfoTable";
-import { CopyButton } from "@/components/ui/copy-button";
-import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Heading } from "@/components/ui/Heading";
+import { Input } from "@/components/ui/Input";
 import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
   TabsList,
-} from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tabs";
+import { Type } from "@/components/ui/Type";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { dateTimeFormatters } from "@/lib/dates";
 import {
@@ -38,7 +38,11 @@ import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
 import { useUpdateTunneledMcpServerMutation } from "@gram/client/react-query/updateTunneledMcpServer.js";
-import { Alert, Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -365,7 +369,7 @@ function OverviewTab({
                     : "-"}
                 </Type>
                 {tunneledMcpServer?.id && (
-                  <CopyButton text={tunneledMcpServer.id} size="inline" />
+                  <CopyButton text={tunneledMcpServer.id} size="xs" />
                 )}
               </span>
             </SourceInfoRow>
@@ -1014,7 +1018,7 @@ function TunnelKeySection({
                 </code>
                 <CopyButton
                   text={rotatedKey.tunnelKey}
-                  size="icon-sm"
+                  size="sm"
                   tooltip="Copy tunnel key"
                 />
               </div>

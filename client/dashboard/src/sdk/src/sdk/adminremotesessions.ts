@@ -81,7 +81,7 @@ export class AdminRemoteSessions extends ClientSDK {
    */
   async createGlobalClient(
     request: CreateGlobalRemoteSessionClientRequest,
-    security?: CreateGlobalRemoteSessionClientSecurity | undefined,
+    security?: CreateGlobalRemoteSessionClientSecurity  ,
     options?: RequestOptions,
   ): Promise<RemoteSessionClient> {
     return unwrapAsync(adminRemoteSessionsCreateGlobalClient(
@@ -100,7 +100,7 @@ export class AdminRemoteSessions extends ClientSDK {
    */
   async createGlobalIssuer(
     request: CreateGlobalRemoteSessionIssuerRequest,
-    security?: CreateGlobalRemoteSessionIssuerSecurity | undefined,
+    security?: CreateGlobalRemoteSessionIssuerSecurity  ,
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuer> {
     return unwrapAsync(adminRemoteSessionsCreateGlobalIssuer(
@@ -119,7 +119,7 @@ export class AdminRemoteSessions extends ClientSDK {
    */
   async deleteGlobalClient(
     request: DeleteGlobalRemoteSessionClientRequest,
-    security?: DeleteGlobalRemoteSessionClientSecurity | undefined,
+    security?: DeleteGlobalRemoteSessionClientSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(adminRemoteSessionsDeleteGlobalClient(
@@ -138,7 +138,7 @@ export class AdminRemoteSessions extends ClientSDK {
    */
   async deleteGlobalIssuer(
     request: DeleteGlobalRemoteSessionIssuerRequest,
-    security?: DeleteGlobalRemoteSessionIssuerSecurity | undefined,
+    security?: DeleteGlobalRemoteSessionIssuerSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(adminRemoteSessionsDeleteGlobalIssuer(
@@ -157,7 +157,7 @@ export class AdminRemoteSessions extends ClientSDK {
    */
   async fetchGlobalIssuerMetadata(
     request: FetchGlobalRemoteSessionIssuerMetadataRequest,
-    security?: FetchGlobalRemoteSessionIssuerMetadataSecurity | undefined,
+    security?: FetchGlobalRemoteSessionIssuerMetadataSecurity  ,
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuerDraft> {
     return unwrapAsync(adminRemoteSessionsFetchGlobalIssuerMetadata(
@@ -176,7 +176,7 @@ export class AdminRemoteSessions extends ClientSDK {
    */
   async getGlobalClient(
     request: GetGlobalRemoteSessionClientRequest,
-    security?: GetGlobalRemoteSessionClientSecurity | undefined,
+    security?: GetGlobalRemoteSessionClientSecurity  ,
     options?: RequestOptions,
   ): Promise<RemoteSessionClient> {
     return unwrapAsync(adminRemoteSessionsGetGlobalClient(
@@ -195,7 +195,7 @@ export class AdminRemoteSessions extends ClientSDK {
    */
   async getGlobalIssuer(
     request: GetGlobalRemoteSessionIssuerRequest,
-    security?: GetGlobalRemoteSessionIssuerSecurity | undefined,
+    security?: GetGlobalRemoteSessionIssuerSecurity  ,
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuer> {
     return unwrapAsync(adminRemoteSessionsGetGlobalIssuer(
@@ -214,7 +214,7 @@ export class AdminRemoteSessions extends ClientSDK {
    */
   async listGlobalClients(
     request: ListGlobalRemoteSessionClientsRequest,
-    security?: ListGlobalRemoteSessionClientsSecurity | undefined,
+    security?: ListGlobalRemoteSessionClientsSecurity  ,
     options?: RequestOptions,
   ): Promise<
     PageIterator<ListGlobalRemoteSessionClientsResponse, { cursor: string }>
@@ -234,8 +234,8 @@ export class AdminRemoteSessions extends ClientSDK {
    * List global remote_session_issuers. Requires platform admin.
    */
   async listGlobalIssuers(
-    request?: ListGlobalRemoteSessionIssuersRequest | undefined,
-    security?: ListGlobalRemoteSessionIssuersSecurity | undefined,
+    request?: ListGlobalRemoteSessionIssuersRequest  ,
+    security?: ListGlobalRemoteSessionIssuersSecurity  ,
     options?: RequestOptions,
   ): Promise<
     PageIterator<ListGlobalRemoteSessionIssuersResponse, { cursor: string }>
@@ -256,7 +256,7 @@ export class AdminRemoteSessions extends ClientSDK {
    */
   async refreshGlobalIssuerMetadata(
     request: RefreshGlobalRemoteSessionIssuerMetadataRequest,
-    security?: RefreshGlobalRemoteSessionIssuerMetadataSecurity | undefined,
+    security?: RefreshGlobalRemoteSessionIssuerMetadataSecurity  ,
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuerRefresh> {
     return unwrapAsync(adminRemoteSessionsRefreshGlobalIssuerMetadata(
@@ -275,7 +275,7 @@ export class AdminRemoteSessions extends ClientSDK {
    */
   async updateGlobalClient(
     request: UpdateGlobalRemoteSessionClientRequest,
-    security?: UpdateGlobalRemoteSessionClientSecurity | undefined,
+    security?: UpdateGlobalRemoteSessionClientSecurity  ,
     options?: RequestOptions,
   ): Promise<RemoteSessionClient> {
     return unwrapAsync(adminRemoteSessionsUpdateGlobalClient(
@@ -294,7 +294,7 @@ export class AdminRemoteSessions extends ClientSDK {
    */
   async updateGlobalIssuer(
     request: UpdateGlobalRemoteSessionIssuerRequest,
-    security?: UpdateGlobalRemoteSessionIssuerSecurity | undefined,
+    security?: UpdateGlobalRemoteSessionIssuerSecurity  ,
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuer> {
     return unwrapAsync(adminRemoteSessionsUpdateGlobalIssuer(

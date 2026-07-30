@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { Building2, ChevronRight, FolderOpen, Plug } from "lucide-react";
 import { Link } from "react-router";

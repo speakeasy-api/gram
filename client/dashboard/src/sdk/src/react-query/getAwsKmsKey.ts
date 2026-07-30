@@ -63,7 +63,7 @@ export type GetAwsKmsKeyQueryError =
  */
 export function useGetAwsKmsKey(
   request: GetAwsKmsKeyRequest,
-  security?: GetAwsKmsKeySecurity | undefined,
+  security?: GetAwsKmsKeySecurity  ,
   options?: QueryHookOptions<GetAwsKmsKeyQueryData, GetAwsKmsKeyQueryError>,
 ): UseQueryResult<GetAwsKmsKeyQueryData, GetAwsKmsKeyQueryError> {
   const client = useGramContext();
@@ -86,7 +86,7 @@ export function useGetAwsKmsKey(
  */
 export function useGetAwsKmsKeySuspense(
   request: GetAwsKmsKeyRequest,
-  security?: GetAwsKmsKeySecurity | undefined,
+  security?: GetAwsKmsKeySecurity  ,
   options?: SuspenseQueryHookOptions<
     GetAwsKmsKeyQueryData,
     GetAwsKmsKeyQueryError

@@ -1,14 +1,14 @@
 import { MetricCard } from "@/components/chart/MetricCard";
 import { RequireScope } from "@/components/require-scope";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Collapsible";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Type } from "@/components/ui/Type";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
@@ -18,7 +18,8 @@ import type { SkillFeedbackMetrics } from "@gram/client/models/components/skillf
 import type { SkillFeedbackTimelinePoint } from "@gram/client/models/components/skillfeedbacktimelinepoint.js";
 import { useSkillFeedbackInfinite } from "@gram/client/react-query/skillFeedback.js";
 import { useTriggerSkillSuggestionMutation } from "@gram/client/react-query/triggerSkillSuggestion.js";
-import { Badge, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -182,7 +183,7 @@ export function SkillFeedbackSection({
                   />
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant="secondary"
                     onClick={() => void query.refetch()}
                   >
                     Retry
@@ -473,7 +474,7 @@ function GroupedFindings({
         <div className="flex justify-center">
           <Button
             size="sm"
-            variant="outline"
+            variant="secondary"
             disabled={loadingMore}
             onClick={onLoadMore}
           >

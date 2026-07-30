@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function skillEfficacyUpsertSettings(
   client: GramCore,
   request: UpsertSkillEfficacySettingsRequest,
-  security?: UpsertSkillEfficacySettingsSecurity | undefined,
+  security?: UpsertSkillEfficacySettingsSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function skillEfficacyUpsertSettings(
 async function $do(
   client: GramCore,
   request: UpsertSkillEfficacySettingsRequest,
-  security?: UpsertSkillEfficacySettingsSecurity | undefined,
+  security?: UpsertSkillEfficacySettingsSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

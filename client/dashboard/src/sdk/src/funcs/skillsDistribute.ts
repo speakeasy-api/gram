@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function skillsDistribute(
   client: GramCore,
   request: DistributeSkillRequest,
-  security?: DistributeSkillSecurity | undefined,
+  security?: DistributeSkillSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function skillsDistribute(
 async function $do(
   client: GramCore,
   request: DistributeSkillRequest,
-  security?: DistributeSkillSecurity | undefined,
+  security?: DistributeSkillSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

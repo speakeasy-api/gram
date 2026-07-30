@@ -1,7 +1,7 @@
 import { Page } from "@/components/page-layout";
-import { Card } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { Card } from "@/components/ui/Card";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Type } from "@/components/ui/Type";
 import { ManualSetupBadge } from "@/pages/catalog/ManualSetupBadge";
 import { useSdkClient } from "@/contexts/Sdk";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
@@ -14,7 +14,9 @@ import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useMcpRegistriesGetServerDetails } from "@gram/client/react-query/mcpRegistriesGetServerDetails.js";
-import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useMutation } from "@tanstack/react-query";
 import {
   ChevronDown,

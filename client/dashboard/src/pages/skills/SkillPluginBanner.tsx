@@ -1,12 +1,12 @@
 import { RequireScope } from "@/components/require-scope";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Checkbox } from "@/components/ui/Checkbox";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { Spinner } from "@/components/ui/spinner";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Popover";
+import { Spinner } from "@/components/ui/Spinner";
+import { Type } from "@/components/ui/Type";
 import { useProject } from "@/contexts/Auth";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { ClientIconFan } from "@/pages/mcp/overview/PluginStatusBanner";
@@ -19,7 +19,8 @@ import {
   useSkillDistributionsInfinite,
 } from "@gram/client/react-query/skillDistributions.js";
 import { useUndistributeSkillMutation } from "@gram/client/react-query/undistributeSkill.js";
-import { Button, cn } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,

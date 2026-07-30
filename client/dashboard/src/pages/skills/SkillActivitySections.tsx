@@ -1,6 +1,6 @@
 import { ChartCard } from "@/components/chart/ChartCard";
 import { CHART_COLORS } from "@/components/stacked-time-series";
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import { HumanizeDateTime } from "@/lib/dates";
 import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
 import type { GetSkillResult } from "@gram/client/models/components/getskillresult.js";

@@ -22,8 +22,8 @@ export type ListToolsetsForOrgQueryData = ListToolsetSummariesResult;
 export function prefetchListToolsetsForOrg(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListToolsetsForOrgRequest | undefined,
-  security?: ListToolsetsForOrgSecurity | undefined,
+  request?: ListToolsetsForOrgRequest  ,
+  security?: ListToolsetsForOrgSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListToolsetsForOrg(
 
 export function buildListToolsetsForOrgQuery(
   client$: GramCore,
-  request?: ListToolsetsForOrgRequest | undefined,
-  security?: ListToolsetsForOrgSecurity | undefined,
+  request?: ListToolsetsForOrgRequest  ,
+  security?: ListToolsetsForOrgSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -23,7 +23,7 @@ export function prefetchRole(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetRoleRequest,
-  security?: GetRoleSecurity | undefined,
+  security?: GetRoleSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchRole(
 export function buildRoleQuery(
   client$: GramCore,
   request: GetRoleRequest,
-  security?: GetRoleSecurity | undefined,
+  security?: GetRoleSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

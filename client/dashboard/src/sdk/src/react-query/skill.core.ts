@@ -23,7 +23,7 @@ export function prefetchSkill(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetSkillRequest,
-  security?: GetSkillSecurity | undefined,
+  security?: GetSkillSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchSkill(
 export function buildSkillQuery(
   client$: GramCore,
   request: GetSkillRequest,
-  security?: GetSkillSecurity | undefined,
+  security?: GetSkillSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

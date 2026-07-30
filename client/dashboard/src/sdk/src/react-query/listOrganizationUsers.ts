@@ -62,8 +62,8 @@ export type ListOrganizationUsersQueryError =
  * List users in the active organization from Gram organization_user_relationships.
  */
 export function useListOrganizationUsers(
-  request?: ListOrganizationUsersRequest | undefined,
-  security?: ListOrganizationUsersSecurity | undefined,
+  request?: ListOrganizationUsersRequest  ,
+  security?: ListOrganizationUsersSecurity  ,
   options?: QueryHookOptions<
     ListOrganizationUsersQueryData,
     ListOrganizationUsersQueryError
@@ -91,8 +91,8 @@ export function useListOrganizationUsers(
  * List users in the active organization from Gram organization_user_relationships.
  */
 export function useListOrganizationUsersSuspense(
-  request?: ListOrganizationUsersRequest | undefined,
-  security?: ListOrganizationUsersSecurity | undefined,
+  request?: ListOrganizationUsersRequest  ,
+  security?: ListOrganizationUsersSecurity  ,
   options?: SuspenseQueryHookOptions<
     ListOrganizationUsersQueryData,
     ListOrganizationUsersQueryError

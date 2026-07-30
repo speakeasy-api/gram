@@ -4,21 +4,18 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Type } from "@/components/ui/Type";
 import { cn } from "@/lib/utils";
 import type { AuthzChallenge } from "@gram/client/models/components/authzchallenge.js";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { Outcome } from "@gram/client/models/operations/listchallengebuckets.js";
 import { useChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
 import { useChallenges } from "@gram/client/react-query/challenges.js";
-import {
-  Badge as MoonshineBadge,
-  type Column,
-  Table,
-} from "@speakeasy-api/moonshine";
-import { Button } from "@/components/ui/button";
+import { Badge as MoonshineBadge } from "@/components/ui/Badge";
+import { type Column, Table } from "@/components/ui/Table";
+import { Button } from "@/components/ui/Button";
 import { Check, Loader2 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -514,7 +511,7 @@ export function ChallengesTab(): JSX.Element {
               </Type>
               {hasMore ? (
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   onClick={() => setPageCount((p) => p + 1)}
                   disabled={isLoadingMore}

@@ -23,7 +23,7 @@ export function prefetchRiskUserBreakdown(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetRiskUserBreakdownRequest,
-  security?: GetRiskUserBreakdownSecurity | undefined,
+  security?: GetRiskUserBreakdownSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchRiskUserBreakdown(
 export function buildRiskUserBreakdownQuery(
   client$: GramCore,
   request: GetRiskUserBreakdownRequest,
-  security?: GetRiskUserBreakdownSecurity | undefined,
+  security?: GetRiskUserBreakdownSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -62,8 +62,8 @@ export type MembersQueryError =
  * List all team members with their role assignments.
  */
 export function useMembers(
-  request?: ListMembersRequest | undefined,
-  security?: ListMembersSecurity | undefined,
+  request?: ListMembersRequest  ,
+  security?: ListMembersSecurity  ,
   options?: QueryHookOptions<MembersQueryData, MembersQueryError>,
 ): UseQueryResult<MembersQueryData, MembersQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useMembers(
  * List all team members with their role assignments.
  */
 export function useMembersSuspense(
-  request?: ListMembersRequest | undefined,
-  security?: ListMembersSecurity | undefined,
+  request?: ListMembersRequest  ,
+  security?: ListMembersSecurity  ,
   options?: SuspenseQueryHookOptions<MembersQueryData, MembersQueryError>,
 ): UseSuspenseQueryResult<MembersQueryData, MembersQueryError> {
   const client = useGramContext();

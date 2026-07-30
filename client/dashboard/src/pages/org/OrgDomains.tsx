@@ -1,9 +1,9 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Page } from "@/components/page-layout";
-import { Badge } from "@/components/ui/badge";
-import { Dialog } from "@/components/ui/dialog";
-import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/Badge";
+import { Dialog } from "@/components/ui/Dialog";
+import { Heading } from "@/components/ui/Heading";
+import { Input } from "@/components/ui/Input";
 import {
   Sheet,
   SheetContent,
@@ -11,9 +11,9 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Type } from "@/components/ui/Type";
 import { useOrganization } from "@/contexts/Auth";
 import { useProductTier } from "@/hooks/useProductTier";
 import {
@@ -28,7 +28,9 @@ import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
 import { invalidateAllListDomains } from "@gram/client/react-query/listDomains";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
 import { useUpdateDomainMutation } from "@gram/client/react-query/updateDomain";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -489,7 +491,7 @@ function OrgDomainsInner() {
                   </Type>
                 ) : (
                   domain.ipAllowlist.map((ip) => (
-                    <Badge key={ip} variant="secondary" className="font-mono">
+                    <Badge key={ip} variant="neutral" className="font-mono">
                       {ip}
                     </Badge>
                   ))

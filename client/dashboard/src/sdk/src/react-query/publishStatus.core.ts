@@ -22,8 +22,8 @@ export type PublishStatusQueryData = PublishStatusResult;
 export function prefetchPublishStatus(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetPublishStatusRequest | undefined,
-  security?: GetPublishStatusSecurity | undefined,
+  request?: GetPublishStatusRequest  ,
+  security?: GetPublishStatusSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchPublishStatus(
 
 export function buildPublishStatusQuery(
   client$: GramCore,
-  request?: GetPublishStatusRequest | undefined,
-  security?: GetPublishStatusSecurity | undefined,
+  request?: GetPublishStatusRequest  ,
+  security?: GetPublishStatusSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

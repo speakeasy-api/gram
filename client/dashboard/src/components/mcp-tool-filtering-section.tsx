@@ -1,5 +1,5 @@
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
+import { Heading } from "@/components/ui/Heading";
 import { toolVariationsGroupDisplayName } from "@/lib/toolVariationGroups";
 import { cn } from "@/lib/utils";
 import {
@@ -8,8 +8,8 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Type } from "@/components/ui/Type";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useCreateGlobalToolVariationGroupMutation } from "@gram/client/react-query/createGlobalToolVariationGroup.js";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
@@ -21,7 +21,7 @@ import {
 } from "@gram/client/react-query/toolVariationGroups.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";

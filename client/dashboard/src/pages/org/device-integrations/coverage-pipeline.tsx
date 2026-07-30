@@ -1,10 +1,10 @@
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { DeviceIntegrationCoverage } from "@gram/client/models/components/deviceintegrationcoverage.js";
 import type { DeviceIntegrationProvider } from "@gram/client/models/components/deviceintegrationprovider.js";
 import { buildDeviceIntegrationConfigQuery } from "@gram/client/react-query/deviceIntegrationConfig.js";
 import { useDeviceIntegrationCoverage } from "@gram/client/react-query/deviceIntegrationCoverage.js";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/Stack";
 import { useQueries } from "@tanstack/react-query";
 import { ArrowRight } from "lucide-react";
 import { useMemo } from "react";

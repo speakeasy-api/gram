@@ -22,8 +22,8 @@ export type ListResourcesQueryData = ListResourcesResult;
 export function prefetchListResources(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListResourcesRequest | undefined,
-  security?: ListResourcesSecurity | undefined,
+  request?: ListResourcesRequest  ,
+  security?: ListResourcesSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListResources(
 
 export function buildListResourcesQuery(
   client$: GramCore,
-  request?: ListResourcesRequest | undefined,
-  security?: ListResourcesSecurity | undefined,
+  request?: ListResourcesRequest  ,
+  security?: ListResourcesSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

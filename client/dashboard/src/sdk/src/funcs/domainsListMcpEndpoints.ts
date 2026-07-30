@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function domainsListMcpEndpoints(
   client: GramCore,
-  request?: ListCustomDomainMcpEndpointsRequest | undefined,
-  security?: ListCustomDomainMcpEndpointsSecurity | undefined,
+  request?: ListCustomDomainMcpEndpointsRequest  ,
+  security?: ListCustomDomainMcpEndpointsSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function domainsListMcpEndpoints(
 
 async function $do(
   client: GramCore,
-  request?: ListCustomDomainMcpEndpointsRequest | undefined,
-  security?: ListCustomDomainMcpEndpointsSecurity | undefined,
+  request?: ListCustomDomainMcpEndpointsRequest  ,
+  security?: ListCustomDomainMcpEndpointsSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

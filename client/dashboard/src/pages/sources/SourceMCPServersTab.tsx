@@ -1,8 +1,9 @@
-import { DotCard } from "@/components/ui/dot-card";
-import { Type } from "@/components/ui/type";
+import { DotCard } from "@/components/ui/DotCard";
+import { Type } from "@/components/ui/Type";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { ArrowRight, Network, Server } from "lucide-react";
 
 function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {

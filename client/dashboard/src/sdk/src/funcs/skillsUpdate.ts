@@ -44,7 +44,7 @@ import { Result } from "../types/fp.js";
 export function skillsUpdate(
   client: GramCore,
   request: UpdateSkillRequest,
-  security?: UpdateSkillSecurity | undefined,
+  security?: UpdateSkillSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -71,7 +71,7 @@ export function skillsUpdate(
 async function $do(
   client: GramCore,
   request: UpdateSkillRequest,
-  security?: UpdateSkillSecurity | undefined,
+  security?: UpdateSkillSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

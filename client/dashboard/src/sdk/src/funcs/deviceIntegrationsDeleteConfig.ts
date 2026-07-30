@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function deviceIntegrationsDeleteConfig(
   client: GramCore,
   request: DeleteDeviceIntegrationConfigRequest,
-  security?: DeleteDeviceIntegrationConfigSecurity | undefined,
+  security?: DeleteDeviceIntegrationConfigSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function deviceIntegrationsDeleteConfig(
 async function $do(
   client: GramCore,
   request: DeleteDeviceIntegrationConfigRequest,
-  security?: DeleteDeviceIntegrationConfigSecurity | undefined,
+  security?: DeleteDeviceIntegrationConfigSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

@@ -1,5 +1,5 @@
-import { Button } from "@/components/ui/button";
-import { Type } from "@/components/ui/type";
+import { Button } from "@/components/ui/Button";
+import { Type } from "@/components/ui/Type";
 import {
   ONBOARDING_CTA_CONTENT_VT_CLASS,
   ONBOARDING_CTA_VT_CLASS,
@@ -63,7 +63,7 @@ export function OnboardingBanner(): JSX.Element | null {
             </Button>
           </orgRoutes.setup.Link>
           <Button
-            variant="ghost"
+            variant="tertiary"
             size="sm"
             onClick={dismiss}
             aria-label="Dismiss setup banner"

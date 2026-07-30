@@ -62,8 +62,8 @@ export type PublishStatusQueryError =
  * Check whether GitHub publishing is configured and connected for this project.
  */
 export function usePublishStatus(
-  request?: GetPublishStatusRequest | undefined,
-  security?: GetPublishStatusSecurity | undefined,
+  request?: GetPublishStatusRequest  ,
+  security?: GetPublishStatusSecurity  ,
   options?: QueryHookOptions<PublishStatusQueryData, PublishStatusQueryError>,
 ): UseQueryResult<PublishStatusQueryData, PublishStatusQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function usePublishStatus(
  * Check whether GitHub publishing is configured and connected for this project.
  */
 export function usePublishStatusSuspense(
-  request?: GetPublishStatusRequest | undefined,
-  security?: GetPublishStatusSecurity | undefined,
+  request?: GetPublishStatusRequest  ,
+  security?: GetPublishStatusSecurity  ,
   options?: SuspenseQueryHookOptions<
     PublishStatusQueryData,
     PublishStatusQueryError

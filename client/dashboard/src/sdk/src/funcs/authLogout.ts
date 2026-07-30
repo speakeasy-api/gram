@@ -44,8 +44,8 @@ import { Result } from "../types/fp.js";
  */
 export function authLogout(
   client: GramCore,
-  request?: LogoutRequest | undefined,
-  security?: LogoutSecurity | undefined,
+  request?: LogoutRequest  ,
+  security?: LogoutSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -71,8 +71,8 @@ export function authLogout(
 
 async function $do(
   client: GramCore,
-  request?: LogoutRequest | undefined,
-  security?: LogoutSecurity | undefined,
+  request?: LogoutRequest  ,
+  security?: LogoutSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

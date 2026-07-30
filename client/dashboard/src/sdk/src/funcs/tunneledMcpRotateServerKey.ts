@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function tunneledMcpRotateServerKey(
   client: GramCore,
   request: RotateTunneledMcpServerKeyRequest,
-  security?: RotateTunneledMcpServerKeySecurity | undefined,
+  security?: RotateTunneledMcpServerKeySecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function tunneledMcpRotateServerKey(
 async function $do(
   client: GramCore,
   request: RotateTunneledMcpServerKeyRequest,
-  security?: RotateTunneledMcpServerKeySecurity | undefined,
+  security?: RotateTunneledMcpServerKeySecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

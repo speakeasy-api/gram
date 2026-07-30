@@ -1,6 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
-import { Switch } from "@/components/ui/switch";
-import { Type } from "@/components/ui/type";
+import { Switch } from "@/components/ui/Switch";
+import { Type } from "@/components/ui/Type";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
@@ -17,7 +17,10 @@ import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
-import { Alert, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Trash2 } from "lucide-react";
 import { useState } from "react";

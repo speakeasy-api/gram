@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function remoteSessionsRevoke(
   client: GramCore,
   request: RevokeRemoteSessionRequest,
-  security?: RevokeRemoteSessionSecurity | undefined,
+  security?: RevokeRemoteSessionSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function remoteSessionsRevoke(
 async function $do(
   client: GramCore,
   request: RevokeRemoteSessionRequest,
-  security?: RevokeRemoteSessionSecurity | undefined,
+  security?: RevokeRemoteSessionSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

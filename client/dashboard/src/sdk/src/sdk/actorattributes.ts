@@ -19,8 +19,8 @@ export class ActorAttributes extends ClientSDK {
    * List the member attributes a rule target condition can be written against, with each attribute's value kind. Static reference data that powers the rule editor's attribute picker.
    */
   async list(
-    request?: ListSpendRuleActorAttributesRequest | undefined,
-    security?: ListSpendRuleActorAttributesSecurity | undefined,
+    request?: ListSpendRuleActorAttributesRequest  ,
+    security?: ListSpendRuleActorAttributesSecurity  ,
     options?: RequestOptions,
   ): Promise<ListActorAttributesResult> {
     return unwrapAsync(spendRulesActorAttributesList(

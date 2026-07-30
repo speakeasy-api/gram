@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function skillEfficacyGetSettings(
   client: GramCore,
-  request?: GetSkillEfficacySettingsRequest | undefined,
-  security?: GetSkillEfficacySettingsSecurity | undefined,
+  request?: GetSkillEfficacySettingsRequest  ,
+  security?: GetSkillEfficacySettingsSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function skillEfficacyGetSettings(
 
 async function $do(
   client: GramCore,
-  request?: GetSkillEfficacySettingsRequest | undefined,
-  security?: GetSkillEfficacySettingsSecurity | undefined,
+  request?: GetSkillEfficacySettingsRequest  ,
+  security?: GetSkillEfficacySettingsSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

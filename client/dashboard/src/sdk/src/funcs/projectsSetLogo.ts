@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function projectsSetLogo(
   client: GramCore,
   request: SetProjectLogoRequest,
-  security?: SetProjectLogoSecurity | undefined,
+  security?: SetProjectLogoSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function projectsSetLogo(
 async function $do(
   client: GramCore,
   request: SetProjectLogoRequest,
-  security?: SetProjectLogoSecurity | undefined,
+  security?: SetProjectLogoSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

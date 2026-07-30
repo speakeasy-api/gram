@@ -45,7 +45,7 @@ import { Result } from "../types/fp.js";
 export function assetsServeFunction(
   client: GramCore,
   request: ServeFunctionRequest,
-  security?: ServeFunctionSecurity | undefined,
+  security?: ServeFunctionSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -72,7 +72,7 @@ export function assetsServeFunction(
 async function $do(
   client: GramCore,
   request: ServeFunctionRequest,
-  security?: ServeFunctionSecurity | undefined,
+  security?: ServeFunctionSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

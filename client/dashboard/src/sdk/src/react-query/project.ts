@@ -63,7 +63,7 @@ export type ProjectQueryError =
  */
 export function useProject(
   request: GetProjectRequest,
-  security?: GetProjectSecurity | undefined,
+  security?: GetProjectSecurity  ,
   options?: QueryHookOptions<ProjectQueryData, ProjectQueryError>,
 ): UseQueryResult<ProjectQueryData, ProjectQueryError> {
   const client = useGramContext();
@@ -86,7 +86,7 @@ export function useProject(
  */
 export function useProjectSuspense(
   request: GetProjectRequest,
-  security?: GetProjectSecurity | undefined,
+  security?: GetProjectSecurity  ,
   options?: SuspenseQueryHookOptions<ProjectQueryData, ProjectQueryError>,
 ): UseSuspenseQueryResult<ProjectQueryData, ProjectQueryError> {
   const client = useGramContext();

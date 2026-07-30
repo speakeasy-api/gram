@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function collectionsCreate(
   client: GramCore,
   request: CreateCollectionRequest,
-  security?: CreateCollectionSecurity | undefined,
+  security?: CreateCollectionSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function collectionsCreate(
 async function $do(
   client: GramCore,
   request: CreateCollectionRequest,
-  security?: CreateCollectionSecurity | undefined,
+  security?: CreateCollectionSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

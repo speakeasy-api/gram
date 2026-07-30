@@ -1,14 +1,14 @@
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Heading } from "@/components/ui/Heading";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { SkeletonTable } from "@/components/ui/skeleton";
+} from "@/components/ui/Select";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import {
   Sheet,
   SheetContent,
@@ -16,8 +16,8 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Type } from "@/components/ui/Type";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
@@ -32,7 +32,10 @@ import { useRiskApprovePolicyBypassRequestMutation } from "@gram/client/react-qu
 import { useRiskDenyPolicyBypassRequestMutation } from "@gram/client/react-query/riskDenyPolicyBypassRequest.js";
 import { useRiskRevokePolicyBypassRequestMutation } from "@gram/client/react-query/riskRevokePolicyBypassRequest.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { Badge, Button, Column, Dialog, Table } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Column, Table } from "@/components/ui/Table";
 import { useQueryClient } from "@tanstack/react-query";
 import { Inbox, Loader2, ShieldCheck } from "lucide-react";
 import type React from "react";

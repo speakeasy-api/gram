@@ -62,8 +62,8 @@ export type GetPeriodUsageQueryError =
  * Get the usage for an organization for a given period
  */
 export function useGetPeriodUsage(
-  request?: GetPeriodUsageRequest | undefined,
-  security?: GetPeriodUsageSecurity | undefined,
+  request?: GetPeriodUsageRequest  ,
+  security?: GetPeriodUsageSecurity  ,
   options?: QueryHookOptions<GetPeriodUsageQueryData, GetPeriodUsageQueryError>,
 ): UseQueryResult<GetPeriodUsageQueryData, GetPeriodUsageQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useGetPeriodUsage(
  * Get the usage for an organization for a given period
  */
 export function useGetPeriodUsageSuspense(
-  request?: GetPeriodUsageRequest | undefined,
-  security?: GetPeriodUsageSecurity | undefined,
+  request?: GetPeriodUsageRequest  ,
+  security?: GetPeriodUsageSecurity  ,
   options?: SuspenseQueryHookOptions<
     GetPeriodUsageQueryData,
     GetPeriodUsageQueryError

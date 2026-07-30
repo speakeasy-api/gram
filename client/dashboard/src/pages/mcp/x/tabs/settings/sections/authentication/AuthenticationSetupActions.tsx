@@ -1,6 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
-import { Type } from "@/components/ui/type";
-import { Button } from "@speakeasy-api/moonshine";
+import { Type } from "@/components/ui/Type";
+import { Button } from "@/components/ui/Button";
 import type { ReactNode } from "react";
 import type { ProtectedResourceProbeStatus } from "./useProtectedResourceMetadata";
 

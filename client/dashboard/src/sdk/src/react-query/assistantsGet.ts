@@ -63,7 +63,7 @@ export type AssistantsGetQueryError =
  */
 export function useAssistantsGet(
   request: GetAssistantRequest,
-  security?: GetAssistantSecurity | undefined,
+  security?: GetAssistantSecurity  ,
   options?: QueryHookOptions<AssistantsGetQueryData, AssistantsGetQueryError>,
 ): UseQueryResult<AssistantsGetQueryData, AssistantsGetQueryError> {
   const client = useGramContext();
@@ -86,7 +86,7 @@ export function useAssistantsGet(
  */
 export function useAssistantsGetSuspense(
   request: GetAssistantRequest,
-  security?: GetAssistantSecurity | undefined,
+  security?: GetAssistantSecurity  ,
   options?: SuspenseQueryHookOptions<
     AssistantsGetQueryData,
     AssistantsGetQueryError

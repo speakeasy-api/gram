@@ -62,8 +62,8 @@ export type TemplateQueryError =
  * Get prompt template by its ID or name.
  */
 export function useTemplate(
-  request?: GetTemplateRequest | undefined,
-  security?: GetTemplateSecurity | undefined,
+  request?: GetTemplateRequest  ,
+  security?: GetTemplateSecurity  ,
   options?: QueryHookOptions<TemplateQueryData, TemplateQueryError>,
 ): UseQueryResult<TemplateQueryData, TemplateQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useTemplate(
  * Get prompt template by its ID or name.
  */
 export function useTemplateSuspense(
-  request?: GetTemplateRequest | undefined,
-  security?: GetTemplateSecurity | undefined,
+  request?: GetTemplateRequest  ,
+  security?: GetTemplateSecurity  ,
   options?: SuspenseQueryHookOptions<TemplateQueryData, TemplateQueryError>,
 ): UseSuspenseQueryResult<TemplateQueryData, TemplateQueryError> {
   const client = useGramContext();

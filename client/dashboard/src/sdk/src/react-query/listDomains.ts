@@ -62,8 +62,8 @@ export type ListDomainsQueryError =
  * List the custom domains for an organization. The result is empty when no custom domain has been configured.
  */
 export function useListDomains(
-  request?: ListDomainsRequest | undefined,
-  security?: ListDomainsSecurity | undefined,
+  request?: ListDomainsRequest  ,
+  security?: ListDomainsSecurity  ,
   options?: QueryHookOptions<ListDomainsQueryData, ListDomainsQueryError>,
 ): UseQueryResult<ListDomainsQueryData, ListDomainsQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useListDomains(
  * List the custom domains for an organization. The result is empty when no custom domain has been configured.
  */
 export function useListDomainsSuspense(
-  request?: ListDomainsRequest | undefined,
-  security?: ListDomainsSecurity | undefined,
+  request?: ListDomainsRequest  ,
+  security?: ListDomainsSecurity  ,
   options?: SuspenseQueryHookOptions<
     ListDomainsQueryData,
     ListDomainsQueryError

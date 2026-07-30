@@ -22,8 +22,8 @@ export type IntegrationsIntegrationsNumberGetQueryData = GetIntegrationResult;
 export function prefetchIntegrationsIntegrationsNumberGet(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: IntegrationsNumberGetRequest | undefined,
-  security?: IntegrationsNumberGetSecurity | undefined,
+  request?: IntegrationsNumberGetRequest  ,
+  security?: IntegrationsNumberGetSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchIntegrationsIntegrationsNumberGet(
 
 export function buildIntegrationsIntegrationsNumberGetQuery(
   client$: GramCore,
-  request?: IntegrationsNumberGetRequest | undefined,
-  security?: IntegrationsNumberGetSecurity | undefined,
+  request?: IntegrationsNumberGetRequest  ,
+  security?: IntegrationsNumberGetSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

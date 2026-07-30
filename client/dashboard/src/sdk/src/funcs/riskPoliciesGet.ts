@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function riskPoliciesGet(
   client: GramCore,
   request: GetRiskPolicyRequest,
-  security?: GetRiskPolicySecurity | undefined,
+  security?: GetRiskPolicySecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function riskPoliciesGet(
 async function $do(
   client: GramCore,
   request: GetRiskPolicyRequest,
-  security?: GetRiskPolicySecurity | undefined,
+  security?: GetRiskPolicySecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

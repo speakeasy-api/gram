@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function mcpServersListForOrg(
   client: GramCore,
-  request?: ListMcpServersForOrgRequest | undefined,
-  security?: ListMcpServersForOrgSecurity | undefined,
+  request?: ListMcpServersForOrgRequest  ,
+  security?: ListMcpServersForOrgSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function mcpServersListForOrg(
 
 async function $do(
   client: GramCore,
-  request?: ListMcpServersForOrgRequest | undefined,
-  security?: ListMcpServersForOrgSecurity | undefined,
+  request?: ListMcpServersForOrgRequest  ,
+  security?: ListMcpServersForOrgSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

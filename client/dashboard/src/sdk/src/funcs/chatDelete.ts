@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function chatDelete(
   client: GramCore,
   request: DeleteChatRequest,
-  security?: DeleteChatSecurity | undefined,
+  security?: DeleteChatSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function chatDelete(
 async function $do(
   client: GramCore,
   request: DeleteChatRequest,
-  security?: DeleteChatSecurity | undefined,
+  security?: DeleteChatSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

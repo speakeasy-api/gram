@@ -23,7 +23,7 @@ export function prefetchDeploymentLogs(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetDeploymentLogsRequest,
-  security?: GetDeploymentLogsSecurity | undefined,
+  security?: GetDeploymentLogsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchDeploymentLogs(
 export function buildDeploymentLogsQuery(
   client$: GramCore,
   request: GetDeploymentLogsRequest,
-  security?: GetDeploymentLogsSecurity | undefined,
+  security?: GetDeploymentLogsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

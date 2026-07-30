@@ -23,7 +23,7 @@ export function prefetchGetProjectOverview(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetProjectOverviewRequest,
-  security?: GetProjectOverviewSecurity | undefined,
+  security?: GetProjectOverviewSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchGetProjectOverview(
 export function buildGetProjectOverviewQuery(
   client$: GramCore,
   request: GetProjectOverviewRequest,
-  security?: GetProjectOverviewSecurity | undefined,
+  security?: GetProjectOverviewSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

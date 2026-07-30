@@ -6,18 +6,18 @@ import {
   invalidateShadowMCPPolicyInventory,
   useShadowMCPPolicyInventory,
 } from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
-import { Card } from "@/components/ui/card";
-import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/Card";
+import { Heading } from "@/components/ui/Heading";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
+} from "@/components/ui/Select";
+import { Slider } from "@/components/ui/Slider";
 import {
   Sheet,
   SheetContent,
@@ -25,11 +25,11 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Switch } from "@/components/ui/switch";
-import { TextArea } from "@/components/ui/textarea";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Switch } from "@/components/ui/Switch";
+import { TextArea } from "@/components/ui/Textarea";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Type } from "@/components/ui/Type";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useProject } from "@/contexts/Auth";
@@ -46,7 +46,9 @@ import { riskEvalsEvaluate } from "@gram/client/funcs/riskEvalsEvaluate.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { RiskCategoryDefinition } from "@gram/client/models/components/riskcategorydefinition.js";
 import type { RiskDetectionScope } from "@gram/client/models/components/riskdetectionscope.js";
-import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import {
   keepPreviousData,
   useQueries,

@@ -1,12 +1,12 @@
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
-import { Dialog } from "@/components/ui/dialog";
-import { Heading } from "@/components/ui/heading";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { SearchBar } from "@/components/ui/search-bar";
-import { Type } from "@/components/ui/type";
+import { Dialog } from "@/components/ui/Dialog";
+import { Heading } from "@/components/ui/Heading";
+import { Label } from "@/components/ui/Label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
+import { SearchBar } from "@/components/ui/SearchBar";
+import { Type } from "@/components/ui/Type";
 import { HumanizeDateTime } from "@/lib/dates";
 import { assert } from "@/lib/utils";
 import { Key } from "@gram/client/models/components/key.js";
@@ -16,7 +16,10 @@ import {
   useListAPIKeysSuspense,
 } from "@gram/client/react-query/listAPIKeys";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
-import { Button, Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
+import { Column, Table } from "@/components/ui/Table";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Copy } from "lucide-react";
 import { useMemo, useState } from "react";

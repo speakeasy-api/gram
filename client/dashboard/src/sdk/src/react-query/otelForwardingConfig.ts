@@ -62,8 +62,8 @@ export type OtelForwardingConfigQueryError =
  * Get the org-wide OTEL forwarding config. Returns an empty config (enabled=false, no URL) when none is set.
  */
 export function useOtelForwardingConfig(
-  request?: GetOtelForwardingConfigRequest | undefined,
-  security?: GetOtelForwardingConfigSecurity | undefined,
+  request?: GetOtelForwardingConfigRequest  ,
+  security?: GetOtelForwardingConfigSecurity  ,
   options?: QueryHookOptions<
     OtelForwardingConfigQueryData,
     OtelForwardingConfigQueryError
@@ -91,8 +91,8 @@ export function useOtelForwardingConfig(
  * Get the org-wide OTEL forwarding config. Returns an empty config (enabled=false, no URL) when none is set.
  */
 export function useOtelForwardingConfigSuspense(
-  request?: GetOtelForwardingConfigRequest | undefined,
-  security?: GetOtelForwardingConfigSecurity | undefined,
+  request?: GetOtelForwardingConfigRequest  ,
+  security?: GetOtelForwardingConfigSecurity  ,
   options?: SuspenseQueryHookOptions<
     OtelForwardingConfigQueryData,
     OtelForwardingConfigQueryError

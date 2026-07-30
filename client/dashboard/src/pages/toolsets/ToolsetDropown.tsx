@@ -1,5 +1,5 @@
-import { Type } from "@/components/ui/type";
-import { Combobox } from "@/components/ui/combobox";
+import { Type } from "@/components/ui/Type";
+import { Combobox } from "@/components/ui/Combobox";
 import { capitalize } from "@/lib/utils";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";

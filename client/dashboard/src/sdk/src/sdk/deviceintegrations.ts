@@ -72,7 +72,7 @@ export class DeviceIntegrations extends ClientSDK {
    */
   async deleteConfig(
     request: DeleteDeviceIntegrationConfigRequest,
-    security?: DeleteDeviceIntegrationConfigSecurity | undefined,
+    security?: DeleteDeviceIntegrationConfigSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(deviceIntegrationsDeleteConfig(
@@ -91,7 +91,7 @@ export class DeviceIntegrations extends ClientSDK {
    */
   async getConfig(
     request: GetDeviceIntegrationConfigRequest,
-    security?: GetDeviceIntegrationConfigSecurity | undefined,
+    security?: GetDeviceIntegrationConfigSecurity  ,
     options?: RequestOptions,
   ): Promise<DeviceIntegrationConfig> {
     return unwrapAsync(deviceIntegrationsGetConfig(
@@ -109,8 +109,8 @@ export class DeviceIntegrations extends ClientSDK {
    * Summarize agent coverage across the org's connected MDM inventories, optionally scoped to one provider.
    */
   async getCoverage(
-    request?: GetDeviceIntegrationCoverageRequest | undefined,
-    security?: GetDeviceIntegrationCoverageSecurity | undefined,
+    request?: GetDeviceIntegrationCoverageRequest  ,
+    security?: GetDeviceIntegrationCoverageSecurity  ,
     options?: RequestOptions,
   ): Promise<DeviceIntegrationCoverage> {
     return unwrapAsync(deviceIntegrationsGetCoverage(
@@ -128,8 +128,8 @@ export class DeviceIntegrations extends ClientSDK {
    * Page through the org's synced MDM device inventory, newest first, with each device's coverage bucket.
    */
   async listManagedDevices(
-    request?: ListManagedDevicesRequest | undefined,
-    security?: ListManagedDevicesSecurity | undefined,
+    request?: ListManagedDevicesRequest  ,
+    security?: ListManagedDevicesSecurity  ,
     options?: RequestOptions,
   ): Promise<PageIterator<ListManagedDevicesResponse, { cursor: string }>> {
     return unwrapResultIterator(deviceIntegrationsListManagedDevices(
@@ -147,8 +147,8 @@ export class DeviceIntegrations extends ClientSDK {
    * List the providers the device integrations framework supports, including the credential fields each needs.
    */
   async listProviders(
-    request?: ListDeviceIntegrationProvidersRequest | undefined,
-    security?: ListDeviceIntegrationProvidersSecurity | undefined,
+    request?: ListDeviceIntegrationProvidersRequest  ,
+    security?: ListDeviceIntegrationProvidersSecurity  ,
     options?: RequestOptions,
   ): Promise<ListDeviceIntegrationProvidersResult> {
     return unwrapAsync(deviceIntegrationsListProviders(
@@ -167,7 +167,7 @@ export class DeviceIntegrations extends ClientSDK {
    */
   async listSchedules(
     request: ListDeviceIntegrationSchedulesRequest,
-    security?: ListDeviceIntegrationSchedulesSecurity | undefined,
+    security?: ListDeviceIntegrationSchedulesSecurity  ,
     options?: RequestOptions,
   ): Promise<ListDeviceIntegrationSchedulesResult> {
     return unwrapAsync(deviceIntegrationsListSchedules(
@@ -186,7 +186,7 @@ export class DeviceIntegrations extends ClientSDK {
    */
   async retrySchedule(
     request: RetryDeviceIntegrationScheduleRequest,
-    security?: RetryDeviceIntegrationScheduleSecurity | undefined,
+    security?: RetryDeviceIntegrationScheduleSecurity  ,
     options?: RequestOptions,
   ): Promise<DeviceIntegrationScheduleState> {
     return unwrapAsync(deviceIntegrationsRetrySchedule(
@@ -205,7 +205,7 @@ export class DeviceIntegrations extends ClientSDK {
    */
   async setScheduleEnabled(
     request: SetDeviceIntegrationScheduleEnabledRequest,
-    security?: SetDeviceIntegrationScheduleEnabledSecurity | undefined,
+    security?: SetDeviceIntegrationScheduleEnabledSecurity  ,
     options?: RequestOptions,
   ): Promise<DeviceIntegrationScheduleState> {
     return unwrapAsync(deviceIntegrationsSetScheduleEnabled(
@@ -224,7 +224,7 @@ export class DeviceIntegrations extends ClientSDK {
    */
   async testConnection(
     request: TestDeviceIntegrationConnectionRequest,
-    security?: TestDeviceIntegrationConnectionSecurity | undefined,
+    security?: TestDeviceIntegrationConnectionSecurity  ,
     options?: RequestOptions,
   ): Promise<DeviceIntegrationTestConnectionResult> {
     return unwrapAsync(deviceIntegrationsTestConnection(
@@ -243,7 +243,7 @@ export class DeviceIntegrations extends ClientSDK {
    */
   async upsertConfig(
     request: UpsertDeviceIntegrationConfigRequest,
-    security?: UpsertDeviceIntegrationConfigSecurity | undefined,
+    security?: UpsertDeviceIntegrationConfigSecurity  ,
     options?: RequestOptions,
   ): Promise<DeviceIntegrationConfig> {
     return unwrapAsync(deviceIntegrationsUpsertConfig(

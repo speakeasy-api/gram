@@ -62,8 +62,8 @@ export type ListAPIKeysQueryError =
  * List all api keys for an organization
  */
 export function useListAPIKeys(
-  request?: ListAPIKeysRequest | undefined,
-  security?: ListAPIKeysSecurity | undefined,
+  request?: ListAPIKeysRequest  ,
+  security?: ListAPIKeysSecurity  ,
   options?: QueryHookOptions<ListAPIKeysQueryData, ListAPIKeysQueryError>,
 ): UseQueryResult<ListAPIKeysQueryData, ListAPIKeysQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useListAPIKeys(
  * List all api keys for an organization
  */
 export function useListAPIKeysSuspense(
-  request?: ListAPIKeysRequest | undefined,
-  security?: ListAPIKeysSecurity | undefined,
+  request?: ListAPIKeysRequest  ,
+  security?: ListAPIKeysSecurity  ,
   options?: SuspenseQueryHookOptions<
     ListAPIKeysQueryData,
     ListAPIKeysQueryError

@@ -83,8 +83,8 @@ export type SkillsQueryError =
  * List active skills in the project. The implementation requires the skills product feature and skill read scope.
  */
 export function useSkills(
-  request?: ListSkillsRequest | undefined,
-  security?: ListSkillsSecurity | undefined,
+  request?: ListSkillsRequest  ,
+  security?: ListSkillsSecurity  ,
   options?: QueryHookOptions<SkillsQueryData, SkillsQueryError>,
 ): UseQueryResult<SkillsQueryData, SkillsQueryError> {
   const client = useGramContext();
@@ -106,8 +106,8 @@ export function useSkills(
  * List active skills in the project. The implementation requires the skills product feature and skill read scope.
  */
 export function useSkillsSuspense(
-  request?: ListSkillsRequest | undefined,
-  security?: ListSkillsSecurity | undefined,
+  request?: ListSkillsRequest  ,
+  security?: ListSkillsSecurity  ,
   options?: SuspenseQueryHookOptions<SkillsQueryData, SkillsQueryError>,
 ): UseSuspenseQueryResult<SkillsQueryData, SkillsQueryError> {
   const client = useGramContext();
@@ -129,8 +129,8 @@ export function useSkillsSuspense(
  * List active skills in the project. The implementation requires the skills product feature and skill read scope.
  */
 export function useSkillsInfinite(
-  request?: ListSkillsRequest | undefined,
-  security?: ListSkillsSecurity | undefined,
+  request?: ListSkillsRequest  ,
+  security?: ListSkillsSecurity  ,
   options?: InfiniteQueryHookOptions<SkillsInfiniteQueryData, SkillsQueryError>,
 ): UseInfiniteQueryResult<
   InfiniteData<SkillsInfiniteQueryData, SkillsPageParams>,
@@ -163,8 +163,8 @@ export function useSkillsInfinite(
  * List active skills in the project. The implementation requires the skills product feature and skill read scope.
  */
 export function useSkillsInfiniteSuspense(
-  request?: ListSkillsRequest | undefined,
-  security?: ListSkillsSecurity | undefined,
+  request?: ListSkillsRequest  ,
+  security?: ListSkillsSecurity  ,
   options?: SuspenseInfiniteQueryHookOptions<
     SkillsInfiniteQueryData,
     SkillsQueryError

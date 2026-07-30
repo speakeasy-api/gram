@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { InputDialog } from "./input-dialog";
 import { ProjectAvatar } from "./project-menu";
-import { Button } from "./ui/button";
+import { Button } from "./ui/Button";
 import {
   Command,
   CommandEmpty,
@@ -15,8 +15,12 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "./ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+} from "@/components/ui/Command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/Popover";
 
 export function WorkspaceSwitcher(): JSX.Element {
   const organization = useOrganization();
@@ -109,7 +113,7 @@ export function WorkspaceSwitcher(): JSX.Element {
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
-            variant="ghost"
+            variant="tertiary"
             className="h-auto w-full justify-start gap-2 rounded-md border px-2 py-1.5 group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-1"
           >
             <ProjectAvatar

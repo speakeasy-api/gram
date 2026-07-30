@@ -29,8 +29,8 @@ export class OtelForwarding extends ClientSDK {
    * Delete the org-wide OTEL forwarding config.
    */
   async deleteConfig(
-    request?: DeleteOtelForwardingConfigRequest | undefined,
-    security?: DeleteOtelForwardingConfigSecurity | undefined,
+    request?: DeleteOtelForwardingConfigRequest  ,
+    security?: DeleteOtelForwardingConfigSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(otelForwardingDeleteConfig(
@@ -48,8 +48,8 @@ export class OtelForwarding extends ClientSDK {
    * Get the org-wide OTEL forwarding config. Returns an empty config (enabled=false, no URL) when none is set.
    */
   async getConfig(
-    request?: GetOtelForwardingConfigRequest | undefined,
-    security?: GetOtelForwardingConfigSecurity | undefined,
+    request?: GetOtelForwardingConfigRequest  ,
+    security?: GetOtelForwardingConfigSecurity  ,
     options?: RequestOptions,
   ): Promise<OtelForwardingConfig> {
     return unwrapAsync(otelForwardingGetConfig(
@@ -68,7 +68,7 @@ export class OtelForwarding extends ClientSDK {
    */
   async upsertConfig(
     request: UpsertOtelForwardingConfigRequest,
-    security?: UpsertOtelForwardingConfigSecurity | undefined,
+    security?: UpsertOtelForwardingConfigSecurity  ,
     options?: RequestOptions,
   ): Promise<OtelForwardingConfig> {
     return unwrapAsync(otelForwardingUpsertConfig(

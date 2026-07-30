@@ -1,8 +1,10 @@
-import { Input } from "@/components/ui/input";
-import { Type } from "@/components/ui/type";
+import { Input } from "@/components/ui/Input";
+import { Type } from "@/components/ui/Type";
 import { LinkedMcpServerRow } from "@/components/sources/LinkedMcpServerRow";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { Alert, Button, Dialog } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";

@@ -48,7 +48,7 @@ export class Exclusions extends ClientSDK {
    */
   async create(
     request: CreateRiskExclusionRequest,
-    security?: CreateRiskExclusionSecurity | undefined,
+    security?: CreateRiskExclusionSecurity  ,
     options?: RequestOptions,
   ): Promise<RiskExclusion> {
     return unwrapAsync(riskExclusionsCreate(
@@ -67,7 +67,7 @@ export class Exclusions extends ClientSDK {
    */
   async delete(
     request: DeleteRiskExclusionRequest,
-    security?: DeleteRiskExclusionSecurity | undefined,
+    security?: DeleteRiskExclusionSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(riskExclusionsDelete(
@@ -85,8 +85,8 @@ export class Exclusions extends ClientSDK {
    * List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.
    */
   async listBuiltinExclusions(
-    request?: ListBuiltinExclusionsRequest | undefined,
-    security?: ListBuiltinExclusionsSecurity | undefined,
+    request?: ListBuiltinExclusionsRequest  ,
+    security?: ListBuiltinExclusionsSecurity  ,
     options?: RequestOptions,
   ): Promise<ListBuiltinExclusionsResult> {
     return unwrapAsync(riskExclusionsListBuiltinExclusions(
@@ -104,8 +104,8 @@ export class Exclusions extends ClientSDK {
    * List risk exclusions for the current project. Optionally filter to a single policy.
    */
   async list(
-    request?: ListRiskExclusionsRequest | undefined,
-    security?: ListRiskExclusionsSecurity | undefined,
+    request?: ListRiskExclusionsRequest  ,
+    security?: ListRiskExclusionsSecurity  ,
     options?: RequestOptions,
   ): Promise<ListRiskExclusionsResult> {
     return unwrapAsync(riskExclusionsList(
@@ -124,7 +124,7 @@ export class Exclusions extends ClientSDK {
    */
   async suggest(
     request: SuggestExclusionRequest,
-    security?: SuggestExclusionSecurity | undefined,
+    security?: SuggestExclusionSecurity  ,
     options?: RequestOptions,
   ): Promise<SuggestExclusionResult> {
     return unwrapAsync(riskExclusionsSuggest(
@@ -143,7 +143,7 @@ export class Exclusions extends ClientSDK {
    */
   async update(
     request: UpdateRiskExclusionRequest,
-    security?: UpdateRiskExclusionSecurity | undefined,
+    security?: UpdateRiskExclusionSecurity  ,
     options?: RequestOptions,
   ): Promise<RiskExclusion> {
     return unwrapAsync(riskExclusionsUpdate(

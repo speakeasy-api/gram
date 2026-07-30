@@ -23,7 +23,7 @@ export function prefetchGetAwsKmsKey(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetAwsKmsKeyRequest,
-  security?: GetAwsKmsKeySecurity | undefined,
+  security?: GetAwsKmsKeySecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchGetAwsKmsKey(
 export function buildGetAwsKmsKeyQuery(
   client$: GramCore,
   request: GetAwsKmsKeyRequest,
-  security?: GetAwsKmsKeySecurity | undefined,
+  security?: GetAwsKmsKeySecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

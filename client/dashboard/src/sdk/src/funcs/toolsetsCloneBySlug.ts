@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function toolsetsCloneBySlug(
   client: GramCore,
   request: CloneToolsetRequest,
-  security?: CloneToolsetSecurity | undefined,
+  security?: CloneToolsetSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function toolsetsCloneBySlug(
 async function $do(
   client: GramCore,
   request: CloneToolsetRequest,
-  security?: CloneToolsetSecurity | undefined,
+  security?: CloneToolsetSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

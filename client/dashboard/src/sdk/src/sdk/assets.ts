@@ -83,7 +83,7 @@ export class Assets extends ClientSDK {
    */
   async createSignedChatAttachmentURL(
     request: CreateSignedChatAttachmentURLRequest,
-    security?: CreateSignedChatAttachmentURLSecurity | undefined,
+    security?: CreateSignedChatAttachmentURLSecurity  ,
     options?: RequestOptions,
   ): Promise<CreateSignedChatAttachmentURLResult> {
     return unwrapAsync(assetsCreateSignedChatAttachmentURL(
@@ -102,7 +102,7 @@ export class Assets extends ClientSDK {
    */
   async fetchOpenAPIv3FromURL(
     request: FetchOpenAPIv3FromURLRequest,
-    security?: FetchOpenAPIv3FromURLSecurity | undefined,
+    security?: FetchOpenAPIv3FromURLSecurity  ,
     options?: RequestOptions,
   ): Promise<UploadOpenAPIv3Result> {
     return unwrapAsync(assetsFetchOpenAPIv3FromURL(
@@ -120,8 +120,8 @@ export class Assets extends ClientSDK {
    * List all assets for a project.
    */
   async listAssets(
-    request?: ListAssetsRequest | undefined,
-    security?: ListAssetsSecurity | undefined,
+    request?: ListAssetsRequest  ,
+    security?: ListAssetsSecurity  ,
     options?: RequestOptions,
   ): Promise<ListAssetsResult> {
     return unwrapAsync(assetsListAssets(
@@ -140,7 +140,7 @@ export class Assets extends ClientSDK {
    */
   async serveChatAttachment(
     request: ServeChatAttachmentRequest,
-    security?: ServeChatAttachmentSecurity | undefined,
+    security?: ServeChatAttachmentSecurity  ,
     options?: RequestOptions,
   ): Promise<ServeChatAttachmentResponse> {
     return unwrapAsync(assetsServeChatAttachment(
@@ -176,7 +176,7 @@ export class Assets extends ClientSDK {
    */
   async serveFunction(
     request: ServeFunctionRequest,
-    security?: ServeFunctionSecurity | undefined,
+    security?: ServeFunctionSecurity  ,
     options?: RequestOptions,
   ): Promise<ServeFunctionResponse> {
     return unwrapAsync(assetsServeFunction(
@@ -212,7 +212,7 @@ export class Assets extends ClientSDK {
    */
   async serveOpenAPIv3(
     request: ServeOpenAPIv3Request,
-    security?: ServeOpenAPIv3Security | undefined,
+    security?: ServeOpenAPIv3Security  ,
     options?: RequestOptions,
   ): Promise<ServeOpenAPIv3Response> {
     return unwrapAsync(assetsServeOpenAPIv3(
@@ -231,7 +231,7 @@ export class Assets extends ClientSDK {
    */
   async uploadChatAttachment(
     request: UploadChatAttachmentRequest,
-    security?: UploadChatAttachmentSecurity | undefined,
+    security?: UploadChatAttachmentSecurity  ,
     options?: RequestOptions,
   ): Promise<UploadChatAttachmentResult> {
     return unwrapAsync(assetsUploadChatAttachment(
@@ -250,7 +250,7 @@ export class Assets extends ClientSDK {
    */
   async uploadFunctions(
     request: UploadFunctionsRequest,
-    security?: UploadFunctionsSecurity | undefined,
+    security?: UploadFunctionsSecurity  ,
     options?: RequestOptions,
   ): Promise<UploadFunctionsResult> {
     return unwrapAsync(assetsUploadFunctions(
@@ -269,7 +269,7 @@ export class Assets extends ClientSDK {
    */
   async uploadImage(
     request: UploadImageRequest,
-    security?: UploadImageSecurity | undefined,
+    security?: UploadImageSecurity  ,
     options?: RequestOptions,
   ): Promise<UploadImageResult> {
     return unwrapAsync(assetsUploadImage(
@@ -288,7 +288,7 @@ export class Assets extends ClientSDK {
    */
   async uploadOpenAPIv3(
     request: UploadOpenAPIv3AssetRequest,
-    security?: UploadOpenAPIv3AssetSecurity | undefined,
+    security?: UploadOpenAPIv3AssetSecurity  ,
     options?: RequestOptions,
   ): Promise<UploadOpenAPIv3Result> {
     return unwrapAsync(assetsUploadOpenAPIv3(

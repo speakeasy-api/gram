@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function deploymentsEvolveDeployment(
   client: GramCore,
   request: EvolveDeploymentRequest,
-  security?: EvolveDeploymentSecurity | undefined,
+  security?: EvolveDeploymentSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function deploymentsEvolveDeployment(
 async function $do(
   client: GramCore,
   request: EvolveDeploymentRequest,
-  security?: EvolveDeploymentSecurity | undefined,
+  security?: EvolveDeploymentSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

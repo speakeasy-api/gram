@@ -23,7 +23,7 @@ export function prefetchInstance(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetInstanceRequest,
-  security?: GetInstanceSecurity | undefined,
+  security?: GetInstanceSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchInstance(
 export function buildInstanceQuery(
   client$: GramCore,
   request: GetInstanceRequest,
-  security?: GetInstanceSecurity | undefined,
+  security?: GetInstanceSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

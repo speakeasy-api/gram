@@ -63,7 +63,7 @@ export type LoadChatQueryError =
  */
 export function useLoadChat(
   request: LoadChatRequest,
-  security?: LoadChatSecurity | undefined,
+  security?: LoadChatSecurity  ,
   options?: QueryHookOptions<LoadChatQueryData, LoadChatQueryError>,
 ): UseQueryResult<LoadChatQueryData, LoadChatQueryError> {
   const client = useGramContext();
@@ -86,7 +86,7 @@ export function useLoadChat(
  */
 export function useLoadChatSuspense(
   request: LoadChatRequest,
-  security?: LoadChatSecurity | undefined,
+  security?: LoadChatSecurity  ,
   options?: SuspenseQueryHookOptions<LoadChatQueryData, LoadChatQueryError>,
 ): UseSuspenseQueryResult<LoadChatQueryData, LoadChatQueryError> {
   const client = useGramContext();

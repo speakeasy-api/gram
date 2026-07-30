@@ -62,8 +62,8 @@ export type ModelProviderKeysQueryError =
  * List the model provider keys configured for a project. Key material is never returned.
  */
 export function useModelProviderKeys(
-  request?: ListModelProviderKeysRequest | undefined,
-  security?: ListModelProviderKeysSecurity | undefined,
+  request?: ListModelProviderKeysRequest  ,
+  security?: ListModelProviderKeysSecurity  ,
   options?: QueryHookOptions<
     ModelProviderKeysQueryData,
     ModelProviderKeysQueryError
@@ -88,8 +88,8 @@ export function useModelProviderKeys(
  * List the model provider keys configured for a project. Key material is never returned.
  */
 export function useModelProviderKeysSuspense(
-  request?: ListModelProviderKeysRequest | undefined,
-  security?: ListModelProviderKeysSecurity | undefined,
+  request?: ListModelProviderKeysRequest  ,
+  security?: ListModelProviderKeysSecurity  ,
   options?: SuspenseQueryHookOptions<
     ModelProviderKeysQueryData,
     ModelProviderKeysQueryError

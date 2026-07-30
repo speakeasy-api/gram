@@ -22,8 +22,8 @@ export type DeviceIntegrationCoverageQueryData = DeviceIntegrationCoverage;
 export function prefetchDeviceIntegrationCoverage(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetDeviceIntegrationCoverageRequest | undefined,
-  security?: GetDeviceIntegrationCoverageSecurity | undefined,
+  request?: GetDeviceIntegrationCoverageRequest  ,
+  security?: GetDeviceIntegrationCoverageSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchDeviceIntegrationCoverage(
 
 export function buildDeviceIntegrationCoverageQuery(
   client$: GramCore,
-  request?: GetDeviceIntegrationCoverageRequest | undefined,
-  security?: GetDeviceIntegrationCoverageSecurity | undefined,
+  request?: GetDeviceIntegrationCoverageRequest  ,
+  security?: GetDeviceIntegrationCoverageSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

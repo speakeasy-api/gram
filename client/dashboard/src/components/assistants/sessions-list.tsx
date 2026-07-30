@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
@@ -9,7 +9,8 @@ import {
   invalidateAllListChats,
   useListChats,
 } from "@gram/client/react-query/listChats.js";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Loader2 } from "lucide-react";

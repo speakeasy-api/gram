@@ -25,8 +25,8 @@ export class UserSessionConsents extends ClientSDK {
    * List consent records for the caller's project.
    */
   async list(
-    request?: ListUserSessionConsentsRequest | undefined,
-    security?: ListUserSessionConsentsSecurity | undefined,
+    request?: ListUserSessionConsentsRequest  ,
+    security?: ListUserSessionConsentsSecurity  ,
     options?: RequestOptions,
   ): Promise<
     PageIterator<ListUserSessionConsentsResponse, { cursor: string }>
@@ -47,7 +47,7 @@ export class UserSessionConsents extends ClientSDK {
    */
   async revoke(
     request: RevokeUserSessionConsentRequest,
-    security?: RevokeUserSessionConsentSecurity | undefined,
+    security?: RevokeUserSessionConsentSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(userSessionConsentsRevoke(

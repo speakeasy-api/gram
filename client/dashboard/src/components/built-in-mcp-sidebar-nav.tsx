@@ -3,8 +3,8 @@ import {
   McpSidebarNavShell,
   type McpSidebarNavItem,
 } from "@/components/mcp-sidebar-nav-shell";
-import { CopyButton } from "@/components/ui/copy-button";
-import { Type } from "@/components/ui/type";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Type } from "@/components/ui/Type";
 import { useSlugs } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
 import {
@@ -65,7 +65,7 @@ export function BuiltInMcpSidebarNav(): React.JSX.Element | null {
           </Type>
           <CopyButton
             text={mcpUrl}
-            size="inline"
+            size="xs"
             tooltip="Copy URL"
             className="mt-[-2px] shrink-0"
           />

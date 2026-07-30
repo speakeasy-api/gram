@@ -63,8 +63,8 @@ export class Auth extends ClientSDK {
    * Provides information about the current authentication status.
    */
   async info(
-    request?: SessionInfoRequest | undefined,
-    security?: SessionInfoSecurity | undefined,
+    request?: SessionInfoRequest  ,
+    security?: SessionInfoSecurity  ,
     options?: RequestOptions,
   ): Promise<SessionInfoResponse> {
     return unwrapAsync(authInfo(
@@ -82,7 +82,7 @@ export class Auth extends ClientSDK {
    * Proxies to auth login through speakeasy oidc.
    */
   async login(
-    request?: AuthLoginRequest | undefined,
+    request?: AuthLoginRequest  ,
     options?: RequestOptions,
   ): Promise<AuthLoginResponse | undefined> {
     return unwrapAsync(authLogin(
@@ -99,8 +99,8 @@ export class Auth extends ClientSDK {
    * Logs out the current user by clearing their session.
    */
   async logout(
-    request?: LogoutRequest | undefined,
-    security?: LogoutSecurity | undefined,
+    request?: LogoutRequest  ,
+    security?: LogoutSecurity  ,
     options?: RequestOptions,
   ): Promise<LogoutResponse | undefined> {
     return unwrapAsync(authLogout(
@@ -119,7 +119,7 @@ export class Auth extends ClientSDK {
    */
   async register(
     request: RegisterRequest,
-    security?: RegisterSecurity | undefined,
+    security?: RegisterSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(authRegister(
@@ -137,8 +137,8 @@ export class Auth extends ClientSDK {
    * Switches the authentication scope to a different organization.
    */
   async switchScopes(
-    request?: SwitchAuthScopesRequest | undefined,
-    security?: SwitchAuthScopesSecurity | undefined,
+    request?: SwitchAuthScopesRequest  ,
+    security?: SwitchAuthScopesSecurity  ,
     options?: RequestOptions,
   ): Promise<SwitchAuthScopesResponse | undefined> {
     return unwrapAsync(authSwitchScopes(

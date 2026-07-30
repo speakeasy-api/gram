@@ -63,7 +63,7 @@ export type ToolsetQueryError =
  */
 export function useToolset(
   request: GetToolsetRequest,
-  security?: GetToolsetSecurity | undefined,
+  security?: GetToolsetSecurity  ,
   options?: QueryHookOptions<ToolsetQueryData, ToolsetQueryError>,
 ): UseQueryResult<ToolsetQueryData, ToolsetQueryError> {
   const client = useGramContext();
@@ -86,7 +86,7 @@ export function useToolset(
  */
 export function useToolsetSuspense(
   request: GetToolsetRequest,
-  security?: GetToolsetSecurity | undefined,
+  security?: GetToolsetSecurity  ,
   options?: SuspenseQueryHookOptions<ToolsetQueryData, ToolsetQueryError>,
 ): UseSuspenseQueryResult<ToolsetQueryData, ToolsetQueryError> {
   const client = useGramContext();

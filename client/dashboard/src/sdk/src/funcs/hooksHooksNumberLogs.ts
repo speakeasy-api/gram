@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function hooksHooksNumberLogs(
   client: GramCore,
   request: HooksNumberLogsRequest,
-  security?: HooksNumberLogsSecurity | undefined,
+  security?: HooksNumberLogsSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function hooksHooksNumberLogs(
 async function $do(
   client: GramCore,
   request: HooksNumberLogsRequest,
-  security?: HooksNumberLogsSecurity | undefined,
+  security?: HooksNumberLogsSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

@@ -63,7 +63,7 @@ export type ListToolUsageTracesQueryError =
  */
 export function useListToolUsageTraces(
   request: ListToolUsageTracesRequest,
-  security?: ListToolUsageTracesSecurity | undefined,
+  security?: ListToolUsageTracesSecurity  ,
   options?: QueryHookOptions<
     ListToolUsageTracesQueryData,
     ListToolUsageTracesQueryError
@@ -89,7 +89,7 @@ export function useListToolUsageTraces(
  */
 export function useListToolUsageTracesSuspense(
   request: ListToolUsageTracesRequest,
-  security?: ListToolUsageTracesSecurity | undefined,
+  security?: ListToolUsageTracesSecurity  ,
   options?: SuspenseQueryHookOptions<
     ListToolUsageTracesQueryData,
     ListToolUsageTracesQueryError

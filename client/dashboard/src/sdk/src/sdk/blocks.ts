@@ -25,7 +25,7 @@ export class Blocks extends ClientSDK {
    */
   async get(
     request: GetRiskBlockRequest,
-    security?: GetRiskBlockSecurity | undefined,
+    security?: GetRiskBlockSecurity  ,
     options?: RequestOptions,
   ): Promise<RiskBlock> {
     return unwrapAsync(riskBlocksGet(
@@ -44,7 +44,7 @@ export class Blocks extends ClientSDK {
    */
   async submitFeedback(
     request: SubmitRiskBlockFeedbackRequest,
-    security?: SubmitRiskBlockFeedbackSecurity | undefined,
+    security?: SubmitRiskBlockFeedbackSecurity  ,
     options?: RequestOptions,
   ): Promise<RiskBlock> {
     return unwrapAsync(riskBlocksSubmitFeedback(

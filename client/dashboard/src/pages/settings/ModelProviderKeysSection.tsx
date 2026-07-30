@@ -1,7 +1,7 @@
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
-import { Heading } from "@/components/ui/heading";
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Type } from "@/components/ui/Type";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { HumanizeDateTime } from "@/lib/dates";
 import type { ModelProviderKey } from "@gram/client/models/components/modelproviderkey.js";
@@ -14,18 +14,17 @@ import { useProductFeatures } from "@gram/client/react-query/productFeatures.js"
 import { useSetModelProviderKeyEnabledMutation } from "@gram/client/react-query/setModelProviderKeyEnabled.js";
 import { useUpsertModelProviderKeyMutation } from "@gram/client/react-query/upsertModelProviderKey.js";
 import { useQueryClient } from "@tanstack/react-query";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
-  Badge,
-  Button,
-  Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Input,
-  Stack,
-  Table,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Input } from "@/components/ui/Input";
+import { Stack } from "@/components/ui/Stack";
+import { Column, Table } from "@/components/ui/Table";
 import { Check, MoreHorizontal } from "lucide-react";
 import { type ComponentProps, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -193,7 +192,7 @@ function ModelProviderKeysTable({
               value={draftValue}
               placeholder={key ? "••••••••••••" : "Enter key"}
               className="h-9 py-0 pr-10"
-              onChange={(event) => handleValueChange(slot, event.target.value)}
+              onChange={(value) => handleValueChange(slot, value)}
               onKeyDown={(event) => {
                 if (event.key !== "Enter") return;
                 event.preventDefault();

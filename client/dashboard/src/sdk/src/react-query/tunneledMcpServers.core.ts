@@ -22,8 +22,8 @@ export type TunneledMcpServersQueryData = ListTunneledMcpServersResult;
 export function prefetchTunneledMcpServers(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListTunneledMcpServersRequest | undefined,
-  security?: ListTunneledMcpServersSecurity | undefined,
+  request?: ListTunneledMcpServersRequest  ,
+  security?: ListTunneledMcpServersSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchTunneledMcpServers(
 
 export function buildTunneledMcpServersQuery(
   client$: GramCore,
-  request?: ListTunneledMcpServersRequest | undefined,
-  security?: ListTunneledMcpServersSecurity | undefined,
+  request?: ListTunneledMcpServersRequest  ,
+  security?: ListTunneledMcpServersSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

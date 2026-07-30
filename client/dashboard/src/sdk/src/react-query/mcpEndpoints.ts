@@ -62,8 +62,8 @@ export type McpEndpointsQueryError =
  * List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server.
  */
 export function useMcpEndpoints(
-  request?: ListMcpEndpointsRequest | undefined,
-  security?: ListMcpEndpointsSecurity | undefined,
+  request?: ListMcpEndpointsRequest  ,
+  security?: ListMcpEndpointsSecurity  ,
   options?: QueryHookOptions<McpEndpointsQueryData, McpEndpointsQueryError>,
 ): UseQueryResult<McpEndpointsQueryData, McpEndpointsQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useMcpEndpoints(
  * List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server.
  */
 export function useMcpEndpointsSuspense(
-  request?: ListMcpEndpointsRequest | undefined,
-  security?: ListMcpEndpointsSecurity | undefined,
+  request?: ListMcpEndpointsRequest  ,
+  security?: ListMcpEndpointsSecurity  ,
   options?: SuspenseQueryHookOptions<
     McpEndpointsQueryData,
     McpEndpointsQueryError

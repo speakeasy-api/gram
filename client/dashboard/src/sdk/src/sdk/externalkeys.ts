@@ -72,7 +72,7 @@ export class ExternalKeys extends ClientSDK {
    */
   async createAwsKms(
     request: CreateAwsKmsKeyRequest,
-    security?: CreateAwsKmsKeySecurity | undefined,
+    security?: CreateAwsKmsKeySecurity  ,
     options?: RequestOptions,
   ): Promise<AwsKmsKey> {
     return unwrapAsync(externalKeysCreateAwsKms(
@@ -91,7 +91,7 @@ export class ExternalKeys extends ClientSDK {
    */
   async createGcpKms(
     request: CreateGcpKmsKeyRequest,
-    security?: CreateGcpKmsKeySecurity | undefined,
+    security?: CreateGcpKmsKeySecurity  ,
     options?: RequestOptions,
   ): Promise<GcpKmsKey> {
     return unwrapAsync(externalKeysCreateGcpKms(
@@ -110,7 +110,7 @@ export class ExternalKeys extends ClientSDK {
    */
   async deleteAwsKms(
     request: DeleteAwsKmsKeyRequest,
-    security?: DeleteAwsKmsKeySecurity | undefined,
+    security?: DeleteAwsKmsKeySecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(externalKeysDeleteAwsKms(
@@ -129,7 +129,7 @@ export class ExternalKeys extends ClientSDK {
    */
   async deleteGcpKms(
     request: DeleteGcpKmsKeyRequest,
-    security?: DeleteGcpKmsKeySecurity | undefined,
+    security?: DeleteGcpKmsKeySecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(externalKeysDeleteGcpKms(
@@ -148,7 +148,7 @@ export class ExternalKeys extends ClientSDK {
    */
   async getAwsKms(
     request: GetAwsKmsKeyRequest,
-    security?: GetAwsKmsKeySecurity | undefined,
+    security?: GetAwsKmsKeySecurity  ,
     options?: RequestOptions,
   ): Promise<AwsKmsKey> {
     return unwrapAsync(externalKeysGetAwsKms(
@@ -167,7 +167,7 @@ export class ExternalKeys extends ClientSDK {
    */
   async getGcpKms(
     request: GetGcpKmsKeyRequest,
-    security?: GetGcpKmsKeySecurity | undefined,
+    security?: GetGcpKmsKeySecurity  ,
     options?: RequestOptions,
   ): Promise<GcpKmsKey> {
     return unwrapAsync(externalKeysGetGcpKms(
@@ -185,8 +185,8 @@ export class ExternalKeys extends ClientSDK {
    * List the organization's external keys (provider-independent summary). Optionally filter by provider. Requires org:read.
    */
   async list(
-    request?: ListExternalKeysRequest | undefined,
-    security?: ListExternalKeysSecurity | undefined,
+    request?: ListExternalKeysRequest  ,
+    security?: ListExternalKeysSecurity  ,
     options?: RequestOptions,
   ): Promise<ListExternalKeysResult> {
     return unwrapAsync(externalKeysList(
@@ -204,8 +204,8 @@ export class ExternalKeys extends ClientSDK {
    * List the organization's AWS KMS external keys. Requires org:read.
    */
   async listAwsKms(
-    request?: ListAwsKmsKeysRequest | undefined,
-    security?: ListAwsKmsKeysSecurity | undefined,
+    request?: ListAwsKmsKeysRequest  ,
+    security?: ListAwsKmsKeysSecurity  ,
     options?: RequestOptions,
   ): Promise<ListExternalKeysResult> {
     return unwrapAsync(externalKeysListAwsKms(
@@ -223,8 +223,8 @@ export class ExternalKeys extends ClientSDK {
    * List the organization's GCP KMS external keys. Requires org:read.
    */
   async listGcpKms(
-    request?: ListGcpKmsKeysRequest | undefined,
-    security?: ListGcpKmsKeysSecurity | undefined,
+    request?: ListGcpKmsKeysRequest  ,
+    security?: ListGcpKmsKeysSecurity  ,
     options?: RequestOptions,
   ): Promise<ListExternalKeysResult> {
     return unwrapAsync(externalKeysListGcpKms(
@@ -243,7 +243,7 @@ export class ExternalKeys extends ClientSDK {
    */
   async updateAwsKms(
     request: UpdateAwsKmsKeyRequest,
-    security?: UpdateAwsKmsKeySecurity | undefined,
+    security?: UpdateAwsKmsKeySecurity  ,
     options?: RequestOptions,
   ): Promise<AwsKmsKey> {
     return unwrapAsync(externalKeysUpdateAwsKms(
@@ -262,7 +262,7 @@ export class ExternalKeys extends ClientSDK {
    */
   async updateGcpKms(
     request: UpdateGcpKmsKeyRequest,
-    security?: UpdateGcpKmsKeySecurity | undefined,
+    security?: UpdateGcpKmsKeySecurity  ,
     options?: RequestOptions,
   ): Promise<GcpKmsKey> {
     return unwrapAsync(externalKeysUpdateGcpKms(

@@ -51,7 +51,7 @@ import {
 export function skillsListFeedback(
   client: GramCore,
   request: ListSkillFeedbackRequest,
-  security?: ListSkillFeedbackSecurity | undefined,
+  security?: ListSkillFeedbackSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   PageIterator<
@@ -81,7 +81,7 @@ export function skillsListFeedback(
 async function $do(
   client: GramCore,
   request: ListSkillFeedbackRequest,
-  security?: ListSkillFeedbackSecurity | undefined,
+  security?: ListSkillFeedbackSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

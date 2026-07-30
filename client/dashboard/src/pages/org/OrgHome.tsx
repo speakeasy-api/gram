@@ -7,17 +7,17 @@ import { buildProjectOverviewQuery } from "@/components/project/projectOverviewQ
 import { RequireScope } from "@/components/require-scope";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { Heading } from "@/components/ui/heading";
-import type { Action } from "@/components/ui/more-actions";
-import { SearchBar } from "@/components/ui/search-bar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/Button";
+import { Heading } from "@/components/ui/Heading";
+import type { Action } from "@/components/ui/MoreActions";
+import { SearchBar } from "@/components/ui/SearchBar";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tooltip";
+import { Type } from "@/components/ui/Type";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
@@ -47,8 +47,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  type IconName,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { type IconName } from "@/components/ui/Icon/names";
 import {
   ChevronDown,
   ChevronUp,

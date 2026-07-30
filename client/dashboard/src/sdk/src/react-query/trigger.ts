@@ -63,7 +63,7 @@ export type TriggerQueryError =
  */
 export function useTrigger(
   request: GetTriggerInstanceRequest,
-  security?: GetTriggerInstanceSecurity | undefined,
+  security?: GetTriggerInstanceSecurity  ,
   options?: QueryHookOptions<TriggerQueryData, TriggerQueryError>,
 ): UseQueryResult<TriggerQueryData, TriggerQueryError> {
   const client = useGramContext();
@@ -86,7 +86,7 @@ export function useTrigger(
  */
 export function useTriggerSuspense(
   request: GetTriggerInstanceRequest,
-  security?: GetTriggerInstanceSecurity | undefined,
+  security?: GetTriggerInstanceSecurity  ,
   options?: SuspenseQueryHookOptions<TriggerQueryData, TriggerQueryError>,
 ): UseSuspenseQueryResult<TriggerQueryData, TriggerQueryError> {
   const client = useGramContext();

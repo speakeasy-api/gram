@@ -2,9 +2,9 @@ import { CreateResourceCard } from "@/components/create-resource-card";
 import { type FilterValue, useFilterState } from "@/components/filters";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
-import { Dialog } from "@/components/ui/dialog";
-import { DotCard } from "@/components/ui/dot-card";
-import { Type } from "@/components/ui/type";
+import { Dialog } from "@/components/ui/Dialog";
+import { DotCard } from "@/components/ui/DotCard";
+import { Type } from "@/components/ui/Type";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useRoutes } from "@/routes";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
@@ -24,16 +24,16 @@ import {
   useMarketplaceSettingsSuspense,
 } from "@gram/client/react-query/marketplaceSettings";
 import { useUpdateMarketplaceSettingsMutation } from "@gram/client/react-query/updateMarketplaceSettings";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Stack,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Stack } from "@/components/ui/Stack";
 import { Activity } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";

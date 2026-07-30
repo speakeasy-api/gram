@@ -1,8 +1,8 @@
 import { Page } from "@/components/page-layout";
-import { Dialog } from "@/components/ui/dialog";
-import { DotRow } from "@/components/ui/dot-row";
-import { DotTable } from "@/components/ui/dot-table";
-import { Type } from "@/components/ui/type";
+import { Dialog } from "@/components/ui/Dialog";
+import { DotRow } from "@/components/ui/DotRow";
+import { DotTable } from "@/components/ui/DotTable";
+import { Type } from "@/components/ui/Type";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useOrgRoutes } from "@/routes";
@@ -13,15 +13,15 @@ import {
   useListPlatformExternalCredentials,
 } from "@gram/client/react-query/listPlatformExternalCredentials";
 import { useVerifyGcpIamPlatformCredentialMutation } from "@gram/client/react-query/verifyGcpIamPlatformCredential";
+import { Button } from "@/components/ui/Button";
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-  Stack,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { useState } from "react";

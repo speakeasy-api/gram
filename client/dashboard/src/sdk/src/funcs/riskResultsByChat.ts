@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function riskResultsByChat(
   client: GramCore,
-  request?: ListRiskResultsByChatRequest | undefined,
-  security?: ListRiskResultsByChatSecurity | undefined,
+  request?: ListRiskResultsByChatRequest  ,
+  security?: ListRiskResultsByChatSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function riskResultsByChat(
 
 async function $do(
   client: GramCore,
-  request?: ListRiskResultsByChatRequest | undefined,
-  security?: ListRiskResultsByChatSecurity | undefined,
+  request?: ListRiskResultsByChatRequest  ,
+  security?: ListRiskResultsByChatSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

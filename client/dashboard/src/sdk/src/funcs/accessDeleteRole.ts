@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function accessDeleteRole(
   client: GramCore,
   request: DeleteRoleRequest,
-  security?: DeleteRoleSecurity | undefined,
+  security?: DeleteRoleSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function accessDeleteRole(
 async function $do(
   client: GramCore,
   request: DeleteRoleRequest,
-  security?: DeleteRoleSecurity | undefined,
+  security?: DeleteRoleSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

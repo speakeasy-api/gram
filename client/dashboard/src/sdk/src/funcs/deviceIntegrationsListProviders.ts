@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function deviceIntegrationsListProviders(
   client: GramCore,
-  request?: ListDeviceIntegrationProvidersRequest | undefined,
-  security?: ListDeviceIntegrationProvidersSecurity | undefined,
+  request?: ListDeviceIntegrationProvidersRequest  ,
+  security?: ListDeviceIntegrationProvidersSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function deviceIntegrationsListProviders(
 
 async function $do(
   client: GramCore,
-  request?: ListDeviceIntegrationProvidersRequest | undefined,
-  security?: ListDeviceIntegrationProvidersSecurity | undefined,
+  request?: ListDeviceIntegrationProvidersRequest  ,
+  security?: ListDeviceIntegrationProvidersSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

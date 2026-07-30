@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function accessResolveChallenge(
   client: GramCore,
   request: ResolveChallengeRequest,
-  security?: ResolveChallengeSecurity | undefined,
+  security?: ResolveChallengeSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function accessResolveChallenge(
 async function $do(
   client: GramCore,
   request: ResolveChallengeRequest,
-  security?: ResolveChallengeSecurity | undefined,
+  security?: ResolveChallengeSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

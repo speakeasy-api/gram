@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function riskResultsListForAgent(
   client: GramCore,
-  request?: ListRiskResultsForAgentRequest | undefined,
-  security?: ListRiskResultsForAgentSecurity | undefined,
+  request?: ListRiskResultsForAgentRequest  ,
+  security?: ListRiskResultsForAgentSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function riskResultsListForAgent(
 
 async function $do(
   client: GramCore,
-  request?: ListRiskResultsForAgentRequest | undefined,
-  security?: ListRiskResultsForAgentSecurity | undefined,
+  request?: ListRiskResultsForAgentRequest  ,
+  security?: ListRiskResultsForAgentSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

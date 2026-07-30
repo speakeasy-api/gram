@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function mcpServersListToolMetadata(
   client: GramCore,
   request: ListMcpServerToolMetadataRequest,
-  security?: ListMcpServerToolMetadataSecurity | undefined,
+  security?: ListMcpServerToolMetadataSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function mcpServersListToolMetadata(
 async function $do(
   client: GramCore,
   request: ListMcpServerToolMetadataRequest,
-  security?: ListMcpServerToolMetadataSecurity | undefined,
+  security?: ListMcpServerToolMetadataSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

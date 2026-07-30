@@ -1,6 +1,6 @@
-import { Dialog } from "@/components/ui/dialog";
-import { Type } from "@/components/ui/type";
-import { Button } from "@speakeasy-api/moonshine";
+import { Dialog } from "@/components/ui/Dialog";
+import { Type } from "@/components/ui/Type";
+import { Button } from "@/components/ui/Button";
 import { CheckCircle2 } from "lucide-react";
 
 export function ResultStep({

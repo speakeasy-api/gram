@@ -36,7 +36,7 @@ import { Result } from "../types/fp.js";
  */
 export function externalReceiveWorkOSWebhook(
   client: GramCore,
-  request?: ReceiveWorkOSWebhookRequest | undefined,
+  request?: ReceiveWorkOSWebhookRequest  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -60,7 +60,7 @@ export function externalReceiveWorkOSWebhook(
 
 async function $do(
   client: GramCore,
-  request?: ReceiveWorkOSWebhookRequest | undefined,
+  request?: ReceiveWorkOSWebhookRequest  ,
   options?: RequestOptions,
 ): Promise<
   [

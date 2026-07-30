@@ -23,8 +23,8 @@ export type DeviceIntegrationProvidersQueryData =
 export function prefetchDeviceIntegrationProviders(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListDeviceIntegrationProvidersRequest | undefined,
-  security?: ListDeviceIntegrationProvidersSecurity | undefined,
+  request?: ListDeviceIntegrationProvidersRequest  ,
+  security?: ListDeviceIntegrationProvidersSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,8 +39,8 @@ export function prefetchDeviceIntegrationProviders(
 
 export function buildDeviceIntegrationProvidersQuery(
   client$: GramCore,
-  request?: ListDeviceIntegrationProvidersRequest | undefined,
-  security?: ListDeviceIntegrationProvidersSecurity | undefined,
+  request?: ListDeviceIntegrationProvidersRequest  ,
+  security?: ListDeviceIntegrationProvidersSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

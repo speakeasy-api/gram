@@ -1,13 +1,13 @@
 import { Page } from "@/components/page-layout";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Type } from "@/components/ui/Type";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { Tool } from "@/lib/toolTypes";
@@ -15,8 +15,10 @@ import { resourceKindForScope, selectorMatches } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { Badge, Button, Column, Table } from "@speakeasy-api/moonshine";
-import { SkeletonTable } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Column, Table } from "@/components/ui/Table";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { useMemo, useState, ReactElement } from "react";
 
 function getInitials(name: string) {

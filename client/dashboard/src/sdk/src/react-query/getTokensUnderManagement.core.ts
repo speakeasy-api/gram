@@ -22,8 +22,8 @@ export type GetTokensUnderManagementQueryData = TokensUnderManagement;
 export function prefetchGetTokensUnderManagement(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetTokensUnderManagementRequest | undefined,
-  security?: GetTokensUnderManagementSecurity | undefined,
+  request?: GetTokensUnderManagementRequest  ,
+  security?: GetTokensUnderManagementSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchGetTokensUnderManagement(
 
 export function buildGetTokensUnderManagementQuery(
   client$: GramCore,
-  request?: GetTokensUnderManagementRequest | undefined,
-  security?: GetTokensUnderManagementSecurity | undefined,
+  request?: GetTokensUnderManagementRequest  ,
+  security?: GetTokensUnderManagementSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

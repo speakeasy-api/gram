@@ -1,9 +1,10 @@
-import { SkeletonCode } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { SkeletonCode } from "@/components/ui/Skeleton";
+import { Type } from "@/components/ui/Type";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
-import { Button, Dialog } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { useQuery } from "@tanstack/react-query";
 import { NamedAsset } from "./SourceCard";
 import MonacoEditorLazy from "../monaco-editor.lazy";

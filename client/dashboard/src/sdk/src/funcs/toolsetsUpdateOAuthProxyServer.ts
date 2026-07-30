@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function toolsetsUpdateOAuthProxyServer(
   client: GramCore,
   request: UpdateOAuthProxyServerRequest,
-  security?: UpdateOAuthProxyServerSecurity | undefined,
+  security?: UpdateOAuthProxyServerSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function toolsetsUpdateOAuthProxyServer(
 async function $do(
   client: GramCore,
   request: UpdateOAuthProxyServerRequest,
-  security?: UpdateOAuthProxyServerSecurity | undefined,
+  security?: UpdateOAuthProxyServerSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

@@ -1,8 +1,9 @@
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { Type } from "@/components/ui/Type";
 import { useListMCPRegistries } from "@gram/client/react-query/listMCPRegistries";
 import { useMcpRegistriesClearCacheMutation } from "@gram/client/react-query/mcpRegistriesClearCache";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";

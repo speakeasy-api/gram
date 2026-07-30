@@ -62,8 +62,8 @@ export type LatestDeploymentQueryError =
  * Get the latest deployment for a project.
  */
 export function useLatestDeployment(
-  request?: GetLatestDeploymentRequest | undefined,
-  security?: GetLatestDeploymentSecurity | undefined,
+  request?: GetLatestDeploymentRequest  ,
+  security?: GetLatestDeploymentSecurity  ,
   options?: QueryHookOptions<
     LatestDeploymentQueryData,
     LatestDeploymentQueryError
@@ -88,8 +88,8 @@ export function useLatestDeployment(
  * Get the latest deployment for a project.
  */
 export function useLatestDeploymentSuspense(
-  request?: GetLatestDeploymentRequest | undefined,
-  security?: GetLatestDeploymentSecurity | undefined,
+  request?: GetLatestDeploymentRequest  ,
+  security?: GetLatestDeploymentSecurity  ,
   options?: SuspenseQueryHookOptions<
     LatestDeploymentQueryData,
     LatestDeploymentQueryError

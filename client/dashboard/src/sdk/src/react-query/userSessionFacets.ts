@@ -62,8 +62,8 @@ export type UserSessionFacetsQueryError =
  * List available user session facet values (clients, users, servers) in the caller's project.
  */
 export function useUserSessionFacets(
-  request?: ListUserSessionFacetsRequest | undefined,
-  security?: ListUserSessionFacetsSecurity | undefined,
+  request?: ListUserSessionFacetsRequest  ,
+  security?: ListUserSessionFacetsSecurity  ,
   options?: QueryHookOptions<
     UserSessionFacetsQueryData,
     UserSessionFacetsQueryError
@@ -88,8 +88,8 @@ export function useUserSessionFacets(
  * List available user session facet values (clients, users, servers) in the caller's project.
  */
 export function useUserSessionFacetsSuspense(
-  request?: ListUserSessionFacetsRequest | undefined,
-  security?: ListUserSessionFacetsSecurity | undefined,
+  request?: ListUserSessionFacetsRequest  ,
+  security?: ListUserSessionFacetsSecurity  ,
   options?: SuspenseQueryHookOptions<
     UserSessionFacetsQueryData,
     UserSessionFacetsQueryError

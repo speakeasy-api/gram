@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function resourcesList(
   client: GramCore,
-  request?: ListResourcesRequest | undefined,
-  security?: ListResourcesSecurity | undefined,
+  request?: ListResourcesRequest  ,
+  security?: ListResourcesSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function resourcesList(
 
 async function $do(
   client: GramCore,
-  request?: ListResourcesRequest | undefined,
-  security?: ListResourcesSecurity | undefined,
+  request?: ListResourcesRequest  ,
+  security?: ListResourcesSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

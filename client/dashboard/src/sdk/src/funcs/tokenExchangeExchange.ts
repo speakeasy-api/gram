@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function tokenExchangeExchange(
   client: GramCore,
   request: TokenExchangeRequest,
-  security?: TokenExchangeSecurity | undefined,
+  security?: TokenExchangeSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function tokenExchangeExchange(
 async function $do(
   client: GramCore,
   request: TokenExchangeRequest,
-  security?: TokenExchangeSecurity | undefined,
+  security?: TokenExchangeSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function chatGetWorkUnitsTrend(
   client: GramCore,
-  request?: GetWorkUnitsTrendRequest | undefined,
-  security?: GetWorkUnitsTrendSecurity | undefined,
+  request?: GetWorkUnitsTrendRequest  ,
+  security?: GetWorkUnitsTrendSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function chatGetWorkUnitsTrend(
 
 async function $do(
   client: GramCore,
-  request?: GetWorkUnitsTrendRequest | undefined,
-  security?: GetWorkUnitsTrendSecurity | undefined,
+  request?: GetWorkUnitsTrendRequest  ,
+  security?: GetWorkUnitsTrendSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

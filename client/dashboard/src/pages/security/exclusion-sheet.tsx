@@ -1,11 +1,11 @@
-import { Label } from "@/components/ui/label";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import {
   Sheet,
   SheetContent,
@@ -13,11 +13,11 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Switch } from "@/components/ui/switch";
-import { TextArea } from "@/components/ui/textarea";
-import { Type } from "@/components/ui/type";
-import { Button } from "@speakeasy-api/moonshine";
+} from "@/components/ui/Sheet";
+import { Switch } from "@/components/ui/Switch";
+import { TextArea } from "@/components/ui/Textarea";
+import { Type } from "@/components/ui/Type";
+import { Button } from "@/components/ui/Button";
 import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
 import { useRiskCreateExclusionMutation } from "@gram/client/react-query/riskCreateExclusion.js";
 import { invalidateAllRiskListExclusions } from "@gram/client/react-query/riskListExclusions.js";

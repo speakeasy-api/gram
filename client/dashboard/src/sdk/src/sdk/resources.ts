@@ -19,8 +19,8 @@ export class Resources extends ClientSDK {
    * List all resources for a project
    */
   async list(
-    request?: ListResourcesRequest | undefined,
-    security?: ListResourcesSecurity | undefined,
+    request?: ListResourcesRequest  ,
+    security?: ListResourcesSecurity  ,
     options?: RequestOptions,
   ): Promise<ListResourcesResult> {
     return unwrapAsync(resourcesList(

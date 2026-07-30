@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import {
   Sheet,
   SheetContent,
@@ -6,8 +6,8 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Type } from "@/components/ui/Type";
 import { Loader2, Pencil, Search, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type JSX } from "react";
 import { EventTypeBadge, RuleActionBadge, UsageBar } from "./budget-shared";
@@ -373,7 +373,7 @@ function PeopleSectionBody({
         <p className="text-destructive text-xs">
           Couldn't load matched people. The preview is temporarily unavailable.
         </p>
-        <Button variant="outline" size="sm" onClick={onRetry}>
+        <Button variant="secondary" size="sm" onClick={onRetry}>
           Retry
         </Button>
       </div>

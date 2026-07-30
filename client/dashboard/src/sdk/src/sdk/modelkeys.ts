@@ -36,7 +36,7 @@ export class ModelKeys extends ClientSDK {
    */
   async deleteKey(
     request: DeleteModelProviderKeyRequest,
-    security?: DeleteModelProviderKeySecurity | undefined,
+    security?: DeleteModelProviderKeySecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(modelKeysDeleteKey(
@@ -54,8 +54,8 @@ export class ModelKeys extends ClientSDK {
    * List the model provider keys configured for a project. Key material is never returned.
    */
   async listKeys(
-    request?: ListModelProviderKeysRequest | undefined,
-    security?: ListModelProviderKeysSecurity | undefined,
+    request?: ListModelProviderKeysRequest  ,
+    security?: ListModelProviderKeysSecurity  ,
     options?: RequestOptions,
   ): Promise<ListKeysResponseBody> {
     return unwrapAsync(modelKeysListKeys(
@@ -74,7 +74,7 @@ export class ModelKeys extends ClientSDK {
    */
   async setKeyEnabled(
     request: SetModelProviderKeyEnabledRequest,
-    security?: SetModelProviderKeyEnabledSecurity | undefined,
+    security?: SetModelProviderKeyEnabledSecurity  ,
     options?: RequestOptions,
   ): Promise<ModelProviderKey> {
     return unwrapAsync(modelKeysSetKeyEnabled(
@@ -93,7 +93,7 @@ export class ModelKeys extends ClientSDK {
    */
   async upsertKey(
     request: UpsertModelProviderKeyRequest,
-    security?: UpsertModelProviderKeySecurity | undefined,
+    security?: UpsertModelProviderKeySecurity  ,
     options?: RequestOptions,
   ): Promise<ModelProviderKey> {
     return unwrapAsync(modelKeysUpsertKey(

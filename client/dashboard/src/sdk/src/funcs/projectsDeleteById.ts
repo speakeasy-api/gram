@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function projectsDeleteById(
   client: GramCore,
   request: DeleteProjectRequest,
-  security?: DeleteProjectSecurity | undefined,
+  security?: DeleteProjectSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function projectsDeleteById(
 async function $do(
   client: GramCore,
   request: DeleteProjectRequest,
-  security?: DeleteProjectSecurity | undefined,
+  security?: DeleteProjectSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

@@ -1,7 +1,7 @@
-import { DotCard } from "@/components/ui/dot-card";
-import { Type } from "@/components/ui/type";
+import { DotCard } from "@/components/ui/DotCard";
+import { Type } from "@/components/ui/Type";
 import { useRoutes } from "@/routes";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import { Network, ScrollText } from "lucide-react";
 
 const BUILT_IN_ICONS: Record<string, React.ReactNode> = {

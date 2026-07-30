@@ -3,14 +3,14 @@ import { Page } from "@/components/page-layout";
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
 import { RequireScope } from "@/components/require-scope";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
-import { Button as UiButton } from "@/components/ui/button";
-import { CopyButton } from "@/components/ui/copy-button";
-import { Dialog } from "@/components/ui/dialog";
-import { DotCard } from "@/components/ui/dot-card";
-import { DotTable } from "@/components/ui/dot-table";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
-import { useViewMode } from "@/components/ui/use-view-mode";
+import { Button as UiButton } from "@/components/ui/Button";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Dialog } from "@/components/ui/Dialog";
+import { DotCard } from "@/components/ui/DotCard";
+import { DotTable } from "@/components/ui/DotTable";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Type } from "@/components/ui/Type";
+import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { cn } from "@/lib/utils";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
@@ -35,17 +35,17 @@ import { useMembers } from "@gram/client/react-query/members";
 import { useRoles } from "@gram/client/react-query/roles";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Icon,
-  Stack,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { Network, Puzzle, Sparkles, Trash2 } from "lucide-react";
@@ -1060,11 +1060,7 @@ function PublishFreshnessIndicator({
           <Badge variant="information">
             <Badge.Text className="font-mono">{cleanVersion}</Badge.Text>
           </Badge>
-          <CopyButton
-            size="inline"
-            text={cleanVersion}
-            tooltip="Copy version"
-          />
+          <CopyButton size="xs" text={cleanVersion} tooltip="Copy version" />
         </div>
       ),
     });
@@ -1200,8 +1196,8 @@ function PluginServerCard({
         )}
         <UiButton
           type="button"
-          variant="ghost"
-          size="icon-sm"
+          variant="tertiary"
+          size="sm"
           tooltip="Remove server"
           aria-label="Remove server"
           className="hover:text-destructive"

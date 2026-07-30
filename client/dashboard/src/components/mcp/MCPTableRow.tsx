@@ -1,7 +1,7 @@
-import { CopyButton } from "@/components/ui/copy-button";
-import { DotRow } from "@/components/ui/dot-row";
-import { Button } from "@/components/ui/button";
-import { Type } from "@/components/ui/type";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { DotRow } from "@/components/ui/DotRow";
+import { Button } from "@/components/ui/Button";
+import { Type } from "@/components/ui/Type";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { useRoutes } from "@/routes";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
@@ -16,7 +16,7 @@ import {
   useExternalMcpOAuthConfigStatus,
 } from "../sources/sources-hooks";
 import { ToolCollectionBadge } from "../tool-collection-badge";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 
 export function MCPTableRow({
   toolset,
@@ -134,15 +134,15 @@ export function MCPTableRow({
             </Type>
             <CopyButton
               text={mcpUrl}
-              size="icon-sm"
+              size="sm"
               icon={Link2}
               tooltip="Copy MCP URL"
             />
             {installSourceTooltip && (
               <Button
                 type="button"
-                variant="ghost"
-                size="icon-sm"
+                variant="tertiary"
+                size="sm"
                 tooltip={installSourceTooltip}
                 aria-label={installSourceTooltip}
                 onClick={(e) => e.stopPropagation()}

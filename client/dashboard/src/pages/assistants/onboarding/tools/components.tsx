@@ -1,13 +1,13 @@
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { TextArea } from "@/components/ui/textarea";
-import { Type } from "@/components/ui/type";
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
+import { TextArea } from "@/components/ui/Textarea";
+import { Type } from "@/components/ui/Type";
 import { cn } from "@/lib/utils";
 import { ToolCallMessagePartProps } from "@assistant-ui/react";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
 import {
   AlertTriangle,
   Check,
@@ -230,7 +230,7 @@ export function RequestEnvironmentSecretsComponent({
         </Type>
       )}
       <div className="mt-4 flex justify-end gap-2">
-        <Button variant="ghost" onClick={cancel} disabled={submitting}>
+        <Button variant="tertiary" onClick={cancel} disabled={submitting}>
           Skip
         </Button>
         <Button
@@ -280,7 +280,7 @@ export function ShowWebhookUrlComponent({
       )}
       <div className="border-border bg-muted/30 flex items-center gap-2 rounded-md border px-3 py-2">
         <code className="flex-1 truncate font-mono text-xs">{url}</code>
-        <Button size="sm" variant="ghost" onClick={() => void copy()}>
+        <Button size="sm" variant="tertiary" onClick={() => void copy()}>
           {copied ? (
             <Check className="h-3.5 w-3.5" />
           ) : (
@@ -426,7 +426,7 @@ export function ShowSlackAppGuideComponent({
           </a>
         </Button>
         <div className="flex gap-2">
-          <Button variant="ghost" onClick={skip}>
+          <Button variant="tertiary" onClick={skip}>
             Skip
           </Button>
           <Button onClick={markInstalled}>I'm done</Button>
@@ -579,7 +579,7 @@ export function ProposeNameComponent({
       </div>
 
       <div className="mt-4 flex justify-end gap-2">
-        <Button variant="ghost" onClick={cancel}>
+        <Button variant="tertiary" onClick={cancel}>
           Skip
         </Button>
         <Button onClick={submit} disabled={!canSubmit}>
@@ -866,7 +866,7 @@ export function ProposePersonalityComponent({
       </div>
 
       <div className="mt-4 flex justify-end gap-2">
-        <Button variant="ghost" onClick={cancel}>
+        <Button variant="tertiary" onClick={cancel}>
           Skip
         </Button>
         <Button onClick={submit} disabled={!canSubmit}>
@@ -1104,7 +1104,7 @@ export function ProposeSlackSetupComponent({
       </div>
 
       <div className="mt-4 flex justify-end gap-2">
-        <Button variant="ghost" onClick={() => void cancel()}>
+        <Button variant="tertiary" onClick={() => void cancel()}>
           Skip
         </Button>
         <Button onClick={() => void submit()} disabled={!anySelected}>

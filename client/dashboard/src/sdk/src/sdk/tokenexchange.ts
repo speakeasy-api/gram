@@ -20,7 +20,7 @@ export class TokenExchange extends ClientSDK {
    */
   async exchange(
     request: TokenExchangeRequest,
-    security?: TokenExchangeSecurity | undefined,
+    security?: TokenExchangeSecurity  ,
     options?: RequestOptions,
   ): Promise<TokenResult> {
     return unwrapAsync(tokenExchangeExchange(

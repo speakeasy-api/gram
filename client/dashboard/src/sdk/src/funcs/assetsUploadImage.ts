@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function assetsUploadImage(
   client: GramCore,
   request: UploadImageRequest,
-  security?: UploadImageSecurity | undefined,
+  security?: UploadImageSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function assetsUploadImage(
 async function $do(
   client: GramCore,
   request: UploadImageRequest,
-  security?: UploadImageSecurity | undefined,
+  security?: UploadImageSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

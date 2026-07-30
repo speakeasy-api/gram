@@ -6,10 +6,10 @@ import { MCPServerCard } from "@/components/mcp/MCPServerCard";
 import { MCPServerTableRow } from "@/components/mcp/MCPServerTableRow";
 import { MCPTableRow, MCPTableRowSkeleton } from "@/components/mcp/MCPTableRow";
 import { Page } from "@/components/page-layout";
-import { DotTable } from "@/components/ui/dot-table";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
-import { useViewMode } from "@/components/ui/use-view-mode";
+import { DotTable } from "@/components/ui/DotTable";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Type } from "@/components/ui/Type";
+import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import { useGetMcpServerActivity } from "@gram/client/react-query/getMcpServerActivity.js";
@@ -21,7 +21,9 @@ import {
   mcpActivityStatus,
   type McpActivityTargetType,
 } from "@/components/mcp/mcp-activity";
-import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Outlet } from "react-router";

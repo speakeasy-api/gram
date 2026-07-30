@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function skillsShare(
   client: GramCore,
   request: ShareSkillRequest,
-  security?: ShareSkillSecurity | undefined,
+  security?: ShareSkillSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function skillsShare(
 async function $do(
   client: GramCore,
   request: ShareSkillRequest,
-  security?: ShareSkillSecurity | undefined,
+  security?: ShareSkillSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

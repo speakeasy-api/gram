@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function riskBlocksSubmitFeedback(
   client: GramCore,
   request: SubmitRiskBlockFeedbackRequest,
-  security?: SubmitRiskBlockFeedbackSecurity | undefined,
+  security?: SubmitRiskBlockFeedbackSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function riskBlocksSubmitFeedback(
 async function $do(
   client: GramCore,
   request: SubmitRiskBlockFeedbackRequest,
-  security?: SubmitRiskBlockFeedbackSecurity | undefined,
+  security?: SubmitRiskBlockFeedbackSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

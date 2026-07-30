@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import {
@@ -128,8 +128,8 @@ export const CodeBlockCopyButton = ({
     <Button
       className={cn("shrink-0", className)}
       onClick={() => void copyToClipboard()}
-      size="icon"
-      variant="ghost"
+      size="md"
+      variant="tertiary"
       {...props}
     >
       {children ?? <Icon size={14} />}

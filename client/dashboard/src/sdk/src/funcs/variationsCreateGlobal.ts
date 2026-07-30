@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function variationsCreateGlobal(
   client: GramCore,
-  request?: CreateGlobalToolVariationGroupRequest | undefined,
-  security?: CreateGlobalToolVariationGroupSecurity | undefined,
+  request?: CreateGlobalToolVariationGroupRequest  ,
+  security?: CreateGlobalToolVariationGroupSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function variationsCreateGlobal(
 
 async function $do(
   client: GramCore,
-  request?: CreateGlobalToolVariationGroupRequest | undefined,
-  security?: CreateGlobalToolVariationGroupSecurity | undefined,
+  request?: CreateGlobalToolVariationGroupRequest  ,
+  security?: CreateGlobalToolVariationGroupSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

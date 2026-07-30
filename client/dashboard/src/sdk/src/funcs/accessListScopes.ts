@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function accessListScopes(
   client: GramCore,
-  request?: ListScopesRequest | undefined,
-  security?: ListScopesSecurity | undefined,
+  request?: ListScopesRequest  ,
+  security?: ListScopesSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function accessListScopes(
 
 async function $do(
   client: GramCore,
-  request?: ListScopesRequest | undefined,
-  security?: ListScopesSecurity | undefined,
+  request?: ListScopesRequest  ,
+  security?: ListScopesSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

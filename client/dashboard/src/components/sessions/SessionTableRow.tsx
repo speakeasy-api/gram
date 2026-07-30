@@ -1,16 +1,16 @@
 import { useState } from "react";
 import type { UserSession } from "@gram/client/models/components/usersession.js";
 
-import { Checkbox } from "@/components/ui/checkbox";
+import { Checkbox } from "@/components/ui/Checkbox";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
-} from "@/components/ui/context-menu";
-import { DotRow } from "@/components/ui/dot-row";
-import { MoreActions } from "@/components/ui/more-actions";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/ContextMenu";
+import { DotRow } from "@/components/ui/DotRow";
+import { MoreActions } from "@/components/ui/MoreActions";
+import { Type } from "@/components/ui/Type";
 import {
   sessionStatus,
   sessionTimeLabel,

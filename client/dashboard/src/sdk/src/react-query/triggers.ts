@@ -62,8 +62,8 @@ export type TriggersQueryError =
  * List trigger instances for the current project.
  */
 export function useTriggers(
-  request?: ListTriggerInstancesRequest | undefined,
-  security?: ListTriggerInstancesSecurity | undefined,
+  request?: ListTriggerInstancesRequest  ,
+  security?: ListTriggerInstancesSecurity  ,
   options?: QueryHookOptions<TriggersQueryData, TriggersQueryError>,
 ): UseQueryResult<TriggersQueryData, TriggersQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useTriggers(
  * List trigger instances for the current project.
  */
 export function useTriggersSuspense(
-  request?: ListTriggerInstancesRequest | undefined,
-  security?: ListTriggerInstancesSecurity | undefined,
+  request?: ListTriggerInstancesRequest  ,
+  security?: ListTriggerInstancesSecurity  ,
   options?: SuspenseQueryHookOptions<TriggersQueryData, TriggersQueryError>,
 ): UseSuspenseQueryResult<TriggersQueryData, TriggersQueryError> {
   const client = useGramContext();

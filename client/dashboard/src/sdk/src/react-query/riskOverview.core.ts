@@ -22,8 +22,8 @@ export type RiskOverviewQueryData = RiskOverviewResult;
 export function prefetchRiskOverview(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetRiskOverviewRequest | undefined,
-  security?: GetRiskOverviewSecurity | undefined,
+  request?: GetRiskOverviewRequest  ,
+  security?: GetRiskOverviewSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchRiskOverview(
 
 export function buildRiskOverviewQuery(
   client$: GramCore,
-  request?: GetRiskOverviewRequest | undefined,
-  security?: GetRiskOverviewSecurity | undefined,
+  request?: GetRiskOverviewRequest  ,
+  security?: GetRiskOverviewSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

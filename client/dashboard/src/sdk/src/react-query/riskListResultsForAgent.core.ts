@@ -22,8 +22,8 @@ export type RiskListResultsForAgentQueryData = ListRiskResultsForAgentResult;
 export function prefetchRiskListResultsForAgent(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListRiskResultsForAgentRequest | undefined,
-  security?: ListRiskResultsForAgentSecurity | undefined,
+  request?: ListRiskResultsForAgentRequest  ,
+  security?: ListRiskResultsForAgentSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchRiskListResultsForAgent(
 
 export function buildRiskListResultsForAgentQuery(
   client$: GramCore,
-  request?: ListRiskResultsForAgentRequest | undefined,
-  security?: ListRiskResultsForAgentSecurity | undefined,
+  request?: ListRiskResultsForAgentRequest  ,
+  security?: ListRiskResultsForAgentSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

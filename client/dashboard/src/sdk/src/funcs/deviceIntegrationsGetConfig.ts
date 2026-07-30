@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function deviceIntegrationsGetConfig(
   client: GramCore,
   request: GetDeviceIntegrationConfigRequest,
-  security?: GetDeviceIntegrationConfigSecurity | undefined,
+  security?: GetDeviceIntegrationConfigSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function deviceIntegrationsGetConfig(
 async function $do(
   client: GramCore,
   request: GetDeviceIntegrationConfigRequest,
-  security?: GetDeviceIntegrationConfigSecurity | undefined,
+  security?: GetDeviceIntegrationConfigSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

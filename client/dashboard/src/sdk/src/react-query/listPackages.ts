@@ -62,8 +62,8 @@ export type ListPackagesQueryError =
  * List all packages for a project.
  */
 export function useListPackages(
-  request?: ListPackagesRequest | undefined,
-  security?: ListPackagesSecurity | undefined,
+  request?: ListPackagesRequest  ,
+  security?: ListPackagesSecurity  ,
   options?: QueryHookOptions<ListPackagesQueryData, ListPackagesQueryError>,
 ): UseQueryResult<ListPackagesQueryData, ListPackagesQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useListPackages(
  * List all packages for a project.
  */
 export function useListPackagesSuspense(
-  request?: ListPackagesRequest | undefined,
-  security?: ListPackagesSecurity | undefined,
+  request?: ListPackagesRequest  ,
+  security?: ListPackagesSecurity  ,
   options?: SuspenseQueryHookOptions<
     ListPackagesQueryData,
     ListPackagesQueryError

@@ -2,11 +2,11 @@ import { defineFilters, useFilterState } from "@/components/filters";
 import type { FilterValue } from "@/components/filters/filter-schema";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { CopyButton } from "@/components/ui/copy-button";
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Type } from "@/components/ui/Type";
 import { useProject } from "@/contexts/Auth";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import type { Skill } from "@gram/client/models/components/skill.js";
@@ -19,7 +19,9 @@ import {
   useSkills,
   useSkillsInfinite,
 } from "@gram/client/react-query/skills.js";
-import { Badge, type Column, Icon, Table } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
+import { type Column, Table } from "@/components/ui/Table";
 import { useRoutes } from "@/routes";
 import { useQueryState } from "nuqs";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
@@ -342,7 +344,7 @@ export default function SkillsList(): JSX.Element {
       render: (skill) =>
         skill.shareToken ? (
           <CopyButton
-            size="icon-sm"
+            size="sm"
             text={skillShareUrl(skill.shareToken)}
             tooltip="Copy public link"
             onCopy={() => {
@@ -470,7 +472,7 @@ export default function SkillsList(): JSX.Element {
                   />
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant="secondary"
                     onClick={() => void openSuggestions.query.refetch()}
                   >
                     Retry suggested edits
@@ -494,7 +496,7 @@ export default function SkillsList(): JSX.Element {
                   />
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant="secondary"
                     onClick={() => void insightsQuery.refetch()}
                   >
                     Retry insights
@@ -548,7 +550,7 @@ export default function SkillsList(): JSX.Element {
                   <div className="flex items-center gap-2">
                     <Button
                       size="sm"
-                      variant="outline"
+                      variant="secondary"
                       onClick={() => setPage((current) => current - 1)}
                       disabled={page === 0}
                     >
@@ -556,7 +558,7 @@ export default function SkillsList(): JSX.Element {
                     </Button>
                     <Button
                       size="sm"
-                      variant="outline"
+                      variant="secondary"
                       onClick={nextPage}
                       disabled={page >= totalPages - 1}
                     >
@@ -621,7 +623,7 @@ function LoadMoreError({ onRetry }: { onRetry: () => void }): JSX.Element {
       <Type small className="text-destructive">
         Unable to load more skills.
       </Type>
-      <Button size="sm" variant="outline" onClick={onRetry}>
+      <Button size="sm" variant="secondary" onClick={onRetry}>
         Retry
       </Button>
     </div>

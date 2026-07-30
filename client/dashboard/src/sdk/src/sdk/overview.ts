@@ -31,8 +31,8 @@ export class Overview extends ClientSDK {
    * Get risk overview metrics and trend data for the current project.
    */
   async get(
-    request?: GetRiskOverviewRequest | undefined,
-    security?: GetRiskOverviewSecurity | undefined,
+    request?: GetRiskOverviewRequest  ,
+    security?: GetRiskOverviewSecurity  ,
     options?: RequestOptions,
   ): Promise<RiskOverviewResult> {
     return unwrapAsync(riskOverviewGet(
@@ -51,7 +51,7 @@ export class Overview extends ClientSDK {
    */
   async rules(
     request: GetRiskRuleBreakdownRequest,
-    security?: GetRiskRuleBreakdownSecurity | undefined,
+    security?: GetRiskRuleBreakdownSecurity  ,
     options?: RequestOptions,
   ): Promise<RiskRuleBreakdownResult> {
     return unwrapAsync(riskOverviewRules(
@@ -70,7 +70,7 @@ export class Overview extends ClientSDK {
    */
   async userBreakdown(
     request: GetRiskUserBreakdownRequest,
-    security?: GetRiskUserBreakdownSecurity | undefined,
+    security?: GetRiskUserBreakdownSecurity  ,
     options?: RequestOptions,
   ): Promise<RiskUserBreakdownResult> {
     return unwrapAsync(riskOverviewUserBreakdown(

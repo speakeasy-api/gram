@@ -23,7 +23,7 @@ export function prefetchGetHooksSummary(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetHooksSummaryRequest,
-  security?: GetHooksSummarySecurity | undefined,
+  security?: GetHooksSummarySecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchGetHooksSummary(
 export function buildGetHooksSummaryQuery(
   client$: GramCore,
   request: GetHooksSummaryRequest,
-  security?: GetHooksSummarySecurity | undefined,
+  security?: GetHooksSummarySecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

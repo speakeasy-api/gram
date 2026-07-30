@@ -77,7 +77,7 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    */
   async create(
     request: CreateOrganizationRemoteSessionIssuerRequest,
-    security?: CreateOrganizationRemoteSessionIssuerSecurity | undefined,
+    security?: CreateOrganizationRemoteSessionIssuerSecurity  ,
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuer> {
     return unwrapAsync(organizationRemoteSessionIssuersCreate(
@@ -96,7 +96,7 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    */
   async delete(
     request: DeleteOrganizationRemoteSessionIssuerRequest,
-    security?: DeleteOrganizationRemoteSessionIssuerSecurity | undefined,
+    security?: DeleteOrganizationRemoteSessionIssuerSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(organizationRemoteSessionIssuersDelete(
@@ -115,7 +115,7 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    */
   async fetchMetadata(
     request: FetchOrganizationRemoteSessionIssuerMetadataRequest,
-    security?: FetchOrganizationRemoteSessionIssuerMetadataSecurity | undefined,
+    security?: FetchOrganizationRemoteSessionIssuerMetadataSecurity  ,
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuerDraft> {
     return unwrapAsync(organizationRemoteSessionIssuersFetchMetadata(
@@ -134,7 +134,7 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    */
   async get(
     request: GetOrganizationRemoteSessionIssuerRequest,
-    security?: GetOrganizationRemoteSessionIssuerSecurity | undefined,
+    security?: GetOrganizationRemoteSessionIssuerSecurity  ,
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuer> {
     return unwrapAsync(organizationRemoteSessionIssuersGet(
@@ -155,7 +155,7 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
     request: GetOrganizationRemoteSessionIssuerDeletePreflightRequest,
     security?:
       | GetOrganizationRemoteSessionIssuerDeletePreflightSecurity
-      | undefined,
+       ,
     options?: RequestOptions,
   ): Promise<OrganizationIssuerDeletePreflight> {
     return unwrapAsync(organizationRemoteSessionIssuersGetDeletePreflight(
@@ -176,7 +176,7 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
     request: GetOrganizationRemoteSessionIssuerMigratePreflightRequest,
     security?:
       | GetOrganizationRemoteSessionIssuerMigratePreflightSecurity
-      | undefined,
+       ,
     options?: RequestOptions,
   ): Promise<OrganizationIssuerMigratePreflight> {
     return unwrapAsync(organizationRemoteSessionIssuersGetMigratePreflight(
@@ -194,8 +194,8 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * List all remote_session_issuers in the caller's organization — organizational (project_id NULL) and project-specific — each with its associated client count and, for project-specific issuers, the owning project name. Requires org:read.
    */
   async list(
-    request?: ListOrganizationRemoteSessionIssuersRequest | undefined,
-    security?: ListOrganizationRemoteSessionIssuersSecurity | undefined,
+    request?: ListOrganizationRemoteSessionIssuersRequest  ,
+    security?: ListOrganizationRemoteSessionIssuersSecurity  ,
     options?: RequestOptions,
   ): Promise<
     PageIterator<
@@ -219,7 +219,7 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    */
   async migrate(
     request: MigrateOrganizationRemoteSessionIssuerRequest,
-    security?: MigrateOrganizationRemoteSessionIssuerSecurity | undefined,
+    security?: MigrateOrganizationRemoteSessionIssuerSecurity  ,
     options?: RequestOptions,
   ): Promise<MigrateOrganizationRemoteSessionIssuerResult> {
     return unwrapAsync(organizationRemoteSessionIssuersMigrate(
@@ -238,7 +238,7 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    */
   async move(
     request: MoveOrganizationRemoteSessionIssuerRequest,
-    security?: MoveOrganizationRemoteSessionIssuerSecurity | undefined,
+    security?: MoveOrganizationRemoteSessionIssuerSecurity  ,
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuer> {
     return unwrapAsync(organizationRemoteSessionIssuersMove(
@@ -259,7 +259,7 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
     request: RefreshOrganizationRemoteSessionIssuerMetadataRequest,
     security?:
       | RefreshOrganizationRemoteSessionIssuerMetadataSecurity
-      | undefined,
+       ,
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuerRefresh> {
     return unwrapAsync(organizationRemoteSessionIssuersRefreshMetadata(
@@ -278,7 +278,7 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    */
   async update(
     request: UpdateOrganizationRemoteSessionIssuerRequest,
-    security?: UpdateOrganizationRemoteSessionIssuerSecurity | undefined,
+    security?: UpdateOrganizationRemoteSessionIssuerSecurity  ,
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuer> {
     return unwrapAsync(organizationRemoteSessionIssuersUpdate(

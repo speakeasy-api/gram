@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function assetsUploadChatAttachment(
   client: GramCore,
   request: UploadChatAttachmentRequest,
-  security?: UploadChatAttachmentSecurity | undefined,
+  security?: UploadChatAttachmentSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function assetsUploadChatAttachment(
 async function $do(
   client: GramCore,
   request: UploadChatAttachmentRequest,
-  security?: UploadChatAttachmentSecurity | undefined,
+  security?: UploadChatAttachmentSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

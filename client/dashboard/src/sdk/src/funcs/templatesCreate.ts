@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function templatesCreate(
   client: GramCore,
   request: CreateTemplateRequest,
-  security?: CreateTemplateSecurity | undefined,
+  security?: CreateTemplateSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function templatesCreate(
 async function $do(
   client: GramCore,
   request: CreateTemplateRequest,
-  security?: CreateTemplateSecurity | undefined,
+  security?: CreateTemplateSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

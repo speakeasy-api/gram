@@ -1,8 +1,8 @@
 import { RequireScope } from "@/components/require-scope";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
-import { Type } from "@/components/ui/type";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Type } from "@/components/ui/Type";
 import { useProject } from "@/contexts/Auth";
 import type { SkillEditSuggestion } from "@gram/client/models/components/skilleditsuggestion.js";
 import { useApproveAllSkillSuggestionsMutation } from "@gram/client/react-query/approveAllSkillSuggestions.js";
@@ -141,7 +141,7 @@ export function ApproveAllSkillSuggestions({
           {error && <ErrorAlert title="Bulk approval failed" error={error} />}
           <Dialog.Footer>
             <Button
-              variant="outline"
+              variant="secondary"
               disabled={reconciling}
               onClick={closeDialog}
             >

@@ -81,7 +81,7 @@ export type SkillVersionsQueryError =
  */
 export function useSkillVersions(
   request: ListSkillVersionsRequest,
-  security?: ListSkillVersionsSecurity | undefined,
+  security?: ListSkillVersionsSecurity  ,
   options?: QueryHookOptions<SkillVersionsQueryData, SkillVersionsQueryError>,
 ): UseQueryResult<SkillVersionsQueryData, SkillVersionsQueryError> {
   const client = useGramContext();
@@ -104,7 +104,7 @@ export function useSkillVersions(
  */
 export function useSkillVersionsSuspense(
   request: ListSkillVersionsRequest,
-  security?: ListSkillVersionsSecurity | undefined,
+  security?: ListSkillVersionsSecurity  ,
   options?: SuspenseQueryHookOptions<
     SkillVersionsQueryData,
     SkillVersionsQueryError
@@ -130,7 +130,7 @@ export function useSkillVersionsSuspense(
  */
 export function useSkillVersionsInfinite(
   request: ListSkillVersionsRequest,
-  security?: ListSkillVersionsSecurity | undefined,
+  security?: ListSkillVersionsSecurity  ,
   options?: InfiniteQueryHookOptions<
     SkillVersionsInfiniteQueryData,
     SkillVersionsQueryError
@@ -167,7 +167,7 @@ export function useSkillVersionsInfinite(
  */
 export function useSkillVersionsInfiniteSuspense(
   request: ListSkillVersionsRequest,
-  security?: ListSkillVersionsSecurity | undefined,
+  security?: ListSkillVersionsSecurity  ,
   options?: SuspenseInfiniteQueryHookOptions<
     SkillVersionsInfiniteQueryData,
     SkillVersionsQueryError

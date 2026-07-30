@@ -1,14 +1,14 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { Type } from "@/components/ui/Type";
 import {
   useIsPlatformAdmin,
   useOrganization,
   useProject,
 } from "@/contexts/Auth";
 import { ShieldAlert } from "lucide-react";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/Stack";
 import { SettingsDangerZone } from "./SettingsDangerZone";
 import { RegistryCacheSection } from "./RegistryCacheSection";
 import { ModelProviderKeysSection } from "./ModelProviderKeysSection";

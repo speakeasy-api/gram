@@ -62,8 +62,8 @@ export type PluginsQueryError =
  * List all plugins for the current project.
  */
 export function usePlugins(
-  request?: ListPluginsRequest | undefined,
-  security?: ListPluginsSecurity | undefined,
+  request?: ListPluginsRequest  ,
+  security?: ListPluginsSecurity  ,
   options?: QueryHookOptions<PluginsQueryData, PluginsQueryError>,
 ): UseQueryResult<PluginsQueryData, PluginsQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function usePlugins(
  * List all plugins for the current project.
  */
 export function usePluginsSuspense(
-  request?: ListPluginsRequest | undefined,
-  security?: ListPluginsSecurity | undefined,
+  request?: ListPluginsRequest  ,
+  security?: ListPluginsSecurity  ,
   options?: SuspenseQueryHookOptions<PluginsQueryData, PluginsQueryError>,
 ): UseSuspenseQueryResult<PluginsQueryData, PluginsQueryError> {
   const client = useGramContext();

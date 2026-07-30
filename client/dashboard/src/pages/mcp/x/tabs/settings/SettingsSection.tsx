@@ -1,8 +1,8 @@
 // oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { Type } from "@/components/ui/Type";
 import { cn } from "@/lib/utils";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { Loader2, SaveIcon } from "lucide-react";
 import { createContext, type ComponentProps, use } from "react";
 

@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function mcpEndpointsCheckSlugAvailability(
   client: GramCore,
   request: CheckMcpEndpointSlugAvailabilityRequest,
-  security?: CheckMcpEndpointSlugAvailabilitySecurity | undefined,
+  security?: CheckMcpEndpointSlugAvailabilitySecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function mcpEndpointsCheckSlugAvailability(
 async function $do(
   client: GramCore,
   request: CheckMcpEndpointSlugAvailabilityRequest,
-  security?: CheckMcpEndpointSlugAvailabilitySecurity | undefined,
+  security?: CheckMcpEndpointSlugAvailabilitySecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

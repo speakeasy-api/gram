@@ -71,8 +71,8 @@ export class Chat extends ClientSDK {
    * Get the total number of chat credits and usage for the current billing period
    */
   async creditUsage(
-    request?: CreditUsageRequest | undefined,
-    security?: CreditUsageSecurity | undefined,
+    request?: CreditUsageRequest  ,
+    security?: CreditUsageSecurity  ,
     options?: RequestOptions,
   ): Promise<CreditUsageResponseBody> {
     return unwrapAsync(chatCreditUsage(
@@ -91,7 +91,7 @@ export class Chat extends ClientSDK {
    */
   async delete(
     request: DeleteChatRequest,
-    security?: DeleteChatSecurity | undefined,
+    security?: DeleteChatSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(chatDelete(
@@ -110,7 +110,7 @@ export class Chat extends ClientSDK {
    */
   async generateTitle(
     request: GenerateTitleRequest,
-    security?: GenerateTitleSecurity | undefined,
+    security?: GenerateTitleSecurity  ,
     options?: RequestOptions,
   ): Promise<GenerateTitleResponseBody> {
     return unwrapAsync(chatGenerateTitle(
@@ -128,8 +128,8 @@ export class Chat extends ClientSDK {
    * Aggregate work-units analysis results over time for the project: work done and cost/token efficiency per UTC day.
    */
   async getWorkUnitsTrend(
-    request?: GetWorkUnitsTrendRequest | undefined,
-    security?: GetWorkUnitsTrendSecurity | undefined,
+    request?: GetWorkUnitsTrendRequest  ,
+    security?: GetWorkUnitsTrendSecurity  ,
     options?: RequestOptions,
   ): Promise<WorkUnitsTrendResult> {
     return unwrapAsync(chatGetWorkUnitsTrend(
@@ -147,8 +147,8 @@ export class Chat extends ClientSDK {
    * List all chats for a project
    */
   async list(
-    request?: ListChatsRequest | undefined,
-    security?: ListChatsSecurity | undefined,
+    request?: ListChatsRequest  ,
+    security?: ListChatsSecurity  ,
     options?: RequestOptions,
   ): Promise<ListChatsResult> {
     return unwrapAsync(chatList(
@@ -166,8 +166,8 @@ export class Chat extends ClientSDK {
    * List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.
    */
   async listSources(
-    request?: ListChatSourcesRequest | undefined,
-    security?: ListChatSourcesSecurity | undefined,
+    request?: ListChatSourcesRequest  ,
+    security?: ListChatSourcesSecurity  ,
     options?: RequestOptions,
   ): Promise<ListSourcesResult> {
     return unwrapAsync(chatListSources(
@@ -186,7 +186,7 @@ export class Chat extends ClientSDK {
    */
   async load(
     request: LoadChatRequest,
-    security?: LoadChatSecurity | undefined,
+    security?: LoadChatSecurity  ,
     options?: RequestOptions,
   ): Promise<Chat$Model> {
     return unwrapAsync(chatLoad(
@@ -205,7 +205,7 @@ export class Chat extends ClientSDK {
    */
   async setPinned(
     request: SetChatPinnedRequest,
-    security?: SetChatPinnedSecurity | undefined,
+    security?: SetChatPinnedSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(chatSetPinned(
@@ -224,7 +224,7 @@ export class Chat extends ClientSDK {
    */
   async submitFeedback(
     request: SubmitFeedbackRequest,
-    security?: SubmitFeedbackSecurity | undefined,
+    security?: SubmitFeedbackSecurity  ,
     options?: RequestOptions,
   ): Promise<CaptureEventResult> {
     return unwrapAsync(chatSubmitFeedback(
@@ -243,7 +243,7 @@ export class Chat extends ClientSDK {
    */
   async summarize(
     request: SummarizeChatRequest,
-    security?: SummarizeChatSecurity | undefined,
+    security?: SummarizeChatSecurity  ,
     options?: RequestOptions,
   ): Promise<SummarizeChatResult> {
     return unwrapAsync(chatSummarize(

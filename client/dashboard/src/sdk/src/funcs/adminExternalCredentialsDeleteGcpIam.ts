@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function adminExternalCredentialsDeleteGcpIam(
   client: GramCore,
   request: DeleteGcpIamPlatformCredentialRequest,
-  security?: DeleteGcpIamPlatformCredentialSecurity | undefined,
+  security?: DeleteGcpIamPlatformCredentialSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function adminExternalCredentialsDeleteGcpIam(
 async function $do(
   client: GramCore,
   request: DeleteGcpIamPlatformCredentialRequest,
-  security?: DeleteGcpIamPlatformCredentialSecurity | undefined,
+  security?: DeleteGcpIamPlatformCredentialSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

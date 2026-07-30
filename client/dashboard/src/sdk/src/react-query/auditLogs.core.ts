@@ -34,8 +34,8 @@ export type AuditLogsPageParams = PageIterator<
 export function prefetchAuditLogs(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListAuditLogsRequest | undefined,
-  security?: ListAuditLogsSecurity | undefined,
+  request?: ListAuditLogsRequest  ,
+  security?: ListAuditLogsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -51,8 +51,8 @@ export function prefetchAuditLogs(
 export function prefetchAuditLogsInfinite(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListAuditLogsRequest | undefined,
-  security?: ListAuditLogsSecurity | undefined,
+  request?: ListAuditLogsRequest  ,
+  security?: ListAuditLogsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -70,8 +70,8 @@ export function prefetchAuditLogsInfinite(
 
 export function buildAuditLogsQuery(
   client$: GramCore,
-  request?: ListAuditLogsRequest | undefined,
-  security?: ListAuditLogsSecurity | undefined,
+  request?: ListAuditLogsRequest  ,
+  security?: ListAuditLogsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -112,8 +112,8 @@ export function buildAuditLogsQuery(
 
 export function buildAuditLogsInfiniteQuery(
   client$: GramCore,
-  request?: ListAuditLogsRequest | undefined,
-  security?: ListAuditLogsSecurity | undefined,
+  request?: ListAuditLogsRequest  ,
+  security?: ListAuditLogsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

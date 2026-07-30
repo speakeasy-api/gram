@@ -5,11 +5,11 @@ import { RequireScope } from "@/components/require-scope";
 import { InsightsConfig, InsightsProvider } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
-import { Heading } from "@/components/ui/heading";
-import { Button } from "@/components/ui/button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
-import { Switch } from "@/components/ui/switch";
+import { Heading } from "@/components/ui/Heading";
+import { Button } from "@/components/ui/Button";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Type } from "@/components/ui/Type";
+import { Switch } from "@/components/ui/Switch";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -21,7 +21,8 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useAuditLogFacets } from "@gram/client/react-query/auditLogFacets.js";
 import { useAuditLogsInfinite } from "@gram/client/react-query/auditLogs.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
-import { Icon, Input } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
+import { Input } from "@/components/ui/Input";
 import React, {
   useCallback,
   useDeferredValue,
@@ -829,7 +830,7 @@ function OrgAuditLogsInner() {
             Filters
           </Type>
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             disabled={!hasActiveFilters}
             onClick={() => {
@@ -936,7 +937,7 @@ function OrgAuditLogsInner() {
                 type="text"
                 placeholder="Search audit logs"
                 value={searchQuery}
-                onChange={(e) => handleSearchChange(e.target.value)}
+                onChange={handleSearchChange}
                 onFocus={() => setSearchInputFocused(true)}
                 onBlur={() => setSearchInputFocused(false)}
                 className="w-56 rounded-sm py-1 pr-16 pl-7 text-xs"

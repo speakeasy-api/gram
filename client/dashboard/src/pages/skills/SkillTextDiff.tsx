@@ -6,7 +6,7 @@ import type {
   ThemeTypes,
 } from "@pierre/diffs";
 import { MultiFileDiff } from "@pierre/diffs/react";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import type { ReactNode } from "react";
 
 export type SkillTextDiffProps<Annotation> = {

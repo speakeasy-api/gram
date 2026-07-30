@@ -1,9 +1,9 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { GettingStartedInstructions } from "@/components/functions/GettingStartedInstructions";
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Heading } from "@/components/ui/Heading";
+import { Type } from "@/components/ui/Type";
+import { Stack } from "@/components/ui/Stack";
 import { CodeIcon } from "lucide-react";
 
 export default function FunctionsOnboarding(): JSX.Element {

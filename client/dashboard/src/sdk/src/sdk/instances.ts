@@ -20,7 +20,7 @@ export class Instances extends ClientSDK {
    */
   async getBySlug(
     request: GetInstanceRequest,
-    security?: GetInstanceSecurity | undefined,
+    security?: GetInstanceSecurity  ,
     options?: RequestOptions,
   ): Promise<GetInstanceResult> {
     return unwrapAsync(instancesGetBySlug(

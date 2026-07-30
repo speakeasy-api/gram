@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function mcpRegistriesGetServerDetails(
   client: GramCore,
   request: GetMCPServerDetailsRequest,
-  security?: GetMCPServerDetailsSecurity | undefined,
+  security?: GetMCPServerDetailsSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function mcpRegistriesGetServerDetails(
 async function $do(
   client: GramCore,
   request: GetMCPServerDetailsRequest,
-  security?: GetMCPServerDetailsSecurity | undefined,
+  security?: GetMCPServerDetailsSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

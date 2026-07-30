@@ -63,7 +63,7 @@ export type GetAssistantMemoryQueryError =
  */
 export function useGetAssistantMemory(
   request: GetAssistantMemoryRequest,
-  security?: GetAssistantMemorySecurity | undefined,
+  security?: GetAssistantMemorySecurity  ,
   options?: QueryHookOptions<
     GetAssistantMemoryQueryData,
     GetAssistantMemoryQueryError
@@ -89,7 +89,7 @@ export function useGetAssistantMemory(
  */
 export function useGetAssistantMemorySuspense(
   request: GetAssistantMemoryRequest,
-  security?: GetAssistantMemorySecurity | undefined,
+  security?: GetAssistantMemorySecurity  ,
   options?: SuspenseQueryHookOptions<
     GetAssistantMemoryQueryData,
     GetAssistantMemoryQueryError

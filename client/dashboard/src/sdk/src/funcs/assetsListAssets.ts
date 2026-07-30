@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function assetsListAssets(
   client: GramCore,
-  request?: ListAssetsRequest | undefined,
-  security?: ListAssetsSecurity | undefined,
+  request?: ListAssetsRequest  ,
+  security?: ListAssetsSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function assetsListAssets(
 
 async function $do(
   client: GramCore,
-  request?: ListAssetsRequest | undefined,
-  security?: ListAssetsSecurity | undefined,
+  request?: ListAssetsRequest  ,
+  security?: ListAssetsSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

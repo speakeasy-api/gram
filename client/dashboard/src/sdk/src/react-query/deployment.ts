@@ -63,7 +63,7 @@ export type DeploymentQueryError =
  */
 export function useDeployment(
   request: GetDeploymentRequest,
-  security?: GetDeploymentSecurity | undefined,
+  security?: GetDeploymentSecurity  ,
   options?: QueryHookOptions<DeploymentQueryData, DeploymentQueryError>,
 ): UseQueryResult<DeploymentQueryData, DeploymentQueryError> {
   const client = useGramContext();
@@ -86,7 +86,7 @@ export function useDeployment(
  */
 export function useDeploymentSuspense(
   request: GetDeploymentRequest,
-  security?: GetDeploymentSecurity | undefined,
+  security?: GetDeploymentSecurity  ,
   options?: SuspenseQueryHookOptions<DeploymentQueryData, DeploymentQueryError>,
 ): UseSuspenseQueryResult<DeploymentQueryData, DeploymentQueryError> {
   const client = useGramContext();

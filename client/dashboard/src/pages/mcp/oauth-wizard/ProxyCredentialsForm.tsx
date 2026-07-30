@@ -1,7 +1,8 @@
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Type } from "@/components/ui/type";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { Type } from "@/components/ui/Type";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 
 import { WizardContext } from "./machine";
 

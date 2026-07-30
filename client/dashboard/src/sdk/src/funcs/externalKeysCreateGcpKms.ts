@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function externalKeysCreateGcpKms(
   client: GramCore,
   request: CreateGcpKmsKeyRequest,
-  security?: CreateGcpKmsKeySecurity | undefined,
+  security?: CreateGcpKmsKeySecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function externalKeysCreateGcpKms(
 async function $do(
   client: GramCore,
   request: CreateGcpKmsKeyRequest,
-  security?: CreateGcpKmsKeySecurity | undefined,
+  security?: CreateGcpKmsKeySecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

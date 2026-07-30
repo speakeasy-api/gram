@@ -4,8 +4,8 @@ import {
   type McpSidebarNavItem,
 } from "@/components/mcp-sidebar-nav-shell";
 import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
-import { CopyButton } from "@/components/ui/copy-button";
-import { Type } from "@/components/ui/type";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Type } from "@/components/ui/Type";
 import { useToolset } from "@/hooks/toolTypes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -162,7 +162,7 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
             </Type>
             <CopyButton
               text={mcpUrl}
-              size="inline"
+              size="xs"
               tooltip="Copy URL"
               className="mt-[-2px] shrink-0"
             />

@@ -62,8 +62,8 @@ export type RemoteMcpServersQueryError =
  * List all remote MCP servers for a project
  */
 export function useRemoteMcpServers(
-  request?: ListRemoteMcpServersRequest | undefined,
-  security?: ListRemoteMcpServersSecurity | undefined,
+  request?: ListRemoteMcpServersRequest  ,
+  security?: ListRemoteMcpServersSecurity  ,
   options?: QueryHookOptions<
     RemoteMcpServersQueryData,
     RemoteMcpServersQueryError
@@ -88,8 +88,8 @@ export function useRemoteMcpServers(
  * List all remote MCP servers for a project
  */
 export function useRemoteMcpServersSuspense(
-  request?: ListRemoteMcpServersRequest | undefined,
-  security?: ListRemoteMcpServersSecurity | undefined,
+  request?: ListRemoteMcpServersRequest  ,
+  security?: ListRemoteMcpServersSecurity  ,
   options?: SuspenseQueryHookOptions<
     RemoteMcpServersQueryData,
     RemoteMcpServersQueryError

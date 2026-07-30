@@ -22,8 +22,8 @@ export type ModelProviderKeysQueryData = ListKeysResponseBody;
 export function prefetchModelProviderKeys(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListModelProviderKeysRequest | undefined,
-  security?: ListModelProviderKeysSecurity | undefined,
+  request?: ListModelProviderKeysRequest  ,
+  security?: ListModelProviderKeysSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchModelProviderKeys(
 
 export function buildModelProviderKeysQuery(
   client$: GramCore,
-  request?: ListModelProviderKeysRequest | undefined,
-  security?: ListModelProviderKeysSecurity | undefined,
+  request?: ListModelProviderKeysRequest  ,
+  security?: ListModelProviderKeysSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

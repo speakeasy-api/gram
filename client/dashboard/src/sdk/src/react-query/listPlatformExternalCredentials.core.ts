@@ -24,8 +24,8 @@ export type ListPlatformExternalCredentialsQueryData =
 export function prefetchListPlatformExternalCredentials(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListPlatformExternalCredentialsRequest | undefined,
-  security?: ListPlatformExternalCredentialsSecurity | undefined,
+  request?: ListPlatformExternalCredentialsRequest  ,
+  security?: ListPlatformExternalCredentialsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -40,8 +40,8 @@ export function prefetchListPlatformExternalCredentials(
 
 export function buildListPlatformExternalCredentialsQuery(
   client$: GramCore,
-  request?: ListPlatformExternalCredentialsRequest | undefined,
-  security?: ListPlatformExternalCredentialsSecurity | undefined,
+  request?: ListPlatformExternalCredentialsRequest  ,
+  security?: ListPlatformExternalCredentialsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

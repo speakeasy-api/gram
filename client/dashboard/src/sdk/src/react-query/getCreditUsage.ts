@@ -62,8 +62,8 @@ export type GetCreditUsageQueryError =
  * Get the total number of chat credits and usage for the current billing period
  */
 export function useGetCreditUsage(
-  request?: CreditUsageRequest | undefined,
-  security?: CreditUsageSecurity | undefined,
+  request?: CreditUsageRequest  ,
+  security?: CreditUsageSecurity  ,
   options?: QueryHookOptions<GetCreditUsageQueryData, GetCreditUsageQueryError>,
 ): UseQueryResult<GetCreditUsageQueryData, GetCreditUsageQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useGetCreditUsage(
  * Get the total number of chat credits and usage for the current billing period
  */
 export function useGetCreditUsageSuspense(
-  request?: CreditUsageRequest | undefined,
-  security?: CreditUsageSecurity | undefined,
+  request?: CreditUsageRequest  ,
+  security?: CreditUsageSecurity  ,
   options?: SuspenseQueryHookOptions<
     GetCreditUsageQueryData,
     GetCreditUsageQueryError

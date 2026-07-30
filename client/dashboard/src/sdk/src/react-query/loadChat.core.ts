@@ -23,7 +23,7 @@ export function prefetchLoadChat(
   queryClient: QueryClient,
   client$: GramCore,
   request: LoadChatRequest,
-  security?: LoadChatSecurity | undefined,
+  security?: LoadChatSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchLoadChat(
 export function buildLoadChatQuery(
   client$: GramCore,
   request: LoadChatRequest,
-  security?: LoadChatSecurity | undefined,
+  security?: LoadChatSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

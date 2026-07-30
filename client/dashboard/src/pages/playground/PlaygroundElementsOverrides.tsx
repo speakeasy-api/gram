@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import { ThreadPrimitive } from "@assistant-ui/react";
 import { useGramElements } from "@/elements";
 import type { FC } from "react";

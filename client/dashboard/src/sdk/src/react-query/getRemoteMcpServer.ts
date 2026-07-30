@@ -62,8 +62,8 @@ export type GetRemoteMcpServerQueryError =
  * Get a remote MCP server by ID or slug. Exactly one of id or slug must be provided.
  */
 export function useGetRemoteMcpServer(
-  request?: GetRemoteMcpServerRequest | undefined,
-  security?: GetRemoteMcpServerSecurity | undefined,
+  request?: GetRemoteMcpServerRequest  ,
+  security?: GetRemoteMcpServerSecurity  ,
   options?: QueryHookOptions<
     GetRemoteMcpServerQueryData,
     GetRemoteMcpServerQueryError
@@ -88,8 +88,8 @@ export function useGetRemoteMcpServer(
  * Get a remote MCP server by ID or slug. Exactly one of id or slug must be provided.
  */
 export function useGetRemoteMcpServerSuspense(
-  request?: GetRemoteMcpServerRequest | undefined,
-  security?: GetRemoteMcpServerSecurity | undefined,
+  request?: GetRemoteMcpServerRequest  ,
+  security?: GetRemoteMcpServerSecurity  ,
   options?: SuspenseQueryHookOptions<
     GetRemoteMcpServerQueryData,
     GetRemoteMcpServerQueryError

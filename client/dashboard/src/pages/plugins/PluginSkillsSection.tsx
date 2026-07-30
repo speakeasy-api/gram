@@ -1,12 +1,12 @@
 import { RequireScope } from "@/components/require-scope";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button as UiButton } from "@/components/ui/button";
-import { DotCard } from "@/components/ui/dot-card";
-import { DotRow } from "@/components/ui/dot-row";
-import { DotTable } from "@/components/ui/dot-table";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
-import type { ViewMode } from "@/components/ui/use-view-mode";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button as UiButton } from "@/components/ui/Button";
+import { DotCard } from "@/components/ui/DotCard";
+import { DotRow } from "@/components/ui/DotRow";
+import { DotTable } from "@/components/ui/DotTable";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Type } from "@/components/ui/Type";
+import type { ViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { useProject } from "@/contexts/Auth";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { useRoutes } from "@/routes";
@@ -16,7 +16,9 @@ import {
   useSkillDistributionsInfinite,
 } from "@gram/client/react-query/skillDistributions.js";
 import { useUndistributeSkillMutation } from "@gram/client/react-query/undistributeSkill.js";
-import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sparkles, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -292,8 +294,8 @@ function PluginSkillCard({
         >
           <UiButton
             type="button"
-            variant="ghost"
-            size="icon-sm"
+            variant="tertiary"
+            size="sm"
             tooltip="Remove skill"
             aria-label="Remove skill"
             className="hover:text-destructive"
@@ -360,8 +362,8 @@ function PluginSkillTableRow({
           >
             <UiButton
               type="button"
-              variant="ghost"
-              size="icon-sm"
+              variant="tertiary"
+              size="sm"
               tooltip="Remove skill"
               aria-label={`Remove skill ${distribution.skillDisplayName}`}
               className="hover:text-destructive"

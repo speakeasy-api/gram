@@ -45,7 +45,7 @@ import { Result } from "../types/fp.js";
 export function assetsServeOpenAPIv3(
   client: GramCore,
   request: ServeOpenAPIv3Request,
-  security?: ServeOpenAPIv3Security | undefined,
+  security?: ServeOpenAPIv3Security  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -72,7 +72,7 @@ export function assetsServeOpenAPIv3(
 async function $do(
   client: GramCore,
   request: ServeOpenAPIv3Request,
-  security?: ServeOpenAPIv3Security | undefined,
+  security?: ServeOpenAPIv3Security  ,
   options?: RequestOptions,
 ): Promise<
   [

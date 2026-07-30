@@ -1,6 +1,6 @@
 import { RemoveSourceDialogContent } from "@/components/sources/RemoveSourceDialogContent";
 import { ViewSourceDialogContent } from "@/components/sources/ViewSourceDialogContent";
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
@@ -10,7 +10,9 @@ import type { OpenAPIv3DeploymentAsset } from "@gram/client/models/components/op
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useListAssets } from "@gram/client/react-query/listAssets.js";
 import { RequireScope } from "@/components/require-scope";
-import { Button, Dialog, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Stack } from "@/components/ui/Stack";
 import { Download, Eye, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";

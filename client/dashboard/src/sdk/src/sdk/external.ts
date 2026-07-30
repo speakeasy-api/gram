@@ -15,7 +15,7 @@ export class External extends ClientSDK {
    * Receive and enqueue a WorkOS webhook event.
    */
   async receiveWorkOSWebhook(
-    request?: ReceiveWorkOSWebhookRequest | undefined,
+    request?: ReceiveWorkOSWebhookRequest  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(externalReceiveWorkOSWebhook(

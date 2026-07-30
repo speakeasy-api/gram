@@ -1,10 +1,10 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { DotTable } from "@/components/ui/dot-table";
-import { Heading } from "@/components/ui/heading";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
-import { useViewMode } from "@/components/ui/use-view-mode";
+import { DotTable } from "@/components/ui/DotTable";
+import { Heading } from "@/components/ui/Heading";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Type } from "@/components/ui/Type";
+import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { useProject } from "@/contexts/Auth";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import { CommandBar } from "@/pages/catalog/CommandBar";
@@ -15,7 +15,8 @@ import {
 } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { SearchXIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Outlet } from "react-router";

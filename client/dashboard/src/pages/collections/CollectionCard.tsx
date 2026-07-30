@@ -1,13 +1,14 @@
-import { DotCard } from "@/components/ui/dot-card";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
-import { Badge } from "@/components/ui/badge";
+import { DotCard } from "@/components/ui/DotCard";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Type } from "@/components/ui/Type";
+import { Badge } from "@/components/ui/Badge";
 import { useOrganization } from "@/contexts/Auth";
 import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
 import { toolStats } from "@/pages/catalog/hooks/serverMetadata";
 import { buildCollectionMcpJson } from "@/lib/mcp-json";
 import { useOrgRoutes } from "@/routes";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import {
   ArrowRight,
   Download,
@@ -129,7 +130,7 @@ export function CollectionCard({
         collection.visibility === "private" ? (
           <div className="absolute top-3.5 left-3.5 z-10">
             <Badge
-              variant="outline"
+              variant="neutral"
               className="border-muted-foreground/30 bg-background/80 text-muted-foreground backdrop-blur-sm"
             >
               <Lock className="mr-1 h-3 w-3" />
@@ -150,7 +151,7 @@ export function CollectionCard({
             {collection.name}
           </Type>
         </div>
-        <Badge variant="secondary">
+        <Badge variant="neutral">
           <Server className="mr-1 h-3 w-3" />
           {serverCount} {serverCount === 1 ? "server" : "servers"}
         </Badge>

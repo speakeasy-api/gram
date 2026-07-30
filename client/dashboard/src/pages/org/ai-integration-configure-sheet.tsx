@@ -1,13 +1,13 @@
 import { RequireScope } from "@/components/require-scope";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import {
   Sheet,
   SheetContent,
@@ -15,10 +15,12 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
-import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
+} from "@/components/ui/Sheet";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Type } from "@/components/ui/Type";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { CheckCircle2, PauseCircle, Trash2 } from "lucide-react";
 import type { AIIntegrationProvider } from "./ai-integration-providers";
 import type { AIIntegrationConfigForm } from "./use-ai-integration-config-form";

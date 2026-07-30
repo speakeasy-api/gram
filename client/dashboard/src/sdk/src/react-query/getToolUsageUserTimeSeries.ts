@@ -63,7 +63,7 @@ export type GetToolUsageUserTimeSeriesQueryError =
  */
 export function useGetToolUsageUserTimeSeries(
   request: GetToolUsageUserTimeSeriesRequest,
-  security?: GetToolUsageUserTimeSeriesSecurity | undefined,
+  security?: GetToolUsageUserTimeSeriesSecurity  ,
   options?: QueryHookOptions<
     GetToolUsageUserTimeSeriesQueryData,
     GetToolUsageUserTimeSeriesQueryError
@@ -92,7 +92,7 @@ export function useGetToolUsageUserTimeSeries(
  */
 export function useGetToolUsageUserTimeSeriesSuspense(
   request: GetToolUsageUserTimeSeriesRequest,
-  security?: GetToolUsageUserTimeSeriesSecurity | undefined,
+  security?: GetToolUsageUserTimeSeriesSecurity  ,
   options?: SuspenseQueryHookOptions<
     GetToolUsageUserTimeSeriesQueryData,
     GetToolUsageUserTimeSeriesQueryError

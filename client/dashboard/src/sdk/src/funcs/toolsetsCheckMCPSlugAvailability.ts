@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function toolsetsCheckMCPSlugAvailability(
   client: GramCore,
   request: CheckMCPSlugAvailabilityRequest,
-  security?: CheckMCPSlugAvailabilitySecurity | undefined,
+  security?: CheckMCPSlugAvailabilitySecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function toolsetsCheckMCPSlugAvailability(
 async function $do(
   client: GramCore,
   request: CheckMCPSlugAvailabilityRequest,
-  security?: CheckMCPSlugAvailabilitySecurity | undefined,
+  security?: CheckMCPSlugAvailabilitySecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

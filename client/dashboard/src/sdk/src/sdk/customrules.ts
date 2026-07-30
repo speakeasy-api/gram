@@ -47,7 +47,7 @@ export class CustomRules extends ClientSDK {
    */
   async create(
     request: CreateCustomDetectionRuleRequest,
-    security?: CreateCustomDetectionRuleSecurity | undefined,
+    security?: CreateCustomDetectionRuleSecurity  ,
     options?: RequestOptions,
   ): Promise<RiskCustomDetectionRule> {
     return unwrapAsync(riskCustomRulesCreate(
@@ -66,7 +66,7 @@ export class CustomRules extends ClientSDK {
    */
   async delete(
     request: DeleteCustomDetectionRuleRequest,
-    security?: DeleteCustomDetectionRuleSecurity | undefined,
+    security?: DeleteCustomDetectionRuleSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(riskCustomRulesDelete(
@@ -85,7 +85,7 @@ export class CustomRules extends ClientSDK {
    */
   async get(
     request: GetCustomDetectionRuleRequest,
-    security?: GetCustomDetectionRuleSecurity | undefined,
+    security?: GetCustomDetectionRuleSecurity  ,
     options?: RequestOptions,
   ): Promise<RiskCustomDetectionRule> {
     return unwrapAsync(riskCustomRulesGet(
@@ -103,8 +103,8 @@ export class CustomRules extends ClientSDK {
    * List custom detection rules for the current project.
    */
   async list(
-    request?: ListCustomDetectionRulesRequest | undefined,
-    security?: ListCustomDetectionRulesSecurity | undefined,
+    request?: ListCustomDetectionRulesRequest  ,
+    security?: ListCustomDetectionRulesSecurity  ,
     options?: RequestOptions,
   ): Promise<ListCustomDetectionRulesResult> {
     return unwrapAsync(riskCustomRulesList(
@@ -123,7 +123,7 @@ export class CustomRules extends ClientSDK {
    */
   async suggest(
     request: SuggestCustomDetectionRuleRequest,
-    security?: SuggestCustomDetectionRuleSecurity | undefined,
+    security?: SuggestCustomDetectionRuleSecurity  ,
     options?: RequestOptions,
   ): Promise<SuggestCustomDetectionRuleResult> {
     return unwrapAsync(riskCustomRulesSuggest(
@@ -142,7 +142,7 @@ export class CustomRules extends ClientSDK {
    */
   async update(
     request: UpdateCustomDetectionRuleRequest,
-    security?: UpdateCustomDetectionRuleSecurity | undefined,
+    security?: UpdateCustomDetectionRuleSecurity  ,
     options?: RequestOptions,
   ): Promise<RiskCustomDetectionRule> {
     return unwrapAsync(riskCustomRulesUpdate(

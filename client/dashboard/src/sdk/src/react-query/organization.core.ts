@@ -22,8 +22,8 @@ export type OrganizationQueryData = Organization;
 export function prefetchOrganization(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetOrganizationRequest | undefined,
-  security?: GetOrganizationSecurity | undefined,
+  request?: GetOrganizationRequest  ,
+  security?: GetOrganizationSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchOrganization(
 
 export function buildOrganizationQuery(
   client$: GramCore,
-  request?: GetOrganizationRequest | undefined,
-  security?: GetOrganizationSecurity | undefined,
+  request?: GetOrganizationRequest  ,
+  security?: GetOrganizationSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

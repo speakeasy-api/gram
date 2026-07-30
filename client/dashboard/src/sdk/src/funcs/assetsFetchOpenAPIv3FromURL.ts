@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function assetsFetchOpenAPIv3FromURL(
   client: GramCore,
   request: FetchOpenAPIv3FromURLRequest,
-  security?: FetchOpenAPIv3FromURLSecurity | undefined,
+  security?: FetchOpenAPIv3FromURLSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function assetsFetchOpenAPIv3FromURL(
 async function $do(
   client: GramCore,
   request: FetchOpenAPIv3FromURLRequest,
-  security?: FetchOpenAPIv3FromURLSecurity | undefined,
+  security?: FetchOpenAPIv3FromURLSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

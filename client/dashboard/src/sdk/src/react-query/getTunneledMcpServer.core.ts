@@ -23,7 +23,7 @@ export function prefetchGetTunneledMcpServer(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetTunneledMcpServerRequest,
-  security?: GetTunneledMcpServerSecurity | undefined,
+  security?: GetTunneledMcpServerSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchGetTunneledMcpServer(
 export function buildGetTunneledMcpServerQuery(
   client$: GramCore,
   request: GetTunneledMcpServerRequest,
-  security?: GetTunneledMcpServerSecurity | undefined,
+  security?: GetTunneledMcpServerSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

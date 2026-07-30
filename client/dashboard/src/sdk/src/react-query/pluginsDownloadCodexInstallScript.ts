@@ -62,8 +62,8 @@ export type PluginsDownloadCodexInstallScriptQueryError =
  * Download a bash install script that registers the Codex observability marketplace and pre-approves all hook events. Requires a published marketplace.
  */
 export function usePluginsDownloadCodexInstallScript(
-  request?: DownloadCodexInstallScriptRequest | undefined,
-  security?: DownloadCodexInstallScriptSecurity | undefined,
+  request?: DownloadCodexInstallScriptRequest  ,
+  security?: DownloadCodexInstallScriptSecurity  ,
   options?: QueryHookOptions<
     PluginsDownloadCodexInstallScriptQueryData,
     PluginsDownloadCodexInstallScriptQueryError
@@ -91,8 +91,8 @@ export function usePluginsDownloadCodexInstallScript(
  * Download a bash install script that registers the Codex observability marketplace and pre-approves all hook events. Requires a published marketplace.
  */
 export function usePluginsDownloadCodexInstallScriptSuspense(
-  request?: DownloadCodexInstallScriptRequest | undefined,
-  security?: DownloadCodexInstallScriptSecurity | undefined,
+  request?: DownloadCodexInstallScriptRequest  ,
+  security?: DownloadCodexInstallScriptSecurity  ,
   options?: SuspenseQueryHookOptions<
     PluginsDownloadCodexInstallScriptQueryData,
     PluginsDownloadCodexInstallScriptQueryError

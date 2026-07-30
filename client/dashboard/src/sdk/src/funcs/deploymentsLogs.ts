@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function deploymentsLogs(
   client: GramCore,
   request: GetDeploymentLogsRequest,
-  security?: GetDeploymentLogsSecurity | undefined,
+  security?: GetDeploymentLogsSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function deploymentsLogs(
 async function $do(
   client: GramCore,
   request: GetDeploymentLogsRequest,
-  security?: GetDeploymentLogsSecurity | undefined,
+  security?: GetDeploymentLogsSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function modelKeysDeleteKey(
   client: GramCore,
   request: DeleteModelProviderKeyRequest,
-  security?: DeleteModelProviderKeySecurity | undefined,
+  security?: DeleteModelProviderKeySecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function modelKeysDeleteKey(
 async function $do(
   client: GramCore,
   request: DeleteModelProviderKeyRequest,
-  security?: DeleteModelProviderKeySecurity | undefined,
+  security?: DeleteModelProviderKeySecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

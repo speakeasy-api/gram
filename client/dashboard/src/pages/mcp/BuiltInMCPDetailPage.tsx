@@ -1,11 +1,13 @@
 import { CodeBlock } from "@/components/code";
 import { Page } from "@/components/page-layout";
-import { Link } from "@/components/ui/link";
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+import { Link } from "@/components/ui/Link";
+import { Heading } from "@/components/ui/Heading";
+import { Type } from "@/components/ui/Type";
 import { useSlugs } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { Navigate, useLocation, useParams } from "react-router";
 import { activeTabFromPath, builtInTabHref } from "./BuiltInMCPDetailRouting";
 import { BUILT_IN_TOOLS } from "./builtInMcpTools";
@@ -74,7 +76,7 @@ function BuiltInOverviewTab({ mcpUrl }: { mcpUrl: string }) {
           >
             {`${mcpUrl}/install`}
           </CodeBlock>
-          <Link external to={`${mcpUrl}/install`} noIcon>
+          <Link href={`${mcpUrl}/install`} asChild>
             <Button variant="primary" className="px-4">
               <Button.LeftIcon>
                 <Icon name="external-link" className="h-4 w-4" />

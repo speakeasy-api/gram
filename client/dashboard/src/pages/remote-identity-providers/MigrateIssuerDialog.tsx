@@ -1,18 +1,20 @@
-import { Dialog } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+import { Dialog } from "@/components/ui/Dialog";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Type } from "@/components/ui/Type";
 import type { OrganizationRemoteSessionIssuer } from "@gram/client/models/components/organizationremotesessionissuer.js";
 import { useMigrateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/migrateOrganizationRemoteSessionIssuer.js";
 import { useOrganizationRemoteSessionIssuerMigratePreflight } from "@gram/client/react-query/organizationRemoteSessionIssuerMigratePreflight.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";

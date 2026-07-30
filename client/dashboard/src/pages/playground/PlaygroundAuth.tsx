@@ -1,13 +1,14 @@
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { PrivateInput } from "@/components/ui/private-input";
-import { Type } from "@/components/ui/type";
+import { Button } from "@/components/ui/Button";
+import { Label } from "@/components/ui/Label";
+import { PrivateInput } from "@/components/ui/PrivateInput";
+import { Type } from "@/components/ui/Type";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
-import { Badge, Stack } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Stack } from "@/components/ui/Stack";
 import { CheckCircle, ExternalLink, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { usePlaygroundEnvironment } from "./usePlaygroundEnvironment";
@@ -81,7 +82,7 @@ function IssuerLoginConnection({
         {!connected && !isLoading && (
           <Button
             size="sm"
-            variant="default"
+            variant="primary"
             className="w-full"
             onClick={connect}
             disabled={!canConnect}
@@ -300,7 +301,7 @@ export function PlaygroundAuth({
       {envVars.some((v) => v.state === "user-provided") && (
         <Button
           size="sm"
-          variant="default"
+          variant="primary"
           className="w-full"
           onClick={() => void handleSave()}
           disabled={editedKeys.size === 0 || playgroundEnv.isSaving}

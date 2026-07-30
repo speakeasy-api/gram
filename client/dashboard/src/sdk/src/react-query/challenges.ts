@@ -63,8 +63,8 @@ export type ChallengesQueryError =
  * List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.
  */
 export function useChallenges(
-  request?: ListChallengesRequest | undefined,
-  security?: ListChallengesSecurity | undefined,
+  request?: ListChallengesRequest  ,
+  security?: ListChallengesSecurity  ,
   options?: QueryHookOptions<ChallengesQueryData, ChallengesQueryError>,
 ): UseQueryResult<ChallengesQueryData, ChallengesQueryError> {
   const client = useGramContext();
@@ -86,8 +86,8 @@ export function useChallenges(
  * List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.
  */
 export function useChallengesSuspense(
-  request?: ListChallengesRequest | undefined,
-  security?: ListChallengesSecurity | undefined,
+  request?: ListChallengesRequest  ,
+  security?: ListChallengesSecurity  ,
   options?: SuspenseQueryHookOptions<ChallengesQueryData, ChallengesQueryError>,
 ): UseSuspenseQueryResult<ChallengesQueryData, ChallengesQueryError> {
   const client = useGramContext();

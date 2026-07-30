@@ -42,8 +42,8 @@ import { Result } from "../types/fp.js";
  */
 export function usageCreateTopUpCheckout(
   client: GramCore,
-  request?: CreateTopUpCheckoutRequest | undefined,
-  security?: CreateTopUpCheckoutSecurity | undefined,
+  request?: CreateTopUpCheckoutRequest  ,
+  security?: CreateTopUpCheckoutSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -69,8 +69,8 @@ export function usageCreateTopUpCheckout(
 
 async function $do(
   client: GramCore,
-  request?: CreateTopUpCheckoutRequest | undefined,
-  security?: CreateTopUpCheckoutSecurity | undefined,
+  request?: CreateTopUpCheckoutRequest  ,
+  security?: CreateTopUpCheckoutSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

@@ -34,8 +34,8 @@ export type SkillEfficacyInsightsPageParams = PageIterator<
 export function prefetchSkillEfficacyInsights(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: QuerySkillEfficacyInsightsRequest | undefined,
-  security?: QuerySkillEfficacyInsightsSecurity | undefined,
+  request?: QuerySkillEfficacyInsightsRequest  ,
+  security?: QuerySkillEfficacyInsightsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -51,8 +51,8 @@ export function prefetchSkillEfficacyInsights(
 export function prefetchSkillEfficacyInsightsInfinite(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: QuerySkillEfficacyInsightsRequest | undefined,
-  security?: QuerySkillEfficacyInsightsSecurity | undefined,
+  request?: QuerySkillEfficacyInsightsRequest  ,
+  security?: QuerySkillEfficacyInsightsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -70,8 +70,8 @@ export function prefetchSkillEfficacyInsightsInfinite(
 
 export function buildSkillEfficacyInsightsQuery(
   client$: GramCore,
-  request?: QuerySkillEfficacyInsightsRequest | undefined,
-  security?: QuerySkillEfficacyInsightsSecurity | undefined,
+  request?: QuerySkillEfficacyInsightsRequest  ,
+  security?: QuerySkillEfficacyInsightsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -117,8 +117,8 @@ export function buildSkillEfficacyInsightsQuery(
 
 export function buildSkillEfficacyInsightsInfiniteQuery(
   client$: GramCore,
-  request?: QuerySkillEfficacyInsightsRequest | undefined,
-  security?: QuerySkillEfficacyInsightsSecurity | undefined,
+  request?: QuerySkillEfficacyInsightsRequest  ,
+  security?: QuerySkillEfficacyInsightsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

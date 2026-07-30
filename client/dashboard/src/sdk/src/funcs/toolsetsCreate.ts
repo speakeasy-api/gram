@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function toolsetsCreate(
   client: GramCore,
   request: CreateToolsetRequest,
-  security?: CreateToolsetSecurity | undefined,
+  security?: CreateToolsetSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function toolsetsCreate(
 async function $do(
   client: GramCore,
   request: CreateToolsetRequest,
-  security?: CreateToolsetSecurity | undefined,
+  security?: CreateToolsetSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

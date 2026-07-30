@@ -1,12 +1,13 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Type } from "@/components/ui/Type";
 import { useProject } from "@/contexts/Auth";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import { Badge, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
 import { Outlet } from "react-router";
 
 export default function Skills(): JSX.Element {
@@ -77,7 +78,7 @@ function SkillsFeatureGate({
           title="Unable to load Skills availability"
           error="Refresh the page or try again."
         />
-        <Button variant="outline" className="self-start" onClick={onRetry}>
+        <Button variant="secondary" className="self-start" onClick={onRetry}>
           Try again
         </Button>
       </div>

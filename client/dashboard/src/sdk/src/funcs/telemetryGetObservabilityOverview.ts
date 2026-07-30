@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function telemetryGetObservabilityOverview(
   client: GramCore,
   request: GetObservabilityOverviewRequest,
-  security?: GetObservabilityOverviewSecurity | undefined,
+  security?: GetObservabilityOverviewSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function telemetryGetObservabilityOverview(
 async function $do(
   client: GramCore,
   request: GetObservabilityOverviewRequest,
-  security?: GetObservabilityOverviewSecurity | undefined,
+  security?: GetObservabilityOverviewSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

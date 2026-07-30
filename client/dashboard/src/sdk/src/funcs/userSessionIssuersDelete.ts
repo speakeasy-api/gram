@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function userSessionIssuersDelete(
   client: GramCore,
   request: DeleteUserSessionIssuerRequest,
-  security?: DeleteUserSessionIssuerSecurity | undefined,
+  security?: DeleteUserSessionIssuerSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function userSessionIssuersDelete(
 async function $do(
   client: GramCore,
   request: DeleteUserSessionIssuerRequest,
-  security?: DeleteUserSessionIssuerSecurity | undefined,
+  security?: DeleteUserSessionIssuerSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

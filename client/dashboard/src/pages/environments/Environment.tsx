@@ -4,8 +4,8 @@ import {
 } from "@/components/environments/EnvironmentVariableDialog";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Dialog } from "@/components/ui/dialog";
-import { Type } from "@/components/ui/type";
+import { Dialog } from "@/components/ui/Dialog";
+import { Type } from "@/components/ui/Type";
 import {
   useRegisterEnvironmentTelemetry,
   useTelemetry,
@@ -15,13 +15,14 @@ import { useDeleteEnvironmentMutation } from "@gram/client/react-query/deleteEnv
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateEnvironmentMutation } from "@gram/client/react-query/updateEnvironment.js";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { AlertCircle, CodeXml, Eye, EyeOff, Lock, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { DotRow } from "@/components/ui/dot-row";
-import { DotTable } from "@/components/ui/dot-table";
-import { type Action, MoreActions } from "@/components/ui/more-actions";
+import { DotRow } from "@/components/ui/DotRow";
+import { DotTable } from "@/components/ui/DotTable";
+import { type Action, MoreActions } from "@/components/ui/MoreActions";
 import { useEnvironment } from "./useEnvironment";
 
 const MASK = "••••••••••••";

@@ -80,7 +80,7 @@ export class RemoteMcp extends ClientSDK {
    */
   async createServer(
     request: CreateRemoteMcpServerRequest,
-    security?: CreateRemoteMcpServerSecurity | undefined,
+    security?: CreateRemoteMcpServerSecurity  ,
     options?: RequestOptions,
   ): Promise<RemoteMcpServer> {
     return unwrapAsync(remoteMcpCreateServer(
@@ -99,7 +99,7 @@ export class RemoteMcp extends ClientSDK {
    */
   async createServerHeader(
     request: CreateRemoteMcpServerHeaderRequest,
-    security?: CreateRemoteMcpServerHeaderSecurity | undefined,
+    security?: CreateRemoteMcpServerHeaderSecurity  ,
     options?: RequestOptions,
   ): Promise<RemoteMcpServerHeader> {
     return unwrapAsync(remoteMcpCreateServerHeader(
@@ -118,7 +118,7 @@ export class RemoteMcp extends ClientSDK {
    */
   async deleteServer(
     request: DeleteRemoteMcpServerRequest,
-    security?: DeleteRemoteMcpServerSecurity | undefined,
+    security?: DeleteRemoteMcpServerSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(remoteMcpDeleteServer(
@@ -137,7 +137,7 @@ export class RemoteMcp extends ClientSDK {
    */
   async deleteServerHeader(
     request: DeleteRemoteMcpServerHeaderRequest,
-    security?: DeleteRemoteMcpServerHeaderSecurity | undefined,
+    security?: DeleteRemoteMcpServerHeaderSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(remoteMcpDeleteServerHeader(
@@ -156,7 +156,7 @@ export class RemoteMcp extends ClientSDK {
    */
   async discoverProtectedResourceMetadata(
     request: DiscoverRemoteMcpProtectedResourceMetadataRequest,
-    security?: DiscoverRemoteMcpProtectedResourceMetadataSecurity | undefined,
+    security?: DiscoverRemoteMcpProtectedResourceMetadataSecurity  ,
     options?: RequestOptions,
   ): Promise<ProtectedResourceMetadataDiscovery> {
     return unwrapAsync(remoteMcpDiscoverProtectedResourceMetadata(
@@ -174,8 +174,8 @@ export class RemoteMcp extends ClientSDK {
    * Get a remote MCP server by ID or slug. Exactly one of id or slug must be provided.
    */
   async getServer(
-    request?: GetRemoteMcpServerRequest | undefined,
-    security?: GetRemoteMcpServerSecurity | undefined,
+    request?: GetRemoteMcpServerRequest  ,
+    security?: GetRemoteMcpServerSecurity  ,
     options?: RequestOptions,
   ): Promise<RemoteMcpServer> {
     return unwrapAsync(remoteMcpGetServer(
@@ -194,7 +194,7 @@ export class RemoteMcp extends ClientSDK {
    */
   async getServerHeader(
     request: GetRemoteMcpServerHeaderRequest,
-    security?: GetRemoteMcpServerHeaderSecurity | undefined,
+    security?: GetRemoteMcpServerHeaderSecurity  ,
     options?: RequestOptions,
   ): Promise<RemoteMcpServerHeader> {
     return unwrapAsync(remoteMcpGetServerHeader(
@@ -213,7 +213,7 @@ export class RemoteMcp extends ClientSDK {
    */
   async listServerHeaders(
     request: ListRemoteMcpServerHeadersRequest,
-    security?: ListRemoteMcpServerHeadersSecurity | undefined,
+    security?: ListRemoteMcpServerHeadersSecurity  ,
     options?: RequestOptions,
   ): Promise<ListServerHeadersResult> {
     return unwrapAsync(remoteMcpListServerHeaders(
@@ -231,8 +231,8 @@ export class RemoteMcp extends ClientSDK {
    * List all remote MCP servers for a project
    */
   async listServers(
-    request?: ListRemoteMcpServersRequest | undefined,
-    security?: ListRemoteMcpServersSecurity | undefined,
+    request?: ListRemoteMcpServersRequest  ,
+    security?: ListRemoteMcpServersSecurity  ,
     options?: RequestOptions,
   ): Promise<ListServersResult> {
     return unwrapAsync(remoteMcpListServers(
@@ -251,7 +251,7 @@ export class RemoteMcp extends ClientSDK {
    */
   async updateServer(
     request: UpdateRemoteMcpServerRequest,
-    security?: UpdateRemoteMcpServerSecurity | undefined,
+    security?: UpdateRemoteMcpServerSecurity  ,
     options?: RequestOptions,
   ): Promise<RemoteMcpServer> {
     return unwrapAsync(remoteMcpUpdateServer(
@@ -270,7 +270,7 @@ export class RemoteMcp extends ClientSDK {
    */
   async updateServerHeader(
     request: UpdateRemoteMcpServerHeaderRequest,
-    security?: UpdateRemoteMcpServerHeaderSecurity | undefined,
+    security?: UpdateRemoteMcpServerHeaderSecurity  ,
     options?: RequestOptions,
   ): Promise<RemoteMcpServerHeader> {
     return unwrapAsync(remoteMcpUpdateServerHeader(
@@ -289,7 +289,7 @@ export class RemoteMcp extends ClientSDK {
    */
   async verifyURL(
     request: VerifyRemoteMcpURLRequest,
-    security?: VerifyRemoteMcpURLSecurity | undefined,
+    security?: VerifyRemoteMcpURLSecurity  ,
     options?: RequestOptions,
   ): Promise<VerifyURLResult> {
     return unwrapAsync(remoteMcpVerifyURL(

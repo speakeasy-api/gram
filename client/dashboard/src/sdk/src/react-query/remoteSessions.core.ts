@@ -34,8 +34,8 @@ export type RemoteSessionsPageParams = PageIterator<
 export function prefetchRemoteSessions(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListRemoteSessionsRequest | undefined,
-  security?: ListRemoteSessionsSecurity | undefined,
+  request?: ListRemoteSessionsRequest  ,
+  security?: ListRemoteSessionsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -51,8 +51,8 @@ export function prefetchRemoteSessions(
 export function prefetchRemoteSessionsInfinite(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListRemoteSessionsRequest | undefined,
-  security?: ListRemoteSessionsSecurity | undefined,
+  request?: ListRemoteSessionsRequest  ,
+  security?: ListRemoteSessionsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -70,8 +70,8 @@ export function prefetchRemoteSessionsInfinite(
 
 export function buildRemoteSessionsQuery(
   client$: GramCore,
-  request?: ListRemoteSessionsRequest | undefined,
-  security?: ListRemoteSessionsSecurity | undefined,
+  request?: ListRemoteSessionsRequest  ,
+  security?: ListRemoteSessionsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -113,8 +113,8 @@ export function buildRemoteSessionsQuery(
 
 export function buildRemoteSessionsInfiniteQuery(
   client$: GramCore,
-  request?: ListRemoteSessionsRequest | undefined,
-  security?: ListRemoteSessionsSecurity | undefined,
+  request?: ListRemoteSessionsRequest  ,
+  security?: ListRemoteSessionsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -19,8 +19,8 @@ export class Events extends ClientSDK {
    * List warning and breach events emitted by budget rule evaluation, most recent first.
    */
   async list(
-    request?: ListSpendRuleEventsRequest | undefined,
-    security?: ListSpendRuleEventsSecurity | undefined,
+    request?: ListSpendRuleEventsRequest  ,
+    security?: ListSpendRuleEventsSecurity  ,
     options?: RequestOptions,
   ): Promise<ListSpendRuleEventsResult> {
     return unwrapAsync(spendRulesEventsList(

@@ -41,7 +41,7 @@ export class PolicyBypassRequests extends ClientSDK {
    */
   async approve(
     request: ApproveRiskPolicyBypassRequestRequest,
-    security?: ApproveRiskPolicyBypassRequestSecurity | undefined,
+    security?: ApproveRiskPolicyBypassRequestSecurity  ,
     options?: RequestOptions,
   ): Promise<RiskPolicyBypassRequest> {
     return unwrapAsync(riskPolicyBypassRequestsApprove(
@@ -60,7 +60,7 @@ export class PolicyBypassRequests extends ClientSDK {
    */
   async create(
     request: CreateRiskPolicyBypassRequestRequest,
-    security?: CreateRiskPolicyBypassRequestSecurity | undefined,
+    security?: CreateRiskPolicyBypassRequestSecurity  ,
     options?: RequestOptions,
   ): Promise<RiskPolicyBypassRequest> {
     return unwrapAsync(riskPolicyBypassRequestsCreate(
@@ -79,7 +79,7 @@ export class PolicyBypassRequests extends ClientSDK {
    */
   async deny(
     request: DenyRiskPolicyBypassRequestRequest,
-    security?: DenyRiskPolicyBypassRequestSecurity | undefined,
+    security?: DenyRiskPolicyBypassRequestSecurity  ,
     options?: RequestOptions,
   ): Promise<RiskPolicyBypassRequest> {
     return unwrapAsync(riskPolicyBypassRequestsDeny(
@@ -97,8 +97,8 @@ export class PolicyBypassRequests extends ClientSDK {
    * List current risk policy bypass request workflow records.
    */
   async list(
-    request?: ListRiskPolicyBypassRequestsRequest | undefined,
-    security?: ListRiskPolicyBypassRequestsSecurity | undefined,
+    request?: ListRiskPolicyBypassRequestsRequest  ,
+    security?: ListRiskPolicyBypassRequestsSecurity  ,
     options?: RequestOptions,
   ): Promise<ListRiskPolicyBypassRequestsResult> {
     return unwrapAsync(riskPolicyBypassRequestsList(
@@ -117,7 +117,7 @@ export class PolicyBypassRequests extends ClientSDK {
    */
   async revoke(
     request: RevokeRiskPolicyBypassRequestRequest,
-    security?: RevokeRiskPolicyBypassRequestSecurity | undefined,
+    security?: RevokeRiskPolicyBypassRequestSecurity  ,
     options?: RequestOptions,
   ): Promise<RiskPolicyBypassRequest> {
     return unwrapAsync(riskPolicyBypassRequestsRevoke(

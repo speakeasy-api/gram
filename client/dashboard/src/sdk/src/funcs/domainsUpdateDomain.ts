@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function domainsUpdateDomain(
   client: GramCore,
   request: UpdateDomainRequest,
-  security?: UpdateDomainSecurity | undefined,
+  security?: UpdateDomainSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function domainsUpdateDomain(
 async function $do(
   client: GramCore,
   request: UpdateDomainRequest,
-  security?: UpdateDomainSecurity | undefined,
+  security?: UpdateDomainSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

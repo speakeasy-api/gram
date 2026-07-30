@@ -1,17 +1,16 @@
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/Badge";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
-import type { Action } from "@/components/ui/more-actions";
-import { Type } from "@/components/ui/type";
-import { Switch } from "@/components/ui/switch";
+import type { Action } from "@/components/ui/MoreActions";
+import { Type } from "@/components/ui/Type";
+import { Switch } from "@/components/ui/Switch";
+import { Button } from "@/components/ui/Button";
 import {
-  Button,
-  type Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Table,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { type Column, Table } from "@/components/ui/Table";
 import { useRiskDeleteExclusionMutation } from "@gram/client/react-query/riskDeleteExclusion.js";
 import {
   invalidateAllRiskListExclusions,
@@ -105,7 +104,7 @@ export function ExclusionsTab({
       header: "Type",
       width: "0.8fr",
       render: (exclusion) => (
-        <Badge variant="secondary">{exclusion.matchType}</Badge>
+        <Badge variant="neutral">{exclusion.matchType}</Badge>
       ),
     },
     {
@@ -115,7 +114,7 @@ export function ExclusionsTab({
       render: (exclusion) => {
         const name = policyName(exclusion.riskPolicyId);
         if (!name) return <Badge variant="warning">Global</Badge>;
-        return <Badge variant="secondary">{name}</Badge>;
+        return <Badge variant="neutral">{name}</Badge>;
       },
     },
     {

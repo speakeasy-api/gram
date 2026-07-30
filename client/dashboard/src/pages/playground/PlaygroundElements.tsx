@@ -6,7 +6,7 @@ import { useRoutes } from "@/routes";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import { AlertCircle, ShieldAlert } from "lucide-react";
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import { usePlaygroundIssuerConnection } from "./usePlaygroundIssuerConnection";
 import { PlaygroundChat } from "./PlaygroundChat";
 

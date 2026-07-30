@@ -63,7 +63,7 @@ export type CollectionsListServersQueryError =
  */
 export function useCollectionsListServers(
   request: ListCollectionServersRequest,
-  security?: ListCollectionServersSecurity | undefined,
+  security?: ListCollectionServersSecurity  ,
   options?: QueryHookOptions<
     CollectionsListServersQueryData,
     CollectionsListServersQueryError
@@ -92,7 +92,7 @@ export function useCollectionsListServers(
  */
 export function useCollectionsListServersSuspense(
   request: ListCollectionServersRequest,
-  security?: ListCollectionServersSecurity | undefined,
+  security?: ListCollectionServersSecurity  ,
   options?: SuspenseQueryHookOptions<
     CollectionsListServersQueryData,
     CollectionsListServersQueryError

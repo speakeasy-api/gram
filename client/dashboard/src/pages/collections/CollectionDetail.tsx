@@ -1,12 +1,12 @@
 import { Page } from "@/components/page-layout";
 import { ProjectAvatar } from "@/components/project-menu";
 import { RequireScope } from "@/components/require-scope";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog } from "@/components/ui/dialog";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Combobox } from "@/components/ui/combobox";
-import { Type } from "@/components/ui/type";
+import { Badge } from "@/components/ui/Badge";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Dialog } from "@/components/ui/Dialog";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Combobox } from "@/components/ui/Combobox";
+import { Type } from "@/components/ui/Type";
 import { useOrganization } from "@/contexts/Auth";
 import {
   AlertTriangle,
@@ -21,7 +21,8 @@ import {
   Server,
   Server as ServerIcon,
 } from "lucide-react";
-import { Button, Input } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/moon/textarea";
 import { useMemo, useState } from "react";
 import { useParams } from "react-router";
@@ -384,7 +385,7 @@ function CollectionDetailInner() {
                         <h1 className="truncate text-2xl font-semibold">
                           {collection.name}
                         </h1>
-                        <Badge variant="outline" className="text-xs">
+                        <Badge variant="neutral" className="text-xs">
                           {collection.visibility === "private" ? (
                             <>
                               <Lock className="mr-1 h-3 w-3" />
@@ -484,12 +485,7 @@ function CollectionDetailInner() {
                     <label className="mb-1 block text-sm font-medium">
                       Name
                     </label>
-                    <Input
-                      value={editName}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                        setEditName(e.target.value)
-                      }
-                    />
+                    <Input value={editName} onChange={setEditName} />
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium">
@@ -602,7 +598,7 @@ function CollectionDetailInner() {
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary" className="shrink-0">
+                  <Badge variant="neutral" className="shrink-0">
                     <Server className="mr-1 h-3 w-3" />
                     {servers.length}
                   </Badge>
@@ -681,14 +677,14 @@ function CollectionDetailInner() {
                                     </span>
                                     {server.kind === "mcpServer" && (
                                       <Badge
-                                        variant="secondary"
+                                        variant="neutral"
                                         className="shrink-0 text-xs"
                                       >
                                         Remote MCP
                                       </Badge>
                                     )}
                                     <Badge
-                                      variant="secondary"
+                                      variant="neutral"
                                       className="shrink-0 text-xs"
                                     >
                                       {server.projectName}

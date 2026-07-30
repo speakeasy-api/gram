@@ -1,10 +1,10 @@
-import { Checkbox } from "@/components/ui/checkbox";
+import { Checkbox } from "@/components/ui/Checkbox";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Popover";
+import { Type } from "@/components/ui/Type";
 import { useRoutes } from "@/routes";
 import { Plugin } from "@gram/client/models/components/plugin.js";
 import { PluginServer } from "@gram/client/models/components/pluginserver.js";
@@ -19,14 +19,15 @@ import {
   usePublishStatus,
 } from "@gram/client/react-query/publishStatus";
 import { useRemovePluginServerMutation } from "@gram/client/react-query/removePluginServer";
-import { Button, cn } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ChevronDown, CircleCheck, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { InstallInstructionsDialog } from "@/pages/plugins/InstallInstructionsDialog";
 import { HostedServerRef } from "./MCPOverviewTab";
-import { Spinner } from "@/components/ui/spinner";
+import { Spinner } from "@/components/ui/Spinner";
 
 function serverMatchesRef(server: PluginServer, ref: HostedServerRef): boolean {
   return ref.kind === "toolset"

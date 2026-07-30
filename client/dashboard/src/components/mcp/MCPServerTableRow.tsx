@@ -1,10 +1,10 @@
-import { DotRow } from "@/components/ui/dot-row";
-import { Type } from "@/components/ui/type";
+import { DotRow } from "@/components/ui/DotRow";
+import { Type } from "@/components/ui/Type";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { Network } from "lucide-react";
-import { Badge } from "../ui/badge";
+import { Badge } from "../ui/Badge";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
 import { MCPActivityIndicator } from "./MCPActivityIndicator";
 import type { McpActivityStatus } from "./mcp-activity";
@@ -80,7 +80,7 @@ export function MCPServerTableRow({
 
       {/* Tools column slot — mcp_servers don't expose tool catalogs through Gram today */}
       <td className="px-3 py-3">
-        <Badge variant="outline">MCP Server</Badge>
+        <Badge variant="neutral">MCP Server</Badge>
       </td>
     </DotRow>
   );

@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function environmentsSetSourceLink(
   client: GramCore,
   request: SetSourceEnvironmentLinkRequest,
-  security?: SetSourceEnvironmentLinkSecurity | undefined,
+  security?: SetSourceEnvironmentLinkSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function environmentsSetSourceLink(
 async function $do(
   client: GramCore,
   request: SetSourceEnvironmentLinkRequest,
-  security?: SetSourceEnvironmentLinkSecurity | undefined,
+  security?: SetSourceEnvironmentLinkSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

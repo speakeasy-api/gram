@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatLogsTable } from "./ChatLogsTable";
 
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/Button", () => ({
   Button: ({
     children,
     onClick,
@@ -13,10 +13,13 @@ vi.mock("@speakeasy-api/moonshine", () => ({
     children: ReactNode;
     onClick?: () => void;
   }) => <button onClick={onClick}>{children}</button>,
+}));
+
+vi.mock("@/components/ui/Icon", () => ({
   Icon: ({ name }: { name: string }) => <span>{name}</span>,
 }));
 
-vi.mock("@/components/ui/tooltip", () => ({
+vi.mock("@/components/ui/Tooltip", () => ({
   SimpleTooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 

@@ -22,8 +22,8 @@ export type McpEndpointsQueryData = ListMcpEndpointsResult;
 export function prefetchMcpEndpoints(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListMcpEndpointsRequest | undefined,
-  security?: ListMcpEndpointsSecurity | undefined,
+  request?: ListMcpEndpointsRequest  ,
+  security?: ListMcpEndpointsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchMcpEndpoints(
 
 export function buildMcpEndpointsQuery(
   client$: GramCore,
-  request?: ListMcpEndpointsRequest | undefined,
-  security?: ListMcpEndpointsSecurity | undefined,
+  request?: ListMcpEndpointsRequest  ,
+  security?: ListMcpEndpointsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

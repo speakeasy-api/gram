@@ -1,10 +1,10 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tooltip";
+import { Type } from "@/components/ui/Type";
 import { HumanizeDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/contexts/Auth";
@@ -13,7 +13,7 @@ import type { ChallengeBucket } from "@gram/client/models/components/challengebu
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useListMcpServersForOrg } from "@gram/client/react-query/listMcpServersForOrg.js";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
-import { Column } from "@speakeasy-api/moonshine";
+import { Column } from "@/components/ui/Table";
 import { KeyRound } from "lucide-react";
 import { useMemo } from "react";
 import { OutcomeBadge } from "./ChallengesTab";

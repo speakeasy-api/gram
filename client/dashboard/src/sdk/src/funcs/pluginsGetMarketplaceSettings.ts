@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function pluginsGetMarketplaceSettings(
   client: GramCore,
-  request?: GetMarketplaceSettingsRequest | undefined,
-  security?: GetMarketplaceSettingsSecurity | undefined,
+  request?: GetMarketplaceSettingsRequest  ,
+  security?: GetMarketplaceSettingsSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function pluginsGetMarketplaceSettings(
 
 async function $do(
   client: GramCore,
-  request?: GetMarketplaceSettingsRequest | undefined,
-  security?: GetMarketplaceSettingsSecurity | undefined,
+  request?: GetMarketplaceSettingsRequest  ,
+  security?: GetMarketplaceSettingsSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

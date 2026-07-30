@@ -63,7 +63,7 @@ export type ListVersionsQueryError =
  */
 export function useListVersions(
   request: ListVersionsRequest,
-  security?: ListVersionsSecurity | undefined,
+  security?: ListVersionsSecurity  ,
   options?: QueryHookOptions<ListVersionsQueryData, ListVersionsQueryError>,
 ): UseQueryResult<ListVersionsQueryData, ListVersionsQueryError> {
   const client = useGramContext();
@@ -86,7 +86,7 @@ export function useListVersions(
  */
 export function useListVersionsSuspense(
   request: ListVersionsRequest,
-  security?: ListVersionsSecurity | undefined,
+  security?: ListVersionsSecurity  ,
   options?: SuspenseQueryHookOptions<
     ListVersionsQueryData,
     ListVersionsQueryError

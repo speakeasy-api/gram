@@ -50,8 +50,8 @@ import {
  */
 export function skillsListDistributions(
   client: GramCore,
-  request?: ListSkillDistributionsRequest | undefined,
-  security?: ListSkillDistributionsSecurity | undefined,
+  request?: ListSkillDistributionsRequest  ,
+  security?: ListSkillDistributionsSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   PageIterator<
@@ -80,8 +80,8 @@ export function skillsListDistributions(
 
 async function $do(
   client: GramCore,
-  request?: ListSkillDistributionsRequest | undefined,
-  security?: ListSkillDistributionsSecurity | undefined,
+  request?: ListSkillDistributionsRequest  ,
+  security?: ListSkillDistributionsSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

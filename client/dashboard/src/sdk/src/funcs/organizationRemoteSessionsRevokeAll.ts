@@ -49,7 +49,7 @@ export function organizationRemoteSessionsRevokeAll(
   request: RevokeAllOrganizationRemoteSessionClientSessionsRequest,
   security?:
     | RevokeAllOrganizationRemoteSessionClientSessionsSecurity
-    | undefined,
+     ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -78,7 +78,7 @@ async function $do(
   request: RevokeAllOrganizationRemoteSessionClientSessionsRequest,
   security?:
     | RevokeAllOrganizationRemoteSessionClientSessionsSecurity
-    | undefined,
+     ,
   options?: RequestOptions,
 ): Promise<
   [

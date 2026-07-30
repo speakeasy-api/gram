@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function adminRemoteSessionsGetGlobalClient(
   client: GramCore,
   request: GetGlobalRemoteSessionClientRequest,
-  security?: GetGlobalRemoteSessionClientSecurity | undefined,
+  security?: GetGlobalRemoteSessionClientSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function adminRemoteSessionsGetGlobalClient(
 async function $do(
   client: GramCore,
   request: GetGlobalRemoteSessionClientRequest,
-  security?: GetGlobalRemoteSessionClientSecurity | undefined,
+  security?: GetGlobalRemoteSessionClientSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

@@ -25,8 +25,8 @@ export class Integrations extends ClientSDK {
    * Get a third-party integration by ID or name.
    */
   async integrationsNumberGet(
-    request?: IntegrationsNumberGetRequest | undefined,
-    security?: IntegrationsNumberGetSecurity | undefined,
+    request?: IntegrationsNumberGetRequest  ,
+    security?: IntegrationsNumberGetSecurity  ,
     options?: RequestOptions,
   ): Promise<GetIntegrationResult> {
     return unwrapAsync(integrationsIntegrationsNumberGet(
@@ -44,8 +44,8 @@ export class Integrations extends ClientSDK {
    * List available third-party integrations.
    */
   async list(
-    request?: ListIntegrationsRequest | undefined,
-    security?: ListIntegrationsSecurity | undefined,
+    request?: ListIntegrationsRequest  ,
+    security?: ListIntegrationsSecurity  ,
     options?: RequestOptions,
   ): Promise<ListIntegrationsResult> {
     return unwrapAsync(integrationsList(

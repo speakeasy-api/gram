@@ -63,7 +63,7 @@ export type AgentPluginsQueryError =
  */
 export function useAgentPlugins(
   request: GetAgentPluginsRequest,
-  security?: GetAgentPluginsSecurity | undefined,
+  security?: GetAgentPluginsSecurity  ,
   options?: QueryHookOptions<AgentPluginsQueryData, AgentPluginsQueryError>,
 ): UseQueryResult<AgentPluginsQueryData, AgentPluginsQueryError> {
   const client = useGramContext();
@@ -86,7 +86,7 @@ export function useAgentPlugins(
  */
 export function useAgentPluginsSuspense(
   request: GetAgentPluginsRequest,
-  security?: GetAgentPluginsSecurity | undefined,
+  security?: GetAgentPluginsSecurity  ,
   options?: SuspenseQueryHookOptions<
     AgentPluginsQueryData,
     AgentPluginsQueryError

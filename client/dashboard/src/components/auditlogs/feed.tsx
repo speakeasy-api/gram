@@ -1,12 +1,12 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Type } from "@/components/ui/Type";
 import {
   getActionCategory,
   getActionColorConfig,
@@ -18,7 +18,7 @@ import {
 } from "@/lib/audit-log-feed";
 import { formatAuditAction } from "@/lib/audit-log-format";
 import { cn } from "@/lib/utils";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
 import React from "react";
 
 export function DateGroupHeader({
@@ -144,7 +144,7 @@ export function AuditFeedFooter({
 
       {hasNextPage ? (
         <Button
-          variant="outline"
+          variant="secondary"
           size="sm"
           onClick={onLoadMore}
           disabled={isFetchingNextPage}

@@ -7,7 +7,7 @@ import {
   SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
-} from "@/components/ui/sidebar";
+} from "@/components/ui/Sidebar";
 import { GramLogo } from "./gram-logo";
 import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
 import { WorkspaceSwitcher } from "./workspace-switcher";
@@ -19,7 +19,7 @@ import { SkillDetailSidebarNav } from "./skill-detail-sidebar-nav";
 import { OnboardingResumeButton } from "./onboarding-resume-button";
 import { SidebarFooterAction } from "./sidebar-footer-action";
 import { SidebarUserMenu } from "./sidebar-user-menu";
-import { useSidebar } from "@/components/ui/sidebar-context";
+import { useSidebar } from "@/components/ui/Sidebar/sidebar-context";
 import { useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -30,15 +30,17 @@ import { useProjectNavRoutes } from "@/hooks/useProjectNavRoutes";
 import type { ProjectNavRoute } from "@/hooks/useProjectNavRoutes";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
-import { cn, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
+import { cn } from "@/lib/utils";
 import { MinusIcon, Settings, TestTube2Icon } from "lucide-react";
 import * as React from "react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { RequireScope } from "./require-scope";
 import { FeatureRequestModal } from "./FeatureRequestModal";
-import { Button } from "./ui/button";
-import { Type } from "./ui/type";
+import { Button } from "./ui/Button";
+import { Type } from "@/components/ui/Type";
 
 function ScopeGatedTopLevelItem({
   item,
@@ -384,8 +386,8 @@ const PersistentNotification = ({
 
   const closeButton = (
     <Button
-      variant="ghost"
-      size="icon"
+      variant="tertiary"
+      size="md"
       className="absolute top-0 right-0 hover:bg-transparent"
       onClick={() => setIsMinimized(true)}
     >
@@ -409,8 +411,8 @@ const PersistentNotification = ({
       {!isMinimized && closeButton}
       {isMinimized && (
         <Button
-          variant="ghost"
-          size="icon"
+          variant="tertiary"
+          size="md"
           className="flex h-full w-full items-center justify-center"
         >
           <Type>?</Type>

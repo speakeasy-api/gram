@@ -22,8 +22,8 @@ export type AssistantsListQueryData = ListAssistantsResult;
 export function prefetchAssistantsList(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListAssistantsRequest | undefined,
-  security?: ListAssistantsSecurity | undefined,
+  request?: ListAssistantsRequest  ,
+  security?: ListAssistantsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchAssistantsList(
 
 export function buildAssistantsListQuery(
   client$: GramCore,
-  request?: ListAssistantsRequest | undefined,
-  security?: ListAssistantsSecurity | undefined,
+  request?: ListAssistantsRequest  ,
+  security?: ListAssistantsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

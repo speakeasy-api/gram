@@ -1,10 +1,11 @@
 import { RequireScope } from "@/components/require-scope";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Type } from "@/components/ui/type";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Type } from "@/components/ui/Type";
 import { usePublishing } from "@/pages/mcp/usePublishing";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { FooterSaveButton, SettingsSection } from "../SettingsSection";
 
 export function PublishingSection({

@@ -1,5 +1,5 @@
-import { SidebarMenuItem } from "@/components/ui/sidebar";
-import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import { SidebarMenuItem } from "@/components/ui/Sidebar";
+import { Collapsible, CollapsibleContent } from "@/components/ui/Collapsible";
 import { cn } from "@/lib/utils";
 import { AppRoute } from "@/routes";
 import { motion } from "motion/react";
@@ -7,8 +7,8 @@ import React from "react";
 import { Link } from "react-router";
 import { ProductTierBadge } from "./product-tier-badge";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
-import { Type } from "./ui/type";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/Tooltip";
+import { Type } from "@/components/ui/Type";
 
 export const NAV_LOADING_DURATION_MS = 600;
 

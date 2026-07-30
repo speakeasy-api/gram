@@ -9,9 +9,10 @@ import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { DashboardCard } from "@/components/ui/dashboard-card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { DashboardCard } from "@/components/ui/DashboardCard";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { type DateRangePreset } from "@/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
@@ -40,7 +41,7 @@ import {
 } from "chart.js";
 import ZoomPlugin from "chartjs-plugin-zoom";
 import { Line } from "react-chartjs-2";
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import { buildRiskTrendChartData, type TrendPoint } from "./riskTrendChartData";
 
 ChartJS.register(

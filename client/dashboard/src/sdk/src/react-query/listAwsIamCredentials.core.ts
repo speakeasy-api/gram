@@ -22,8 +22,8 @@ export type ListAwsIamCredentialsQueryData = ListExternalCredentialsResult;
 export function prefetchListAwsIamCredentials(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListAwsIamCredentialsRequest | undefined,
-  security?: ListAwsIamCredentialsSecurity | undefined,
+  request?: ListAwsIamCredentialsRequest  ,
+  security?: ListAwsIamCredentialsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListAwsIamCredentials(
 
 export function buildListAwsIamCredentialsQuery(
   client$: GramCore,
-  request?: ListAwsIamCredentialsRequest | undefined,
-  security?: ListAwsIamCredentialsSecurity | undefined,
+  request?: ListAwsIamCredentialsRequest  ,
+  security?: ListAwsIamCredentialsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

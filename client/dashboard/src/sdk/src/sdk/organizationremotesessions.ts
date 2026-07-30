@@ -38,7 +38,7 @@ export class OrganizationRemoteSessions extends ClientSDK {
    */
   async list(
     request: ListOrganizationRemoteSessionClientSessionsRequest,
-    security?: ListOrganizationRemoteSessionClientSessionsSecurity | undefined,
+    security?: ListOrganizationRemoteSessionClientSessionsSecurity  ,
     options?: RequestOptions,
   ): Promise<
     PageIterator<
@@ -62,7 +62,7 @@ export class OrganizationRemoteSessions extends ClientSDK {
    */
   async refresh(
     request: RefreshOrganizationRemoteSessionRequest,
-    security?: RefreshOrganizationRemoteSessionSecurity | undefined,
+    security?: RefreshOrganizationRemoteSessionSecurity  ,
     options?: RequestOptions,
   ): Promise<RemoteSession> {
     return unwrapAsync(organizationRemoteSessionsRefresh(
@@ -81,7 +81,7 @@ export class OrganizationRemoteSessions extends ClientSDK {
    */
   async revoke(
     request: RevokeOrganizationRemoteSessionRequest,
-    security?: RevokeOrganizationRemoteSessionSecurity | undefined,
+    security?: RevokeOrganizationRemoteSessionSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(organizationRemoteSessionsRevoke(
@@ -102,7 +102,7 @@ export class OrganizationRemoteSessions extends ClientSDK {
     request: RevokeAllOrganizationRemoteSessionClientSessionsRequest,
     security?:
       | RevokeAllOrganizationRemoteSessionClientSessionsSecurity
-      | undefined,
+       ,
     options?: RequestOptions,
   ): Promise<RevokeAllRemoteSessionsResult> {
     return unwrapAsync(organizationRemoteSessionsRevokeAll(

@@ -80,8 +80,8 @@ export type UserSessionClientsQueryError =
  * List user_session_clients in the caller's project.
  */
 export function useUserSessionClients(
-  request?: ListUserSessionClientsRequest | undefined,
-  security?: ListUserSessionClientsSecurity | undefined,
+  request?: ListUserSessionClientsRequest  ,
+  security?: ListUserSessionClientsSecurity  ,
   options?: QueryHookOptions<
     UserSessionClientsQueryData,
     UserSessionClientsQueryError
@@ -106,8 +106,8 @@ export function useUserSessionClients(
  * List user_session_clients in the caller's project.
  */
 export function useUserSessionClientsSuspense(
-  request?: ListUserSessionClientsRequest | undefined,
-  security?: ListUserSessionClientsSecurity | undefined,
+  request?: ListUserSessionClientsRequest  ,
+  security?: ListUserSessionClientsSecurity  ,
   options?: SuspenseQueryHookOptions<
     UserSessionClientsQueryData,
     UserSessionClientsQueryError
@@ -135,8 +135,8 @@ export function useUserSessionClientsSuspense(
  * List user_session_clients in the caller's project.
  */
 export function useUserSessionClientsInfinite(
-  request?: ListUserSessionClientsRequest | undefined,
-  security?: ListUserSessionClientsSecurity | undefined,
+  request?: ListUserSessionClientsRequest  ,
+  security?: ListUserSessionClientsSecurity  ,
   options?: InfiniteQueryHookOptions<
     UserSessionClientsInfiniteQueryData,
     UserSessionClientsQueryError
@@ -178,8 +178,8 @@ export function useUserSessionClientsInfinite(
  * List user_session_clients in the caller's project.
  */
 export function useUserSessionClientsInfiniteSuspense(
-  request?: ListUserSessionClientsRequest | undefined,
-  security?: ListUserSessionClientsSecurity | undefined,
+  request?: ListUserSessionClientsRequest  ,
+  security?: ListUserSessionClientsSecurity  ,
   options?: SuspenseInfiniteQueryHookOptions<
     UserSessionClientsInfiniteQueryData,
     UserSessionClientsQueryError

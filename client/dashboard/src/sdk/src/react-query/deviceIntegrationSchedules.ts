@@ -63,7 +63,7 @@ export type DeviceIntegrationSchedulesQueryError =
  */
 export function useDeviceIntegrationSchedules(
   request: ListDeviceIntegrationSchedulesRequest,
-  security?: ListDeviceIntegrationSchedulesSecurity | undefined,
+  security?: ListDeviceIntegrationSchedulesSecurity  ,
   options?: QueryHookOptions<
     DeviceIntegrationSchedulesQueryData,
     DeviceIntegrationSchedulesQueryError
@@ -92,7 +92,7 @@ export function useDeviceIntegrationSchedules(
  */
 export function useDeviceIntegrationSchedulesSuspense(
   request: ListDeviceIntegrationSchedulesRequest,
-  security?: ListDeviceIntegrationSchedulesSecurity | undefined,
+  security?: ListDeviceIntegrationSchedulesSecurity  ,
   options?: SuspenseQueryHookOptions<
     DeviceIntegrationSchedulesQueryData,
     DeviceIntegrationSchedulesQueryError

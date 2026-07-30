@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function skillsApproveAllSuggestions(
   client: GramCore,
-  request?: ApproveAllSkillSuggestionsRequest | undefined,
-  security?: ApproveAllSkillSuggestionsSecurity | undefined,
+  request?: ApproveAllSkillSuggestionsRequest  ,
+  security?: ApproveAllSkillSuggestionsSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function skillsApproveAllSuggestions(
 
 async function $do(
   client: GramCore,
-  request?: ApproveAllSkillSuggestionsRequest | undefined,
-  security?: ApproveAllSkillSuggestionsSecurity | undefined,
+  request?: ApproveAllSkillSuggestionsRequest  ,
+  security?: ApproveAllSkillSuggestionsSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

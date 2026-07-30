@@ -23,8 +23,8 @@ export type RiskListCustomDetectionRulesQueryData =
 export function prefetchRiskListCustomDetectionRules(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListCustomDetectionRulesRequest | undefined,
-  security?: ListCustomDetectionRulesSecurity | undefined,
+  request?: ListCustomDetectionRulesRequest  ,
+  security?: ListCustomDetectionRulesSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,8 +39,8 @@ export function prefetchRiskListCustomDetectionRules(
 
 export function buildRiskListCustomDetectionRulesQuery(
   client$: GramCore,
-  request?: ListCustomDetectionRulesRequest | undefined,
-  security?: ListCustomDetectionRulesSecurity | undefined,
+  request?: ListCustomDetectionRulesRequest  ,
+  security?: ListCustomDetectionRulesSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -42,8 +42,8 @@ import { Result } from "../types/fp.js";
  */
 export function otelForwardingDeleteConfig(
   client: GramCore,
-  request?: DeleteOtelForwardingConfigRequest | undefined,
-  security?: DeleteOtelForwardingConfigSecurity | undefined,
+  request?: DeleteOtelForwardingConfigRequest  ,
+  security?: DeleteOtelForwardingConfigSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -69,8 +69,8 @@ export function otelForwardingDeleteConfig(
 
 async function $do(
   client: GramCore,
-  request?: DeleteOtelForwardingConfigRequest | undefined,
-  security?: DeleteOtelForwardingConfigSecurity | undefined,
+  request?: DeleteOtelForwardingConfigRequest  ,
+  security?: DeleteOtelForwardingConfigSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

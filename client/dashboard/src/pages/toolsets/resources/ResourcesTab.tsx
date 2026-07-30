@@ -1,6 +1,6 @@
 import { CardContextMenu } from "@/components/card-context-menu";
 import { RequireScope } from "@/components/require-scope";
-import { Card, Cards } from "@/components/ui/card";
+import { Card, Cards } from "@/components/ui/Card";
 import {
   Command,
   CommandEmpty,
@@ -8,19 +8,20 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
-import { Action, MoreActions } from "@/components/ui/more-actions";
+} from "@/components/ui/Command";
+import { Action, MoreActions } from "@/components/ui/MoreActions";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Popover";
+import { Type } from "@/components/ui/Type";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useLatestDeployment, useListResources } from "@/hooks/toolTypes";
 import { Resource, Toolset } from "@/lib/toolTypes";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
-import { Dialog, Stack } from "@speakeasy-api/moonshine";
+import { Dialog } from "@/components/ui/Dialog";
+import { Stack } from "@/components/ui/Stack";
 import { Newspaper } from "lucide-react";
 import { useMemo, useState } from "react";
 import { GettingStartedInstructions } from "@/components/functions/GettingStartedInstructions";

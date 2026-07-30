@@ -1,7 +1,7 @@
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
-import { TextArea } from "@/components/ui/textarea";
-import { Type } from "@/components/ui/type";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { TextArea } from "@/components/ui/Textarea";
+import { Type } from "@/components/ui/Type";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Assistant } from "@gram/client/models/components/assistant.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";

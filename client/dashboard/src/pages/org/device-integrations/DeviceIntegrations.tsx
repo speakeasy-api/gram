@@ -1,9 +1,9 @@
 import { Page } from "@/components/page-layout";
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Type } from "@/components/ui/Type";
 import type { DeviceIntegrationProvider } from "@gram/client/models/components/deviceintegrationprovider.js";
 import { useDeviceIntegrationProviders } from "@gram/client/react-query/deviceIntegrationProviders.js";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/Stack";
 import React from "react";
 import { CoveragePipeline } from "./coverage-pipeline";
 import { DeviceIntegrationConnectionRow } from "./device-integration-connection-row";

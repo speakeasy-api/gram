@@ -1,10 +1,11 @@
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Type } from "@/components/ui/type";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Type } from "@/components/ui/Type";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import type { UnknownSkillActivation } from "@gram/client/models/components/unknownskillactivation.js";
 import { useUnknownSkillActivationsInfinite } from "@gram/client/react-query/unknownSkillActivations.js";
-import { Badge, type Column, Table } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { type Column, Table } from "@/components/ui/Table";
 import { useState } from "react";
 
 const reasonLabels: Record<string, string> = {
@@ -31,7 +32,7 @@ export function UnknownSkillActivationsSection(): JSX.Element | null {
         aria-labelledby="unknown-skills-title"
       >
         <UnknownActivationsHeading />
-        <Button variant="outline" onClick={() => setExpanded(true)}>
+        <Button variant="secondary" onClick={() => setExpanded(true)}>
           View unknown activations
         </Button>
       </section>
@@ -83,7 +84,7 @@ export function UnknownSkillActivationsSection(): JSX.Element | null {
             title="Unable to load unknown activations"
             error={query.error}
           />
-          <Button variant="outline" onClick={() => void query.refetch()}>
+          <Button variant="secondary" onClick={() => void query.refetch()}>
             Retry
           </Button>
         </div>
@@ -103,7 +104,7 @@ export function UnknownSkillActivationsSection(): JSX.Element | null {
       )}
       {query.hasNextPage && (
         <Button
-          variant="outline"
+          variant="secondary"
           disabled={query.isFetchingNextPage}
           onClick={() => void query.fetchNextPage()}
         >

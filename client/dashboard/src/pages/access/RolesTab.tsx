@@ -1,6 +1,6 @@
-import { Badge } from "@/components/ui/badge";
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+import { Badge } from "@/components/ui/Badge";
+import { Heading } from "@/components/ui/Heading";
+import { Type } from "@/components/ui/Type";
 import type { Role } from "@gram/client/models/components/role.js";
 import {
   invalidateAllRoles,
@@ -11,15 +11,15 @@ import {
   useMembers,
 } from "@gram/client/react-query/members.js";
 import { useDeleteRoleMutation } from "@gram/client/react-query/deleteRole.js";
-import { SkeletonTable } from "@/components/ui/skeleton";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Button } from "@/components/ui/Button";
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
@@ -29,7 +29,7 @@ import { MemberFacepile } from "@/components/member-facepile";
 import { Ellipsis } from "lucide-react";
 import { RequireScope } from "@/components/require-scope";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
-import type { Action } from "@/components/ui/more-actions";
+import type { Action } from "@/components/ui/MoreActions";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { visiblePermissionCount } from "./roleDialogState";
@@ -161,7 +161,7 @@ function RoleRow({
             {role.name}
           </Type>
           {role.isSystem && (
-            <Badge variant="outline" size="sm">
+            <Badge variant="neutral" size="sm">
               System
             </Badge>
           )}
@@ -292,7 +292,7 @@ export function RolesTab(): JSX.Element {
         </Type>
         <div className="flex items-start gap-3 text-sm">
           <Badge
-            variant="outline"
+            variant="neutral"
             size="sm"
             className="mt-0.5 w-16 shrink-0 justify-center bg-white dark:bg-zinc-900"
           >
@@ -306,7 +306,7 @@ export function RolesTab(): JSX.Element {
         </div>
         <div className="mt-2 flex items-start gap-3 text-sm">
           <Badge
-            variant="outline"
+            variant="neutral"
             size="sm"
             className="mt-0.5 w-16 shrink-0 justify-center bg-white dark:bg-zinc-900"
           >

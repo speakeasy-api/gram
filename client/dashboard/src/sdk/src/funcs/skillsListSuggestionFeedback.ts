@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function skillsListSuggestionFeedback(
   client: GramCore,
   request: ListSkillSuggestionFeedbackRequest,
-  security?: ListSkillSuggestionFeedbackSecurity | undefined,
+  security?: ListSkillSuggestionFeedbackSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function skillsListSuggestionFeedback(
 async function $do(
   client: GramCore,
   request: ListSkillSuggestionFeedbackRequest,
-  security?: ListSkillSuggestionFeedbackSecurity | undefined,
+  security?: ListSkillSuggestionFeedbackSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

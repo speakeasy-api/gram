@@ -1,13 +1,13 @@
 import { EnvironmentVariableDialog } from "@/components/environments/EnvironmentVariableDialog";
 import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@/components/ui/Tooltip";
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
@@ -27,7 +27,9 @@ import {
 import { useMcpMetadataSetMutation } from "@gram/client/react-query/mcpMetadataSet.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateEnvironmentMutation } from "@gram/client/react-query/updateEnvironment.js";
-import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle, Link, Plus, Shield } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";

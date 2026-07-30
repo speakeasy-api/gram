@@ -42,8 +42,8 @@ import { Result } from "../types/fp.js";
  */
 export function accessEnableRBAC(
   client: GramCore,
-  request?: EnableRBACRequest | undefined,
-  security?: EnableRBACSecurity | undefined,
+  request?: EnableRBACRequest  ,
+  security?: EnableRBACSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -69,8 +69,8 @@ export function accessEnableRBAC(
 
 async function $do(
   client: GramCore,
-  request?: EnableRBACRequest | undefined,
-  security?: EnableRBACSecurity | undefined,
+  request?: EnableRBACRequest  ,
+  security?: EnableRBACSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

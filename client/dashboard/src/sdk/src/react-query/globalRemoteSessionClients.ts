@@ -81,7 +81,7 @@ export type GlobalRemoteSessionClientsQueryError =
  */
 export function useGlobalRemoteSessionClients(
   request: ListGlobalRemoteSessionClientsRequest,
-  security?: ListGlobalRemoteSessionClientsSecurity | undefined,
+  security?: ListGlobalRemoteSessionClientsSecurity  ,
   options?: QueryHookOptions<
     GlobalRemoteSessionClientsQueryData,
     GlobalRemoteSessionClientsQueryError
@@ -110,7 +110,7 @@ export function useGlobalRemoteSessionClients(
  */
 export function useGlobalRemoteSessionClientsSuspense(
   request: ListGlobalRemoteSessionClientsRequest,
-  security?: ListGlobalRemoteSessionClientsSecurity | undefined,
+  security?: ListGlobalRemoteSessionClientsSecurity  ,
   options?: SuspenseQueryHookOptions<
     GlobalRemoteSessionClientsQueryData,
     GlobalRemoteSessionClientsQueryError
@@ -139,7 +139,7 @@ export function useGlobalRemoteSessionClientsSuspense(
  */
 export function useGlobalRemoteSessionClientsInfinite(
   request: ListGlobalRemoteSessionClientsRequest,
-  security?: ListGlobalRemoteSessionClientsSecurity | undefined,
+  security?: ListGlobalRemoteSessionClientsSecurity  ,
   options?: InfiniteQueryHookOptions<
     GlobalRemoteSessionClientsInfiniteQueryData,
     GlobalRemoteSessionClientsQueryError
@@ -182,7 +182,7 @@ export function useGlobalRemoteSessionClientsInfinite(
  */
 export function useGlobalRemoteSessionClientsInfiniteSuspense(
   request: ListGlobalRemoteSessionClientsRequest,
-  security?: ListGlobalRemoteSessionClientsSecurity | undefined,
+  security?: ListGlobalRemoteSessionClientsSecurity  ,
   options?: SuspenseInfiniteQueryHookOptions<
     GlobalRemoteSessionClientsInfiniteQueryData,
     GlobalRemoteSessionClientsQueryError

@@ -179,7 +179,7 @@ export class Telemetry extends ClientSDK {
    */
   async captureEvent(
     request: CaptureEventRequest,
-    security?: CaptureEventSecurity | undefined,
+    security?: CaptureEventSecurity  ,
     options?: RequestOptions,
   ): Promise<CaptureEventResult> {
     return unwrapAsync(telemetryCaptureEvent(
@@ -198,7 +198,7 @@ export class Telemetry extends ClientSDK {
    */
   async getEmployeeDataFlowGraph(
     request: GetEmployeeDataFlowGraphRequest,
-    security?: GetEmployeeDataFlowGraphSecurity | undefined,
+    security?: GetEmployeeDataFlowGraphSecurity  ,
     options?: RequestOptions,
   ): Promise<GetEmployeeDataFlowGraphResult> {
     return unwrapAsync(telemetryGetEmployeeDataFlowGraph(
@@ -217,7 +217,7 @@ export class Telemetry extends ClientSDK {
    */
   async getHooksSummary(
     request: GetHooksSummaryRequest,
-    security?: GetHooksSummarySecurity | undefined,
+    security?: GetHooksSummarySecurity  ,
     options?: RequestOptions,
   ): Promise<GetHooksSummaryResult> {
     return unwrapAsync(telemetryGetHooksSummary(
@@ -236,7 +236,7 @@ export class Telemetry extends ClientSDK {
    */
   async getMcpServerActivity(
     request: GetMcpServerActivityRequest,
-    security?: GetMcpServerActivitySecurity | undefined,
+    security?: GetMcpServerActivitySecurity  ,
     options?: RequestOptions,
   ): Promise<GetMcpServerActivityResult> {
     return unwrapAsync(telemetryGetMcpServerActivity(
@@ -255,7 +255,7 @@ export class Telemetry extends ClientSDK {
    */
   async getObservabilityOverview(
     request: GetObservabilityOverviewRequest,
-    security?: GetObservabilityOverviewSecurity | undefined,
+    security?: GetObservabilityOverviewSecurity  ,
     options?: RequestOptions,
   ): Promise<GetObservabilityOverviewResult> {
     return unwrapAsync(telemetryGetObservabilityOverview(
@@ -274,7 +274,7 @@ export class Telemetry extends ClientSDK {
    */
   async getProjectMetricsSummary(
     request: GetProjectMetricsSummaryRequest,
-    security?: GetProjectMetricsSummarySecurity | undefined,
+    security?: GetProjectMetricsSummarySecurity  ,
     options?: RequestOptions,
   ): Promise<GetMetricsSummaryResult> {
     return unwrapAsync(telemetryGetProjectMetricsSummary(
@@ -293,7 +293,7 @@ export class Telemetry extends ClientSDK {
    */
   async getProjectOverview(
     request: GetProjectOverviewRequest,
-    security?: GetProjectOverviewSecurity | undefined,
+    security?: GetProjectOverviewSecurity  ,
     options?: RequestOptions,
   ): Promise<GetProjectOverviewResult> {
     return unwrapAsync(telemetryGetProjectOverview(
@@ -312,7 +312,7 @@ export class Telemetry extends ClientSDK {
    */
   async getToolUsageFilterOptions(
     request: GetToolUsageFilterOptionsRequest,
-    security?: GetToolUsageFilterOptionsSecurity | undefined,
+    security?: GetToolUsageFilterOptionsSecurity  ,
     options?: RequestOptions,
   ): Promise<GetToolUsageFilterOptionsResult> {
     return unwrapAsync(telemetryGetToolUsageFilterOptions(
@@ -331,7 +331,7 @@ export class Telemetry extends ClientSDK {
    */
   async getToolUsageSummary(
     request: GetToolUsageSummaryRequest,
-    security?: GetToolUsageSummarySecurity | undefined,
+    security?: GetToolUsageSummarySecurity  ,
     options?: RequestOptions,
   ): Promise<GetToolUsageSummaryResult> {
     return unwrapAsync(telemetryGetToolUsageSummary(
@@ -350,7 +350,7 @@ export class Telemetry extends ClientSDK {
    */
   async getToolUsageTargetTimeSeries(
     request: GetToolUsageTargetTimeSeriesRequest,
-    security?: GetToolUsageTargetTimeSeriesSecurity | undefined,
+    security?: GetToolUsageTargetTimeSeriesSecurity  ,
     options?: RequestOptions,
   ): Promise<GetToolUsageTargetTimeSeriesResult> {
     return unwrapAsync(telemetryGetToolUsageTargetTimeSeries(
@@ -369,7 +369,7 @@ export class Telemetry extends ClientSDK {
    */
   async getToolUsageTargetToolBreakdown(
     request: GetToolUsageTargetToolBreakdownRequest,
-    security?: GetToolUsageTargetToolBreakdownSecurity | undefined,
+    security?: GetToolUsageTargetToolBreakdownSecurity  ,
     options?: RequestOptions,
   ): Promise<GetToolUsageTargetToolBreakdownResult> {
     return unwrapAsync(telemetryGetToolUsageTargetToolBreakdown(
@@ -388,7 +388,7 @@ export class Telemetry extends ClientSDK {
    */
   async getToolUsageTargets(
     request: GetToolUsageTargetsRequest,
-    security?: GetToolUsageTargetsSecurity | undefined,
+    security?: GetToolUsageTargetsSecurity  ,
     options?: RequestOptions,
   ): Promise<GetToolUsageTargetsResult> {
     return unwrapAsync(telemetryGetToolUsageTargets(
@@ -407,7 +407,7 @@ export class Telemetry extends ClientSDK {
    */
   async getToolUsageTotals(
     request: GetToolUsageTotalsRequest,
-    security?: GetToolUsageTotalsSecurity | undefined,
+    security?: GetToolUsageTotalsSecurity  ,
     options?: RequestOptions,
   ): Promise<GetToolUsageTotalsResult> {
     return unwrapAsync(telemetryGetToolUsageTotals(
@@ -426,7 +426,7 @@ export class Telemetry extends ClientSDK {
    */
   async getToolUsageUserTimeSeries(
     request: GetToolUsageUserTimeSeriesRequest,
-    security?: GetToolUsageUserTimeSeriesSecurity | undefined,
+    security?: GetToolUsageUserTimeSeriesSecurity  ,
     options?: RequestOptions,
   ): Promise<GetToolUsageUserTimeSeriesResult> {
     return unwrapAsync(telemetryGetToolUsageUserTimeSeries(
@@ -445,7 +445,7 @@ export class Telemetry extends ClientSDK {
    */
   async getToolUsageUsers(
     request: GetToolUsageUsersRequest,
-    security?: GetToolUsageUsersSecurity | undefined,
+    security?: GetToolUsageUsersSecurity  ,
     options?: RequestOptions,
   ): Promise<GetToolUsageUsersResult> {
     return unwrapAsync(telemetryGetToolUsageUsers(
@@ -464,7 +464,7 @@ export class Telemetry extends ClientSDK {
    */
   async getToolUsageUsersByTarget(
     request: GetToolUsageUsersByTargetRequest,
-    security?: GetToolUsageUsersByTargetSecurity | undefined,
+    security?: GetToolUsageUsersByTargetSecurity  ,
     options?: RequestOptions,
   ): Promise<GetToolUsageUsersByTargetResult> {
     return unwrapAsync(telemetryGetToolUsageUsersByTarget(
@@ -483,7 +483,7 @@ export class Telemetry extends ClientSDK {
    */
   async getUserMetricsSummary(
     request: GetUserMetricsSummaryRequest,
-    security?: GetUserMetricsSummarySecurity | undefined,
+    security?: GetUserMetricsSummarySecurity  ,
     options?: RequestOptions,
   ): Promise<GetUserMetricsSummaryResult> {
     return unwrapAsync(telemetryGetUserMetricsSummary(
@@ -502,7 +502,7 @@ export class Telemetry extends ClientSDK {
    */
   async listAttributeKeys(
     request: ListAttributeKeysRequest,
-    security?: ListAttributeKeysSecurity | undefined,
+    security?: ListAttributeKeysSecurity  ,
     options?: RequestOptions,
   ): Promise<ListAttributeKeysResult> {
     return unwrapAsync(telemetryListAttributeKeys(
@@ -521,7 +521,7 @@ export class Telemetry extends ClientSDK {
    */
   async listFilterOptions(
     request: ListFilterOptionsRequest,
-    security?: ListFilterOptionsSecurity | undefined,
+    security?: ListFilterOptionsSecurity  ,
     options?: RequestOptions,
   ): Promise<ListFilterOptionsResult> {
     return unwrapAsync(telemetryListFilterOptions(
@@ -540,7 +540,7 @@ export class Telemetry extends ClientSDK {
    */
   async listHooksTraces(
     request: ListHooksTracesRequest,
-    security?: ListHooksTracesSecurity | undefined,
+    security?: ListHooksTracesSecurity  ,
     options?: RequestOptions,
   ): Promise<ListHooksTracesResult> {
     return unwrapAsync(telemetryListHooksTraces(
@@ -559,7 +559,7 @@ export class Telemetry extends ClientSDK {
    */
   async listSessions(
     request: ListSessionsRequest,
-    security?: ListSessionsSecurity | undefined,
+    security?: ListSessionsSecurity  ,
     options?: RequestOptions,
   ): Promise<ListSessionsResult> {
     return unwrapAsync(telemetryListSessions(
@@ -578,7 +578,7 @@ export class Telemetry extends ClientSDK {
    */
   async listToolUsageTraces(
     request: ListToolUsageTracesRequest,
-    security?: ListToolUsageTracesSecurity | undefined,
+    security?: ListToolUsageTracesSecurity  ,
     options?: RequestOptions,
   ): Promise<ListToolUsageTracesResult> {
     return unwrapAsync(telemetryListToolUsageTraces(
@@ -597,7 +597,7 @@ export class Telemetry extends ClientSDK {
    */
   async query(
     request: QueryRequest,
-    security?: QuerySecurity | undefined,
+    security?: QuerySecurity  ,
     options?: RequestOptions,
   ): Promise<QueryResult> {
     return unwrapAsync(telemetryQuery(
@@ -616,7 +616,7 @@ export class Telemetry extends ClientSDK {
    */
   async queryTumDetails(
     request: QueryTumDetailsRequest,
-    security?: QueryTumDetailsSecurity | undefined,
+    security?: QueryTumDetailsSecurity  ,
     options?: RequestOptions,
   ): Promise<TumDetailsResult> {
     return unwrapAsync(telemetryQueryTumDetails(
@@ -635,7 +635,7 @@ export class Telemetry extends ClientSDK {
    */
   async searchChats(
     request: SearchChatsRequest,
-    security?: SearchChatsSecurity | undefined,
+    security?: SearchChatsSecurity  ,
     options?: RequestOptions,
   ): Promise<SearchChatsResult> {
     return unwrapAsync(telemetrySearchChats(
@@ -654,7 +654,7 @@ export class Telemetry extends ClientSDK {
    */
   async searchLogs(
     request: SearchLogsRequest,
-    security?: SearchLogsSecurity | undefined,
+    security?: SearchLogsSecurity  ,
     options?: RequestOptions,
   ): Promise<SearchLogsResult> {
     return unwrapAsync(telemetrySearchLogs(
@@ -673,7 +673,7 @@ export class Telemetry extends ClientSDK {
    */
   async searchToolCalls(
     request: SearchToolCallsRequest,
-    security?: SearchToolCallsSecurity | undefined,
+    security?: SearchToolCallsSecurity  ,
     options?: RequestOptions,
   ): Promise<SearchToolCallsResult> {
     return unwrapAsync(telemetrySearchToolCalls(
@@ -692,7 +692,7 @@ export class Telemetry extends ClientSDK {
    */
   async searchUsers(
     request: SearchUsersRequest,
-    security?: SearchUsersSecurity | undefined,
+    security?: SearchUsersSecurity  ,
     options?: RequestOptions,
   ): Promise<SearchUsersResult> {
     return unwrapAsync(telemetrySearchUsers(

@@ -22,8 +22,8 @@ export type ListDeploymentsQueryData = ListDeploymentResult;
 export function prefetchListDeployments(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListDeploymentsRequest | undefined,
-  security?: ListDeploymentsSecurity | undefined,
+  request?: ListDeploymentsRequest  ,
+  security?: ListDeploymentsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListDeployments(
 
 export function buildListDeploymentsQuery(
   client$: GramCore,
-  request?: ListDeploymentsRequest | undefined,
-  security?: ListDeploymentsSecurity | undefined,
+  request?: ListDeploymentsRequest  ,
+  security?: ListDeploymentsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

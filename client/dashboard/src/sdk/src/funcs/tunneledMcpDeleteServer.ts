@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function tunneledMcpDeleteServer(
   client: GramCore,
   request: DeleteTunneledMcpServerRequest,
-  security?: DeleteTunneledMcpServerSecurity | undefined,
+  security?: DeleteTunneledMcpServerSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function tunneledMcpDeleteServer(
 async function $do(
   client: GramCore,
   request: DeleteTunneledMcpServerRequest,
-  security?: DeleteTunneledMcpServerSecurity | undefined,
+  security?: DeleteTunneledMcpServerSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

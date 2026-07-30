@@ -22,8 +22,8 @@ export type GetPeriodUsageQueryData = PeriodUsage;
 export function prefetchGetPeriodUsage(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetPeriodUsageRequest | undefined,
-  security?: GetPeriodUsageSecurity | undefined,
+  request?: GetPeriodUsageRequest  ,
+  security?: GetPeriodUsageSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchGetPeriodUsage(
 
 export function buildGetPeriodUsageQuery(
   client$: GramCore,
-  request?: GetPeriodUsageRequest | undefined,
-  security?: GetPeriodUsageSecurity | undefined,
+  request?: GetPeriodUsageRequest  ,
+  security?: GetPeriodUsageSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

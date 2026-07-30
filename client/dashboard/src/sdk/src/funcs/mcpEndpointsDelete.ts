@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function mcpEndpointsDelete(
   client: GramCore,
   request: DeleteMcpEndpointRequest,
-  security?: DeleteMcpEndpointSecurity | undefined,
+  security?: DeleteMcpEndpointSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function mcpEndpointsDelete(
 async function $do(
   client: GramCore,
   request: DeleteMcpEndpointRequest,
-  security?: DeleteMcpEndpointSecurity | undefined,
+  security?: DeleteMcpEndpointSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

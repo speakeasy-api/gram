@@ -72,7 +72,7 @@ export class ExternalCredentials extends ClientSDK {
    */
   async createAwsIam(
     request: CreateAwsIamCredentialRequest,
-    security?: CreateAwsIamCredentialSecurity | undefined,
+    security?: CreateAwsIamCredentialSecurity  ,
     options?: RequestOptions,
   ): Promise<AwsIamCredential> {
     return unwrapAsync(externalCredentialsCreateAwsIam(
@@ -91,7 +91,7 @@ export class ExternalCredentials extends ClientSDK {
    */
   async createGcpIam(
     request: CreateGcpIamCredentialRequest,
-    security?: CreateGcpIamCredentialSecurity | undefined,
+    security?: CreateGcpIamCredentialSecurity  ,
     options?: RequestOptions,
   ): Promise<GcpIamCredential> {
     return unwrapAsync(externalCredentialsCreateGcpIam(
@@ -110,7 +110,7 @@ export class ExternalCredentials extends ClientSDK {
    */
   async deleteAwsIam(
     request: DeleteAwsIamCredentialRequest,
-    security?: DeleteAwsIamCredentialSecurity | undefined,
+    security?: DeleteAwsIamCredentialSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(externalCredentialsDeleteAwsIam(
@@ -129,7 +129,7 @@ export class ExternalCredentials extends ClientSDK {
    */
   async deleteGcpIam(
     request: DeleteGcpIamCredentialRequest,
-    security?: DeleteGcpIamCredentialSecurity | undefined,
+    security?: DeleteGcpIamCredentialSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(externalCredentialsDeleteGcpIam(
@@ -148,7 +148,7 @@ export class ExternalCredentials extends ClientSDK {
    */
   async getAwsIam(
     request: GetAwsIamCredentialRequest,
-    security?: GetAwsIamCredentialSecurity | undefined,
+    security?: GetAwsIamCredentialSecurity  ,
     options?: RequestOptions,
   ): Promise<AwsIamCredential> {
     return unwrapAsync(externalCredentialsGetAwsIam(
@@ -167,7 +167,7 @@ export class ExternalCredentials extends ClientSDK {
    */
   async getGcpIam(
     request: GetGcpIamCredentialRequest,
-    security?: GetGcpIamCredentialSecurity | undefined,
+    security?: GetGcpIamCredentialSecurity  ,
     options?: RequestOptions,
   ): Promise<GcpIamCredential> {
     return unwrapAsync(externalCredentialsGetGcpIam(
@@ -185,8 +185,8 @@ export class ExternalCredentials extends ClientSDK {
    * List the organization's external credentials (provider-independent summary). Optionally filter by provider. Requires org:read.
    */
   async list(
-    request?: ListExternalCredentialsRequest | undefined,
-    security?: ListExternalCredentialsSecurity | undefined,
+    request?: ListExternalCredentialsRequest  ,
+    security?: ListExternalCredentialsSecurity  ,
     options?: RequestOptions,
   ): Promise<ListExternalCredentialsResult> {
     return unwrapAsync(externalCredentialsList(
@@ -204,8 +204,8 @@ export class ExternalCredentials extends ClientSDK {
    * List the organization's AWS IAM external credentials. Requires org:read.
    */
   async listAwsIam(
-    request?: ListAwsIamCredentialsRequest | undefined,
-    security?: ListAwsIamCredentialsSecurity | undefined,
+    request?: ListAwsIamCredentialsRequest  ,
+    security?: ListAwsIamCredentialsSecurity  ,
     options?: RequestOptions,
   ): Promise<ListExternalCredentialsResult> {
     return unwrapAsync(externalCredentialsListAwsIam(
@@ -223,8 +223,8 @@ export class ExternalCredentials extends ClientSDK {
    * List the organization's GCP IAM external credentials. Requires org:read.
    */
   async listGcpIam(
-    request?: ListGcpIamCredentialsRequest | undefined,
-    security?: ListGcpIamCredentialsSecurity | undefined,
+    request?: ListGcpIamCredentialsRequest  ,
+    security?: ListGcpIamCredentialsSecurity  ,
     options?: RequestOptions,
   ): Promise<ListExternalCredentialsResult> {
     return unwrapAsync(externalCredentialsListGcpIam(
@@ -243,7 +243,7 @@ export class ExternalCredentials extends ClientSDK {
    */
   async updateAwsIam(
     request: UpdateAwsIamCredentialRequest,
-    security?: UpdateAwsIamCredentialSecurity | undefined,
+    security?: UpdateAwsIamCredentialSecurity  ,
     options?: RequestOptions,
   ): Promise<AwsIamCredential> {
     return unwrapAsync(externalCredentialsUpdateAwsIam(
@@ -262,7 +262,7 @@ export class ExternalCredentials extends ClientSDK {
    */
   async updateGcpIam(
     request: UpdateGcpIamCredentialRequest,
-    security?: UpdateGcpIamCredentialSecurity | undefined,
+    security?: UpdateGcpIamCredentialSecurity  ,
     options?: RequestOptions,
   ): Promise<GcpIamCredential> {
     return unwrapAsync(externalCredentialsUpdateGcpIam(

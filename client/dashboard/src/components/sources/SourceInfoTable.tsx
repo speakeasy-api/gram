@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import type { ReactNode } from "react";
 
 export function SourceInfoTable({

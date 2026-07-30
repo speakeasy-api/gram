@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function toolsetsDeleteBySlug(
   client: GramCore,
   request: DeleteToolsetRequest,
-  security?: DeleteToolsetSecurity | undefined,
+  security?: DeleteToolsetSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function toolsetsDeleteBySlug(
 async function $do(
   client: GramCore,
   request: DeleteToolsetRequest,
-  security?: DeleteToolsetSecurity | undefined,
+  security?: DeleteToolsetSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

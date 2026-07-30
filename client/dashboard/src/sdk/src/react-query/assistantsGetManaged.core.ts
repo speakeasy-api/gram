@@ -22,8 +22,8 @@ export type AssistantsGetManagedQueryData = Assistant;
 export function prefetchAssistantsGetManaged(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetManagedAssistantRequest | undefined,
-  security?: GetManagedAssistantSecurity | undefined,
+  request?: GetManagedAssistantRequest  ,
+  security?: GetManagedAssistantSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchAssistantsGetManaged(
 
 export function buildAssistantsGetManagedQuery(
   client$: GramCore,
-  request?: GetManagedAssistantRequest | undefined,
-  security?: GetManagedAssistantSecurity | undefined,
+  request?: GetManagedAssistantRequest  ,
+  security?: GetManagedAssistantSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

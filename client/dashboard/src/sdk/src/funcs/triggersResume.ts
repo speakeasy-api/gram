@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function triggersResume(
   client: GramCore,
   request: ResumeTriggerInstanceRequest,
-  security?: ResumeTriggerInstanceSecurity | undefined,
+  security?: ResumeTriggerInstanceSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function triggersResume(
 async function $do(
   client: GramCore,
   request: ResumeTriggerInstanceRequest,
-  security?: ResumeTriggerInstanceSecurity | undefined,
+  security?: ResumeTriggerInstanceSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

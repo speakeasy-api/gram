@@ -23,7 +23,7 @@ export function prefetchAssistantsGet(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetAssistantRequest,
-  security?: GetAssistantSecurity | undefined,
+  security?: GetAssistantSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchAssistantsGet(
 export function buildAssistantsGetQuery(
   client$: GramCore,
   request: GetAssistantRequest,
-  security?: GetAssistantSecurity | undefined,
+  security?: GetAssistantSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

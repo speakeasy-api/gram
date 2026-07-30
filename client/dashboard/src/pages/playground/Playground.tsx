@@ -1,14 +1,14 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Type } from "@/components/ui/Type";
 import { useSdkClient } from "@/contexts/Sdk";
 import {
   useRegisterEnvironmentTelemetry,
@@ -30,7 +30,7 @@ import {
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateTemplate } from "@gram/client/react-query/template.js";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
-import { ResizablePanel } from "@speakeasy-api/moonshine";
+import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { useQueryClient } from "@tanstack/react-query";
 import { MessageCircle, Plus, ScrollTextIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -269,7 +269,7 @@ function PlaygroundInner() {
   }
 
   const logsButton = (
-    <Button size="sm" variant="ghost" onClick={() => setShowLogs(!showLogs)}>
+    <Button size="sm" variant="tertiary" onClick={() => setShowLogs(!showLogs)}>
       <ScrollTextIcon className="mr-2 size-4" />
       {showLogs ? "Hide" : "Show"} Logs
     </Button>

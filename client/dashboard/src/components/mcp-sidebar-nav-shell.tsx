@@ -1,8 +1,8 @@
 import { NavButton, NavGroupProvider } from "@/components/nav-menu";
 import { SidebarFooterAction } from "@/components/sidebar-footer-action";
-import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar";
-import { useSidebar } from "@/components/ui/sidebar-context";
-import { Type } from "@/components/ui/type";
+import { SidebarMenu, SidebarMenuItem } from "@/components/ui/Sidebar";
+import { useSidebar } from "@/components/ui/Sidebar/sidebar-context";
+import { Type } from "@/components/ui/Type";
 import { cn } from "@/lib/utils";
 import { ArrowLeft } from "lucide-react";
 import * as React from "react";

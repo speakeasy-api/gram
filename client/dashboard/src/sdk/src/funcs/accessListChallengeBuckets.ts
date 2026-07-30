@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function accessListChallengeBuckets(
   client: GramCore,
-  request?: ListChallengeBucketsRequest | undefined,
-  security?: ListChallengeBucketsSecurity | undefined,
+  request?: ListChallengeBucketsRequest  ,
+  security?: ListChallengeBucketsSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function accessListChallengeBuckets(
 
 async function $do(
   client: GramCore,
-  request?: ListChallengeBucketsRequest | undefined,
-  security?: ListChallengeBucketsSecurity | undefined,
+  request?: ListChallengeBucketsRequest  ,
+  security?: ListChallengeBucketsSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

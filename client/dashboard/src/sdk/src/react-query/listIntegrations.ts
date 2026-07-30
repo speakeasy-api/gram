@@ -62,8 +62,8 @@ export type ListIntegrationsQueryError =
  * List available third-party integrations.
  */
 export function useListIntegrations(
-  request?: ListIntegrationsRequest | undefined,
-  security?: ListIntegrationsSecurity | undefined,
+  request?: ListIntegrationsRequest  ,
+  security?: ListIntegrationsSecurity  ,
   options?: QueryHookOptions<
     ListIntegrationsQueryData,
     ListIntegrationsQueryError
@@ -88,8 +88,8 @@ export function useListIntegrations(
  * List available third-party integrations.
  */
 export function useListIntegrationsSuspense(
-  request?: ListIntegrationsRequest | undefined,
-  security?: ListIntegrationsSecurity | undefined,
+  request?: ListIntegrationsRequest  ,
+  security?: ListIntegrationsSecurity  ,
   options?: SuspenseQueryHookOptions<
     ListIntegrationsQueryData,
     ListIntegrationsQueryError

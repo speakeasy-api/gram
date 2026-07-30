@@ -4,11 +4,11 @@ import {
   RouteNotFoundState,
   SecondaryRouteAction,
 } from "@/components/route-not-found-state";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
+import { Type } from "@/components/ui/Type";
 import { useProject } from "@/contexts/Auth";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { Markdown } from "@/elements/components/Markdown";
@@ -22,7 +22,8 @@ import { useRoutes } from "@/routes";
 import type { SkillVersion } from "@gram/client/models/components/skillversion.js";
 import { useSkill } from "@gram/client/react-query/skill.js";
 import { useSkillVersionsInfinite } from "@gram/client/react-query/skillVersions.js";
-import { Badge, type Column, Table } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { type Column, Table } from "@/components/ui/Table";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import {
@@ -411,7 +412,7 @@ function SkillDetailSections({
               level="component"
             >
               <Button
-                variant="destructiveGhost"
+                variant="destructive-secondary"
                 onClick={() =>
                   setArchiveTarget({
                     id: skill.id,
@@ -522,7 +523,7 @@ function VersionHistory({
             >
               <Button
                 size="sm"
-                variant="outline"
+                variant="secondary"
                 onClick={() => setRestoreTarget({ version, direction })}
               >
                 {direction === "backward" ? "Roll back" : "Promote"}
@@ -566,7 +567,7 @@ function VersionHistory({
         )}
         {versionsQuery.hasNextPage && !versionsQuery.isFetchNextPageError && (
           <Button
-            variant="outline"
+            variant="secondary"
             disabled={versionsQuery.isFetchingNextPage}
             onClick={() => void versionsQuery.fetchNextPage()}
           >
@@ -765,7 +766,7 @@ function LoadMoreError({ onRetry }: { onRetry: () => void }): JSX.Element {
       <Type small className="text-destructive">
         Unable to load more versions.
       </Type>
-      <Button size="sm" variant="outline" onClick={onRetry}>
+      <Button size="sm" variant="secondary" onClick={onRetry}>
         Retry
       </Button>
     </div>

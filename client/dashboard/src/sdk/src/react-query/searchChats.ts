@@ -63,7 +63,7 @@ export type SearchChatsQueryError =
  */
 export function useSearchChats(
   request: SearchChatsRequest,
-  security?: SearchChatsSecurity | undefined,
+  security?: SearchChatsSecurity  ,
   options?: QueryHookOptions<SearchChatsQueryData, SearchChatsQueryError>,
 ): UseQueryResult<SearchChatsQueryData, SearchChatsQueryError> {
   const client = useGramContext();
@@ -86,7 +86,7 @@ export function useSearchChats(
  */
 export function useSearchChatsSuspense(
   request: SearchChatsRequest,
-  security?: SearchChatsSecurity | undefined,
+  security?: SearchChatsSecurity  ,
   options?: SuspenseQueryHookOptions<
     SearchChatsQueryData,
     SearchChatsQueryError

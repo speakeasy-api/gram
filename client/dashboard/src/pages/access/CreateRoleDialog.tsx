@@ -1,9 +1,9 @@
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 
-import { Button as LocalButton } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Button as LocalButton } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
 import {
   Sheet,
   SheetContent,
@@ -11,8 +11,8 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Type } from "@/components/ui/Type";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/contexts/Auth";
 import type { Role } from "@gram/client/models/components/role.js";
@@ -24,7 +24,8 @@ import {
 import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
 import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
-import { Alert, Button } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { useOrgRoutes } from "@/routes";
@@ -42,7 +43,7 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@/components/ui/Tooltip";
 import { useMemo, useState } from "react";
 import {
   getSelectableMembers,
@@ -841,8 +842,8 @@ export function CreateRoleDialog({
                                           ).length > 0 && (
                                             <LocalButton
                                               type="button"
-                                              variant="ghost"
-                                              size="inline"
+                                              variant="tertiary"
+                                              size="xs"
                                               className="text-muted-foreground text-xs"
                                               onClick={() =>
                                                 openRuleEditor(

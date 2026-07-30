@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function userSessionIssuersCreate(
   client: GramCore,
   request: CreateUserSessionIssuerRequest,
-  security?: CreateUserSessionIssuerSecurity | undefined,
+  security?: CreateUserSessionIssuerSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function userSessionIssuersCreate(
 async function $do(
   client: GramCore,
   request: CreateUserSessionIssuerRequest,
-  security?: CreateUserSessionIssuerSecurity | undefined,
+  security?: CreateUserSessionIssuerSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

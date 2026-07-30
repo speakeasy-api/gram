@@ -46,7 +46,7 @@ export class McpEndpoints extends ClientSDK {
    */
   async checkSlugAvailability(
     request: CheckMcpEndpointSlugAvailabilityRequest,
-    security?: CheckMcpEndpointSlugAvailabilitySecurity | undefined,
+    security?: CheckMcpEndpointSlugAvailabilitySecurity  ,
     options?: RequestOptions,
   ): Promise<boolean> {
     return unwrapAsync(mcpEndpointsCheckSlugAvailability(
@@ -65,7 +65,7 @@ export class McpEndpoints extends ClientSDK {
    */
   async create(
     request: CreateMcpEndpointRequest,
-    security?: CreateMcpEndpointSecurity | undefined,
+    security?: CreateMcpEndpointSecurity  ,
     options?: RequestOptions,
   ): Promise<McpEndpoint> {
     return unwrapAsync(mcpEndpointsCreate(
@@ -84,7 +84,7 @@ export class McpEndpoints extends ClientSDK {
    */
   async delete(
     request: DeleteMcpEndpointRequest,
-    security?: DeleteMcpEndpointSecurity | undefined,
+    security?: DeleteMcpEndpointSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(mcpEndpointsDelete(
@@ -102,8 +102,8 @@ export class McpEndpoints extends ClientSDK {
    * Get an MCP endpoint by id or by (custom_domain_id, slug). Provide either id, or slug with an optional custom_domain_id — not both.
    */
   async get(
-    request?: GetMcpEndpointRequest | undefined,
-    security?: GetMcpEndpointSecurity | undefined,
+    request?: GetMcpEndpointRequest  ,
+    security?: GetMcpEndpointSecurity  ,
     options?: RequestOptions,
   ): Promise<McpEndpoint> {
     return unwrapAsync(mcpEndpointsGet(
@@ -121,8 +121,8 @@ export class McpEndpoints extends ClientSDK {
    * List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server.
    */
   async list(
-    request?: ListMcpEndpointsRequest | undefined,
-    security?: ListMcpEndpointsSecurity | undefined,
+    request?: ListMcpEndpointsRequest  ,
+    security?: ListMcpEndpointsSecurity  ,
     options?: RequestOptions,
   ): Promise<ListMcpEndpointsResult> {
     return unwrapAsync(mcpEndpointsList(
@@ -141,7 +141,7 @@ export class McpEndpoints extends ClientSDK {
    */
   async update(
     request: UpdateMcpEndpointRequest,
-    security?: UpdateMcpEndpointSecurity | undefined,
+    security?: UpdateMcpEndpointSecurity  ,
     options?: RequestOptions,
   ): Promise<McpEndpoint> {
     return unwrapAsync(mcpEndpointsUpdate(

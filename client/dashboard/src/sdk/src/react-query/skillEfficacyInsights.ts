@@ -80,8 +80,8 @@ export type SkillEfficacyInsightsQueryError =
  * Query activation-time skill efficacy, estimated savings, attributed session cost, and optional scored-session detail for the current project. Scores are sampled and costs fan out to every activated version.
  */
 export function useSkillEfficacyInsights(
-  request?: QuerySkillEfficacyInsightsRequest | undefined,
-  security?: QuerySkillEfficacyInsightsSecurity | undefined,
+  request?: QuerySkillEfficacyInsightsRequest  ,
+  security?: QuerySkillEfficacyInsightsSecurity  ,
   options?: QueryHookOptions<
     SkillEfficacyInsightsQueryData,
     SkillEfficacyInsightsQueryError
@@ -109,8 +109,8 @@ export function useSkillEfficacyInsights(
  * Query activation-time skill efficacy, estimated savings, attributed session cost, and optional scored-session detail for the current project. Scores are sampled and costs fan out to every activated version.
  */
 export function useSkillEfficacyInsightsSuspense(
-  request?: QuerySkillEfficacyInsightsRequest | undefined,
-  security?: QuerySkillEfficacyInsightsSecurity | undefined,
+  request?: QuerySkillEfficacyInsightsRequest  ,
+  security?: QuerySkillEfficacyInsightsSecurity  ,
   options?: SuspenseQueryHookOptions<
     SkillEfficacyInsightsQueryData,
     SkillEfficacyInsightsQueryError
@@ -138,8 +138,8 @@ export function useSkillEfficacyInsightsSuspense(
  * Query activation-time skill efficacy, estimated savings, attributed session cost, and optional scored-session detail for the current project. Scores are sampled and costs fan out to every activated version.
  */
 export function useSkillEfficacyInsightsInfinite(
-  request?: QuerySkillEfficacyInsightsRequest | undefined,
-  security?: QuerySkillEfficacyInsightsSecurity | undefined,
+  request?: QuerySkillEfficacyInsightsRequest  ,
+  security?: QuerySkillEfficacyInsightsSecurity  ,
   options?: InfiniteQueryHookOptions<
     SkillEfficacyInsightsInfiniteQueryData,
     SkillEfficacyInsightsQueryError
@@ -181,8 +181,8 @@ export function useSkillEfficacyInsightsInfinite(
  * Query activation-time skill efficacy, estimated savings, attributed session cost, and optional scored-session detail for the current project. Scores are sampled and costs fan out to every activated version.
  */
 export function useSkillEfficacyInsightsInfiniteSuspense(
-  request?: QuerySkillEfficacyInsightsRequest | undefined,
-  security?: QuerySkillEfficacyInsightsSecurity | undefined,
+  request?: QuerySkillEfficacyInsightsRequest  ,
+  security?: QuerySkillEfficacyInsightsSecurity  ,
   options?: SuspenseInfiniteQueryHookOptions<
     SkillEfficacyInsightsInfiniteQueryData,
     SkillEfficacyInsightsQueryError

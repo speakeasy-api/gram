@@ -34,8 +34,8 @@ export type SkillDistributionsPageParams = PageIterator<
 export function prefetchSkillDistributions(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListSkillDistributionsRequest | undefined,
-  security?: ListSkillDistributionsSecurity | undefined,
+  request?: ListSkillDistributionsRequest  ,
+  security?: ListSkillDistributionsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -51,8 +51,8 @@ export function prefetchSkillDistributions(
 export function prefetchSkillDistributionsInfinite(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListSkillDistributionsRequest | undefined,
-  security?: ListSkillDistributionsSecurity | undefined,
+  request?: ListSkillDistributionsRequest  ,
+  security?: ListSkillDistributionsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -70,8 +70,8 @@ export function prefetchSkillDistributionsInfinite(
 
 export function buildSkillDistributionsQuery(
   client$: GramCore,
-  request?: ListSkillDistributionsRequest | undefined,
-  security?: ListSkillDistributionsSecurity | undefined,
+  request?: ListSkillDistributionsRequest  ,
+  security?: ListSkillDistributionsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -115,8 +115,8 @@ export function buildSkillDistributionsQuery(
 
 export function buildSkillDistributionsInfiniteQuery(
   client$: GramCore,
-  request?: ListSkillDistributionsRequest | undefined,
-  security?: ListSkillDistributionsSecurity | undefined,
+  request?: ListSkillDistributionsRequest  ,
+  security?: ListSkillDistributionsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

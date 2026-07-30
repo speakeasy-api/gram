@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function projectsUpsertAllowedOrigin(
   client: GramCore,
   request: UpsertAllowedOriginRequest,
-  security?: UpsertAllowedOriginSecurity | undefined,
+  security?: UpsertAllowedOriginSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function projectsUpsertAllowedOrigin(
 async function $do(
   client: GramCore,
   request: UpsertAllowedOriginRequest,
-  security?: UpsertAllowedOriginSecurity | undefined,
+  security?: UpsertAllowedOriginSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

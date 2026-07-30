@@ -63,7 +63,7 @@ export type GetEmployeeDataFlowGraphQueryError =
  */
 export function useGetEmployeeDataFlowGraph(
   request: GetEmployeeDataFlowGraphRequest,
-  security?: GetEmployeeDataFlowGraphSecurity | undefined,
+  security?: GetEmployeeDataFlowGraphSecurity  ,
   options?: QueryHookOptions<
     GetEmployeeDataFlowGraphQueryData,
     GetEmployeeDataFlowGraphQueryError
@@ -92,7 +92,7 @@ export function useGetEmployeeDataFlowGraph(
  */
 export function useGetEmployeeDataFlowGraphSuspense(
   request: GetEmployeeDataFlowGraphRequest,
-  security?: GetEmployeeDataFlowGraphSecurity | undefined,
+  security?: GetEmployeeDataFlowGraphSecurity  ,
   options?: SuspenseQueryHookOptions<
     GetEmployeeDataFlowGraphQueryData,
     GetEmployeeDataFlowGraphQueryError

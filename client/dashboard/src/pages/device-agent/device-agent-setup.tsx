@@ -1,22 +1,23 @@
 import { CodeBlock } from "@/components/code";
 import { Page } from "@/components/page-layout";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Dialog } from "@/components/ui/dialog";
-import { Link as ExternalLink } from "@/components/ui/link";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
+import { Dialog } from "@/components/ui/Dialog";
+import { Link as ExternalLink } from "@/components/ui/Link";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
+import { Type } from "@/components/ui/Type";
 import { useOrganization } from "@/contexts/Auth";
 import { useAgentToken } from "@/hooks/useAgentToken";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ChevronRight, Download } from "lucide-react";
 import React, { useEffect, useState } from "react";
@@ -319,7 +320,11 @@ function ManualDownload({ os }: { os: OsKey }) {
     return (
       <Type small muted>
         Couldn't load the latest release — open the{" "}
-        <ExternalLink to={MANIFEST_URL} external>
+        <ExternalLink
+          href={MANIFEST_URL}
+          target="_blank"
+          iconSuffixName="external-link"
+        >
           release manifest
         </ExternalLink>{" "}
         for the current version and download URLs.
@@ -650,7 +655,7 @@ function FleetIdentity() {
           )}
 
           {isError && (
-            <Alert variant="destructive">
+            <Alert variant="error">
               <Icon name="triangle-alert" className="h-4 w-4" />
               <AlertTitle>Couldn't generate a token</AlertTitle>
               <AlertDescription>
@@ -687,7 +692,7 @@ function FleetIdentity() {
               This expires the token currently deployed in your MDM settings.
             </Dialog.Description>
           </Dialog.Header>
-          <Alert variant="destructive">
+          <Alert variant="error">
             <Icon name="triangle-alert" className="h-4 w-4" />
             <AlertTitle>
               Your current MDM integration will stop working

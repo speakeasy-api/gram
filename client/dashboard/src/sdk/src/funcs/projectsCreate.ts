@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function projectsCreate(
   client: GramCore,
   request: CreateProjectRequest,
-  security?: CreateProjectSecurity | undefined,
+  security?: CreateProjectSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function projectsCreate(
 async function $do(
   client: GramCore,
   request: CreateProjectRequest,
-  security?: CreateProjectSecurity | undefined,
+  security?: CreateProjectSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

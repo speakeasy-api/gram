@@ -1,8 +1,8 @@
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { Textarea } from "@/components/moon/textarea";
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import { useQueryState } from "nuqs";
 import type { ApproveSkillSuggestionResultOutcome } from "@gram/client/models/components/approveskillsuggestionresult.js";
 import type { RecordSkillResult } from "@gram/client/models/components/recordskillresult.js";
@@ -339,7 +339,7 @@ export function SkillManifestDialog({
 
         <Dialog.Footer>
           <Button
-            variant="outline"
+            variant="secondary"
             disabled={isBusy}
             onClick={() => handleOpenChange(false)}
           >
@@ -395,7 +395,7 @@ function SavedManifestResult({
         <Button size="sm" onClick={onView}>
           View skill
         </Button>
-        <Button size="sm" variant="outline" onClick={onContinue}>
+        <Button size="sm" variant="secondary" onClick={onContinue}>
           Continue editing
         </Button>
       </div>

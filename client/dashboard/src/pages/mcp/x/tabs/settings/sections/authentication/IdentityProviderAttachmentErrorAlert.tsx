@@ -1,6 +1,7 @@
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import { ProxyRegistrationError } from "@/lib/proxyRegisterUpstreamClient";
-import { Alert, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Stack } from "@/components/ui/Stack";
 import { useEffect, useRef } from "react";
 
 type ErrorContent = {

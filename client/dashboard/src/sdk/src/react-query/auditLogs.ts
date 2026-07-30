@@ -80,8 +80,8 @@ export type AuditLogsQueryError =
  * List audit logs across organization and projects.
  */
 export function useAuditLogs(
-  request?: ListAuditLogsRequest | undefined,
-  security?: ListAuditLogsSecurity | undefined,
+  request?: ListAuditLogsRequest  ,
+  security?: ListAuditLogsSecurity  ,
   options?: QueryHookOptions<AuditLogsQueryData, AuditLogsQueryError>,
 ): UseQueryResult<AuditLogsQueryData, AuditLogsQueryError> {
   const client = useGramContext();
@@ -103,8 +103,8 @@ export function useAuditLogs(
  * List audit logs across organization and projects.
  */
 export function useAuditLogsSuspense(
-  request?: ListAuditLogsRequest | undefined,
-  security?: ListAuditLogsSecurity | undefined,
+  request?: ListAuditLogsRequest  ,
+  security?: ListAuditLogsSecurity  ,
   options?: SuspenseQueryHookOptions<AuditLogsQueryData, AuditLogsQueryError>,
 ): UseSuspenseQueryResult<AuditLogsQueryData, AuditLogsQueryError> {
   const client = useGramContext();
@@ -126,8 +126,8 @@ export function useAuditLogsSuspense(
  * List audit logs across organization and projects.
  */
 export function useAuditLogsInfinite(
-  request?: ListAuditLogsRequest | undefined,
-  security?: ListAuditLogsSecurity | undefined,
+  request?: ListAuditLogsRequest  ,
+  security?: ListAuditLogsSecurity  ,
   options?: InfiniteQueryHookOptions<
     AuditLogsInfiniteQueryData,
     AuditLogsQueryError
@@ -163,8 +163,8 @@ export function useAuditLogsInfinite(
  * List audit logs across organization and projects.
  */
 export function useAuditLogsInfiniteSuspense(
-  request?: ListAuditLogsRequest | undefined,
-  security?: ListAuditLogsSecurity | undefined,
+  request?: ListAuditLogsRequest  ,
+  security?: ListAuditLogsSecurity  ,
   options?: SuspenseInfiniteQueryHookOptions<
     AuditLogsInfiniteQueryData,
     AuditLogsQueryError

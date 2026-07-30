@@ -5,9 +5,9 @@ import {
   type FilterValue,
   useFilterState,
 } from "@/components/filters";
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Type } from "@/components/ui/Type";
 import { useOrganization } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { formatRelativeTime } from "@/lib/dates";
@@ -16,13 +16,10 @@ import type {
   CoverageBucket,
   ManagedDevice,
 } from "@gram/client/models/components/manageddevice.js";
-import {
-  Badge,
-  Button,
-  type Column,
-  Stack,
-  Table,
-} from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
+import { type Column, Table } from "@/components/ui/Table";
 import {
   CheckCircle2,
   CircleSlash,

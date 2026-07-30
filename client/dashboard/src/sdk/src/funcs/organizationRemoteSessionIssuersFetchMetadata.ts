@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function organizationRemoteSessionIssuersFetchMetadata(
   client: GramCore,
   request: FetchOrganizationRemoteSessionIssuerMetadataRequest,
-  security?: FetchOrganizationRemoteSessionIssuerMetadataSecurity | undefined,
+  security?: FetchOrganizationRemoteSessionIssuerMetadataSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function organizationRemoteSessionIssuersFetchMetadata(
 async function $do(
   client: GramCore,
   request: FetchOrganizationRemoteSessionIssuerMetadataRequest,
-  security?: FetchOrganizationRemoteSessionIssuerMetadataSecurity | undefined,
+  security?: FetchOrganizationRemoteSessionIssuerMetadataSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

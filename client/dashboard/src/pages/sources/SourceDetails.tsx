@@ -3,15 +3,15 @@ import MonacoEditorLazy from "@/components/monaco-editor.lazy";
 import { Page } from "@/components/page-layout";
 import { computeTelemetrySummary } from "@/components/sources/sourceTelemetrySummary";
 import { useFetchSourceContent } from "@/components/sources/useFetchSourceContent";
-import { SkeletonCode } from "@/components/ui/skeleton";
+import { SkeletonCode } from "@/components/ui/Skeleton";
 import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
   TabsList,
-} from "@/components/ui/tabs";
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tabs";
+import { Heading } from "@/components/ui/Heading";
+import { Type } from "@/components/ui/Type";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
@@ -29,7 +29,8 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useToolUpdate } from "@/hooks/useToolUpdate";
 import { invalidateAllListTools } from "@gram/client/react-query/listTools.js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useParams } from "react-router";
 import { SourceDeploymentsPanel } from "./SourceDeploymentsPanel";

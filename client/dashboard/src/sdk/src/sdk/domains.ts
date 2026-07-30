@@ -51,8 +51,8 @@ export class Domains extends ClientSDK {
    * Check the routing and certificate health of the organization's custom domain
    */
   async checkHealth(
-    request?: CheckDomainHealthRequest | undefined,
-    security?: CheckDomainHealthSecurity | undefined,
+    request?: CheckDomainHealthRequest  ,
+    security?: CheckDomainHealthSecurity  ,
     options?: RequestOptions,
   ): Promise<CustomDomain> {
     return unwrapAsync(domainsCheckHealth(
@@ -70,8 +70,8 @@ export class Domains extends ClientSDK {
    * Delete a custom domain
    */
   async deleteDomain(
-    request?: DeleteDomainRequest | undefined,
-    security?: DeleteDomainSecurity | undefined,
+    request?: DeleteDomainRequest  ,
+    security?: DeleteDomainSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(domainsDeleteDomain(
@@ -89,8 +89,8 @@ export class Domains extends ClientSDK {
    * Get the custom domain for an organization
    */
   async getDomain(
-    request?: GetDomainRequest | undefined,
-    security?: GetDomainSecurity | undefined,
+    request?: GetDomainRequest  ,
+    security?: GetDomainSecurity  ,
     options?: RequestOptions,
   ): Promise<CustomDomain> {
     return unwrapAsync(domainsGetDomain(
@@ -108,8 +108,8 @@ export class Domains extends ClientSDK {
    * List the custom domains for an organization. The result is empty when no custom domain has been configured.
    */
   async listDomains(
-    request?: ListDomainsRequest | undefined,
-    security?: ListDomainsSecurity | undefined,
+    request?: ListDomainsRequest  ,
+    security?: ListDomainsSecurity  ,
     options?: RequestOptions,
   ): Promise<ListCustomDomainsResult> {
     return unwrapAsync(domainsListDomains(
@@ -127,8 +127,8 @@ export class Domains extends ClientSDK {
    * List the MCP endpoints registered under the organization's custom domain across every project. Returns enriched rows that include the parent MCP server and project so callers can preview what a custom-domain deletion would cascade through.
    */
   async listMcpEndpoints(
-    request?: ListCustomDomainMcpEndpointsRequest | undefined,
-    security?: ListCustomDomainMcpEndpointsSecurity | undefined,
+    request?: ListCustomDomainMcpEndpointsRequest  ,
+    security?: ListCustomDomainMcpEndpointsSecurity  ,
     options?: RequestOptions,
   ): Promise<ListCustomDomainMcpEndpointsResult> {
     return unwrapAsync(domainsListMcpEndpoints(
@@ -147,7 +147,7 @@ export class Domains extends ClientSDK {
    */
   async registerDomain(
     request: RegisterDomainRequest,
-    security?: RegisterDomainSecurity | undefined,
+    security?: RegisterDomainSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(domainsRegisterDomain(
@@ -166,7 +166,7 @@ export class Domains extends ClientSDK {
    */
   async updateDomain(
     request: UpdateDomainRequest,
-    security?: UpdateDomainSecurity | undefined,
+    security?: UpdateDomainSecurity  ,
     options?: RequestOptions,
   ): Promise<CustomDomain> {
     return unwrapAsync(domainsUpdateDomain(

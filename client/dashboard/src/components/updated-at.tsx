@@ -1,9 +1,9 @@
 import { HumanizeDateTime } from "@/lib/dates";
 
 import { cn } from "@/lib/utils";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
 import { isAfter } from "date-fns";
-import { Type } from "./ui/type";
+import { Type } from "@/components/ui/Type";
 
 export function UpdatedAt({
   date,

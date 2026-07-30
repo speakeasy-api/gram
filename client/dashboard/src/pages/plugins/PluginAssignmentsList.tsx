@@ -2,7 +2,7 @@ import {
   type FacepileMember,
   MemberFacepile,
 } from "@/components/member-facepile";
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { PluginAssignment } from "@gram/client/models/components/pluginassignment.js";
 import type { Role } from "@gram/client/models/components/role.js";

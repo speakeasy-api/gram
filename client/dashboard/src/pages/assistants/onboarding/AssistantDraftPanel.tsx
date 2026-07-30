@@ -3,22 +3,23 @@ import { AssistantSessionsList } from "@/components/assistants/sessions-list";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
 import { EditInstructionsDialog } from "@/components/assistants/edit-instructions-dialog";
 import { RequireScope } from "@/components/require-scope";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
   TabsList,
-} from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tabs";
+import { Type } from "@/components/ui/Type";
 import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
 import { useAssistantsDeleteMutation } from "@gram/client/react-query/assistantsDelete.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useTriggers } from "@gram/client/react-query/triggers.js";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
@@ -98,7 +99,7 @@ export function AssistantDraftPanel(): JSX.Element {
           {a?.name ?? "Loading…"}
         </Type>
         <Button
-          variant="ghost"
+          variant="tertiary"
           size="sm"
           className="shrink-0"
           aria-label="Delete assistant"
@@ -169,7 +170,7 @@ export function AssistantDraftPanel(): JSX.Element {
                 title="System instructions"
                 action={
                   <Button
-                    variant="ghost"
+                    variant="tertiary"
                     size="sm"
                     className="h-auto gap-1 px-1.5 py-0.5 text-xs"
                     onClick={() => setEditingInstructions(true)}
@@ -292,7 +293,7 @@ export function AssistantDraftPanel(): JSX.Element {
                         <Type small className="font-medium">
                           {t.name}
                         </Type>
-                        <Badge variant="outline" className="text-[10px]">
+                        <Badge variant="neutral" className="text-[10px]">
                           {t.definitionSlug}
                         </Badge>
                       </Stack>
@@ -303,11 +304,11 @@ export function AssistantDraftPanel(): JSX.Element {
                       )}
                     </Stack>
                     {t.status === "active" ? (
-                      <Badge variant="default" className="text-[10px]">
+                      <Badge variant="neutral" className="text-[10px]">
                         Active
                       </Badge>
                     ) : (
-                      <Badge variant="secondary" className="text-[10px]">
+                      <Badge variant="neutral" className="text-[10px]">
                         Paused
                       </Badge>
                     )}

@@ -3,7 +3,7 @@ import {
   McpSidebarNavShell,
   type McpSidebarNavItem,
 } from "@/components/mcp-sidebar-nav-shell";
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { HumanizeDateTime } from "@/lib/dates";
 import {
@@ -25,7 +25,7 @@ import { SkillSharingCardBlocks } from "@/pages/skills/SkillSharingControl";
 import { useRoutes } from "@/routes";
 import { useSkill } from "@gram/client/react-query/skill.js";
 import { useSkillDistributionsInfinite } from "@gram/client/react-query/skillDistributions.js";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import {
   Activity,
   Braces,

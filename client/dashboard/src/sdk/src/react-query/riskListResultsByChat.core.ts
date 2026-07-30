@@ -22,8 +22,8 @@ export type RiskListResultsByChatQueryData = ListRiskResultsByChatResult;
 export function prefetchRiskListResultsByChat(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListRiskResultsByChatRequest | undefined,
-  security?: ListRiskResultsByChatSecurity | undefined,
+  request?: ListRiskResultsByChatRequest  ,
+  security?: ListRiskResultsByChatSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchRiskListResultsByChat(
 
 export function buildRiskListResultsByChatQuery(
   client$: GramCore,
-  request?: ListRiskResultsByChatRequest | undefined,
-  security?: ListRiskResultsByChatSecurity | undefined,
+  request?: ListRiskResultsByChatRequest  ,
+  security?: ListRiskResultsByChatSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

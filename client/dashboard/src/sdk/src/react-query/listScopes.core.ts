@@ -22,8 +22,8 @@ export type ListScopesQueryData = ListScopesResult;
 export function prefetchListScopes(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListScopesRequest | undefined,
-  security?: ListScopesSecurity | undefined,
+  request?: ListScopesRequest  ,
+  security?: ListScopesSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListScopes(
 
 export function buildListScopesQuery(
   client$: GramCore,
-  request?: ListScopesRequest | undefined,
-  security?: ListScopesSecurity | undefined,
+  request?: ListScopesRequest  ,
+  security?: ListScopesSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

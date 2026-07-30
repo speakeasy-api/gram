@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function deviceIntegrationsSetScheduleEnabled(
   client: GramCore,
   request: SetDeviceIntegrationScheduleEnabledRequest,
-  security?: SetDeviceIntegrationScheduleEnabledSecurity | undefined,
+  security?: SetDeviceIntegrationScheduleEnabledSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function deviceIntegrationsSetScheduleEnabled(
 async function $do(
   client: GramCore,
   request: SetDeviceIntegrationScheduleEnabledRequest,
-  security?: SetDeviceIntegrationScheduleEnabledSecurity | undefined,
+  security?: SetDeviceIntegrationScheduleEnabledSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

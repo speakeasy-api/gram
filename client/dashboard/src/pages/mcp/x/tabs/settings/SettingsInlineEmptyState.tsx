@@ -1,5 +1,5 @@
-import { Type } from "@/components/ui/type";
-import { Button } from "@speakeasy-api/moonshine";
+import { Type } from "@/components/ui/Type";
+import { Button } from "@/components/ui/Button";
 import { Plus } from "lucide-react";
 import type { ReactNode } from "react";
 

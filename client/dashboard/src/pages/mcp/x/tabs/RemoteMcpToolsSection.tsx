@@ -1,13 +1,13 @@
-import { Heading } from "@/components/ui/heading";
+import { Heading } from "@/components/ui/Heading";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Type } from "@/components/ui/Type";
 import {
   useProxiedMcpTools,
   type ProxiedMcpTool,
@@ -25,7 +25,8 @@ import {
   useToolMetadata,
   type ToolMetadataByName,
 } from "@/hooks/useToolMetadata";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { PlugZap } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";

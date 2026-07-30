@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function riskPolicyBypassRequestsRevoke(
   client: GramCore,
   request: RevokeRiskPolicyBypassRequestRequest,
-  security?: RevokeRiskPolicyBypassRequestSecurity | undefined,
+  security?: RevokeRiskPolicyBypassRequestSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function riskPolicyBypassRequestsRevoke(
 async function $do(
   client: GramCore,
   request: RevokeRiskPolicyBypassRequestRequest,
-  security?: RevokeRiskPolicyBypassRequestSecurity | undefined,
+  security?: RevokeRiskPolicyBypassRequestSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

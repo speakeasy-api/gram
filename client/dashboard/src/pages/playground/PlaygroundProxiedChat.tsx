@@ -1,5 +1,5 @@
-import { Button } from "@/components/ui/button";
-import { Type } from "@/components/ui/type";
+import { Button } from "@/components/ui/Button";
+import { Type } from "@/components/ui/Type";
 import { PlugZap } from "lucide-react";
 import { useEffect } from "react";
 import { PlaygroundChat } from "./PlaygroundChat";

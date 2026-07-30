@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function featuresGet(
   client: GramCore,
-  request?: GetProductFeaturesRequest | undefined,
-  security?: GetProductFeaturesSecurity | undefined,
+  request?: GetProductFeaturesRequest  ,
+  security?: GetProductFeaturesSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function featuresGet(
 
 async function $do(
   client: GramCore,
-  request?: GetProductFeaturesRequest | undefined,
-  security?: GetProductFeaturesSecurity | undefined,
+  request?: GetProductFeaturesRequest  ,
+  security?: GetProductFeaturesSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

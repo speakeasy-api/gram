@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function aiIntegrationsGetConfig(
   client: GramCore,
   request: GetAIIntegrationConfigRequest,
-  security?: GetAIIntegrationConfigSecurity | undefined,
+  security?: GetAIIntegrationConfigSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function aiIntegrationsGetConfig(
 async function $do(
   client: GramCore,
   request: GetAIIntegrationConfigRequest,
-  security?: GetAIIntegrationConfigSecurity | undefined,
+  security?: GetAIIntegrationConfigSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

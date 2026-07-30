@@ -62,8 +62,8 @@ export type ListToolsetsForOrgQueryError =
  * List all toolsets across the organization (summary view)
  */
 export function useListToolsetsForOrg(
-  request?: ListToolsetsForOrgRequest | undefined,
-  security?: ListToolsetsForOrgSecurity | undefined,
+  request?: ListToolsetsForOrgRequest  ,
+  security?: ListToolsetsForOrgSecurity  ,
   options?: QueryHookOptions<
     ListToolsetsForOrgQueryData,
     ListToolsetsForOrgQueryError
@@ -88,8 +88,8 @@ export function useListToolsetsForOrg(
  * List all toolsets across the organization (summary view)
  */
 export function useListToolsetsForOrgSuspense(
-  request?: ListToolsetsForOrgRequest | undefined,
-  security?: ListToolsetsForOrgSecurity | undefined,
+  request?: ListToolsetsForOrgRequest  ,
+  security?: ListToolsetsForOrgSecurity  ,
   options?: SuspenseQueryHookOptions<
     ListToolsetsForOrgQueryData,
     ListToolsetsForOrgQueryError

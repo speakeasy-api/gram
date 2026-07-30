@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function organizationRemoteSessionClientsListMcpServers(
   client: GramCore,
   request: ListOrganizationRemoteSessionClientMcpServersRequest,
-  security?: ListOrganizationRemoteSessionClientMcpServersSecurity | undefined,
+  security?: ListOrganizationRemoteSessionClientMcpServersSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function organizationRemoteSessionClientsListMcpServers(
 async function $do(
   client: GramCore,
   request: ListOrganizationRemoteSessionClientMcpServersRequest,
-  security?: ListOrganizationRemoteSessionClientMcpServersSecurity | undefined,
+  security?: ListOrganizationRemoteSessionClientMcpServersSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

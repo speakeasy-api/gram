@@ -1,17 +1,19 @@
-import { CopyButton } from "@/components/ui/copy-button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Type } from "@/components/ui/Type";
 import { getServerURL } from "@/lib/utils";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import {
   CLIENT_TYPE_LABELS,
   clientTypeHelp,
@@ -41,7 +43,7 @@ function RedirectURICallout(): JSX.Element {
         <div className="flex items-center justify-between gap-2">
           <code className="break-all">{redirectURI}</code>
           <CopyButton
-            size="inline"
+            size="xs"
             text={redirectURI}
             tooltip="Copy redirect URI"
           />

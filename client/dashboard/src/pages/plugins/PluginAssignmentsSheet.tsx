@@ -1,4 +1,4 @@
-import { MultiSelect } from "@/components/ui/multi-select";
+import { MultiSelect } from "@/components/ui/MultiSelect";
 import {
   Sheet,
   SheetContent,
@@ -6,13 +6,13 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Type } from "@/components/ui/Type";
 import type { PluginAssignment } from "@gram/client/models/components/pluginassignment.js";
 import { useSetPluginAssignmentsMutation } from "@gram/client/react-query/setPluginAssignments";
 import { useMembers } from "@gram/client/react-query/members";
 import { useRoles } from "@gram/client/react-query/roles";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {

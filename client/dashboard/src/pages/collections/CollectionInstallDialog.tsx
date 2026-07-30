@@ -1,14 +1,16 @@
 import { ProjectAvatar } from "@/components/project-menu";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog } from "@/components/ui/dialog";
-import { Type } from "@/components/ui/type";
+import { Badge } from "@/components/ui/Badge";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Dialog } from "@/components/ui/Dialog";
+import { Type } from "@/components/ui/Type";
 import { cn } from "@/lib/utils";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
-import { Button, Icon, Input } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { Input } from "@/components/ui/Input";
 import {
   ArrowRight,
   Circle,
@@ -17,7 +19,6 @@ import {
   Search,
   Server,
 } from "lucide-react";
-import type { ChangeEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 
 type InstallResult = {
@@ -267,9 +268,7 @@ export function CollectionInstallDialog({
                         <Input
                           value={projectSearch}
                           placeholder="Search projects..."
-                          onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                            setProjectSearch(e.target.value)
-                          }
+                          onChange={setProjectSearch}
                           className="pl-9"
                         />
                       </div>
@@ -426,7 +425,7 @@ function ResultStat({
 function InstallResultBadge({ status }: { status: InstallResult["status"] }) {
   if (status === "succeeded") {
     return (
-      <Badge variant="secondary" className="text-emerald-600">
+      <Badge variant="neutral" className="text-emerald-600">
         <StatusCircleIcon tone="success" size="sm" />
         Succeeded
       </Badge>
@@ -434,7 +433,7 @@ function InstallResultBadge({ status }: { status: InstallResult["status"] }) {
   }
 
   return (
-    <Badge variant="outline" className="text-destructive">
+    <Badge variant="neutral" className="text-destructive">
       <StatusCircleIcon tone="danger" size="sm" />
       Failed
     </Badge>
@@ -444,7 +443,7 @@ function InstallResultBadge({ status }: { status: InstallResult["status"] }) {
 function ProjectStatusIndicator({ status }: { status: ProjectInstallStatus }) {
   if (status === "pending") {
     return (
-      <Badge variant="outline" className="text-muted-foreground">
+      <Badge variant="neutral" className="text-muted-foreground">
         <Circle className="mr-1 h-3 w-3" />
         Pending
       </Badge>
@@ -453,7 +452,7 @@ function ProjectStatusIndicator({ status }: { status: ProjectInstallStatus }) {
 
   if (status === "installing") {
     return (
-      <Badge variant="secondary" className="text-primary">
+      <Badge variant="neutral" className="text-primary">
         <Loader2 className="mr-1 h-3 w-3 animate-spin" />
         Installing
       </Badge>

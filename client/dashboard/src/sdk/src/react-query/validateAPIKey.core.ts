@@ -22,8 +22,8 @@ export type ValidateAPIKeyQueryData = ValidateKeyResult;
 export function prefetchValidateAPIKey(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ValidateAPIKeyRequest | undefined,
-  security?: ValidateAPIKeySecurity | undefined,
+  request?: ValidateAPIKeyRequest  ,
+  security?: ValidateAPIKeySecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchValidateAPIKey(
 
 export function buildValidateAPIKeyQuery(
   client$: GramCore,
-  request?: ValidateAPIKeyRequest | undefined,
-  security?: ValidateAPIKeySecurity | undefined,
+  request?: ValidateAPIKeyRequest  ,
+  security?: ValidateAPIKeySecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -1,15 +1,15 @@
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
-import { Button } from "@/components/ui/button";
-import { DotRow } from "@/components/ui/dot-row";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { Button } from "@/components/ui/Button";
+import { DotRow } from "@/components/ui/DotRow";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Type } from "@/components/ui/Type";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import { Network, Trash2 } from "lucide-react";
 
 export function PluginServerTableRow({
@@ -114,8 +114,8 @@ export function PluginServerTableRow({
         >
           <Button
             type="button"
-            variant="ghost"
-            size="icon-sm"
+            variant="tertiary"
+            size="sm"
             tooltip="Remove server"
             aria-label={`Remove server ${server.displayName}`}
             className="hover:text-destructive"

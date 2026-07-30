@@ -23,7 +23,7 @@ export function prefetchTelemetryQueryTumDetails(
   queryClient: QueryClient,
   client$: GramCore,
   request: QueryTumDetailsRequest,
-  security?: QueryTumDetailsSecurity | undefined,
+  security?: QueryTumDetailsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchTelemetryQueryTumDetails(
 export function buildTelemetryQueryTumDetailsQuery(
   client$: GramCore,
   request: QueryTumDetailsRequest,
-  security?: QueryTumDetailsSecurity | undefined,
+  security?: QueryTumDetailsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function remoteMcpDeleteServer(
   client: GramCore,
   request: DeleteRemoteMcpServerRequest,
-  security?: DeleteRemoteMcpServerSecurity | undefined,
+  security?: DeleteRemoteMcpServerSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function remoteMcpDeleteServer(
 async function $do(
   client: GramCore,
   request: DeleteRemoteMcpServerRequest,
-  security?: DeleteRemoteMcpServerSecurity | undefined,
+  security?: DeleteRemoteMcpServerSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

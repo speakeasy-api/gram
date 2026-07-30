@@ -1,7 +1,8 @@
 import { Expandable } from "@/components/expandable";
-import { SkeletonParagraph } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { SkeletonParagraph } from "@/components/ui/Skeleton";
+import { Type } from "@/components/ui/Type";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { FileJson2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 

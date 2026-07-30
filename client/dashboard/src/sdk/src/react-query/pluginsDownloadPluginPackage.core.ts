@@ -25,7 +25,7 @@ export function prefetchPluginsDownloadPluginPackage(
   queryClient: QueryClient,
   client$: GramCore,
   request: DownloadPluginPackageRequest,
-  security?: DownloadPluginPackageSecurity | undefined,
+  security?: DownloadPluginPackageSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -41,7 +41,7 @@ export function prefetchPluginsDownloadPluginPackage(
 export function buildPluginsDownloadPluginPackageQuery(
   client$: GramCore,
   request: DownloadPluginPackageRequest,
-  security?: DownloadPluginPackageSecurity | undefined,
+  security?: DownloadPluginPackageSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

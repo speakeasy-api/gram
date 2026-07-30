@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function remoteMcpDiscoverProtectedResourceMetadata(
   client: GramCore,
   request: DiscoverRemoteMcpProtectedResourceMetadataRequest,
-  security?: DiscoverRemoteMcpProtectedResourceMetadataSecurity | undefined,
+  security?: DiscoverRemoteMcpProtectedResourceMetadataSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function remoteMcpDiscoverProtectedResourceMetadata(
 async function $do(
   client: GramCore,
   request: DiscoverRemoteMcpProtectedResourceMetadataRequest,
-  security?: DiscoverRemoteMcpProtectedResourceMetadataSecurity | undefined,
+  security?: DiscoverRemoteMcpProtectedResourceMetadataSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

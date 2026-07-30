@@ -35,7 +35,7 @@ export function prefetchSkillFeedback(
   queryClient: QueryClient,
   client$: GramCore,
   request: ListSkillFeedbackRequest,
-  security?: ListSkillFeedbackSecurity | undefined,
+  security?: ListSkillFeedbackSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -52,7 +52,7 @@ export function prefetchSkillFeedbackInfinite(
   queryClient: QueryClient,
   client$: GramCore,
   request: ListSkillFeedbackRequest,
-  security?: ListSkillFeedbackSecurity | undefined,
+  security?: ListSkillFeedbackSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -71,7 +71,7 @@ export function prefetchSkillFeedbackInfinite(
 export function buildSkillFeedbackQuery(
   client$: GramCore,
   request: ListSkillFeedbackRequest,
-  security?: ListSkillFeedbackSecurity | undefined,
+  security?: ListSkillFeedbackSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -113,7 +113,7 @@ export function buildSkillFeedbackQuery(
 export function buildSkillFeedbackInfiniteQuery(
   client$: GramCore,
   request: ListSkillFeedbackRequest,
-  security?: ListSkillFeedbackSecurity | undefined,
+  security?: ListSkillFeedbackSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

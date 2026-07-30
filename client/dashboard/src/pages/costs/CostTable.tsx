@@ -1,11 +1,11 @@
 import { formatCost } from "@/lib/money";
-import { SkeletonTable } from "@/components/ui/skeleton";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tooltip";
+import { Type } from "@/components/ui/Type";
 import { cn } from "@/lib/utils";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { type QueryRow } from "@gram/client/models/components/queryrow.js";

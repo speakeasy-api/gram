@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function riskEvalsEvaluate(
   client: GramCore,
   request: EvaluatePromptGuardrailRequest,
-  security?: EvaluatePromptGuardrailSecurity | undefined,
+  security?: EvaluatePromptGuardrailSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function riskEvalsEvaluate(
 async function $do(
   client: GramCore,
   request: EvaluatePromptGuardrailRequest,
-  security?: EvaluatePromptGuardrailSecurity | undefined,
+  security?: EvaluatePromptGuardrailSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

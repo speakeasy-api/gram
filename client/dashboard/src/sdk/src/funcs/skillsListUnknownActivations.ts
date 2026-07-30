@@ -50,8 +50,8 @@ import {
  */
 export function skillsListUnknownActivations(
   client: GramCore,
-  request?: ListUnknownSkillActivationsRequest | undefined,
-  security?: ListUnknownSkillActivationsSecurity | undefined,
+  request?: ListUnknownSkillActivationsRequest  ,
+  security?: ListUnknownSkillActivationsSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   PageIterator<
@@ -80,8 +80,8 @@ export function skillsListUnknownActivations(
 
 async function $do(
   client: GramCore,
-  request?: ListUnknownSkillActivationsRequest | undefined,
-  security?: ListUnknownSkillActivationsSecurity | undefined,
+  request?: ListUnknownSkillActivationsRequest  ,
+  security?: ListUnknownSkillActivationsSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

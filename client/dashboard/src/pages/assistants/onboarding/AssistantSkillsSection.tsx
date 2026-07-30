@@ -1,13 +1,13 @@
 import { RequireScope } from "@/components/require-scope";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/Alert";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Type } from "@/components/ui/Type";
 import { useProject } from "@/contexts/Auth";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import type { AssistantSkillRef } from "@gram/client/models/components/assistantskillref.js";
@@ -16,7 +16,10 @@ import { useDistributeSkillMutation } from "@gram/client/react-query/distributeS
 import { useSkillVersionsInfinite } from "@gram/client/react-query/skillVersions.js";
 import { useSkillsInfinite } from "@gram/client/react-query/skills.js";
 import { useUndistributeSkillMutation } from "@gram/client/react-query/undistributeSkill.js";
-import { Badge, Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {

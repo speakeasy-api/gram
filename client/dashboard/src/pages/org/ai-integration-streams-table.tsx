@@ -1,18 +1,17 @@
 import { RequireScope } from "@/components/require-scope";
-import { Switch } from "@/components/ui/switch";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+import { Switch } from "@/components/ui/Switch";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Type } from "@/components/ui/Type";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
-  Badge,
-  Button,
-  type Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Stack,
-  Table,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Stack } from "@/components/ui/Stack";
+import { type Column, Table } from "@/components/ui/Table";
 import { Activity, ChartLine, Clock3, MoreHorizontal } from "lucide-react";
 import type { AIIntegrationSchedule } from "./ai-integration-providers";
 import { ScheduleStatusBadge } from "@/components/schedule-status-badge";

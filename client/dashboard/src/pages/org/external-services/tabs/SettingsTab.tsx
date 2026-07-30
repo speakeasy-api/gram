@@ -1,12 +1,13 @@
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Type } from "@/components/ui/type";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { Type } from "@/components/ui/Type";
 import { useOrgRoutes } from "@/routes";
 import type { GcpIamCredential } from "@gram/client/models/components/gcpiamcredential.js";
 import { invalidateAllGetGcpIamPlatformCredential } from "@gram/client/react-query/getGcpIamPlatformCredential";
 import { invalidateAllListPlatformExternalCredentials } from "@gram/client/react-query/listPlatformExternalCredentials";
 import { useUpdateGcpIamPlatformCredentialMutation } from "@gram/client/react-query/updateGcpIamPlatformCredential";
-import { Alert, Button } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";

@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function otelForwardingGetConfig(
   client: GramCore,
-  request?: GetOtelForwardingConfigRequest | undefined,
-  security?: GetOtelForwardingConfigSecurity | undefined,
+  request?: GetOtelForwardingConfigRequest  ,
+  security?: GetOtelForwardingConfigSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function otelForwardingGetConfig(
 
 async function $do(
   client: GramCore,
-  request?: GetOtelForwardingConfigRequest | undefined,
-  security?: GetOtelForwardingConfigSecurity | undefined,
+  request?: GetOtelForwardingConfigRequest  ,
+  security?: GetOtelForwardingConfigSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

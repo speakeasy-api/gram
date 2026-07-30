@@ -23,7 +23,7 @@ export function prefetchRiskEvaluatePromptGuardrail(
   queryClient: QueryClient,
   client$: GramCore,
   request: EvaluatePromptGuardrailRequest,
-  security?: EvaluatePromptGuardrailSecurity | undefined,
+  security?: EvaluatePromptGuardrailSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchRiskEvaluatePromptGuardrail(
 export function buildRiskEvaluatePromptGuardrailQuery(
   client$: GramCore,
   request: EvaluatePromptGuardrailRequest,
-  security?: EvaluatePromptGuardrailSecurity | undefined,
+  security?: EvaluatePromptGuardrailSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

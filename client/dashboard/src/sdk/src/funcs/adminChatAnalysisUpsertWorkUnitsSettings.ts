@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function adminChatAnalysisUpsertWorkUnitsSettings(
   client: GramCore,
   request: UpsertChatAnalysisSettingsRequest,
-  security?: UpsertChatAnalysisSettingsSecurity | undefined,
+  security?: UpsertChatAnalysisSettingsSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function adminChatAnalysisUpsertWorkUnitsSettings(
 async function $do(
   client: GramCore,
   request: UpsertChatAnalysisSettingsRequest,
-  security?: UpsertChatAnalysisSettingsSecurity | undefined,
+  security?: UpsertChatAnalysisSettingsSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

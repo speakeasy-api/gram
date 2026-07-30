@@ -22,8 +22,8 @@ export type ListOrganizationUsersQueryData = ListUsersResult;
 export function prefetchListOrganizationUsers(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListOrganizationUsersRequest | undefined,
-  security?: ListOrganizationUsersSecurity | undefined,
+  request?: ListOrganizationUsersRequest  ,
+  security?: ListOrganizationUsersSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListOrganizationUsers(
 
 export function buildListOrganizationUsersQuery(
   client$: GramCore,
-  request?: ListOrganizationUsersRequest | undefined,
-  security?: ListOrganizationUsersSecurity | undefined,
+  request?: ListOrganizationUsersRequest  ,
+  security?: ListOrganizationUsersSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

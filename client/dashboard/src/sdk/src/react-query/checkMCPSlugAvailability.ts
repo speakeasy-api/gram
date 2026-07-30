@@ -63,7 +63,7 @@ export type CheckMCPSlugAvailabilityQueryError =
  */
 export function useCheckMCPSlugAvailability(
   request: CheckMCPSlugAvailabilityRequest,
-  security?: CheckMCPSlugAvailabilitySecurity | undefined,
+  security?: CheckMCPSlugAvailabilitySecurity  ,
   options?: QueryHookOptions<
     CheckMCPSlugAvailabilityQueryData,
     CheckMCPSlugAvailabilityQueryError
@@ -92,7 +92,7 @@ export function useCheckMCPSlugAvailability(
  */
 export function useCheckMCPSlugAvailabilitySuspense(
   request: CheckMCPSlugAvailabilityRequest,
-  security?: CheckMCPSlugAvailabilitySecurity | undefined,
+  security?: CheckMCPSlugAvailabilitySecurity  ,
   options?: SuspenseQueryHookOptions<
     CheckMCPSlugAvailabilityQueryData,
     CheckMCPSlugAvailabilityQueryError

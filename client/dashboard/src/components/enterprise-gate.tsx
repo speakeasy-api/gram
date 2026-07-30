@@ -1,6 +1,8 @@
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import { useProductTier } from "@/hooks/useProductTier";
-import { Button, Icon, IconName } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { IconName } from "@/components/ui/Icon/names";
 import React from "react";
 
 interface EnterpriseGateProps {

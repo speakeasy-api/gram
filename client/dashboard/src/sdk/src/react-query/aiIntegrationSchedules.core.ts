@@ -23,7 +23,7 @@ export function prefetchAiIntegrationSchedules(
   queryClient: QueryClient,
   client$: GramCore,
   request: ListAIIntegrationSchedulesRequest,
-  security?: ListAIIntegrationSchedulesSecurity | undefined,
+  security?: ListAIIntegrationSchedulesSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchAiIntegrationSchedules(
 export function buildAiIntegrationSchedulesQuery(
   client$: GramCore,
   request: ListAIIntegrationSchedulesRequest,
-  security?: ListAIIntegrationSchedulesSecurity | undefined,
+  security?: ListAIIntegrationSchedulesSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

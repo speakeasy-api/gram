@@ -80,8 +80,8 @@ export type OrganizationRemoteSessionIssuersQueryError =
  * List all remote_session_issuers in the caller's organization — organizational (project_id NULL) and project-specific — each with its associated client count and, for project-specific issuers, the owning project name. Requires org:read.
  */
 export function useOrganizationRemoteSessionIssuers(
-  request?: ListOrganizationRemoteSessionIssuersRequest | undefined,
-  security?: ListOrganizationRemoteSessionIssuersSecurity | undefined,
+  request?: ListOrganizationRemoteSessionIssuersRequest  ,
+  security?: ListOrganizationRemoteSessionIssuersSecurity  ,
   options?: QueryHookOptions<
     OrganizationRemoteSessionIssuersQueryData,
     OrganizationRemoteSessionIssuersQueryError
@@ -109,8 +109,8 @@ export function useOrganizationRemoteSessionIssuers(
  * List all remote_session_issuers in the caller's organization — organizational (project_id NULL) and project-specific — each with its associated client count and, for project-specific issuers, the owning project name. Requires org:read.
  */
 export function useOrganizationRemoteSessionIssuersSuspense(
-  request?: ListOrganizationRemoteSessionIssuersRequest | undefined,
-  security?: ListOrganizationRemoteSessionIssuersSecurity | undefined,
+  request?: ListOrganizationRemoteSessionIssuersRequest  ,
+  security?: ListOrganizationRemoteSessionIssuersSecurity  ,
   options?: SuspenseQueryHookOptions<
     OrganizationRemoteSessionIssuersQueryData,
     OrganizationRemoteSessionIssuersQueryError
@@ -138,8 +138,8 @@ export function useOrganizationRemoteSessionIssuersSuspense(
  * List all remote_session_issuers in the caller's organization — organizational (project_id NULL) and project-specific — each with its associated client count and, for project-specific issuers, the owning project name. Requires org:read.
  */
 export function useOrganizationRemoteSessionIssuersInfinite(
-  request?: ListOrganizationRemoteSessionIssuersRequest | undefined,
-  security?: ListOrganizationRemoteSessionIssuersSecurity | undefined,
+  request?: ListOrganizationRemoteSessionIssuersRequest  ,
+  security?: ListOrganizationRemoteSessionIssuersSecurity  ,
   options?: InfiniteQueryHookOptions<
     OrganizationRemoteSessionIssuersInfiniteQueryData,
     OrganizationRemoteSessionIssuersQueryError
@@ -181,8 +181,8 @@ export function useOrganizationRemoteSessionIssuersInfinite(
  * List all remote_session_issuers in the caller's organization — organizational (project_id NULL) and project-specific — each with its associated client count and, for project-specific issuers, the owning project name. Requires org:read.
  */
 export function useOrganizationRemoteSessionIssuersInfiniteSuspense(
-  request?: ListOrganizationRemoteSessionIssuersRequest | undefined,
-  security?: ListOrganizationRemoteSessionIssuersSecurity | undefined,
+  request?: ListOrganizationRemoteSessionIssuersRequest  ,
+  security?: ListOrganizationRemoteSessionIssuersSecurity  ,
   options?: SuspenseInfiniteQueryHookOptions<
     OrganizationRemoteSessionIssuersInfiniteQueryData,
     OrganizationRemoteSessionIssuersQueryError

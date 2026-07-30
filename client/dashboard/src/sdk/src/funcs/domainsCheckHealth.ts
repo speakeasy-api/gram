@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function domainsCheckHealth(
   client: GramCore,
-  request?: CheckDomainHealthRequest | undefined,
-  security?: CheckDomainHealthSecurity | undefined,
+  request?: CheckDomainHealthRequest  ,
+  security?: CheckDomainHealthSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function domainsCheckHealth(
 
 async function $do(
   client: GramCore,
-  request?: CheckDomainHealthRequest | undefined,
-  security?: CheckDomainHealthSecurity | undefined,
+  request?: CheckDomainHealthRequest  ,
+  security?: CheckDomainHealthSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

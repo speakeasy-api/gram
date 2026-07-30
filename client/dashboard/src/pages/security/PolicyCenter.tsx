@@ -3,43 +3,42 @@ import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
-import type { Action } from "@/components/ui/more-actions";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { SearchBar } from "@/components/ui/search-bar";
-import { Switch } from "@/components/ui/switch";
-import { Dialog } from "@/components/ui/dialog";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import type { Action } from "@/components/ui/MoreActions";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
+import { SearchBar } from "@/components/ui/SearchBar";
+import { Switch } from "@/components/ui/Switch";
+import { Dialog } from "@/components/ui/Dialog";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
   SheetDescription,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Type } from "@/components/ui/Type";
 import {
   PageTabsList,
   PageTabsTrigger,
   Tabs,
   TabsContent,
-} from "@/components/ui/tabs";
+} from "@/components/ui/Tabs";
 import { ExclusionsTab, type ExclusionSheetState } from "./ExclusionsTab";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
-  Badge,
-  Button,
-  type Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Stack,
-  Table,
-} from "@speakeasy-api/moonshine";
-import type { BadgeProps } from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Stack } from "@/components/ui/Stack";
+import { type Column, Table } from "@/components/ui/Table";
+import { type BadgeProps } from "@/components/ui/Badge";
 import {
   Plus,
   Shield,

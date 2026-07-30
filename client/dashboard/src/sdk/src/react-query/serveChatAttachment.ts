@@ -63,7 +63,7 @@ export type ServeChatAttachmentQueryError =
  */
 export function useServeChatAttachment(
   request: ServeChatAttachmentRequest,
-  security?: ServeChatAttachmentSecurity | undefined,
+  security?: ServeChatAttachmentSecurity  ,
   options?: QueryHookOptions<
     ServeChatAttachmentQueryData,
     ServeChatAttachmentQueryError
@@ -89,7 +89,7 @@ export function useServeChatAttachment(
  */
 export function useServeChatAttachmentSuspense(
   request: ServeChatAttachmentRequest,
-  security?: ServeChatAttachmentSecurity | undefined,
+  security?: ServeChatAttachmentSecurity  ,
   options?: SuspenseQueryHookOptions<
     ServeChatAttachmentQueryData,
     ServeChatAttachmentQueryError

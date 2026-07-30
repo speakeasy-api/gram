@@ -23,7 +23,7 @@ export function prefetchGetAwsIamCredential(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetAwsIamCredentialRequest,
-  security?: GetAwsIamCredentialSecurity | undefined,
+  security?: GetAwsIamCredentialSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchGetAwsIamCredential(
 export function buildGetAwsIamCredentialQuery(
   client$: GramCore,
   request: GetAwsIamCredentialRequest,
-  security?: GetAwsIamCredentialSecurity | undefined,
+  security?: GetAwsIamCredentialSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

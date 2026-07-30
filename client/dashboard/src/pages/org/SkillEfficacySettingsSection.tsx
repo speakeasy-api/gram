@@ -1,15 +1,15 @@
-import { ErrorAlert } from "@/components/ui/alert";
+import { ErrorAlert } from "@/components/ui/Alert";
 import {
   Field,
   FieldDescription,
   FieldError,
   FieldLabel,
-} from "@/components/ui/field";
-import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Field";
+import { Heading } from "@/components/ui/Heading";
+import { Input } from "@/components/ui/Input";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Switch } from "@/components/ui/Switch";
+import { Type } from "@/components/ui/Type";
 import { useRBAC } from "@/hooks/useRBAC";
 import type { SkillEfficacySettings } from "@gram/client/models/components/skillefficacysettings.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
@@ -18,7 +18,8 @@ import {
   useSkillEfficacySettings,
 } from "@gram/client/react-query/skillEfficacySettings.js";
 import { useUpsertSkillEfficacySettingsMutation } from "@gram/client/react-query/upsertSkillEfficacySettings.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";

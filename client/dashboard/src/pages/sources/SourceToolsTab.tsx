@@ -1,11 +1,11 @@
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { ToolVariationBadge } from "@/components/tool-variation-badge";
-import { MoreActions } from "@/components/ui/more-actions";
-import { SearchBar } from "@/components/ui/search-bar";
-import { Type } from "@/components/ui/type";
+import { MoreActions } from "@/components/ui/MoreActions";
+import { SearchBar } from "@/components/ui/SearchBar";
+import { Type } from "@/components/ui/Type";
 import { ToolUpdateFields } from "@/hooks/useToolUpdate";
 import type { Tool } from "@/lib/toolTypes";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import { useState } from "react";
 import { useSourceToolActions } from "./useSourceToolActions";
 

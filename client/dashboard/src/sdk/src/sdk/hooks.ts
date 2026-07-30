@@ -69,7 +69,7 @@ export class Hooks extends ClientSDK {
    */
   async hooksNumberCodex(
     request: HooksNumberCodexRequest,
-    security?: HooksNumberCodexSecurity | undefined,
+    security?: HooksNumberCodexSecurity  ,
     options?: RequestOptions,
   ): Promise<CodexHookResult> {
     return unwrapAsync(hooksHooksNumberCodex(
@@ -88,7 +88,7 @@ export class Hooks extends ClientSDK {
    */
   async hooksNumberCursor(
     request: HooksNumberCursorRequest,
-    security?: HooksNumberCursorSecurity | undefined,
+    security?: HooksNumberCursorSecurity  ,
     options?: RequestOptions,
   ): Promise<CursorHookResult> {
     return unwrapAsync(hooksHooksNumberCursor(
@@ -124,7 +124,7 @@ export class Hooks extends ClientSDK {
    */
   async hooksNumberLogs(
     request: HooksNumberLogsRequest,
-    security?: HooksNumberLogsSecurity | undefined,
+    security?: HooksNumberLogsSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(hooksHooksNumberLogs(
@@ -143,7 +143,7 @@ export class Hooks extends ClientSDK {
    */
   async hooksNumberMetrics(
     request: HooksNumberMetricsRequest,
-    security?: HooksNumberMetricsSecurity | undefined,
+    security?: HooksNumberMetricsSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(hooksHooksNumberMetrics(
@@ -162,7 +162,7 @@ export class Hooks extends ClientSDK {
    */
   async skillFeedback(
     request: SkillFeedbackRequest,
-    security?: SkillFeedbackSecurity | undefined,
+    security?: SkillFeedbackSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(hooksSkillFeedback(
@@ -181,7 +181,7 @@ export class Hooks extends ClientSDK {
    */
   async uploadSkillContent(
     request: UploadSkillContentRequest,
-    security?: UploadSkillContentSecurity | undefined,
+    security?: UploadSkillContentSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(hooksUploadSkillContent(

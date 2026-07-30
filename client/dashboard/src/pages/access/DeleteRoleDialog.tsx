@@ -1,10 +1,10 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Dialog } from "@/components/ui/dialog";
-import { Type } from "@/components/ui/type";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { Badge } from "@/components/ui/Badge";
+import { Dialog } from "@/components/ui/Dialog";
+import { Type } from "@/components/ui/Type";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { ArrowRight } from "lucide-react";
 import { PropsWithChildren } from "react";
 
@@ -51,7 +51,7 @@ export const DeleteRoleDialog = ({
                     : `${soleRoleMembers.length} of ${members.length} affected member${members.length === 1 ? "" : "s"}`}{" "}
                   will fall back to the default role{" "}
                   <Badge
-                    variant="outline"
+                    variant="neutral"
                     size="sm"
                     className="font-mono text-[10px] uppercase"
                   >
@@ -105,7 +105,7 @@ export const DeleteRoleDialog = ({
                         {role && isOnlyRole && defaultRole && (
                           <div className="flex items-center gap-1">
                             <Badge
-                              variant="outline"
+                              variant="neutral"
                               size="sm"
                               className="font-mono text-[10px] uppercase line-through opacity-60"
                             >
@@ -113,7 +113,7 @@ export const DeleteRoleDialog = ({
                             </Badge>
                             <ArrowRight className="text-muted-foreground h-3 w-3 shrink-0" />
                             <Badge
-                              variant="outline"
+                              variant="neutral"
                               size="sm"
                               className="border-primary text-primary font-mono text-[10px] uppercase"
                             >

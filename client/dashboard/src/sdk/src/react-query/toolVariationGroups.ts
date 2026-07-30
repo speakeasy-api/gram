@@ -62,8 +62,8 @@ export type ToolVariationGroupsQueryError =
  * List the tool variation groups visible to the project. In v1 this returns the project-default group when it exists, or an empty list otherwise.
  */
 export function useToolVariationGroups(
-  request?: ListToolVariationGroupsRequest | undefined,
-  security?: ListToolVariationGroupsSecurity | undefined,
+  request?: ListToolVariationGroupsRequest  ,
+  security?: ListToolVariationGroupsSecurity  ,
   options?: QueryHookOptions<
     ToolVariationGroupsQueryData,
     ToolVariationGroupsQueryError
@@ -88,8 +88,8 @@ export function useToolVariationGroups(
  * List the tool variation groups visible to the project. In v1 this returns the project-default group when it exists, or an empty list otherwise.
  */
 export function useToolVariationGroupsSuspense(
-  request?: ListToolVariationGroupsRequest | undefined,
-  security?: ListToolVariationGroupsSecurity | undefined,
+  request?: ListToolVariationGroupsRequest  ,
+  security?: ListToolVariationGroupsSecurity  ,
   options?: SuspenseQueryHookOptions<
     ToolVariationGroupsQueryData,
     ToolVariationGroupsQueryError

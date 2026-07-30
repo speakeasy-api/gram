@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function environmentsDeleteSourceLink(
   client: GramCore,
   request: DeleteSourceEnvironmentLinkRequest,
-  security?: DeleteSourceEnvironmentLinkSecurity | undefined,
+  security?: DeleteSourceEnvironmentLinkSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function environmentsDeleteSourceLink(
 async function $do(
   client: GramCore,
   request: DeleteSourceEnvironmentLinkRequest,
-  security?: DeleteSourceEnvironmentLinkSecurity | undefined,
+  security?: DeleteSourceEnvironmentLinkSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

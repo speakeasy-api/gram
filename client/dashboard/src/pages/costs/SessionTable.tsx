@@ -1,6 +1,6 @@
 import { formatCost } from "@/lib/money";
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Type } from "@/components/ui/Type";
 import { cn } from "@/lib/utils";
 import type { SessionSummary } from "@gram/client/models/components/sessionsummary.js";
 import { formatDistanceToNow } from "date-fns";

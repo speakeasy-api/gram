@@ -62,8 +62,8 @@ export type GrantsQueryError =
  * List the current user's effective grants, including inherited role grants.
  */
 export function useGrants(
-  request?: ListGrantsRequest | undefined,
-  security?: ListGrantsSecurity | undefined,
+  request?: ListGrantsRequest  ,
+  security?: ListGrantsSecurity  ,
   options?: QueryHookOptions<GrantsQueryData, GrantsQueryError>,
 ): UseQueryResult<GrantsQueryData, GrantsQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useGrants(
  * List the current user's effective grants, including inherited role grants.
  */
 export function useGrantsSuspense(
-  request?: ListGrantsRequest | undefined,
-  security?: ListGrantsSecurity | undefined,
+  request?: ListGrantsRequest  ,
+  security?: ListGrantsSecurity  ,
   options?: SuspenseQueryHookOptions<GrantsQueryData, GrantsQueryError>,
 ): UseSuspenseQueryResult<GrantsQueryData, GrantsQueryError> {
   const client = useGramContext();

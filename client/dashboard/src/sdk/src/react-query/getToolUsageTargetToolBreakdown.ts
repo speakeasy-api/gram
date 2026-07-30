@@ -63,7 +63,7 @@ export type GetToolUsageTargetToolBreakdownQueryError =
  */
 export function useGetToolUsageTargetToolBreakdown(
   request: GetToolUsageTargetToolBreakdownRequest,
-  security?: GetToolUsageTargetToolBreakdownSecurity | undefined,
+  security?: GetToolUsageTargetToolBreakdownSecurity  ,
   options?: QueryHookOptions<
     GetToolUsageTargetToolBreakdownQueryData,
     GetToolUsageTargetToolBreakdownQueryError
@@ -92,7 +92,7 @@ export function useGetToolUsageTargetToolBreakdown(
  */
 export function useGetToolUsageTargetToolBreakdownSuspense(
   request: GetToolUsageTargetToolBreakdownRequest,
-  security?: GetToolUsageTargetToolBreakdownSecurity | undefined,
+  security?: GetToolUsageTargetToolBreakdownSecurity  ,
   options?: SuspenseQueryHookOptions<
     GetToolUsageTargetToolBreakdownQueryData,
     GetToolUsageTargetToolBreakdownQueryError

@@ -8,16 +8,16 @@ import {
   SourceInfoRow,
   SourceInfoTable,
 } from "@/components/sources/SourceInfoTable";
-import { CopyButton } from "@/components/ui/copy-button";
-import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Heading } from "@/components/ui/Heading";
+import { Input } from "@/components/ui/Input";
 import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
   TabsList,
-} from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tabs";
+import { Type } from "@/components/ui/Type";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { dateTimeFormatters } from "@/lib/dates";
 import {
@@ -40,7 +40,11 @@ import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { useUpdateRemoteMcpServerMutation } from "@gram/client/react-query/updateRemoteMcpServer.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Alert, Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Stack } from "@/components/ui/Stack";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -365,7 +369,7 @@ function OverviewTab({
                     : "—"}
                 </Type>
                 {remoteMcpServer?.id && (
-                  <CopyButton text={remoteMcpServer.id} size="inline" />
+                  <CopyButton text={remoteMcpServer.id} size="xs" />
                 )}
               </span>
             </SourceInfoRow>

@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function packagesList(
   client: GramCore,
-  request?: ListPackagesRequest | undefined,
-  security?: ListPackagesSecurity | undefined,
+  request?: ListPackagesRequest  ,
+  security?: ListPackagesSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function packagesList(
 
 async function $do(
   client: GramCore,
-  request?: ListPackagesRequest | undefined,
-  security?: ListPackagesSecurity | undefined,
+  request?: ListPackagesRequest  ,
+  security?: ListPackagesSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

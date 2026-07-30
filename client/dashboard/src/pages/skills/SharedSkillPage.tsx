@@ -1,11 +1,12 @@
 import { GramLogo } from "@/components/gram-logo";
-import { Button } from "@/components/ui/button";
-import { Type } from "@/components/ui/type";
+import { Button } from "@/components/ui/Button";
+import { Type } from "@/components/ui/Type";
 import { Markdown } from "@/elements/components/Markdown";
 import { dateTimeFormatters } from "@/lib/dates";
 import type { SharedSkill2 } from "@gram/client/models/components/sharedskill2.js";
 import { useSharedSkill } from "@gram/client/react-query/sharedSkill.js";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { useParams } from "react-router";
 import { toast } from "sonner";
 import { stripSkillFrontmatter } from "./skill-manifest";
@@ -102,14 +103,14 @@ function SharedSkillDocument({ skill }: { skill: SharedSkill2 }): JSX.Element {
         <div className="flex flex-wrap items-center gap-2 pt-1">
           <Button
             size="sm"
-            variant="outline"
+            variant="secondary"
             onClick={() => void copyMarkdown()}
           >
             Copy markdown
           </Button>
           <Button
             size="sm"
-            variant="outline"
+            variant="secondary"
             onClick={() => downloadSkillMarkdown(skill.content)}
           >
             Download SKILL.md

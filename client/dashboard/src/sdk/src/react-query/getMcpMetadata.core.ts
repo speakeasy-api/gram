@@ -22,8 +22,8 @@ export type GetMcpMetadataQueryData = GetMcpMetadataResponseBody;
 export function prefetchGetMcpMetadata(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetMcpMetadataRequest | undefined,
-  security?: GetMcpMetadataSecurity | undefined,
+  request?: GetMcpMetadataRequest  ,
+  security?: GetMcpMetadataSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchGetMcpMetadata(
 
 export function buildGetMcpMetadataQuery(
   client$: GramCore,
-  request?: GetMcpMetadataRequest | undefined,
-  security?: GetMcpMetadataSecurity | undefined,
+  request?: GetMcpMetadataRequest  ,
+  security?: GetMcpMetadataSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -62,8 +62,8 @@ export type GetMcpMetadataQueryError =
  * Fetch the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.
  */
 export function useGetMcpMetadata(
-  request?: GetMcpMetadataRequest | undefined,
-  security?: GetMcpMetadataSecurity | undefined,
+  request?: GetMcpMetadataRequest  ,
+  security?: GetMcpMetadataSecurity  ,
   options?: QueryHookOptions<GetMcpMetadataQueryData, GetMcpMetadataQueryError>,
 ): UseQueryResult<GetMcpMetadataQueryData, GetMcpMetadataQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useGetMcpMetadata(
  * Fetch the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.
  */
 export function useGetMcpMetadataSuspense(
-  request?: GetMcpMetadataRequest | undefined,
-  security?: GetMcpMetadataSecurity | undefined,
+  request?: GetMcpMetadataRequest  ,
+  security?: GetMcpMetadataSecurity  ,
   options?: SuspenseQueryHookOptions<
     GetMcpMetadataQueryData,
     GetMcpMetadataQueryError

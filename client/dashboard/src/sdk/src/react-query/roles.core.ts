@@ -22,8 +22,8 @@ export type RolesQueryData = ListRolesResult;
 export function prefetchRoles(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListRolesRequest | undefined,
-  security?: ListRolesSecurity | undefined,
+  request?: ListRolesRequest  ,
+  security?: ListRolesSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchRoles(
 
 export function buildRolesQuery(
   client$: GramCore,
-  request?: ListRolesRequest | undefined,
-  security?: ListRolesSecurity | undefined,
+  request?: ListRolesRequest  ,
+  security?: ListRolesSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

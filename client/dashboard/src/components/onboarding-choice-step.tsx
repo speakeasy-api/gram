@@ -1,7 +1,7 @@
-import { Type } from "@/components/ui/type";
+import { Type } from "@/components/ui/Type";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/Stack";
 import {
   FileCode,
   MessageSquare,

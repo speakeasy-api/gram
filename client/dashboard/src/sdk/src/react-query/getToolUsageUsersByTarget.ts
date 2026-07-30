@@ -63,7 +63,7 @@ export type GetToolUsageUsersByTargetQueryError =
  */
 export function useGetToolUsageUsersByTarget(
   request: GetToolUsageUsersByTargetRequest,
-  security?: GetToolUsageUsersByTargetSecurity | undefined,
+  security?: GetToolUsageUsersByTargetSecurity  ,
   options?: QueryHookOptions<
     GetToolUsageUsersByTargetQueryData,
     GetToolUsageUsersByTargetQueryError
@@ -92,7 +92,7 @@ export function useGetToolUsageUsersByTarget(
  */
 export function useGetToolUsageUsersByTargetSuspense(
   request: GetToolUsageUsersByTargetRequest,
-  security?: GetToolUsageUsersByTargetSecurity | undefined,
+  security?: GetToolUsageUsersByTargetSecurity  ,
   options?: SuspenseQueryHookOptions<
     GetToolUsageUsersByTargetQueryData,
     GetToolUsageUsersByTargetQueryError

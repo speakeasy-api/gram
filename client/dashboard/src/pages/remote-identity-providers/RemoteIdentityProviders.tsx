@@ -1,17 +1,17 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Dialog } from "@/components/ui/dialog";
-import { DotRow } from "@/components/ui/dot-row";
-import { DotTable } from "@/components/ui/dot-table";
-import { Label } from "@/components/ui/label";
+import { Dialog } from "@/components/ui/Dialog";
+import { DotRow } from "@/components/ui/DotRow";
+import { DotTable } from "@/components/ui/DotTable";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Type } from "@/components/ui/Type";
 import { useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
 import type { OrganizationRemoteSessionIssuer } from "@gram/client/models/components/organizationremotesessionissuer.js";
@@ -25,17 +25,17 @@ import {
   useOrganizationRemoteSessionIssuers,
 } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
 import { useRefreshOrganizationRemoteSessionIssuerMetadataMutation } from "@gram/client/react-query/refreshOrganizationRemoteSessionIssuerMetadata.js";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import {
-  Alert,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Icon,
-  Stack,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { useMemo, useState } from "react";

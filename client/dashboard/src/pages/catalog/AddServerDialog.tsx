@@ -1,12 +1,15 @@
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { Type } from "@/components/ui/type";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Label } from "@/components/ui/Label";
+import { Type } from "@/components/ui/Type";
 import { useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
-import { Button, Dialog, Input, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { Stack } from "@/components/ui/Stack";
 import {
   AlertCircle,
   ArrowRight,
@@ -572,9 +575,9 @@ function SelectRemotesPhaseContent({
               currentConfig.server.registrySpecifier
             }
             value={currentConfig.name}
-            onChange={(e) =>
+            onChange={(value) =>
               releaseState.updateCurrentConfig({
-                name: e.target.value,
+                name: value,
               })
             }
           />
@@ -817,9 +820,9 @@ function SingleServerConfig({
       <Input
         placeholder={config.server.title || config.server.registrySpecifier}
         value={config.name}
-        onChange={(e) =>
+        onChange={(value) =>
           releaseState.updateServerConfig(originalIndex, {
-            name: e.target.value,
+            name: value,
           })
         }
       />
@@ -863,9 +866,9 @@ function BatchServerConfig({
                     config.server.title || config.server.registrySpecifier
                   }
                   value={config.name}
-                  onChange={(e) =>
+                  onChange={(value) =>
                     releaseState.updateServerConfig(originalIndex, {
-                      name: e.target.value,
+                      name: value,
                     })
                   }
                   className="text-sm"
@@ -1082,7 +1085,7 @@ function HeaderValueField({
         type={secret ? "password" : "text"}
         placeholder={placeholder ?? description ?? ""}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={onChange}
       />
       {description && (
         <Type small muted>

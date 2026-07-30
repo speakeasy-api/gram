@@ -63,7 +63,7 @@ export type GetToolUsageFilterOptionsQueryError =
  */
 export function useGetToolUsageFilterOptions(
   request: GetToolUsageFilterOptionsRequest,
-  security?: GetToolUsageFilterOptionsSecurity | undefined,
+  security?: GetToolUsageFilterOptionsSecurity  ,
   options?: QueryHookOptions<
     GetToolUsageFilterOptionsQueryData,
     GetToolUsageFilterOptionsQueryError
@@ -92,7 +92,7 @@ export function useGetToolUsageFilterOptions(
  */
 export function useGetToolUsageFilterOptionsSuspense(
   request: GetToolUsageFilterOptionsRequest,
-  security?: GetToolUsageFilterOptionsSecurity | undefined,
+  security?: GetToolUsageFilterOptionsSecurity  ,
   options?: SuspenseQueryHookOptions<
     GetToolUsageFilterOptionsQueryData,
     GetToolUsageFilterOptionsQueryError

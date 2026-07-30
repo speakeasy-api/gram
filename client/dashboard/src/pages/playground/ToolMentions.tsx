@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { Icon } from "@speakeasy-api/moonshine";
-import { Type } from "@/components/ui/type";
+import { Icon } from "@/components/ui/Icon";
+import { Type } from "@/components/ui/Type";
 import { type Tool, parseMentionedTools } from "./tool-mention-utils";
 
 interface ToolMentionProps {

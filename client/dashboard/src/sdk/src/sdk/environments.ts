@@ -73,7 +73,7 @@ export class Environments extends ClientSDK {
    */
   async clone(
     request: CloneEnvironmentRequest,
-    security?: CloneEnvironmentSecurity | undefined,
+    security?: CloneEnvironmentSecurity  ,
     options?: RequestOptions,
   ): Promise<Environment> {
     return unwrapAsync(environmentsClone(
@@ -92,7 +92,7 @@ export class Environments extends ClientSDK {
    */
   async create(
     request: CreateEnvironmentRequest,
-    security?: CreateEnvironmentSecurity | undefined,
+    security?: CreateEnvironmentSecurity  ,
     options?: RequestOptions,
   ): Promise<Environment> {
     return unwrapAsync(environmentsCreate(
@@ -111,7 +111,7 @@ export class Environments extends ClientSDK {
    */
   async deleteBySlug(
     request: DeleteEnvironmentRequest,
-    security?: DeleteEnvironmentSecurity | undefined,
+    security?: DeleteEnvironmentSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(environmentsDeleteBySlug(
@@ -130,7 +130,7 @@ export class Environments extends ClientSDK {
    */
   async deleteSourceLink(
     request: DeleteSourceEnvironmentLinkRequest,
-    security?: DeleteSourceEnvironmentLinkSecurity | undefined,
+    security?: DeleteSourceEnvironmentLinkSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(environmentsDeleteSourceLink(
@@ -149,7 +149,7 @@ export class Environments extends ClientSDK {
    */
   async deleteToolsetLink(
     request: DeleteToolsetEnvironmentLinkRequest,
-    security?: DeleteToolsetEnvironmentLinkSecurity | undefined,
+    security?: DeleteToolsetEnvironmentLinkSecurity  ,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(environmentsDeleteToolsetLink(
@@ -168,7 +168,7 @@ export class Environments extends ClientSDK {
    */
   async getBySource(
     request: GetSourceEnvironmentRequest,
-    security?: GetSourceEnvironmentSecurity | undefined,
+    security?: GetSourceEnvironmentSecurity  ,
     options?: RequestOptions,
   ): Promise<Environment> {
     return unwrapAsync(environmentsGetBySource(
@@ -187,7 +187,7 @@ export class Environments extends ClientSDK {
    */
   async getByToolset(
     request: GetToolsetEnvironmentRequest,
-    security?: GetToolsetEnvironmentSecurity | undefined,
+    security?: GetToolsetEnvironmentSecurity  ,
     options?: RequestOptions,
   ): Promise<Environment> {
     return unwrapAsync(environmentsGetByToolset(
@@ -205,8 +205,8 @@ export class Environments extends ClientSDK {
    * List all environments for an organization
    */
   async list(
-    request?: ListEnvironmentsRequest | undefined,
-    security?: ListEnvironmentsSecurity | undefined,
+    request?: ListEnvironmentsRequest  ,
+    security?: ListEnvironmentsSecurity  ,
     options?: RequestOptions,
   ): Promise<ListEnvironmentsResult> {
     return unwrapAsync(environmentsList(
@@ -225,7 +225,7 @@ export class Environments extends ClientSDK {
    */
   async setSourceLink(
     request: SetSourceEnvironmentLinkRequest,
-    security?: SetSourceEnvironmentLinkSecurity | undefined,
+    security?: SetSourceEnvironmentLinkSecurity  ,
     options?: RequestOptions,
   ): Promise<SourceEnvironmentLink> {
     return unwrapAsync(environmentsSetSourceLink(
@@ -244,7 +244,7 @@ export class Environments extends ClientSDK {
    */
   async setToolsetLink(
     request: SetToolsetEnvironmentLinkRequest,
-    security?: SetToolsetEnvironmentLinkSecurity | undefined,
+    security?: SetToolsetEnvironmentLinkSecurity  ,
     options?: RequestOptions,
   ): Promise<ToolsetEnvironmentLink> {
     return unwrapAsync(environmentsSetToolsetLink(
@@ -263,7 +263,7 @@ export class Environments extends ClientSDK {
    */
   async updateBySlug(
     request: UpdateEnvironmentRequest,
-    security?: UpdateEnvironmentSecurity | undefined,
+    security?: UpdateEnvironmentSecurity  ,
     options?: RequestOptions,
   ): Promise<Environment> {
     return unwrapAsync(environmentsUpdateBySlug(

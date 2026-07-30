@@ -63,7 +63,7 @@ export type RenderTemplateByIDQueryError =
  */
 export function useRenderTemplateByID(
   request: RenderTemplateByIDRequest,
-  security?: RenderTemplateByIDSecurity | undefined,
+  security?: RenderTemplateByIDSecurity  ,
   options?: QueryHookOptions<
     RenderTemplateByIDQueryData,
     RenderTemplateByIDQueryError
@@ -89,7 +89,7 @@ export function useRenderTemplateByID(
  */
 export function useRenderTemplateByIDSuspense(
   request: RenderTemplateByIDRequest,
-  security?: RenderTemplateByIDSecurity | undefined,
+  security?: RenderTemplateByIDSecurity  ,
   options?: SuspenseQueryHookOptions<
     RenderTemplateByIDQueryData,
     RenderTemplateByIDQueryError

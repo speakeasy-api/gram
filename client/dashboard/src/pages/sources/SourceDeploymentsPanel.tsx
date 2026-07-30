@@ -1,12 +1,13 @@
-import { CopyButton } from "@/components/ui/copy-button";
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Heading } from "@/components/ui/Heading";
+import { Type } from "@/components/ui/Type";
 import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
 import type { DeploymentSummary } from "@gram/client/models/components/deploymentsummary.js";
 import { useRoutes } from "@/routes";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { ExternalLink } from "lucide-react";
 import { Suspense, useState } from "react";
 import { DeploymentsEmptyState } from "../deployments/DeploymentsEmptyState";
@@ -136,7 +137,7 @@ function DeploymentDetailPanel({
             </dt>
             <dd className="flex items-center gap-1">
               <span className="font-mono">{deployment.id.slice(0, 8)}</span>
-              <CopyButton text={deployment.id} size="inline" />
+              <CopyButton text={deployment.id} size="xs" />
             </dd>
           </div>
 

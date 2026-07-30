@@ -1,18 +1,16 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
-import { Switch } from "@/components/ui/switch";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { Switch } from "@/components/ui/Switch";
+import { Type } from "@/components/ui/Type";
 import { useCreatePortalSessionMutation } from "@gram/client/react-query/createPortalSession.js";
 import { useDisableWebhooksMutation } from "@gram/client/react-query/disableWebhooks.js";
 import { useEnableWebhooksMutation } from "@gram/client/react-query/enableWebhooks.js";
 import { useOrganization } from "@gram/client/react-query/organization.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import {
-  Button as MoonshineButton,
-  Stack,
-  useMoonshineConfig,
-} from "@speakeasy-api/moonshine";
+import { Button as MoonshineButton } from "@/components/ui/Button";
+import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
+import { Stack } from "@/components/ui/Stack";
 import { Webhook } from "lucide-react";
 import { AppPortal } from "svix-react";
 import React, { JSX } from "react";

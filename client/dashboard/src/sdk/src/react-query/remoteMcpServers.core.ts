@@ -22,8 +22,8 @@ export type RemoteMcpServersQueryData = ListServersResult;
 export function prefetchRemoteMcpServers(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListRemoteMcpServersRequest | undefined,
-  security?: ListRemoteMcpServersSecurity | undefined,
+  request?: ListRemoteMcpServersRequest  ,
+  security?: ListRemoteMcpServersSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchRemoteMcpServers(
 
 export function buildRemoteMcpServersQuery(
   client$: GramCore,
-  request?: ListRemoteMcpServersRequest | undefined,
-  security?: ListRemoteMcpServersSecurity | undefined,
+  request?: ListRemoteMcpServersRequest  ,
+  security?: ListRemoteMcpServersSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

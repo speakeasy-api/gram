@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Info } from "lucide-react";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
-import { ToggleButton } from "@/components/ui/toggle-button";
+import { ToggleButton } from "@/components/ui/ToggleButton";
 import { type BillingCycle } from "./billing-cycles";
 
 const HOUR_MS = 60 * 60 * 1000;

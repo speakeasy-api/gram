@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function triggersPause(
   client: GramCore,
   request: PauseTriggerInstanceRequest,
-  security?: PauseTriggerInstanceSecurity | undefined,
+  security?: PauseTriggerInstanceSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function triggersPause(
 async function $do(
   client: GramCore,
   request: PauseTriggerInstanceRequest,
-  security?: PauseTriggerInstanceSecurity | undefined,
+  security?: PauseTriggerInstanceSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [

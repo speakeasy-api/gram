@@ -23,7 +23,7 @@ export function prefetchListVersions(
   queryClient: QueryClient,
   client$: GramCore,
   request: ListVersionsRequest,
-  security?: ListVersionsSecurity | undefined,
+  security?: ListVersionsSecurity  ,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchListVersions(
 export function buildListVersionsQuery(
   client$: GramCore,
   request: ListVersionsRequest,
-  security?: ListVersionsSecurity | undefined,
+  security?: ListVersionsSecurity  ,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

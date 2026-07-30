@@ -63,7 +63,7 @@ export type GetObservabilityOverviewQueryError =
  */
 export function useGetObservabilityOverview(
   request: GetObservabilityOverviewRequest,
-  security?: GetObservabilityOverviewSecurity | undefined,
+  security?: GetObservabilityOverviewSecurity  ,
   options?: QueryHookOptions<
     GetObservabilityOverviewQueryData,
     GetObservabilityOverviewQueryError
@@ -92,7 +92,7 @@ export function useGetObservabilityOverview(
  */
 export function useGetObservabilityOverviewSuspense(
   request: GetObservabilityOverviewRequest,
-  security?: GetObservabilityOverviewSecurity | undefined,
+  security?: GetObservabilityOverviewSecurity  ,
   options?: SuspenseQueryHookOptions<
     GetObservabilityOverviewQueryData,
     GetObservabilityOverviewQueryError

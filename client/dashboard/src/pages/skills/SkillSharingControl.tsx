@@ -1,9 +1,9 @@
 import { McpSidebarInfoLabel } from "@/components/mcp-sidebar-nav-shell";
-import { Button } from "@/components/ui/button";
-import { CopyButton } from "@/components/ui/copy-button";
-import { Dialog } from "@/components/ui/dialog";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+import { Button } from "@/components/ui/Button";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Dialog } from "@/components/ui/Dialog";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Type } from "@/components/ui/Type";
 import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
@@ -15,7 +15,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown, RotateCcw } from "lucide-react";
 import { useState } from "react";
@@ -254,7 +254,7 @@ export function SkillSharingCardBlocks({
             </Type>
             <CopyButton
               text={shareUrl}
-              size="inline"
+              size="xs"
               tooltip="Copy public link"
               className="mt-[-2px] shrink-0"
               onCopy={() => {
@@ -264,8 +264,8 @@ export function SkillSharingCardBlocks({
             {canWrite && (
               <SimpleTooltip tooltip="Reset link">
                 <Button
-                  size="icon-sm"
-                  variant="ghost"
+                  size="sm"
+                  variant="tertiary"
                   disabled={pending}
                   aria-label="Reset public link"
                   className="mt-[-4px] shrink-0"
@@ -291,11 +291,11 @@ export function SkillSharingCardBlocks({
             <Dialog.Description>{confirmCopy?.description}</Dialog.Description>
           </Dialog.Header>
           <Dialog.Footer>
-            <Button variant="outline" onClick={() => setConfirmAction(null)}>
+            <Button variant="secondary" onClick={() => setConfirmAction(null)}>
               Cancel
             </Button>
             <Button
-              variant="destructive"
+              variant="destructive-primary"
               disabled={pending || confirmAction === null}
               onClick={runConfirmedAction}
             >

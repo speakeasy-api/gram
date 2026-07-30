@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function remoteMcpListServers(
   client: GramCore,
-  request?: ListRemoteMcpServersRequest | undefined,
-  security?: ListRemoteMcpServersSecurity | undefined,
+  request?: ListRemoteMcpServersRequest  ,
+  security?: ListRemoteMcpServersSecurity  ,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function remoteMcpListServers(
 
 async function $do(
   client: GramCore,
-  request?: ListRemoteMcpServersRequest | undefined,
-  security?: ListRemoteMcpServersSecurity | undefined,
+  request?: ListRemoteMcpServersRequest  ,
+  security?: ListRemoteMcpServersSecurity  ,
   options?: RequestOptions,
 ): Promise<
   [
