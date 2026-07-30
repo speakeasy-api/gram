@@ -77,10 +77,15 @@ describe("EventMatchDialog", () => {
 });
 
 describe("RuleLabel", () => {
-  it("renders nothing for judge sources, whose rule restates the category", () => {
+  it("renders no second line for judge sources, whose rule restates the category", () => {
     const { container } = render(
       <RuleLabel source="prompt_injection" ruleId="prompt_injection" />,
     );
+    expect(container.textContent).toBe("");
+  });
+
+  it("renders no second line when the finding carries no rule id", () => {
+    const { container } = render(<RuleLabel source="gitleaks" />);
     expect(container.textContent).toBe("");
   });
 

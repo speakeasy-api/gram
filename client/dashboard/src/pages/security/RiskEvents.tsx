@@ -31,11 +31,15 @@ import {
 } from "./risk-ui";
 import { isJudgeSource } from "./risk-utils";
 
+// Category and rule share one column, badge over rule title, matching the
+// findings table on the risk overview category drill-down. Judge findings own a
+// single rule whose name only restates the category, so they render the badge
+// alone rather than an empty Rule cell.
+//
 // Evidence gets the widest track: for judge findings it holds a sentence or two
-// of rationale, where every other column holds a label. Rule pays for most of
-// it, since judge rows leave it empty.
+// of rationale, where every other column holds a label.
 const RISK_EVENTS_GRID =
-  "grid grid-cols-[172px_minmax(0,0.9fr)_88px_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,2.2fr)_minmax(0,0.9fr)_110px] gap-3";
+  "grid grid-cols-[172px_minmax(0,1.3fr)_88px_minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,2.4fr)_minmax(0,0.9fr)_110px] gap-3";
 
 // Strongly-typed filter schema for Risk Events. `policy_id` and the date range
 // are pinned (always visible in the bar); the rest live behind "More filters".
@@ -377,9 +381,8 @@ function RiskEventsHeader() {
       )}
     >
       <div className="min-w-0">Timestamp</div>
-      <div className="min-w-0">Category</div>
+      <div className="min-w-0">Category / Rule</div>
       <div className="min-w-0">Severity</div>
-      <div className="min-w-0">Rule</div>
       <div className="min-w-0">Session Name</div>
       <div className="min-w-0">User</div>
       <div className="min-w-0">Evidence</div>
@@ -409,7 +412,9 @@ function RiskEventsRows({
   const rowVirtualizer = useVirtualizer({
     count: results.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 52,
+    // Rows stack category over rule and can wrap two lines of rationale;
+    // measureElement corrects each row, this is just the pre-measure estimate.
+    estimateSize: () => 68,
     overscan: 12,
   });
 
@@ -567,14 +572,12 @@ function RiskEventsRow({
       <div className="text-muted-foreground min-w-0 font-mono text-xs">
         {result.createdAt ? new Date(result.createdAt).toLocaleString() : "-"}
       </div>
-      <div className="min-w-0 truncate">
+      <div className="flex min-w-0 flex-col gap-0.5">
         <CategoryLabel source={result.source} ruleId={result.ruleId} />
+        <RuleLabel source={result.source} ruleId={result.ruleId} />
       </div>
       <div className="min-w-0">
         <SeverityScore score={policyScore} />
-      </div>
-      <div className="min-w-0 truncate">
-        <RuleLabel source={result.source} ruleId={result.ruleId} />
       </div>
       <div className="min-w-0 truncate">{result.chatTitle ?? "Untitled"}</div>
       <div className="min-w-0 truncate">{result.userId ?? "-"}</div>

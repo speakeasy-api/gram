@@ -298,7 +298,7 @@ function ResultsTable({
         <thead className="bg-muted text-muted-foreground sticky top-0 z-[1] text-xs font-medium tracking-wide uppercase shadow-[0_1px_0_0_var(--color-border)]">
           <tr>
             <th className="px-4 py-2 text-left">Time</th>
-            <th className="px-4 py-2 text-left">Rule</th>
+            <th className="px-4 py-2 text-left">Category / Rule</th>
             <th className="px-4 py-2 text-left">Session</th>
             <th className="px-4 py-2 text-left">User</th>
             <th className="px-4 py-2 text-left">Evidence</th>

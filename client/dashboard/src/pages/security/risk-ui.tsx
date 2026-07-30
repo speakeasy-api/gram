@@ -65,8 +65,11 @@ export function CategoryLabel({
 // presidio, or prompt_injection rules independently of the dashboard, so
 // every snake_case id needs to display legibly without a code change.
 //
-// Judge sources render nothing: their single rule label just restates the
-// category badge sitting next to it.
+// Renders as the secondary line under a CategoryLabel, so it renders nothing
+// when there is no rule worth naming: judge sources own a single rule whose
+// name restates the category badge above it, and a finding with no rule id has
+// nothing to show. Omitting the line is what keeps the merged cell clean; a
+// placeholder would read as missing data.
 export function RuleLabel({
   source,
   ruleId,
@@ -74,11 +77,10 @@ export function RuleLabel({
   source?: string;
   ruleId?: string;
 }): JSX.Element | null {
-  if (isJudgeSource(source)) return null;
-  const label = ruleId ? getRuleTitleFallback(ruleId) : "-";
+  if (!ruleId || isJudgeSource(source)) return null;
   return (
-    <span className="font-mono text-xs" title={ruleId}>
-      {label}
+    <span className="truncate font-mono text-xs" title={ruleId}>
+      {getRuleTitleFallback(ruleId)}
     </span>
   );
 }
