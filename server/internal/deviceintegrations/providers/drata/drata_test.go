@@ -61,34 +61,80 @@ type fakeDrata struct {
 	// empty-fleet clear path.
 	deletedRecords []string
 
+	// existingConnections is the collection the list endpoint returns, as
+	// {id, clientAlias} maps — pre-seed to exercise find-existing.
+	existingConnections []map[string]any
+	// createdConnections records the bodies POSTed to the collection endpoint,
+	// so provisioning tests can assert the schema and workspace sent.
+	createdConnections []map[string]any
+	// nextConnID is the id assigned to the next created connection.
+	nextConnID int
+
 	server *httptest.Server
 }
 
 func newFakeDrata(t *testing.T) *fakeDrata {
 	t.Helper()
 	f := &fakeDrata{
-		t:                  t,
-		apiKey:             "test-api-key",
-		resourceIDs:        []string{testResourceID},
-		mu:                 sync.Mutex{},
-		sessions:           map[string][]map[string]any{},
-		sessionStatus:      map[string]string{},
-		ignoreStatusFilter: false,
-		failComplete:       false,
-		rejectRecordID:     "",
-		records:            nil,
-		uploadRequests:     0,
-		completed:          nil,
-		canceled:           nil,
-		deletedRecords:     nil,
-		server:             nil,
+		t:                   t,
+		apiKey:              "test-api-key",
+		resourceIDs:         []string{testResourceID},
+		mu:                  sync.Mutex{},
+		sessions:            map[string][]map[string]any{},
+		sessionStatus:       map[string]string{},
+		ignoreStatusFilter:  false,
+		failComplete:        false,
+		rejectRecordID:      "",
+		records:             nil,
+		uploadRequests:      0,
+		completed:           nil,
+		canceled:            nil,
+		deletedRecords:      nil,
+		existingConnections: nil,
+		createdConnections:  nil,
+		nextConnID:          900,
+		server:              nil,
 	}
 
 	connBase := "/public/v2/custom-connections/" + testConnectionID
+	collection := "/public/v2/custom-connections"
 	sessionsList := connBase + "/resources/" + testResourceID + "/sessions"
 	sessionsBase := sessionsList + "/"
 
 	mux := http.NewServeMux()
+	// Collection endpoint (exact path, so it never shadows the per-connection
+	// routes below): GET lists connections for find-existing; POST creates one
+	// for provisioning.
+	mux.HandleFunc(collection, func(w http.ResponseWriter, r *http.Request) {
+		if !f.authorized(w, r) {
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			f.mu.Lock()
+			items := []byte("[]")
+			if f.existingConnections != nil {
+				items, _ = json.Marshal(f.existingConnections)
+			}
+			f.mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprintf(w, `{"data": %s}`, items)
+		case http.MethodPost:
+			var body map[string]any
+			assert.NoError(f.t, json.NewDecoder(r.Body).Decode(&body))
+			f.mu.Lock()
+			f.createdConnections = append(f.createdConnections, body)
+			f.nextConnID++
+			id := f.nextConnID
+			name, _ := body["name"].(string)
+			f.existingConnections = append(f.existingConnections, map[string]any{"id": id, "clientAlias": name})
+			f.mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprintf(w, `{"id": %d, "clientAlias": %q}`, id, name)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	})
 	// Registered without the trailing slash so the list read does not fall
 	// into ServeMux's subtree redirect onto the upload handler.
 	mux.HandleFunc(sessionsList, func(w http.ResponseWriter, r *http.Request) {
@@ -707,4 +753,85 @@ func TestPushCoverageEmitsAttestationPerRecord(t *testing.T) {
 		require.NotContains(t, r, "assignedUserAgentActive")
 		require.NotContains(t, r, "assignedUserAgentLastSeenAt")
 	}
+}
+
+func TestProvisionCreatesConnection(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeDrata(t)
+	s := fake.newSink(t)
+
+	out, err := s.Provision(t.Context(), fake.creds(), providers.Settings{fieldRegion: "us"})
+	require.NoError(t, err)
+	require.NotEmpty(t, out[fieldConnectionID], "provision fills in the created connection id")
+
+	require.Len(t, fake.createdConnections, 1)
+	body := fake.createdConnections[0]
+	require.Equal(t, provisionConnectionName, body["name"])
+	require.Equal(t, []any{"CUSTOM"}, body["providerTypes"])
+	require.Equal(t, displayNameKey, body["displayNameKey"])
+	require.Equal(t, []any{float64(defaultWorkspaceID)}, body["workspaceIds"], "blank workspace defaults to 1")
+
+	schema, ok := body["schema"].(map[string]any)
+	require.True(t, ok, "create carries the record schema")
+	required, ok := schema["required"].([]any)
+	require.True(t, ok)
+	// The whole point of provisioning: encode the required list correctly so a
+	// never-seen-agent record (no agentLastSeenAt) is never rejected at sync.
+	require.NotContains(t, required, "agentLastSeenAt")
+	require.Contains(t, required, "agentActive")
+	props, ok := schema["properties"].(map[string]any)
+	require.True(t, ok)
+	require.Contains(t, props, "agentLastSeenAt", "the property still exists — just not required")
+}
+
+func TestProvisionReusesExistingConnection(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeDrata(t)
+	fake.existingConnections = []map[string]any{
+		{"id": 42, "clientAlias": "Some Other Connection"},
+		{"id": 777, "clientAlias": provisionConnectionName},
+	}
+	s := fake.newSink(t)
+
+	out, err := s.Provision(t.Context(), fake.creds(), providers.Settings{fieldRegion: "us"})
+	require.NoError(t, err)
+	require.Equal(t, "777", out[fieldConnectionID], "reuses the existing Gram connection by name")
+	require.Empty(t, fake.createdConnections, "a matching connection must never be duplicated")
+}
+
+func TestProvisionNoOpWhenConfigured(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeDrata(t)
+	s := fake.newSink(t)
+
+	in := providers.Settings{fieldRegion: "us", fieldConnectionID: "existing-123"}
+	out, err := s.Provision(t.Context(), fake.creds(), in)
+	require.NoError(t, err)
+	require.Equal(t, "existing-123", out[fieldConnectionID])
+	require.Empty(t, fake.createdConnections, "a configured connection is never re-provisioned")
+}
+
+func TestProvisionWorkspaceID(t *testing.T) {
+	t.Parallel()
+
+	t.Run("explicit workspace is used", func(t *testing.T) {
+		t.Parallel()
+		fake := newFakeDrata(t)
+		s := fake.newSink(t)
+		_, err := s.Provision(t.Context(), fake.creds(), providers.Settings{fieldRegion: "us", fieldWorkspaceID: "3"})
+		require.NoError(t, err)
+		require.Equal(t, []any{float64(3)}, fake.createdConnections[0]["workspaceIds"])
+	})
+
+	t.Run("invalid workspace fails loudly and creates nothing", func(t *testing.T) {
+		t.Parallel()
+		fake := newFakeDrata(t)
+		s := fake.newSink(t)
+		_, err := s.Provision(t.Context(), fake.creds(), providers.Settings{fieldRegion: "us", fieldWorkspaceID: "not-a-number"})
+		require.ErrorContains(t, err, "workspace_id")
+		require.Empty(t, fake.createdConnections)
+	})
 }

@@ -45,6 +45,11 @@ const (
 	// remotemcp's URL verification).
 	testConnectionTimeout = 10 * time.Second
 
+	// provisionTimeout bounds the synchronous connect-time provisioning call
+	// (creating a vendor-side connection/resource). Larger than the probe: it
+	// may list then create, but still short enough to fail a broken save fast.
+	provisionTimeout = 20 * time.Second
+
 	// activeWindow is the freshness window for the coverage buckets: an
 	// assigned user counts as agent-active when their heartbeat is within
 	// it. The agent polls every 60s, so an hour is generous — anything
@@ -282,6 +287,15 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 		return nil, err
 	}
 
+	// Give the provider a chance to create its vendor-side object (e.g. a Drata
+	// Custom Connection) and fold the resulting ids into settings. Runs before
+	// the transaction — it's an external round-trip — and persists as part of
+	// the same save below.
+	settings, err = s.provisionIfSupported(ctx, desc, creds, settings)
+	if err != nil {
+		return nil, err
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").LogError(ctx, logger)
@@ -438,6 +452,40 @@ func (s *Service) probeProvider(ctx context.Context, desc providers.Descriptor, 
 	default:
 		return oops.E(oops.CodeUnexpected, nil, "provider %s has no testable capability", desc.ID)
 	}
+}
+
+// provisionIfSupported lets a provider that implements providers.Provisioner
+// create its vendor-side object (e.g. a Drata Custom Connection) during
+// connect, returning settings to persist. It runs OUTSIDE the config
+// transaction — provisioning is an external side effect that must not hold the
+// row lock across a vendor round-trip — so the caller persists what it returns.
+// A no-op passthrough for providers that don't provision. A provisioning
+// failure surfaces as an actionable bad-request so the customer fixes the
+// credentials/workspace instead of saving a config that can never sync.
+func (s *Service) provisionIfSupported(ctx context.Context, desc providers.Descriptor, creds providers.Credentials, settings providers.Settings) (providers.Settings, error) {
+	deps := providers.Deps{Client: boundedProviderClient(s.guardian)}
+	var prov providers.Provisioner
+	switch {
+	case desc.NewEvidenceSink != nil:
+		if p, ok := desc.NewEvidenceSink(deps).(providers.Provisioner); ok {
+			prov = p
+		}
+	case desc.NewInventorySource != nil:
+		if p, ok := desc.NewInventorySource(deps).(providers.Provisioner); ok {
+			prov = p
+		}
+	}
+	if prov == nil {
+		return settings, nil
+	}
+
+	provCtx, cancel := context.WithTimeout(ctx, provisionTimeout)
+	defer cancel()
+	out, err := prov.Provision(provCtx, creds, settings)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "provision %s connection", desc.ID)
+	}
+	return out, nil
 }
 
 func (s *Service) ListSchedules(ctx context.Context, payload *gen.ListSchedulesPayload) (*gen.ListDeviceIntegrationSchedulesResult, error) {
