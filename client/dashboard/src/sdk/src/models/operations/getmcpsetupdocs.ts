@@ -26,7 +26,7 @@ export type GetMCPSetupDocsRequest = {
    */
   serverUrl?: string | undefined;
   /**
-   * Registry identifier for the server: a registry alias (e.g., 'com.pulsemcp.mirror/box'), a guide slug, or a canonical 'slug/remote-id' ref
+   * Registry specifier for the server, as returned by listCatalog (e.g., 'com.pulsemcp.mirror/box')
    */
   registrySpecifier?: string | undefined;
   /**

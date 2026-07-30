@@ -79,8 +79,8 @@ type GetServerDetailsPayload struct {
 type GetSetupDocsPayload struct {
 	// URL of the upstream MCP server endpoint
 	ServerURL *string
-	// Registry identifier for the server: a registry alias (e.g.,
-	// 'com.pulsemcp.mirror/box'), a guide slug, or a canonical 'slug/remote-id' ref
+	// Registry specifier for the server, as returned by listCatalog (e.g.,
+	// 'com.pulsemcp.mirror/box')
 	RegistrySpecifier *string
 	SessionToken      *string
 	ApikeyToken       *string

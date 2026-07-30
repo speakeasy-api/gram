@@ -1123,10 +1123,10 @@ type MCPSetupGuideResponseBody struct {
 	Remotes []*MCPSetupGuideRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
 	// IDs of the documented endpoints the lookup matched. Empty when the lookup
 	// only identified the guide and not a specific endpoint, which is always the
-	// case for a 'slug' or 'alias' match.
+	// case for an 'alias' match.
 	MatchedRemoteIds []string `form:"matched_remote_ids,omitempty" json:"matched_remote_ids,omitempty" xml:"matched_remote_ids,omitempty"`
-	// How the lookup matched this guide. The most specific kind, when more than
-	// one lookup key matched it.
+	// How the lookup matched this guide. The most specific kind, when both lookup
+	// keys matched it.
 	MatchKind *string `form:"match_kind,omitempty" json:"match_kind,omitempty" xml:"match_kind,omitempty"`
 	// Markdown instructions for the setup work that happens in the upstream
 	// provider
@@ -3411,8 +3411,8 @@ func ValidateMCPSetupGuideResponseBody(body *MCPSetupGuideResponseBody) (err err
 		}
 	}
 	if body.MatchKind != nil {
-		if !(*body.MatchKind == "server_ref" || *body.MatchKind == "endpoint" || *body.MatchKind == "slug" || *body.MatchKind == "alias") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_kind", *body.MatchKind, []any{"server_ref", "endpoint", "slug", "alias"}))
+		if !(*body.MatchKind == "endpoint" || *body.MatchKind == "alias") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_kind", *body.MatchKind, []any{"endpoint", "alias"}))
 		}
 	}
 	return

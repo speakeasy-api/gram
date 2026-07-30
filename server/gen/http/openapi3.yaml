@@ -19211,12 +19211,12 @@ paths:
                     example: https://mcp.box.com
                     type: string
                 - allowEmptyValue: true
-                  description: 'Registry identifier for the server: a registry alias (e.g., ''com.pulsemcp.mirror/box''), a guide slug, or a canonical ''slug/remote-id'' ref'
+                  description: Registry specifier for the server, as returned by listCatalog (e.g., 'com.pulsemcp.mirror/box')
                   example: com.pulsemcp.mirror/box
                   in: query
                   name: registry_specifier
                   schema:
-                    description: 'Registry identifier for the server: a registry alias (e.g., ''com.pulsemcp.mirror/box''), a guide slug, or a canonical ''slug/remote-id'' ref'
+                    description: Registry specifier for the server, as returned by listCatalog (e.g., 'com.pulsemcp.mirror/box')
                     example: com.pulsemcp.mirror/box
                     type: string
                 - allowEmptyValue: true
@@ -58600,17 +58600,15 @@ components:
                     description: Markdown instructions for the setup work that happens in the upstream provider
                 match_kind:
                     type: string
-                    description: How the lookup matched this guide. The most specific kind, when more than one lookup key matched it.
+                    description: How the lookup matched this guide. The most specific kind, when both lookup keys matched it.
                     enum:
-                        - server_ref
                         - endpoint
-                        - slug
                         - alias
                 matched_remote_ids:
                     type: array
                     items:
                         type: string
-                    description: IDs of the documented endpoints the lookup matched. Empty when the lookup only identified the guide and not a specific endpoint, which is always the case for a 'slug' or 'alias' match.
+                    description: IDs of the documented endpoints the lookup matched. Empty when the lookup only identified the guide and not a specific endpoint, which is always the case for an 'alias' match.
                 remotes:
                     type: array
                     items:

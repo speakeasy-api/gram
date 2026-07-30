@@ -14,16 +14,14 @@ import {
 } from "./mcpsetupguideremote.js";
 
 /**
- * How the lookup matched this guide. The most specific kind, when more than one lookup key matched it.
+ * How the lookup matched this guide. The most specific kind, when both lookup keys matched it.
  */
 export const MatchKind = {
-  ServerRef: "server_ref",
   Endpoint: "endpoint",
-  Slug: "slug",
   Alias: "alias",
 } as const;
 /**
- * How the lookup matched this guide. The most specific kind, when more than one lookup key matched it.
+ * How the lookup matched this guide. The most specific kind, when both lookup keys matched it.
  */
 export type MatchKind = ClosedEnum<typeof MatchKind>;
 
@@ -44,11 +42,11 @@ export type MCPSetupGuide = {
    */
   externalMarkdown: string;
   /**
-   * How the lookup matched this guide. The most specific kind, when more than one lookup key matched it.
+   * How the lookup matched this guide. The most specific kind, when both lookup keys matched it.
    */
   matchKind: MatchKind;
   /**
-   * IDs of the documented endpoints the lookup matched. Empty when the lookup only identified the guide and not a specific endpoint, which is always the case for a 'slug' or 'alias' match.
+   * IDs of the documented endpoints the lookup matched. Empty when the lookup only identified the guide and not a specific endpoint, which is always the case for an 'alias' match.
    */
   matchedRemoteIds: Array<string>;
   /**
