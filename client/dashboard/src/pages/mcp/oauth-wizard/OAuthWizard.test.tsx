@@ -444,6 +444,42 @@ describe("OAuthWizard — rendering", () => {
     });
   });
 
+  it("applies automatic metadata after switching away from a manually overridden issuer", async () => {
+    renderWizard({ initialPath: "external" });
+
+    fireEvent.change(screen.getByPlaceholderText("https://login.example.com"), {
+      target: { value: "https://first.example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Advanced metadata" }));
+    const metadataInput = screen.getByLabelText(
+      "OAuth Authorization Server Metadata",
+    ) as HTMLTextAreaElement;
+    fireEvent.change(metadataInput, {
+      target: {
+        value: JSON.stringify({
+          issuer: "https://first.example.com",
+          authorization_endpoint: "https://manual.example.com/authorize",
+          token_endpoint: "https://manual.example.com/token",
+          registration_endpoint: "https://manual.example.com/register",
+        }),
+      },
+    });
+
+    fireEvent.change(screen.getByPlaceholderText("https://login.example.com"), {
+      target: { value: "https://auth.example.com" },
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/OAuth metadata fetched automatically/),
+      ).toBeTruthy();
+    });
+    expect(metadataInput.value).toContain(
+      '"authorization_endpoint": "https://auth.example.com/oauth/authorize"',
+    );
+    expect(metadataInput.value).not.toContain("manual.example.com");
+  });
+
   it("offers an explicit retry after automatic discovery fails", async () => {
     mocks.discoverIssuer.mockRejectedValueOnce(new Error("Temporary failure"));
     renderWizard({ initialPath: "external" });

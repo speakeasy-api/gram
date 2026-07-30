@@ -221,6 +221,9 @@ export function ExternalOAuthForm({
   };
 
   const handleIssuerChange = (value: string) => {
+    if (!issuerUrlsMatch(value, external.issuerUrl)) {
+      manualMetadataDirtyRef.current = false;
+    }
     clearVerification();
     send({ type: "FIELD_EXTERNAL", key: "issuerUrl", value });
   };
