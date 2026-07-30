@@ -57,8 +57,8 @@ var batchOnlyFindingSources = map[string]struct{}{
 // survives activity cancellation, and heartbeats between acks — the same
 // discipline every other publish in this activity uses.
 // anchors carries one entry per findings slot, so the two stay index aligned.
-// Content parts are skipped: the finding proto only has a chat_message_id to
-// anchor to, so exactly one of the two ids is set per finding.
+// An anchor is either a chat message or a content part, so exactly one of the
+// two published ids is set per finding.
 func (a *AnalyzeBatch) publishBatchOnlyFindings(ctx context.Context, args AnalyzeBatchArgs, anchors []batchMessage, findings [][]scanners.Finding) {
 	var results []gcp.PublishResult
 	for i, anchor := range anchors {

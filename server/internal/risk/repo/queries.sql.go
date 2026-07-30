@@ -1229,12 +1229,19 @@ SELECT
 FROM chat_content_parts ccp
 LEFT JOIN chat_messages cm
   ON cm.id = ccp.parent_chat_message_id
+  AND cm.chat_id = ccp.chat_id
 LEFT JOIN chats c
   ON c.id = ccp.chat_id
   AND c.deleted IS FALSE
 WHERE ccp.id = ANY($1::uuid[])
+  AND ccp.project_id = ANY($2::uuid[])
   AND ccp.deleted IS FALSE
 `
+
+type GetChatContentPartAttributionParams struct {
+	Ids        []uuid.UUID
+	ProjectIds []uuid.UUID
+}
 
 type GetChatContentPartAttributionRow struct {
 	ID             uuid.UUID
@@ -1247,10 +1254,14 @@ type GetChatContentPartAttributionRow struct {
 // Resolves denormalized attribution for a content-part finding. The parent
 // message's user ids win over chat-level ids; both empty and NULL collapse to
 // ”. A content part without a parent still resolves chat-level attribution.
-// project_id comes back so the caller can reject ids belonging to another
-// project: a findings batch can span projects, so the scope cannot be a param.
-func (q *Queries) GetChatContentPartAttribution(ctx context.Context, ids []uuid.UUID) ([]GetChatContentPartAttributionRow, error) {
-	rows, err := q.db.Query(ctx, getChatContentPartAttribution, ids)
+// A findings batch can span projects, so the scope is the batch's set of
+// project ids rather than a single id. project_id is still returned because
+// that set only proves the part belongs to SOME project in the batch: the
+// caller re-checks it against the individual finding's project.
+// The parent must sit in the part's own chat. Unconstrained, a stale or forged
+// parent_chat_message_id would hand another tenant's user ids to this row.
+func (q *Queries) GetChatContentPartAttribution(ctx context.Context, arg GetChatContentPartAttributionParams) ([]GetChatContentPartAttributionRow, error) {
+	rows, err := q.db.Query(ctx, getChatContentPartAttribution, arg.Ids, arg.ProjectIds)
 	if err != nil {
 		return nil, err
 	}

@@ -310,7 +310,20 @@ func (w *FindingCHWriter) chatContentPartAttribution(ctx context.Context, messag
 		return nil
 	}
 
-	rows, err := repo.New(w.db).GetChatContentPartAttribution(ctx, ids)
+	// Bound the read to the projects present in this batch. Findings whose
+	// project id is unparseable contribute nothing, so a part they anchor to
+	// simply resolves no attribution.
+	projectIDs := findingAnchorIDs(messages, func(message *riskv1.Finding) string {
+		return message.GetProjectId()
+	})
+	if len(projectIDs) == 0 {
+		return nil
+	}
+
+	rows, err := repo.New(w.db).GetChatContentPartAttribution(ctx, repo.GetChatContentPartAttributionParams{
+		Ids:        ids,
+		ProjectIds: projectIDs,
+	})
 	if err != nil {
 		w.logger.ErrorContext(ctx, "resolve chat content part attribution", attr.SlogError(err))
 		return nil

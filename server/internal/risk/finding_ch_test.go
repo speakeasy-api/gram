@@ -559,11 +559,23 @@ func TestFindingCHWriter_HandleBatch_ResolvesContentPartAttribution(t *testing.T
 		ParentChatMessageID: uuid.NullUUID{UUID: parentMessageID, Valid: true},
 	})
 	require.NoError(t, err)
-	attributionRows, err := queries.GetChatContentPartAttribution(t.Context(), []uuid.UUID{contentPartID})
+	attributionRows, err := queries.GetChatContentPartAttribution(t.Context(), riskrepo.GetChatContentPartAttributionParams{
+		Ids:        []uuid.UUID{contentPartID},
+		ProjectIds: []uuid.UUID{*authCtx.ProjectID},
+	})
 	require.NoError(t, err)
 	require.Len(t, attributionRows, 1)
 	require.Equal(t, chatID, attributionRows[0].ChatID)
 	require.Equal(t, "parent-user", attributionRows[0].UserID)
+
+	// Scoping to a different project returns nothing at all, so a caller that
+	// forgot the per-finding project check still cannot read across tenants.
+	otherScoped, err := queries.GetChatContentPartAttribution(t.Context(), riskrepo.GetChatContentPartAttributionParams{
+		Ids:        []uuid.UUID{contentPartID},
+		ProjectIds: []uuid.UUID{uuid.New()},
+	})
+	require.NoError(t, err)
+	require.Empty(t, otherScoped)
 
 	ins := &fakeCHInserter{}
 	fp, err := risk.ParsePepperKeyRing(keyRingJSON(t, testPepperVersion, map[string][]byte{testPepperVersion: testPepperKey}))
@@ -607,6 +619,64 @@ func TestFindingCHWriter_HandleBatch_ResolvesContentPartAttribution(t *testing.T
 	require.Empty(t, crossRows[0].ChatID)
 	require.Empty(t, crossRows[0].UserID)
 	require.Empty(t, crossRows[0].ExternalUserID)
+}
+
+// A part whose parent_chat_message_id points outside its own chat must not
+// inherit that message's user ids. The join is what enforces this, so a stale
+// or forged parent id falls back to the part's own chat instead of leaking the
+// other chat's identifiers.
+func TestFindingCHWriter_HandleBatch_IgnoresParentMessageFromAnotherChat(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	queries := riskrepo.New(ti.conn)
+	ownChatID, err := queries.CreateChatForTest(t.Context(), riskrepo.CreateChatForTestParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText("own-chat-user"),
+		ExternalUserID: conv.ToPGText("own-chat-user@example.com"),
+	})
+	require.NoError(t, err)
+
+	foreignChatID, err := queries.CreateChatForTest(t.Context(), riskrepo.CreateChatForTestParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText("foreign-chat-user"),
+		ExternalUserID: conv.ToPGText("foreign-chat-user@example.com"),
+	})
+	require.NoError(t, err)
+
+	foreignMessageID, err := queries.CreateChatMessageForTest(t.Context(), riskrepo.CreateChatMessageForTestParams{
+		ChatID:         foreignChatID,
+		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		Content:        "prompt in another chat",
+		UserID:         conv.ToPGText("foreign-message-user"),
+		ExternalUserID: conv.ToPGText("foreign-message-user@example.com"),
+	})
+	require.NoError(t, err)
+
+	contentPartID, err := queries.CreateChatContentPartForTest(t.Context(), riskrepo.CreateChatContentPartForTestParams{
+		ChatID:              ownChatID,
+		ProjectID:           uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		Kind:                "prompt_attachment",
+		ContentAssetUrl:     "file:///attachment.txt",
+		ParentChatMessageID: uuid.NullUUID{UUID: foreignMessageID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	rows, err := queries.GetChatContentPartAttribution(t.Context(), riskrepo.GetChatContentPartAttributionParams{
+		Ids:        []uuid.UUID{contentPartID},
+		ProjectIds: []uuid.UUID{*authCtx.ProjectID},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, ownChatID, rows[0].ChatID)
+	require.Equal(t, "own-chat-user", rows[0].UserID)
+	require.Equal(t, "own-chat-user@example.com", rows[0].ExternalUserID)
 }
 
 // chMessagesInsertedPoint returns the single data point for the CH

@@ -1630,8 +1630,10 @@ WHERE cm.id = ANY(@ids::uuid[]);
 -- Resolves denormalized attribution for a content-part finding. The parent
 -- message's user ids win over chat-level ids; both empty and NULL collapse to
 -- ''. A content part without a parent still resolves chat-level attribution.
--- project_id comes back so the caller can reject ids belonging to another
--- project: a findings batch can span projects, so the scope cannot be a param.
+-- A findings batch can span projects, so the scope is the batch's set of
+-- project ids rather than a single id. project_id is still returned because
+-- that set only proves the part belongs to SOME project in the batch: the
+-- caller re-checks it against the individual finding's project.
 SELECT
     ccp.id
   , ccp.chat_id
@@ -1639,12 +1641,16 @@ SELECT
   , COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id
   , COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
 FROM chat_content_parts ccp
+-- The parent must sit in the part's own chat. Unconstrained, a stale or forged
+-- parent_chat_message_id would hand another tenant's user ids to this row.
 LEFT JOIN chat_messages cm
   ON cm.id = ccp.parent_chat_message_id
+  AND cm.chat_id = ccp.chat_id
 LEFT JOIN chats c
   ON c.id = ccp.chat_id
   AND c.deleted IS FALSE
 WHERE ccp.id = ANY(@ids::uuid[])
+  AND ccp.project_id = ANY(@project_ids::uuid[])
   AND ccp.deleted IS FALSE;
 
 -- name: CreateChatForTest :one
