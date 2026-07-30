@@ -120,7 +120,14 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 	}
 
 	subject := urn.NewUserSubject(authCtx.UserID)
-	access, jti, err := s.signer.Mint(subject, target.audience, target.issuerURL, mintAccessTokenLifetime)
+	access, jti, err := s.signer.Mint(MintParams{
+		Subject:  subject,
+		Audience: target.audience,
+		Issuer:   target.issuerURL,
+		Lifetime: mintAccessTokenLifetime,
+		// No DCR-registered client — this mint bypasses the OAuth dance.
+		ClientID: "",
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "mint session jwt").LogError(ctx, s.logger)
 	}
