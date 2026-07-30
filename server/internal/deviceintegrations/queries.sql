@@ -282,16 +282,41 @@ LEFT JOIN device_agent_syncs das
 LEFT JOIN device_agent_device_syncs dads
   ON dads.organization_id = d.organization_id
  AND LOWER(dads.serial_number) = LOWER(d.serial_number)
+-- Positive evidence for the agent_other_device bucket: a fresh heartbeat from
+-- this user on a DIFFERENT machine. LIMIT 1 because existence is the whole
+-- question.
+LEFT JOIN LATERAL (
+  SELECT 1 AS found
+  FROM device_agent_device_syncs o
+  WHERE o.organization_id = d.organization_id
+    AND LOWER(o.email) = LOWER(d.user_email)
+    AND LOWER(o.serial_number) IS DISTINCT FROM LOWER(d.serial_number)
+    AND o.last_seen_at >= @active_cutoff::timestamptz
+  LIMIT 1
+) other ON TRUE
 CROSS JOIN LATERAL (
   SELECT CASE
     WHEN d.missing_since IS NOT NULL THEN 'missing'
+    -- Device-level: this machine's own heartbeat answers for it, and outranks
+    -- everything email-based including no_email — a device the MDM records
+    -- with no assigned user is still legible when its own agent reports in.
     WHEN @device_level::boolean AND dads.last_seen_at >= @active_cutoff::timestamptz THEN 'agent_active'
     WHEN @device_level::boolean AND dads.id IS NOT NULL THEN 'agent_stale'
-    WHEN @device_level::boolean AND das.last_seen_at >= @active_cutoff::timestamptz THEN 'agent_other_device'
-    WHEN NOT @device_level::boolean AND coalesce(d.user_email, '') = '' THEN 'no_email'
-    WHEN NOT @device_level::boolean AND das.last_seen_at >= @active_cutoff::timestamptz THEN 'agent_active'
-    WHEN das.id IS NOT NULL THEN 'agent_stale'
+    -- Device-level only, and it requires POSITIVE evidence: the assigned user
+    -- has a fresh heartbeat from a different serial-identified machine, so
+    -- this one is a real gap. Without that evidence we must NOT land here —
+    -- an agent that reports no serial is indistinguishable from one running
+    -- on another machine, and guessing "elsewhere" would tell an admin to
+    -- reinstall on a device already running the agent.
+    WHEN @device_level::boolean AND dads.id IS NULL AND other.found IS NOT NULL THEN 'agent_other_device'
+    -- Shared fallback, identical in both modes. This is what keeps the two
+    -- consistent: a device with only a user-level heartbeat stays
+    -- agent_active (the evidence push says the same thing, at "user"
+    -- attestation), so enabling device-level matching can never demote a
+    -- covered fleet to 0%.
     WHEN coalesce(d.user_email, '') = '' THEN 'no_email'
+    WHEN das.last_seen_at >= @active_cutoff::timestamptz THEN 'agent_active'
+    WHEN das.id IS NOT NULL THEN 'agent_stale'
     WHEN d.user_id IS NOT NULL THEN 'no_agent'
     ELSE 'unresolved_email'
   END AS coverage_bucket
@@ -322,7 +347,15 @@ WHERE das.organization_id = @organization_id
   -- under a different email, or none at all. Without this escape hatch the
   -- tile would report a user as having no managed device while the coverage
   -- list shows that very device as active.
-  AND NOT (@device_level::boolean AND EXISTS (
+  -- Written as a top-level NOT EXISTS with the flag INSIDE, not as
+  -- NOT (@device_level AND EXISTS (...)). Nesting the sublink under NOT(AND ...)
+  -- blocks pull_up_sublinks (it runs before const-folding, so even a literal
+  -- true does not help): Postgres falls back to a hashed SubPlan and hoists the
+  -- correlation quals into hash keys, leaving the scans with no organization_id
+  -- predicate — so it reads EVERY tenant's rows on a user-facing dashboard
+  -- call. At top level it plans as an org-scoped anti-join over the serial
+  -- indexes, and degenerates to a cheap constant-false scan when the flag is off.
+  AND NOT EXISTS (
     SELECT 1
     FROM device_agent_device_syncs dads
     JOIN mdm_devices d2
@@ -332,10 +365,11 @@ WHERE das.organization_id = @organization_id
     JOIN device_integration_configs c2
       ON c2.id = d2.device_integration_config_id
      AND c2.deleted IS FALSE
-    WHERE dads.organization_id = das.organization_id
+    WHERE @device_level::boolean
+      AND dads.organization_id = @organization_id
       AND LOWER(dads.email) = LOWER(das.email)
       AND (sqlc.narg('provider')::text IS NULL OR c2.provider = sqlc.narg('provider')::text)
-  ));
+  );
 
 -- ListManagedDevices pages the org's device inventory newest-first by id
 -- (UUIDv7, so id order is creation order) with an `id <` cursor, computing
@@ -364,19 +398,44 @@ LEFT JOIN device_agent_syncs das
 LEFT JOIN device_agent_device_syncs dads
   ON dads.organization_id = d.organization_id
  AND LOWER(dads.serial_number) = LOWER(d.serial_number)
+-- Positive evidence for the agent_other_device bucket: a fresh heartbeat from
+-- this user on a DIFFERENT machine. LIMIT 1 because existence is the whole
+-- question.
+LEFT JOIN LATERAL (
+  SELECT 1 AS found
+  FROM device_agent_device_syncs o
+  WHERE o.organization_id = d.organization_id
+    AND LOWER(o.email) = LOWER(d.user_email)
+    AND LOWER(o.serial_number) IS DISTINCT FROM LOWER(d.serial_number)
+    AND o.last_seen_at >= @active_cutoff::timestamptz
+  LIMIT 1
+) other ON TRUE
 CROSS JOIN LATERAL (
   -- Kept byte-identical to the CASE in GetCoverageCounts. Both the projected
   -- column and the bucket filter below read this alias, so what is shown and
   -- what is filtered cannot drift apart.
   SELECT CASE
     WHEN d.missing_since IS NOT NULL THEN 'missing'
+    -- Device-level: this machine's own heartbeat answers for it, and outranks
+    -- everything email-based including no_email — a device the MDM records
+    -- with no assigned user is still legible when its own agent reports in.
     WHEN @device_level::boolean AND dads.last_seen_at >= @active_cutoff::timestamptz THEN 'agent_active'
     WHEN @device_level::boolean AND dads.id IS NOT NULL THEN 'agent_stale'
-    WHEN @device_level::boolean AND das.last_seen_at >= @active_cutoff::timestamptz THEN 'agent_other_device'
-    WHEN NOT @device_level::boolean AND coalesce(d.user_email, '') = '' THEN 'no_email'
-    WHEN NOT @device_level::boolean AND das.last_seen_at >= @active_cutoff::timestamptz THEN 'agent_active'
-    WHEN das.id IS NOT NULL THEN 'agent_stale'
+    -- Device-level only, and it requires POSITIVE evidence: the assigned user
+    -- has a fresh heartbeat from a different serial-identified machine, so
+    -- this one is a real gap. Without that evidence we must NOT land here —
+    -- an agent that reports no serial is indistinguishable from one running
+    -- on another machine, and guessing "elsewhere" would tell an admin to
+    -- reinstall on a device already running the agent.
+    WHEN @device_level::boolean AND dads.id IS NULL AND other.found IS NOT NULL THEN 'agent_other_device'
+    -- Shared fallback, identical in both modes. This is what keeps the two
+    -- consistent: a device with only a user-level heartbeat stays
+    -- agent_active (the evidence push says the same thing, at "user"
+    -- attestation), so enabling device-level matching can never demote a
+    -- covered fleet to 0%.
     WHEN coalesce(d.user_email, '') = '' THEN 'no_email'
+    WHEN das.last_seen_at >= @active_cutoff::timestamptz THEN 'agent_active'
+    WHEN das.id IS NOT NULL THEN 'agent_stale'
     WHEN d.user_id IS NOT NULL THEN 'no_agent'
     ELSE 'unresolved_email'
   END AS coverage_bucket

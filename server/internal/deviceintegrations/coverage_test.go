@@ -314,9 +314,12 @@ func TestDeviceLevelCoverageRescuesEmaillessDevice(t *testing.T) {
 	require.EqualValues(t, 0, deviceLevel.NoEmail)
 }
 
-// TestDeviceLevelCoverageFallsBackToEmail pins graceful degradation: a device
-// whose agent predates hardware reporting has no serial heartbeat, so
-// device-level matching must fall back rather than report it uncovered.
+// TestDeviceLevelCoverageFallsBackToEmail is the regression test for the
+// demotion bug: a device whose agent predates hardware reporting has no serial
+// heartbeat, and enabling device-level matching must leave it agent_active on
+// the weaker attestation — NOT move it into a warning bucket. Demoting it made
+// a fully covered fleet read "0% are running the agent" while the evidence
+// push simultaneously reported it active.
 func TestDeviceLevelCoverageFallsBackToEmail(t *testing.T) {
 	t.Parallel()
 
@@ -327,7 +330,7 @@ func TestDeviceLevelCoverageFallsBackToEmail(t *testing.T) {
 	const email = "legacy@example.test"
 	userID := seedUser(t, ctx, conn, email)
 	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "legacy", email, &userID, "SERIAL-LEGACY", false)
-	// Old agent: user-level heartbeat only, no device row.
+	// Old agent: user-level heartbeat only, no device row anywhere in the org.
 	seedAgentSync(t, ctx, conn, orgID, email, now)
 
 	counts, err := store.repo.GetCoverageCounts(ctx, repo.GetCoverageCountsParams{
@@ -337,9 +340,128 @@ func TestDeviceLevelCoverageFallsBackToEmail(t *testing.T) {
 		Provider:       conv.ToPGTextEmpty(""),
 	})
 	require.NoError(t, err)
-	require.EqualValues(t, 1, counts.AgentOtherDevice,
-		"with no serial heartbeat the honest answer is the weaker one, not uncovered")
+	require.EqualValues(t, 1, counts.AgentActive,
+		"the email fallback keeps the device covered; only the attestation strength is weaker")
+	require.EqualValues(t, 0, counts.AgentOtherDevice,
+		"agent_other_device needs positive evidence of the agent on a DIFFERENT identified machine")
 	require.EqualValues(t, 0, counts.NoAgent)
+}
+
+// TestDeviceLevelCoverageModesAgreeWithoutSerials pins the property that makes
+// the rollout safe: for an org whose agents report no serials at all (every org
+// until the daemon ships), flipping the flag must not move a single device.
+func TestDeviceLevelCoverageModesAgreeWithoutSerials(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+	cfg := mustUpsert(t, ctx, conn, store, orgID, validCreds(), validSettings(), true)
+	now := time.Now().UTC()
+
+	// A fleet spanning every bucket the email path can produce.
+	activeEmail := "active@example.test"
+	activeUser := seedUser(t, ctx, conn, activeEmail)
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "active", activeEmail, &activeUser, "S-ACTIVE", false)
+	seedAgentSync(t, ctx, conn, orgID, activeEmail, now)
+
+	staleEmail := "stale@example.test"
+	staleUser := seedUser(t, ctx, conn, staleEmail)
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "stale", staleEmail, &staleUser, "S-STALE", false)
+	seedAgentSync(t, ctx, conn, orgID, staleEmail, now.Add(-25*time.Hour))
+
+	noAgentEmail := "noagent@example.test"
+	noAgentUser := seedUser(t, ctx, conn, noAgentEmail)
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "noagent", noAgentEmail, &noAgentUser, "S-NOAGENT", false)
+
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "noemail", "", nil, "S-NOEMAIL", false)
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "stranger", "stranger@example.test", nil, "S-STRANGER", false)
+
+	cutoff := conv.ToPGTimestamptz(now.Add(-time.Hour))
+	params := func(deviceLevel bool) repo.GetCoverageCountsParams {
+		return repo.GetCoverageCountsParams{
+			DeviceLevel:    deviceLevel,
+			ActiveCutoff:   cutoff,
+			OrganizationID: orgID,
+			Provider:       conv.ToPGTextEmpty(""),
+		}
+	}
+
+	off, err := store.repo.GetCoverageCounts(ctx, params(false))
+	require.NoError(t, err)
+	on, err := store.repo.GetCoverageCounts(ctx, params(true))
+	require.NoError(t, err)
+	require.Equal(t, off, on,
+		"with no serial heartbeats in the org, enabling device-level matching must be a no-op")
+}
+
+// TestCoverageBucketDefinitionsAgreeAcrossQueries guards the one risk of the
+// bucket CASE being duplicated in GetCoverageCounts and ListManagedDevices:
+// a divergence would leave devices reachable from no bucket, with the tile
+// count and the drill-down list silently disagreeing.
+func TestCoverageBucketDefinitionsAgreeAcrossQueries(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+	cfg := mustUpsert(t, ctx, conn, store, orgID, validCreds(), validSettings(), true)
+	now := time.Now().UTC()
+
+	// One device per reachable bucket, under device-level matching.
+	activeEmail := "dl-active@example.test"
+	activeUser := seedUser(t, ctx, conn, activeEmail)
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "dl-active", activeEmail, &activeUser, "D-ACTIVE", false)
+	seedDeviceAgentSync(t, ctx, conn, orgID, "D-ACTIVE", activeEmail, now)
+	// Same user, second machine with no heartbeat -> agent_other_device.
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "dl-other", activeEmail, &activeUser, "D-OTHER", false)
+
+	staleEmail := "dl-stale@example.test"
+	staleUser := seedUser(t, ctx, conn, staleEmail)
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "dl-stale", staleEmail, &staleUser, "D-STALE", false)
+	seedDeviceAgentSync(t, ctx, conn, orgID, "D-STALE", staleEmail, now.Add(-25*time.Hour))
+
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "dl-noemail", "", nil, "D-NOEMAIL", false)
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "dl-stranger", "who@example.test", nil, "D-STRANGER", false)
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "dl-missing", "", nil, "D-MISSING", true)
+
+	cutoff := conv.ToPGTimestamptz(now.Add(-time.Hour))
+
+	for _, deviceLevel := range []bool{false, true} {
+		counts, err := store.repo.GetCoverageCounts(ctx, repo.GetCoverageCountsParams{
+			DeviceLevel:    deviceLevel,
+			ActiveCutoff:   cutoff,
+			OrganizationID: orgID,
+			Provider:       conv.ToPGTextEmpty(""),
+		})
+		require.NoError(t, err)
+
+		rows, err := store.repo.ListManagedDevices(ctx, repo.ListManagedDevicesParams{
+			DeviceLevel:    deviceLevel,
+			ActiveCutoff:   cutoff,
+			OrganizationID: orgID,
+			Provider:       conv.ToPGTextEmpty(""),
+			CursorID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			Bucket:         conv.ToPGTextEmpty(""),
+			PageLimit:      200,
+		})
+		require.NoError(t, err)
+
+		listed := map[string]int64{}
+		for _, row := range rows {
+			listed[row.CoverageBucket]++
+		}
+		aggregate := map[string]int64{
+			"agent_active":       counts.AgentActive,
+			"agent_stale":        counts.AgentStale,
+			"agent_other_device": counts.AgentOtherDevice,
+			"no_agent":           counts.NoAgent,
+			"no_email":           counts.NoEmail,
+			"unresolved_email":   counts.UnresolvedEmail,
+			"missing":            counts.Missing,
+		}
+		for bucket, want := range aggregate {
+			require.Equal(t, want, listed[bucket],
+				"device_level=%v: GetCoverageCounts and ListManagedDevices disagree on %s", deviceLevel, bucket)
+		}
+		require.EqualValues(t, len(rows), counts.Total, "device_level=%v: every device lands in exactly one bucket", deviceLevel)
+	}
 }
 
 // TestDeviceLevelCoverageMatchesSerialCaseInsensitively guards the join key:
