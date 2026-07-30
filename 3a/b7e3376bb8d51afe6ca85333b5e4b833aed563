@@ -3,6 +3,7 @@ server/internal/risk/queries.sql
 server/internal/risk/finding_ch.go
   s_3d388cbf35fcf4::t_3e78427baff144 207-208,212
   s_3d388cbf35fcf4::t_0f19fb25e96d20 206
+  s_3d388cbf35fcf4::t_f47c983adf82fe 209-211
 server/internal/risk/finding_ch_test.go
   s_3d388cbf35fcf4::t_026f291e7d4973 588-609
 server/internal/risk/repo/queries.sql.go
