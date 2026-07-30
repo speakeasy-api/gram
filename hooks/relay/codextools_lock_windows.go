@@ -2,11 +2,18 @@
 
 package relay
 
-import "os"
+import (
+	"os"
 
-// Windows has no flock; the queue operates unlocked there, the bash sender's
-// posture. Mis-correlation needs concurrent same-tool codex hooks on Windows,
-// and the queue self-heals as entries drain.
-func lockFile(*os.File) error { return nil }
+	"golang.org/x/sys/windows"
+)
 
-func unlockFile(*os.File) {}
+func lockFile(f *os.File) error {
+	var overlapped windows.Overlapped
+	return windows.LockFileEx(windows.Handle(f.Fd()), windows.LOCKFILE_EXCLUSIVE_LOCK, 0, 1, 0, &overlapped)
+}
+
+func unlockFile(f *os.File) {
+	var overlapped windows.Overlapped
+	_ = windows.UnlockFileEx(windows.Handle(f.Fd()), 0, 1, 0, &overlapped)
+}

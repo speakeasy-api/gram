@@ -8,7 +8,10 @@ import (
 	"path/filepath"
 )
 
-const maxDebugLogBytes = 10 << 20
+const (
+	maxDebugLogBytes       = 10 << 20
+	maxDebugLogRecordBytes = 64 << 10
+)
 
 type debugLogWriter struct {
 	path string
@@ -35,6 +38,14 @@ func (w debugLogWriter) Write(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
+	requested := len(p)
+	if len(p) > maxDebugLogRecordBytes {
+		const suffix = "... record truncated\n"
+		truncated := make([]byte, 0, maxDebugLogRecordBytes)
+		truncated = append(truncated, p[:maxDebugLogRecordBytes-len(suffix)]...)
+		truncated = append(truncated, suffix...)
+		p = truncated
+	}
 
 	parent := filepath.Dir(w.path)
 	if parent != "." {
@@ -58,10 +69,18 @@ func (w debugLogWriter) Write(p []byte) (int, error) {
 			writeErr = fmt.Errorf("open hooks log: %w", err)
 			return
 		}
+		if err := file.Chmod(0o600); err != nil {
+			_ = file.Close()
+			writeErr = fmt.Errorf("secure hooks log permissions: %w", err)
+			return
+		}
 		written, writeErr = file.Write(p)
 		if closeErr := file.Close(); writeErr == nil && closeErr != nil {
 			writeErr = fmt.Errorf("close hooks log: %w", closeErr)
 		}
 	})
+	if writeErr == nil && written == len(p) {
+		return requested, nil
+	}
 	return written, writeErr
 }

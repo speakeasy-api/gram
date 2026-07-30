@@ -1,8 +1,11 @@
 package relay
 
 import (
+	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/speakeasy-api/agenthooks"
@@ -80,4 +83,44 @@ func TestDebugLogCapturesRelayAndAgenthooksDiagnostics(t *testing.T) {
 	info, err := os.Stat(path)
 	require.NoError(t, err)
 	require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+}
+
+func TestDebugLogSecuresExistingFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "speakeasy-hooks.log")
+	require.NoError(t, os.WriteFile(path, []byte("existing\n"), 0o644))
+	require.NoError(t, os.Chmod(path, 0o644))
+
+	logger := newDebugLogger(path)
+	logger.ErrorContext(t.Context(), "diagnostic")
+
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+}
+
+func TestDebugLogCapsIndividualRecords(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "speakeasy-hooks.log")
+	logger := newDebugLogger(path)
+	logger.ErrorContext(t.Context(), strings.Repeat("x", maxDebugLogRecordBytes*2))
+
+	logData, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.LessOrEqual(t, len(logData), maxDebugLogRecordBytes)
+	require.Contains(t, string(logData), "record truncated")
+}
+
+func TestTransportDiagnosticRedactsAndCapsURLErrors(t *testing.T) {
+	err := &url.Error{
+		Op:  "Post",
+		URL: "https://user:password@example.com/hooks?token=secret",
+		Err: errors.New(strings.Repeat("connection failure ", 256)),
+	}
+
+	diagnostic := transportDiagnostic(err)
+
+	require.LessOrEqual(t, len(diagnostic), maxDiagnosticBytes)
+	require.NotContains(t, diagnostic, "password")
+	require.NotContains(t, diagnostic, "secret")
+	require.Contains(t, diagnostic, "example.com")
+	require.Contains(t, diagnostic, "connection failure")
 }
