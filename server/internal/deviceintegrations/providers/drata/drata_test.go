@@ -72,6 +72,9 @@ type fakeDrata struct {
 	// connectionsCursorFrozen makes the list endpoint return the same non-null
 	// cursor every time, driving the non-advancing-cursor guard.
 	connectionsCursorFrozen bool
+	// connectionsCursorEmpty makes the list endpoint return a present-but-empty
+	// cursor — distinct from a null cursor, so it must NOT count as end-of-list.
+	connectionsCursorEmpty bool
 	// createdConnections records the bodies POSTed to the collection endpoint,
 	// so provisioning tests can assert the schema and workspace sent.
 	createdConnections []map[string]any
@@ -101,6 +104,7 @@ func newFakeDrata(t *testing.T) *fakeDrata {
 		existingConnections:     nil,
 		connectionsPageForever:  false,
 		connectionsCursorFrozen: false,
+		connectionsCursorEmpty:  false,
 		createdConnections:      nil,
 		nextConnID:              900,
 		server:                  nil,
@@ -133,6 +137,11 @@ func newFakeDrata(t *testing.T) *fakeDrata {
 			if f.connectionsCursorFrozen {
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = fmt.Fprint(w, `{"data": [], "pagination": {"cursor": "frozen"}}`)
+				return
+			}
+			if f.connectionsCursorEmpty {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprint(w, `{"data": [], "pagination": {"cursor": ""}}`)
 				return
 			}
 			// Paginate by the requested limit so find-existing's cursor-following
@@ -922,6 +931,20 @@ func TestProvisionFailsWhenCursorStuck(t *testing.T) {
 	_, err := s.Provision(t.Context(), testOrgID, fake.creds(), providers.Settings{fieldRegion: "us"})
 	require.ErrorContains(t, err, "did not advance")
 	require.Empty(t, fake.createdConnections, "a stuck cursor must not create a connection")
+}
+
+func TestProvisionFailsWhenCursorEmptyNotNull(t *testing.T) {
+	t.Parallel()
+
+	// A present-but-empty cursor is not Drata's null end-of-list signal, so it
+	// must not be mistaken for "no more pages" and permit a duplicate create.
+	fake := newFakeDrata(t)
+	fake.connectionsCursorEmpty = true
+	s := fake.newSink(t)
+
+	_, err := s.Provision(t.Context(), testOrgID, fake.creds(), providers.Settings{fieldRegion: "us"})
+	require.ErrorContains(t, err, "did not advance")
+	require.Empty(t, fake.createdConnections, "an empty non-null cursor must not create a connection")
 }
 
 func TestProvisionNoOpWhenConfigured(t *testing.T) {

@@ -515,18 +515,17 @@ func (s *sink) findConnectionByName(ctx context.Context, creds providers.Credent
 				return string(c.ID), nil
 			}
 		}
-		next := ""
-		if list.Pagination.Cursor != nil {
-			next = *list.Pagination.Cursor
-		}
-		if next == "" {
-			// True end of the list, no match: the connection does not exist and
-			// the caller creates it.
+		if list.Pagination.Cursor == nil {
+			// A genuine null cursor is Drata's only end-of-list signal: no match
+			// through the true end means the connection does not exist and the
+			// caller creates it. A present-but-empty cursor is NOT this signal —
+			// it falls through to the can't-advance error below.
 			return "", nil
 		}
-		if next == cursor {
-			// A cursor that won't advance can't prove the connection is absent;
-			// fail rather than fall through and risk a duplicate.
+		next := *list.Pagination.Cursor
+		if next == "" || next == cursor {
+			// A cursor that is empty or unchanged can't advance the scan and
+			// isn't proof of absence; fail rather than risk a duplicate.
 			return "", fmt.Errorf("connection list cursor did not advance")
 		}
 		cursor = next
