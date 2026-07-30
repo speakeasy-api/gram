@@ -44,7 +44,12 @@ type DiscoveryPurpose = "auto" | "test";
 type DiscoveryFeedback = {
   kind: "error" | "fetched" | "verified";
   message: string;
+  retryable?: boolean;
 };
+
+function issuerUrlsMatch(left: string, right: string): boolean {
+  return left.trim().replace(/\/$/, "") === right.trim().replace(/\/$/, "");
+}
 
 export function ExternalOAuthForm({
   hasMultipleOAuth2AuthCode,
@@ -93,24 +98,48 @@ export function ExternalOAuthForm({
     mutationFn: async ({
       issuerUrl,
       purpose,
+      metadataJsonAtStart,
     }: {
       issuerUrl: string;
       purpose: DiscoveryPurpose;
+      metadataJsonAtStart: string;
     }) => {
       const draft = await client.remoteSessionIssuers.fetchMetadata({
         fetchIssuerMetadataRequestBody: { issuer: issuerUrl },
       });
       const metadataJson = JSON.stringify(
-        metadataFromIssuerDraft(issuerUrl, draft),
+        metadataFromIssuerDraft(draft),
         null,
         2,
       );
-      return { issuerUrl, metadataJson, purpose };
+      return {
+        issuerUrl,
+        metadataJson,
+        metadataJsonAtStart,
+        purpose,
+        discoveredIssuer: draft.issuer,
+      };
     },
-    onSuccess: ({ issuerUrl, metadataJson, purpose }) => {
+    onSuccess: ({
+      issuerUrl,
+      metadataJson,
+      metadataJsonAtStart,
+      purpose,
+      discoveredIssuer,
+    }) => {
       if (issuerUrlRef.current.trim() !== issuerUrl) return;
+      if (!issuerUrlsMatch(discoveredIssuer, issuerUrl)) {
+        setAdvancedOpen(true);
+        setFeedback({
+          kind: "error",
+          message:
+            "The discovered metadata issuer does not match the Issuer URL.",
+        });
+        return;
+      }
 
       if (purpose === "auto") {
+        if (externalRef.current.metadataJson !== metadataJsonAtStart) return;
         send({
           type: "FIELD_EXTERNAL",
           key: "metadataJson",
@@ -138,12 +167,15 @@ export function ExternalOAuthForm({
       setFeedback({
         kind: "verified",
         message:
-          "Configuration verified. The issuer is reachable, and the configured OAuth and dynamic registration endpoints are valid.",
+          "Issuer discovery succeeded. Configured endpoint URLs are syntactically valid; endpoint reachability was not tested.",
       });
     },
-    onError: (error) => {
+    onError: (error, { issuerUrl, purpose }) => {
+      if (issuerUrlRef.current.trim() !== issuerUrl) return;
+      if (purpose === "auto") lastAutoDiscoveryRef.current = "";
       setFeedback({
         kind: "error",
+        retryable: purpose === "auto",
         message:
           error instanceof Error
             ? error.message
@@ -163,7 +195,11 @@ export function ExternalOAuthForm({
 
     const timeout = window.setTimeout(() => {
       lastAutoDiscoveryRef.current = issuerUrl;
-      discoverMetadata({ issuerUrl, purpose: "auto" });
+      discoverMetadata({
+        issuerUrl,
+        purpose: "auto",
+        metadataJsonAtStart: externalRef.current.metadataJson,
+      });
     }, 500);
 
     return () => window.clearTimeout(timeout);
@@ -215,6 +251,20 @@ export function ExternalOAuthForm({
     discoverMetadata({
       issuerUrl: external.issuerUrl.trim(),
       purpose: "test",
+      metadataJsonAtStart: external.metadataJson,
+    });
+  };
+
+  const handleRetryDiscovery = () => {
+    const issuerUrl = external.issuerUrl.trim();
+    if (validateIssuerUrl(issuerUrl)) return;
+
+    setFeedback(null);
+    lastAutoDiscoveryRef.current = issuerUrl;
+    discoverMetadata({
+      issuerUrl,
+      purpose: "auto",
+      metadataJsonAtStart: external.metadataJson,
     });
   };
 
@@ -312,7 +362,23 @@ export function ExternalOAuthForm({
             {feedback?.kind === "error" && (
               <Alert variant="destructive">
                 <AlertTitle>Configuration could not be verified</AlertTitle>
-                <AlertDescription>{feedback.message}</AlertDescription>
+                <AlertDescription>
+                  <Stack gap={2}>
+                    <span>{feedback.message}</span>
+                    {feedback.retryable && (
+                      <div>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={handleRetryDiscovery}
+                          disabled={discoveryMutation.isPending}
+                        >
+                          <Button.Text>Retry Metadata Fetch</Button.Text>
+                        </Button>
+                      </div>
+                    )}
+                  </Stack>
+                </AlertDescription>
               </Alert>
             )}
             {feedback?.kind === "fetched" && (
@@ -369,7 +435,8 @@ export function ExternalOAuthForm({
 
             <div className="flex items-center justify-between gap-3">
               <Type muted small>
-                Test the issuer connection before saving.
+                Checks issuer discovery. Endpoint URL format is validated
+                locally; endpoint reachability is not tested.
               </Type>
               <Button
                 variant="secondary"

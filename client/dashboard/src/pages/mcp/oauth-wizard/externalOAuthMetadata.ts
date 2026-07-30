@@ -95,11 +95,10 @@ export function validateExternalMetadataJson(
 }
 
 export function metadataFromIssuerDraft(
-  issuerUrl: string,
   draft: RemoteSessionIssuerDraft,
 ): Record<string, unknown> {
   const metadata: Record<string, unknown> = {
-    issuer: issuerUrl.trim(),
+    issuer: draft.issuer,
   };
 
   const optionalStrings: Array<[string, string | undefined]> = [
@@ -129,13 +128,4 @@ export function metadataFromIssuerDraft(
   }
 
   return metadata;
-}
-
-export function issuerFromMetadataJson(value: string): string {
-  try {
-    const metadata = JSON.parse(value) as Record<string, unknown>;
-    return typeof metadata.issuer === "string" ? metadata.issuer : "";
-  } catch {
-    return "";
-  }
 }

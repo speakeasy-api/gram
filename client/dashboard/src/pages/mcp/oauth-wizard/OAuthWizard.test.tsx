@@ -293,7 +293,7 @@ describe("OAuthWizard — rendering", () => {
     fireEvent.click(testButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/Configuration verified/)).toBeTruthy();
+      expect(screen.getByText(/Issuer discovery succeeded/)).toBeTruthy();
     });
 
     const saveButton = screen.getByRole("button", {
@@ -347,6 +347,77 @@ describe("OAuthWizard — rendering", () => {
       name: "Configure External OAuth",
     });
     expect((saveButton as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("does not overwrite manual metadata when auto-discovery finishes late", async () => {
+    let resolveDiscovery:
+      | ((value: Awaited<ReturnType<typeof mocks.discoverIssuer>>) => void)
+      | undefined;
+    mocks.discoverIssuer.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveDiscovery = resolve;
+      }),
+    );
+    renderWizard({ initialPath: "external" });
+
+    fireEvent.change(screen.getByPlaceholderText("https://login.example.com"), {
+      target: { value: "https://auth.example.com" },
+    });
+    await waitFor(() => {
+      expect(mocks.discoverIssuer).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced metadata" }));
+    const metadataInput = screen.getByLabelText(
+      "OAuth Authorization Server Metadata",
+    ) as HTMLTextAreaElement;
+    const manualMetadata = JSON.stringify({
+      issuer: "https://auth.example.com",
+      authorization_endpoint: "https://manual.example.com/authorize",
+      token_endpoint: "https://manual.example.com/token",
+      registration_endpoint: "https://manual.example.com/register",
+    });
+    fireEvent.change(metadataInput, {
+      target: { value: manualMetadata },
+    });
+
+    resolveDiscovery?.({
+      issuer: "https://auth.example.com",
+      authorizationEndpoint: "https://auth.example.com/oauth/authorize",
+      tokenEndpoint: "https://auth.example.com/oauth/token",
+      registrationEndpoint: "https://auth.example.com/oauth/register",
+      clientIdMetadataDocumentSupported: false,
+      discoveryWarnings: [],
+      oidc: false,
+      passthrough: true,
+    });
+
+    await waitFor(() => {
+      expect(metadataInput.value).toBe(manualMetadata);
+    });
+  });
+
+  it("offers an explicit retry after automatic discovery fails", async () => {
+    mocks.discoverIssuer.mockRejectedValueOnce(new Error("Temporary failure"));
+    renderWizard({ initialPath: "external" });
+
+    fireEvent.change(screen.getByPlaceholderText("https://login.example.com"), {
+      target: { value: "https://auth.example.com" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Temporary failure")).toBeTruthy();
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry Metadata Fetch" }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/OAuth metadata fetched automatically/),
+      ).toBeTruthy();
+    });
+    expect(mocks.discoverIssuer).toHaveBeenCalledTimes(2);
   });
 
   it("keeps auto-configure labeled as OAuth Proxy when user-session onboarding is enabled", () => {

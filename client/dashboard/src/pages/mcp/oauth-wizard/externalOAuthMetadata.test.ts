@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  issuerFromMetadataJson,
   metadataFromIssuerDraft,
   validateExternalMetadataJson,
   validateIssuerUrl,
@@ -68,7 +67,7 @@ describe("validateExternalMetadataJson", () => {
 
 describe("metadataFromIssuerDraft", () => {
   it("maps discovered issuer metadata to RFC 8414 field names", () => {
-    const metadata = metadataFromIssuerDraft("https://auth.example.com", {
+    const metadata = metadataFromIssuerDraft({
       issuer: "https://auth.example.com",
       authorizationEndpoint: "https://auth.example.com/authorize",
       tokenEndpoint: "https://auth.example.com/token",
@@ -94,14 +93,16 @@ describe("metadataFromIssuerDraft", () => {
       token_endpoint_auth_methods_supported: ["client_secret_post"],
     });
   });
-});
 
-describe("issuerFromMetadataJson", () => {
-  it("returns the issuer when present and an empty string otherwise", () => {
-    expect(issuerFromMetadataJson(JSON.stringify(VALID_METADATA))).toBe(
-      "https://auth.example.com",
-    );
-    expect(issuerFromMetadataJson("{}")).toBe("");
-    expect(issuerFromMetadataJson("{")).toBe("");
+  it("preserves a mismatched issuer advertised by discovery", () => {
+    const metadata = metadataFromIssuerDraft({
+      issuer: "https://different.example.com",
+      clientIdMetadataDocumentSupported: false,
+      discoveryWarnings: [],
+      oidc: false,
+      passthrough: true,
+    });
+
+    expect(metadata.issuer).toBe("https://different.example.com");
   });
 });
