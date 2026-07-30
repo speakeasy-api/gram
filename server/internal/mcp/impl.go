@@ -124,6 +124,9 @@ type Service struct {
 	platformToolsets       map[string]platformtools.Toolset
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
 	userSessionGrantCache  cache.TypedCacheObject[UserSessionGrant]
+	// sessionClientInfoCache holds the MCP client identity captured at
+	// initialize so tools/call on the same session can resolve it.
+	sessionClientInfoCache cache.TypedCacheObject[SessionClientInfo]
 	// userSessionSigner mints the SessionClaims JWT issued at /token.
 	// HS256 with GRAM_JWT_SIGNING_KEY -- same key the chat-session signer
 	// uses, intentionally separate signer code so each path is removable
@@ -338,6 +341,11 @@ func NewService(
 		),
 		userSessionGrantCache: cache.NewTypedObjectCache[UserSessionGrant](
 			logger.With(attr.SlogCacheNamespace("user_session_grant")),
+			cacheImpl,
+			cache.SuffixNone,
+		),
+		sessionClientInfoCache: cache.NewTypedObjectCache[SessionClientInfo](
+			logger.With(attr.SlogCacheNamespace("mcp_session_client_info")),
 			cacheImpl,
 			cache.SuffixNone,
 		),
@@ -1134,7 +1142,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "ping":
 		return handlePing(ctx, s.logger, req.ID)
 	case "initialize":
-		return handleInitialize(ctx, s.logger, req, payload, s.posthog, s.toolsetsRepo, s.mcpMetadataRepo)
+		return handleInitialize(ctx, s.logger, req, payload, s.posthog, s.toolsetsRepo, s.mcpMetadataRepo, &s.sessionClientInfoCache)
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
