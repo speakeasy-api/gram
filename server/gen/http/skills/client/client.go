@@ -42,6 +42,10 @@ type Client struct {
 	// listFeedback endpoint.
 	ListFeedbackDoer goahttp.Doer
 
+	// TriggerSuggestion Doer is the HTTP client used to make requests to the
+	// triggerSuggestion endpoint.
+	TriggerSuggestionDoer goahttp.Doer
+
 	// ApproveSuggestion Doer is the HTTP client used to make requests to the
 	// approveSuggestion endpoint.
 	ApproveSuggestionDoer goahttp.Doer
@@ -123,6 +127,7 @@ func NewClient(
 		ListDoer:                   doer,
 		ListSuggestionsDoer:        doer,
 		ListFeedbackDoer:           doer,
+		TriggerSuggestionDoer:      doer,
 		ApproveSuggestionDoer:      doer,
 		DismissSuggestionDoer:      doer,
 		ListSuggestionFeedbackDoer: doer,
@@ -308,6 +313,30 @@ func (c *Client) ListFeedback() goa.Endpoint {
 		resp, err := c.ListFeedbackDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("skills", "listFeedback", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// TriggerSuggestion returns an endpoint that makes HTTP requests to the skills
+// service triggerSuggestion server.
+func (c *Client) TriggerSuggestion() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeTriggerSuggestionRequest(c.encoder)
+		decodeResponse = DecodeTriggerSuggestionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildTriggerSuggestionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.TriggerSuggestionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "triggerSuggestion", err)
 		}
 		return decodeResponse(resp)
 	}

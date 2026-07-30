@@ -258,7 +258,69 @@ func TestHealthIssueMessageCertificateProblemsAreManagedByGram(t *testing.T) {
 	} {
 		require.Equal(t,
 			"There is a problem with the domain's TLS certificate. We're working to resolve it.",
-			HealthIssueMessage(issue),
+			HealthIssueMessage(issue, "cname.example.com."),
 		)
 	}
+}
+
+func TestHealthIssueMessageNamesExpectedCNAME(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t,
+		"The domain's DNS no longer resolves to the expected target. Point the domain's CNAME record at cname.example.com..",
+		HealthIssueMessage(HealthIssueDNSTargetMismatch, "cname.example.com."),
+	)
+	require.Equal(t,
+		"DNS records for the domain could not be found. Create a CNAME record pointing the domain at cname.example.com..",
+		HealthIssueMessage(HealthIssueDNSNotFound, "cname.example.com."),
+	)
+
+	// An unconfigured target must not leak an empty parenthetical or name the
+	// platform.
+	require.Equal(t,
+		"The domain's DNS no longer resolves to the expected target.",
+		HealthIssueMessage(HealthIssueDNSTargetMismatch, ""),
+	)
+	require.Equal(t,
+		"DNS records for the domain could not be found.",
+		HealthIssueMessage(HealthIssueDNSNotFound, ""),
+	)
+}
+
+func TestShouldAutoDisableRequiresAllThresholds(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 7, 27, 12, 0, 0, 0, time.UTC)
+	eightDaysAgo := now.Add(-8 * 24 * time.Hour)
+	sixDaysAgo := now.Add(-6 * 24 * time.Hour)
+
+	eligible := HealthState{
+		Status:               HealthStatusUnhealthy,
+		Issue:                HealthIssueDNSTargetMismatch,
+		CheckedAt:            &now,
+		UnhealthySince:       &eightDaysAgo,
+		CertificateExpiresAt: nil,
+		ConsecutiveFailures:  AutoDisableConsecutiveFailures,
+	}
+	require.True(t, ShouldAutoDisable(eligible, now))
+
+	belowFailures := eligible
+	belowFailures.ConsecutiveFailures = AutoDisableConsecutiveFailures - 1
+	require.False(t, ShouldAutoDisable(belowFailures, now), "needs the full failure count")
+
+	tooRecent := eligible
+	tooRecent.UnhealthySince = &sixDaysAgo
+	require.False(t, ShouldAutoDisable(tooRecent, now), "needs a full week unhealthy")
+
+	gramSide := eligible
+	gramSide.Issue = HealthIssueCheckFailed
+	require.False(t, ShouldAutoDisable(gramSide, now), "check_failed never disables")
+
+	healthy := eligible
+	healthy.Status = HealthStatusHealthy
+	require.False(t, ShouldAutoDisable(healthy, now))
+
+	noAnchor := eligible
+	noAnchor.UnhealthySince = nil
+	require.False(t, ShouldAutoDisable(noAnchor, now))
 }

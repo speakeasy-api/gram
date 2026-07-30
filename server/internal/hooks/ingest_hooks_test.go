@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
@@ -26,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // ingestUserScopedShadowMCPScanner reports a blocking shadow-MCP policy for a
@@ -1157,8 +1159,9 @@ func TestIngest_PersistsPromptAttachmentsAsScannableToolRows(t *testing.T) {
 	require.False(t, secondPromptRow.MessageID.Valid, "hash match must not stamp the newer unrelated prompt")
 
 	parts, err := chatRepo.New(ti.conn).ListChatContentPartsByChatID(ctx, chatRepo.ListChatContentPartsByChatIDParams{
-		ChatID:    chatID,
-		ProjectID: *authCtx.ProjectID,
+		ChatID:               chatID,
+		ProjectID:            *authCtx.ProjectID,
+		ParentChatMessageIds: []uuid.UUID{promptRow.ID, secondPromptRow.ID},
 	})
 	require.NoError(t, err)
 	require.Len(t, parts, 1)
@@ -1178,6 +1181,51 @@ func TestIngest_PersistsPromptAttachmentsAsScannableToolRows(t *testing.T) {
 	require.JSONEq(t, `{"display_path": "marker.txt", "kind": "file"}`, string(attachmentRow.Metadata))
 	require.True(t, attachmentRow.CreatedAt.Valid)
 	require.Equal(t, int64(2026), int64(attachmentRow.CreatedAt.Time.Year()))
+
+	policyID, err := uuid.NewV7()
+	require.NoError(t, err)
+	policy, err := riskRepo.New(ti.conn).CreateRiskPolicy(ctx, riskRepo.CreateRiskPolicyParams{
+		ID:             policyID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Name:           "content part test policy",
+		Sources:        []string{"gitleaks"},
+		Enabled:        true,
+		Action:         "flag",
+		AudienceType:   "everyone",
+		AutoName:       false,
+		UserMessage:    pgtype.Text{},
+	})
+	require.NoError(t, err)
+	resultID, err := uuid.NewV7()
+	require.NoError(t, err)
+	_, err = riskRepo.New(ti.conn).InsertRiskResults(ctx, []riskRepo.InsertRiskResultsParams{{
+		ID:                resultID,
+		ProjectID:         *authCtx.ProjectID,
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		RiskPolicyID:      policy.ID,
+		RiskPolicyVersion: policy.Version,
+		ChatMessageID:     uuid.NullUUID{},
+		ChatContentPartID: uuid.NullUUID{UUID: attachmentRow.ID, Valid: true},
+		Source:            "gitleaks",
+		Found:             true,
+		RuleID:            pgtype.Text{String: "secret.test", Valid: true},
+		Description:       pgtype.Text{String: "test finding", Valid: true},
+		Match:             pgtype.Text{String: "secret", Valid: true},
+		StartPos:          pgtype.Int4{Int32: 0, Valid: true},
+		EndPos:            pgtype.Int4{Int32: 6, Valid: true},
+		Confidence:        pgtype.Float8{Float64: 1, Valid: true},
+		Tags:              []string{},
+	}})
+	require.NoError(t, err)
+	results, err := testrepo.New(ti.conn).ListRiskResultsAll(ctx, testrepo.ListRiskResultsAllParams{
+		ProjectID:    *authCtx.ProjectID,
+		RiskPolicyID: policy.ID,
+	})
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.False(t, results[0].ChatMessageID.Valid)
+	require.Equal(t, attachmentRow.ID, results[0].ChatContentPartID.UUID)
 
 	// A redelivered attachment event must not stamp an unrelated prompt row.
 	redelivery := canonicalIngestPayload("claude", "assistant.responded", sessionID)

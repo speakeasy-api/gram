@@ -42,6 +42,11 @@ func ListFeedbackSkillsPath() string {
 	return "/rpc/skills.listFeedback"
 }
 
+// TriggerSuggestionSkillsPath returns the URL path to the skills service triggerSuggestion HTTP endpoint.
+func TriggerSuggestionSkillsPath() string {
+	return "/rpc/skills.triggerSuggestion"
+}
+
 // ApproveSuggestionSkillsPath returns the URL path to the skills service approveSuggestion HTTP endpoint.
 func ApproveSuggestionSkillsPath() string {
 	return "/rpc/skills.approveSuggestion"

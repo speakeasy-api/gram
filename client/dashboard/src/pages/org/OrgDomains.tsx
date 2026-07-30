@@ -87,9 +87,9 @@ type IPRow = { id: number; value: string; error: string | null };
 
 const healthIssueMessages: Record<string, string> = {
   dns_not_found:
-    "We couldn't find DNS records for this domain. Check that the record still exists with your DNS provider.",
+    "We couldn't find DNS records for this domain. Set this record with your DNS provider:",
   dns_target_mismatch:
-    "This domain's DNS does not resolve to the platform's endpoint. If the domain sits behind a proxy or CDN, traffic may still work; otherwise update its DNS record to the value shown when you registered the domain.",
+    "This domain's DNS does not resolve to the expected CNAME target. If the domain sits behind a proxy or CDN, traffic may still work; otherwise set this DNS record:",
   resource_missing:
     "The routing configuration for this domain is missing. Run the check again to confirm the problem persists.",
   certificate_missing:
@@ -111,20 +111,61 @@ function customDomainHealthMessage(issue?: string): string {
     : "The latest health check found a problem with this domain.";
 }
 
+// DNS-shaped issues end in a colon and expect the exact record the customer
+// must create; the other messages stand alone.
+function CustomDomainHealthMessage({
+  issue,
+  domainName,
+}: {
+  issue?: string;
+  domainName: string;
+}) {
+  const showsExpectedRecord =
+    issue === "dns_not_found" || issue === "dns_target_mismatch";
+  return (
+    <>
+      {customDomainHealthMessage(issue)}
+      {showsExpectedRecord && (
+        <>
+          {" "}
+          <code className="break-all">
+            {domainName} CNAME {getCustomDomainCNAME()}
+          </code>
+        </>
+      )}
+    </>
+  );
+}
+
 // A single failed probe (check_failed) is usually a transient Gram-side issue,
 // not a customer-actionable problem; only surface it once it has persisted
 // across consecutive checks.
 function showCustomDomainUnhealthy(domain: {
+  verified: boolean;
   healthStatus?: string;
   healthIssue?: string;
   consecutiveFailures?: number;
 }): boolean {
-  if (domain.healthStatus !== "unhealthy") {
+  if (!domain.verified || domain.healthStatus !== "unhealthy") {
     return false;
   }
   return (
     domain.healthIssue !== "check_failed" ||
     (domain.consecutiveFailures ?? 0) >= 2
+  );
+}
+
+// Unhealthy state on an unverified domain means the health sweep auto-disabled
+// it: routing was torn down and it must go back through the reverify flow.
+function showCustomDomainAutoDisabled(domain: {
+  verified: boolean;
+  healthStatus?: string;
+  unhealthySince?: unknown;
+}): boolean {
+  return (
+    !domain.verified &&
+    domain.healthStatus === "unhealthy" &&
+    Boolean(domain.unhealthySince)
   );
 }
 
@@ -411,6 +452,10 @@ function OrgDomainsInner() {
                   <SimpleTooltip tooltip="Your domain is being verified. This may take a few minutes.">
                     <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
                   </SimpleTooltip>
+                ) : showCustomDomainAutoDisabled(domain) ? (
+                  <SimpleTooltip tooltip="This domain was disabled after failing health checks for over a week">
+                    <X className="h-4 w-4 stroke-3 text-red-500" />
+                  </SimpleTooltip>
                 ) : showCustomDomainUnhealthy(domain) ? (
                   <SimpleTooltip tooltip="The latest health check found a problem">
                     <AlertTriangle className="h-4 w-4 text-amber-500" />
@@ -490,6 +535,44 @@ function OrgDomainsInner() {
               </Stack>
             </RequireScope>
           </Stack>
+          {showCustomDomainAutoDisabled(domain) && (
+            <Alert variant="error" dismissible={false} className="mt-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <Type variant="body" className="font-medium">
+                    This custom domain was disabled
+                  </Type>
+                  <Type variant="body" className="text-sm">
+                    It failed health checks continuously for over a week, so its
+                    routing and TLS certificate were removed.{" "}
+                    <CustomDomainHealthMessage
+                      issue={domain.healthIssue}
+                      domainName={domain.domain}
+                    />
+                  </Type>
+                  {domain.unhealthySince && (
+                    <Type variant="body" className="text-sm opacity-80">
+                      Unhealthy since{" "}
+                      <HumanizeDateTime date={domain.unhealthySince} />
+                    </Type>
+                  )}
+                  <Type variant="body" className="text-sm">
+                    Fix the issue above, then reverify the domain to provision
+                    it again.
+                  </Type>
+                </div>
+                <RequireScope scope="org:admin" level="component">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIsAddDomainDialogOpen(true)}
+                  >
+                    Reverify domain
+                  </Button>
+                </RequireScope>
+              </div>
+            </Alert>
+          )}
           {showCustomDomainUnhealthy(domain) && (
             <Alert variant="warning" dismissible={false} className="mt-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -498,7 +581,10 @@ function OrgDomainsInner() {
                     This custom domain may not be working
                   </Type>
                   <Type variant="body" className="text-sm">
-                    {customDomainHealthMessage(domain.healthIssue)}
+                    <CustomDomainHealthMessage
+                      issue={domain.healthIssue}
+                      domainName={domain.domain}
+                    />
                   </Type>
                   {domain.healthCheckedAt && (
                     <Type variant="body" className="text-sm opacity-80">
