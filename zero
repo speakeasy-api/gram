@@ -150,6 +150,26 @@ mise run zero:tls
 echo -e "\n⏳ Updating VS Code and Cursor editor settings"
 mise run install:vscode
 
+echo -e "\n⏳ Syncing agent skills"
+# One-time choice, persisted to mise.local.toml; skills:sync installs and
+# keeps the SHA-pinned external set current whenever it is true.
+if ! grep -q 'USE_RECOMMENDED_SKILLS' mise.local.toml 2>/dev/null; then
+    if $agent_mode || $auto_yes; then
+        mise set --file mise.local.toml USE_RECOMMENDED_SKILLS=true
+    else
+        echo "Install recommended agent skills? Third-party, pinned to commit SHAs,"
+        echo "kept out of git (see .agents/recommended-skills.json)."
+        echo -n "[y/N] "
+        read -r answer
+        if [ "$(echo "$answer" | tr '[:upper:]' '[:lower:]')" = "y" ]; then
+            mise set --file mise.local.toml USE_RECOMMENDED_SKILLS=true
+        else
+            mise set --file mise.local.toml USE_RECOMMENDED_SKILLS=false
+        fi
+    fi
+fi
+mise run skills:sync
+
 echo -e "\n⏳ Setting up hooks"
 if $agent_mode; then
     mise run zero:hk --yes
