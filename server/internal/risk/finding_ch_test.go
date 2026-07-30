@@ -585,6 +585,28 @@ func TestFindingCHWriter_HandleBatch_ResolvesContentPartAttribution(t *testing.T
 	require.Equal(t, chatID.String(), rows[0].ChatID)
 	require.Equal(t, "parent-user", rows[0].UserID)
 	require.Equal(t, "parent-user@example.com", rows[0].ExternalUserID)
+
+	// A finding claiming a part that belongs to another project resolves the
+	// row but must not inherit its chat or user ids. A findings batch can span
+	// projects, so this is enforced per finding rather than by scoping the query.
+	otherProject := &riskv1.Finding{}
+	otherProject.SetId(uuid.NewString())
+	otherProject.SetCreatedAt(time.Now().UTC().Format(time.RFC3339))
+	otherProject.SetOrganizationId(authCtx.ActiveOrganizationID)
+	otherProject.SetProjectId(uuid.NewString())
+	otherProject.SetContentPartId(contentPartID.String())
+	otherProject.SetRiskPolicyId(uuid.NewString())
+
+	ins2 := &fakeCHInserter{}
+	w2 := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins2, fp)
+	require.NoError(t, w2.HandleBatch(ctx, []*riskv1.Finding{otherProject}, nil))
+
+	crossRows := chRows(t, ins2)
+	require.Len(t, crossRows, 1)
+	require.Equal(t, contentPartID.String(), crossRows[0].ContentPartID)
+	require.Empty(t, crossRows[0].ChatID)
+	require.Empty(t, crossRows[0].UserID)
+	require.Empty(t, crossRows[0].ExternalUserID)
 }
 
 // chMessagesInsertedPoint returns the single data point for the CH

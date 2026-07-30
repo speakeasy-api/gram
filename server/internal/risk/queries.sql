@@ -1630,9 +1630,12 @@ WHERE cm.id = ANY(@ids::uuid[]);
 -- Resolves denormalized attribution for a content-part finding. The parent
 -- message's user ids win over chat-level ids; both empty and NULL collapse to
 -- ''. A content part without a parent still resolves chat-level attribution.
+-- project_id comes back so the caller can reject ids belonging to another
+-- project: a findings batch can span projects, so the scope cannot be a param.
 SELECT
     ccp.id
   , ccp.chat_id
+  , ccp.project_id
   , COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id
   , COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
 FROM chat_content_parts ccp

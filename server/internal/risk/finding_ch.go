@@ -203,9 +203,13 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 				}
 			}
 		} else if partID, err := uuid.Parse(contentPartID); err == nil {
-			// The part attribution query carries no assistant link or message
-			// timestamp, so both keep the fallbacks above.
-			if a, ok := contentPartAttribution[partID]; ok {
+			// Only attribute a part that belongs to the finding's own project,
+			// so a wrong or forged anchor id cannot pull another tenant's chat
+			// and user ids into this row. A NULL project_id (project deleted)
+			// is unverifiable and so gets no attribution. The part attribution
+			// query carries no assistant link or message timestamp, so both keep
+			// the fallbacks above.
+			if a, ok := contentPartAttribution[partID]; ok && a.ProjectID.Valid && a.ProjectID.UUID.String() == message.GetProjectId() {
 				chatID = a.ChatID.String()
 				userID = a.UserID
 				externalUserID = a.ExternalUserID
