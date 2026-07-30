@@ -1661,3 +1661,76 @@ func TestServeInstallPage_McpServer_InstallationOverrideURL(t *testing.T) {
 	require.Equal(t, []string{"spring", "summer"}, location.Query()["campaign"])
 	require.Equal(t, "https://directory.example.com/catalog?category=ai", location.Query().Get("referrer"))
 }
+
+// TestServeInstallPage_CustomDomain_RootEndpointRendersBareDomainURL verifies
+// that a domain-root mcp_endpoint's install page advertises the bare custom
+// domain as the MCP URL instead of the also-valid /mcp/<slug> path.
+func TestServeInstallPage_CustomDomain_RootEndpointRendersBareDomainURL(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	domainsRepo := customdomains_repo.New(testInstance.conn)
+
+	domain, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         "root-install.example.com",
+		IngressName:    pgtype.Text{String: "", Valid: false},
+		CertSecretName: pgtype.Text{String: "", Valid: false},
+		IpAllowlist:    []string{},
+	})
+	require.NoError(t, err)
+
+	domain, err = domainsRepo.UpdateCustomDomain(ctx, customdomains_repo.UpdateCustomDomainParams{
+		ID:             domain.ID,
+		Verified:       true,
+		Activated:      true,
+		IngressName:    pgtype.Text{String: "", Valid: false},
+		CertSecretName: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	remoteServer := remotemcptest.SeedServer(t, ctx, testInstance.conn, remotemcp_repo.CreateServerParams{
+		ProjectID:     *authCtx.ProjectID,
+		TransportType: "streamable-http",
+		Url:           "https://upstream.example.com/mcp",
+	})
+
+	issuer := createUserSessionIssuer(t, ctx, testInstance, *authCtx.ProjectID)
+	endpointSlug := "root-ep-" + uuid.NewString()[:8]
+	_, endpoint := createMcpServerWithEndpoint(t, ctx, testInstance, mcpServerFixtureOptions{
+		name:                "Root Endpoint Install",
+		visibility:          mcpservers.VisibilityPublic,
+		endpointSlug:        endpointSlug,
+		remoteMcpServerID:   uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		userSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+		customDomainID:      uuid.NullUUID{UUID: domain.ID, Valid: true},
+	})
+
+	require.NoError(t, domainsRepo.SetRootMcpEndpoint(ctx, customdomains_repo.SetRootMcpEndpointParams{
+		McpEndpointID:  endpoint.ID,
+		CustomDomainID: domain.ID,
+	}))
+
+	domainCtx := customdomains.WithContext(context.Background(), &customdomains.Context{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         domain.Domain,
+		DomainID:       domain.ID,
+	})
+
+	req := httptest.NewRequest("GET", "/mcp/"+endpointSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", endpointSlug)
+	req = req.WithContext(context.WithValue(domainCtx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, testInstance.service.ServeInstallPage(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	body := rr.Body.String()
+	require.Contains(t, body, "https://root-install.example.com", "install page advertises the bare domain")
+	require.NotContains(t, body, "https://root-install.example.com/mcp/", "root endpoint installs do not use the /mcp path")
+}
