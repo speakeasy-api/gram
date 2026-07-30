@@ -1,7 +1,13 @@
 import { format } from "date-fns";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 
-const CLAUDE_OTEL_LOG_URN = "claude-code:otel:logs";
+// Raw OTEL streams are persisted for analytics but are too noisy for the chat
+// detail panel; derived rows (e.g. claude-code:usage:metrics) stay visible.
+const RAW_OTEL_URNS = new Set([
+  "claude-code:otel:logs",
+  "codex:otel:logs",
+  "codex:otel:metrics",
+]);
 
 export function formatLogTimestamp(nanos: string): string {
   const ms = Number(BigInt(nanos) / 1_000_000n);
@@ -27,5 +33,7 @@ export function filterToolLogs(
 export function filterPanelTelemetryLogs(
   logs: TelemetryLogRecord[],
 ): TelemetryLogRecord[] {
-  return logs.filter((log) => log.attributes?.gram_urn !== CLAUDE_OTEL_LOG_URN);
+  return logs.filter(
+    (log) => !RAW_OTEL_URNS.has(String(log.attributes?.gram_urn ?? "")),
+  );
 }

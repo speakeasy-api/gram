@@ -473,6 +473,8 @@ func DecodeQueryInsightsRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 			to                    *string
 			includeVersions       *bool
 			includeScoredSessions *bool
+			cursor                *string
+			limit                 int
 			sessionToken          *string
 			projectSlugInput      *string
 			err                   error
@@ -513,6 +515,28 @@ func DecodeQueryInsightsRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 				includeScoredSessions = &v
 			}
 		}
+		cursorRaw := qp.Get("cursor")
+		if cursorRaw != "" {
+			cursor = &cursorRaw
+		}
+		{
+			limitRaw := qp.Get("limit")
+			if limitRaw == "" {
+				limit = 20
+			} else {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
+				}
+				limit = int(v)
+			}
+		}
+		if limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+		}
+		if limit > 100 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -524,7 +548,7 @@ func DecodeQueryInsightsRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		if err != nil {
 			return payload, err
 		}
-		payload = NewQueryInsightsPayload(skillIds, from, to, includeVersions, includeScoredSessions, sessionToken, projectSlugInput)
+		payload = NewQueryInsightsPayload(skillIds, from, to, includeVersions, includeScoredSessions, cursor, limit, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -722,6 +746,9 @@ func marshalSkillefficacySkillEfficacyInsightToSkillEfficacyInsightResponseBody(
 	} else {
 		res.Versions = []*SkillVersionInsightResponseBody{}
 	}
+	if v.RegressionSignal != nil {
+		res.RegressionSignal = marshalSkillefficacySkillEfficacyRegressionSignalToSkillEfficacyRegressionSignalResponseBody(v.RegressionSignal)
+	}
 
 	return res
 }
@@ -818,6 +845,29 @@ func marshalSkillefficacySkillInsightPointToSkillInsightPointResponseBody(v *ski
 		ScoredSessions:        v.ScoredSessions,
 		AverageScore:          v.AverageScore,
 		EstimatedMinutesSaved: v.EstimatedMinutesSaved,
+	}
+
+	return res
+}
+
+// marshalSkillefficacySkillEfficacyRegressionSignalToSkillEfficacyRegressionSignalResponseBody
+// builds a value of type *SkillEfficacyRegressionSignalResponseBody from a
+// value of type *skillefficacy.SkillEfficacyRegressionSignal.
+func marshalSkillefficacySkillEfficacyRegressionSignalToSkillEfficacyRegressionSignalResponseBody(v *skillefficacy.SkillEfficacyRegressionSignal) *SkillEfficacyRegressionSignalResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &SkillEfficacyRegressionSignalResponseBody{
+		Comparable:                v.Comparable,
+		Regression:                v.Regression,
+		CurrentVersionID:          v.CurrentVersionID,
+		PredecessorVersionID:      v.PredecessorVersionID,
+		CurrentAverageScore:       v.CurrentAverageScore,
+		CurrentScoredSessions:     v.CurrentScoredSessions,
+		PredecessorAverageScore:   v.PredecessorAverageScore,
+		PredecessorScoredSessions: v.PredecessorScoredSessions,
+		WindowStart:               v.WindowStart,
+		WindowEnd:                 v.WindowEnd,
 	}
 
 	return res

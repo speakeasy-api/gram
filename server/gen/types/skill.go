@@ -23,17 +23,20 @@ type Skill struct {
 	SourceKind string
 	// The skill classification.
 	Classification string
-	// The derived latest version ID, selected from immutable version creation
-	// order.
+	// The current version ID, selected by effective promotion time.
 	LatestVersionID *string
 	// The number of immutable versions recorded for the skill.
 	VersionCount int64
+	// Whether the skill has at least one valid version available to distribute.
+	HasValidVersion bool
 	// When this skill was first activated.
 	FirstSeenAt *string
 	// When this skill was most recently activated.
 	LastSeenAt *string
 	// The number of reconciled activations observed for this skill.
 	SeenCount int64
+	// The active public share token, absent when the skill is not shared.
+	ShareToken *string
 	// When the skill was created.
 	CreatedAt string
 	// When the skill was last updated.

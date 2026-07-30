@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
@@ -104,23 +105,45 @@ func Reserve(ctx context.Context, db *pgxpool.Pool, features FeatureChecker, pro
 	}
 
 	settings := Effective(settingsRow)
-	if !settings.admitsWork() {
+	if !settings.Enabled {
 		return nil, fromHead, nil
 	}
 
-	orgSpend, err := queries.CountSkillEfficacyOrgSpendForProject(ctx, repo.CountSkillEfficacyOrgSpendForProjectParams{
-		ProjectID:  projectID,
-		ReservedOn: reservedOn,
+	admitted := make([]repo.SkillEfficacyEvaluation, 0, batchSize)
+	ids := make([]uuid.UUID, 0, batchSize)
+	inactivity := pgtype.Interval{Microseconds: InactivityWindow.Microseconds(), Days: 0, Months: 0, Valid: true}
+	recovered, err := queries.ListPendingSkillEfficacyEvaluations(ctx, repo.ListPendingSkillEfficacyEvaluationsParams{
+		ProjectID:        projectID,
+		HasReservedSpend: true,
+		Inactivity:       inactivity,
+		CursorObservedAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		CursorID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		PageSize:         batchSize,
 	})
 	if err != nil {
-		return nil, fromHead, fmt.Errorf("count skill efficacy organization spend: %w", err)
+		return nil, fromHead, fmt.Errorf("list recovered skill efficacy evaluations: %w", err)
 	}
-	orgRemaining := max(0, int64(settings.OrgDailyCap)-orgSpend)
+	for _, candidate := range recovered {
+		candidate.State = StateReserved
+		admitted = append(admitted, candidate)
+		ids = append(ids, candidate.ID)
+	}
+
+	freshAllowed := settings.admitsWork()
+	orgRemaining := int64(0)
+	if freshAllowed && len(ids) < int(batchSize) {
+		orgSpend, err := queries.CountSkillEfficacyOrgSpendForProject(ctx, repo.CountSkillEfficacyOrgSpendForProjectParams{
+			ProjectID:  projectID,
+			ReservedOn: reservedOn,
+		})
+		if err != nil {
+			return nil, fromHead, fmt.Errorf("count skill efficacy organization spend: %w", err)
+		}
+		orgRemaining = max(0, int64(settings.OrgDailyCap)-orgSpend)
+	}
 
 	skillRemaining := make(map[uuid.UUID]int64)
 	burstRemaining := make(map[uuid.UUID]int64)
-	admitted := make([]repo.SkillEfficacyEvaluation, 0, batchSize)
-	ids := make([]uuid.UUID, 0, batchSize)
 
 	// The head of the queue can be entirely capped — one hot skill's backlog is
 	// enough — so the walk pages past it rather than reading a single fixed head.
@@ -130,17 +153,18 @@ func Reserve(ctx context.Context, db *pgxpool.Pool, features FeatureChecker, pro
 	resumed := cursor != fromHead
 	page := repo.ListPendingSkillEfficacyEvaluationsParams{
 		ProjectID:        projectID,
+		HasReservedSpend: false,
 		CursorObservedAt: pgtype.Timestamptz{Time: cursor.ObservedAt, InfinityModifier: pgtype.Finite, Valid: resumed},
 		CursorID:         uuid.NullUUID{UUID: cursor.ID, Valid: resumed},
 		PageSize:         PendingCandidatePage,
-		Inactivity:       pgtype.Interval{Microseconds: InactivityWindow.Microseconds(), Days: 0, Months: 0, Valid: true},
+		Inactivity:       inactivity,
 	}
 	// The walk starts where the last pass stopped and reports where this one
 	// does. Reaching the end of the queue reports the head instead, so the next
 	// pass starts over rather than sitting past the tail.
 	next := cursor
 	for range MaxPendingCandidatePages {
-		if len(ids) >= int(batchSize) || orgRemaining <= 0 {
+		if len(ids) >= int(batchSize) || !freshAllowed || orgRemaining <= 0 {
 			break
 		}
 
@@ -201,7 +225,7 @@ func Reserve(ctx context.Context, db *pgxpool.Pool, features FeatureChecker, pro
 
 		examined := 0
 		for _, candidate := range candidates {
-			if orgRemaining <= 0 || len(ids) >= int(batchSize) {
+			if len(ids) >= int(batchSize) || orgRemaining <= 0 {
 				break
 			}
 			examined++
@@ -243,9 +267,11 @@ func Reserve(ctx context.Context, db *pgxpool.Pool, features FeatureChecker, pro
 	if len(ids) == 0 {
 		return nil, next, nil
 	}
+	claimToken := uuid.New()
 
 	reserved, err := queries.ReserveSkillEfficacyEvaluations(ctx, repo.ReserveSkillEfficacyEvaluationsParams{
 		ReservedOn: reservedOn,
+		ClaimToken: claimToken,
 		ProjectID:  projectID,
 		Ids:        ids,
 	})
@@ -266,6 +292,7 @@ func Reserve(ctx context.Context, db *pgxpool.Pool, features FeatureChecker, pro
 
 	evaluations := make([]Evaluation, 0, len(admitted))
 	for _, row := range admitted {
+		row.ClaimToken = uuid.NullUUID{UUID: claimToken, Valid: true}
 		evaluations = append(evaluations, NewEvaluation(row))
 	}
 
@@ -281,8 +308,7 @@ func Reserve(ctx context.Context, db *pgxpool.Pool, features FeatureChecker, pro
 // ReservedClaimLease — so a concurrent or immediately repeated claim selects
 // nothing and the model call that follows never has to hold a transaction open.
 // A row whose owner crashed stops being bumped, falls out of its lease, and is
-// claimed again here or, much later, returned to the queue by
-// ResetStaleReservations.
+// claimed again here or, much later, recovered by the estate sweep.
 func LoadReserved(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID, batchSize int32) ([]Evaluation, error) {
 	return loadReserved(ctx, db, projectID, batchSize, ReservedClaimLease)
 }
@@ -297,10 +323,13 @@ func loadReserved(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID, ba
 		return nil, fmt.Errorf("load reserved skill efficacy evaluations: batch size %d exceeds the %d the claim lease covers", batchSize, MaxReservedClaimBatch)
 	}
 
+	claimToken := uuid.New()
 	rows, err := repo.New(db).LoadReservedSkillEfficacyEvaluations(ctx, repo.LoadReservedSkillEfficacyEvaluationsParams{
-		ProjectID:  projectID,
-		ClaimLease: pgtype.Interval{Microseconds: lease.Microseconds(), Days: 0, Months: 0, Valid: true},
-		BatchSize:  batchSize,
+		ProjectID:     projectID,
+		ClaimToken:    claimToken,
+		ClaimLease:    pgtype.Interval{Microseconds: lease.Microseconds(), Days: 0, Months: 0, Valid: true},
+		RecoveryAfter: pgtype.Interval{Microseconds: StaleReservationAfter.Microseconds(), Days: 0, Months: 0, Valid: true},
+		BatchSize:     batchSize,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("load reserved skill efficacy evaluations: %w", err)
@@ -324,23 +353,28 @@ func loadReserved(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID, ba
 	return evaluations, nil
 }
 
-// ResetStaleReservations returns evaluations whose owner is gone to the queue.
-// A row is stale when it has been reserved without an updated_at bump for
-// staleAfter, which callers set to StaleReservationAfter. The reset deliberately
-// re-opens the budget slot; attempts is preserved, so a unit that poisons the
-// judge still terminates at MaxModelAttempts.
-func ResetStaleReservations(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID, staleAfter time.Duration) (int64, error) {
+const staleReservationFailureClass = "skill efficacy reservation lease expired"
+
+// RecoverStaleReservations returns abandoned work to pending or dead-letters it
+// at the attempt ceiling without releasing its spend reservation.
+func RecoverStaleReservations(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID, staleAfter time.Duration, batchSize int32) (RecoveryResult, error) {
 	if staleAfter.Microseconds() <= 0 {
-		return 0, fmt.Errorf("reset stale skill efficacy reservations: stale duration must be positive")
+		return RecoveryResult{}, fmt.Errorf("recover stale skill efficacy reservations: stale duration must be positive")
+	}
+	if batchSize <= 0 || batchSize > MaxRecoveryBatch {
+		return RecoveryResult{}, fmt.Errorf("recover stale skill efficacy reservations: batch size must be between 1 and %d", MaxRecoveryBatch)
 	}
 
-	reset, err := repo.New(db).ResetStaleSkillEfficacyReservations(ctx, repo.ResetStaleSkillEfficacyReservationsParams{
-		ProjectID:  projectID,
-		StaleAfter: pgtype.Interval{Microseconds: staleAfter.Microseconds(), Days: 0, Months: 0, Valid: true},
+	recovered, err := repo.New(db).RecoverStaleSkillEfficacyReservations(ctx, repo.RecoverStaleSkillEfficacyReservationsParams{
+		ProjectID:   projectID,
+		StaleAfter:  pgtype.Interval{Microseconds: staleAfter.Microseconds(), Days: 0, Months: 0, Valid: true},
+		BatchSize:   batchSize,
+		LastError:   conv.ToPGText(staleReservationFailureClass),
+		MaxAttempts: MaxModelAttempts,
 	})
 	if err != nil {
-		return 0, fmt.Errorf("reset stale skill efficacy reservations: %w", err)
+		return RecoveryResult{}, fmt.Errorf("recover stale skill efficacy reservations: %w", err)
 	}
 
-	return reset, nil
+	return RecoveryResult{Recovered: recovered.Recovered, DeadLettered: recovered.DeadLettered}, nil
 }

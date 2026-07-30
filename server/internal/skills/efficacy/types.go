@@ -8,9 +8,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 )
 
-// Evaluation lifecycle states. Spending states are exactly reserved and
-// scored: both hold a budget slot, and only StateFailed and a stale-
-// reservation reset give one back.
+// Evaluation lifecycle states. reserved_on, rather than state, records whether
+// an evaluation has spent a budget slot; recovery and terminal failure retain it.
 const (
 	StatePending  = "pending"
 	StateReserved = "reserved"
@@ -32,7 +31,7 @@ const (
 
 	// StaleReservationAfter is how long a reserved evaluation may go without an
 	// updated_at bump before it is treated as crashed and returned to the queue.
-	// Orders of magnitude above the judge timeout, so a reset can only hit a row
+	// Orders of magnitude above the judge timeout, so recovery can only hit a row
 	// whose owner is genuinely gone.
 	StaleReservationAfter = 24 * time.Hour
 
@@ -80,6 +79,10 @@ const (
 	// than this — an organization's day is up to DefaultOrgDailyCap evaluations
 	// — is drained by claiming again, not by claiming wider.
 	MaxReservedClaimBatch int32 = 10
+
+	// MaxRecoveryBatch bounds how many stale reservations one project recovery
+	// locks and transitions in a sweep pass.
+	MaxRecoveryBatch int32 = 100
 )
 
 // Settings are the effective per-organization scoring budgets. A cap of 0 means
@@ -155,6 +158,7 @@ type Evaluation struct {
 	// ReservedOn is the UTC day the evaluation spent its budget slot on, zero
 	// while the row has never been reserved.
 	ReservedOn time.Time
+	ClaimToken uuid.UUID
 	Attempts   int32
 }
 
@@ -173,11 +177,20 @@ func NewEvaluation(row repo.SkillEfficacyEvaluation) Evaluation {
 		ObservedAt:      row.ObservedAt.Time,
 		State:           row.State,
 		ReservedOn:      time.Time{},
+		ClaimToken:      uuid.Nil,
 		Attempts:        row.Attempts,
 	}
 	if row.ReservedOn.Valid {
 		evaluation.ReservedOn = row.ReservedOn.Time
 	}
+	if row.ClaimToken.Valid {
+		evaluation.ClaimToken = row.ClaimToken.UUID
+	}
 
 	return evaluation
+}
+
+type RecoveryResult struct {
+	Recovered    int64 `json:"recovered"`
+	DeadLettered int64 `json:"dead_lettered"`
 }

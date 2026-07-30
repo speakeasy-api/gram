@@ -121,7 +121,7 @@ const useChatResolution = () => useContext(ChatResolutionContext);
 
 const DangerousApiKeyWarning = () => (
   <div className="m-2 rounded-md border border-red-500 bg-red-100 px-4 py-3 text-sm text-red-800 dark:border-red-600 dark:bg-red-900/30 dark:text-red-200">
-    <strong>Danger:</strong> You are using a Gram API key directly in the
+    <strong>Danger:</strong> You are using a Speakeasy API key directly in the
     browser. This exposes your key to anyone who inspects this page. Do NOT use
     this in production.
   </div>
@@ -274,7 +274,7 @@ const ThreadScrollToBottom: FC = () => {
       <TooltipIconButton
         tooltip="Scroll to bottom"
         variant="outline"
-        className="aui-thread-scroll-to-bottom absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible dark:bg-background dark:text-foreground dark:hover:bg-accent"
+        className="aui-thread-scroll-to-bottom pointer-events-auto absolute bottom-full left-1/2 mb-2 -translate-x-1/2 rounded-full p-4 disabled:invisible dark:bg-background dark:text-foreground dark:hover:bg-accent"
       >
         <ArrowDownIcon />
       </TooltipIconButton>
@@ -555,10 +555,11 @@ const ComposerFeedback: FC = () => {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}
               transition={{ duration: 0.2, ease: EASE_OUT_QUINT }}
-              className="mb-3"
+              // z-10 keeps the pill (and its portalled tooltips) above the
+              // scroll-to-bottom button that floats directly overhead.
+              className="pointer-events-auto relative z-10"
             >
               <MessageFeedback
-                className="mx-auto"
                 onResolved={setResolved}
                 onFeedback={(type) => {
                   void handleFeedback(type);
@@ -612,8 +613,13 @@ const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
         r("xl"),
       )}
     >
-      {showFeedback && <ComposerFeedback />}
-      <ThreadScrollToBottom />
+      {/* Floating overlay above the opaque composer: keeps the message list
+          scrolling all the way down to the composer instead of being cut off
+          by a band of background behind the feedback pill. */}
+      <div className="aui-composer-overlay pointer-events-none absolute inset-x-0 bottom-full z-20 flex justify-center pb-3">
+        {showFeedback && <ComposerFeedback />}
+        <ThreadScrollToBottom />
+      </div>
       {showFeedback && isResolved ? (
         <m.div
           className="aui-composer-resolved flex min-h-[118px] flex-col items-center justify-center gap-2 border-t border-input px-1"

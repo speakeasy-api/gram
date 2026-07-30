@@ -12,7 +12,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * Derived status for the schedule's latest poll state.
  */
-export const AIIntegrationScheduleStateStatus = {
+export const Status = {
   Pending: "pending",
   Success: "success",
   Failed: "failed",
@@ -22,9 +22,7 @@ export const AIIntegrationScheduleStateStatus = {
 /**
  * Derived status for the schedule's latest poll state.
  */
-export type AIIntegrationScheduleStateStatus = ClosedEnum<
-  typeof AIIntegrationScheduleStateStatus
->;
+export type Status = ClosedEnum<typeof Status>;
 
 /**
  * Whether the stream carries discrete events or aggregated metrics. Omitted for legacy schedules with no registered stream.
@@ -77,7 +75,7 @@ export type AIIntegrationScheduleState = {
   /**
    * Derived status for the schedule's latest poll state.
    */
-  status: AIIntegrationScheduleStateStatus;
+  status: Status;
   /**
    * Product-level identifier for the stream this schedule writes (e.g. cursor.usage, claude.chat.message). Omitted for legacy schedules with no registered stream.
    */
@@ -89,9 +87,9 @@ export type AIIntegrationScheduleState = {
 };
 
 /** @internal */
-export const AIIntegrationScheduleStateStatus$inboundSchema: z.ZodMiniEnum<
-  typeof AIIntegrationScheduleStateStatus
-> = z.enum(AIIntegrationScheduleStateStatus);
+export const Status$inboundSchema: z.ZodMiniEnum<typeof Status> = z.enum(
+  Status,
+);
 
 /** @internal */
 export const StreamKind$inboundSchema: z.ZodMiniEnum<typeof StreamKind> = z
@@ -119,7 +117,7 @@ export const AIIntegrationScheduleState$inboundSchema: z.ZodMiniType<
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     schedule: z.string(),
-    status: AIIntegrationScheduleStateStatus$inboundSchema,
+    status: Status$inboundSchema,
     stream: z.optional(z.string()),
     stream_kind: z.optional(StreamKind$inboundSchema),
   }),

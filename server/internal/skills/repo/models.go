@@ -39,6 +39,31 @@ type SkillDistribution struct {
 	UpdatedAt       pgtype.Timestamptz
 }
 
+type SkillEditSuggestion struct {
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	SkillID            uuid.UUID
+	BaseVersionID      uuid.UUID
+	Rationale          string
+	Status             string
+	ScoredSessionCount int64
+	ApprovedByUserID   pgtype.Text
+	ApprovedAt         pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+}
+
+type SkillEditSuggestionChange struct {
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+	SuggestionID uuid.UUID
+	ProposedDiff string
+	Rationale    string
+	Position     int32
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
 type SkillEfficacyEvaluation struct {
 	ID              uuid.UUID
 	OrganizationID  string
@@ -52,9 +77,11 @@ type SkillEfficacyEvaluation struct {
 	ObservedAt      pgtype.Timestamptz
 	State           string
 	ReservedOn      pgtype.Date
+	ClaimToken      uuid.NullUUID
 	Attempts        int32
 	LastError       pgtype.Text
 	ScoredAt        pgtype.Timestamptz
+	FailedAt        pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 }
@@ -67,6 +94,22 @@ type SkillEfficacySetting struct {
 	NewVersionBurst  int32
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
+}
+
+type SkillFeedback struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	SkillID        uuid.NullUUID
+	SkillVersionID uuid.NullUUID
+	SkillName      string
+	Source         string
+	Outcome        string
+	Note           pgtype.Text
+	SessionID      pgtype.Text
+	UserID         pgtype.Text
+	UserEmail      pgtype.Text
+	ReviewedAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
 }
 
 type SkillObservation struct {
@@ -100,6 +143,17 @@ type SkillRawHash struct {
 	CreatedAt       pgtype.Timestamptz
 }
 
+type SkillShareLink struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	SkillID         uuid.UUID
+	Token           string
+	CreatedByUserID string
+	RevokedAt       pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
 type SkillVersion struct {
 	ID               uuid.UUID
 	SkillID          uuid.UUID
@@ -111,6 +165,7 @@ type SkillVersion struct {
 	SpecValid        bool
 	ValidationErrors []byte
 	CreatedAt        pgtype.Timestamptz
+	PromotedAt       pgtype.Timestamptz
 	CreatedByUserID  string
 }
 

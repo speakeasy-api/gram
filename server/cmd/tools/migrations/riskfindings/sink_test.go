@@ -14,7 +14,7 @@ func TestSinkDryRunCountsButExposesNoCursor(t *testing.T) {
 	t.Parallel()
 
 	const batchSize = 2
-	sink := NewSink(nil, 4, batchSize, true)
+	sink := NewSink(nil, 4, batchSize, true, true)
 
 	done := make(chan error, 1)
 	go func() { done <- sink.Run(t.Context()) }()
@@ -54,7 +54,7 @@ func TestDeduplicationTokenDistinguishesInteriors(t *testing.T) {
 func TestSinkEmptyCommitsNothing(t *testing.T) {
 	t.Parallel()
 
-	sink := NewSink(nil, 1, 2, true)
+	sink := NewSink(nil, 1, 2, true, true)
 
 	done := make(chan error, 1)
 	go func() { done <- sink.Run(t.Context()) }()

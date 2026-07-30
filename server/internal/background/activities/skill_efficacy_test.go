@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // stubEfficacyPublisher answers one publication with a pinned outcome and
@@ -19,11 +20,13 @@ import (
 type stubEfficacyPublisher struct {
 	result     efficacy.PublishResult
 	err        error
+	claimToken uuid.UUID
 	ids        []uuid.UUID
 	heartbeats int
 }
 
-func (s *stubEfficacyPublisher) Publish(_ context.Context, _ uuid.UUID, ids []uuid.UUID, heartbeat func()) (efficacy.PublishResult, error) {
+func (s *stubEfficacyPublisher) Publish(_ context.Context, _ uuid.UUID, claimToken uuid.UUID, ids []uuid.UUID, heartbeat func()) (efficacy.PublishResult, error) {
+	s.claimToken = claimToken
 	s.ids = ids
 	if heartbeat != nil {
 		heartbeat()
@@ -46,22 +49,25 @@ func (s *stubEfficacySignaler) Signal(_ context.Context, projectID uuid.UUID) er
 func TestSkillEfficacyScorerPublishesABatchAndReportsWhatItDid(t *testing.T) {
 	t.Parallel()
 	projectID := uuid.New()
+	claimToken := uuid.New()
 	ids := []uuid.UUID{uuid.New(), uuid.New()}
 	publisher := &stubEfficacyPublisher{
 		result: efficacy.PublishResult{
 			Loaded: 2, AlreadyPublished: 1, Scored: 2, ModelFailures: 0, Failed: 0, Retryable: 0,
 		},
-		err: nil,
-		ids: nil, heartbeats: 0,
+		err:        nil,
+		claimToken: uuid.Nil, ids: nil, heartbeats: 0,
 	}
-	scorer := activities.NewSkillEfficacyScorer(nil, nil, publisher, &stubEfficacySignaler{err: nil, projects: nil})
+	scorer := activities.NewSkillEfficacyScorer(testenv.NewLogger(t), testenv.NewMeterProvider(t), nil, nil, publisher, &stubEfficacySignaler{err: nil, projects: nil})
 
 	result, err := scorer.PublishSkillEfficacyBatch(t.Context(), activities.PublishSkillEfficacyBatchParams{
-		ProjectID: projectID,
-		IDs:       ids,
+		ProjectID:  projectID,
+		ClaimToken: claimToken,
+		IDs:        ids,
 	})
 
 	require.NoError(t, err)
+	require.Equal(t, claimToken, publisher.claimToken)
 	require.Equal(t, ids, publisher.ids)
 	require.Equal(t, publisher.result, *result)
 }
@@ -75,14 +81,15 @@ func TestSkillEfficacyScorerRetriesNonTerminalModelFailures(t *testing.T) {
 		result: efficacy.PublishResult{
 			Loaded: 3, AlreadyPublished: 0, Scored: 1, ModelFailures: 1, Failed: 1, Retryable: 0,
 		},
-		err: nil,
-		ids: nil, heartbeats: 0,
+		err:        nil,
+		claimToken: uuid.Nil, ids: nil, heartbeats: 0,
 	}
-	scorer := activities.NewSkillEfficacyScorer(nil, nil, publisher, &stubEfficacySignaler{err: nil, projects: nil})
+	scorer := activities.NewSkillEfficacyScorer(testenv.NewLogger(t), testenv.NewMeterProvider(t), nil, nil, publisher, &stubEfficacySignaler{err: nil, projects: nil})
 
 	result, err := scorer.PublishSkillEfficacyBatch(t.Context(), activities.PublishSkillEfficacyBatchParams{
-		ProjectID: uuid.New(),
-		IDs:       []uuid.UUID{uuid.New(), uuid.New(), uuid.New()},
+		ProjectID:  uuid.New(),
+		ClaimToken: uuid.New(),
+		IDs:        []uuid.UUID{uuid.New(), uuid.New(), uuid.New()},
 	})
 
 	require.ErrorIs(t, err, efficacy.ErrRetryable)
@@ -95,14 +102,15 @@ func TestSkillEfficacyScorerCompletesAfterTerminalModelFailure(t *testing.T) {
 		result: efficacy.PublishResult{
 			Loaded: 1, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 1, Retryable: 0,
 		},
-		err: nil,
-		ids: nil, heartbeats: 0,
+		err:        nil,
+		claimToken: uuid.Nil, ids: nil, heartbeats: 0,
 	}
-	scorer := activities.NewSkillEfficacyScorer(nil, nil, publisher, &stubEfficacySignaler{err: nil, projects: nil})
+	scorer := activities.NewSkillEfficacyScorer(testenv.NewLogger(t), testenv.NewMeterProvider(t), nil, nil, publisher, &stubEfficacySignaler{err: nil, projects: nil})
 
 	result, err := scorer.PublishSkillEfficacyBatch(t.Context(), activities.PublishSkillEfficacyBatchParams{
-		ProjectID: uuid.New(),
-		IDs:       []uuid.UUID{uuid.New()},
+		ProjectID:  uuid.New(),
+		ClaimToken: uuid.New(),
+		IDs:        []uuid.UUID{uuid.New()},
 	})
 
 	require.NoError(t, err)
@@ -115,14 +123,15 @@ func TestSkillEfficacyScorerRetriesInfrastructureFailures(t *testing.T) {
 		result: efficacy.PublishResult{
 			Loaded: 1, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 0, Retryable: 1,
 		},
-		err: fmt.Errorf("insert skill efficacy score: %w: %w", efficacy.ErrRetryable, errors.New("clickhouse unavailable")),
-		ids: nil, heartbeats: 0,
+		err:        fmt.Errorf("insert skill efficacy score: %w: %w", efficacy.ErrRetryable, errors.New("clickhouse unavailable")),
+		claimToken: uuid.Nil, ids: nil, heartbeats: 0,
 	}
-	scorer := activities.NewSkillEfficacyScorer(nil, nil, publisher, &stubEfficacySignaler{err: nil, projects: nil})
+	scorer := activities.NewSkillEfficacyScorer(testenv.NewLogger(t), testenv.NewMeterProvider(t), nil, nil, publisher, &stubEfficacySignaler{err: nil, projects: nil})
 
 	_, err := scorer.PublishSkillEfficacyBatch(t.Context(), activities.PublishSkillEfficacyBatchParams{
-		ProjectID: uuid.New(),
-		IDs:       []uuid.UUID{uuid.New()},
+		ProjectID:  uuid.New(),
+		ClaimToken: uuid.New(),
+		IDs:        []uuid.UUID{uuid.New()},
 	})
 
 	require.Error(t, err)
@@ -141,14 +150,15 @@ func TestSkillEfficacyScorerDoesNotRetryFailuresARetryWouldRepeat(t *testing.T) 
 		result: efficacy.PublishResult{
 			Loaded: 2, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 0, Retryable: 0,
 		},
-		err: errors.New("skill efficacy guard window: project resolved evaluations across organizations"),
-		ids: nil, heartbeats: 0,
+		err:        errors.New("skill efficacy guard window: project resolved evaluations across organizations"),
+		claimToken: uuid.Nil, ids: nil, heartbeats: 0,
 	}
-	scorer := activities.NewSkillEfficacyScorer(nil, nil, publisher, &stubEfficacySignaler{err: nil, projects: nil})
+	scorer := activities.NewSkillEfficacyScorer(testenv.NewLogger(t), testenv.NewMeterProvider(t), nil, nil, publisher, &stubEfficacySignaler{err: nil, projects: nil})
 
 	_, err := scorer.PublishSkillEfficacyBatch(t.Context(), activities.PublishSkillEfficacyBatchParams{
-		ProjectID: uuid.New(),
-		IDs:       []uuid.UUID{uuid.New(), uuid.New()},
+		ProjectID:  uuid.New(),
+		ClaimToken: uuid.New(),
+		IDs:        []uuid.UUID{uuid.New(), uuid.New()},
 	})
 
 	var applicationErr *temporal.ApplicationError
@@ -160,10 +170,11 @@ func TestSkillEfficacyScorerSignalsTheProjectCoordinator(t *testing.T) {
 	t.Parallel()
 	projectID := uuid.New()
 	signaler := &stubEfficacySignaler{err: nil, projects: nil}
-	scorer := activities.NewSkillEfficacyScorer(nil, nil, &stubEfficacyPublisher{
-		result: efficacy.PublishResult{Loaded: 0, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 0, Retryable: 0},
-		err:    nil,
-		ids:    nil, heartbeats: 0,
+	scorer := activities.NewSkillEfficacyScorer(testenv.NewLogger(t), testenv.NewMeterProvider(t), nil, nil, &stubEfficacyPublisher{
+		result:     efficacy.PublishResult{Loaded: 0, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 0, Retryable: 0},
+		err:        nil,
+		claimToken: uuid.Nil,
+		ids:        nil, heartbeats: 0,
 	}, signaler)
 
 	require.NoError(t, scorer.SignalSkillEfficacyCoordinator(t.Context(), activities.SignalSkillEfficacyCoordinatorParams{

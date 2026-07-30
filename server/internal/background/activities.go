@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -14,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/assets"
@@ -25,10 +27,14 @@ import (
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_exclusion"
 	risk_policy "github.com/speakeasy-api/gram/server/internal/background/activities/risk_policy"
+	spend_rules "github.com/speakeasy-api/gram/server/internal/background/activities/spend_rules"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/deviceintegrations"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
@@ -40,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
@@ -47,6 +54,8 @@ import (
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	"github.com/speakeasy-api/gram/server/internal/skills/suggest"
+	spendrulesch "github.com/speakeasy-api/gram/server/internal/spendrules/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -61,6 +70,11 @@ type Publishers struct {
 	PromptInjectionAnalysis gcp.Publisher[*riskv1.PromptInjectionAnalysis]
 	PromptPolicyAnalysis    gcp.Publisher[*riskv1.PromptPolicyAnalysis]
 	CustomRulesAnalysis     gcp.Publisher[*riskv1.CustomRulesAnalysis]
+	// RiskFindings is the shared findings topic the ClickHouse risk_findings
+	// writer consumes. The batch path publishes only sources with no stream
+	// publisher on it (see risk_analysis.batchOnlyFindingSources).
+	RiskFindings  gcp.Publisher[*riskv1.Finding]
+	TelemetryLogs gcp.Publisher[*telemetryv1.LogRecord]
 }
 
 type Activities struct {
@@ -68,8 +82,10 @@ type Activities struct {
 	collectPlatformUsageMetrics     *activities.CollectPlatformUsageMetrics
 	getAIIntegrationsCandidates     *activities.GetAIIntegrationsCandidates
 	pollAIData                      *activities.PollAIData
+	getDeviceIntegrationCandidates  *activities.GetDeviceIntegrationSyncCandidates
+	runDeviceIntegrationSync        *activities.RunDeviceIntegrationSync
 	customDomainIngress             *activities.CustomDomainIngress
-	defaultCustomDomainProvisioner  k8s.ProvisionerKind
+	customDomainHealth              *activities.CustomDomainHealth
 	fireOpenRouterCreditsMetrics    *activities.FireOpenRouterCreditsMetrics
 	sendOpenRouterCreditsAlerts     *activities.MaybeSendOpenRouterCreditsAlerts
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
@@ -123,7 +139,11 @@ type Activities struct {
 	outboxRelay                     *outbox_relay.Relay
 	outboxGC                        *outbox_relay.GC
 	pluginPublisher                 *activities.PluginPublisher
+	listSpendRuleOrgs               *spend_rules.ListOrgs
+	evaluateOrgSpendRules           *spend_rules.EvaluateOrg
 	skillEfficacyScorer             *activities.SkillEfficacyScorer
+	skillSuggestionAnalyzer         *activities.SkillSuggestionAnalyzer
+	chatAnalysisScorer              *activities.ChatAnalysisScorer
 }
 
 func NewActivities(
@@ -139,8 +159,8 @@ func NewActivities(
 	openrouterProvisioner openrouter.Provisioner,
 	chatClient *chat.Client,
 	k8sClient *k8s.KubernetesClients,
-	defaultCustomDomainProvisioner k8s.ProvisionerKind,
 	expectedTargetCNAME string,
+	siteURL *url.URL,
 	billingTracker billing.Tracker,
 	billingRepo billing.Repository,
 	posthogClient *posthog.Posthog,
@@ -171,11 +191,19 @@ func NewActivities(
 	judgeRateLimiter *ratelimit.Limiter,
 	builtinPresets *presetlib.Library,
 ) *Activities {
+	// Spend rule evaluation reads ClickHouse; workers without a ClickHouse
+	// connection get a nil repo and the activity fails loudly if scheduled.
+	var spendRulesCH *spendrulesch.Queries
+	if chConn != nil {
+		spendRulesCH = spendrulesch.New(chConn)
+	}
+
 	analyzeBatch, err := risk_analysis.NewAnalyzeBatch(
 		logger,
 		tracerProvider,
 		meterProvider,
 		db,
+		assetStorage,
 		piiScanner,
 		piScanner,
 		shadowMCPClient,
@@ -187,12 +215,37 @@ func NewActivities(
 		publishers.PromptInjectionAnalysis,
 		publishers.PromptPolicyAnalysis,
 		publishers.CustomRulesAnalysis,
+		publishers.RiskFindings,
 		customRuleScanner,
 		celEng,
 		builtinPresets,
+		&shadowMCPPolicyBypassChecker{
+			evaluator: risk.NewPolicyBypassEvaluator(logger, db),
+		},
 	)
 	if err != nil {
 		panic(fmt.Errorf("new analyze batch: %w", err))
+	}
+
+	telemetryLogPublisher := telemetry.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs)
+
+	// The chat analysis judge roster. Adding a new session analysis is
+	// registering its judge here; enabling it per organization is a
+	// chat_analysis_settings row.
+	chatAnalysisJudges, err := analysis.NewJudges(
+		analysis.NewWorkUnitsJudge(logger, tracerProvider, chatClient, judgeRateLimiter),
+	)
+	if err != nil {
+		panic(fmt.Errorf("new chat analysis judges: %w", err))
+	}
+
+	var skillSuggestionAnalyzer *activities.SkillSuggestionAnalyzer
+	if db != nil && telemetryRepo != nil && chatClient != nil && temporalEnv != nil && judgeRateLimiter != nil {
+		engine, err := suggest.NewEngine(suggest.DefaultConfig(), logger, db, telemetryRepo, chatrepo.New(db), chatClient, judgeRateLimiter)
+		if err != nil {
+			panic(fmt.Errorf("new skill suggestion engine: %w", err))
+		}
+		skillSuggestionAnalyzer = activities.NewSkillSuggestionAnalyzer(db, engine, &TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0})
 	}
 
 	return &Activities{
@@ -200,13 +253,15 @@ func NewActivities(
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
 		getAIIntegrationsCandidates:     activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
 		pollAIData:                      activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
-		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient, defaultCustomDomainProvisioner),
-		defaultCustomDomainProvisioner:  defaultCustomDomainProvisioner,
+		getDeviceIntegrationCandidates:  activities.NewGetDeviceIntegrationSyncCandidates(logger, db, encryption, guardianPolicy, features),
+		runDeviceIntegrationSync:        activities.NewRunDeviceIntegrationSync(logger, db, encryption, guardianPolicy, features),
+		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
+		customDomainHealth:              activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, emailService, siteURL, guardianPolicy),
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		sendOpenRouterCreditsAlerts:     activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		correlateClaudePrompts:          activities.NewCorrelateClaudePrompts(logger, db, chConn),
-		promoteStagedTelemetry:          activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter),
+		promoteStagedTelemetry:          activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter, telemetryLogPublisher),
 		listStagedTelemetryProjects:     activities.NewListStagedTelemetryProjects(logger, chConn),
 		generateChatTitle:               activities.NewGenerateChatTitle(logger, db, chatClient),
 		getAllOrganizations:             activities.NewGetAllOrganizations(logger, db),
@@ -255,14 +310,28 @@ func NewActivities(
 		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient, productFeatures),
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
+		listSpendRuleOrgs:               spend_rules.NewListOrgs(logger, db),
+		evaluateOrgSpendRules:           spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter, features),
 		// The judge draws on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so efficacy scoring
 		// cannot outspend the org's key behind their backs.
 		skillEfficacyScorer: activities.NewSkillEfficacyScorer(
+			logger,
+			meterProvider,
 			db,
 			productFeatures,
 			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter)),
 			&TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
+		),
+		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
+		// The judges draw on the same per-(org, model) bucket and the same
+		// completion client as every other platform judge, so chat analysis
+		// cannot outspend the org's key behind their backs.
+		chatAnalysisScorer: activities.NewChatAnalysisScorer(
+			db,
+			chatAnalysisJudges,
+			analysis.NewPublisher(logger, tracerProvider, db, telemetryRepo, telemetryLogger, chatAnalysisJudges),
+			&TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
 		),
 	}
 }
@@ -311,6 +380,37 @@ func (a *Activities) CustomDomainIngress(ctx context.Context, input activities.C
 	return a.customDomainIngress.Do(ctx, input)
 }
 
+func (a *Activities) ListCustomDomainsForHealthCheck(ctx context.Context, input activities.ListCustomDomainsForHealthCheckArgs) ([]activities.CustomDomainHealthCheckTarget, error) {
+	targets, err := a.customDomainHealth.List(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("list custom domains for health check: %w", err)
+	}
+	return targets, nil
+}
+
+func (a *Activities) CheckCustomDomainHealth(ctx context.Context, input activities.CheckCustomDomainHealthArgs) (activities.NotifyCustomDomainUnhealthyArgs, error) {
+	notification, err := a.customDomainHealth.Check(ctx, input)
+	if err != nil {
+		var noNotification activities.NotifyCustomDomainUnhealthyArgs
+		return noNotification, fmt.Errorf("check custom domain health: %w", err)
+	}
+	return notification, nil
+}
+
+func (a *Activities) NotifyCustomDomainUnhealthy(ctx context.Context, input activities.NotifyCustomDomainUnhealthyArgs) error {
+	if err := a.customDomainHealth.NotifyOrgAdmins(ctx, input); err != nil {
+		return fmt.Errorf("notify custom domain unhealthy: %w", err)
+	}
+	return nil
+}
+
+func (a *Activities) FindOrphanCustomDomainResources(ctx context.Context) error {
+	if err := a.customDomainHealth.FindOrphanResources(ctx); err != nil {
+		return fmt.Errorf("find orphan custom domain resources: %w", err)
+	}
+	return nil
+}
+
 func (a *Activities) CollectPlatformUsageMetrics(ctx context.Context) ([]activities.PlatformUsageMetrics, error) {
 	return a.collectPlatformUsageMetrics.Do(ctx)
 }
@@ -341,6 +441,18 @@ func (a *Activities) GetAIIntegrationsCandidates(ctx context.Context, input acti
 
 func (a *Activities) PollAIData(ctx context.Context, input string) error {
 	return a.pollAIData.Do(ctx, input)
+}
+
+func (a *Activities) GetDeviceIntegrationSyncCandidates(ctx context.Context, input activities.GetDeviceIntegrationSyncCandidatesInput) ([]deviceintegrations.SyncCandidate, error) {
+	candidates, err := a.getDeviceIntegrationCandidates.Do(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("get device integration sync candidates: %w", err)
+	}
+	return candidates, nil
+}
+
+func (a *Activities) RunDeviceIntegrationSync(ctx context.Context, input string) error {
+	return a.runDeviceIntegrationSync.Do(ctx, input)
 }
 
 func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) error {
@@ -590,4 +702,26 @@ func (a *Activities) PublishPluginProject(ctx context.Context, input plugins.Pub
 		return nil, fmt.Errorf("publish plugin project: %w", err)
 	}
 	return result, nil
+}
+
+func (a *Activities) ListSpendRuleOrgs(ctx context.Context) ([]string, error) {
+	orgs, err := a.listSpendRuleOrgs.Do(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list spend rule orgs: %w", err)
+	}
+	return orgs, nil
+}
+
+func (a *Activities) EvaluateOrgSpendRules(ctx context.Context, args spend_rules.EvaluateOrgArgs) error {
+	if err := a.evaluateOrgSpendRules.Do(ctx, args); err != nil {
+		return fmt.Errorf("evaluate org spend rules: %w", err)
+	}
+	return nil
+}
+
+func (a *Activities) RefreshSpendRuleActor(ctx context.Context, args spend_rules.EvaluateActorArgs) error {
+	if err := a.evaluateOrgSpendRules.RefreshActor(ctx, args); err != nil {
+		return fmt.Errorf("refresh spend rule actor: %w", err)
+	}
+	return nil
 }

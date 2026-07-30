@@ -2,10 +2,13 @@ package skillefficacy
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/skills/suggest"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -101,9 +105,14 @@ func (s *Service) QueryInsights(ctx context.Context, payload *gen.QueryInsightsP
 		}
 	}
 	includeScoredSessions := payload.IncludeScoredSessions != nil && *payload.IncludeScoredSessions
+	var cursorScoredAt time.Time
+	var cursorID string
 	if includeScoredSessions {
 		if len(skillIDs) == 0 {
 			return nil, oops.E(oops.CodeInvalid, nil, "skill_ids are required when including scored sessions")
+		}
+		if payload.Limit < 1 || payload.Limit > 100 {
+			return nil, oops.E(oops.CodeBadRequest, nil, "scored sessions limit must be between 1 and 100")
 		}
 		if err := s.authz.Require(ctx, authz.Check{
 			Scope:        authz.ScopeChatRead,
@@ -113,6 +122,10 @@ func (s *Service) QueryInsights(ctx context.Context, payload *gen.QueryInsightsP
 		}); err != nil {
 			return nil, err
 		}
+		cursorScoredAt, cursorID, err = decodeScoredSessionsCursor(payload.Cursor)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid scored sessions cursor")
+		}
 	}
 	from, to, err := resolveInsightsWindow(payload.From, payload.To)
 	if err != nil {
@@ -121,7 +134,9 @@ func (s *Service) QueryInsights(ctx context.Context, payload *gen.QueryInsightsP
 	responseSkillIDs := skillIDs
 	if len(responseSkillIDs) == 0 {
 		activeSkills, err := skillsrepo.New(s.db).ListSkills(ctx, skillsrepo.ListSkillsParams{
-			ProjectID: *authCtx.ProjectID, CursorName: pgtype.Text{String: "", Valid: false}, PageLimit: math.MaxInt32,
+			ProjectID: *authCtx.ProjectID, Search: pgtype.Text{String: "", Valid: false}, SourceKinds: nil, Classifications: nil, SortOrder: "name",
+			CursorName: pgtype.Text{String: "", Valid: false}, CursorUpdatedAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+			CursorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, PageLimit: math.MaxInt32,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "list active project skills").LogError(ctx, logger)
@@ -149,6 +164,9 @@ func (s *Service) QueryInsights(ctx context.Context, payload *gen.QueryInsightsP
 	result := buildInsightsView(responseSkillIDs, rows, payload.IncludeVersions != nil && *payload.IncludeVersions)
 	result.From = from.Format(time.RFC3339)
 	result.To = to.Format(time.RFC3339)
+	if err := s.attachRegressionSignals(ctx, logger, authCtx, result); err != nil {
+		return nil, err
+	}
 	if includeScoredSessions {
 		scores, err := s.insights.ListSkillEfficacyScoreSessions(ctx, telemetryrepo.ListSkillEfficacyScoreSessionsParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
@@ -156,14 +174,91 @@ func (s *Service) QueryInsights(ctx context.Context, payload *gen.QueryInsightsP
 			SkillIDs:       skillIDs,
 			From:           from,
 			To:             to,
-			Limit:          100,
+			CursorScoredAt: cursorScoredAt,
+			CursorID:       cursorID,
+			Limit:          uint64(payload.Limit + 1), //nolint:gosec // The limit is validated above.
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "list scored skill sessions").LogError(ctx, logger)
 		}
+		hasMore := len(scores) > payload.Limit
+		if hasMore {
+			scores = scores[:payload.Limit]
+		}
 		result.ScoredSessions = buildScoredSessionViews(scores)
+		if hasMore {
+			cursor := encodeScoredSessionsCursor(scores[len(scores)-1].ScoredAt, scores[len(scores)-1].ID)
+			result.NextCursor = &cursor
+		}
 	}
 	return result, nil
+}
+
+func (s *Service) attachRegressionSignals(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, result *gen.SkillEfficacyInsightsResult) error {
+	config := suggest.DefaultConfig()
+	queries := skillsrepo.New(s.db)
+	bases := make(map[string]suggest.TrendBase, len(result.Insights))
+	versionSet := make(map[string]struct{}, len(result.Insights)*2)
+	skillIDs := make([]uuid.UUID, 0, len(result.Insights))
+	for _, insight := range result.Insights {
+		skillID, err := uuid.Parse(insight.SkillID)
+		if err != nil {
+			continue
+		}
+		skillIDs = append(skillIDs, skillID)
+	}
+	baseRows, err := queries.ResolveSkillRegressionBases(ctx, skillsrepo.ResolveSkillRegressionBasesParams{ProjectID: *authCtx.ProjectID, SkillIds: skillIDs})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "resolve skill efficacy regression bases").LogError(ctx, logger)
+	}
+	regressionSkillIDs := make([]string, 0, len(baseRows))
+	for _, base := range baseRows {
+		skillID := base.SkillID.String()
+		bases[skillID] = suggest.TrendBase{
+			BaseVersionID:        base.BaseVersionID,
+			PredecessorVersionID: base.PredecessorVersionID,
+		}
+		regressionSkillIDs = append(regressionSkillIDs, skillID)
+		versionSet[base.BaseVersionID.String()] = struct{}{}
+		if base.PredecessorVersionID != uuid.Nil {
+			versionSet[base.PredecessorVersionID.String()] = struct{}{}
+		}
+	}
+	if len(bases) == 0 {
+		return nil
+	}
+	versionIDs := make([]string, 0, len(versionSet))
+	for versionID := range versionSet {
+		versionIDs = append(versionIDs, versionID)
+	}
+	windowEnd := time.Now().UTC()
+	rows, err := s.insights.QuerySkillInsights(ctx, telemetryrepo.QuerySkillInsightsParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: authCtx.ProjectID.String(), SkillIDs: regressionSkillIDs,
+		SkillVersionIDs: versionIDs, From: windowEnd.Add(-config.TrendWindow), To: windowEnd,
+		IntervalSeconds: int64(config.TrendWindow.Seconds()),
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "query skill efficacy regression signal").LogError(ctx, logger)
+	}
+	for _, insight := range result.Insights {
+		base, ok := bases[insight.SkillID]
+		if !ok {
+			continue
+		}
+		trend := suggest.EvaluateTrend(config, base, rows)
+		var predecessorVersionID *string
+		if base.PredecessorVersionID != uuid.Nil {
+			predecessorVersionID = conv.PtrEmpty(base.PredecessorVersionID.String())
+		}
+		insight.RegressionSignal = &gen.SkillEfficacyRegressionSignal{
+			Comparable: trend.Comparable, Regression: trend.Regression, CurrentVersionID: base.BaseVersionID.String(),
+			PredecessorVersionID: predecessorVersionID,
+			CurrentAverageScore:  trend.CurrentAverage, CurrentScoredSessions: trend.CurrentCount,
+			PredecessorAverageScore: trend.PreviousAverage, PredecessorScoredSessions: trend.PreviousCount,
+			WindowStart: windowEnd.Add(-config.TrendWindow).Format(time.RFC3339), WindowEnd: windowEnd.Format(time.RFC3339),
+		}
+	}
+	return nil
 }
 
 func (s *Service) requireProjectAccess(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, *slog.Logger, error) {
@@ -241,6 +336,7 @@ func buildInsightsView(skillIDs []string, rows []telemetryrepo.SkillInsightBucke
 		ScoresAvailable: scoresAvailable,
 		Insights:        make([]*gen.SkillEfficacyInsight, 0, len(skillIDs)),
 		ScoredSessions:  []*gen.SkillEfficacyScoredSession{},
+		NextCursor:      nil,
 	}
 	for _, skillID := range skillIDs {
 		var aggregate telemetryrepo.SkillInsightBucket
@@ -257,9 +353,37 @@ func buildInsightsView(skillIDs []string, rows []telemetryrepo.SkillInsightBucke
 				versions = append(versions, &gen.SkillVersionInsight{SkillVersionID: versionID, Metrics: buildMetricsView(total.row), Trend: total.points})
 			}
 		}
-		result.Insights = append(result.Insights, &gen.SkillEfficacyInsight{SkillID: skillID, Metrics: buildMetricsView(aggregate), Versions: versions})
+		result.Insights = append(result.Insights, &gen.SkillEfficacyInsight{SkillID: skillID, Metrics: buildMetricsView(aggregate), Versions: versions, RegressionSignal: nil})
 	}
 	return result
+}
+
+func encodeScoredSessionsCursor(scoredAt time.Time, id string) string {
+	payload := scoredAt.UTC().Format(time.RFC3339Nano) + "|" + id
+	return base64.RawURLEncoding.EncodeToString([]byte(payload))
+}
+
+func decodeScoredSessionsCursor(cursor *string) (time.Time, string, error) {
+	if cursor == nil {
+		return time.Time{}, "", nil
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(*cursor)
+	if err != nil {
+		return time.Time{}, "", fmt.Errorf("decode scored sessions cursor: %w", err)
+	}
+	timestampText, idText, ok := strings.Cut(string(decoded), "|")
+	if !ok || strings.Contains(idText, "|") {
+		return time.Time{}, "", errors.New("decode scored sessions cursor: invalid format")
+	}
+	scoredAt, err := time.Parse(time.RFC3339Nano, timestampText)
+	if err != nil || scoredAt.UTC().Format(time.RFC3339Nano) != timestampText {
+		return time.Time{}, "", errors.New("decode scored sessions cursor: invalid timestamp")
+	}
+	id, err := uuid.Parse(idText)
+	if err != nil || id == uuid.Nil || id.String() != idText {
+		return time.Time{}, "", errors.New("decode scored sessions cursor: invalid id")
+	}
+	return scoredAt, idText, nil
 }
 
 func addInsightRow(dst *telemetryrepo.SkillInsightBucket, src telemetryrepo.SkillInsightBucket) {

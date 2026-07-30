@@ -33,6 +33,7 @@ import {
   type OptionsById,
 } from "@/components/filters";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
+import { Source } from "@gram/client/models/components/searchuserspayload.js";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useMembers } from "@gram/client/react-query/members.js";
@@ -62,6 +63,17 @@ import { HooksSetupDialog } from "@/pages/hooks/HooksSetupDialog";
 type EmployeeView = "employees" | "unattributed";
 
 const VIEW_SEARCH_PARAM = "view";
+const SORT_SEARCH_PARAM = "sort";
+
+// `?sort=tokenCount:desc` seeds the table's initial sort so links into this page
+// (e.g. the Top Users card on the project home) land on the same ordering the
+// card showed. Sorting stays table-local afterwards; the param is read once.
+function parseSortParam(raw: string | null): SortDescriptor | null {
+  if (!raw) return null;
+  const [id, direction] = raw.split(":");
+  if (!id) return null;
+  return { id, direction: direction === "asc" ? "asc" : "desc" };
+}
 
 const EMPLOYEE_VIEWS: EmployeeView[] = ["employees", "unattributed"];
 const VIEW_LABELS: Record<EmployeeView, string> = {
@@ -260,6 +272,7 @@ export function InsightsEmployeesContent(): JSX.Element {
       ? "unattributed"
       : "employees";
   const isUnattributedView = view === "unattributed";
+  const initialSort = parseSortParam(searchParams.get(SORT_SEARCH_PARAM));
 
   const selectedStatuses = values.status;
   const selectedRoleId = values.role;
@@ -561,6 +574,7 @@ export function InsightsEmployeesContent(): JSX.Element {
                 key={view}
                 employees={employees}
                 search={search}
+                initialSort={initialSort}
                 onSelectUser={openUser}
                 deviceSyncByEmail={deviceSyncByEmail}
                 deviceStatus={deviceStatus}
@@ -579,19 +593,25 @@ const PAGE_SIZE = 10;
 function EmployeeTable({
   employees,
   search,
+  initialSort,
   onSelectUser,
   deviceSyncByEmail,
   deviceStatus,
 }: {
   employees: Employee[];
   search: string;
+  initialSort: SortDescriptor | null;
   onSelectUser: (employee: Employee) => void;
   deviceSyncByEmail: Map<string, Date>;
   deviceStatus: DeviceAgentColumnStatus;
 }) {
   const showDeviceAgent = deviceStatus !== "hidden";
   const [page, setPage] = useState(0);
-  const [sort, setSort] = useState<SortDescriptor | null>(null);
+  // Default to enrolled-first when no explicit sort was seeded via URL. Status
+  // labels sort "Enrolled" before "Not Enrolled" ascending.
+  const [sort, setSort] = useState<SortDescriptor | null>(
+    initialSort ?? { id: "status", direction: "asc" },
+  );
   // Only ticks once statuses are actually resolvable; disabled (0) otherwise so
   // the memo stays stable (deviceAgentState is only called when "ready").
   const now = useNow(deviceStatus === "ready" ? AGENT_STATUS_TICK_MS : 0);
@@ -787,7 +807,7 @@ function EmployeeTable({
 
   const NoResultsMessage = () => {
     return (
-      <div className="flex h-full items-center justify-center">
+      <div className="flex h-full items-center justify-center py-10">
         <p className="text-muted-foreground text-sm">
           {search
             ? `No employees matching "${search}".`
@@ -1116,6 +1136,13 @@ async function fetchEmployeeUsage(
           limit: 1000,
           sort: "desc",
           userType: "internal",
+          // Serve the enrollment list from the pre-aggregated agent-usage view
+          // instead of scanning raw telemetry_logs: the list renders only
+          // identity, last activity, token totals, and linked accounts (the
+          // latter from Postgres enrichment), all of which the view provides far
+          // more cheaply. Email-less identities (no token usage) are surfaced by
+          // the backend from raw logs so unknown users stay visible (DNO-618).
+          source: Source.AgentMetrics,
         },
       }),
     );

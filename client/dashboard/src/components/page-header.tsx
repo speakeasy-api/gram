@@ -77,6 +77,8 @@ const breadcrumbSubstitutions = {
   "add-from-catalog": "Add from Catalog",
   "ai-integrations": "AI Integrations",
   "api-keys": "API Keys",
+  "mdm-integrations": "MDM Integrations",
+  jamf: "Jamf Pro",
   slack: "Assistants",
 };
 

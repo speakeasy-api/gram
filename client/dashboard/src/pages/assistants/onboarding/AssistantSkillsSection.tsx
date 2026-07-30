@@ -1,6 +1,5 @@
 import { RequireScope } from "@/components/require-scope";
-import { Alert, AlertDescription, ErrorAlert } from "@/components/ui/alert";
-import { Dialog } from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Select,
   SelectContent,
@@ -8,7 +7,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
@@ -21,6 +19,10 @@ import { useUndistributeSkillMutation } from "@gram/client/react-query/undistrib
 import { Badge, Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import {
+  SkillPickerDialog,
+  type SkillPickerResult,
+} from "../../skills/SkillPickerDialog";
 import { shouldWarnAboutSkillIndex } from "./assistant-skill-limit";
 import { useAssistantDraft } from "./useAssistantDraft";
 
@@ -29,7 +31,7 @@ export function AssistantSkillsSection(): JSX.Element {
   const project = useProject();
   const [addOpen, setAddOpen] = useState(false);
   const attached = draft.assistant?.skills ?? [];
-  const shouldLoadSkills = addOpen || attached.length > 0;
+  const shouldLoadSkills = attached.length > 0;
   const skillsQuery = useSkillsInfinite({ limit: 200 }, undefined, {
     throwOnError: false,
     enabled: shouldLoadSkills,
@@ -44,8 +46,6 @@ export function AssistantSkillsSection(): JSX.Element {
     () => new Map(skills.map((skill) => [skill.id, skill])),
     [skills],
   );
-  const attachedIds = new Set(attached.map((ref) => ref.skillId));
-  const available = skills.filter((skill) => !attachedIds.has(skill.id));
   const distribute = useDistributeSkillMutation();
   const undistribute = useUndistributeSkillMutation();
 
@@ -54,34 +54,31 @@ export function AssistantSkillsSection(): JSX.Element {
     await draft.refetchAssistant();
   };
 
-  const addSkill: React.FormEventHandler<HTMLFormElement> = (event) => {
-    event.preventDefault();
-    if (!draft.assistantId) return;
-    const skillId = new FormData(event.currentTarget).get("skillId");
-    if (typeof skillId !== "string" || !skillId) return;
-    distribute.mutate(
-      {
-        request: {
-          distributeSkillRequestBody: {
-            id: skillId,
-            assistantId: draft.assistantId,
-          },
-        },
-      },
-      {
-        onSuccess: () => {
-          setAddOpen(false);
-          void refresh()
-            .then(() => toast.success("Skill attached"))
-            .catch(() => {
-              draft.invalidateAll();
-              toast.error("Skill attached, but the assistant did not refresh");
-            });
-        },
-        onError: () => {
-          toast.error("Unable to attach skill");
-        },
-      },
+  const handleAddSkillsComplete = async ({
+    addedCount,
+    failedCount,
+  }: SkillPickerResult) => {
+    if (addedCount > 0) {
+      try {
+        await refresh();
+      } catch {
+        draft.invalidateAll();
+        toast.error(
+          `${addedCount > 1 ? "Skills attached" : "Skill attached"}, but the assistant did not refresh`,
+        );
+        return;
+      }
+    }
+    if (failedCount > 0) {
+      toast.error(
+        addedCount > 0
+          ? `Attached ${addedCount} skill${addedCount > 1 ? "s" : ""}, ${failedCount} failed`
+          : `Unable to attach skill${failedCount > 1 ? "s" : ""}`,
+      );
+      return;
+    }
+    toast.success(
+      addedCount > 1 ? `${addedCount} skills attached` : "Skill attached",
     );
   };
 
@@ -166,12 +163,9 @@ export function AssistantSkillsSection(): JSX.Element {
       </div>
 
       {shouldWarnAboutSkillIndex(attached.length) && (
-        <Alert variant="warning" className="mb-3 px-3 py-2">
-          <AlertDescription>
-            With this many skills, the skill index adds roughly 2k tokens to
-            every thread.
-          </AlertDescription>
-        </Alert>
+        <div className="mb-3">
+          <SkillIndexWarning />
+        </div>
       )}
 
       {attached.length === 0 ? (
@@ -193,61 +187,36 @@ export function AssistantSkillsSection(): JSX.Element {
         </Stack>
       )}
 
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <Dialog.Content>
-          <Dialog.Header>
-            <Dialog.Title>Attach skill</Dialog.Title>
-            <Dialog.Description>
-              Add a project skill to this assistant. It will track the latest
-              valid version by default.
-            </Dialog.Description>
-          </Dialog.Header>
-          <form className="flex flex-col gap-4" onSubmit={addSkill}>
-            {skillsQuery.error && !skillsQuery.data ? (
-              <ErrorAlert
-                title="Unable to load skills"
-                error={skillsQuery.error}
-              />
-            ) : skillsQuery.isPending || skillsQuery.hasNextPage ? (
-              <Skeleton className="h-9 w-full" />
-            ) : available.length === 0 ? (
-              <Type small muted>
-                No skills available to attach.
-              </Type>
-            ) : (
-              <select
-                name="skillId"
-                required
-                className="bg-background rounded-md border px-3 py-2 text-sm"
-                aria-label="Skill"
-              >
-                <option value="">Select a skill</option>
-                {available.map((skill) => (
-                  <option key={skill.id} value={skill.id}>
-                    {skill.displayName}
-                  </option>
-                ))}
-              </select>
-            )}
-            <Dialog.Footer>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => setAddOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={distribute.isPending || available.length === 0}
-              >
-                Attach
-              </Button>
-            </Dialog.Footer>
-          </form>
-        </Dialog.Content>
-      </Dialog>
+      {draft.assistantId && (
+        <SkillPickerDialog
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          excludedSkillIds={attached.map((item) => item.skillId)}
+          target={{ assistantId: draft.assistantId }}
+          title="Attach Skills"
+          description="Add project skills to this assistant. They will track the latest valid version by default."
+          actionLabel="Attach"
+          emptyMessage="No skills available to attach. Record a skill in this project first."
+          renderSelectionNotice={(selectedCount) =>
+            shouldWarnAboutSkillIndex(attached.length + selectedCount) ? (
+              <SkillIndexWarning />
+            ) : null
+          }
+          onBatchComplete={handleAddSkillsComplete}
+        />
+      )}
     </div>
+  );
+}
+
+function SkillIndexWarning(): JSX.Element {
+  return (
+    <Alert variant="warning" className="px-3 py-2">
+      <AlertDescription>
+        With this many skills, the skill index adds roughly 2k tokens to every
+        thread.
+      </AlertDescription>
+    </Alert>
   );
 }
 

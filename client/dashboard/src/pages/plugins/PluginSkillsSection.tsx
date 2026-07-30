@@ -1,7 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Button as UiButton } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
 import { DotCard } from "@/components/ui/dot-card";
 import { DotRow } from "@/components/ui/dot-row";
 import { DotTable } from "@/components/ui/dot-table";
@@ -12,12 +11,10 @@ import { useProject } from "@/contexts/Auth";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { useRoutes } from "@/routes";
 import type { SkillDistribution } from "@gram/client/models/components/skilldistribution.js";
-import { useDistributeSkillMutation } from "@gram/client/react-query/distributeSkill.js";
 import {
   invalidateAllSkillDistributions,
   useSkillDistributionsInfinite,
 } from "@gram/client/react-query/skillDistributions.js";
-import { useSkillsInfinite } from "@gram/client/react-query/skills.js";
 import { useUndistributeSkillMutation } from "@gram/client/react-query/undistributeSkill.js";
 import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
@@ -25,6 +22,10 @@ import { Sparkles, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
+import {
+  SkillPickerDialog,
+  type SkillPickerResult,
+} from "../skills/SkillPickerDialog";
 import { SectionEmptyState } from "./SectionEmptyState";
 
 /**
@@ -80,43 +81,27 @@ export function PluginSkillsSection({
     );
   }, [distributions, normalizedSearch]);
 
-  const skillsQuery = useSkillsInfinite({ limit: 200 }, undefined, {
-    throwOnError: false,
-    enabled: isAddSkillOpen,
-  });
-  useDrainInfiniteQuery(skillsQuery, isAddSkillOpen);
-  const isSkillListLoading = skillsQuery.isPending || skillsQuery.hasNextPage;
-  const availableSkills = useMemo(() => {
-    const distributedSkillIds = new Set(distributions.map((d) => d.skillId));
-    return (
-      skillsQuery.data?.pages.flatMap((page) => page.result.skills) ?? []
-    ).filter(
-      (skill) =>
-        skill.latestVersionId != null && !distributedSkillIds.has(skill.id),
-    );
-  }, [distributions, skillsQuery.data?.pages]);
-
-  const distribute = useDistributeSkillMutation();
   const undistribute = useUndistributeSkillMutation();
 
-  const handleAddSkill: React.FormEventHandler<HTMLFormElement> = (e) => {
-    e.preventDefault();
-    const skillId = new FormData(e.currentTarget).get("skillId") as string;
-    if (!skillId) return;
-    distribute.mutate(
-      {
-        request: { distributeSkillRequestBody: { id: skillId, pluginId } },
-      },
-      {
-        onSuccess: () => {
-          setIsAddSkillOpen(false);
-          void invalidateAllSkillDistributions(queryClient);
-          onMutated("Skill added to plugin");
-        },
-        onError: () => {
-          toast.error("Unable to add skill to plugin");
-        },
-      },
+  const handleAddSkillsComplete = async ({
+    addedCount,
+    failedCount,
+  }: SkillPickerResult) => {
+    // Some mutations may succeed even when others fail, so always refresh the
+    // cache before offering a failed-only retry.
+    await invalidateAllSkillDistributions(queryClient);
+    if (failedCount === 0) {
+      onMutated(
+        addedCount > 1
+          ? `${addedCount} skills added to plugin`
+          : "Skill added to plugin",
+      );
+      return;
+    }
+    toast.error(
+      addedCount > 0
+        ? `Added ${addedCount} skill${addedCount > 1 ? "s" : ""}, ${failedCount} failed`
+        : `Unable to add skill${failedCount > 1 ? "s" : ""} to plugin`,
     );
   };
 
@@ -243,62 +228,17 @@ export function PluginSkillsSection({
       </div>
       <div className="mb-8">{listContent}</div>
 
-      {/* Add Skill Dialog */}
-      <Dialog open={isAddSkillOpen} onOpenChange={setIsAddSkillOpen}>
-        <Dialog.Content>
-          <Dialog.Header>
-            <Dialog.Title>Add Skill</Dialog.Title>
-            <Dialog.Description>
-              Distribute a project skill to this plugin bundle.
-            </Dialog.Description>
-          </Dialog.Header>
-          <form onSubmit={handleAddSkill} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium">Skill</label>
-              {isSkillListLoading ? (
-                <Skeleton className="h-9 w-full" />
-              ) : availableSkills.length > 0 ? (
-                <select
-                  name="skillId"
-                  className="bg-background rounded-md border px-3 py-2 text-sm"
-                  required
-                >
-                  <option value="">Select a skill</option>
-                  {availableSkills.map((skill) => (
-                    <option key={skill.id} value={skill.id}>
-                      {skill.displayName}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <Type muted small>
-                  No skills available to add. Record a skill in this project
-                  first.
-                </Type>
-              )}
-            </div>
-            <Dialog.Footer>
-              <Button
-                variant="secondary"
-                onClick={() => setIsAddSkillOpen(false)}
-                type="button"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={
-                  distribute.isPending ||
-                  isSkillListLoading ||
-                  availableSkills.length === 0
-                }
-              >
-                Add
-              </Button>
-            </Dialog.Footer>
-          </form>
-        </Dialog.Content>
-      </Dialog>
+      <SkillPickerDialog
+        open={isAddSkillOpen}
+        onOpenChange={setIsAddSkillOpen}
+        excludedSkillIds={distributions.map((item) => item.skillId)}
+        target={{ pluginId }}
+        title="Add Skills"
+        description="Distribute project skills to this plugin bundle."
+        actionLabel="Add"
+        emptyMessage="No skills available to add. Record a skill in this project first."
+        onBatchComplete={handleAddSkillsComplete}
+      />
     </>
   );
 }

@@ -307,20 +307,66 @@ type BillingMetadatum struct {
 }
 
 type Chat struct {
-	ID               uuid.UUID
-	ProjectID        uuid.UUID
-	OrganizationID   string
-	UserID           pgtype.Text
-	ExternalUserID   pgtype.Text
-	ExternalChatID   pgtype.Text
-	Title            pgtype.Text
-	TitleManuallySet bool
-	PinnedAt         pgtype.Timestamptz
-	UserAccountID    uuid.NullUUID
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-	DeletedAt        pgtype.Timestamptz
-	Deleted          bool
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	OrganizationID     string
+	UserID             pgtype.Text
+	ExternalUserID     pgtype.Text
+	ExternalChatID     pgtype.Text
+	Title              pgtype.Text
+	TitleManuallySet   bool
+	PinnedAt           pgtype.Timestamptz
+	Summary            pgtype.Text
+	SummaryGeneratedAt pgtype.Timestamptz
+	UserAccountID      uuid.NullUUID
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	Deleted            bool
+}
+
+type ChatAnalysisEvaluation struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ChatID         uuid.UUID
+	SessionID      string
+	Judge          string
+	ObservedAt     pgtype.Timestamptz
+	State          string
+	ReservedOn     pgtype.Date
+	Attempts       int32
+	LastError      pgtype.Text
+	ScoredAt       pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type ChatAnalysisSetting struct {
+	OrganizationID string
+	Judge          string
+	Enabled        bool
+	DailyCap       int32
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type ChatContentPart struct {
+	ID                  uuid.UUID
+	ChatID              uuid.UUID
+	ProjectID           uuid.NullUUID
+	Kind                string
+	ContentAssetUrl     string
+	ExternalID          pgtype.Text
+	ParentChatMessageID uuid.NullUUID
+	Version             pgtype.Int4
+	Source              pgtype.Text
+	Metadata            []byte
+	RiskAnalyzedAt      pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
 }
 
 type ChatMessage struct {
@@ -386,25 +432,26 @@ type ChatUserFeedback struct {
 }
 
 type CustomDomain struct {
-	ID                   uuid.UUID
-	OrganizationID       string
-	Domain               string
-	Verified             bool
-	Activated            bool
-	IngressName          pgtype.Text
-	CertSecretName       pgtype.Text
-	ProvisionerKind      string
-	IpAllowlist          []string
-	HealthStatus         pgtype.Text
-	HealthIssue          pgtype.Text
-	HealthCheckedAt      pgtype.Timestamptz
-	UnhealthySince       pgtype.Timestamptz
-	CertificateExpiresAt pgtype.Timestamptz
-	ConsecutiveFailures  pgtype.Int4
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
-	DeletedAt            pgtype.Timestamptz
-	Deleted              bool
+	ID                       uuid.UUID
+	OrganizationID           string
+	Domain                   string
+	Verified                 bool
+	Activated                bool
+	IngressName              pgtype.Text
+	CertSecretName           pgtype.Text
+	ProvisionerKind          string
+	IpAllowlist              []string
+	OpenaiAppsChallengeToken pgtype.Text
+	HealthStatus             pgtype.Text
+	HealthIssue              pgtype.Text
+	HealthCheckedAt          pgtype.Timestamptz
+	UnhealthySince           pgtype.Timestamptz
+	CertificateExpiresAt     pgtype.Timestamptz
+	ConsecutiveFailures      pgtype.Int4
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
+	DeletedAt                pgtype.Timestamptz
+	Deleted                  bool
 }
 
 type Deployment struct {
@@ -493,6 +540,18 @@ type DeploymentsPackage struct {
 	VersionID    uuid.UUID
 }
 
+type DeviceAgentDeviceSync struct {
+	ID             uuid.UUID
+	OrganizationID string
+	SerialNumber   string
+	Email          string
+	Hostname       pgtype.Text
+	FirstSeenAt    pgtype.Timestamptz
+	LastSeenAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type DeviceAgentSync struct {
 	ID             uuid.UUID
 	OrganizationID string
@@ -501,6 +560,44 @@ type DeviceAgentSync struct {
 	LastSeenAt     pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
+}
+
+type DeviceIntegrationConfig struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	Provider             string
+	CredentialsEncrypted string
+	Settings             []byte
+	Enabled              bool
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
+}
+
+type DeviceIntegrationSchedule struct {
+	ID                        uuid.UUID
+	DeviceIntegrationConfigID uuid.UUID
+	Schedule                  string
+	DisabledAt                pgtype.Timestamptz
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+}
+
+type DeviceIntegrationSync struct {
+	ID                          uuid.UUID
+	DeviceIntegrationScheduleID uuid.UUID
+	PollWatermarkAt             pgtype.Timestamptz
+	NextPollAfter               pgtype.Timestamptz
+	LastPollSuccessAt           pgtype.Timestamptz
+	LastPollFailedAt            pgtype.Timestamptz
+	LastPollError               pgtype.Text
+	ConsecutiveFailures         int32
+	ConsecutiveAuthRejections   int32
+	LastPushDigest              pgtype.Text
+	AutoPausedAt                pgtype.Timestamptz
+	CreatedAt                   pgtype.Timestamptz
+	UpdatedAt                   pgtype.Timestamptz
 }
 
 type DeviceOwner struct {
@@ -903,6 +1000,7 @@ type McpEndpoint struct {
 	CustomDomainID uuid.NullUUID
 	McpServerID    uuid.UUID
 	Slug           string
+	IsDomainRoot   pgtype.Bool
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
@@ -979,6 +1077,26 @@ type McpServerToolMetadatum struct {
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
 	Deleted         bool
+}
+
+type MdmDevice struct {
+	ID                        uuid.UUID
+	DeviceIntegrationConfigID uuid.UUID
+	OrganizationID            string
+	ExternalID                string
+	SerialNumber              pgtype.Text
+	Hostname                  pgtype.Text
+	OsName                    pgtype.Text
+	OsVersion                 pgtype.Text
+	UserEmail                 pgtype.Text
+	UserID                    pgtype.Text
+	MdmLastCheckInAt          pgtype.Timestamptz
+	Raw                       []byte
+	FirstSeenAt               pgtype.Timestamptz
+	LastSeenAt                pgtype.Timestamptz
+	MissingSince              pgtype.Timestamptz
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
 }
 
 type ModelProviderKey struct {
@@ -1540,6 +1658,7 @@ type RiskPolicy struct {
 	ScopeExempt          pgtype.Text
 	Action               string
 	AudienceType         string
+	ShadowMcpDisposition pgtype.Text
 	AutoName             bool
 	UserMessage          pgtype.Text
 	Prompt               pgtype.Text
@@ -1621,7 +1740,8 @@ type RiskResult struct {
 	OrganizationID      string
 	RiskPolicyID        uuid.UUID
 	RiskPolicyVersion   int64
-	ChatMessageID       uuid.UUID
+	ChatMessageID       uuid.NullUUID
+	ChatContentPartID   uuid.NullUUID
 	Source              string
 	Found               bool
 	RuleID              pgtype.Text
@@ -1670,6 +1790,38 @@ type SkillDistribution struct {
 	UpdatedAt       pgtype.Timestamptz
 }
 
+type SkillEditSuggestion struct {
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	SkillID            uuid.UUID
+	BaseVersionID      uuid.UUID
+	Rationale          string
+	Status             string
+	ScoredSessionCount int64
+	ApprovedByUserID   pgtype.Text
+	ApprovedAt         pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+}
+
+type SkillEditSuggestionChange struct {
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+	SuggestionID uuid.UUID
+	ProposedDiff string
+	Rationale    string
+	Position     int32
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type SkillEditSuggestionFeedback struct {
+	ProjectID  uuid.UUID
+	ChangeID   uuid.UUID
+	FeedbackID uuid.UUID
+	CreatedAt  pgtype.Timestamptz
+}
+
 type SkillEfficacyEvaluation struct {
 	ID              uuid.UUID
 	OrganizationID  string
@@ -1683,9 +1835,11 @@ type SkillEfficacyEvaluation struct {
 	ObservedAt      pgtype.Timestamptz
 	State           string
 	ReservedOn      pgtype.Date
+	ClaimToken      uuid.NullUUID
 	Attempts        int32
 	LastError       pgtype.Text
 	ScoredAt        pgtype.Timestamptz
+	FailedAt        pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 }
@@ -1698,6 +1852,22 @@ type SkillEfficacySetting struct {
 	NewVersionBurst  int32
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
+}
+
+type SkillFeedback struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	SkillID        uuid.NullUUID
+	SkillVersionID uuid.NullUUID
+	SkillName      string
+	Source         string
+	Outcome        string
+	Note           pgtype.Text
+	SessionID      pgtype.Text
+	UserID         pgtype.Text
+	UserEmail      pgtype.Text
+	ReviewedAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
 }
 
 type SkillObservation struct {
@@ -1731,6 +1901,17 @@ type SkillRawHash struct {
 	CreatedAt       pgtype.Timestamptz
 }
 
+type SkillShareLink struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	SkillID         uuid.UUID
+	Token           string
+	CreatedByUserID string
+	RevokedAt       pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
 type SkillSyncReceipt struct {
 	ProjectID      uuid.UUID
 	SkillID        uuid.UUID
@@ -1755,6 +1936,7 @@ type SkillVersion struct {
 	SpecValid        bool
 	ValidationErrors []byte
 	CreatedAt        pgtype.Timestamptz
+	PromotedAt       pgtype.Timestamptz
 	CreatedByUserID  string
 }
 
@@ -1817,6 +1999,43 @@ type SourceEnvironment struct {
 	EnvironmentID uuid.UUID
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
+}
+
+type SpendRule struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Name           string
+	Slug           string
+	Description    string
+	TargetExpr     string
+	LimitUsdCents  int64
+	RuleExpr       string
+	WindowKind     string
+	WarnAtPct      int32
+	Action         string
+	Enabled        bool
+	Version        int64
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	ArchivedAt     pgtype.Timestamptz
+	Archived       bool
+	SupersededBy   uuid.NullUUID
+}
+
+type SpendRuleEvent struct {
+	ID             uuid.UUID
+	OrganizationID string
+	SpendRuleID    uuid.UUID
+	RuleUrn        string
+	EventType      string
+	UserID         pgtype.Text
+	Email          string
+	DisplayName    pgtype.Text
+	SpendUsdCents  int64
+	LimitUsdCents  int64
+	WindowStart    pgtype.Timestamptz
+	WindowEnd      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
 }
 
 // Durable record of a blocked tool call or prompt. One row per hook-time block decision, carrying the exact reason shown to the agent. Backs the durable /blocks/:id page and its thumbs feedback. The risk_results / risk_policies foreign keys are nullable enrichment links — the page renders from this row alone.
@@ -1990,6 +2209,8 @@ type TunneledMcpServer struct {
 	KeyPrefix string
 	// Durable lifecycle state for the source: created, active, or revoked. Live connection state is derived from Redis.
 	Status string
+	// Owner consent for anonymous public MCP serving of this source. Double opt-in with mcp_servers.visibility=public, enforced in application code.
+	AllowPublic bool
 	// Last persisted tunnel agent version reported for this source. Per-connection agent versions are stored in Redis.
 	AgentVersion pgtype.Text
 	// Most recent persisted heartbeat time for the source, used when Redis liveness data is absent or expired.
@@ -2093,19 +2314,23 @@ type UserSession struct {
 }
 
 type UserSessionClient struct {
-	ID                    uuid.UUID
-	ProjectID             uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-	ClientID              string
-	ClientSecretHash      pgtype.Text
-	ClientName            string
-	RedirectUris          []string
-	ClientIDIssuedAt      pgtype.Timestamptz
-	ClientSecretExpiresAt pgtype.Timestamptz
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
-	DeletedAt             pgtype.Timestamptz
-	Deleted               bool
+	ID                             uuid.UUID
+	ProjectID                      uuid.UUID
+	UserSessionIssuerID            uuid.UUID
+	ClientID                       string
+	ClientSecretHash               pgtype.Text
+	ClientName                     string
+	RedirectUris                   []string
+	ClientIDIssuedAt               pgtype.Timestamptz
+	ClientSecretExpiresAt          pgtype.Timestamptz
+	ClientIDMetadataUri            pgtype.Text
+	ClientIDMetadataFetchedAt      pgtype.Timestamptz
+	ClientIDMetadataCacheExpiresAt pgtype.Timestamptz
+	ClientIDMetadataEtag           pgtype.Text
+	CreatedAt                      pgtype.Timestamptz
+	UpdatedAt                      pgtype.Timestamptz
+	DeletedAt                      pgtype.Timestamptz
+	Deleted                        bool
 }
 
 type UserSessionConsent struct {
@@ -2122,16 +2347,28 @@ type UserSessionConsent struct {
 }
 
 type UserSessionIssuer struct {
-	ID                 uuid.UUID
-	ProjectID          uuid.UUID
-	Slug               string
-	AuthnChallengeMode string
-	SessionDuration    pgtype.Interval
-	Classification     string
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-	DeletedAt          pgtype.Timestamptz
-	Deleted            bool
+	ID                            uuid.UUID
+	ProjectID                     uuid.UUID
+	Slug                          string
+	AuthnChallengeMode            string
+	SessionDuration               pgtype.Interval
+	Classification                string
+	ClientIDMetadataAdmissionMode pgtype.Text
+	CreatedAt                     pgtype.Timestamptz
+	UpdatedAt                     pgtype.Timestamptz
+	DeletedAt                     pgtype.Timestamptz
+	Deleted                       bool
+}
+
+type UserSessionIssuerCimdClient struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	ClientIDMetadataUri string
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
 }
 
 type WorkosOrganizationSync struct {

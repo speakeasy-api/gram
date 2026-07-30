@@ -38,6 +38,7 @@ function initialProxy(): Context["proxy"] {
 function initialContext(input: Input): Context {
   return {
     discovered: input.discovered,
+    initialPath: input.initialPath,
     external: { slug: "", metadataJson: "", jsonError: null, prefilled: false },
     proxy: initialProxy(),
     envSlug: null,
@@ -159,8 +160,24 @@ export const oauthWizardMachine = setup({
 }).createMachine({
   id: "oauthWizard",
   context: ({ input }) => initialContext(input),
-  initial: "pathSelection",
+  initial: "initializing",
   states: {
+    initializing: {
+      always: [
+        {
+          guard: ({ context }) => context.initialPath === "external",
+          target: "external.editing",
+          actions: assign({
+            external: ({ context }) =>
+              context.discovered && context.discovered.version === "2.1"
+                ? externalFromDiscovered(context.discovered)
+                : context.external,
+          }),
+        },
+        { target: "pathSelection" },
+      ],
+    },
+
     pathSelection: {
       meta: { title: "Connect OAuth" },
       on: {

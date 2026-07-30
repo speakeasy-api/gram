@@ -17,6 +17,7 @@ const toolsetServer = (id: string, name = `toolset ${id}`): Server => ({
   mcpSlug: id,
   tools: [{ id: `${id}-tool`, name: "do_thing", type: "http" }],
   dynamicTools: false,
+  remoteBacked: false,
 });
 
 const group = (projectId: string, servers: Server[]): ServerGroup => ({
@@ -89,6 +90,24 @@ describe("mergeMcpServersIntoGroups", () => {
     });
   });
 
+  it("marks remoteBacked only for rows with a remote_mcp_server_id", () => {
+    const merged = mergeMcpServersIntoGroups(
+      [],
+      [
+        row({ id: "remote-1", remoteMcpServerId: "rmt-1" }),
+        row({ id: "tunneled-1" }),
+      ],
+      projectNames,
+    );
+    const servers = merged[0]!.servers;
+    // Remote-backed servers carry a metadata table; tunneled ones don't, so
+    // only the former should drive the metadata-backed tool picker.
+    expect(servers).toMatchObject([
+      { id: "remote-1", dynamicTools: true, remoteBacked: true },
+      { id: "tunneled-1", dynamicTools: true, remoteBacked: false },
+    ]);
+  });
+
   it("dedupes toolset-backed rows against the existing toolset entry", () => {
     const existing = toolsetServer("ts-1");
     const merged = mergeMcpServersIntoGroups(
@@ -115,6 +134,7 @@ describe("mergeMcpServersIntoGroups", () => {
         mcpSlug: undefined,
         tools: [],
         dynamicTools: false,
+        remoteBacked: false,
       },
     ]);
   });

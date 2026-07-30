@@ -33,7 +33,13 @@ import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { getPresetRange, type DateRangePreset } from "@/elements";
 import { telemetryGetToolUsageFilterOptions } from "@gram/client/funcs/telemetryGetToolUsageFilterOptions";
-import { telemetryGetToolUsageSummary } from "@gram/client/funcs/telemetryGetToolUsageSummary";
+import { telemetryGetToolUsageTargets } from "@gram/client/funcs/telemetryGetToolUsageTargets";
+import { telemetryGetToolUsageTargetTimeSeries } from "@gram/client/funcs/telemetryGetToolUsageTargetTimeSeries";
+import { telemetryGetToolUsageTargetToolBreakdown } from "@gram/client/funcs/telemetryGetToolUsageTargetToolBreakdown";
+import { telemetryGetToolUsageTotals } from "@gram/client/funcs/telemetryGetToolUsageTotals";
+import { telemetryGetToolUsageUsers } from "@gram/client/funcs/telemetryGetToolUsageUsers";
+import { telemetryGetToolUsageUsersByTarget } from "@gram/client/funcs/telemetryGetToolUsageUsersByTarget";
+import { telemetryGetToolUsageUserTimeSeries } from "@gram/client/funcs/telemetryGetToolUsageUserTimeSeries";
 import type { GetToolUsageSummaryResult } from "@gram/client/models/components/gettoolusagesummaryresult.js";
 import type { ToolUsageTargetTimeSeriesPoint } from "@gram/client/models/components/toolusagetargettimeseriespoint.js";
 import type { ToolUsageTargetToolBreakdownRow } from "@gram/client/models/components/toolusagetargettoolbreakdownrow.js";
@@ -167,6 +173,25 @@ const SHARED_TOOLTIP = {
   boxPadding: 4,
 } satisfies _BarTooltip;
 
+// Category-axis labels are mostly emails. Keep the domain — it's how you tell
+// internal from external users — and spend the character budget on the local
+// part instead. Full label is still available in the tooltip title.
+const MAX_AXIS_LABEL_CHARS = 26;
+
+function truncateAxisLabel(label: string): string {
+  if (label.length <= MAX_AXIS_LABEL_CHARS) return label;
+
+  const at = label.lastIndexOf("@");
+  if (at > 0) {
+    const domain = label.slice(at);
+    if (domain.length <= MAX_AXIS_LABEL_CHARS - 4) {
+      return `${label.slice(0, MAX_AXIS_LABEL_CHARS - 1 - domain.length)}…${domain}`;
+    }
+  }
+
+  return `${label.slice(0, MAX_AXIS_LABEL_CHARS - 1)}…`;
+}
+
 const SHARED_BAR_SCALES = {
   x: {
     stacked: true,
@@ -185,15 +210,26 @@ const SHARED_BAR_SCALES = {
       padding: 2,
       font: { size: 12 },
       callback(value) {
-        const label = this.getLabelForValue(value as number);
-        const display = label.includes("@")
-          ? label.split("@")[0]!.slice(0, 14) + "@…"
-          : label.slice(0, 14) + (label.length > 14 ? "…" : "");
-        return display;
+        return truncateAxisLabel(this.getLabelForValue(value as number));
       },
     },
   },
 } satisfies _BarScales;
+
+type ToolUsageSectionState = { pending: boolean; error: boolean };
+
+// Per-section load state for the split tool usage summary. Each entry drives the
+// skeleton/error state of the card(s) derived from that section, so panels render
+// — and fail — independently. `totals` is intentionally omitted: it gates the
+// page shell via summaryPending/summaryIsError, not an individual card.
+type ToolUsageSectionStatus = {
+  targets: ToolUsageSectionState;
+  users: ToolUsageSectionState;
+  targetTimeSeries: ToolUsageSectionState;
+  userTimeSeries: ToolUsageSectionState;
+  usersByTarget: ToolUsageSectionState;
+  targetToolBreakdown: ToolUsageSectionState;
+};
 
 export function InsightsToolsContent(): JSX.Element {
   const { projectSlug } = useSlugs();
@@ -266,49 +302,208 @@ export function InsightsToolsContent(): JSX.Element {
     [activeFilters],
   );
 
+  // The tool usage summary is split across seven endpoints (one per panel) so the
+  // dashboard renders each card as its data lands instead of blocking on the
+  // slowest aggregate. They all share this payload; each has its own query so its
+  // own loading state drives its own card's skeleton.
+  const summaryPayload = useMemo(
+    () => ({
+      from,
+      to,
+      hostedToolsetSlugs:
+        hostedToolsetSlugs.length > 0 ? hostedToolsetSlugs : undefined,
+      shadowServerNames:
+        shadowServerNames.length > 0 ? shadowServerNames : undefined,
+      targetTypes: toTargetTypes(selectedHookTypes),
+      userFilters: userFilters.length > 0 ? userFilters : undefined,
+      hookSources: hookSourceFilters.length > 0 ? hookSourceFilters : undefined,
+      accountType: accountType || undefined,
+    }),
+    [
+      from,
+      to,
+      hostedToolsetSlugs,
+      shadowServerNames,
+      selectedHookTypes,
+      userFilters,
+      hookSourceFilters,
+      accountType,
+    ],
+  );
+
+  const sharedQueryKey = [
+    from.toISOString(),
+    to.toISOString(),
+    hostedToolsetSlugs,
+    shadowServerNames,
+    userFilters,
+    hookSourceFilters,
+    selectedHookTypes,
+    accountType,
+  ];
+
+  // Totals is the gate query: it decides the page shell (logs-disabled overlay,
+  // "no data" empty state, KPI cards) and is the cheapest, so the page appears as
+  // soon as it resolves while the heavier panels stream in behind it.
   const {
-    data: summaryData,
+    data: totalsData,
     error,
-    isFetching: summaryFetching,
+    isFetching: totalsFetching,
     isPending: summaryPending,
     isError: summaryIsError,
-    refetch: refetchSummary,
+    refetch: refetchTotals,
     isLogsDisabled: isLogsLogsDisabled,
   } = useLogsEnabledErrorCheck(
     useQuery({
-      queryKey: [
-        "tool-usage-summary",
-        from.toISOString(),
-        to.toISOString(),
-        hostedToolsetSlugs,
-        shadowServerNames,
-        userFilters,
-        hookSourceFilters,
-        selectedHookTypes,
-        accountType,
-      ],
+      queryKey: ["tool-usage-totals", ...sharedQueryKey],
       queryFn: () =>
         unwrapAsync(
-          telemetryGetToolUsageSummary(client, {
-            getToolUsageSummaryPayload: {
-              from,
-              to,
-              hostedToolsetSlugs:
-                hostedToolsetSlugs.length > 0 ? hostedToolsetSlugs : undefined,
-              shadowServerNames:
-                shadowServerNames.length > 0 ? shadowServerNames : undefined,
-              targetTypes: toTargetTypes(selectedHookTypes),
-              userFilters: userFilters.length > 0 ? userFilters : undefined,
-              hookSources:
-                hookSourceFilters.length > 0 ? hookSourceFilters : undefined,
-              accountType: accountType || undefined,
-            },
+          telemetryGetToolUsageTotals(client, {
+            getToolUsageSummaryPayload: summaryPayload,
           }),
         ),
       enabled: !roleFilterPending,
       throwOnError: false,
     }),
   );
+
+  const targetsQuery = useQuery({
+    queryKey: ["tool-usage-targets", ...sharedQueryKey],
+    queryFn: () =>
+      unwrapAsync(
+        telemetryGetToolUsageTargets(client, {
+          getToolUsageSummaryPayload: summaryPayload,
+        }),
+      ),
+    enabled: !roleFilterPending,
+    throwOnError: false,
+  });
+
+  const usersQuery = useQuery({
+    queryKey: ["tool-usage-users", ...sharedQueryKey],
+    queryFn: () =>
+      unwrapAsync(
+        telemetryGetToolUsageUsers(client, {
+          getToolUsageSummaryPayload: summaryPayload,
+        }),
+      ),
+    enabled: !roleFilterPending,
+    throwOnError: false,
+  });
+
+  const targetTimeSeriesQuery = useQuery({
+    queryKey: ["tool-usage-target-time-series", ...sharedQueryKey],
+    queryFn: () =>
+      unwrapAsync(
+        telemetryGetToolUsageTargetTimeSeries(client, {
+          getToolUsageSummaryPayload: summaryPayload,
+        }),
+      ),
+    enabled: !roleFilterPending,
+    throwOnError: false,
+  });
+
+  const userTimeSeriesQuery = useQuery({
+    queryKey: ["tool-usage-user-time-series", ...sharedQueryKey],
+    queryFn: () =>
+      unwrapAsync(
+        telemetryGetToolUsageUserTimeSeries(client, {
+          getToolUsageSummaryPayload: summaryPayload,
+        }),
+      ),
+    enabled: !roleFilterPending,
+    throwOnError: false,
+  });
+
+  const usersByTargetQuery = useQuery({
+    queryKey: ["tool-usage-users-by-target", ...sharedQueryKey],
+    queryFn: () =>
+      unwrapAsync(
+        telemetryGetToolUsageUsersByTarget(client, {
+          getToolUsageSummaryPayload: summaryPayload,
+        }),
+      ),
+    enabled: !roleFilterPending,
+    throwOnError: false,
+  });
+
+  const targetToolBreakdownQuery = useQuery({
+    queryKey: ["tool-usage-target-tool-breakdown", ...sharedQueryKey],
+    queryFn: () =>
+      unwrapAsync(
+        telemetryGetToolUsageTargetToolBreakdown(client, {
+          getToolUsageSummaryPayload: summaryPayload,
+        }),
+      ),
+    enabled: !roleFilterPending,
+    throwOnError: false,
+  });
+
+  // Assemble the sections that have resolved into the summary shape the panels
+  // already consume. Undefined until totals lands (which gates the shell);
+  // each array fills in as its query resolves.
+  const summaryData: GetToolUsageSummaryResult | undefined = useMemo(
+    () =>
+      totalsData
+        ? {
+            totals: totalsData.totals,
+            targets: targetsQuery.data?.targets ?? [],
+            users: usersQuery.data?.users ?? [],
+            targetTimeSeries:
+              targetTimeSeriesQuery.data?.targetTimeSeries ?? [],
+            userTimeSeries: userTimeSeriesQuery.data?.userTimeSeries ?? [],
+            usersByTarget: usersByTargetQuery.data?.usersByTarget ?? [],
+            targetToolBreakdown:
+              targetToolBreakdownQuery.data?.targetToolBreakdown ?? [],
+          }
+        : undefined,
+    [
+      totalsData,
+      targetsQuery.data,
+      usersQuery.data,
+      targetTimeSeriesQuery.data,
+      userTimeSeriesQuery.data,
+      usersByTargetQuery.data,
+      targetToolBreakdownQuery.data,
+    ],
+  );
+
+  const sectionStatus: ToolUsageSectionStatus = {
+    targets: { pending: targetsQuery.isPending, error: targetsQuery.isError },
+    users: { pending: usersQuery.isPending, error: usersQuery.isError },
+    targetTimeSeries: {
+      pending: targetTimeSeriesQuery.isPending,
+      error: targetTimeSeriesQuery.isError,
+    },
+    userTimeSeries: {
+      pending: userTimeSeriesQuery.isPending,
+      error: userTimeSeriesQuery.isError,
+    },
+    usersByTarget: {
+      pending: usersByTargetQuery.isPending,
+      error: usersByTargetQuery.isError,
+    },
+    targetToolBreakdown: {
+      pending: targetToolBreakdownQuery.isPending,
+      error: targetToolBreakdownQuery.isError,
+    },
+  };
+
+  const { refetch: refetchTargets } = targetsQuery;
+  const { refetch: refetchUsers } = usersQuery;
+  const { refetch: refetchTargetTimeSeries } = targetTimeSeriesQuery;
+  const { refetch: refetchUserTimeSeries } = userTimeSeriesQuery;
+  const { refetch: refetchUsersByTarget } = usersByTargetQuery;
+  const { refetch: refetchTargetToolBreakdown } = targetToolBreakdownQuery;
+
+  const isAnyFetching =
+    totalsFetching ||
+    targetsQuery.isFetching ||
+    usersQuery.isFetching ||
+    targetTimeSeriesQuery.isFetching ||
+    userTimeSeriesQuery.isFetching ||
+    usersByTargetQuery.isFetching ||
+    targetToolBreakdownQuery.isFetching;
 
   const { data: filterOptionsData } = useQuery({
     queryKey: [
@@ -358,11 +553,27 @@ export function InsightsToolsContent(): JSX.Element {
     : null;
 
   const refetch = useCallback(() => {
-    void refetchSummary();
-  }, [refetchSummary]);
+    void refetchTotals();
+    void refetchTargets();
+    void refetchUsers();
+    void refetchTargetTimeSeries();
+    void refetchUserTimeSeries();
+    void refetchUsersByTarget();
+    void refetchTargetToolBreakdown();
+  }, [
+    refetchTotals,
+    refetchTargets,
+    refetchUsers,
+    refetchTargetTimeSeries,
+    refetchUserTimeSeries,
+    refetchUsersByTarget,
+    refetchTargetToolBreakdown,
+  ]);
 
   const isLogsDisabled = isLogsLogsDisabled;
-  const isLoading = summaryFetching && !summaryData;
+  // Gate the page shell on the totals query only; the heavier panels stream in
+  // behind it via their own per-card loading states.
+  const isLoading = totalsFetching && !totalsData;
 
   return (
     <>
@@ -424,10 +635,11 @@ export function InsightsToolsContent(): JSX.Element {
           summaryData={summaryData}
           summaryPending={summaryPending}
           summaryIsError={summaryIsError}
+          sectionStatus={sectionStatus}
           accountType={accountType}
           onAccountTypeChange={handleAccountTypeChange}
           onRefresh={refetch}
-          isRefreshing={summaryFetching}
+          isRefreshing={isAnyFetching}
         />
       )}
     </>
@@ -463,6 +675,7 @@ function HooksInnerContent({
   summaryData,
   summaryPending,
   summaryIsError,
+  sectionStatus,
   accountType,
   onAccountTypeChange,
   onRefresh,
@@ -497,6 +710,7 @@ function HooksInnerContent({
   summaryData: GetToolUsageSummaryResult | undefined;
   summaryPending: boolean;
   summaryIsError: boolean;
+  sectionStatus: ToolUsageSectionStatus;
   accountType: string;
   onAccountTypeChange: (value: string) => void;
   onRefresh: () => void;
@@ -620,6 +834,7 @@ function HooksInnerContent({
                 summaryData={summaryData}
                 summaryPending={summaryPending}
                 summaryIsError={summaryIsError}
+                sectionStatus={sectionStatus}
                 expandedChart={expandedChart}
                 onExpandedChartChange={setExpandedChart}
                 onRangeSelect={handleChartRangeSelect}
@@ -806,6 +1021,8 @@ function UsersPerServerChart({
   handleFilter,
   expandedChart,
   onExpand,
+  loading,
+  error,
 }: {
   title: string;
   breakdown: ToolUsageUsersByTargetRow[];
@@ -813,6 +1030,8 @@ function UsersPerServerChart({
   handleFilter?: (userEmail: string, serverName: string) => void;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
+  loading?: boolean;
+  error?: boolean;
 }) {
   const chartId = "users-per-server";
   const expanded = expandedChart === chartId;
@@ -871,6 +1090,8 @@ function UsersPerServerChart({
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
+      loading={loading}
+      error={error}
       hasData={labels.length > 0}
     >
       {labels.length === 0 ? (
@@ -895,12 +1116,16 @@ function UserEventCountsChart({
   handleFilter,
   expandedChart,
   onExpand,
+  loading,
+  error,
 }: {
   title: string;
   users: ToolUsageUserSummary[];
   handleFilter?: (datasetLabel: string, userEmail: string) => void;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
+  loading?: boolean;
+  error?: boolean;
 }) {
   const chartId = "user-event-counts";
   const expanded = expandedChart === chartId;
@@ -911,7 +1136,7 @@ function UserEventCountsChart({
     const color = USER_SOURCE_COLORS[0]!;
     const chartDatasets = [
       {
-        label: "Events",
+        label: "Tool calls",
         barThickness: 24,
         data: sortedUsers.map((user) => user.eventCount),
         backgroundColor: color,
@@ -928,6 +1153,8 @@ function UserEventCountsChart({
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
+      loading={loading}
+      error={error}
       hasData={labels.length > 0}
     >
       {labels.length === 0 ? (
@@ -952,12 +1179,16 @@ function ServerErrorRateChart({
   serverNameMappings,
   expandedChart,
   onExpand,
+  loading,
+  error,
 }: {
   title: string;
   breakdown: ToolUsageTargetToolBreakdownRow[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
+  loading?: boolean;
+  error?: boolean;
 }) {
   const chartId = "errors-per-server";
   const expanded = expandedChart === chartId;
@@ -1062,6 +1293,8 @@ function ServerErrorRateChart({
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
+      loading={loading}
+      error={error}
       hasData={labels.length > 0}
     >
       {labels.length === 0 ? (
@@ -1208,6 +1441,8 @@ function ServerUsageTimeSeries({
   serverNameMappings,
   expandedChart,
   onExpand,
+  loading,
+  error,
   onRangeSelect,
   isZoomed,
   onResetZoom,
@@ -1218,6 +1453,8 @@ function ServerUsageTimeSeries({
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
+  loading?: boolean;
+  error?: boolean;
   onRangeSelect?: (from: Date, to: Date) => void;
   isZoomed?: boolean;
   onResetZoom?: () => void;
@@ -1243,6 +1480,8 @@ function ServerUsageTimeSeries({
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
+      loading={loading}
+      error={error}
       hasData={labels.length > 0}
       isZoomed={isZoomed}
       onResetZoom={onResetZoom}
@@ -1267,6 +1506,8 @@ function UserUsageTimeSeries({
   to,
   expandedChart,
   onExpand,
+  loading,
+  error,
   onRangeSelect,
   isZoomed,
   onResetZoom,
@@ -1276,6 +1517,8 @@ function UserUsageTimeSeries({
   to: Date;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
+  loading?: boolean;
+  error?: boolean;
   onRangeSelect?: (from: Date, to: Date) => void;
   isZoomed?: boolean;
   onResetZoom?: () => void;
@@ -1300,6 +1543,8 @@ function UserUsageTimeSeries({
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
+      loading={loading}
+      error={error}
       hasData={labels.length > 0}
       isZoomed={isZoomed}
       onResetZoom={onResetZoom}
@@ -1324,6 +1569,8 @@ function SkillUsageTimeSeries({
   to,
   expandedChart,
   onExpand,
+  loading,
+  error,
   onRangeSelect,
   isZoomed,
   onResetZoom,
@@ -1333,6 +1580,8 @@ function SkillUsageTimeSeries({
   to: Date;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
+  loading?: boolean;
+  error?: boolean;
   onRangeSelect?: (from: Date, to: Date) => void;
   isZoomed?: boolean;
   onResetZoom?: () => void;
@@ -1357,6 +1606,8 @@ function SkillUsageTimeSeries({
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
+      loading={loading}
+      error={error}
       hasData={labels.length > 0}
       isZoomed={isZoomed}
       onResetZoom={onResetZoom}
@@ -1380,11 +1631,15 @@ function UsersPerSkillChart({
   skillBreakdown,
   expandedChart,
   onExpand,
+  loading,
+  error,
 }: {
   title: string;
   skillBreakdown: ToolUsageUsersByTargetRow[];
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
+  loading?: boolean;
+  error?: boolean;
 }) {
   const chartId = "users-per-skill";
   const expanded = expandedChart === chartId;
@@ -1437,6 +1692,8 @@ function UsersPerSkillChart({
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
+      loading={loading}
+      error={error}
       hasData={labels.length > 0}
     >
       {labels.length === 0 ? (
@@ -1461,6 +1718,8 @@ function ErrorsOverTimeChart({
   serverNameMappings,
   expandedChart,
   onExpand,
+  loading,
+  error,
   onRangeSelect,
   isZoomed,
   onResetZoom,
@@ -1471,6 +1730,8 @@ function ErrorsOverTimeChart({
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
+  loading?: boolean;
+  error?: boolean;
   onRangeSelect?: (from: Date, to: Date) => void;
   isZoomed?: boolean;
   onResetZoom?: () => void;
@@ -1553,6 +1814,8 @@ function ErrorsOverTimeChart({
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
+      loading={loading}
+      error={error}
       hasData={hasErrors}
       isZoomed={isZoomed}
       onResetZoom={onResetZoom}
@@ -1590,6 +1853,7 @@ function HooksAnalytics({
   summaryData,
   summaryPending,
   summaryIsError,
+  sectionStatus,
   expandedChart,
   onExpandedChartChange: setExpandedChart,
   onRangeSelect,
@@ -1605,6 +1869,7 @@ function HooksAnalytics({
   summaryData: GetToolUsageSummaryResult | undefined;
   summaryPending: boolean;
   summaryIsError: boolean;
+  sectionStatus: ToolUsageSectionStatus;
   expandedChart: string | null;
   onExpandedChartChange: (id: string | null) => void;
   onRangeSelect?: (from: Date, to: Date) => void;
@@ -1612,6 +1877,12 @@ function HooksAnalytics({
   onResetZoom?: () => void;
 }) {
   const targets = summaryData?.targets;
+  // targetFiltersByLabel (below) is built from the targets section, which loads
+  // independently from the panels that trigger filtering. Until it resolves —
+  // and if it fails to resolve — suppress server-row clicks rather than apply
+  // the wrong fallback filter.
+  const targetsUnavailable =
+    sectionStatus.targets.pending || sectionStatus.targets.error;
   const users = summaryData?.users ?? [];
   const timeSeries = summaryData?.targetTimeSeries ?? [];
   const userTimeSeries = summaryData?.userTimeSeries ?? [];
@@ -1676,6 +1947,10 @@ function HooksAnalytics({
       const apply = (value: string, filterType: "server" | "user") => {
         if (!value || value === "unknown") return;
         if (filterType === "server") {
+          // Skill/local-tool/hosted routing needs targetFiltersByLabel; if the
+          // targets section is still loading or failed, ignore the click instead
+          // of misrouting it to a raw server filter.
+          if (targetsUnavailable) return;
           if (value === localToolsDisplayName) {
             onHookTypesChange(["local_tool"]);
             return;
@@ -1717,6 +1992,7 @@ function HooksAnalytics({
       serverNameMappings.rawToDisplay,
       serverNameMappings.displayToRaws,
       targetFiltersByLabel,
+      targetsUnavailable,
     ],
   );
 
@@ -1792,6 +2068,8 @@ function HooksAnalytics({
         )}
       >
         <ServerUsageTimeSeries
+          loading={sectionStatus.targetTimeSeries.pending}
+          error={sectionStatus.targetTimeSeries.error}
           timeSeries={timeSeries}
           from={from}
           to={to}
@@ -1804,6 +2082,8 @@ function HooksAnalytics({
         />
 
         <UsersPerServerChart
+          loading={sectionStatus.usersByTarget.pending}
+          error={sectionStatus.usersByTarget.error}
           title="Users by Source"
           breakdown={usersByTarget}
           serverNameMappings={serverNameMappings}
@@ -1816,6 +2096,8 @@ function HooksAnalytics({
         />
 
         <UserUsageTimeSeries
+          loading={sectionStatus.userTimeSeries.pending}
+          error={sectionStatus.userTimeSeries.error}
           timeSeries={userTimeSeries}
           from={from}
           to={to}
@@ -1827,7 +2109,9 @@ function HooksAnalytics({
         />
 
         <UserEventCountsChart
-          title="User Event Counts"
+          loading={sectionStatus.users.pending}
+          error={sectionStatus.users.error}
+          title="Tool Calls by User"
           users={users}
           handleFilter={makeFilterHandler({ user: "row" })}
           expandedChart={expandedChart}
@@ -1835,6 +2119,8 @@ function HooksAnalytics({
         />
 
         <SkillUsageTimeSeries
+          loading={sectionStatus.targetTimeSeries.pending}
+          error={sectionStatus.targetTimeSeries.error}
           skillTimeSeries={skillTimeSeries}
           from={from}
           to={to}
@@ -1846,6 +2132,8 @@ function HooksAnalytics({
         />
 
         <UsersPerSkillChart
+          loading={sectionStatus.usersByTarget.pending}
+          error={sectionStatus.usersByTarget.error}
           title="Users per Skill"
           skillBreakdown={skillBreakdown}
           expandedChart={expandedChart}
@@ -1853,6 +2141,8 @@ function HooksAnalytics({
         />
 
         <ErrorsOverTimeChart
+          loading={sectionStatus.targetTimeSeries.pending}
+          error={sectionStatus.targetTimeSeries.error}
           timeSeries={timeSeries}
           from={from}
           to={to}
@@ -1865,6 +2155,8 @@ function HooksAnalytics({
         />
 
         <ServerErrorRateChart
+          loading={sectionStatus.targetToolBreakdown.pending}
+          error={sectionStatus.targetToolBreakdown.error}
           title="Failures by Source and Tool"
           breakdown={targetToolBreakdown}
           serverNameMappings={serverNameMappings}

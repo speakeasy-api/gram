@@ -215,6 +215,8 @@ export function renderVerb(log: AuditLog): string {
       return "updated plugin access assignments";
     case "plugin:publish":
       return "published plugins";
+    case "chat_session:access":
+      return "accessed chat session";
     case "organization:webhooks_enabled":
       return "enabled webhooks delivery";
     case "organization:webhooks_disabled":

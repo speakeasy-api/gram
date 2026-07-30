@@ -1604,7 +1604,12 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 
 func TestResolveModel_AllowedModelReturnedAsIs(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, "openai/gpt-5.4", ResolveModel("openai/gpt-5.4"))
+	require.Equal(t, "anthropic/claude-opus-5", ResolveModel("anthropic/claude-opus-5"))
+}
+
+func TestDefaultChatModel_UsesClaudeOpus5(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "anthropic/claude-opus-5", DefaultChatModel)
 }
 
 func TestResolveModel_Gemini35FlashLiteReturnedAsIs(t *testing.T) {

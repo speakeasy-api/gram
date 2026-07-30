@@ -3,15 +3,15 @@ import { Heading } from "@/components/ui/heading";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
-import { telemetryGetToolUsageSummary } from "@gram/client/funcs/telemetryGetToolUsageSummary";
-import type { GetToolUsageSummaryResult } from "@gram/client/models/components/gettoolusagesummaryresult.js";
+import { telemetryGetToolUsageUsers } from "@gram/client/funcs/telemetryGetToolUsageUsers";
+import type { GetToolUsageUsersResult } from "@gram/client/models/components/gettoolusageusersresult.js";
 import { useGramContext } from "@gram/client/react-query/_context";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Column, Table } from "@speakeasy-api/moonshine";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-type UserRow = GetToolUsageSummaryResult["users"][number];
+type UserRow = GetToolUsageUsersResult["users"][number];
 
 const columns: Column<UserRow>[] = [
   {
@@ -60,7 +60,7 @@ export function TopUsersTable({
       ],
       queryFn: () =>
         unwrapAsync(
-          telemetryGetToolUsageSummary(client, {
+          telemetryGetToolUsageUsers(client, {
             getToolUsageSummaryPayload: {
               from,
               to,

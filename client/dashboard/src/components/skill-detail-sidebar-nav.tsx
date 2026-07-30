@@ -21,6 +21,7 @@ import {
   SkillClassificationBadge,
   SkillSourceBadge,
 } from "@/pages/skills/skill-badges";
+import { SkillSharingCardBlocks } from "@/pages/skills/SkillSharingControl";
 import { useRoutes } from "@/routes";
 import { useSkill } from "@gram/client/react-query/skill.js";
 import { useSkillDistributionsInfinite } from "@gram/client/react-query/skillDistributions.js";
@@ -123,6 +124,8 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
           <Badge variant="destructive">Needs review</Badge>
         )}
       </div>
+
+      <SkillSharingCardBlocks skill={skill} />
 
       <div className="flex flex-col gap-1">
         <McpSidebarInfoLabel>Distributions</McpSidebarInfoLabel>

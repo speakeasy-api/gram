@@ -20,6 +20,7 @@ export type ProxyFormKey =
 
 export type Context = {
   discovered: DiscoveredOAuth | null;
+  initialPath?: "external";
   external: {
     slug: string;
     metadataJson: string;
@@ -53,6 +54,7 @@ export type Context = {
 
 export type Input = {
   discovered: DiscoveredOAuth | null;
+  initialPath?: "external";
   toolsetSlug: string;
   toolsetName: string;
   activeOrganizationId: string;

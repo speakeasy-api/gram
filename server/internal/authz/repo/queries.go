@@ -15,13 +15,10 @@ var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 // The call is fire-and-forget from CH's perspective: it acks once the row is
 // queued in CH's async insert buffer, not once the row is committed to disk.
 func (q *Queries) InsertChallenge(ctx context.Context, row ChallengeRow) error {
-	ctx = clickhouse.Context(ctx,
-		clickhouse.WithAsync(false),
-		clickhouse.WithSettings(clickhouse.Settings{
-			"async_insert":          1,
-			"wait_for_async_insert": 0,
-		}),
-	)
+	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+		"async_insert":          1,
+		"wait_for_async_insert": 0,
+	}))
 
 	reqScope := make([]string, len(row.RequestedChecks))
 	reqKind := make([]string, len(row.RequestedChecks))

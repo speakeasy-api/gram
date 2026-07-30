@@ -45,6 +45,20 @@ export type UpdateRiskPolicyRequestBodyAudienceType = ClosedEnum<
   typeof UpdateRiskPolicyRequestBodyAudienceType
 >;
 
+/**
+ * The policy's shadow MCP disposition. Immutable: omit, or send the current value unchanged; any other value is rejected. Switching posture requires delete + recreate.
+ */
+export const UpdateRiskPolicyRequestBodyShadowMcpDisposition = {
+  BlockAll: "block_all",
+  AllowAll: "allow_all",
+} as const;
+/**
+ * The policy's shadow MCP disposition. Immutable: omit, or send the current value unchanged; any other value is rejected. Switching posture requires delete + recreate.
+ */
+export type UpdateRiskPolicyRequestBodyShadowMcpDisposition = ClosedEnum<
+  typeof UpdateRiskPolicyRequestBodyShadowMcpDisposition
+>;
+
 export type UpdateRiskPolicyRequestBody = {
   /**
    * Policy action: flag, warn (challenge), or block.
@@ -124,6 +138,16 @@ export type UpdateRiskPolicyRequestBody = {
    */
   score?: number | undefined;
   /**
+   * Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.
+   */
+  shadowMcpAllowedUrls?: Array<string> | undefined;
+  /**
+   * The policy's shadow MCP disposition. Immutable: omit, or send the current value unchanged; any other value is rejected. Switching posture requires delete + recreate.
+   */
+  shadowMcpDisposition?:
+    | UpdateRiskPolicyRequestBodyShadowMcpDisposition
+    | undefined;
+  /**
    * Detection sources to enable.
    */
   sources?: Array<string> | undefined;
@@ -143,6 +167,11 @@ export const UpdateRiskPolicyRequestBodyAudienceType$outboundSchema:
   z.ZodMiniEnum<typeof UpdateRiskPolicyRequestBodyAudienceType> = z.enum(
     UpdateRiskPolicyRequestBodyAudienceType,
   );
+
+/** @internal */
+export const UpdateRiskPolicyRequestBodyShadowMcpDisposition$outboundSchema:
+  z.ZodMiniEnum<typeof UpdateRiskPolicyRequestBodyShadowMcpDisposition> = z
+    .enum(UpdateRiskPolicyRequestBodyShadowMcpDisposition);
 
 /** @internal */
 export type UpdateRiskPolicyRequestBody$Outbound = {
@@ -166,6 +195,8 @@ export type UpdateRiskPolicyRequestBody$Outbound = {
   scope_exempt?: string | undefined;
   scope_include?: string | undefined;
   score?: number | undefined;
+  shadow_mcp_allowed_urls?: Array<string> | undefined;
+  shadow_mcp_disposition?: string | undefined;
   sources?: Array<string> | undefined;
   user_message?: string | undefined;
 };
@@ -198,6 +229,10 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     scopeExempt: z.optional(z.string()),
     scopeInclude: z.optional(z.string()),
     score: z.optional(z.number()),
+    shadowMcpAllowedUrls: z.optional(z.array(z.string())),
+    shadowMcpDisposition: z.optional(
+      UpdateRiskPolicyRequestBodyShadowMcpDisposition$outboundSchema,
+    ),
     sources: z.optional(z.array(z.string())),
     userMessage: z.optional(z.string()),
   }),
@@ -217,6 +252,8 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       promptInjectionRules: "prompt_injection_rules",
       scopeExempt: "scope_exempt",
       scopeInclude: "scope_include",
+      shadowMcpAllowedUrls: "shadow_mcp_allowed_urls",
+      shadowMcpDisposition: "shadow_mcp_disposition",
       userMessage: "user_message",
     });
   }),

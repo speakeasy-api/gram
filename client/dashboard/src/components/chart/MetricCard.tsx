@@ -121,7 +121,7 @@ export function MetricCard(props: MetricCardProps): JSX.Element {
               <div className="flex flex-col items-end gap-0.5">
                 <div
                   className={`flex items-center gap-1 text-xs font-medium ${
-                    isGood ? "text-emerald-600" : "text-red-500"
+                    isGood ? "text-success-foreground" : "text-destructive"
                   }`}
                 >
                   <Icon

@@ -12,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -22,6 +24,7 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -54,24 +57,35 @@ type chatTestInstance struct {
 	conn      *pgxpool.Pool
 	projectID uuid.UUID
 	orgID     string
+	assets    assets.BlobStore
 }
 
-// newTestChatService builds a chat service with RBAC enforcement enabled for
-// the org. Use authztest.WithExactGrants to grant org:admin in tests that need
-// project-wide visibility.
+// newTestChatService builds a chat service with RBAC enforcement enabled.
 func newTestChatService(t *testing.T) *chatTestInstance {
 	t.Helper()
 	return newTestChatServiceWithRBAC(t, authztest.RBACAlwaysEnabled)
 }
 
 // newTestChatServiceRBACDisabled builds a chat service whose org has the RBAC
-// feature flag off, so ShouldEnforce returns false even for enterprise callers.
+// feature flag off, so ShouldEnforce returns false for session callers.
 func newTestChatServiceRBACDisabled(t *testing.T) *chatTestInstance {
 	t.Helper()
 	return newTestChatServiceWithRBAC(t, authztest.RBACAlwaysDisabled)
 }
 
 func newTestChatServiceWithRBAC(t *testing.T, isRBACEnabled authz.IsRBACEnabled) *chatTestInstance {
+	t.Helper()
+	return newTestChatServiceWithOptions(t, isRBACEnabled, nil)
+}
+
+// newTestChatServiceWithCompletion builds a chat service with a custom
+// OpenRouter completion client (e.g. a mock for summarize tests).
+func newTestChatServiceWithCompletion(t *testing.T, completionClient openrouter.CompletionClient) *chatTestInstance {
+	t.Helper()
+	return newTestChatServiceWithOptions(t, authztest.RBACAlwaysEnabled, completionClient)
+}
+
+func newTestChatServiceWithOptions(t *testing.T, isRBACEnabled authz.IsRBACEnabled, completionClient openrouter.CompletionClient) *chatTestInstance {
 	t.Helper()
 
 	ctx := t.Context()
@@ -113,7 +127,8 @@ func newTestChatServiceWithRBAC(t *testing.T, isRBACEnabled authz.IsRBACEnabled)
 	mgr := testenv.NewTestManager(t, logger, tp, conn, redisClient, suffix, billingClient)
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, isRBACEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := chat.NewService(logger, tp, conn, mgr, nil, nil, nil, nil, nil, nil, nil, authzEngine, nil, billingClient, audit.NewLogger())
+	assetStorage := assetstest.NewTestBlobStore(t)
+	svc := chat.NewService(logger, tp, conn, mgr, nil, nil, completionClient, nil, nil, nil, assetStorage, authzEngine, nil, billingClient, audit.NewLogger())
 
 	return &chatTestInstance{
 		service:   svc,
@@ -121,5 +136,6 @@ func newTestChatServiceWithRBAC(t *testing.T, isRBACEnabled authz.IsRBACEnabled)
 		conn:      conn,
 		projectID: project.ID,
 		orgID:     orgID,
+		assets:    assetStorage,
 	}
 }

@@ -83,13 +83,16 @@ func TestPendingWorkProjectsFindsAProjectWhoseOnlyWorkIsAnAbandonedReservation(t
 
 	// Recovering it puts the row back in the queue, which is what the coordinator
 	// the sweep then signals goes on to reserve again.
-	reset, err := ResetStaleReservations(ctx, fixture.db, fixture.projectID, time.Since(reservedAt)-gap)
+	recovery, err := RecoverStaleReservations(ctx, fixture.db, fixture.projectID, time.Since(reservedAt)-gap, MaxRecoveryBatch)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), reset)
+	require.Equal(t, RecoveryResult{Recovered: 1, DeadLettered: 0}, recovery)
 
 	pending := fixture.pendingEvaluations(t)
 	require.Len(t, pending, 1)
 	require.Equal(t, StatePending, pending[0].State)
+	require.True(t, pending[0].ReservedOn.Valid, "recovery retains the spend reservation")
+	require.False(t, pending[0].ClaimToken.Valid)
+	require.Equal(t, int32(1), pending[0].Attempts)
 	require.Equal(t, []PendingWorkProject{{ProjectID: fixture.projectID, HasStale: false}}, fixture.pendingWork(t),
 		"the recovered row keeps the project in the sweep until it is scored, with nothing left to reset")
 }

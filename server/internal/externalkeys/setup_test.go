@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalkeys"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -68,7 +69,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
@@ -76,7 +77,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	auditLogger := audit.NewLogger()
 	svc := externalkeys.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger)
-	credSvc := externalcredentials.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger)
+	credSvc := externalcredentials.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, gcpauth.NewResolver())
 
 	return ctx, &testInstance{service: svc, credService: credSvc, conn: conn}
 }

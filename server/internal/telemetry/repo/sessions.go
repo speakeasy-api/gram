@@ -32,19 +32,53 @@ const (
 		sessionClaudeOTELRowPredicate + " AND " +
 		"(toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')" +
 		")"
-	// sessionAgentUsageRowPredicate matches Codex/Cursor/Claude-Chat usage
-	// rows — their only token/cost source. claude_chat:usage rows carry Claude
+	// sessionCodexOTELRowPredicate anchors Codex provenance on the raw OTEL log
+	// stream URN stamped at ingest, mirroring is_codex_otel_row in the MV.
+	sessionCodexOTELRowPredicate = "(gram_urn = 'codex:otel:logs')"
+	// sessionCodexAPIRequestPredicate matches Codex response.completed rows that
+	// carry token counts — the sole Codex usage source (the derived
+	// codex:usage:metrics rows are deprecated). Mirrors is_codex_api_request.
+	sessionCodexAPIRequestPredicate = "(" +
+		sessionCodexOTELRowPredicate + " AND " +
+		"toString(attributes.event.name) = 'codex.sse_event' AND " +
+		"toString(attributes.event.kind) = 'response.completed' AND " +
+		"(toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')" +
+		")"
+	// Codex reports input_token_count INCLUSIVE of cached_token_count (OpenAI
+	// usage semantics); the canonical shape is disjoint. Normalize with the
+	// same clamping as the MV (0 <= cached <= input) so bad client data can
+	// never increase usage. Codex reports no cache writes and no cost.
+	sessionCodexCacheReadTokensExpr = "least(greatest(toInt64OrZero(toString(attributes.cached_token_count)), 0), " +
+		"greatest(toInt64OrZero(toString(attributes.input_token_count)), 0))"
+	sessionCodexInputTokensExpr = "(greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - " + sessionCodexCacheReadTokensExpr + ")"
+	// sessionAgentUsageRowPredicate matches Cursor/Claude-Chat usage rows —
+	// their only token/cost source. claude_chat:usage rows carry Claude
 	// Chat (web/desktop) token usage and claude_chat:cost rows the matching
-	// spend, both polled from the Admin Analytics API. Gram-hosted chat
-	// completions and claude-code:usage rows are deliberately excluded: the
-	// summaries cover agent surfaces only, and claude-code:usage duplicates
-	// the OTEL api_request stream.
+	// spend, both polled from the Admin Analytics API. The codex:usage prefix
+	// is kept only for in-flight rows from pods that predate the Codex
+	// raw-stream cutover. Gram-hosted chat completions and claude-code:usage
+	// rows are deliberately excluded: the summaries cover agent surfaces only,
+	// and claude-code:usage duplicates the OTEL api_request stream.
 	sessionAgentUsageRowPredicate = "(startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost'))"
-	// sessionAgentToolCallPredicate matches Codex/Cursor completed tool-call hook
-	// rows (they have no OTEL stream). The hook.event guard excludes the
-	// PreToolUse companion row; provider names are not tool calls.
+	// sessionOpencodeUsageRowPredicate matches opencode's per-turn usage rows.
+	// opencode reports tokens and cost on its unified-ingest assistant.responded
+	// rows, under the canonical gen_ai.usage.* keys the generic fallback branches
+	// already read. It has no OTEL stream and the unified-ingest path stamps no
+	// gram_urn, so provenance anchors on hook_source. The AfterAgentResponse
+	// event guard keeps a session's other opencode rows (thoughts, usage.reported,
+	// tool calls, lifecycle) from double-counting as usage turns; cost is part of
+	// the guard so a cost-only turn still counts. Mirrors is_opencode_usage_row in
+	// the MVs (server/clickhouse/schema.sql).
+	sessionOpencodeUsageRowPredicate = "(" +
+		"hook_source = 'opencode' AND " +
+		"toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND " +
+		"(toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')" +
+		")"
+	// sessionAgentToolCallPredicate matches Codex/Cursor/opencode completed
+	// tool-call hook rows (they have no OTEL stream). The hook.event guard excludes
+	// the PreToolUse companion row; provider names are not tool calls.
 	sessionAgentToolCallPredicate = "(" +
-		"hook_source IN ('codex', 'cursor') AND " +
+		"hook_source IN ('codex', 'cursor', 'opencode') AND " +
 		"toString(attributes.gram.tool.name) != '' AND " +
 		"toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor') AND " +
 		"toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')" +
@@ -67,37 +101,45 @@ const (
 		"toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id), " +
 		"toString(id))"
 	// sessionUsageMeasureFilter selects the rows that carry token/cost usage:
-	// Claude api_request rows and Codex/Cursor usage rows. This is the sumIf
-	// guard for every token/cost measure, keeping session totals aligned with
-	// the aggregate.
-	sessionUsageMeasureFilter = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + ")"
+	// Claude api_request rows, Codex response.completed rows, Cursor/Claude-Chat
+	// usage rows, and opencode assistant.responded rows. This is the sumIf guard
+	// for every token/cost measure, keeping session totals aligned with the
+	// aggregate.
+	sessionUsageMeasureFilter = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionOpencodeUsageRowPredicate + ")"
 	// sessionSourceRowPredicate admits every row class the session list derives
 	// from, matching the aggregate MV's WHERE clause so the two views cover the
 	// same sessions.
-	sessionSourceRowPredicate = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionClaudeToolResultPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionAgentToolCallPredicate + ")"
+	sessionSourceRowPredicate = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionClaudeToolResultPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionOpencodeUsageRowPredicate + " OR " + sessionAgentToolCallPredicate + ")"
 
-	// Token/cost measures are source-aware: Claude api_request rows carry usage on
-	// flat attributes (input_tokens, cost_usd, …), while generic usage rows carry
-	// it under gen_ai.usage.*. These mirror attribute_metrics_summaries_mv exactly.
-	sessionInputTokensExpr = "sumIf(if(" + sessionClaudeAPIRequestPredicate + ", " +
+	// Token/cost measures are source-aware: Claude api_request rows carry usage
+	// on flat attributes (input_tokens, cost_usd, …), Codex response.completed
+	// rows on native *_token_count attributes, and generic usage rows under
+	// gen_ai.usage.*. These mirror attribute_metrics_summaries_mv exactly.
+	sessionInputTokensExpr = "sumIf(multiIf(" + sessionClaudeAPIRequestPredicate + ", " +
 		"toInt64OrZero(toString(attributes.input_tokens)), " +
+		sessionCodexAPIRequestPredicate + ", " + sessionCodexInputTokensExpr + ", " +
 		"toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), " + sessionUsageMeasureFilter + ")"
-	sessionOutputTokensExpr = "sumIf(if(" + sessionClaudeAPIRequestPredicate + ", " +
+	sessionOutputTokensExpr = "sumIf(multiIf(" + sessionClaudeAPIRequestPredicate + ", " +
 		"toInt64OrZero(toString(attributes.output_tokens)), " +
+		sessionCodexAPIRequestPredicate + ", toInt64OrZero(toString(attributes.output_token_count)), " +
 		"toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), " + sessionUsageMeasureFilter + ")"
 	// total_tokens is input + output + cache WRITES — cache reads are excluded,
-	// matching the aggregate MV and the tokens-under-management measure. Both
-	// branches sum the disjoint components rather than trusting a reported
-	// total (Codex's gen_ai.usage.total_tokens includes cache reads; Cursor
-	// usage rows report no total at all).
-	sessionTotalTokensExpr = "sumIf(if(" + sessionClaudeAPIRequestPredicate + ", " +
+	// matching the aggregate MV and the tokens-under-management measure. Every
+	// branch sums the disjoint components rather than trusting a reported
+	// total (Codex's input count includes cache reads, normalized above;
+	// Cursor usage rows report no total at all).
+	sessionTotalTokensExpr = "sumIf(multiIf(" + sessionClaudeAPIRequestPredicate + ", " +
 		"toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + " +
 		"toInt64OrZero(toString(attributes.cache_creation_tokens)), " +
+		sessionCodexAPIRequestPredicate + ", " + sessionCodexInputTokensExpr + " + toInt64OrZero(toString(attributes.output_token_count)), " +
 		"toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + " +
 		"toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), " + sessionUsageMeasureFilter + ")"
-	sessionCacheReadTokensExpr = "sumIf(if(" + sessionClaudeAPIRequestPredicate + ", " +
+	sessionCacheReadTokensExpr = "sumIf(multiIf(" + sessionClaudeAPIRequestPredicate + ", " +
 		"toInt64OrZero(toString(attributes.cache_read_tokens)), " +
+		sessionCodexAPIRequestPredicate + ", " + sessionCodexCacheReadTokensExpr + ", " +
 		"toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), " + sessionUsageMeasureFilter + ")"
+	// Codex rows fall into the gen_ai.usage.* fallback for cache writes and
+	// cost; the attributes are absent on raw Codex rows so both sum 0.
 	sessionCacheCreationTokensExpr = "sumIf(if(" + sessionClaudeAPIRequestPredicate + ", " +
 		"toInt64OrZero(toString(attributes.cache_creation_tokens)), " +
 		"toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), " + sessionUsageMeasureFilter + ")"
@@ -117,10 +159,15 @@ const (
 		"toString(attributes.gen_ai.response.model))"
 
 	// sessionMessageIDExpr identifies a distinct message/turn per row: Claude
-	// api_request rows are one turn each (unique prompt.id); generic rows key off
+	// api_request rows are one turn each (unique prompt.id); Codex
+	// response.completed and opencode assistant.responded rows are one turn each
+	// but carry no stable turn id, so they fall back to the row id (count-per-row,
+	// same degradation as the tool-call dedup); generic rows key off
 	// gen_ai.response.id. Counted distinct for message_count.
-	sessionMessageIDExpr = "if(" + sessionClaudeAPIRequestPredicate + ", " +
-		"toString(attributes.prompt.id), toString(attributes.gen_ai.response.id))"
+	sessionMessageIDExpr = "multiIf(" + sessionClaudeAPIRequestPredicate + ", " +
+		"toString(attributes.prompt.id), " +
+		"(" + sessionCodexAPIRequestPredicate + " OR " + sessionOpencodeUsageRowPredicate + "), toString(id), " +
+		"toString(attributes.gen_ai.response.id))"
 	sessionMessageCountExpr = "uniqExactIf(" + sessionMessageIDExpr + ", " + sessionMessageIDExpr + " != '')"
 )
 
@@ -328,9 +375,10 @@ const SessionSummaryMinWindow = 48 * time.Hour
 
 // ListSessions retrieves org-scoped session summaries grouped by chat_id from
 // the same source-event classes as attribute_metrics_summaries: Claude OTEL
-// api_request/tool_result rows and Codex/Cursor usage plus tool-call hook
-// rows. Pagination is based on the selected sort measure plus chat_id so
-// ordering stays stable across pages.
+// api_request/tool_result rows, Codex OTEL response.completed usage rows,
+// Cursor usage rows, and Codex/Cursor tool-call hook rows. Pagination is
+// based on the selected sort measure plus chat_id so ordering stays stable
+// across pages.
 //
 // Wide windows read the pre-aggregated chat_session_summaries table; narrow
 // windows scan raw telemetry_logs (see SessionSummaryMinWindow).
@@ -597,4 +645,91 @@ func scanSessionSummaries(rows driver.Rows) ([]SessionSummary, error) {
 		return nil, err
 	}
 	return sessions, nil
+}
+
+// ChatSessionFacts are the per-chat display and usage facts the chat analysis
+// publisher stamps onto work-units score events: the session's user identity,
+// effective model, source, account type, end time and usage totals, all read
+// from chat_session_summaries.
+type ChatSessionFacts struct {
+	ChatID          string   `ch:"gram_chat_id"`
+	UserEmail       string   `ch:"session_user_email"`
+	HookSource      string   `ch:"session_hook_source"`
+	Model           string   `ch:"session_model"`
+	AccountTypes    []string `ch:"account_types"`
+	EndTimeUnixNano int64    `ch:"end_time_unix_nano"`
+	TotalTokens     int64    `ch:"total_tokens"`
+	TotalCost       float64  `ch:"total_cost"`
+}
+
+// AccountType returns the session's account type: the first non-empty value
+// observed across the session's rows, or "" when unclassified.
+func (f ChatSessionFacts) AccountType() string {
+	for _, accountType := range f.AccountTypes {
+		if accountType != "" {
+			return accountType
+		}
+	}
+	return ""
+}
+
+// GetChatSessionFactsByChatIDsParams' window bounds the summary-bucket scan;
+// chats whose activity falls entirely outside it are simply absent from the
+// result.
+type GetChatSessionFactsByChatIDsParams struct {
+	ProjectID string
+	ChatIDs   []string
+	From      time.Time
+	To        time.Time
+}
+
+// GetChatSessionFactsByChatIDs returns per-chat session facts keyed by chat
+// id. Chats without summary rows in the window are absent from the map.
+func (q *Queries) GetChatSessionFactsByChatIDs(ctx context.Context, arg GetChatSessionFactsByChatIDsParams) (map[string]ChatSessionFacts, error) {
+	if len(arg.ChatIDs) == 0 {
+		return map[string]ChatSessionFacts{}, nil
+	}
+
+	sb := sq.Select(
+		"s.chat_id as gram_chat_id",
+		// max() so '' loses to a non-empty value, matching the summary
+		// columns' merge semantics.
+		"max(s.session_user_email) as session_user_email",
+		"max(s.session_hook_source) as session_hook_source",
+		"argMaxIfMerge(s.session_model) as session_model",
+		"groupUniqArrayArray(s.account_types) as account_types",
+		"max(s.end_time_unix_nano) as end_time_unix_nano",
+		"sum(s.total_tokens) as total_tokens",
+		"sum(s.total_cost) as total_cost",
+	).
+		From("chat_session_summaries s").
+		Where(squirrel.Eq{"s.gram_project_id": arg.ProjectID}).
+		Where("s.time_bucket >= toStartOfHour(?)", arg.From).
+		Where("s.time_bucket <= ?", arg.To).
+		Where(squirrel.Eq{"s.chat_id": arg.ChatIDs}).
+		GroupBy("s.chat_id")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building chat session facts query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("querying chat session facts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make(map[string]ChatSessionFacts, len(arg.ChatIDs))
+	for rows.Next() {
+		var row ChatSessionFacts
+		if err := rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scanning chat session facts row: %w", err)
+		}
+		result[row.ChatID] = row
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating chat session facts: %w", err)
+	}
+	return result, nil
 }

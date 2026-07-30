@@ -80,7 +80,7 @@ func newTestAssetsService(t *testing.T) (context.Context, *testInstance) {
 
 	storage := assetstest.NewTestBlobStore(t)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)

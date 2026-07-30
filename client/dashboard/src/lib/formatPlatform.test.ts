@@ -11,6 +11,7 @@ describe("formatPlatform", () => {
   it("keeps Claude product surfaces distinct", () => {
     expect(formatPlatform("claude-code")).toBe("Claude Code");
     expect(formatPlatform("ClaudeCode")).toBe("Claude Code");
+    expect(formatPlatform("claude-code-desktop")).toBe("Claude Code Desktop");
     expect(formatPlatform("cowork")).toBe("Claude Cowork");
     expect(formatPlatform("Claude Web")).toBe("Claude Chat Web");
     expect(formatPlatform("Claude Chat Web")).toBe("Claude Chat Web");
@@ -19,6 +20,7 @@ describe("formatPlatform", () => {
   it("uses canonical labels for other known surfaces", () => {
     expect(formatPlatform("cursor")).toBe("Cursor");
     expect(formatPlatform("codex")).toBe("Codex");
+    expect(formatPlatform("opencode")).toBe("opencode");
     expect(formatPlatform("aws-bedrock")).toBe("AWS Bedrock");
   });
 

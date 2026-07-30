@@ -22,11 +22,12 @@ message PromptInjectionAnalysis {
   string body = 12;
   string tool_name = 13;
   repeated ToolCall tool_calls = 14;
+  string content_part_id = 15;
 
   // Bounded causal evidence captured when the event is read. These fields are
   // untrusted content and are never included in the published finding match.
-  string prior_user_request = 15;
-  string recent_untrusted_content = 16;
+  string prior_user_request = 16;
+  string recent_untrusted_content = 17;
 
   message ToolCall {
     string name = 1;

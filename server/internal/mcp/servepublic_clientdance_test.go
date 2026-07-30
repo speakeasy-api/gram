@@ -555,11 +555,18 @@ func TestClientDance_ExternalOAuth_FullFlow(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
+	upstreamMetadata := idp.OAuth21Metadata(t)
 	result := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
 		Slug:     "ext-dance",
 		IsPublic: true,
-		Metadata: idp.OAuth21Metadata(t),
+		Metadata: upstreamMetadata,
 	})
+
+	var upstreamMeta map[string]any
+	require.NoError(t, json.Unmarshal(upstreamMetadata, &upstreamMeta))
+	upstreamIssuer, ok := upstreamMeta["issuer"].(string)
+	require.True(t, ok, "upstream metadata must carry an issuer")
+	require.NotEmpty(t, upstreamIssuer)
 
 	mcpSlug := result.Toolset.McpSlug.String
 
@@ -599,6 +606,34 @@ func TestClientDance_ExternalOAuth_FullFlow(t *testing.T) {
 	authServers, ok := prMeta["authorization_servers"].([]any)
 	require.True(t, ok, "authorization_servers should be an array")
 	require.NotEmpty(t, authServers, "authorization_servers should not be empty")
+
+	// 7. Fetch the RFC 8414 authorization-server metadata. Gram re-serves the
+	//    captured upstream document from its own well-known URL, so per
+	//    RFC 8414 §3.3 the served issuer must equal the resource URL the
+	//    protected-resource metadata advertises (the Gram URL), NOT the
+	//    upstream issuer. The upstream's own endpoints stay verbatim.
+	asReq := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+mcpSlug, nil)
+	asRctx := chi.NewRouteContext()
+	asRctx.URLParams.Add("mcpSlug", mcpSlug)
+	asReq = asReq.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, asRctx))
+
+	asW := httptest.NewRecorder()
+	err = ti.service.HandleGetAuthorizationServer(asW, asReq)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, asW.Code)
+
+	var asMeta map[string]any
+	err = json.Unmarshal(asW.Body.Bytes(), &asMeta)
+	require.NoError(t, err)
+
+	servedIssuer, ok := asMeta["issuer"].(string)
+	require.True(t, ok, "authorization-server metadata must carry an issuer")
+	require.Equal(t, resource, servedIssuer, "served issuer must equal the protected-resource URL (RFC 8414 §3.3)")
+	require.NotEqual(t, upstreamIssuer, servedIssuer, "served issuer must not be the raw upstream issuer")
+
+	// The upstream's own endpoints must be preserved verbatim.
+	require.Equal(t, upstreamMeta["authorization_endpoint"], asMeta["authorization_endpoint"], "authorization_endpoint must stay upstream")
+	require.Equal(t, upstreamMeta["token_endpoint"], asMeta["token_endpoint"], "token_endpoint must stay upstream")
 }
 
 // TestClientDance_ProxyOAuth_WWWAuthenticateChain verifies the

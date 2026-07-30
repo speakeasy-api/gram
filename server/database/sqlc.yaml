@@ -321,6 +321,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/chat/analysis/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/chat/analysis/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/variations/queries.sql
     engine: postgresql
     gen:
@@ -587,6 +597,29 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/spendrules/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/spendrules/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+        overrides:
+          - column: spend_rules.limit_usd_cents
+            go_type:
+              import: github.com/speakeasy-api/gram/server/internal/spendrules/money
+              type: Cents
+          - column: spend_rule_events.spend_usd_cents
+            go_type:
+              import: github.com/speakeasy-api/gram/server/internal/spendrules/money
+              type: Cents
+          - column: spend_rule_events.limit_usd_cents
+            go_type:
+              import: github.com/speakeasy-api/gram/server/internal/spendrules/money
+              type: Cents
+
+  - schema: schema.sql
     queries: ../internal/auth/assistanttokens/queries.sql
     engine: postgresql
     gen:
@@ -633,6 +666,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/aiintegrations/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/deviceintegrations/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/deviceintegrations/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 

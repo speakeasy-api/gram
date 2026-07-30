@@ -19,7 +19,7 @@ import (
 const MaxSweepProjectPage int32 = 100
 
 // PendingWorkProject is a project the sweep has to visit, and whether it holds
-// a reservation to recover. HasStale is what lets the sweep skip the reset for
+// a reservation to recover. HasStale is what lets the sweep skip recovery for
 // the projects named by the other two sources, which is most of them.
 type PendingWorkProject struct {
 	ProjectID uuid.UUID `json:"project_id"`

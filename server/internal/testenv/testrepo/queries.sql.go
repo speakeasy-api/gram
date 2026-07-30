@@ -12,6 +12,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const corruptDeviceIntegrationCredentialsFixture = `-- name: CorruptDeviceIntegrationCredentialsFixture :exec
+UPDATE device_integration_configs
+SET credentials_encrypted = 'not-a-valid-ciphertext'
+WHERE id = $1
+`
+
+func (q *Queries) CorruptDeviceIntegrationCredentialsFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, corruptDeviceIntegrationCredentialsFixture, id)
+	return err
+}
+
 const countFunctionsAccess = `-- name: CountFunctionsAccess :one
 SELECT count(id)
 FROM functions_access
@@ -116,6 +127,55 @@ func (q *Queries) CreateOrganizationUserRelationshipFixture(ctx context.Context,
 	return err
 }
 
+const deferDeviceIntegrationSyncsFixture = `-- name: DeferDeviceIntegrationSyncsFixture :exec
+UPDATE device_integration_syncs s
+SET next_poll_after = clock_timestamp() + interval '1 hour'
+FROM device_integration_schedules sch
+WHERE s.device_integration_schedule_id = sch.id
+  AND sch.device_integration_config_id = $1
+`
+
+// Pushes every sync's next poll an hour out, simulating a config whose
+// schedules already ran this interval.
+func (q *Queries) DeferDeviceIntegrationSyncsFixture(ctx context.Context, deviceIntegrationConfigID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deferDeviceIntegrationSyncsFixture, deviceIntegrationConfigID)
+	return err
+}
+
+const disableDeviceIntegrationSchedulesFixture = `-- name: DisableDeviceIntegrationSchedulesFixture :exec
+UPDATE device_integration_schedules
+SET disabled_at = clock_timestamp()
+WHERE device_integration_config_id = $1
+`
+
+func (q *Queries) DisableDeviceIntegrationSchedulesFixture(ctx context.Context, deviceIntegrationConfigID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, disableDeviceIntegrationSchedulesFixture, deviceIntegrationConfigID)
+	return err
+}
+
+const failDeviceIntegrationSyncsFixture = `-- name: FailDeviceIntegrationSyncsFixture :exec
+UPDATE device_integration_syncs s
+SET last_poll_error = $1,
+    last_poll_failed_at = clock_timestamp(),
+    last_push_digest = $2,
+    auto_paused_at = clock_timestamp(),
+    consecutive_failures = 3
+FROM device_integration_schedules sch
+WHERE s.device_integration_schedule_id = sch.id
+  AND sch.device_integration_config_id = $3
+`
+
+type FailDeviceIntegrationSyncsFixtureParams struct {
+	ErrorMessage              pgtype.Text
+	LastPushDigest            pgtype.Text
+	DeviceIntegrationConfigID uuid.UUID
+}
+
+func (q *Queries) FailDeviceIntegrationSyncsFixture(ctx context.Context, arg FailDeviceIntegrationSyncsFixtureParams) error {
+	_, err := q.db.Exec(ctx, failDeviceIntegrationSyncsFixture, arg.ErrorMessage, arg.LastPushDigest, arg.DeviceIntegrationConfigID)
+	return err
+}
+
 const forceSoftDeleteChat = `-- name: ForceSoftDeleteChat :exec
 UPDATE chats
 SET deleted_at = clock_timestamp()
@@ -176,6 +236,47 @@ func (q *Queries) GetDeploymentFunctionInfraOverrides(ctx context.Context, deplo
 	return items, nil
 }
 
+const getDeviceIntegrationCredentialsCiphertext = `-- name: GetDeviceIntegrationCredentialsCiphertext :one
+SELECT credentials_encrypted
+FROM device_integration_configs
+WHERE id = $1
+`
+
+func (q *Queries) GetDeviceIntegrationCredentialsCiphertext(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getDeviceIntegrationCredentialsCiphertext, id)
+	var credentials_encrypted string
+	err := row.Scan(&credentials_encrypted)
+	return credentials_encrypted, err
+}
+
+const getDeviceIntegrationSyncPushDigests = `-- name: GetDeviceIntegrationSyncPushDigests :many
+SELECT s.last_push_digest
+FROM device_integration_syncs s
+JOIN device_integration_schedules sch
+  ON s.device_integration_schedule_id = sch.id
+WHERE sch.device_integration_config_id = $1
+`
+
+func (q *Queries) GetDeviceIntegrationSyncPushDigests(ctx context.Context, deviceIntegrationConfigID uuid.UUID) ([]pgtype.Text, error) {
+	rows, err := q.db.Query(ctx, getDeviceIntegrationSyncPushDigests, deviceIntegrationConfigID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.Text
+	for rows.Next() {
+		var last_push_digest pgtype.Text
+		if err := rows.Scan(&last_push_digest); err != nil {
+			return nil, err
+		}
+		items = append(items, last_push_digest)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getOutboxEntry = `-- name: GetOutboxEntry :one
 SELECT id FROM outbox WHERE id = $1
 `
@@ -227,6 +328,33 @@ func (q *Queries) GetOutboxRelayState(ctx context.Context, outboxID int64) (GetO
 	return i, err
 }
 
+const insertChatContentPartFixture = `-- name: InsertChatContentPartFixture :one
+INSERT INTO chat_content_parts (chat_id, project_id, kind, content_asset_url)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type InsertChatContentPartFixtureParams struct {
+	ChatID          uuid.UUID
+	ProjectID       uuid.NullUUID
+	Kind            string
+	ContentAssetUrl string
+}
+
+// Test-only fixture: seeds a minimal chat content part so tests can anchor a
+// risk_results row to it.
+func (q *Queries) InsertChatContentPartFixture(ctx context.Context, arg InsertChatContentPartFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertChatContentPartFixture,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Kind,
+		arg.ContentAssetUrl,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const insertChatMessage = `-- name: InsertChatMessage :one
 INSERT INTO chat_messages (chat_id, project_id, role, content)
 VALUES ($1, $2, $3, $4)
@@ -252,6 +380,119 @@ func (q *Queries) InsertChatMessage(ctx context.Context, arg InsertChatMessagePa
 	return id, err
 }
 
+const insertContentPartRiskResultFixture = `-- name: InsertContentPartRiskResultFixture :exec
+INSERT INTO risk_results (
+  id, project_id, organization_id, risk_policy_id, risk_policy_version,
+  chat_content_part_id, source, found, rule_id, description, match, tags
+) VALUES (
+  $1, $2, $3, $4, $5,
+  $6, $7, TRUE, $8, $9, $10, $11
+)
+`
+
+type InsertContentPartRiskResultFixtureParams struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	ChatContentPartID uuid.NullUUID
+	Source            string
+	RuleID            pgtype.Text
+	Description       pgtype.Text
+	Match             pgtype.Text
+	Tags              []string
+}
+
+// Test-only fixture: seeds a risk_results row anchored to a chat content part
+// (chat_message_id IS NULL), a shape the production InsertRiskResults copyfrom
+// cannot produce, so backfill tooling can exercise the fallback path its
+// chat_messages join takes when a finding has no chat message.
+func (q *Queries) InsertContentPartRiskResultFixture(ctx context.Context, arg InsertContentPartRiskResultFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertContentPartRiskResultFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.RiskPolicyID,
+		arg.RiskPolicyVersion,
+		arg.ChatContentPartID,
+		arg.Source,
+		arg.RuleID,
+		arg.Description,
+		arg.Match,
+		arg.Tags,
+	)
+	return err
+}
+
+const insertDeviceAgentDeviceSyncFixture = `-- name: InsertDeviceAgentDeviceSyncFixture :exec
+INSERT INTO device_agent_device_syncs (organization_id, serial_number, email, hostname, first_seen_at, last_seen_at)
+VALUES ($1, $2, $3, NULLIF($4::text, ''), $5, $5)
+`
+
+type InsertDeviceAgentDeviceSyncFixtureParams struct {
+	OrganizationID string
+	SerialNumber   string
+	Email          string
+	Hostname       string
+	SeenAt         pgtype.Timestamptz
+}
+
+func (q *Queries) InsertDeviceAgentDeviceSyncFixture(ctx context.Context, arg InsertDeviceAgentDeviceSyncFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertDeviceAgentDeviceSyncFixture,
+		arg.OrganizationID,
+		arg.SerialNumber,
+		arg.Email,
+		arg.Hostname,
+		arg.SeenAt,
+	)
+	return err
+}
+
+const insertDeviceAgentSyncFixture = `-- name: InsertDeviceAgentSyncFixture :exec
+INSERT INTO device_agent_syncs (organization_id, email, first_seen_at, last_seen_at)
+VALUES ($1, $2, $3, $3)
+`
+
+type InsertDeviceAgentSyncFixtureParams struct {
+	OrganizationID string
+	Email          string
+	SeenAt         pgtype.Timestamptz
+}
+
+func (q *Queries) InsertDeviceAgentSyncFixture(ctx context.Context, arg InsertDeviceAgentSyncFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertDeviceAgentSyncFixture, arg.OrganizationID, arg.Email, arg.SeenAt)
+	return err
+}
+
+const insertMdmDeviceFixture = `-- name: InsertMdmDeviceFixture :exec
+INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, serial_number, missing_since)
+VALUES ($1, $2, $3, NULLIF($4::text, ''), $5::text, NULLIF($6::text, ''), $7::timestamptz)
+`
+
+type InsertMdmDeviceFixtureParams struct {
+	DeviceIntegrationConfigID uuid.UUID
+	OrganizationID            string
+	ExternalID                string
+	UserEmail                 string
+	UserID                    pgtype.Text
+	SerialNumber              string
+	MissingSince              pgtype.Timestamptz
+}
+
+func (q *Queries) InsertMdmDeviceFixture(ctx context.Context, arg InsertMdmDeviceFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertMdmDeviceFixture,
+		arg.DeviceIntegrationConfigID,
+		arg.OrganizationID,
+		arg.ExternalID,
+		arg.UserEmail,
+		arg.UserID,
+		arg.SerialNumber,
+		arg.MissingSince,
+	)
+	return err
+}
+
 const insertPluginAssignmentFixture = `-- name: InsertPluginAssignmentFixture :exec
 INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
 VALUES ($1, $2, $3)
@@ -269,6 +510,22 @@ type InsertPluginAssignmentFixtureParams struct {
 // create.
 func (q *Queries) InsertPluginAssignmentFixture(ctx context.Context, arg InsertPluginAssignmentFixtureParams) error {
 	_, err := q.db.Exec(ctx, insertPluginAssignmentFixture, arg.PluginID, arg.OrganizationID, arg.PrincipalUrn)
+	return err
+}
+
+const insertUserFixture = `-- name: InsertUserFixture :exec
+INSERT INTO users (id, email, display_name)
+VALUES ($1, $2, $3)
+`
+
+type InsertUserFixtureParams struct {
+	ID          string
+	Email       string
+	DisplayName string
+}
+
+func (q *Queries) InsertUserFixture(ctx context.Context, arg InsertUserFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertUserFixture, arg.ID, arg.Email, arg.DisplayName)
 	return err
 }
 
@@ -429,8 +686,53 @@ func (q *Queries) ListDeploymentHTTPTools(ctx context.Context, deploymentID uuid
 	return items, nil
 }
 
+const listDeviceAgentDeviceSyncsFixture = `-- name: ListDeviceAgentDeviceSyncsFixture :many
+SELECT organization_id, serial_number, email, hostname, first_seen_at, last_seen_at
+FROM device_agent_device_syncs
+WHERE organization_id = $1
+ORDER BY serial_number ASC
+`
+
+type ListDeviceAgentDeviceSyncsFixtureRow struct {
+	OrganizationID string
+	SerialNumber   string
+	Email          string
+	Hostname       pgtype.Text
+	FirstSeenAt    pgtype.Timestamptz
+	LastSeenAt     pgtype.Timestamptz
+}
+
+// Reads back per-device agent heartbeats so tests can assert the write path;
+// there is no production reader until the coverage join lands.
+func (q *Queries) ListDeviceAgentDeviceSyncsFixture(ctx context.Context, organizationID string) ([]ListDeviceAgentDeviceSyncsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listDeviceAgentDeviceSyncsFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDeviceAgentDeviceSyncsFixtureRow
+	for rows.Next() {
+		var i ListDeviceAgentDeviceSyncsFixtureRow
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.SerialNumber,
+			&i.Email,
+			&i.Hostname,
+			&i.FirstSeenAt,
+			&i.LastSeenAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRiskResultsAll = `-- name: ListRiskResultsAll :many
-SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
+SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
 FROM risk_results
 WHERE project_id = $1
   AND risk_policy_id = $2
@@ -461,6 +763,7 @@ func (q *Queries) ListRiskResultsAll(ctx context.Context, arg ListRiskResultsAll
 			&i.RiskPolicyID,
 			&i.RiskPolicyVersion,
 			&i.ChatMessageID,
+			&i.ChatContentPartID,
 			&i.Source,
 			&i.Found,
 			&i.RuleID,
@@ -488,29 +791,18 @@ func (q *Queries) ListRiskResultsAll(ctx context.Context, arg ListRiskResultsAll
 	return items, nil
 }
 
-const resetSkillEfficacyReservationFixture = `-- name: ResetSkillEfficacyReservationFixture :execrows
-UPDATE skill_efficacy_evaluations
-SET state = 'pending',
-    reserved_on = NULL,
-    updated_at = clock_timestamp()
-WHERE project_id = $1
-  AND id = $2
-  AND state = 'reserved'
+const pauseDeviceIntegrationSyncsFixture = `-- name: PauseDeviceIntegrationSyncsFixture :exec
+UPDATE device_integration_syncs s
+SET auto_paused_at = clock_timestamp(),
+    consecutive_failures = 5
+FROM device_integration_schedules sch
+WHERE s.device_integration_schedule_id = sch.id
+  AND sch.device_integration_config_id = $1
 `
 
-type ResetSkillEfficacyReservationFixtureParams struct {
-	ProjectID uuid.UUID
-	ID        uuid.UUID
-}
-
-// Test-only fixture for simulating a stale reaper taking one reserved row while
-// a publisher still holds it.
-func (q *Queries) ResetSkillEfficacyReservationFixture(ctx context.Context, arg ResetSkillEfficacyReservationFixtureParams) (int64, error) {
-	result, err := q.db.Exec(ctx, resetSkillEfficacyReservationFixture, arg.ProjectID, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+func (q *Queries) PauseDeviceIntegrationSyncsFixture(ctx context.Context, deviceIntegrationConfigID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, pauseDeviceIntegrationSyncsFixture, deviceIntegrationConfigID)
+	return err
 }
 
 const scrubDeploymentFunctionMachineSpecs = `-- name: ScrubDeploymentFunctionMachineSpecs :exec
@@ -535,6 +827,24 @@ type SetDeploymentFunctionInfraOverridesParams struct {
 
 func (q *Queries) SetDeploymentFunctionInfraOverrides(ctx context.Context, arg SetDeploymentFunctionInfraOverridesParams) error {
 	_, err := q.db.Exec(ctx, setDeploymentFunctionInfraOverrides, arg.MemoryMibOverride, arg.ScaleOverride, arg.DeploymentID)
+	return err
+}
+
+const setDeviceIntegrationSyncPushDigestFixture = `-- name: SetDeviceIntegrationSyncPushDigestFixture :exec
+UPDATE device_integration_syncs s
+SET last_push_digest = $1
+FROM device_integration_schedules sch
+WHERE s.device_integration_schedule_id = sch.id
+  AND sch.device_integration_config_id = $2
+`
+
+type SetDeviceIntegrationSyncPushDigestFixtureParams struct {
+	LastPushDigest            pgtype.Text
+	DeviceIntegrationConfigID uuid.UUID
+}
+
+func (q *Queries) SetDeviceIntegrationSyncPushDigestFixture(ctx context.Context, arg SetDeviceIntegrationSyncPushDigestFixtureParams) error {
+	_, err := q.db.Exec(ctx, setDeviceIntegrationSyncPushDigestFixture, arg.LastPushDigest, arg.DeviceIntegrationConfigID)
 	return err
 }
 

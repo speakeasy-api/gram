@@ -131,9 +131,8 @@ func NewPublisher(logger *slog.Logger, tracerProvider trace.TracerProvider, db *
 // retry has the same logical event identity and analytical reads collapse it.
 // The guard window starts at the batch's earliest evaluation created_at and
 // always extends past the current pass, so it contains every insert a previous
-// pass could have made — including one made for a reservation older than the
-// slack, and one made before a stale reset moved the row's reservation day
-// forward.
+// pass could have made, including one made for a reservation older than the
+// slack.
 //
 // A model failure charges the evaluation an attempt and the batch continues; the
 // third one terminates that evaluation as failed and never writes a score. A
@@ -148,7 +147,7 @@ func NewPublisher(logger *slog.Logger, tracerProvider trace.TracerProvider, db *
 // Temporal path, what delivers a cancellation: the pass stops at the next
 // evaluation boundary rather than paying for a batch a second attempt already
 // owns.
-func (p *Publisher) Publish(ctx context.Context, projectID uuid.UUID, ids []uuid.UUID, heartbeat func()) (PublishResult, error) {
+func (p *Publisher) Publish(ctx context.Context, projectID uuid.UUID, claimToken uuid.UUID, ids []uuid.UUID, heartbeat func()) (PublishResult, error) {
 	ctx, span := p.tracer.Start(ctx, "skill.efficacy.publish", trace.WithAttributes(
 		attr.ProjectID(projectID.String()),
 	))
@@ -160,11 +159,26 @@ func (p *Publisher) Publish(ctx context.Context, projectID uuid.UUID, ids []uuid
 	}
 
 	queries := repo.New(p.db)
+	if claimToken == uuid.Nil {
+		claimToken = uuid.New()
+		claimed, err := queries.ClaimLegacySkillEfficacyEvaluations(ctx, repo.ClaimLegacySkillEfficacyEvaluationsParams{
+			ClaimToken: claimToken,
+			ProjectID:  projectID,
+			Ids:        ids,
+		})
+		if err != nil {
+			return result, fmt.Errorf("claim legacy skill efficacy evaluations: %w: %w", ErrRetryable, err)
+		}
+		if claimed == 0 {
+			return result, nil
+		}
+	}
 	// Project-scoped and state-scoped: rows another worker already failed or
 	// scored are simply not returned, so this batch cannot act on them.
 	inputs, err := queries.GetSkillEfficacyJudgeInputs(ctx, repo.GetSkillEfficacyJudgeInputsParams{
-		ProjectID: projectID,
-		Ids:       ids,
+		ProjectID:  projectID,
+		ClaimToken: claimToken,
+		Ids:        ids,
 	})
 	if err != nil {
 		err = fmt.Errorf("load skill efficacy judge inputs: %w: %w", ErrRetryable, err)
@@ -205,7 +219,7 @@ func (p *Publisher) Publish(ctx context.Context, projectID uuid.UUID, ids []uuid
 		if _, ok := published[input.ID]; ok {
 			// The score is already in ClickHouse: a crash between a previous
 			// insert and its mark. Finish the transition, judge nothing.
-			if err := p.markScored(ctx, projectID, input.ID); err != nil {
+			if err := p.markScored(ctx, projectID, claimToken, input.ID); err != nil {
 				result.Retryable++
 				retryable = append(retryable, err)
 				continue
@@ -215,7 +229,7 @@ func (p *Publisher) Publish(ctx context.Context, projectID uuid.UUID, ids []uuid
 			continue
 		}
 
-		if err := p.publishEvaluation(ctx, projectID, input, transcripts, &result); err != nil {
+		if err := p.publishEvaluation(ctx, projectID, claimToken, input, transcripts, &result); err != nil {
 			retryable = append(retryable, err)
 		}
 	}
@@ -291,8 +305,6 @@ func (p *Publisher) alreadyPublished(ctx context.Context, projectID uuid.UUID, i
 // The lower bound is the evaluation's birth stamp, which no transition rewrites,
 // so it is identical on every pass and can never sit after a score an earlier
 // pass inserted for that evaluation — a row cannot be scored before it exists.
-// reserved_on cannot serve here: a stale reservation is reset and re-reserved on
-// the current UTC day, which moves the day forward past the earlier score.
 // Rounding down to midnight only widens the window, which is the safe direction.
 //
 // The upper bound tracks the clock because created_at is stamped at insert time,
@@ -317,11 +329,11 @@ func guardWindow(inputs []repo.GetSkillEfficacyJudgeInputsRow, now time.Time) (t
 // its rows, letting a second pass judge them concurrently. A hang is
 // infrastructure: state and attempt counter are both left alone, so the caller
 // retries the same reserved rows.
-func (p *Publisher) publishEvaluation(ctx context.Context, projectID uuid.UUID, input repo.GetSkillEfficacyJudgeInputsRow, transcripts map[uuid.UUID]Transcript, result *PublishResult) error {
+func (p *Publisher) publishEvaluation(ctx context.Context, projectID uuid.UUID, claimToken uuid.UUID, input repo.GetSkillEfficacyJudgeInputsRow, transcripts map[uuid.UUID]Transcript, result *PublishResult) error {
 	evaluationCtx, cancel := context.WithTimeout(ctx, p.evaluationTimeout)
 	defer cancel()
 
-	err := p.publishOne(evaluationCtx, projectID, input, transcripts, result)
+	err := p.publishOne(evaluationCtx, projectID, claimToken, input, transcripts, result)
 	if err != nil && ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
 		// The bound expired while the pass's own context was still live, so the
 		// hang is this evaluation's. The step that surfaced it cannot tell a hung
@@ -335,9 +347,9 @@ func (p *Publisher) publishEvaluation(ctx context.Context, projectID uuid.UUID, 
 // publishOne judges one evaluation and publishes its score. It returns an error
 // only for infrastructure failures; model failures and deterministic row
 // validation failures are charged locally so the rest of the batch still runs.
-func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, input repo.GetSkillEfficacyJudgeInputsRow, transcripts map[uuid.UUID]Transcript, result *PublishResult) error {
+func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, claimToken uuid.UUID, input repo.GetSkillEfficacyJudgeInputsRow, transcripts map[uuid.UUID]Transcript, result *PublishResult) error {
 	if input.Surface != SurfaceDev && input.Surface != SurfaceAssistant {
-		terminal, err := p.chargeAttempt(ctx, projectID, input, validationFailureClass, 1)
+		terminal, err := p.chargeAttempt(ctx, projectID, claimToken, input, validationFailureClass, 1)
 		if err != nil {
 			result.Retryable++
 			return err
@@ -366,22 +378,38 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, input r
 	})
 	switch {
 	case err != nil && errors.Is(err, ErrModelFailure):
-		return p.recordAttempt(ctx, projectID, input, result)
+		return p.recordAttempt(ctx, projectID, claimToken, input, result)
 	case err != nil:
 		result.Retryable++
 		return fmt.Errorf("judge skill efficacy: %w", err)
 	}
 	normalized, err := judged.Verdict.Normalize()
 	if err != nil {
-		return p.recordAttempt(ctx, projectID, input, result)
+		return p.recordAttempt(ctx, projectID, claimToken, input, result)
 	}
 	judged.Verdict = normalized
+	owned, err := repo.New(p.db).RefreshSkillEfficacyEvaluationClaim(ctx, repo.RefreshSkillEfficacyEvaluationClaimParams{
+		ProjectID:  projectID,
+		ID:         input.ID,
+		ClaimToken: claimToken,
+	})
+	if err != nil {
+		result.Retryable++
+		return fmt.Errorf("refresh skill efficacy evaluation claim: %w: %w", ErrRetryable, err)
+	}
+	if owned == 0 {
+		p.logger.WarnContext(ctx, "skill efficacy evaluation ownership changed before score publication",
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogResourceID(input.ID.String()),
+		)
+		return nil
+	}
 
 	// One row per insert: a CHECK the normalizer somehow let through terminates
 	// only its own evaluation instead of dropping or retrying the whole batch.
 	if err := p.scores.InsertSkillEfficacyScores(ctx, []telemetryrepo.SkillEfficacyScore{scoreRow(projectID, input, judged)}); err != nil {
 		if errors.Is(err, telemetryrepo.ErrInvalidSkillEfficacyScore) {
-			terminal, chargeErr := p.chargeAttempt(ctx, projectID, input, validationFailureClass, 1)
+			terminal, chargeErr := p.chargeAttempt(ctx, projectID, claimToken, input, validationFailureClass, 1)
 			if chargeErr != nil {
 				result.Retryable++
 				return chargeErr
@@ -398,7 +426,7 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, input r
 		// here as well: the failure is still infrastructure and still retried, but
 		// the paid calls one evaluation can cost are bounded by MaxModelAttempts
 		// exactly as a model failure's are.
-		terminal, chargeErr := p.chargeAttempt(ctx, projectID, input, sinkFailureClass, MaxModelAttempts)
+		terminal, chargeErr := p.chargeAttempt(ctx, projectID, claimToken, input, sinkFailureClass, MaxModelAttempts)
 		switch {
 		case chargeErr != nil:
 			result.Retryable++
@@ -413,7 +441,7 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, input r
 		return fmt.Errorf("insert skill efficacy score: %w: %w", ErrRetryable, err)
 	}
 
-	if err := p.markScored(ctx, projectID, input.ID); err != nil {
+	if err := p.markScored(ctx, projectID, claimToken, input.ID); err != nil {
 		result.Retryable++
 		return err
 	}
@@ -426,6 +454,24 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, input r
 // already made. Only a success is cached: a failed read is retryable, and
 // caching it would hand every later evaluation of the same chat the same
 // failure.
+func (p *Publisher) loadTranscript(ctx context.Context, projectID uuid.UUID, chatID uuid.UUID, transcripts map[uuid.UUID]Transcript) (Transcript, error) {
+	if cached, ok := transcripts[chatID]; ok {
+		return cached, nil
+	}
+
+	transcript, err := LoadTranscript(ctx, p.chats, projectID, chatID)
+	if err != nil {
+		return Transcript{}, err
+	}
+
+	transcripts[chatID] = transcript
+
+	return transcript, nil
+}
+
+// LoadTranscript renders one chat's transcript for a judge. Shared with the
+// chat analysis pipeline, which judges the same transcripts under its own
+// queue.
 //
 // The chat is read backwards in fixed pages rather than whole: a session has no
 // bound on its length, but the rendering the judge receives does, so loading all
@@ -434,12 +480,9 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, input r
 // drops a message, which is sound because RenderTranscript trims oldest-first
 // and every unread message is older than every message already dropped — so the
 // messages it keeps are exactly the ones a full load would have kept, and only
-// the omission count has to account for what was never read.
-func (p *Publisher) loadTranscript(ctx context.Context, projectID uuid.UUID, chatID uuid.UUID, transcripts map[uuid.UUID]Transcript) (Transcript, error) {
-	if cached, ok := transcripts[chatID]; ok {
-		return cached, nil
-	}
-
+// the omission count has to account for what was never read. Errors wrap
+// ErrRetryable: a failed read is infrastructure, never the transcript's fault.
+func LoadTranscript(ctx context.Context, chats TranscriptSource, projectID uuid.UUID, chatID uuid.UUID) (Transcript, error) {
 	page := chatrepo.ListChatTranscriptMessagesPageParams{
 		ChatID:          chatID,
 		ProjectID:       projectID,
@@ -449,9 +492,9 @@ func (p *Publisher) loadTranscript(ctx context.Context, projectID uuid.UUID, cha
 		Lim:             transcriptPageSize,
 	}
 
-	unread, err := p.chats.CountChatMessages(ctx, chatrepo.CountChatMessagesParams{ChatID: chatID, ProjectID: projectID})
+	unread, err := chats.CountChatMessages(ctx, chatrepo.CountChatMessagesParams{ChatID: chatID, ProjectID: projectID})
 	if err != nil {
-		return Transcript{}, fmt.Errorf("count skill efficacy transcript: %w: %w", ErrRetryable, err)
+		return Transcript{}, fmt.Errorf("count judge transcript: %w: %w", ErrRetryable, err)
 	}
 
 	loaded := make([]TranscriptInput, 0, min(unread, int64(transcriptPageSize)))
@@ -459,9 +502,9 @@ func (p *Publisher) loadTranscript(ctx context.Context, projectID uuid.UUID, cha
 	// rendering a whole-chat read produced rather than a zero Transcript.
 	transcript := RenderTranscript(nil)
 	for {
-		rows, err := p.chats.ListChatTranscriptMessagesPage(ctx, page)
+		rows, err := chats.ListChatTranscriptMessagesPage(ctx, page)
 		if err != nil {
-			return Transcript{}, fmt.Errorf("load skill efficacy transcript: %w: %w", ErrRetryable, err)
+			return Transcript{}, fmt.Errorf("load judge transcript: %w: %w", ErrRetryable, err)
 		}
 		if len(rows) == 0 {
 			// The cursor reached the start of the chat, so nothing is left
@@ -496,8 +539,6 @@ func (p *Publisher) loadTranscript(ctx context.Context, projectID uuid.UUID, cha
 		transcript.Messages[i].Index += int(unread)
 	}
 
-	transcripts[chatID] = transcript
-
 	return transcript, nil
 }
 
@@ -522,8 +563,8 @@ func transcriptPageMessage(row chatrepo.ListChatTranscriptMessagesPageRow) Trans
 // recordAttempt charges a model failure to the evaluation. The query never
 // returns the row to pending, so its budget slot stays spent and no second
 // reservation can re-spend the unit.
-func (p *Publisher) recordAttempt(ctx context.Context, projectID uuid.UUID, input repo.GetSkillEfficacyJudgeInputsRow, result *PublishResult) error {
-	terminal, err := p.chargeAttempt(ctx, projectID, input, modelFailureClass, MaxModelAttempts)
+func (p *Publisher) recordAttempt(ctx context.Context, projectID uuid.UUID, claimToken uuid.UUID, input repo.GetSkillEfficacyJudgeInputsRow, result *PublishResult) error {
+	terminal, err := p.chargeAttempt(ctx, projectID, claimToken, input, modelFailureClass, MaxModelAttempts)
 	if err != nil {
 		result.Retryable++
 		return err
@@ -543,16 +584,17 @@ func (p *Publisher) recordAttempt(ctx context.Context, projectID uuid.UUID, inpu
 // spent and no second reservation can re-spend the unit.
 //
 // A zero-row update is benign, not an error: the row left reserved under this
-// pass — a stale-reservation reset, or a concurrent terminal failure — and there
+// pass — a recovery ownership change, or a concurrent terminal failure — and there
 // is nothing left here to charge. Failing the call would fail the whole batch
 // over one row another owner has already accounted for.
-func (p *Publisher) chargeAttempt(ctx context.Context, projectID uuid.UUID, input repo.GetSkillEfficacyJudgeInputsRow, class string, maxAttempts int32) (bool, error) {
+func (p *Publisher) chargeAttempt(ctx context.Context, projectID uuid.UUID, claimToken uuid.UUID, input repo.GetSkillEfficacyJudgeInputsRow, class string, maxAttempts int32) (bool, error) {
 	// The class, never the cause.
 	row, err := repo.New(p.db).RecordSkillEfficacyEvaluationAttempt(ctx, repo.RecordSkillEfficacyEvaluationAttemptParams{
 		LastError:   conv.ToPGText(class),
 		MaxAttempts: maxAttempts,
 		ProjectID:   projectID,
 		ID:          input.ID,
+		ClaimToken:  claimToken,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -579,16 +621,17 @@ func (p *Publisher) chargeAttempt(ctx context.Context, projectID uuid.UUID, inpu
 	return row.State == StateFailed, nil
 }
 
-func (p *Publisher) markScored(ctx context.Context, projectID uuid.UUID, id uuid.UUID) error {
+func (p *Publisher) markScored(ctx context.Context, projectID uuid.UUID, claimToken uuid.UUID, id uuid.UUID) error {
 	marked, err := repo.New(p.db).MarkSkillEfficacyEvaluationScored(ctx, repo.MarkSkillEfficacyEvaluationScoredParams{
-		ProjectID: projectID,
-		ID:        id,
+		ProjectID:  projectID,
+		ID:         id,
+		ClaimToken: claimToken,
 	})
 	if err != nil {
 		return fmt.Errorf("mark skill efficacy evaluation scored: %w: %w", ErrRetryable, err)
 	}
 	if marked == 0 {
-		// The row left reserved under us — a stale-reservation reset or a
+		// The row left this ownership claim under us — recovery or a
 		// concurrent terminal failure. The score stands and the guard keeps a
 		// later pass from judging it again.
 		p.logger.WarnContext(ctx, "skill efficacy evaluation was no longer reserved when marking scored",

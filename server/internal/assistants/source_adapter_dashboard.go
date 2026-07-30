@@ -55,7 +55,14 @@ Id values come from the tool results (their JSON field names are PascalCase). Us
 - Deployment: [label](gram:deployment/<deployment id>)
 - Environment: [slug](gram:environment/<environment_slug>)
 
-Only link an entity when you actually have its id from a tool result, and the link target must be a gram:<type>/<id> reference built from that id. Never write a link with an empty, partial, or guessed URL (e.g. [name]() or [name](gram:user/) ) — if you don't have a usable id, write the name as plain text, not a link. The organization-directory users from platform_list_organization_users have no detail page, so write those as plain text; only link a user when you have their ExternalUserID (from the chats or risk-result tools).`
+Only link an entity when you actually have its id from a tool result, and the link target must be a gram:<type>/<id> reference built from that id. Never write a link with an empty, partial, or guessed URL (e.g. [name]() or [name](gram:user/) ) — if you don't have a usable id, write the name as plain text, not a link. The organization-directory users from platform_list_organization_users have no detail page, so write those as plain text; only link a user when you have their ExternalUserID (from the chats or risk-result tools).` +
+		"\n\n## Elements visualizations\n\n" +
+		"The dashboard renders Elements widgets from fenced code blocks. Use these formats when a visualization or structured widget helps answer the user's question. The code fence language must be exactly `chart` or `ui`; never expose the widget JSON outside its fence.\n\n" +
+		elementsSystemPrompt +
+		"\n### Chart code blocks\n\n" +
+		elementsChartPrompt +
+		"\n### Generative UI code blocks\n\n" +
+		elementsGenerativeUIPrompt
 }
 
 // ChatID: the dashboard's correlation key already IS the server-minted chat id

@@ -39,7 +39,20 @@ export type Measures = {
   tools: number;
   tokens: number;
   cacheCreation: number;
+  // Work-units analysis measures: workUnits is the output delivered by scored
+  // sessions; scoredCost/scoredTokens are the cost/tokens of ONLY those scored
+  // sessions. Efficiency ratios are scoredCost/workUnits and
+  // scoredTokens/workUnits, and only when workUnits > 0 — dividing the full
+  // totals by work units would overstate cost wherever coverage is partial.
+  workUnits: number;
+  scoredCost: number;
+  scoredTokens: number;
 };
+
+// Compact work-units figure, max one decimal (e.g. "1,204.5").
+export function formatWorkUnits(value: number): string {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 1 });
+}
 
 // The suggested top-down chain an admin walks. "User" is email; "Agent" is
 // hook_source.
@@ -170,14 +183,25 @@ export function isAttributionDim(dim: Dimension): boolean {
 }
 
 // ── Datasets ────────────────────────────────────────────────────────────────
-// A "dataset" is a narrow slice of the overall spend rather than a breakdown of
-// it: the Claude attribution lenses (MCP calls, Subagent runs, Skill runs), each
-// isolating a subset of turns. They live in their own top-right selector instead
-// of the breakdown dropdown because they aren't true breakdown axes. `all` — the
-// full project spend — is the default and keeps the org/attribute breakdowns.
+// A "dataset" is a different lens over the project spend rather than a
+// breakdown of it. Most are attribution slices — the Claude attribution lenses
+// (MCP calls, Subagent runs, Skill runs), each isolating a subset of turns.
+// `efficiency` is different: it keeps the full spend scope (same org/attribute
+// breakdowns as `all`) but reads it through the work-units analysis measures
+// (work units delivered, cost per unit). They live in their own top-right
+// selector instead of the breakdown dropdown because they aren't true breakdown
+// axes. `all` — the full project spend — is the default.
 export const DATASET_PARAM = "dataset";
-const DATASETS = ["all", "mcp", "subagents", "skills"] as const;
+const DATASETS = ["all", "efficiency", "mcp", "subagents", "skills"] as const;
 export type Dataset = (typeof DATASETS)[number];
+
+// Datasets that keep the full spend scope (no attribution slice): `all`, plus
+// `efficiency`, which is a measure lens rather than a slice. Everything scoped
+// to "is this an attribution slice?" — pivots, drill promotion, session-list
+// availability — treats these two identically.
+export function isFullSpendDataset(ds: Dataset): boolean {
+  return ds === "all" || ds === "efficiency";
+}
 
 export function isDataset(value: string | null | undefined): value is Dataset {
   return value != null && (DATASETS as readonly string[]).includes(value);
@@ -195,6 +219,7 @@ type DatasetMeta = {
 };
 const DATASET_META: Record<Dataset, DatasetMeta> = {
   all: { label: "All spend", dims: [], parent: {} },
+  efficiency: { label: "Efficiency", dims: [], parent: {} },
   mcp: {
     label: "MCP",
     dims: [Dimension.McpServerName, Dimension.McpToolName],
@@ -228,10 +253,12 @@ export function datasetForDim(dim: Dimension): Dataset {
 // dims are excluded here; they're only reachable inside their own dataset.
 const BASE_PIVOTS: DimMeta[] = PIVOTS.filter((p) => !isAttributionDim(p.dim));
 
-// The breakdown axes offered inside a dataset: the base org/attribute pivots for
-// `all`, or the dataset's own attribution dims otherwise.
+// The breakdown axes offered inside a dataset: the base org/attribute pivots
+// for the full-spend datasets (`all` and the `efficiency` lens, which breaks
+// down by the same org/user/model dims), or the dataset's own attribution dims
+// otherwise.
 export function datasetPivots(ds: Dataset): DimMeta[] {
-  if (ds === "all") return BASE_PIVOTS;
+  if (isFullSpendDataset(ds)) return BASE_PIVOTS;
   const dims = new Set(DATASET_META[ds].dims);
   return PIVOTS.filter((p) => dims.has(p.dim));
 }
@@ -424,13 +451,14 @@ export function defaultGroupBy(
 }
 
 // The breakdown axis a node defaults to within a dataset: the dataset's primary
-// dim at its root, otherwise the natural drill child (same as `all`).
+// dim at its root, otherwise the natural drill child (same as `all`). The
+// full-spend datasets share `all`'s defaulting wholesale.
 export function datasetDefaultGroupBy(
   ds: Dataset,
   path: Crumb[],
   available?: Set<Dimension>,
 ): Dimension {
-  if (ds === "all") return defaultGroupBy(path, available);
+  if (isFullSpendDataset(ds)) return defaultGroupBy(path, available);
   const last = path[path.length - 1];
   if (last) return nextDimension(last.dim) ?? last.dim;
   return DATASET_META[ds].dims[0]!;

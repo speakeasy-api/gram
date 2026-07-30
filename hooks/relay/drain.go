@@ -280,7 +280,7 @@ func resolveDrainAuth(entry spoolEntry, key string, memo map[string]drainAuth) d
 	}
 	a := drainAuth{c: creds{ServerURL: "", APIKey: "", Project: "", Email: "", Org: "", Source: credEnv}, ok: false, orgKey: ""}
 	if !insecureServerURL(entry.ServerURL) {
-		cfg := Config{ServerURL: entry.ServerURL, ProjectSlug: entry.ProjectSlug, OrgID: entry.OrgID, HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: entry.ConfigPath, ConfigError: ""}
+		cfg := Config{ServerURL: entry.ServerURL, SiteURL: "", ProjectSlug: entry.ProjectSlug, OrgID: entry.OrgID, HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: entry.ConfigPath, ConfigError: ""}
 		if entry.ConfigPath != "" {
 			if fc, err := readFileConfig(entry.ConfigPath); err == nil &&
 				sameDeployment(fc.ServerURL, fc.Org, entry.ServerURL, entry.OrgID) {

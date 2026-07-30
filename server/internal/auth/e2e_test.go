@@ -121,7 +121,7 @@ type e2eInstance struct {
 func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOSFetcher) (context.Context, *e2eInstance) {
 	t.Helper()
 
-	ctx := t.Context()
+	ctx := authztest.WithAdminGrants(t.Context())
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 

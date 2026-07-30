@@ -20,6 +20,9 @@ actions:
             schema:
               type: string
               format: binary
+  - target: $.paths.*[?(@.operationId=='approveAllSkillSuggestions')].requestBody
+    update:
+      required: false
   - target: $.paths..security
     update:
       - {}

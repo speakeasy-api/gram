@@ -22,6 +22,10 @@ type SkillSessionVersion struct {
 	Surface         string
 }
 
+// InsertSkillSessionVersions writes rows using a server-side async insert
+// (async_insert=1, wait_for_async_insert=0). The call is fire-and-forget from
+// CH's perspective: it acks once the rows are queued in CH's async insert
+// buffer, not once they are committed to disk.
 func (q *Queries) InsertSkillSessionVersions(ctx context.Context, rows []SkillSessionVersion) error {
 	if len(rows) == 0 {
 		return nil
@@ -58,7 +62,11 @@ func (q *Queries) InsertSkillSessionVersions(ctx context.Context, rows []SkillSe
 	if err != nil {
 		return fmt.Errorf("building skill session version insert: %w", err)
 	}
-	if err := q.conn.Exec(clickhouse.Context(ctx, clickhouse.WithAsync(false)), query, args...); err != nil {
+	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+		"async_insert":          1,
+		"wait_for_async_insert": 0,
+	}))
+	if err := q.conn.Exec(ctx, query, args...); err != nil {
 		return fmt.Errorf("inserting skill session versions: %w", err)
 	}
 	return nil

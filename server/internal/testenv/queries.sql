@@ -150,13 +150,103 @@ WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
 VALUES (@plugin_id, @organization_id, @principal_urn);
 
--- name: ResetSkillEfficacyReservationFixture :execrows
--- Test-only fixture for simulating a stale reaper taking one reserved row while
--- a publisher still holds it.
-UPDATE skill_efficacy_evaluations
-SET state = 'pending',
-    reserved_on = NULL,
-    updated_at = clock_timestamp()
-WHERE project_id = @project_id
-  AND id = @id
-  AND state = 'reserved';
+-- name: InsertUserFixture :exec
+INSERT INTO users (id, email, display_name)
+VALUES (@id, @email, @display_name);
+
+-- name: InsertDeviceAgentSyncFixture :exec
+INSERT INTO device_agent_syncs (organization_id, email, first_seen_at, last_seen_at)
+VALUES (@organization_id, @email, @seen_at, @seen_at);
+
+-- name: ListDeviceAgentDeviceSyncsFixture :many
+-- Reads back per-device agent heartbeats so tests can assert the write path;
+-- there is no production reader until the coverage join lands.
+SELECT organization_id, serial_number, email, hostname, first_seen_at, last_seen_at
+FROM device_agent_device_syncs
+WHERE organization_id = @organization_id
+ORDER BY serial_number ASC;
+
+-- name: InsertMdmDeviceFixture :exec
+INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, serial_number, missing_since)
+VALUES (@device_integration_config_id, @organization_id, @external_id, NULLIF(@user_email::text, ''), sqlc.narg('user_id')::text, NULLIF(@serial_number::text, ''), sqlc.narg('missing_since')::timestamptz);
+
+-- name: InsertDeviceAgentDeviceSyncFixture :exec
+INSERT INTO device_agent_device_syncs (organization_id, serial_number, email, hostname, first_seen_at, last_seen_at)
+VALUES (@organization_id, @serial_number, @email, NULLIF(@hostname::text, ''), @seen_at, @seen_at);
+
+-- name: PauseDeviceIntegrationSyncsFixture :exec
+UPDATE device_integration_syncs s
+SET auto_paused_at = clock_timestamp(),
+    consecutive_failures = 5
+FROM device_integration_schedules sch
+WHERE s.device_integration_schedule_id = sch.id
+  AND sch.device_integration_config_id = @device_integration_config_id;
+
+-- name: DisableDeviceIntegrationSchedulesFixture :exec
+UPDATE device_integration_schedules
+SET disabled_at = clock_timestamp()
+WHERE device_integration_config_id = @device_integration_config_id;
+
+-- Pushes every sync's next poll an hour out, simulating a config whose
+-- schedules already ran this interval.
+-- name: DeferDeviceIntegrationSyncsFixture :exec
+UPDATE device_integration_syncs s
+SET next_poll_after = clock_timestamp() + interval '1 hour'
+FROM device_integration_schedules sch
+WHERE s.device_integration_schedule_id = sch.id
+  AND sch.device_integration_config_id = @device_integration_config_id;
+
+-- name: GetDeviceIntegrationCredentialsCiphertext :one
+SELECT credentials_encrypted
+FROM device_integration_configs
+WHERE id = @id;
+
+-- name: FailDeviceIntegrationSyncsFixture :exec
+UPDATE device_integration_syncs s
+SET last_poll_error = @error_message,
+    last_poll_failed_at = clock_timestamp(),
+    last_push_digest = @last_push_digest,
+    auto_paused_at = clock_timestamp(),
+    consecutive_failures = 3
+FROM device_integration_schedules sch
+WHERE s.device_integration_schedule_id = sch.id
+  AND sch.device_integration_config_id = @device_integration_config_id;
+
+-- name: GetDeviceIntegrationSyncPushDigests :many
+SELECT s.last_push_digest
+FROM device_integration_syncs s
+JOIN device_integration_schedules sch
+  ON s.device_integration_schedule_id = sch.id
+WHERE sch.device_integration_config_id = @device_integration_config_id;
+
+-- name: SetDeviceIntegrationSyncPushDigestFixture :exec
+UPDATE device_integration_syncs s
+SET last_push_digest = @last_push_digest
+FROM device_integration_schedules sch
+WHERE s.device_integration_schedule_id = sch.id
+  AND sch.device_integration_config_id = @device_integration_config_id;
+
+-- name: CorruptDeviceIntegrationCredentialsFixture :exec
+UPDATE device_integration_configs
+SET credentials_encrypted = 'not-a-valid-ciphertext'
+WHERE id = @id;
+
+-- name: InsertChatContentPartFixture :one
+-- Test-only fixture: seeds a minimal chat content part so tests can anchor a
+-- risk_results row to it.
+INSERT INTO chat_content_parts (chat_id, project_id, kind, content_asset_url)
+VALUES (@chat_id, @project_id, @kind, @content_asset_url)
+RETURNING id;
+
+-- name: InsertContentPartRiskResultFixture :exec
+-- Test-only fixture: seeds a risk_results row anchored to a chat content part
+-- (chat_message_id IS NULL), a shape the production InsertRiskResults copyfrom
+-- cannot produce, so backfill tooling can exercise the fallback path its
+-- chat_messages join takes when a finding has no chat message.
+INSERT INTO risk_results (
+  id, project_id, organization_id, risk_policy_id, risk_policy_version,
+  chat_content_part_id, source, found, rule_id, description, match, tags
+) VALUES (
+  @id, @project_id, @organization_id, @risk_policy_id, @risk_policy_version,
+  @chat_content_part_id, @source, TRUE, @rule_id, @description, @match, @tags
+);

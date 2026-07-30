@@ -36,7 +36,7 @@ type TelemetryLogger interface {
 }
 
 const (
-	DefaultChatModel = "anthropic/claude-sonnet-5"
+	DefaultChatModel = "anthropic/claude-opus-5"
 )
 
 // ChatClient is the single HTTP client for all OpenRouter communication.
@@ -525,6 +525,11 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		Name:    nil,
 	}))
 
+	reasoning := req.Reasoning
+	if reasoning == nil {
+		reasoning = &Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil}
+	}
+
 	completionReq := CompletionRequest{
 		OrgID:                     req.OrgID,
 		ProjectID:                 req.ProjectID,
@@ -544,7 +549,7 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		CacheControl:              nil,
 		ChatID:                    uuid.Nil,
 		APIKeyID:                  "",
-		Reasoning:                 &Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
+		Reasoning:                 reasoning,
 		NormalizeOutboundMessages: false,
 	}
 

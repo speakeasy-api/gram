@@ -29,6 +29,10 @@ export type Skill = {
    */
   firstSeenAt?: Date | undefined;
   /**
+   * Whether the skill has at least one valid version available to distribute.
+   */
+  hasValidVersion: boolean;
+  /**
    * The skill ID.
    */
   id: string;
@@ -37,7 +41,7 @@ export type Skill = {
    */
   lastSeenAt?: Date | undefined;
   /**
-   * The derived latest version ID, selected from immutable version creation order.
+   * The current version ID, selected by effective promotion time.
    */
   latestVersionId?: string | undefined;
   /**
@@ -52,6 +56,10 @@ export type Skill = {
    * The number of reconciled activations observed for this skill.
    */
   seenCount: number;
+  /**
+   * The active public share token, absent when the skill is not shared.
+   */
+  shareToken?: string | undefined;
   /**
    * How the skill entered the registry.
    */
@@ -82,6 +90,7 @@ export const Skill$inboundSchema: z.ZodMiniType<Skill, unknown> = z.pipe(
     first_seen_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
+    has_valid_version: z.boolean(),
     id: z.string(),
     last_seen_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
@@ -90,6 +99,7 @@ export const Skill$inboundSchema: z.ZodMiniType<Skill, unknown> = z.pipe(
     name: z.string(),
     project_id: z.string(),
     seen_count: z.int(),
+    share_token: z.optional(z.string()),
     source_kind: z.string(),
     summary: z.optional(z.string()),
     updated_at: z.pipe(
@@ -103,10 +113,12 @@ export const Skill$inboundSchema: z.ZodMiniType<Skill, unknown> = z.pipe(
       "created_at": "createdAt",
       "display_name": "displayName",
       "first_seen_at": "firstSeenAt",
+      "has_valid_version": "hasValidVersion",
       "last_seen_at": "lastSeenAt",
       "latest_version_id": "latestVersionId",
       "project_id": "projectId",
       "seen_count": "seenCount",
+      "share_token": "shareToken",
       "source_kind": "sourceKind",
       "updated_at": "updatedAt",
       "version_count": "versionCount",

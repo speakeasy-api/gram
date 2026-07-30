@@ -121,14 +121,22 @@ const (
 	// from user.email — the authenticated actor — so adopting cached
 	// attribution never rewrites the canonical user identity; it has no
 	// materialized column yet.
-	ProviderKey                    = attribute.Key("gram.provider")
-	ExternalOrgIDKey               = attribute.Key("gram.external_org_id")
-	AccountTypeKey                 = attribute.Key("gram.account_type")
-	BillingModeKey                 = attribute.Key("gram.billing_mode")
-	DeviceIDKey                    = attribute.Key("gram.device_id")
-	AccountEmailKey                = attribute.Key("gram.account_email")
-	ChatIDKey                      = attribute.Key("gram.chat.id")
-	MessageIDKey                   = attribute.Key("gram.message.id")
+	ProviderKey          = attribute.Key("gram.provider")
+	ExternalOrgIDKey     = attribute.Key("gram.external_org_id")
+	AccountTypeKey       = attribute.Key("gram.account_type")
+	BillingModeKey       = attribute.Key("gram.billing_mode")
+	DeviceIDKey          = attribute.Key("gram.device_id")
+	AccountEmailKey      = attribute.Key("gram.account_email")
+	ChatIDKey            = attribute.Key("gram.chat.id")
+	ChatContentPartIDKey = attribute.Key("gram.chat.content_part_id")
+	MessageIDKey         = attribute.Key("gram.message.id")
+	// Chat-analysis score event attributes: stamped on the synthetic
+	// chat_analysis:work_units:score telemetry rows the chat analysis
+	// publisher emits once per scored session, and read back by
+	// attribute_metrics_summaries_mv's work-units measures.
+	ChatAnalysisWorkUnitsKey       = attribute.Key("gram.chat_analysis.work_units")
+	ChatAnalysisScoredCostKey      = attribute.Key("gram.chat_analysis.scored_cost")
+	ChatAnalysisScoredTokensKey    = attribute.Key("gram.chat_analysis.scored_tokens")
 	MCPRegistryIDKey               = attribute.Key("gram.mcp_registry.id")
 	MCPRegistryURLKey              = attribute.Key("gram.mcp_registry.url")
 	ExternalMCPIDKey               = attribute.Key("gram.external_mcp.id")
@@ -153,6 +161,7 @@ const (
 	EnvironmentSlugKey             = attribute.Key("gram.environment.slug")
 	EnvVarNameKey                  = attribute.Key("gram.envvar.name")
 	EventSourceKey                 = attribute.Key("gram.event.source")
+	EventURNKey                    = attribute.Key("gram.event.urn")
 	FilterExpressionKey            = attribute.Key("gram.filter.src")
 	TriggerCorrelationIDKey        = attribute.Key("gram.trigger.correlation_id")
 	TriggerDefinitionSlugKey       = attribute.Key("gram.trigger.definition_slug")
@@ -194,19 +203,23 @@ const (
 	HTTPStatusCodePatternKey       = attribute.Key("gram.http.status_code_pattern")
 	IngressNameKey                 = attribute.Key("gram.ingress.name")
 	CustomDomainProvisionerKindKey = attribute.Key("gram.custom_domain.provisioner.kind")
-	McpMethodKey                   = attribute.Key("gram.mcp.method")
-	McpRequestedTagsKey            = attribute.Key("gram.mcp.requested_tags")
-	McpToolsReturnedKey            = attribute.Key("gram.mcp.tools_returned")
-	McpToolsFilteredKey            = attribute.Key("gram.mcp.tools_filtered")
-	McpServerIDKey                 = attribute.Key("gram.mcp_server.id")
-	McpURLKey                      = attribute.Key("gram.mcp.url")
-	ToolVariationsGroupIDKey       = attribute.Key("gram.tool_variations_group.id")
-	MetricNameKey                  = attribute.Key("gram.metric.name")
-	MimeTypeKey                    = attribute.Key("mime.type")
-	OAuthAuthorizationEndpointKey  = attribute.Key("gram.oauth.authorization_endpoint")
-	OAuthClientIDKey               = attribute.Key("gram.oauth.client_id")
-	OAuthClientNameKey             = attribute.Key("gram.oauth.client_name")
-	OAuthClientSecretGeneratedKey  = attribute.Key("gram.oauth.client_secret_generated")
+
+	CustomDomainHealthStatusKey         = attribute.Key("gram.custom_domain.health.status")
+	CustomDomainHealthIssueKey          = attribute.Key("gram.custom_domain.health.issue")
+	CustomDomainNotifyRecipientCountKey = attribute.Key("gram.custom_domain.notify.recipient_count")
+	McpMethodKey                        = attribute.Key("gram.mcp.method")
+	McpRequestedTagsKey                 = attribute.Key("gram.mcp.requested_tags")
+	McpToolsReturnedKey                 = attribute.Key("gram.mcp.tools_returned")
+	McpToolsFilteredKey                 = attribute.Key("gram.mcp.tools_filtered")
+	McpServerIDKey                      = attribute.Key("gram.mcp_server.id")
+	McpURLKey                           = attribute.Key("gram.mcp.url")
+	ToolVariationsGroupIDKey            = attribute.Key("gram.tool_variations_group.id")
+	MetricNameKey                       = attribute.Key("gram.metric.name")
+	MimeTypeKey                         = attribute.Key("mime.type")
+	OAuthAuthorizationEndpointKey       = attribute.Key("gram.oauth.authorization_endpoint")
+	OAuthClientIDKey                    = attribute.Key("gram.oauth.client_id")
+	OAuthClientNameKey                  = attribute.Key("gram.oauth.client_name")
+	OAuthClientSecretGeneratedKey       = attribute.Key("gram.oauth.client_secret_generated")
 	// OAuthErrorKey / OAuthErrorDescriptionKey carry the `error` /
 	// `error_description` parameters from RFC 6749 / RFC 7591 error responses
 	// — used across DCR registration, /authorize, /token, and /revoke.
@@ -296,6 +309,7 @@ const (
 	RiskPolicyTypeKey                 = attribute.Key("gram.risk.policy_type")
 	RiskMessageTypeKey                = attribute.Key("gram.risk.message_type")
 	RiskRuleIDKey                     = attribute.Key("gram.risk.rule_id")
+	SpendRuleIDKey                    = attribute.Key("gram.spend.rule_id")
 	RiskSourceKey                     = attribute.Key("gram.risk.source")
 	RiskScanAttemptKey                = attribute.Key("gram.risk.scan.attempt")
 	RiskScanMaxAttemptsKey            = attribute.Key("gram.risk.scan.max_attempts")
@@ -397,6 +411,10 @@ const (
 	RetryAttemptKey = attribute.Key("retry.attempt")
 	RetryWaitKey    = attribute.Key("retry.wait")
 
+	TelemetryPublishFailedCountKey = attribute.Key("gram.telemetry.publish_failed_count")
+	TelemetryCHOperationKey        = attribute.Key("gram.telemetry.ch.operation")
+	TelemetryCHRowCountKey         = attribute.Key("gram.telemetry.ch.row_count")
+
 	// GenAI semantic convention keys (OTel GenAI semconv - experimental)
 	// See: https://opentelemetry.io/docs/specs/semconv/gen-ai/
 	GenAIOperationNameKey         = semconv.GenAIOperationNameKey
@@ -449,10 +467,6 @@ const (
 	// (gram_project_id, codex.compliance.event_hash).
 	CodexComplianceEventHashKey = attribute.Key("codex.compliance.event_hash")
 
-	// CodexUsageToolTokensKey stores Codex's tool_token_count verbatim for
-	// fidelity. It equals input + output, so it is intentionally not summed
-	// into any total downstream.
-	CodexUsageToolTokensKey       = attribute.Key("codex.usage.tool_tokens")
 	CodexComplianceEventIDKey     = attribute.Key("codex.compliance.event_id")
 	CodexComplianceLogIDKey       = attribute.Key("codex.compliance.log_id")
 	CodexComplianceCostUnitKey    = attribute.Key("codex.compliance.cost_unit")
@@ -475,6 +489,10 @@ const (
 	RemoteMCPServerIDKey               = attribute.Key("gram.remote_mcp_server.id")
 	RemoteMCPServerURLKey              = attribute.Key("gram.remote_mcp_server.url")
 	TunneledMCPServerIDKey             = attribute.Key("gram.tunneled_mcp_server.id")
+	// TunnelAnonymousSessionHashKey carries a sha256 prefix of a Gram-minted
+	// anonymous tunnel session id. The raw id is bearer-like and must never
+	// be logged.
+	TunnelAnonymousSessionHashKey = attribute.Key("gram.tunneled_mcp_server.anonymous_session_hash")
 
 	WorkOSEventIDKey             = attribute.Key("gram.workos_event.id")
 	WorkOSEventTypeKey           = attribute.Key("gram.workos_event.type")
@@ -629,6 +647,18 @@ func SlogHookServerNameOverrideID(v string) slog.Attr {
 func HookDecision(v string) attribute.KeyValue { return HookDecisionKey.String(v) }
 
 func HookRiskScanned(v bool) attribute.KeyValue { return HookRiskScannedKey.Bool(v) }
+
+func SlogTelemetryPublishFailedCount(v int) slog.Attr {
+	return slog.Int(string(TelemetryPublishFailedCountKey), v)
+}
+
+func TelemetryCHOperation(v string) attribute.KeyValue { return TelemetryCHOperationKey.String(v) }
+
+func TelemetryCHRowCount(v int) attribute.KeyValue { return TelemetryCHRowCountKey.Int(v) }
+
+func SlogTelemetryCHRowCount(v int) slog.Attr {
+	return slog.Int(string(TelemetryCHRowCountKey), v)
+}
 
 func HookEvent(v string) attribute.KeyValue { return HookEventKey.String(v) }
 func SlogHookEvent(v string) slog.Attr      { return slog.String(string(HookEventKey), v) }
@@ -801,6 +831,11 @@ func SlogAssetURL(v string) slog.Attr      { return slog.String(string(AssetURLK
 func ChatID(v string) attribute.KeyValue { return ChatIDKey.String(v) }
 func SlogChatID(v string) slog.Attr      { return slog.String(string(ChatIDKey), v) }
 
+func ChatContentPartID(v string) attribute.KeyValue { return ChatContentPartIDKey.String(v) }
+func SlogChatContentPartID(v string) slog.Attr {
+	return slog.String(string(ChatContentPartIDKey), v)
+}
+
 func MessageID(v string) attribute.KeyValue { return MessageIDKey.String(v) }
 func SlogMessageID(v string) slog.Attr      { return slog.String(string(MessageIDKey), v) }
 
@@ -891,6 +926,9 @@ func SlogEnvVarName(v string) slog.Attr      { return slog.String(string(EnvVarN
 
 func EventSource(v string) attribute.KeyValue { return EventSourceKey.String(v) }
 func SlogEventSource(v string) slog.Attr      { return slog.String(string(EventSourceKey), v) }
+
+func EventURN(v string) attribute.KeyValue { return EventURNKey.String(v) }
+func SlogEventURN(v string) slog.Attr      { return slog.String(string(EventURNKey), v) }
 
 func ErrorID(v string) attribute.KeyValue { return ErrorIDKey.String(v) }
 func SlogErrorID(v string) slog.Attr      { return slog.String(string(ErrorIDKey), v) }
@@ -995,6 +1033,30 @@ func CustomDomainProvisionerKind(v string) attribute.KeyValue {
 
 func SlogCustomDomainProvisionerKind(v string) slog.Attr {
 	return slog.String(string(CustomDomainProvisionerKindKey), v)
+}
+
+func CustomDomainHealthStatus(v string) attribute.KeyValue {
+	return CustomDomainHealthStatusKey.String(v)
+}
+
+func SlogCustomDomainHealthStatus(v string) slog.Attr {
+	return slog.String(string(CustomDomainHealthStatusKey), v)
+}
+
+func CustomDomainHealthIssue(v string) attribute.KeyValue {
+	return CustomDomainHealthIssueKey.String(v)
+}
+
+func SlogCustomDomainHealthIssue(v string) slog.Attr {
+	return slog.String(string(CustomDomainHealthIssueKey), v)
+}
+
+func CustomDomainNotifyRecipientCount(v int) attribute.KeyValue {
+	return CustomDomainNotifyRecipientCountKey.Int(v)
+}
+
+func SlogCustomDomainNotifyRecipientCount(v int) slog.Attr {
+	return slog.Int(string(CustomDomainNotifyRecipientCountKey), v)
 }
 
 func MetricName(v string) attribute.KeyValue { return MetricNameKey.String(v) }
@@ -1324,6 +1386,13 @@ func SlogTunneledMCPServerID(v string) slog.Attr {
 	return slog.String(string(TunneledMCPServerIDKey), v)
 }
 
+func TunnelAnonymousSessionHash(v string) attribute.KeyValue {
+	return TunnelAnonymousSessionHashKey.String(v)
+}
+func SlogTunnelAnonymousSessionHash(v string) slog.Attr {
+	return slog.String(string(TunnelAnonymousSessionHashKey), v)
+}
+
 func RemoteMCPProxyInterceptor(v string) attribute.KeyValue {
 	return RemoteMCPProxyInterceptorKey.String(v)
 }
@@ -1365,6 +1434,9 @@ func SlogRiskMessageType(v string) slog.Attr      { return slog.String(string(Ri
 
 func RiskRuleID(v string) attribute.KeyValue { return RiskRuleIDKey.String(v) }
 func SlogRiskRuleID(v string) slog.Attr      { return slog.String(string(RiskRuleIDKey), v) }
+
+func SpendRuleID(v string) attribute.KeyValue { return SpendRuleIDKey.String(v) }
+func SlogSpendRuleID(v string) slog.Attr      { return slog.String(string(SpendRuleIDKey), v) }
 
 func RiskSource(v string) attribute.KeyValue { return RiskSourceKey.String(v) }
 func SlogRiskSource(v string) slog.Attr      { return slog.String(string(RiskSourceKey), v) }

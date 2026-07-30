@@ -215,6 +215,14 @@ describe("OAuthWizard — rendering", () => {
     expect(screen.getByRole("button", { name: /External OAuth/ })).toBeTruthy();
   });
 
+  it("can open directly on the external OAuth management form", () => {
+    renderWizard({ initialPath: "external" });
+
+    expect(screen.getAllByText("Configure External OAuth")).toHaveLength(2);
+    expect(screen.getByPlaceholderText("my-oauth-server")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /OAuth Proxy/ })).toBeNull();
+  });
+
   it("keeps auto-configure labeled as OAuth Proxy when user-session onboarding is enabled", () => {
     mocks.isFeatureEnabled.mockReturnValue(true);
     renderWizard({ toolset: oauthToolset });

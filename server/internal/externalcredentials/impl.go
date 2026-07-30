@@ -15,9 +15,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
+	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 
+	adminecgen "github.com/speakeasy-api/gram/server/gen/admin_external_credentials"
 	gen "github.com/speakeasy-api/gram/server/gen/external_credentials"
+	adminecsrv "github.com/speakeasy-api/gram/server/gen/http/admin_external_credentials/server"
 	srv "github.com/speakeasy-api/gram/server/gen/http/external_credentials/server"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -31,21 +34,25 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	auth   *auth.Auth
-	authz  *authz.Engine
-	audit  *audit.Logger
+	tracer      trace.Tracer
+	logger      *slog.Logger
+	db          *pgxpool.Pool
+	auth        *auth.Auth
+	authz       *authz.Engine
+	audit       *audit.Logger
+	gcpResolver gcpauth.Resolver
 }
 
 var (
-	_ gen.Service = (*Service)(nil)
-	_ gen.Auther  = (*Service)(nil)
+	_ gen.Service        = (*Service)(nil)
+	_ gen.Auther         = (*Service)(nil)
+	_ adminecgen.Service = (*Service)(nil)
+	_ adminecgen.Auther  = (*Service)(nil)
 )
 
 func NewService(
@@ -55,27 +62,41 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	gcpResolver gcpauth.Resolver,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("externalcredentials"))
 
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/externalcredentials"),
-		logger: logger,
-		db:     db,
-		auth:   auth.New(logger, db, sessions, authzEngine),
-		authz:  authzEngine,
-		audit:  auditLogger,
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/externalcredentials"),
+		logger:      logger,
+		db:          db,
+		auth:        auth.New(logger, db, sessions, authzEngine),
+		authz:       authzEngine,
+		audit:       auditLogger,
+		gcpResolver: gcpResolver,
 	}
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
+	mw := []func(goa.Endpoint) goa.Endpoint{
+		middleware.MapErrors(),
+		middleware.TraceMethods(service.tracer),
+	}
+
 	endpoints := gen.NewEndpoints(service)
-	endpoints.Use(middleware.MapErrors())
-	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
-	)
+	for _, m := range mw {
+		endpoints.Use(m)
+	}
+	srv.Mount(mux, srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
+
+	// The platform-admin (adminExternalCredentials) surface shares this Service
+	// struct; its handlers live in adminhandlers.go and gate on the platform-admin
+	// flag rather than an org RBAC scope.
+	adminEndpoints := adminecgen.NewEndpoints(service)
+	for _, m := range mw {
+		adminEndpoints.Use(m)
+	}
+	adminecsrv.Mount(mux, adminecsrv.New(adminEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

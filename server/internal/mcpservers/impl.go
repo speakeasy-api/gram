@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -53,6 +54,7 @@ type Service struct {
 	authz                *authz.Engine
 	audit                *audit.Logger
 	temporalEnv          *tenv.Environment
+	dispositionCache     *ToolDispositionCache
 	pluginsGitHubEnabled bool
 }
 
@@ -67,6 +69,7 @@ func NewService(
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	temporalEnv *tenv.Environment,
+	dispositionCache *ToolDispositionCache,
 	pluginsGitHubEnabled bool,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("mcpservers"))
@@ -79,6 +82,7 @@ func NewService(
 		authz:                authzEngine,
 		audit:                auditLogger,
 		temporalEnv:          temporalEnv,
+		dispositionCache:     dispositionCache,
 		pluginsGitHubEnabled: pluginsGitHubEnabled,
 	}
 }
@@ -127,9 +131,6 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	if err := validateServerBackendExclusivity(ids.RemoteMcpServerID, ids.TunneledMcpServerID, ids.ToolsetID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
-	if err := validateTunneledMCPVisibility(ids, payload.Visibility); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
-	}
 
 	// Generate the server ID up front so the slug can include its suffix and
 	// the row can be inserted in a single statement (no insert-then-update).
@@ -153,6 +154,10 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 
 	if err := verifyServerReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, ids); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
+	}
+
+	if err := verifyTunneledPublicConsent(ctx, dbtx, *authCtx.ProjectID, ids.TunneledMcpServerID, string(payload.Visibility)); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
 	}
 
 	// Remote- and tunneled-backed servers carry a user_session_issuer for
@@ -439,9 +444,6 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	if err := validateServerBackendExclusivity(ids.RemoteMcpServerID, ids.TunneledMcpServerID, ids.ToolsetID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
-	if err := validateTunneledMCPVisibility(ids, payload.Visibility); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
-	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -509,6 +511,26 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 			return nil, oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update mcp server").LogError(ctx, logger)
+	}
+
+	// Check against the post-update row (not the payload): the update query
+	// COALESCEs unset backend references, so this is the only state that
+	// reliably says whether the server is now tunneled + public.
+	if err := verifyTunneledPublicConsent(ctx, dbtx, *authCtx.ProjectID, updated.TunneledMcpServerID, updated.Visibility); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
+	}
+
+	oldDisplayName := ServerDisplayName(existing)
+	newDisplayName := ServerDisplayName(updated)
+	if oldDisplayName != newDisplayName {
+		if _, err := pluginsrepo.New(dbtx).SyncMcpServerDisplayName(ctx, pluginsrepo.SyncMcpServerDisplayNameParams{
+			NewDisplayName: newDisplayName,
+			ProjectID:      *authCtx.ProjectID,
+			McpServerID:    uuid.NullUUID{UUID: updated.ID, Valid: true},
+			OldDisplayName: oldDisplayName,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "sync plugin server display name").LogError(ctx, logger)
+		}
 	}
 
 	afterView := mv.BuildMcpServerView(updated)
@@ -684,6 +706,38 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		}
 	}
 
+	// Detach the server from any plugins (Default or manually curated). The
+	// (plugin_id, display_name) unique index only excludes soft-deleted rows,
+	// so a live attachment left behind would keep holding the display name and
+	// block a later same-named server from ever attaching — i.e. from being
+	// enabled at all via UpdateMcpServer's attach-on-enable path.
+	detachedPluginServers, err := pluginsrepo.New(dbtx).SoftDeletePluginServersByMCPServerID(ctx, pluginsrepo.SoftDeletePluginServersByMCPServerIDParams{
+		ProjectID:   *authCtx.ProjectID,
+		McpServerID: uuid.NullUUID{UUID: deleted.ID, Valid: true},
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "detach mcp server from plugins").LogError(ctx, logger)
+	}
+
+	deletedServerURN := urn.NewMcpServer(deleted.ID)
+	for _, pluginServer := range detachedPluginServers {
+		if err := s.audit.LogPluginServerRemove(ctx, dbtx, audit.LogPluginServerRemoveEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			ProjectID:        *authCtx.ProjectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			PluginID:         pluginServer.PluginID,
+			PluginName:       pluginServer.PluginName,
+			PluginSlug:       pluginServer.PluginSlug,
+			ServerID:         pluginServer.ID,
+			ToolsetURN:       nil,
+			McpServerURN:     &deletedServerURN,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "log mcp server plugin detachment").LogError(ctx, logger)
+		}
+	}
+
 	// Remote- and tunneled-backed servers own the issuer minted with them.
 	// An issuer may also be referenced by another server or toolset, so only
 	// cascade once this deletion leaves it without an active owner.
@@ -811,9 +865,27 @@ func validateServerBackendExclusivity(remoteMcpServerID, tunneledMcpServerID, to
 	return nil
 }
 
-func validateTunneledMCPVisibility(ids serverIDs, visibility types.McpServerVisibility) error {
-	if ids.TunneledMcpServerID.Valid && string(visibility) == VisibilityPublic {
-		return fmt.Errorf("tunneled MCP servers cannot be public")
+// verifyTunneledPublicConsent enforces the double opt-in for anonymous public
+// serving of tunneled backends: an mcp_server may only take public visibility
+// when the tunneled source's owner has set allow_public. Runs inside the
+// create/update transaction against the authoritative post-write state so no
+// payload permutation can slip a public tunneled server past the check.
+func verifyTunneledPublicConsent(ctx context.Context, dbtx pgx.Tx, projectID uuid.UUID, tunneledMcpServerID uuid.NullUUID, visibility string) error {
+	if !tunneledMcpServerID.Valid || visibility != VisibilityPublic {
+		return nil
+	}
+	source, err := tunneledmcprepo.New(dbtx).GetServerByID(ctx, tunneledmcprepo.GetServerByIDParams{
+		ID:        tunneledMcpServerID.UUID,
+		ProjectID: projectID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("tunneled_mcp_server_id does not reference a resource in this project")
+	}
+	if err != nil {
+		return fmt.Errorf("check tunneled mcp server public consent: %w", err)
+	}
+	if !source.AllowPublic {
+		return fmt.Errorf("tunneled MCP servers cannot be public until the tunnel source enables public serving")
 	}
 	return nil
 }

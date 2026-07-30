@@ -138,7 +138,7 @@ func TestSkillsVersioningByNormalizedNameAndExplicitAdd(t *testing.T) {
 	require.NotEqual(t, first.Version.ID, second.Version.ID)
 	require.Equal(t, "my-skill", second.Skill.Name)
 	require.Equal(t, "My_Skill", second.Skill.DisplayName)
-	require.Equal(t, "First summary.", *second.Skill.Summary)
+	require.Equal(t, "Second summary.", *second.Skill.Summary)
 	require.Equal(t, int64(2), second.Skill.VersionCount)
 	require.NotNil(t, second.Skill.LatestVersionID)
 	require.Equal(t, second.Version.ID, *second.Skill.LatestVersionID)
@@ -158,7 +158,7 @@ func TestSkillsVersioningByNormalizedNameAndExplicitAdd(t *testing.T) {
 	require.Equal(t, int64(3), third.Skill.VersionCount)
 	require.NotNil(t, third.Skill.LatestVersionID)
 	require.Equal(t, third.Version.ID, *third.Skill.LatestVersionID)
-	require.Equal(t, "First summary.", *third.Skill.Summary)
+	require.Equal(t, "Third summary.", *third.Skill.Summary)
 
 	_, err = ti.service.AddVersion(ctx, &gen.AddVersionPayload{
 		ID:               first.Skill.ID,
@@ -221,7 +221,7 @@ func TestSkillsCurateCapturedSkillWithVersionLineage(t *testing.T) {
 	require.Equal(t, captured.SkillVersionID.String(), *derived.Version.DerivedFromVersionID)
 	require.Equal(t, "curated-name", derived.Skill.Name)
 	require.Equal(t, "Curated skill", derived.Skill.DisplayName)
-	require.Equal(t, "Curated summary.", *derived.Skill.Summary)
+	require.Equal(t, "Edited description.", *derived.Skill.Summary)
 
 	other := createSkill(t, ctx, ti, "other-skill", "Other summary.")
 	_, err = ti.service.AddVersion(ctx, &gen.AddVersionPayload{
@@ -316,7 +316,9 @@ func TestSkillsHistoricalDuplicateDoesNotMoveLatestBackward(t *testing.T) {
 	require.NotNil(t, duplicate.Skill.LatestVersionID)
 	require.Equal(t, newer.Version.ID, *duplicate.Skill.LatestVersionID)
 	require.Equal(t, int64(2), duplicate.Skill.VersionCount)
-	require.Equal(t, "First.", *duplicate.Skill.Summary)
+	// The duplicate re-record creates no version, so the summary stays with
+	// the current (newer) version's description.
+	require.Equal(t, "Second.", *duplicate.Skill.Summary)
 }
 
 func TestSkillsArchiveIsIdempotentAndAllowsReplacement(t *testing.T) {
@@ -467,6 +469,68 @@ func TestSkillsPaginationAndInvalidCursors(t *testing.T) {
 
 	_, err = ti.service.ListVersions(ctx, &gen.ListVersionsPayload{ID: versioned.Skill.ID, Cursor: conv.PtrEmpty("%%%"), Limit: 1, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestSkillsListSearchFiltersAndUpdatedPagination(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	alpha := createSkill(t, ctx, ti, "alpha", "Alpha summary")
+	bravo := createSkill(t, ctx, ti, "bravo", "Bravo summary")
+	_, err := skillservice.CaptureSkillContent(ctx, ti.conn, ti.projectID, skillManifest("captured", "Captured summary", "body"))
+	require.NoError(t, err)
+	_, err = ti.service.Update(ctx, &gen.UpdatePayload{
+		ID: alpha.Skill.ID, Name: alpha.Skill.Name, DisplayName: "Alpha updated", Summary: alpha.Skill.Summary,
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	first, err := ti.service.List(ctx, &gen.ListPayload{
+		Cursor: nil, Limit: 1, Search: nil, SourceKinds: []string{"manual"}, Classifications: nil, Sort: "updated",
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), first.TotalCount)
+	require.Equal(t, "alpha", first.Skills[0].Name)
+	require.NotNil(t, first.NextCursor)
+
+	second, err := ti.service.List(ctx, &gen.ListPayload{
+		Cursor: first.NextCursor, Limit: 1, Search: nil, SourceKinds: []string{"manual"}, Classifications: nil, Sort: "updated",
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), second.TotalCount)
+	require.Equal(t, "bravo", second.Skills[0].Name)
+	require.Nil(t, second.NextCursor)
+
+	search := "bravo summary"
+	searched, err := ti.service.List(ctx, &gen.ListPayload{
+		Cursor: nil, Limit: 10, Search: &search, SourceKinds: nil, Classifications: nil, Sort: "name",
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), searched.TotalCount)
+	require.Equal(t, "bravo", searched.Skills[0].Name)
+
+	captured, err := ti.service.List(ctx, &gen.ListPayload{
+		Cursor: nil, Limit: 10, Search: nil, SourceKinds: []string{"captured"}, Classifications: []string{"custom"}, Sort: "name",
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), captured.TotalCount)
+	require.Equal(t, "captured", captured.Skills[0].Name)
+
+	err = ti.service.Archive(ctx, &gen.ArchivePayload{
+		ID: bravo.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	empty, err := ti.service.List(ctx, &gen.ListPayload{
+		Cursor: first.NextCursor, Limit: 1, Search: nil, SourceKinds: []string{"manual"}, Classifications: nil, Sort: "updated",
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, empty.Skills)
+	require.Equal(t, int64(1), empty.TotalCount)
 }
 
 func TestSkillsReadAndWriteRBACExpansion(t *testing.T) {

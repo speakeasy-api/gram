@@ -70,6 +70,7 @@ func TestEngineRequire_mapsDeniedToForbidden(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	require.Equal(t, "permission denied", oopsErr.Error())
 }
 
 func TestEngineRequire_mapsMissingGrantsToUnexpected(t *testing.T) {
@@ -692,7 +693,7 @@ func TestEngineRequire_skipsForAPIKeyAuth(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestEngineFilter_skipsForNonEnterpriseAccount(t *testing.T) {
+func TestEngineFilter_enforcesForNonEnterpriseAccount(t *testing.T) {
 	t.Parallel()
 
 	chConn, err := newClickhouseClient(t)
@@ -715,12 +716,13 @@ func TestEngineFilter_skipsForNonEnterpriseAccount(t *testing.T) {
 		APIKeyScopes:          nil,
 	})
 
+	ctx = GrantsToContext(ctx, []Grant{NewGrant(ScopeProjectRead, "proj_123")})
 	resourceIDs, err := engine.Filter(ctx, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj_123"},
 		{Scope: ScopeProjectRead, ResourceID: "proj_456"},
 	})
 	require.NoError(t, err)
-	require.Equal(t, []string{"proj_123", "proj_456"}, resourceIDs)
+	require.Equal(t, []string{"proj_123"}, resourceIDs)
 }
 
 func TestEngineFindMatched_returnsParallelBools(t *testing.T) {
@@ -768,7 +770,7 @@ func TestEngineFindMatched_returnsAllTrueWhenEnforcementDisabled(t *testing.T) {
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(false), staticChallengeLogging(true), workos.NewStubClient())
 	sessionID := "session_123"
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID:  "org_123",
@@ -791,7 +793,7 @@ func TestEngineFindMatched_returnsAllTrueWhenEnforcementDisabled(t *testing.T) {
 		{Scope: ScopeProjectRead, ResourceID: "proj_456"},
 	})
 	require.NoError(t, err)
-	require.Equal(t, []bool{true, true}, matched, "non-enforcing mode mirrors Filter's permissive behavior — every check passes")
+	require.Equal(t, []bool{true, true}, matched, "feature-disabled mode mirrors Filter's permissive behavior — every check passes")
 }
 
 func TestEngineFindMatched_emptyInputReturnsEmptySlice(t *testing.T) {

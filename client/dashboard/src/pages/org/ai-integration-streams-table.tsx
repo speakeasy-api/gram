@@ -15,7 +15,7 @@ import {
 } from "@speakeasy-api/moonshine";
 import { Activity, ChartLine, Clock3, MoreHorizontal } from "lucide-react";
 import type { AIIntegrationSchedule } from "./ai-integration-providers";
-import { ScheduleStatusBadge } from "./ai-integration-status-badge";
+import { ScheduleStatusBadge } from "@/components/schedule-status-badge";
 import {
   formatRelativeTime,
   type ScheduleRuntime,

@@ -50,6 +50,13 @@ func TestShadowMCPInventoryURLs_UpsertAndList(t *testing.T) {
 			ServerName:         "Other",
 			SeenAt:             lastSeen.Add(time.Hour),
 		},
+		{
+			GramProjectID:      otherProjectID,
+			CanonicalServerURL: "https://other.example.com/mcp",
+			URLHost:            "other.example.com",
+			ServerName:         "Other Only",
+			SeenAt:             lastSeen.Add(time.Hour),
+		},
 	}))
 
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
@@ -66,6 +73,17 @@ func TestShadowMCPInventoryURLs_UpsertAndList(t *testing.T) {
 	require.Equal(t, "Speakeasy", rows[0].ServerName)
 	require.Equal(t, firstSeen, rows[0].FirstSeen)
 	require.Equal(t, lastSeen, rows[0].LastSeen)
+
+	existingURLs, err := ti.chClient.ListExistingShadowMCPInventoryURLs(ctx, telemetryRepo.ListExistingShadowMCPInventoryURLsParams{
+		GramProjectID: projectID,
+		CanonicalServerURLs: []string{
+			"https://mcp.speakeasy.com/mcp",
+			"https://other.example.com/mcp",
+			"https://missing.example.com/mcp",
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"https://mcp.speakeasy.com/mcp"}, existingURLs)
 }
 
 func TestShadowMCPInventoryURLs_NameOverrideSurvivesLaterObservation(t *testing.T) {
@@ -642,8 +660,6 @@ func TestBackfillShadowMCPInventoryURLs_CanonicalizesAndUpserts(t *testing.T) {
 		ObservedAt: observedAt.Add(time.Hour),
 	})
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	result, err := ti.service.BackfillShadowMCPInventoryURLs(ctx, telemetry.BackfillShadowMCPInventoryURLsParams{
 		GramProjectID:      projectID,
 		Limit:              50,
@@ -660,8 +676,6 @@ func TestBackfillShadowMCPInventoryURLs_CanonicalizesAndUpserts(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, result.InventoryURLCount)
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	rows, err := ti.chClient.ListShadowMCPInventoryURLs(ctx, telemetryRepo.ListShadowMCPInventoryURLsParams{
 		GramProjectID: projectID,
@@ -761,7 +775,10 @@ func insertHistoricalShadowMCPCall(t *testing.T, ctx context.Context, ti *testIn
 
 	spanID := uuid.New().String()[:16]
 	traceID := strings.ReplaceAll(uuid.NewString(), "-", "")
-	err = ti.chClient.InsertTelemetryLog(ctx, telemetryRepo.InsertTelemetryLogParams{
+	// Promotion writes live telemetry synchronously, including attached
+	// materialized views, so tests can read trace_summaries without a global
+	// async-insert queue flush.
+	err = ti.chClient.InsertPromotedTelemetryLogs(ctx, []telemetryRepo.InsertTelemetryLogParams{{
 		ID:                   uuid.NewString(),
 		TimeUnixNano:         p.ObservedAt.UnixNano(),
 		ObservedTimeUnixNano: p.ObservedAt.UnixNano(),
@@ -778,9 +795,10 @@ func insertHistoricalShadowMCPCall(t *testing.T, ctx context.Context, ti *testIn
 		ServiceName:          "gram-hooks",
 		ServiceVersion:       nil,
 		GramChatID:           nil,
-	})
+	}})
 	require.NoError(t, err)
 }
+
 func inventoryURLRows(rows []telemetryRepo.ShadowMCPInventoryURLRow) []string {
 	urls := make([]string, 0, len(rows))
 	for _, row := range rows {

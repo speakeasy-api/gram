@@ -229,6 +229,90 @@
   }
 }
 
+/* Chat suggestion launch, first half: the clicked suggestion chip flies to the
+   centre of the screen and becomes the overlay card, both tagged `chat-launch`
+   (see `useChatLaunch`). The UA's default cross-fade sells the content change;
+   only the timing is tuned. The second half is NOT a view transition — the
+   user bubble lives inside the Elements shadow root, where a
+   `view-transition-name` produces no pseudo-element at all, so the card is
+   FLIP-animated onto the bubble instead. */
+::view-transition-group(chat-launch) {
+  animation-duration: 420ms;
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* No cross-fade: the chip and the card show the same icon and label, so fading
+   between them just reads as the card materialising. Dropping the UA's default
+   animations leaves the chip's snapshot hidden and the card's fully opaque from
+   frame one, so the only thing that moves is the group's geometry — the chip
+   scales up and travels to the centre. */
+::view-transition-old(chat-launch) {
+  animation: none;
+  opacity: 0;
+}
+
+::view-transition-new(chat-launch) {
+  animation: none;
+  opacity: 1;
+}
+
+/* Nothing else on screen may fade while the chip flies. The page itself is
+   swapping route in the same transition, and the UA's 250ms root cross-fade
+   under an otherwise-instant card reads as the card fading in; the veil ramping
+   up reads the same way. Both are cut to an instant swap, scoped to this
+   transition by the class `useChatLaunch` sets on <html>. */
+html.chat-launching::view-transition-old(root),
+html.chat-launching::view-transition-new(root) {
+  animation-duration: 1ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(chat-launch),
+  ::view-transition-old(chat-launch),
+  ::view-transition-new(chat-launch) {
+    animation: none;
+  }
+}
+
+/* Highlight sweep over the launch card's label while it swaps the suggestion
+   title for the full message (driven from `chat-launch.ts`). A pseudo-element
+   sweep rather than a background-clip gradient, because the label keeps its own
+   colour — the shimmer passes over the text, it doesn't paint it. */
+.chat-launch-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.chat-launch-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgb(255 255 255 / 0.45) 50%,
+    transparent 70%
+  );
+  animation: 900ms ease-out 1 both chat-launch-shimmer-sweep;
+  pointer-events: none;
+}
+
+@keyframes chat-launch-shimmer-sweep {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(120%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-launch-shimmer::after {
+    animation: none;
+    opacity: 0;
+  }
+}
+
 /* Dotted background scroll animation for catalog cards */
 @keyframes scroll-dots {
   from {

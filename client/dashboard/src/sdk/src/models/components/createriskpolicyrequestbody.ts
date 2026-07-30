@@ -53,6 +53,18 @@ export const PolicyType = {
  */
 export type PolicyType = ClosedEnum<typeof PolicyType>;
 
+/**
+ * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
+ */
+export const ShadowMcpDisposition = {
+  BlockAll: "block_all",
+  AllowAll: "allow_all",
+} as const;
+/**
+ * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
+ */
+export type ShadowMcpDisposition = ClosedEnum<typeof ShadowMcpDisposition>;
+
 export type CreateRiskPolicyRequestBody = {
   /**
    * Policy action: flag, warn (challenge), or block.
@@ -132,6 +144,14 @@ export type CreateRiskPolicyRequestBody = {
    */
   score?: number | undefined;
   /**
+   * Complete desired canonical URL allow set for this policy. Omit or send empty to create no URL-specific allow decisions.
+   */
+  shadowMcpAllowedUrls?: Array<string> | undefined;
+  /**
+   * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
+   */
+  shadowMcpDisposition?: ShadowMcpDisposition | undefined;
+  /**
    * Detection sources to enable.
    */
   sources?: Array<string> | undefined;
@@ -155,6 +175,11 @@ export const PolicyType$outboundSchema: z.ZodMiniEnum<typeof PolicyType> = z
   .enum(PolicyType);
 
 /** @internal */
+export const ShadowMcpDisposition$outboundSchema: z.ZodMiniEnum<
+  typeof ShadowMcpDisposition
+> = z.enum(ShadowMcpDisposition);
+
+/** @internal */
 export type CreateRiskPolicyRequestBody$Outbound = {
   action: string;
   approved_email_domains?: Array<string> | undefined;
@@ -176,6 +201,8 @@ export type CreateRiskPolicyRequestBody$Outbound = {
   scope_exempt?: string | undefined;
   scope_include?: string | undefined;
   score: number;
+  shadow_mcp_allowed_urls?: Array<string> | undefined;
+  shadow_mcp_disposition?: string | undefined;
   sources?: Array<string> | undefined;
   user_message?: string | undefined;
 };
@@ -206,6 +233,8 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     scopeExempt: z.optional(z.string()),
     scopeInclude: z.optional(z.string()),
     score: z._default(z.number(), 5),
+    shadowMcpAllowedUrls: z.optional(z.array(z.string())),
+    shadowMcpDisposition: z.optional(ShadowMcpDisposition$outboundSchema),
     sources: z.optional(z.array(z.string())),
     userMessage: z.optional(z.string()),
   }),
@@ -226,6 +255,8 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       promptInjectionRules: "prompt_injection_rules",
       scopeExempt: "scope_exempt",
       scopeInclude: "scope_include",
+      shadowMcpAllowedUrls: "shadow_mcp_allowed_urls",
+      shadowMcpDisposition: "shadow_mcp_disposition",
       userMessage: "user_message",
     });
   }),

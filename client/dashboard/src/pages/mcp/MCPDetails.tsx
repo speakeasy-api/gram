@@ -242,8 +242,10 @@ function renderMcpDetailTabContent(
       );
     case "team-access":
       return (
-        <RequireScope scope="mcp:read" level="page">
-          <MCPTeamAccessTab resourceId={toolset.id} tools={toolset.tools} />
+        <RequireScope scope="org:read" level="page">
+          <RequireScope scope="mcp:read" resourceId={toolset.id} level="page">
+            <MCPTeamAccessTab resourceId={toolset.id} tools={toolset.tools} />
+          </RequireScope>
         </RequireScope>
       );
     case "settings":
@@ -263,14 +265,12 @@ function MCPDetailPageContent({
   toolsetSlug: string;
 }) {
   const routes = useRoutes();
-  const telemetry = useTelemetry();
   const location = useLocation();
-  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
 
   const activeTab = activeTabFromPath(location.pathname, toolsetSlug);
 
   if (!activeTab) {
-    const initialTab = initialTabFromHash(window.location.hash, isRbacEnabled);
+    const initialTab = initialTabFromHash(window.location.hash);
     return (
       <Navigate
         to={mcpDetailTabHref(routes, toolsetSlug, initialTab)}
@@ -278,15 +278,6 @@ function MCPDetailPageContent({
       />
     );
   }
-  if (activeTab === "team-access" && !isRbacEnabled) {
-    return (
-      <Navigate
-        to={mcpDetailTabHref(routes, toolsetSlug, "overview")}
-        replace
-      />
-    );
-  }
-
   return (
     <Page>
       <Page.Header>
@@ -543,6 +534,10 @@ export function MCPStatusDropdown({
       : "private";
 
   const applyStatus = (status: ServerStatus) => {
+    // Disabling intentionally leaves mcpIsPublic untouched: flipping it
+    // would trigger UpdateToolset's visibility-flip OAuth cleanup and
+    // destroy an attached OAuth configuration. Serving is gated on
+    // mcpEnabled alone, and re-enabling sets mcpIsPublic explicitly.
     const updates =
       status === "disabled"
         ? { mcpEnabled: false }

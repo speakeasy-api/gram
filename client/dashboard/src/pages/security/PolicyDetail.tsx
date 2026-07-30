@@ -1,5 +1,11 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { ShadowMCPPolicyServerSelector } from "@/components/shadow-mcp/ShadowMCPPolicyServerSelector";
+import {
+  initialShadowMCPPolicyURLs,
+  invalidateShadowMCPPolicyInventory,
+  useShadowMCPPolicyInventory,
+} from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
 import { Card } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
@@ -26,10 +32,12 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
+import { useProject } from "@/contexts/Auth";
 import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
 import { useRiskCategories } from "@gram/client/react-query/riskCategories.js";
 import { invalidateAllRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useRiskPoliciesUpdateMutation } from "@gram/client/react-query/riskPoliciesUpdate.js";
+import { invalidateAllShadowMCPInventory } from "@gram/client/react-query/shadowMCPInventory.js";
 import {
   invalidateAllRiskPoliciesGet,
   useRiskPoliciesGet,
@@ -69,6 +77,14 @@ import {
 } from "react";
 import { useParams } from "react-router";
 import { useQueryState } from "nuqs";
+import {
+  isBlockingShadowMCPPolicy,
+  isShadowMCPBlockConfiguration,
+  shadowMCPAllowedURLsForMutation,
+  shadowMCPSelectionBaselineForUpdate,
+  shadowMCPSelectionIsDirty,
+  shadowMCPSelectionIsInitialized,
+} from "./policy-shadow-mcp-setup";
 import { type Step } from "@/pages/setup/components/onboarding-stepper";
 import {
   DETECTION_RULES,
@@ -79,10 +95,11 @@ import {
 import {
   ActionPicker,
   CustomizeRulesSheet,
-  DetectorCard,
   PolicyAudiencePicker,
   RuleSelectList,
 } from "./PolicyCenter";
+import { DetectorCard } from "./DetectorCard";
+import { builtInRuleDisabledReason } from "./policy-built-in-rule-exclusivity";
 import {
   ALL_CATEGORIES,
   CATEGORY_LEVEL_DETECTORS,
@@ -177,11 +194,6 @@ const STANDARD_STEPS: Step[] = [
     id: "detect",
     title: "Detect",
     description: "Turn on detector categories and custom rules.",
-  },
-  {
-    id: "sensitivity",
-    title: "Sensitivity",
-    description: "Tune detection confidence.",
   },
   {
     id: "scope",
@@ -1818,69 +1830,60 @@ function SeveritySection({
   );
 }
 
-// ── Sensitivity step (Presidio match-confidence threshold) ───────────────────
+// ── Sensitivity section (Presidio match-confidence threshold) ────────────────
 // The minimum confidence a Presidio PII match must clear to be flagged. Applies
 // to every Presidio-backed detector in a standard policy and is only persisted
 // while at least one such category is active (see `presidioActive` in the
-// editor). Non-Presidio policies don't carry a stray threshold.
+// editor). Non-Presidio policies don't carry a stray threshold. Rendered inside
+// the Detect step, and only while a confidence-scored category is on.
 const PRESIDIO_THRESHOLD_MIN = 0;
 const PRESIDIO_THRESHOLD_MAX = 1;
 const PRESIDIO_THRESHOLD_STEP = 0.05;
 const PRESIDIO_THRESHOLD_TICKS = [0, 0.25, 0.5, 0.75, 1];
 const DEFAULT_PRESIDIO_THRESHOLD = 0.5;
+const EMPTY_SHADOW_MCP_URLS: ReadonlySet<string> = new Set<string>();
 
-function SensitivityStep({
-  active,
+function SensitivitySection({
   threshold,
   setThreshold,
 }: {
-  active: boolean;
   threshold: number;
   setThreshold: React.Dispatch<React.SetStateAction<number>>;
 }): JSX.Element {
   return (
     <Card>
-      <SectionHeader description="Tune the confidence a match must clear before it's flagged." />
-      {active ? (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label className="text-sm font-medium">Detection sensitivity</Label>
-            <Type small mono>
-              {threshold.toFixed(2)}
-              {threshold === DEFAULT_PRESIDIO_THRESHOLD ? " · default" : ""}
-            </Type>
-          </div>
-          <Type small muted>
-            Minimum confidence a match must clear to be flagged, from{" "}
-            {PRESIDIO_THRESHOLD_MIN} to {PRESIDIO_THRESHOLD_MAX}. Higher means
-            fewer false positives but may miss borderline matches. Applies to
-            all Presidio-backed detectors in this policy.
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label className="text-sm font-medium">Detection sensitivity</Label>
+          <Type small mono>
+            {threshold.toFixed(2)}
+            {threshold === DEFAULT_PRESIDIO_THRESHOLD ? " · default" : ""}
           </Type>
-          <div className="pt-3">
-            <Slider
-              value={threshold}
-              onChange={(v) =>
-                setThreshold(
-                  Math.max(
-                    PRESIDIO_THRESHOLD_MIN,
-                    Math.min(PRESIDIO_THRESHOLD_MAX, Math.round(v * 20) / 20),
-                  ),
-                )
-              }
-              min={PRESIDIO_THRESHOLD_MIN}
-              max={PRESIDIO_THRESHOLD_MAX}
-              step={PRESIDIO_THRESHOLD_STEP}
-              ticks={PRESIDIO_THRESHOLD_TICKS}
-            />
-          </div>
         </div>
-      ) : (
         <Type small muted>
-          Sensitivity applies to confidence-scored detectors. Turn on a
-          PII-style category (Financial, PII, Government IDs, Healthcare, or
-          Off-Policy) in the Detect step to adjust it.
+          Minimum confidence a match must clear to be flagged, from{" "}
+          {PRESIDIO_THRESHOLD_MIN} to {PRESIDIO_THRESHOLD_MAX}. Higher means
+          fewer false positives but may miss borderline matches. Applies to all
+          confidence-scored detectors in this policy.
         </Type>
-      )}
+        <div className="pt-3">
+          <Slider
+            value={threshold}
+            onChange={(v) =>
+              setThreshold(
+                Math.max(
+                  PRESIDIO_THRESHOLD_MIN,
+                  Math.min(PRESIDIO_THRESHOLD_MAX, Math.round(v * 20) / 20),
+                ),
+              )
+            }
+            min={PRESIDIO_THRESHOLD_MIN}
+            max={PRESIDIO_THRESHOLD_MAX}
+            step={PRESIDIO_THRESHOLD_STEP}
+            ticks={PRESIDIO_THRESHOLD_TICKS}
+          />
+        </div>
+      </div>
     </Card>
   );
 }
@@ -1897,6 +1900,7 @@ function ActionStep({
   score,
   setScore,
   flagOnlySelected = false,
+  shadowMCPAllowedServers,
 }: {
   action: PolicyAction;
   setAction: React.Dispatch<React.SetStateAction<PolicyAction>>;
@@ -1911,6 +1915,7 @@ function ActionStep({
   score: number;
   setScore: React.Dispatch<React.SetStateAction<number>>;
   flagOnlySelected?: boolean;
+  shadowMCPAllowedServers?: ReactNode;
 }): JSX.Element {
   return (
     <div className="space-y-4">
@@ -1925,6 +1930,7 @@ function ActionStep({
             setFormAction={setAction}
             flagOnlySelected={flagOnlySelected}
           />
+          {shadowMCPAllowedServers}
           <PolicyAudiencePicker
             formAudienceType={audienceType}
             setFormAudienceType={setAudienceType}
@@ -3433,14 +3439,17 @@ function ReviewAgreementControl({
 // Reuses PolicyCenter's detector/scope/action/audience building blocks and its
 // payload mapping. `policy === null` means create mode.
 
-function StandardPolicyEditor({
+export function StandardPolicyEditor({
   policy,
 }: {
   policy: RiskPolicy | null;
 }): JSX.Element {
   const routes = useRoutes();
+  const project = useProject();
   const queryClient = useQueryClient();
   const { customRules } = useDetectionRulesStore();
+  const [initializedInventoryForPolicy, setInitializedInventoryForPolicy] =
+    useState<string | null>(null);
 
   const [step, setStep] = useStepParam(STANDARD_STEPS);
 
@@ -3489,6 +3498,11 @@ function StandardPolicyEditor({
   const [action, setAction] = useState<PolicyAction>(
     (policy?.action as PolicyAction) ?? "flag",
   );
+  const [selectedShadowMCPURLs, setSelectedShadowMCPURLs] = useState<
+    Set<string>
+  >(() => new Set());
+  const [originalShadowMCPURLs, setOriginalShadowMCPURLs] =
+    useState<Set<string> | null>(null);
   const [userMessage, setUserMessage] = useState(policy?.userMessage ?? "");
   const [audienceType, setAudienceType] = useState<"everyone" | "targeted">(
     policy?.audienceType === "targeted" ? "targeted" : "everyone",
@@ -3514,6 +3528,46 @@ function StandardPolicyEditor({
   );
 
   // ── Derived state ──
+  const targetIsShadowMCPBlock = isBlockingShadowMCPPolicy(
+    true,
+    [...selectedCategories],
+    action,
+  );
+  const inventoryQuery = useShadowMCPPolicyInventory(
+    project.id,
+    targetIsShadowMCPBlock,
+  );
+  const policyID = policy?.id ?? null;
+  const editorIdentity = policyID ?? "create";
+  const originalHasShadowMCPBlockConfiguration = policy
+    ? isShadowMCPBlockConfiguration(policy.sources, policy.action)
+    : false;
+
+  useEffect(() => {
+    if (
+      !targetIsShadowMCPBlock ||
+      !inventoryQuery.data ||
+      initializedInventoryForPolicy === editorIdentity
+    ) {
+      return;
+    }
+
+    const initialURLs =
+      policyID && originalHasShadowMCPBlockConfiguration
+        ? initialShadowMCPPolicyURLs(inventoryQuery.data, policyID)
+        : new Set<string>();
+    setSelectedShadowMCPURLs(new Set(initialURLs));
+    setOriginalShadowMCPURLs(new Set(initialURLs));
+    setInitializedInventoryForPolicy(editorIdentity);
+  }, [
+    editorIdentity,
+    initializedInventoryForPolicy,
+    inventoryQuery.data,
+    originalHasShadowMCPBlockConfiguration,
+    policyID,
+    targetIsShadowMCPBlock,
+  ]);
+
   const flagOnlySelected = [...FLAG_ONLY_CATEGORIES].some((c) =>
     selectedCategories.has(c),
   );
@@ -3529,7 +3583,27 @@ function StandardPolicyEditor({
     );
   const audienceMissing =
     audienceType === "targeted" && audiencePrincipalUrns.size === 0;
-  const saveBlocked = !hasEnabledDetector || audienceMissing;
+  const shadowMCPInventoryUnavailable =
+    targetIsShadowMCPBlock &&
+    (inventoryQuery.isPending ||
+      inventoryQuery.isError ||
+      inventoryQuery.data === undefined);
+  const shadowMCPSelectionInitialized = shadowMCPSelectionIsInitialized(
+    targetIsShadowMCPBlock,
+    initializedInventoryForPolicy,
+    editorIdentity,
+  );
+  const saveBlocked =
+    !hasEnabledDetector ||
+    audienceMissing ||
+    shadowMCPInventoryUnavailable ||
+    !shadowMCPSelectionInitialized;
+
+  const shadowMCPSelectionDirty = shadowMCPSelectionIsDirty(
+    targetIsShadowMCPBlock,
+    selectedShadowMCPURLs,
+    originalShadowMCPURLs,
+  );
 
   const dirty =
     !!orig &&
@@ -3544,17 +3618,29 @@ function StandardPolicyEditor({
       approvedDomains !== orig.approvedDomains ||
       score !== orig.score ||
       (presidioActive && presidioThreshold !== orig.presidioThreshold) ||
-      !sameSet(audiencePrincipalUrns, orig.audiencePrincipalUrns));
+      !sameSet(audiencePrincipalUrns, orig.audiencePrincipalUrns) ||
+      shadowMCPSelectionDirty);
 
   const updateMutation = useRiskPoliciesUpdateMutation({
-    onSuccess: () => {
+    onSuccess: (_policy, variables) => {
+      const submittedURLs = shadowMCPSelectionBaselineForUpdate(
+        variables.request.updateRiskPolicyRequestBody,
+      );
+      if (submittedURLs !== undefined) {
+        setSelectedShadowMCPURLs(new Set(submittedURLs));
+        setOriginalShadowMCPURLs(new Set(submittedURLs));
+      }
       void invalidateAllRiskPoliciesGet(queryClient);
       void invalidateAllRiskListPolicies(queryClient);
+      void invalidateAllShadowMCPInventory(queryClient);
+      void invalidateShadowMCPPolicyInventory(queryClient, project.id);
     },
   });
   const createMutation = useRiskCreatePolicyMutation({
     onSuccess: () => {
       void invalidateAllRiskListPolicies(queryClient);
+      void invalidateAllShadowMCPInventory(queryClient);
+      void invalidateShadowMCPPolicyInventory(queryClient, project.id);
       routes.policyCenter.goTo();
     },
   });
@@ -3563,6 +3649,13 @@ function StandardPolicyEditor({
   // Toggle a whole built-in detector category (clears its per-rule disables).
   // Flag-only categories force the policy action to flag.
   const toggleCategory = (cat: RuleCategory, checked: boolean) => {
+    if (
+      checked &&
+      builtInRuleDisabledReason(cat, selectedCategories) !== undefined
+    ) {
+      return;
+    }
+
     const rules = DETECTION_RULES[cat].filter((r) => !r.hidden);
     const nextCats = new Set(selectedCategories);
     const nextDisabled = new Set(disabledRules);
@@ -3614,6 +3707,14 @@ function StandardPolicyEditor({
       selectedCategories,
       scopeOverrides,
     );
+    const shadowMcpAllowedUrls = shadowMCPAllowedURLsForMutation({
+      action: resolvedAction,
+      selectedCategories,
+      selectedURLs: selectedShadowMCPURLs,
+      originalPolicy: policy,
+    });
+    const setupFields =
+      shadowMcpAllowedUrls === undefined ? {} : { shadowMcpAllowedUrls };
 
     if (policy) {
       updateMutation.mutate({
@@ -3641,6 +3742,7 @@ function StandardPolicyEditor({
             presidioScoreThreshold: presidioActive
               ? presidioThreshold
               : DEFAULT_PRESIDIO_THRESHOLD,
+            ...setupFields,
             ...(identityActive ? { approvedEmailDomains } : {}),
           },
         },
@@ -3666,6 +3768,7 @@ function StandardPolicyEditor({
             ...(presidioActive
               ? { presidioScoreThreshold: presidioThreshold }
               : {}),
+            ...setupFields,
             ...(identityActive ? { approvedEmailDomains } : {}),
           },
         },
@@ -3696,71 +3799,77 @@ function StandardPolicyEditor({
         onStep={setStep}
       >
         {step === 0 && (
-          <Card>
-            <SectionHeader description="Turn on detector categories and attach your organization's custom rules." />
-            <Stack gap={5}>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium">Built-in rules</Label>
-                  <span className="text-muted-foreground text-xs">
-                    {
-                      ALL_CATEGORIES.filter((c) => selectedCategories.has(c))
-                        .length
-                    }{" "}
-                    on
-                  </span>
+          <>
+            <Card>
+              <SectionHeader description="Turn on detector categories and attach your organization's custom rules." />
+              <Stack gap={5}>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-medium">
+                      Built-in rules
+                    </Label>
+                    <span className="text-muted-foreground text-xs">
+                      {
+                        ALL_CATEGORIES.filter((c) => selectedCategories.has(c))
+                          .length
+                      }{" "}
+                      on
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {ALL_CATEGORIES.map((cat) => (
+                      <DetectorCard
+                        key={cat}
+                        category={cat}
+                        selected={selectedCategories.has(cat)}
+                        disabledRules={disabledRules}
+                        disabledReason={builtInRuleDisabledReason(
+                          cat,
+                          selectedCategories,
+                        )}
+                        onToggle={(checked) => toggleCategory(cat, checked)}
+                        onCustomize={() => setCustomizeCategory(cat)}
+                      />
+                    ))}
+                  </div>
                 </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {ALL_CATEGORIES.map((cat) => (
-                    <DetectorCard
-                      key={cat}
-                      category={cat}
-                      selected={selectedCategories.has(cat)}
-                      disabledRules={disabledRules}
-                      onToggle={(checked) => toggleCategory(cat, checked)}
-                      onCustomize={() => setCustomizeCategory(cat)}
-                    />
-                  ))}
-                </div>
-              </div>
-              {customRules.length > 0 && (
-                <RuleSelectList
-                  title="Custom Rules"
-                  description={
-                    <>
-                      Attach your organization's custom rules as{" "}
-                      <span className="text-foreground font-medium">
-                        detectors
-                      </span>{" "}
-                      — a match records a finding.
-                    </>
-                  }
-                  idPrefix="detector"
-                  customRules={customRules}
-                  selectedRuleIds={selectedCustomRuleIds}
-                  onToggleRule={toggleDetector}
-                  expanded={detectionExpanded}
-                  onToggle={() => setDetectionExpanded((v) => !v)}
-                />
-              )}
-              {!hasEnabledDetector && (
-                <Type small className="text-destructive">
-                  Turn on at least one detector or attach a custom rule.
-                </Type>
-              )}
-            </Stack>
-          </Card>
+                {customRules.length > 0 && (
+                  <RuleSelectList
+                    title="Custom Rules"
+                    description={
+                      <>
+                        Attach your organization's custom rules as{" "}
+                        <span className="text-foreground font-medium">
+                          detectors
+                        </span>{" "}
+                        — a match records a finding.
+                      </>
+                    }
+                    idPrefix="detector"
+                    customRules={customRules}
+                    selectedRuleIds={selectedCustomRuleIds}
+                    onToggleRule={toggleDetector}
+                    expanded={detectionExpanded}
+                    onToggle={() => setDetectionExpanded((v) => !v)}
+                  />
+                )}
+                {!hasEnabledDetector && (
+                  <Type small className="text-destructive">
+                    Turn on at least one detector or attach a custom rule.
+                  </Type>
+                )}
+              </Stack>
+            </Card>
+            {presidioActive && (
+              <SensitivitySection
+                threshold={presidioThreshold}
+                setThreshold={setPresidioThreshold}
+              />
+            )}
+          </>
         )}
 
         {step === 1 && (
-          <SensitivityStep
-            active={presidioActive}
-            threshold={presidioThreshold}
-            setThreshold={setPresidioThreshold}
-          />
-        )}
-
-        {step === 2 && (
           <ScopeStep
             description="Apply everywhere, or narrow the scope to reduce noise and cost."
             selectedCategories={selectedCategories}
@@ -3770,7 +3879,7 @@ function StandardPolicyEditor({
           />
         )}
 
-        {step === 3 && (
+        {step === 2 && (
           <ActionStep
             action={action}
             setAction={setAction}
@@ -3783,10 +3892,23 @@ function StandardPolicyEditor({
             score={score}
             setScore={setScore}
             flagOnlySelected={flagOnlySelected}
+            shadowMCPAllowedServers={
+              targetIsShadowMCPBlock ? (
+                <ShadowMCPPolicyServerSelector
+                  servers={inventoryQuery.data ?? []}
+                  originalURLs={originalShadowMCPURLs ?? EMPTY_SHADOW_MCP_URLS}
+                  selectedURLs={selectedShadowMCPURLs}
+                  onSelectionChange={setSelectedShadowMCPURLs}
+                  isLoading={inventoryQuery.isPending}
+                  error={inventoryQuery.error}
+                  onRetry={() => void inventoryQuery.refetch()}
+                />
+              ) : undefined
+            }
           />
         )}
 
-        {step === 4 && (
+        {step === 3 && (
           <StandardReview
             name={name}
             categories={selectedCategories}

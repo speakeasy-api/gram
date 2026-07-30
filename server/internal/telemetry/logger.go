@@ -12,6 +12,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"go.opentelemetry.io/otel/attribute"
@@ -52,6 +53,16 @@ func WithOTELMetadata(params LogParams, observedTimestamp time.Time, resourceAtt
 	return params
 }
 
+// LogObserver is notified after a batch of telemetry log rows is written to
+// telemetry_logs. Observers receive the caller's batch before per-org
+// feature-flag filtering, so a row is not a guarantee that it was persisted.
+// Implementations must be cheap; heavy work should be throttled or dispatched
+// asynchronously. Staged rows (LogBulkStaging) are not observed — they only
+// reach telemetry_logs later, via promotion.
+type LogObserver interface {
+	OnTelemetryLogsWritten(ctx context.Context, params []LogParams)
+}
+
 type Logger struct {
 	shutdownCtx       func() context.Context
 	logger            *slog.Logger
@@ -59,6 +70,8 @@ type Logger struct {
 	logsEnabled       FeatureChecker
 	toolIOLogsEnabled FeatureChecker
 	users             *UserInfoResolver
+	logPublisher      *LogPublisher
+	observers         []LogObserver
 }
 
 func NewLogger(
@@ -73,7 +86,13 @@ func NewLogger(
 	logsEnabled FeatureChecker,
 	toolIOLogsEnabled FeatureChecker,
 	users *UserInfoResolver,
+	logPublisher *LogPublisher,
 ) *Logger {
+	inv.Require(
+		"telemetry logger",
+		"log publisher set", logPublisher != nil,
+	)
+
 	logger = logger.With(attr.SlogComponent("telemetry_logger"))
 	return &Logger{
 		shutdownCtx:       func() context.Context { return shutdownCtx },
@@ -82,11 +101,20 @@ func NewLogger(
 		logsEnabled:       logsEnabled,
 		toolIOLogsEnabled: toolIOLogsEnabled,
 		users:             users,
+		logPublisher:      logPublisher,
+		observers:         nil,
 	}
 }
 
+// AddObserver registers a LogObserver. Not safe to call concurrently with
+// logging — register observers during wiring, before traffic flows.
+func (l *Logger) AddObserver(obs LogObserver) {
+	l.observers = append(l.observers, obs)
+}
+
 // NewStub returns a Logger with feature checks hard-wired to disabled. Log
-// is a no-op and the ClickHouse connection is never dialed.
+// is a no-op and the ClickHouse connection is never dialed; the shadow log
+// publisher is an inert noop with all flags off.
 func NewStub(logger *slog.Logger) *Logger {
 	disabled := func(context.Context, string) (bool, error) { return false, nil }
 	return &Logger{
@@ -96,6 +124,8 @@ func NewStub(logger *slog.Logger) *Logger {
 		logsEnabled:       disabled,
 		toolIOLogsEnabled: disabled,
 		users:             nil,
+		logPublisher:      NewNoopLogPublisher(logger),
+		observers:         nil,
 	}
 }
 
@@ -156,7 +186,16 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 	}
 	err := repo.New(l.chConn).InsertTelemetryLogs(l.detachedWriteContext(ctx), logParams)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "insert telemetry logs")
+		return fmt.Errorf("insert telemetry logs: %w", err)
+	}
+
+	// Shadow dual-write: mirror the rows onto Pub/Sub only after ClickHouse
+	// accepted them, so the shadow stream never contains rows the ledger
+	// rejected. Best-effort and non-blocking.
+	l.logPublisher.PublishLogs(ctx, logParams)
+
+	for _, obs := range l.observers {
+		obs.OnTelemetryLogsWritten(ctx, params)
 	}
 	return nil
 }
@@ -285,6 +324,16 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 	allAttrs[attr.ObservedTimeUnixNanoKey] = observedTimeUnixNano
 	allAttrs[attr.TimeUnixNanoKey] = params.Timestamp.UnixNano()
 	allAttrs[attr.ServiceNameKey] = serviceName
+
+	// Stamp the canonical event identity (urn:telemetry:...) on every
+	// row so consumers can classify by one column (the event_urn
+	// materialized column) instead of re-deriving meaning from gram_urn
+	// prefixes, hook names, and attribute presence. Callers that already set
+	// gram.event.urn win; everything else is derived from the signals the
+	// writer stamped.
+	if getString(allAttrs, attr.EventURNKey) == "" {
+		allAttrs[attr.EventURNKey] = deriveEventURN(params.ToolInfo.URN, allAttrs)
+	}
 
 	spanAttrs, resourceAttrs, err := parseAttributesWithExplicitResources(allAttrs, params.resourceAttributes)
 	if err != nil {

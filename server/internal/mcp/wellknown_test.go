@@ -175,10 +175,16 @@ func TestHandleGetAuthorizationServer_ToolsetBackendWithExternalOAuth(t *testing
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Header().Get("Content-Type"), "application/json")
 
-	// External OAuth toolsets surface the upstream provider's metadata verbatim.
+	// External OAuth toolsets re-serve the upstream provider's captured
+	// metadata, but the issuer is rewritten to the Gram resource URL so the
+	// document satisfies RFC 8414 §3.3 (served issuer must equal the URL the
+	// client fetched it under, i.e. the /mcp/{slug} surface). The upstream's
+	// own authorization/token endpoints are preserved verbatim.
 	var metadata map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
-	require.Equal(t, "https://test-oauth-server.example.com", metadata["issuer"])
+	require.Equal(t, "http://0.0.0.0/mcp/"+slug, metadata["issuer"])
+	require.Equal(t, "https://test-oauth-server.example.com/authorize", metadata["authorization_endpoint"])
+	require.Equal(t, "https://test-oauth-server.example.com/token", metadata["token_endpoint"])
 }
 
 // TestHandleGetAuthorizationServer_IssuerGatedRemoteBackend is the primary

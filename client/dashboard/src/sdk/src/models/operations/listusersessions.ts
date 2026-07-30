@@ -31,7 +31,7 @@ export type ListUserSessionsSecurity = {
 /**
  * Filter by session status.
  */
-export const ListUserSessionsQueryParamStatus = {
+export const QueryParamStatus = {
   Active: "active",
   Expired: "expired",
   Revoked: "revoked",
@@ -40,9 +40,7 @@ export const ListUserSessionsQueryParamStatus = {
 /**
  * Filter by session status.
  */
-export type ListUserSessionsQueryParamStatus = ClosedEnum<
-  typeof ListUserSessionsQueryParamStatus
->;
+export type QueryParamStatus = ClosedEnum<typeof QueryParamStatus>;
 
 export type ListUserSessionsRequest = {
   /**
@@ -56,7 +54,7 @@ export type ListUserSessionsRequest = {
   /**
    * Filter by session status.
    */
-  status?: ListUserSessionsQueryParamStatus | undefined;
+  status?: QueryParamStatus | undefined;
   /**
    * Filter by the connecting client id.
    */
@@ -189,9 +187,9 @@ export function listUserSessionsSecurityToJSON(
 }
 
 /** @internal */
-export const ListUserSessionsQueryParamStatus$outboundSchema: z.ZodMiniEnum<
-  typeof ListUserSessionsQueryParamStatus
-> = z.enum(ListUserSessionsQueryParamStatus);
+export const QueryParamStatus$outboundSchema: z.ZodMiniEnum<
+  typeof QueryParamStatus
+> = z.enum(QueryParamStatus);
 
 /** @internal */
 export type ListUserSessionsRequest$Outbound = {
@@ -214,7 +212,7 @@ export const ListUserSessionsRequest$outboundSchema: z.ZodMiniType<
   z.object({
     subjectUrn: z.optional(z.string()),
     userSessionIssuerId: z.optional(z.string()),
-    status: z.optional(ListUserSessionsQueryParamStatus$outboundSchema),
+    status: z.optional(QueryParamStatus$outboundSchema),
     clientId: z.optional(z.string()),
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
