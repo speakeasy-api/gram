@@ -18637,12 +18637,12 @@ paths:
             example: https://mcp.box.com
             type: string
         - allowEmptyValue: true
-          description: Registry identifier for the server (e.g., 'com.pulsemcp.mirror/box')
+          description: 'Registry identifier for the server: a registry alias (e.g., ''com.pulsemcp.mirror/box''), a guide slug, or a canonical ''slug/remote-id'' ref'
           example: com.pulsemcp.mirror/box
           in: query
           name: registry_specifier
           schema:
-            description: Registry identifier for the server (e.g., 'com.pulsemcp.mirror/box')
+            description: 'Registry identifier for the server: a registry alias (e.g., ''com.pulsemcp.mirror/box''), a guide slug, or a canonical ''slug/remote-id'' ref'
             example: com.pulsemcp.mirror/box
             type: string
         - allowEmptyValue: true
@@ -58317,18 +58317,17 @@ components:
           description: Markdown instructions for the setup work that happens in the upstream provider
         match_kind:
           type: string
-          description: How the lookup matched this guide
+          description: How the lookup matched this guide. The most specific kind, when more than one lookup key matched it.
           enum:
             - server_ref
+            - endpoint
             - slug
             - alias
-            - provenance
-            - endpoint
         matched_remote_ids:
           type: array
           items:
             type: string
-          description: IDs of the documented endpoints the lookup matched. Empty when the lookup only identified the guide and not a specific endpoint.
+          description: IDs of the documented endpoints the lookup matched. Empty when the lookup only identified the guide and not a specific endpoint, which is always the case for a 'slug' or 'alias' match.
         remotes:
           type: array
           items:
@@ -58371,10 +58370,8 @@ components:
           description: Whether the endpoint URL is customer-specific and has to be filled in per tenant
         transport_type:
           type: string
-          description: Transport type (sse or streamable-http)
-          enum:
-            - sse
-            - streamable-http
+          description: Transport type as published by the guide (e.g., 'streamable-http', 'sse')
+          example: streamable-http
         url:
           type: string
           description: URL of the endpoint

@@ -13,7 +13,7 @@ type MCPSetupGuideRemote struct {
 	ID string
 	// URL of the endpoint
 	URL string
-	// Transport type (sse or streamable-http)
+	// Transport type as published by the guide (e.g., 'streamable-http', 'sse')
 	TransportType string
 	// Whether the endpoint URL is customer-specific and has to be filled in per
 	// tenant

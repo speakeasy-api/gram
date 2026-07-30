@@ -1122,9 +1122,11 @@ type MCPSetupGuideResponseBody struct {
 	// Endpoints documented by the guide
 	Remotes []*MCPSetupGuideRemoteResponseBody `form:"remotes" json:"remotes" xml:"remotes"`
 	// IDs of the documented endpoints the lookup matched. Empty when the lookup
-	// only identified the guide and not a specific endpoint.
+	// only identified the guide and not a specific endpoint, which is always the
+	// case for a 'slug' or 'alias' match.
 	MatchedRemoteIds []string `form:"matched_remote_ids" json:"matched_remote_ids" xml:"matched_remote_ids"`
-	// How the lookup matched this guide
+	// How the lookup matched this guide. The most specific kind, when more than
+	// one lookup key matched it.
 	MatchKind string `form:"match_kind" json:"match_kind" xml:"match_kind"`
 	// Markdown instructions for the setup work that happens in the upstream
 	// provider
@@ -1140,7 +1142,7 @@ type MCPSetupGuideRemoteResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// URL of the endpoint
 	URL string `form:"url" json:"url" xml:"url"`
-	// Transport type (sse or streamable-http)
+	// Transport type as published by the guide (e.g., 'streamable-http', 'sse')
 	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
 	// Whether the endpoint URL is customer-specific and has to be filled in per
 	// tenant

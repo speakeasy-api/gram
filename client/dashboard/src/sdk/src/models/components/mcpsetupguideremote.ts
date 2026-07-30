@@ -5,23 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
-
-/**
- * Transport type (sse or streamable-http)
- */
-export const MCPSetupGuideRemoteTransportType = {
-  Sse: "sse",
-  StreamableHttp: "streamable-http",
-} as const;
-/**
- * Transport type (sse or streamable-http)
- */
-export type MCPSetupGuideRemoteTransportType = ClosedEnum<
-  typeof MCPSetupGuideRemoteTransportType
->;
 
 /**
  * An MCP server endpoint documented by a setup guide
@@ -36,19 +21,14 @@ export type MCPSetupGuideRemote = {
    */
   tenanted: boolean;
   /**
-   * Transport type (sse or streamable-http)
+   * Transport type as published by the guide (e.g., 'streamable-http', 'sse')
    */
-  transportType: MCPSetupGuideRemoteTransportType;
+  transportType: string;
   /**
    * URL of the endpoint
    */
   url: string;
 };
-
-/** @internal */
-export const MCPSetupGuideRemoteTransportType$inboundSchema: z.ZodMiniEnum<
-  typeof MCPSetupGuideRemoteTransportType
-> = z.enum(MCPSetupGuideRemoteTransportType);
 
 /** @internal */
 export const MCPSetupGuideRemote$inboundSchema: z.ZodMiniType<
@@ -58,7 +38,7 @@ export const MCPSetupGuideRemote$inboundSchema: z.ZodMiniType<
   z.object({
     id: z.string(),
     tenanted: z.boolean(),
-    transport_type: MCPSetupGuideRemoteTransportType$inboundSchema,
+    transport_type: z.string(),
     url: z.string(),
   }),
   z.transform((v) => {

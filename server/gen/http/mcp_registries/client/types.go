@@ -1122,9 +1122,11 @@ type MCPSetupGuideResponseBody struct {
 	// Endpoints documented by the guide
 	Remotes []*MCPSetupGuideRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
 	// IDs of the documented endpoints the lookup matched. Empty when the lookup
-	// only identified the guide and not a specific endpoint.
+	// only identified the guide and not a specific endpoint, which is always the
+	// case for a 'slug' or 'alias' match.
 	MatchedRemoteIds []string `form:"matched_remote_ids,omitempty" json:"matched_remote_ids,omitempty" xml:"matched_remote_ids,omitempty"`
-	// How the lookup matched this guide
+	// How the lookup matched this guide. The most specific kind, when more than
+	// one lookup key matched it.
 	MatchKind *string `form:"match_kind,omitempty" json:"match_kind,omitempty" xml:"match_kind,omitempty"`
 	// Markdown instructions for the setup work that happens in the upstream
 	// provider
@@ -1140,7 +1142,7 @@ type MCPSetupGuideRemoteResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// URL of the endpoint
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
-	// Transport type (sse or streamable-http)
+	// Transport type as published by the guide (e.g., 'streamable-http', 'sse')
 	TransportType *string `form:"transport_type,omitempty" json:"transport_type,omitempty" xml:"transport_type,omitempty"`
 	// Whether the endpoint URL is customer-specific and has to be filled in per
 	// tenant
@@ -3409,8 +3411,8 @@ func ValidateMCPSetupGuideResponseBody(body *MCPSetupGuideResponseBody) (err err
 		}
 	}
 	if body.MatchKind != nil {
-		if !(*body.MatchKind == "server_ref" || *body.MatchKind == "slug" || *body.MatchKind == "alias" || *body.MatchKind == "provenance" || *body.MatchKind == "endpoint") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_kind", *body.MatchKind, []any{"server_ref", "slug", "alias", "provenance", "endpoint"}))
+		if !(*body.MatchKind == "server_ref" || *body.MatchKind == "endpoint" || *body.MatchKind == "slug" || *body.MatchKind == "alias") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_kind", *body.MatchKind, []any{"server_ref", "endpoint", "slug", "alias"}))
 		}
 	}
 	return
@@ -3433,11 +3435,6 @@ func ValidateMCPSetupGuideRemoteResponseBody(body *MCPSetupGuideRemoteResponseBo
 	}
 	if body.URL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", *body.URL, goa.FormatURI))
-	}
-	if body.TransportType != nil {
-		if !(*body.TransportType == "sse" || *body.TransportType == "streamable-http") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.transport_type", *body.TransportType, []any{"sse", "streamable-http"}))
-		}
 	}
 	return
 }
