@@ -2,6 +2,7 @@ package riskfindingscols
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -11,11 +12,11 @@ import (
 	"github.com/google/uuid"
 )
 
-// createdAtSlack widens the mutation's created_at lower bound below the
-// batch's minimum finding created_at. The ClickHouse created_at is the exact
-// value copied from Postgres, so in principle no slack is needed; an hour of
-// headroom guards against any precision or clock quirks while still letting
-// ClickHouse prune all but the batch's own daily partitions.
+// createdAtSlack widens the mutation's created_at bounds beyond the batch's
+// minimum and maximum finding created_at. The ClickHouse created_at is the
+// exact value copied from Postgres, so in principle no slack is needed; an
+// hour of headroom guards against any precision or clock quirks while still
+// letting ClickHouse prune all but the batch's own daily partitions.
 const createdAtSlack = time.Hour
 
 // Sink batches UpdateRow values and applies each batch as ONE ClickHouse
@@ -24,7 +25,9 @@ const createdAtSlack = time.Hour
 //	ALTER TABLE risk_findings UPDATE
 //	    message_created_at = transform(toString(id), [ids...], [values...], message_created_at),
 //	    assistant_id       = transform(toString(id), [ids...], [values...], assistant_id)
-//	WHERE id IN (ids...) AND created_at >= <min batch created_at - slack>
+//	WHERE id IN (ids...)
+//	  AND created_at >= <min batch created_at - slack>
+//	  AND created_at <= <max batch created_at + slack>
 //
 // Mutations — not inserts — are required here: the read path dedups duplicate
 // ids by keeping the copy sorting first under message_created_at DESC ...
@@ -146,8 +149,13 @@ func mutationVerb(dryRun bool) string {
 // idempotent by construction: the mutation rewrites each targeted row to the
 // same values, so overlap after a resume is harmless.
 func (s *Sink) flush(ctx context.Context, rows []UpdateRow) error {
-	if s.dryRun || s.conn == nil {
+	if s.dryRun {
 		return nil
+	}
+	// A nil connection is only legal in dry-run mode; treating it as a no-op
+	// here would count and log submitted mutations while writing nothing.
+	if s.conn == nil {
+		return errors.New("nil clickhouse connection with dry-run disabled")
 	}
 
 	stmt := mutationStatement(rows)
@@ -172,6 +180,7 @@ func mutationStatement(rows []UpdateRow) string {
 	messageTimes := make([]string, len(rows))
 	assistants := make([]string, len(rows))
 	minCreatedAt := rows[0].CreatedAt
+	maxCreatedAt := rows[0].CreatedAt
 	for i := range rows {
 		ids[i] = "'" + chStringEscaper.Replace(rows[i].ID.String()) + "'"
 		messageTimes[i] = fmt.Sprintf("toDateTime64('%d', 9)", rows[i].MessageCreatedAt.UnixNano())
@@ -179,16 +188,23 @@ func mutationStatement(rows []UpdateRow) string {
 		if rows[i].CreatedAt.Before(minCreatedAt) {
 			minCreatedAt = rows[i].CreatedAt
 		}
+		if rows[i].CreatedAt.After(maxCreatedAt) {
+			maxCreatedAt = rows[i].CreatedAt
+		}
 	}
 
+	// created_at is bounded on both sides of the batch (with slack) so each
+	// mutation prunes to the batch's own daily partitions. A lower bound alone
+	// would leave every later partition scanned by every batch, queuing
+	// repeated full-tail mutations over a long backfill.
 	idList := strings.Join(ids, ", ")
 	return fmt.Sprintf(
 		"ALTER TABLE risk_findings UPDATE"+
 			" message_created_at = transform(toString(id), [%s], [%s], message_created_at),"+
 			" assistant_id = transform(toString(id), [%s], [%s], assistant_id)"+
-			" WHERE id IN (%s) AND created_at >= toDateTime64('%d', 9)",
+			" WHERE id IN (%s) AND created_at >= toDateTime64('%d', 9) AND created_at <= toDateTime64('%d', 9)",
 		idList, strings.Join(messageTimes, ", "),
 		idList, strings.Join(assistants, ", "),
-		idList, minCreatedAt.Add(-createdAtSlack).UnixNano(),
+		idList, minCreatedAt.Add(-createdAtSlack).UnixNano(), maxCreatedAt.Add(createdAtSlack).UnixNano(),
 	)
 }

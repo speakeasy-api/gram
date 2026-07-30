@@ -145,6 +145,12 @@ func parseColsFlags(args []string) (colsConfig, error) {
 	if err := fs.Parse(args); err != nil {
 		return colsConfig{}, fmt.Errorf("parse flags: %w", err)
 	}
+	// A leftover positional token is almost always a mistyped flag (e.g. a
+	// scope value detached from its -org/-project). Silently ignoring it would
+	// run the migration at its default all-org scope.
+	if fs.NArg() > 0 {
+		return colsConfig{}, fmt.Errorf("unexpected positional arguments: %q", fs.Args())
+	}
 
 	chCfg.password = os.Getenv("CLICKHOUSE_PASSWORD")
 

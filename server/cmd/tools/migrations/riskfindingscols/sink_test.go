@@ -60,7 +60,8 @@ func TestSinkEmptyCommitsNothing(t *testing.T) {
 // batch produces: both transform() maps and the IN list share the same id
 // order, timestamps render at nanosecond scale (positional binding would
 // truncate to seconds, which is why the statement is built by hand), and the
-// created_at bound is the batch minimum minus the slack.
+// created_at bounds are the batch minimum minus the slack and the batch
+// maximum plus the slack.
 func TestMutationStatementRendersAlignedArraysAndBound(t *testing.T) {
 	t.Parallel()
 
@@ -81,9 +82,10 @@ func TestMutationStatementRendersAlignedArraysAndBound(t *testing.T) {
 		"ALTER TABLE risk_findings UPDATE"+
 			" message_created_at = transform(toString(id), ['%[1]s', '%[2]s'], [toDateTime64('%[3]d', 9), toDateTime64('%[4]d', 9)], message_created_at),"+
 			" assistant_id = transform(toString(id), ['%[1]s', '%[2]s'], ['%[5]s', ''], assistant_id)"+
-			" WHERE id IN ('%[1]s', '%[2]s') AND created_at >= toDateTime64('%[6]d', 9)",
+			" WHERE id IN ('%[1]s', '%[2]s') AND created_at >= toDateTime64('%[6]d', 9) AND created_at <= toDateTime64('%[7]d', 9)",
 		id1, id2, message1.UnixNano(), message2.UnixNano(), assistantID,
 		created2.Add(-createdAtSlack).UnixNano(),
+		created1.Add(createdAtSlack).UnixNano(),
 	)
 	require.Equal(t, want, got)
 }
