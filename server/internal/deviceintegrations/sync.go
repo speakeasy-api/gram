@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
 
 const (
@@ -125,32 +124,8 @@ func NewSyncer(
 	}
 }
 
-// deviceLevelCoverage mirrors the management API's resolution so a pushed
-// snapshot and the dashboard an admin is looking at agree on matching mode.
-// Degrades to user-level on any error: publishing the weaker-but-provable
-// claim is always safe, publishing an unprovable one is not.
 func (s *Syncer) deviceLevelCoverage(ctx context.Context, orgID string) bool {
-	if s.features == nil {
-		return false
-	}
-	var groups map[string]string
-	if org, err := orgRepo.New(s.db).GetOrganizationMetadata(ctx, orgID); err != nil {
-		s.logger.WarnContext(ctx, "resolve organization slug for device-level coverage flag",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(orgID),
-		)
-	} else {
-		groups = feature.OrgProjectGroups(org.Slug, "")
-	}
-	enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagDeviceLevelCoverage, orgID, groups)
-	if err != nil {
-		s.logger.WarnContext(ctx, "device-level coverage flag lookup failed, pushing user-level evidence",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(orgID),
-		)
-		return false
-	}
-	return enabled
+	return deviceLevelCoverage(ctx, s.logger, s.db, s.features, orgID)
 }
 
 // ListCandidates returns due, runnable syncs. Due-ness is evaluated on the

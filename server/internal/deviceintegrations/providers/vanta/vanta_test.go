@@ -158,12 +158,12 @@ func snapshotOf(deviceCount int) providers.CoverageSnapshot {
 	devices := make([]providers.CoverageDevice, 0, deviceCount)
 	for i := range deviceCount {
 		devices = append(devices, providers.CoverageDevice{
-			ExternalID:                  fmt.Sprintf("dev-%04d", i+1),
-			SerialNumber:                fmt.Sprintf("SER%04d", i+1),
-			Hostname:                    fmt.Sprintf("mac-%04d", i+1),
-			UserEmail:                   fmt.Sprintf("user%d@example.test", i+1),
-			AgentActive:      i%2 == 0,
-			AgentLastSeenAt:  time.Date(2026, 7, 28, 9, 0, 0, 0, time.UTC),
+			ExternalID:      fmt.Sprintf("dev-%04d", i+1),
+			SerialNumber:    fmt.Sprintf("SER%04d", i+1),
+			Hostname:        fmt.Sprintf("mac-%04d", i+1),
+			UserEmail:       fmt.Sprintf("user%d@example.test", i+1),
+			AgentActive:     i%2 == 0,
+			AgentLastSeenAt: time.Date(2026, 7, 28, 9, 0, 0, 0, time.UTC),
 		})
 	}
 	return providers.CoverageSnapshot{
@@ -352,12 +352,12 @@ func TestUnassignedDeviceResource(t *testing.T) {
 		OrganizationID: "org-test",
 		GeneratedAt:    time.Date(2026, 7, 28, 10, 30, 0, 0, time.UTC),
 		Devices: []providers.CoverageDevice{{
-			ExternalID:                  "dev-unassigned",
-			SerialNumber:                "SERX",
-			Hostname:                    "",
-			UserEmail:                   "",
-			AgentActive:      false,
-			AgentLastSeenAt:  time.Time{},
+			ExternalID:      "dev-unassigned",
+			SerialNumber:    "SERX",
+			Hostname:        "",
+			UserEmail:       "",
+			AgentActive:     false,
+			AgentLastSeenAt: time.Time{},
 		}},
 	}
 	require.NoError(t, s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshot))
@@ -371,4 +371,57 @@ func TestUnassignedDeviceResource(t *testing.T) {
 	require.Equal(t, false, props["agent_active"])
 	_, present := props["agent_last_seen_at"]
 	require.False(t, present, "a never-seen agent omits the property — null or a zero timestamp would overclaim")
+}
+
+// TestPushCoverageEmitsAttestationPerResource is the Vanta twin: the custom
+// properties are a customer-declared schema, so the attestation key and both
+// of its values must be verified at the serialization boundary.
+func TestPushCoverageEmitsAttestationPerResource(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeVanta(t)
+	s := newSink(fake.server.Client(), fake.server.URL)
+
+	seen := time.Date(2026, 7, 29, 9, 0, 0, 0, time.UTC)
+	snapshot := providers.CoverageSnapshot{
+		OrganizationID: "org-test",
+		GeneratedAt:    time.Date(2026, 7, 29, 10, 0, 0, 0, time.UTC),
+		Devices: []providers.CoverageDevice{
+			{
+				ExternalID: "dev-attested", SerialNumber: "SER-A", Hostname: "mac-a",
+				UserEmail: "a@example.test", AgentActive: true,
+				AgentAttestation: providers.AttestationDevice, AgentLastSeenAt: seen,
+			},
+			{
+				ExternalID: "dev-user-only", SerialNumber: "SER-B", Hostname: "mac-b",
+				UserEmail: "b@example.test", AgentActive: false,
+				AgentAttestation: providers.AttestationUser, AgentLastSeenAt: time.Time{},
+			},
+		},
+	}
+	require.NoError(t, s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshot))
+
+	byID := map[string]map[string]any{}
+	for _, r := range fake.resources {
+		id, ok := r["uniqueId"].(string)
+		require.True(t, ok)
+		props, ok := r["customProperties"].(map[string]any)
+		require.True(t, ok)
+		byID[id] = props
+	}
+	require.Len(t, byID, 2)
+
+	require.Equal(t, "device", byID["dev-attested"]["agent_attestation"])
+	require.Equal(t, true, byID["dev-attested"]["agent_active"])
+	require.Equal(t, "2026-07-29T09:00:00Z", byID["dev-attested"]["agent_last_seen_at"])
+
+	require.Equal(t, "user", byID["dev-user-only"]["agent_attestation"])
+	require.Equal(t, false, byID["dev-user-only"]["agent_active"])
+	_, present := byID["dev-user-only"]["agent_last_seen_at"]
+	require.False(t, present, "a never-seen agent omits the timestamp rather than sending null or a zero time")
+
+	for _, props := range byID {
+		require.NotContains(t, props, "assigned_user_agent_active")
+		require.NotContains(t, props, "assigned_user_agent_last_seen_at")
+	}
 }

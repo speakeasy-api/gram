@@ -454,6 +454,12 @@ func TestCoverageSnapshotAttestationIsPerDevice(t *testing.T) {
 	// device-attested would be short-circuited as "no change".
 	userOnly, err := syncer.buildCoverageSnapshotWithMode(ctx, orgID, now, false)
 	require.NoError(t, err)
+	require.Len(t, userOnly.Devices, 2,
+		"both snapshots must carry the same devices, so the digests can only differ on attestation")
+	for _, d := range userOnly.Devices {
+		require.Equal(t, providers.AttestationUser, d.AgentAttestation)
+		require.True(t, d.AgentActive, "user-level matching still covers both devices")
+	}
 	require.NotEqual(t, coverageSnapshotDigest(snapshot), coverageSnapshotDigest(userOnly),
 		"attestation is push-relevant content and must be digested")
 }

@@ -74,38 +74,52 @@ type Service struct {
 	features    feature.Provider
 }
 
-// deviceLevelCoverage reports whether this org matches coverage on hardware
-// serials rather than assigned-user emails. Resolved once per request and
-// passed to every coverage query in it, so the counts, the device list, and
-// its bucket filter can never disagree about which mode they are in.
+// deviceLevelCoverage reports whether an org matches coverage on hardware
+// serials rather than assigned-user emails. Shared by the management API and
+// the sync runner so a pushed snapshot and the dashboard an admin is looking
+// at can never disagree about the mode.
 //
-// Degrades to user-level on any provider error: showing the pre-existing,
-// weaker-but-correct attestation beats failing an org's coverage page.
-func (s *Service) deviceLevelCoverage(ctx context.Context, orgID string) bool {
-	if s.features == nil {
+// Resolve it ONCE per request or run and pass the result to every coverage
+// query in it: the counts, the device list, and its bucket filter must all
+// report the same mode.
+//
+// Degrades to user-level on any error. The weaker claim is always safe to
+// show or publish; failing an org's coverage page, or publishing an
+// unprovable claim, is not.
+func deviceLevelCoverage(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, features feature.Provider, orgID string) bool {
+	if features == nil {
 		return false
 	}
-	// Targeted by PostHog organization group (org slug), the same way the
-	// dashboard evaluates it and matching the FlagBudgets rollout.
-	var groups map[string]string
-	if org, err := orgRepo.New(s.db).GetOrganizationMetadata(ctx, orgID); err != nil {
-		s.logger.WarnContext(ctx, "resolve organization slug for device-level coverage flag",
+	// Targeted by PostHog organization group (org slug), matching how the
+	// dashboard evaluates it and how FlagBudgets is rolled out.
+	// Evaluating the flag without the org group would silently change the
+	// question asked: a rollout targeted by organization group cannot match,
+	// yet a user- or global-level rule could still answer true and hand back
+	// the STRONGER claim off the back of an error. Degrade instead — the
+	// documented contract, and the safe direction.
+	org, err := orgRepo.New(db).GetOrganizationMetadata(ctx, orgID)
+	if err != nil {
+		logger.WarnContext(ctx, "resolve organization slug for device-level coverage flag, falling back to user-level",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(orgID),
 		)
-	} else {
-		groups = feature.OrgProjectGroups(org.Slug, "")
+		return false
 	}
+	groups := feature.OrgProjectGroups(org.Slug, "")
 
-	enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagDeviceLevelCoverage, orgID, groups)
-	if err != nil {
-		s.logger.WarnContext(ctx, "device-level coverage flag lookup failed, falling back to user-level",
-			attr.SlogError(err),
+	enabled, flagErr := features.IsFlagEnabled(ctx, feature.FlagDeviceLevelCoverage, orgID, groups)
+	if flagErr != nil {
+		logger.WarnContext(ctx, "device-level coverage flag lookup failed, falling back to user-level",
+			attr.SlogError(flagErr),
 			attr.SlogOrganizationID(orgID),
 		)
 		return false
 	}
 	return enabled
+}
+
+func (s *Service) deviceLevelCoverage(ctx context.Context, orgID string) bool {
+	return deviceLevelCoverage(ctx, s.logger, s.db, s.features, orgID)
 }
 
 // coverageAttestation names the strongest claim that holds for EVERY active
