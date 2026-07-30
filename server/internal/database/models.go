@@ -306,6 +306,30 @@ type BillingMetadatum struct {
 	UpdatedAt              pgtype.Timestamptz
 }
 
+type BusinessMemory struct {
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	OrganizationID       string
+	Body                 string
+	MemoryType           string
+	StructuralScope      string
+	ContentScope         []byte
+	Embedding            pgvector_go.HalfVector
+	EmbeddingModel       string
+	ExtractionModel      string
+	SourceEvaluationID   uuid.NullUUID
+	SourceCandidateIndex int32
+	SourceChatID         uuid.NullUUID
+	SourceTurn           pgtype.Int4
+	SourceAuthorID       pgtype.Text
+	ExtractedAt          pgtype.Timestamptz
+	LifecycleState       string
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
+}
+
 type Chat struct {
 	ID                 uuid.UUID
 	ProjectID          uuid.UUID
