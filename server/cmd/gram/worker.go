@@ -717,6 +717,7 @@ func newWorkerCommand() *cli.Command {
 				chatSessionsManager,
 				env,
 				posthogClient,
+				posthogClient,
 				serverURL,
 				nil,
 				encryptionClient,

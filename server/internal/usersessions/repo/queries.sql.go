@@ -1369,6 +1369,94 @@ func (q *Queries) UpdateUserSessionIssuer(ctx context.Context, arg UpdateUserSes
 	return i, err
 }
 
+const upsertUserSessionClientFromCIMD = `-- name: UpsertUserSessionClientFromCIMD :one
+INSERT INTO user_session_clients (
+    project_id,
+    user_session_issuer_id,
+    client_id,
+    client_secret_hash,
+    client_name,
+    redirect_uris,
+    client_secret_expires_at,
+    client_id_metadata_uri,
+    client_id_metadata_fetched_at
+)
+VALUES (
+    (SELECT project_id FROM user_session_issuers WHERE id = $1),
+    $1,
+    $2,
+    NULL,
+    $3,
+    $4,
+    NULL,
+    $2,
+    clock_timestamp()
+)
+ON CONFLICT (user_session_issuer_id, client_id) WHERE deleted IS FALSE
+DO UPDATE SET
+    client_name = EXCLUDED.client_name,
+    redirect_uris = EXCLUDED.redirect_uris,
+    client_id_metadata_uri = EXCLUDED.client_id_metadata_uri,
+    client_id_metadata_fetched_at = EXCLUDED.client_id_metadata_fetched_at,
+    updated_at = clock_timestamp()
+WHERE user_session_clients.client_secret_hash IS NULL
+RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertUserSessionClientFromCIMDParams struct {
+	UserSessionIssuerID uuid.UUID
+	ClientID            string
+	ClientName          string
+	RedirectUris        []string
+}
+
+// Lazy upsert for a client resolved from a Client ID Metadata Document at
+// authorize time. For CIMD rows the document URL IS the client_id, so the
+// conflict target is the same partial unique index that serves DCR lookups.
+// On refresh the mutable metadata (client_name, redirect_uris) and the fetch
+// stamp are replaced wholesale — the document is refetched on every
+// authorize.
+//
+// Two deliberate behaviors:
+//   - A soft-deleted row does not conflict (partial index), so revoking a
+//     CIMD client does not stick: the next authorize resolves the document
+//     again and inserts a fresh row. CIMD identity lives at the URL, and
+//     durable blocking is admission control's job, not revocation's.
+//   - The DO UPDATE is guarded so it can never touch a secret-bearing DCR
+//     row that happens to share the client_id: rewriting it would trip the
+//     client_id_metadata_uri CHECK constraints with an opaque 500. The
+//     guard makes such a collision surface as no-rows, which handlers
+//     already map to invalid_client.
+func (q *Queries) UpsertUserSessionClientFromCIMD(ctx context.Context, arg UpsertUserSessionClientFromCIMDParams) (UserSessionClient, error) {
+	row := q.db.QueryRow(ctx, upsertUserSessionClientFromCIMD,
+		arg.UserSessionIssuerID,
+		arg.ClientID,
+		arg.ClientName,
+		arg.RedirectUris,
+	)
+	var i UserSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.UserSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretHash,
+		&i.ClientName,
+		&i.RedirectUris,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.ClientIDMetadataUri,
+		&i.ClientIDMetadataFetchedAt,
+		&i.ClientIDMetadataCacheExpiresAt,
+		&i.ClientIDMetadataEtag,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const userSessionIssuerHasActiveOwner = `-- name: UserSessionIssuerHasActiveOwner :one
 SELECT EXISTS (
     SELECT 1

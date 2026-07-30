@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -47,6 +48,7 @@ import (
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -86,20 +88,31 @@ type IdentityResolver interface {
 }
 
 type Service struct {
-	logger                 *slog.Logger
-	tracer                 trace.Tracer
-	metrics                *metrics
-	guardianPolicy         *guardian.Policy
-	db                     *pgxpool.Pool
-	authRepo               *auth_repo.Queries
-	toolsetsRepo           *toolsets_repo.Queries
-	mcpMetadataRepo        *metadata_repo.Queries
-	orgsRepo               *organizations_repo.Queries
-	auth                   *auth.Auth
-	env                    toolconfig.EnvironmentLoader
-	serverURL              *url.URL
-	siteURL                *url.URL
-	posthog                *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	logger          *slog.Logger
+	tracer          trace.Tracer
+	metrics         *metrics
+	guardianPolicy  *guardian.Policy
+	db              *pgxpool.Pool
+	authRepo        *auth_repo.Queries
+	toolsetsRepo    *toolsets_repo.Queries
+	mcpMetadataRepo *metadata_repo.Queries
+	orgsRepo        *organizations_repo.Queries
+	auth            *auth.Auth
+	env             toolconfig.EnvironmentLoader
+	serverURL       *url.URL
+	siteURL         *url.URL
+	posthog         *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	// features gates flag-controlled behavior on the OAuth surface (inbound
+	// CIMD). Wired from the same posthog client in production; typed as the
+	// interface so tests can inject feature.InMemory.
+	features feature.Provider
+	// cimdOrgFlagLastKnown remembers the last successful per-organization
+	// evaluation of FlagUserSessionCIMD so a flag-provider outage degrades
+	// to the last known state instead of failing closed on the
+	// unauthenticated OAuth surface. Guarded by cimdOrgFlagMu; holds one bool
+	// per organization that touches the surface.
+	cimdOrgFlagMu          sync.RWMutex
+	cimdOrgFlagLastKnown   map[string]bool
 	toolProxy              *gateway.ToolProxy
 	oauthService           OAuthService
 	oauthRepo              *oauth_repo.Queries
@@ -239,6 +252,7 @@ func NewService(
 	chatSessionsManager *chatsessions.Manager,
 	env toolconfig.EnvironmentLoader,
 	posthog *posthog.Posthog,
+	features feature.Provider,
 	serverURL *url.URL,
 	siteURL *url.URL,
 	enc *encryption.Client,
@@ -286,22 +300,25 @@ func NewService(
 	)
 
 	return &Service{
-		logger:          logger,
-		tracer:          tracer,
-		metrics:         newMetrics(meter, logger),
-		guardianPolicy:  guardianPolicy,
-		db:              db,
-		authRepo:        auth_repo.New(db),
-		toolsetsRepo:    toolsets_repo.New(db),
-		mcpMetadataRepo: metadata_repo.New(db),
-		orgsRepo:        organizations_repo.New(db),
-		deploymentsRepo: deployments_repo.New(db),
-		externalmcpRepo: externalmcp_repo.New(db),
-		auth:            auth.New(logger, db, sessions, authzEngine),
-		env:             env,
-		serverURL:       serverURL,
-		siteURL:         siteURL,
-		posthog:         posthog,
+		logger:               logger,
+		tracer:               tracer,
+		metrics:              newMetrics(meter, logger),
+		guardianPolicy:       guardianPolicy,
+		db:                   db,
+		authRepo:             auth_repo.New(db),
+		toolsetsRepo:         toolsets_repo.New(db),
+		mcpMetadataRepo:      metadata_repo.New(db),
+		orgsRepo:             organizations_repo.New(db),
+		deploymentsRepo:      deployments_repo.New(db),
+		externalmcpRepo:      externalmcp_repo.New(db),
+		auth:                 auth.New(logger, db, sessions, authzEngine),
+		env:                  env,
+		serverURL:            serverURL,
+		siteURL:              siteURL,
+		posthog:              posthog,
+		features:             features,
+		cimdOrgFlagMu:        sync.RWMutex{},
+		cimdOrgFlagLastKnown: map[string]bool{},
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			tracerProvider,
