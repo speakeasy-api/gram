@@ -38,7 +38,9 @@ export function useDismissFinding(): {
     (ids: string[]) => {
       setOptimistic((prev) => {
         const next = new Set(prev);
-        ids.forEach((id) => next.delete(id));
+        ids.forEach((id) => {
+          next.delete(id);
+        });
         return next;
       });
       unmarkMutation.mutate(
@@ -59,7 +61,9 @@ export function useDismissFinding(): {
       if (ids.length === 0) return;
       setOptimistic((prev) => {
         const next = new Set(prev);
-        ids.forEach((id) => next.add(id));
+        ids.forEach((id) => {
+          next.add(id);
+        });
         return next;
       });
       markMutation.mutate(
