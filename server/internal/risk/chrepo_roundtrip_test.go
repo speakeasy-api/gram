@@ -26,7 +26,9 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 	q := chrepo.New(conn)
 
 	orgID := "org_" + uuid.NewString()
-	createdAt := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+	// Relative: the risk_findings table has a 90-day TTL, so a fixed date
+	// eventually expires and the read-back finds nothing.
+	createdAt := time.Now().UTC().Truncate(time.Hour).AddDate(0, 0, -1)
 
 	// A plain (non-excluded) row: excluded_at / exclusion_id bind as nil into
 	// the Nullable columns.
