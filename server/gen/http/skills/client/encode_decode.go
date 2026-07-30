@@ -1734,6 +1734,235 @@ func DecodeListFeedbackResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildTriggerSuggestionRequest instantiates a HTTP request object with method
+// and path set to call the "skills" service "triggerSuggestion" endpoint
+func (c *Client) BuildTriggerSuggestionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: TriggerSuggestionSkillsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "triggerSuggestion", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeTriggerSuggestionRequest returns an encoder for requests sent to the
+// skills triggerSuggestion server.
+func EncodeTriggerSuggestionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.TriggerSuggestionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "triggerSuggestion", "*skills.TriggerSuggestionPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewTriggerSuggestionRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("skills", "triggerSuggestion", err)
+		}
+		return nil
+	}
+}
+
+// DecodeTriggerSuggestionResponse returns a decoder for responses returned by
+// the skills triggerSuggestion endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeTriggerSuggestionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeTriggerSuggestionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusAccepted:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body TriggerSuggestionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "triggerSuggestion", err)
+			}
+			err = ValidateTriggerSuggestionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "triggerSuggestion", err)
+			}
+			return nil, NewTriggerSuggestionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body TriggerSuggestionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "triggerSuggestion", err)
+			}
+			err = ValidateTriggerSuggestionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "triggerSuggestion", err)
+			}
+			return nil, NewTriggerSuggestionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body TriggerSuggestionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "triggerSuggestion", err)
+			}
+			err = ValidateTriggerSuggestionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "triggerSuggestion", err)
+			}
+			return nil, NewTriggerSuggestionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body TriggerSuggestionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "triggerSuggestion", err)
+			}
+			err = ValidateTriggerSuggestionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "triggerSuggestion", err)
+			}
+			return nil, NewTriggerSuggestionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body TriggerSuggestionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "triggerSuggestion", err)
+			}
+			err = ValidateTriggerSuggestionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "triggerSuggestion", err)
+			}
+			return nil, NewTriggerSuggestionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body TriggerSuggestionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "triggerSuggestion", err)
+			}
+			err = ValidateTriggerSuggestionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "triggerSuggestion", err)
+			}
+			return nil, NewTriggerSuggestionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body TriggerSuggestionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "triggerSuggestion", err)
+			}
+			err = ValidateTriggerSuggestionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "triggerSuggestion", err)
+			}
+			return nil, NewTriggerSuggestionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body TriggerSuggestionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "triggerSuggestion", err)
+				}
+				err = ValidateTriggerSuggestionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "triggerSuggestion", err)
+				}
+				return nil, NewTriggerSuggestionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body TriggerSuggestionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "triggerSuggestion", err)
+				}
+				err = ValidateTriggerSuggestionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "triggerSuggestion", err)
+				}
+				return nil, NewTriggerSuggestionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "triggerSuggestion", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body TriggerSuggestionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "triggerSuggestion", err)
+			}
+			err = ValidateTriggerSuggestionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "triggerSuggestion", err)
+			}
+			return nil, NewTriggerSuggestionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "triggerSuggestion", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildApproveSuggestionRequest instantiates a HTTP request object with method
 // and path set to call the "skills" service "approveSuggestion" endpoint
 func (c *Client) BuildApproveSuggestionRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -5245,6 +5474,35 @@ func unmarshalSkillFeedbackCountsResponseBodyToSkillsSkillFeedbackCounts(v *Skil
 		DidNotHelp:      *v.DidNotHelp,
 		Misleading:      *v.Misleading,
 		Harmful:         *v.Harmful,
+	}
+
+	return res
+}
+
+// unmarshalSkillFeedbackMetricsResponseBodyToSkillsSkillFeedbackMetrics builds
+// a value of type *skills.SkillFeedbackMetrics from a value of type
+// *SkillFeedbackMetricsResponseBody.
+func unmarshalSkillFeedbackMetricsResponseBodyToSkillsSkillFeedbackMetrics(v *SkillFeedbackMetricsResponseBody) *skills.SkillFeedbackMetrics {
+	res := &skills.SkillFeedbackMetrics{
+		WindowStart:                 *v.WindowStart,
+		WindowEnd:                   *v.WindowEnd,
+		FeedbackInWindow:            *v.FeedbackInWindow,
+		ActivationsInWindow:         *v.ActivationsInWindow,
+		FeedbackActivationsInWindow: *v.FeedbackActivationsInWindow,
+		Unreviewed:                  *v.Unreviewed,
+		Converted:                   *v.Converted,
+	}
+
+	return res
+}
+
+// unmarshalSkillFeedbackTimelinePointResponseBodyToSkillsSkillFeedbackTimelinePoint
+// builds a value of type *skills.SkillFeedbackTimelinePoint from a value of
+// type *SkillFeedbackTimelinePointResponseBody.
+func unmarshalSkillFeedbackTimelinePointResponseBodyToSkillsSkillFeedbackTimelinePoint(v *SkillFeedbackTimelinePointResponseBody) *skills.SkillFeedbackTimelinePoint {
+	res := &skills.SkillFeedbackTimelinePoint{
+		BucketStart:   *v.BucketStart,
+		FeedbackCount: *v.FeedbackCount,
 	}
 
 	return res

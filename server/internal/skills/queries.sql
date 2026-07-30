@@ -57,6 +57,85 @@ FROM skill_feedback
 WHERE project_id = @project_id
   AND skill_id = @skill_id;
 
+-- name: GetSkillFeedbackMetrics :one
+SELECT
+  COUNT(*) FILTER (
+    WHERE feedback.created_at >= @window_start
+      AND feedback.created_at < @window_end
+  )::bigint AS feedback_in_window,
+  COUNT(*) FILTER (WHERE feedback.reviewed_at IS NULL)::bigint AS unreviewed,
+  (
+    SELECT COUNT(*)::bigint
+    FROM skill_observations observation
+    WHERE observation.project_id = @project_id
+      AND observation.skill_id = @skill_id
+      AND observation.reconciled_at IS NOT NULL
+      AND observation.reconcile_error_code IS NULL
+      AND observation.seen_at >= @window_start
+      AND observation.seen_at < @window_end
+  ) AS activations_in_window,
+  (
+    SELECT COUNT(*)::bigint
+    FROM skill_observations observation
+    WHERE observation.project_id = @project_id
+      AND observation.skill_id = @skill_id
+      AND observation.reconciled_at IS NOT NULL
+      AND observation.reconcile_error_code IS NULL
+      AND observation.session_id IS NOT NULL
+      AND observation.seen_at >= @window_start
+      AND observation.seen_at < @window_end
+      AND EXISTS (
+        SELECT 1
+        FROM skill_feedback paired
+        WHERE paired.project_id = observation.project_id
+          AND paired.skill_id = observation.skill_id
+          AND paired.session_id = observation.session_id
+          AND paired.created_at >= @window_start
+          AND paired.created_at < @window_end
+      )
+  ) AS feedback_activations_in_window,
+  (
+    SELECT COUNT(DISTINCT converted.id)::bigint
+    FROM skill_feedback converted
+    JOIN skill_edit_suggestion_feedback link
+      ON link.project_id = converted.project_id
+      AND link.feedback_id = converted.id
+    JOIN skill_edit_suggestion_changes change
+      ON change.project_id = link.project_id
+      AND change.id = link.change_id
+    JOIN skill_edit_suggestions suggestion
+      ON suggestion.project_id = change.project_id
+      AND suggestion.id = change.suggestion_id
+    WHERE converted.project_id = @project_id
+      AND converted.skill_id = @skill_id
+      AND suggestion.skill_id = @skill_id
+  ) AS converted
+FROM skill_feedback feedback
+WHERE feedback.project_id = @project_id
+  AND feedback.skill_id = @skill_id;
+
+-- name: ListSkillFeedbackTimeline :many
+WITH buckets AS (
+  SELECT generate_series(
+    date_trunc('day', @window_start::timestamptz, 'UTC'),
+    date_trunc('day', @window_end::timestamptz, 'UTC'),
+    interval '1 day'
+  )::timestamptz AS bucket_start
+)
+SELECT
+  buckets.bucket_start,
+  COUNT(feedback.id)::bigint AS feedback_count
+FROM buckets
+LEFT JOIN skill_feedback feedback
+  ON feedback.project_id = @project_id
+  AND feedback.skill_id = @skill_id
+  AND feedback.created_at >= buckets.bucket_start
+  AND feedback.created_at < buckets.bucket_start + interval '1 day'
+  AND feedback.created_at >= @window_start
+  AND feedback.created_at < @window_end
+GROUP BY buckets.bucket_start
+ORDER BY buckets.bucket_start;
+
 -- name: ListSkillFeedbackByID :many
 SELECT *
 FROM skill_feedback

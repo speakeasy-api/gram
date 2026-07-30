@@ -407,6 +407,7 @@ trackedFiles:
   src/funcs/skillsListVersions.ts: {}
   src/funcs/skillsRestoreVersion.ts: {}
   src/funcs/skillsShare.ts: {}
+  src/funcs/skillsTriggerSuggestion.ts: {}
   src/funcs/skillsUndistribute.ts: {}
   src/funcs/skillsUnshare.ts: {}
   src/funcs/skillsUpdate.ts: {}
@@ -1084,7 +1085,9 @@ trackedFiles:
   src/models/components/skillefficacysettings.ts: {}
   src/models/components/skillfeedback.ts: {}
   src/models/components/skillfeedbackcounts.ts: {}
+  src/models/components/skillfeedbackmetrics.ts: {}
   src/models/components/skillfeedbackpayload.ts: {}
+  src/models/components/skillfeedbacktimelinepoint.ts: {}
   src/models/components/skillinsightmetrics.ts: {}
   src/models/components/skillinsightpoint.ts: {}
   src/models/components/skillsharelink.ts: {}
@@ -1158,6 +1161,7 @@ trackedFiles:
   src/models/components/triggerenvrequirement.ts: {}
   src/models/components/triggerinstance.ts: {}
   src/models/components/triggerriskanalysisrequestbody.ts: {}
+  src/models/components/triggerskillsuggestionrequestbody.ts: {}
   src/models/components/tumdetailsbreakdown.ts: {}
   src/models/components/tumdetailsbreakdownrow.ts: {}
   src/models/components/tumdetailspoint.ts: {}
@@ -1669,6 +1673,7 @@ trackedFiles:
   src/models/operations/tokenexchange.ts: {}
   src/models/operations/triggerchatanalysis.ts: {}
   src/models/operations/triggerriskanalysis.ts: {}
+  src/models/operations/triggerskillsuggestion.ts: {}
   src/models/operations/undistributeskill.ts: {}
   src/models/operations/unmaskriskresult.ts: {}
   src/models/operations/unshareskill.ts: {}
@@ -2352,6 +2357,7 @@ trackedFiles:
   src/react-query/triggerChatAnalysis.ts: {}
   src/react-query/triggerDefinitions.core.ts: {}
   src/react-query/triggerDefinitions.ts: {}
+  src/react-query/triggerSkillSuggestion.ts: {}
   src/react-query/triggers.core.ts: {}
   src/react-query/triggers.ts: {}
   src/react-query/tunneledMcpServers.core.ts: {}
@@ -5929,7 +5935,7 @@ examples:
           limit: 20
       responses:
         "200":
-          application/json: {"counts": {"did_not_help": 9166, "harmful": 958057, "helped": 233517, "misleading": 284907, "partially_helped": 732301, "total": 162598}, "feedback": []}
+          application/json: {"counts": {"did_not_help": 9166, "harmful": 958057, "helped": 233517, "misleading": 284907, "partially_helped": 732301, "total": 162598}, "feedback": [], "metrics": {"activations_in_window": 912003, "converted": 26011, "feedback_activations_in_window": 139631, "feedback_in_window": 742679, "unreviewed": 518115, "window_end": "2024-09-26T14:24:20.465Z", "window_start": "2024-03-16T01:50:19.355Z"}, "timeline": [{"bucket_start": "2025-09-15T08:08:59.146Z", "feedback_count": 496980}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -7185,6 +7191,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  triggerSkillSuggestion:
+    speakeasy-default-trigger-skill-suggestion:
+      requestBody:
+        application/json: {"id": "3403f4a4-d5a8-447b-b951-c79cc0163359"}
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   undistributeSkill:
     speakeasy-default-undistribute-skill:
       requestBody:

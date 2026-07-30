@@ -211,7 +211,7 @@ var _ = Service("skills", func() {
 	})
 
 	Method("listFeedback", func() {
-		Description("List all-time outcome counts and recent resolved feedback for a skill. Name-only feedback is excluded.")
+		Description("List outcome counts, collection metrics, volume, and recent resolved feedback for a skill. Name-only feedback is excluded.")
 
 		Payload(func() {
 			Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
@@ -244,6 +244,33 @@ var _ = Service("skills", func() {
 		Meta("openapi:operationId", "listSkillFeedback")
 		Meta("openapi:extension:x-speakeasy-name-override", "listFeedback")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SkillFeedback"}`)
+	})
+
+	Method("triggerSuggestion", func() {
+		Description("Manually run suggestion analysis for a skill, bypassing automatic feedback and efficacy thresholds while preserving the one-open-suggestion invariant.")
+
+		Payload(func() {
+			Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(Empty)
+
+		HTTP(func() {
+			POST("/rpc/skills.triggerSuggestion")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Body(TriggerSkillSuggestionRequestBody)
+			Response(StatusAccepted)
+		})
+
+		Meta("openapi:operationId", "triggerSkillSuggestion")
+		Meta("openapi:extension:x-speakeasy-name-override", "triggerSuggestion")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TriggerSkillSuggestion", "type": "mutation"}`)
 	})
 
 	Method("approveSuggestion", func() {
@@ -710,6 +737,13 @@ var DismissSkillSuggestionRequestBody = Type("DismissSkillSuggestionRequestBody"
 	Required("id")
 })
 
+var TriggerSkillSuggestionRequestBody = Type("TriggerSkillSuggestionRequestBody", func() {
+	Meta("openapi:typename", "TriggerSkillSuggestionRequestBody")
+
+	Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
+	Required("id")
+})
+
 var ApproveAllSkillSuggestionsRequestBody = Type("ApproveAllSkillSuggestionsRequestBody", func() {
 	Meta("openapi:typename", "ApproveAllSkillSuggestionsRequestBody")
 
@@ -952,12 +986,33 @@ var SkillFeedbackCounts = Type("SkillFeedbackCounts", func() {
 	Required("total", "helped", "partially_helped", "did_not_help", "misleading", "harmful")
 })
 
+var SkillFeedbackMetrics = Type("SkillFeedbackMetrics", func() {
+	Description("Feedback collection and suggestion conversion metrics for a skill.")
+	Attribute("window_start", String, "The start of the rolling collection window.", func() { Format(FormatDateTime) })
+	Attribute("window_end", String, "The end of the rolling collection window.", func() { Format(FormatDateTime) })
+	Attribute("feedback_in_window", Int64, "Feedback recorded during the collection window.")
+	Attribute("activations_in_window", Int64, "Resolved skill activations during the collection window.")
+	Attribute("feedback_activations_in_window", Int64, "Resolved activations paired to feedback during the collection window.")
+	Attribute("unreviewed", Int64, "Feedback not yet reviewed by suggestion analysis.")
+	Attribute("converted", Int64, "All-time feedback linked to a generated suggestion.")
+	Required("window_start", "window_end", "feedback_in_window", "activations_in_window", "feedback_activations_in_window", "unreviewed", "converted")
+})
+
+var SkillFeedbackTimelinePoint = Type("SkillFeedbackTimelinePoint", func() {
+	Description("Feedback volume for one UTC day.")
+	Attribute("bucket_start", String, "The start of the UTC day.", func() { Format(FormatDateTime) })
+	Attribute("feedback_count", Int64)
+	Required("bucket_start", "feedback_count")
+})
+
 var ListSkillFeedbackResult = Type("ListSkillFeedbackResult", func() {
-	Description("All-time outcome counts and a newest-first page of feedback for a skill.")
+	Description("Outcome counts, collection metrics, a 30-day timeline, and a newest-first page of feedback for a skill.")
 	Attribute("counts", SkillFeedbackCounts)
+	Attribute("metrics", SkillFeedbackMetrics)
+	Attribute("timeline", ArrayOf(SkillFeedbackTimelinePoint))
 	Attribute("feedback", ArrayOf(SkillFeedback))
 	Attribute("next_cursor", String, "Cursor for the next page; absent when exhausted.")
-	Required("counts", "feedback")
+	Required("counts", "metrics", "timeline", "feedback")
 })
 
 var ListSkillSuggestionFeedbackResult = Type("ListSkillSuggestionFeedbackResult", func() {

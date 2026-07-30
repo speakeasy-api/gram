@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	domainskills "github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/suggest"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
@@ -32,6 +33,7 @@ const (
 
 	skillSuggestionSweepScheduleID = "v1:skill-suggestion-sweep-schedule"
 	skillSuggestionSweepWorkflowID = skillSuggestionSweepScheduleID + "/scheduled"
+	skillSuggestionForceMessage    = "force"
 )
 
 type SkillSuggestionParams = activities.SkillSuggestionIdentity
@@ -53,11 +55,15 @@ func skillSuggestionSignal(params SkillSuggestionParams) string {
 }
 
 func SkillSuggestionWorkflow(ctx workflow.Context, params SkillSuggestionParams) (*suggest.Result, error) {
-	return Debounce(
+	return DebounceWithSignalCoalescing(
 		SkillSuggestionAnalysisWorkflow,
 		SkillSuggestionWorkflow,
 		skillSuggestionSignal,
 		func(_ SkillSuggestionParams, result *suggest.Result) bool { return result.Reenqueue },
+		func(params SkillSuggestionParams, message string) SkillSuggestionParams {
+			params.Force = params.Force || message == skillSuggestionForceMessage
+			return params
+		},
 	)(ctx, params)
 }
 
@@ -156,7 +162,7 @@ func sweepSkillSuggestionProject(ctx workflow.Context, project activities.SkillS
 		}
 		identities := make([]activities.SkillSuggestionIdentity, len(skills))
 		for i, skill := range skills {
-			identities[i] = activities.SkillSuggestionIdentity{ProjectID: project.ProjectID, SkillID: skill.ID}
+			identities[i] = activities.SkillSuggestionIdentity{ProjectID: project.ProjectID, SkillID: skill.ID, Force: false}
 		}
 		if len(identities) > 0 {
 			if err := workflow.ExecuteActivity(ctx, analyzer.SignalSkillSuggestions, identities).Get(ctx, nil); err != nil {
@@ -210,15 +216,24 @@ type TemporalSkillSuggestionSignaler struct {
 }
 
 var _ suggest.Signaler = (*TemporalSkillSuggestionSignaler)(nil)
+var _ domainskills.ManualSuggestionSignaler = (*TemporalSkillSuggestionSignaler)(nil)
 
 func (s *TemporalSkillSuggestionSignaler) Signal(ctx context.Context, projectID, skillID uuid.UUID) error {
-	params := SkillSuggestionParams{ProjectID: projectID, SkillID: skillID}
+	return s.signal(ctx, projectID, skillID, "enqueue", s.StartDelay)
+}
+
+// SignalManual requests a pass that bypasses automatic thresholds.
+func (s *TemporalSkillSuggestionSignaler) SignalManual(ctx context.Context, projectID, skillID uuid.UUID) error {
+	return s.signal(ctx, projectID, skillID, skillSuggestionForceMessage, 0)
+}
+
+func (s *TemporalSkillSuggestionSignaler) signal(ctx context.Context, projectID, skillID uuid.UUID, message string, startDelay time.Duration) error {
+	params := SkillSuggestionParams{ProjectID: projectID, SkillID: skillID, Force: false}
 	workflowID := skillSuggestionWorkflowID(skillID)
-	startDelay := s.StartDelay
-	if startDelay <= 0 {
+	if message != skillSuggestionForceMessage && startDelay <= 0 {
 		startDelay = defaultSkillSuggestionStartDelay
 	}
-	_, err := s.TemporalEnv.Client().SignalWithStartWorkflow(ctx, workflowID, skillSuggestionSignal(params), "enqueue", client.StartWorkflowOptions{
+	_, err := s.TemporalEnv.Client().SignalWithStartWorkflow(ctx, workflowID, skillSuggestionSignal(params), message, client.StartWorkflowOptions{
 		ID:                       workflowID,
 		TaskQueue:                string(s.TemporalEnv.Queue()),
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
