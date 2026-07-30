@@ -156,11 +156,22 @@ func redirectURIMatches(client *usersessions_repo.UserSessionClient, requested s
 		return false
 	}
 
+	// Fragments disqualify the exception on either side: RFC 6749 §3.1.2
+	// forbids fragments in redirect URIs, and url.Parse cannot distinguish
+	// an absent fragment from an explicit empty one ("...#") — URL.String()
+	// drops the latter, which would let a malformed registered URI match a
+	// fragment-less request. A raw-string check is the only reliable guard.
+	if strings.Contains(requested, "#") {
+		return false
+	}
 	requestedURL, err := url.Parse(requested)
 	if err != nil || requestedURL.User != nil || !cimd.IsLoopbackRedirectURI(requestedURL) {
 		return false
 	}
 	for _, registered := range client.RedirectUris {
+		if strings.Contains(registered, "#") {
+			continue
+		}
 		registeredURL, err := url.Parse(registered)
 		if err != nil || registeredURL.User != nil || !cimd.IsLoopbackRedirectURI(registeredURL) {
 			continue
@@ -175,10 +186,11 @@ func redirectURIMatches(client *usersessions_repo.UserSessionClient, requested s
 // loopbackRedirectEqualIgnoringPort reports whether two parsed loopback
 // redirect URIs are identical except for the port. Rebuilding each URI with
 // the port stripped and the host lowercased, then comparing the resulting
-// strings, covers every component in escaped form — scheme, host, path,
-// query, and fragment — so a percent-encoding variant (e.g. /%63allback for
-// a registered /callback) or an added fragment cannot slip through the
-// variable-port exception.
+// strings, covers every remaining component in escaped form — scheme, host,
+// path, and query — so a percent-encoding variant (e.g. /%63allback for a
+// registered /callback) cannot slip through the variable-port exception.
+// Callers must have rejected fragments on both sides already: URL.String()
+// cannot represent an explicit empty fragment.
 func loopbackRedirectEqualIgnoringPort(a, b *url.URL) bool {
 	stripPort := func(u *url.URL) string {
 		c := *u

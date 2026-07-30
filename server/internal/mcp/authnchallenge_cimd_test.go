@@ -599,3 +599,19 @@ func TestOAuthCIMD_LoopbackFragmentRejected(t *testing.T) {
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback#frag", pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
 }
+
+// TestOAuthCIMD_LoopbackEmptyFragmentRegistrationRejected: a registered URI
+// carrying an explicit empty fragment ("...#") must not satisfy the
+// variable-port exception for a fragment-less request. URL.String() drops a
+// bare "#", so without the raw-string fragment guard the two would compare
+// equal despite differing by more than the port.
+func TestOAuthCIMD_LoopbackEmptyFragmentRegistrationRejected(t *testing.T) {
+	t.Parallel()
+
+	_, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ds.doc["redirect_uris"] = []any{"http://127.0.0.1:33418/callback#"}
+
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(pkceVerifier(t)))
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
+}
