@@ -89,15 +89,19 @@ func newFakeDrata(t *testing.T) *fakeDrata {
 		}
 		wanted := r.URL.Query().Get("status")
 		f.mu.Lock()
+		// Items mirror the shape observed from the production API: a numeric
+		// "id" alongside the caller-chosen "sessionId", extra timestamp
+		// fields, and a pagination envelope. The provider once decoded "id"
+		// as a string and the mismatch broke every push.
 		listed := make([]string, 0, len(f.sessionStatus))
 		for id, status := range f.sessionStatus {
 			if f.ignoreStatusFilter || wanted == "" || status == wanted {
-				listed = append(listed, fmt.Sprintf(`{"sessionId": %q, "status": %q}`, id, status))
+				listed = append(listed, fmt.Sprintf(`{"id": %d, "sessionId": %q, "status": %q, "activatedAt": null}`, len(listed)+1, id, status))
 			}
 		}
 		f.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintf(w, `{"data": [%s]}`, strings.Join(listed, ","))
+		_, _ = fmt.Fprintf(w, `{"data": [%s], "pagination": {"cursor": null}}`, strings.Join(listed, ","))
 	})
 	mux.HandleFunc(connBase, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(f.t, http.MethodGet, r.Method)
@@ -420,6 +424,71 @@ func TestPushCancelsStrandedSession(t *testing.T) {
 	require.Len(t, fake.completed, 1)
 	require.NotContains(t, fake.completed, "gram-stranded")
 	require.Len(t, fake.records, 2, "the live dataset is the new snapshot alone")
+}
+
+// TestStrandedSweepDecodesSessionListShapes pins the sweep's decode against
+// the response shapes the endpoint is undocumented enough to serve. The
+// production API returns numeric session "id"s inside a data/pagination
+// envelope — decoding "id" as a string once broke every push — and an empty
+// sweep may surface as data: null or a missing data key rather than [].
+func TestStrandedSweepDecodesSessionListShapes(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		body string
+		// wantCancel is the session identifier the sweep must cancel, or ""
+		// when the listing holds nothing cancellable.
+		wantCancel string
+	}{
+		{name: "envelope with null data", body: `{"data": null, "pagination": {"cursor": null}}`, wantCancel: ""},
+		{name: "envelope without data key", body: `{"pagination": {"cursor": null}}`, wantCancel: ""},
+		{name: "bare empty array", body: `[]`, wantCancel: ""},
+		{name: "bare array with a strand", body: `[{"sessionId": "gram-old", "status": "IN_PROGRESS"}]`, wantCancel: "gram-old"},
+		{
+			name:       "production envelope shape",
+			body:       `{"data": [{"id": 2, "sessionId": "gram-old", "status": "IN_PROGRESS", "createdAt": "2026-07-30T16:55:20.756Z", "activatedAt": null}], "pagination": {"cursor": null}}`,
+			wantCancel: "gram-old",
+		},
+		{
+			// No sessionId at all: the identifier must fall back to the
+			// numeric id, stringified, because it names the cancel URL.
+			name:       "numeric id only",
+			body:       `{"data": [{"id": 7, "status": "IN_PROGRESS"}]}`,
+			wantCancel: "7",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var canceled []string
+			mux := http.NewServeMux()
+			mux.HandleFunc("/resource/sessions", func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "IN_PROGRESS", r.URL.Query().Get("status"))
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprint(w, tc.body)
+			})
+			mux.HandleFunc("/resource/sessions/", func(w http.ResponseWriter, r *http.Request) {
+				id, ok := strings.CutSuffix(strings.TrimPrefix(r.URL.Path, "/resource/sessions/"), "/actions")
+				assert.True(t, ok, "only action posts are expected here")
+				canceled = append(canceled, id)
+				w.WriteHeader(http.StatusCreated)
+			})
+			server := httptest.NewTLSServer(mux)
+			t.Cleanup(server.Close)
+
+			s := &sink{client: server.Client(), regions: map[string]string{"us": server.URL}}
+			require.NoError(t, s.cancelStrandedSessions(t.Context(), providers.Credentials{fieldAPIKey: "k"}, server.URL+"/resource"))
+
+			if tc.wantCancel == "" {
+				require.Empty(t, canceled)
+			} else {
+				require.Equal(t, []string{tc.wantCancel}, canceled)
+			}
+		})
+	}
 }
 
 func TestPushRecoversAfterPartialFailure(t *testing.T) {

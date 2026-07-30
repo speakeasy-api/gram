@@ -213,17 +213,18 @@ func (s *sink) doJSON(ctx context.Context, creds providers.Credentials, method, 
 	return respBody, nil
 }
 
-// resourceID tolerates Drata serializing resource ids as JSON numbers or
-// strings — the reference documents numbers, but a string-typed id must not
-// permanently brick the integration.
-type resourceID string
+// flexID tolerates Drata serializing ids as JSON numbers or strings. The
+// reference documents resource ids as numbers, and session listings have been
+// observed carrying numeric "id" fields in production — but a string-typed id
+// must not permanently brick the integration either way.
+type flexID string
 
-func (r *resourceID) UnmarshalJSON(data []byte) error {
+func (r *flexID) UnmarshalJSON(data []byte) error {
 	trimmed := strings.Trim(strings.TrimSpace(string(data)), `"`)
 	if trimmed == "null" {
 		trimmed = ""
 	}
-	*r = resourceID(trimmed)
+	*r = flexID(trimmed)
 	return nil
 }
 
@@ -242,7 +243,7 @@ func (s *sink) resolveResourceID(ctx context.Context, creds providers.Credential
 
 	var connection struct {
 		CustomResources []struct {
-			ID resourceID `json:"id"`
+			ID flexID `json:"id"`
 		} `json:"customResources"`
 	}
 	if err := json.Unmarshal(body, &connection); err != nil {
@@ -261,14 +262,16 @@ func (s *sink) resolveResourceID(ctx context.Context, creds providers.Credential
 	return id, nil
 }
 
-// sessionRef is one entry of the session list. Drata documents neither the
-// envelope nor the item shape for this endpoint, so both are decoded
-// permissively: the id is read from "sessionId" (the field the documented
-// action response carries) or "id", and the status is required rather than
-// assumed.
+// sessionRef is one entry of the session list. Drata does not document this
+// endpoint's shapes; the production API has been observed returning a
+// {"data": [...], "pagination": {...}} envelope whose items carry a numeric
+// "id" alongside the caller-chosen string "sessionId" — hence flexID — so
+// both fields are decoded and the id is read from "sessionId" (the field the
+// documented action response carries) or "id". The status is required rather
+// than assumed.
 type sessionRef struct {
 	SessionID string `json:"sessionId"`
-	ID        string `json:"id"`
+	ID        flexID `json:"id"`
 	Status    string `json:"status"`
 }
 
@@ -276,7 +279,7 @@ func (r sessionRef) identifier() string {
 	if r.SessionID != "" {
 		return r.SessionID
 	}
-	return r.ID
+	return string(r.ID)
 }
 
 // cancelStrandedSessions cancels every IN_PROGRESS session on the resource,
@@ -293,21 +296,35 @@ func (s *sink) cancelStrandedSessions(ctx context.Context, creds providers.Crede
 		return err
 	}
 
-	var envelope struct {
-		Data []sessionRef `json:"data"`
-	}
+	// The observed response is a {"data": [...]} envelope; a bare array is
+	// tolerated in case the shape changes. The branch is picked by looking at
+	// the payload, not by trying one decode and falling back on error — a
+	// fallback would swallow the envelope's real decode error (e.g. an
+	// unexpected field type) and report a useless "cannot unmarshal object
+	// into []sessionRef" instead.
 	var sessions []sessionRef
-	if err := json.Unmarshal(body, &envelope); err == nil && envelope.Data != nil {
+	if trimmed := bytes.TrimSpace(body); len(trimmed) > 0 && trimmed[0] == '[' {
+		if err := json.Unmarshal(trimmed, &sessions); err != nil {
+			return fmt.Errorf("decode session list: %w", err)
+		}
+	} else {
+		var envelope struct {
+			Data []sessionRef `json:"data"`
+		}
+		if err := json.Unmarshal(body, &envelope); err != nil {
+			return fmt.Errorf("decode session list: %w", err)
+		}
+		// A null or absent "data" is an empty sweep, not an error.
 		sessions = envelope.Data
-	} else if err := json.Unmarshal(body, &sessions); err != nil {
-		return fmt.Errorf("decode session list: %w", err)
 	}
 
 	for _, sess := range sessions {
-		// The status filter is re-checked here rather than trusted. An API
-		// that ignored an unknown query param would hand back ACTIVE
-		// sessions too, and cancelling one of those would destroy the live
-		// evidence this integration exists to publish.
+		// The status filter is re-checked here rather than trusted, and that
+		// is load-bearing: the production API has been observed ignoring the
+		// status query param entirely (returning CANCELED sessions). An API
+		// handing back ACTIVE sessions the same way would otherwise get them
+		// cancelled — destroying the live evidence this integration exists
+		// to publish.
 		if sess.Status != sessionStatusInProgress {
 			continue
 		}
