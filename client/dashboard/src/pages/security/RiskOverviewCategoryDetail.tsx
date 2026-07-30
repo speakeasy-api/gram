@@ -5,7 +5,11 @@ import {
 } from "@/components/observe/useDateRangeFilter";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { BulkActionBar } from "@/components/ui/bulk-action-bar";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
+import { showUndoToast } from "@/lib/toast-undo";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { type DateRangePreset } from "@/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
@@ -33,6 +37,11 @@ import {
   RevealAllToggle,
   RuleLabel,
 } from "./risk-ui";
+import {
+  dismissFindings,
+  undoDismiss,
+  useDismissedIds,
+} from "./false-positive-demo-store";
 
 const RISK_OVERVIEW_PRESETS: DateRangePreset[] = [
   "15m",
@@ -160,6 +169,22 @@ function RiskOverviewCategoryDetailContent() {
   const categoryMeta = RULE_CATEGORY_META[category as RuleCategory];
   const categoryLabel = categoryMeta?.label ?? category;
 
+  const dismissedIds = useDismissedIds();
+  const visibleResults = useMemo(
+    () => results.filter((r) => !dismissedIds.has(r.id)),
+    [results, dismissedIds],
+  );
+  const selection = useRowSelection(visibleResults, (r) => r.id);
+  const handleDismissSelected = useCallback(() => {
+    const toDismiss = selection.selectedItems;
+    if (toDismiss.length === 0) return;
+    dismissFindings(toDismiss);
+    selection.clear();
+    showUndoToast(`Marked ${toDismiss.length} as false positive`, () =>
+      toDismiss.forEach((r) => undoDismiss(r.id)),
+    );
+  }, [selection]);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const handleScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
@@ -224,12 +249,21 @@ function RiskOverviewCategoryDetailContent() {
                   .filter(Boolean)}
               />
             </div>
+            {selection.selectedCount > 0 && (
+              <BulkActionBar
+                selectedCount={selection.selectedCount}
+                actionLabel="Mark as false positive"
+                onAction={handleDismissSelected}
+                onClear={selection.clear}
+              />
+            )}
             <ResultsTable
-              results={results}
+              results={visibleResults}
               isLoading={resultsQuery.isLoading}
               scrollRef={scrollRef}
               onScroll={handleScroll}
               onSelectChat={setSelectedChatId}
+              selection={selection}
             />
           </div>
         </Page.Section.Body>
@@ -251,12 +285,14 @@ function ResultsTable({
   scrollRef,
   onScroll,
   onSelectChat,
+  selection,
 }: {
   results: RiskResult[];
   isLoading: boolean;
   scrollRef: React.RefObject<HTMLDivElement | null>;
   onScroll: (e: React.UIEvent<HTMLDivElement>) => void;
   onSelectChat: (chatId: string) => void;
+  selection: RowSelection<RiskResult>;
 }) {
   if (isLoading) {
     return (
@@ -288,6 +324,7 @@ function ResultsTable({
     >
       <table className="w-full table-fixed text-sm">
         <colgroup>
+          <col className="w-[32px]" />
           <col className="w-[180px]" />
           <col className="w-[200px]" />
           <col />
@@ -297,6 +334,13 @@ function ResultsTable({
         </colgroup>
         <thead className="bg-muted text-muted-foreground sticky top-0 z-[1] text-xs font-medium tracking-wide uppercase shadow-[0_1px_0_0_var(--color-border)]">
           <tr>
+            <th className="px-4 py-2">
+              <Checkbox
+                checked={selection.allState}
+                onCheckedChange={() => selection.toggleAll()}
+                aria-label="Select all findings"
+              />
+            </th>
             <th className="px-4 py-2 text-left">Time</th>
             <th className="px-4 py-2 text-left">Category / Rule</th>
             <th className="px-4 py-2 text-left">Session</th>
@@ -327,6 +371,13 @@ function ResultsTable({
                   : "hover:bg-muted/30"
               }
             >
+              <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                <Checkbox
+                  checked={selection.isSelected(result.id)}
+                  onCheckedChange={() => selection.toggle(result.id)}
+                  aria-label="Select finding"
+                />
+              </td>
               <td className="text-muted-foreground truncate px-4 py-3 font-mono text-xs">
                 {result.createdAt
                   ? new Date(result.createdAt).toLocaleString()

@@ -5,8 +5,12 @@ import {
   type FilterValue,
 } from "@/components/filters";
 import { Page } from "@/components/page-layout";
+import { BulkActionBar } from "@/components/ui/bulk-action-bar";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
 import { cn } from "@/lib/utils";
+import { showUndoToast } from "@/lib/toast-undo";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { getPresetRange } from "@/elements";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
@@ -20,6 +24,11 @@ import { History, Share2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
+import {
+  dismissFindings,
+  undoDismiss,
+  useDismissedIds,
+} from "./false-positive-demo-store";
 import {
   CategoryLabel,
   EventMatchDialog,
@@ -39,7 +48,7 @@ import { isJudgeSource } from "./risk-utils";
 // Evidence gets the widest track: for judge findings it holds a sentence or two
 // of rationale, where every other column holds a label.
 const RISK_EVENTS_GRID =
-  "grid grid-cols-[172px_minmax(0,1.3fr)_88px_minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,2.4fr)_minmax(0,0.9fr)_110px] gap-3";
+  "grid grid-cols-[28px_172px_minmax(0,1.3fr)_88px_minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,2.4fr)_minmax(0,0.9fr)_110px] gap-3";
 
 // Strongly-typed filter schema for Risk Events. `policy_id` and the date range
 // are pinned (always visible in the bar); the rest live behind "More filters".
@@ -249,6 +258,22 @@ export default function RiskEvents(): JSX.Element {
   const totalCount = resultsQuery.data?.pages[0]?.totalCount ?? results.length;
   const isInitialLoading = policiesLoading || resultsQuery.isLoading;
 
+  const dismissedIds = useDismissedIds();
+  const visibleResults = useMemo(
+    () => results.filter((r) => !dismissedIds.has(r.id)),
+    [results, dismissedIds],
+  );
+  const selection = useRowSelection(visibleResults, (r) => r.id);
+  const handleDismissSelected = useCallback(() => {
+    const toDismiss = selection.selectedItems;
+    if (toDismiss.length === 0) return;
+    dismissFindings(toDismiss);
+    selection.clear();
+    showUndoToast(`Marked ${toDismiss.length} as false positive`, () =>
+      toDismiss.forEach((r) => undoDismiss(r.id)),
+    );
+  }, [selection]);
+
   const handleScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
       const container = e.currentTarget;
@@ -293,6 +318,14 @@ export default function RiskEvents(): JSX.Element {
             {viewingInactivePolicy ? (
               <InactivePolicyNotice policyName={selectedPolicy?.name} />
             ) : null}
+            {selection.selectedCount > 0 ? (
+              <BulkActionBar
+                selectedCount={selection.selectedCount}
+                actionLabel="Mark as false positive"
+                onAction={handleDismissSelected}
+                onClear={selection.clear}
+              />
+            ) : null}
             {resultsQuery.isFetching && results.length > 0 ? (
               <div className="bg-primary/20 h-1 shrink-0">
                 <div className="bg-primary h-full animate-pulse" />
@@ -302,7 +335,7 @@ export default function RiskEvents(): JSX.Element {
         }
         header={
           <div className="min-w-[1200px]">
-            <RiskEventsHeader />
+            <RiskEventsHeader selection={selection} />
           </div>
         }
         footer={
@@ -334,11 +367,12 @@ export default function RiskEvents(): JSX.Element {
         <RiskEventsRows
           error={resultsQuery.error}
           isLoading={isInitialLoading}
-          results={results}
+          results={visibleResults}
           policyNameById={policyNameById}
           policyScoreById={policyScoreById}
           scrollRef={containerRef}
           onSelectChat={setSelectedChatId}
+          selection={selection}
         />
       </LogWorkbench>
     </RevealAllProvider>
@@ -372,7 +406,11 @@ function InactivePolicyNotice({
   );
 }
 
-function RiskEventsHeader() {
+function RiskEventsHeader({
+  selection,
+}: {
+  selection: RowSelection<RiskResult>;
+}) {
   return (
     <div
       className={cn(
@@ -380,6 +418,13 @@ function RiskEventsHeader() {
         "bg-muted/30 text-muted-foreground shrink-0 items-center border-b px-5 py-2.5 text-xs font-medium tracking-wide uppercase",
       )}
     >
+      <div className="min-w-0">
+        <Checkbox
+          checked={selection.allState}
+          onCheckedChange={() => selection.toggleAll()}
+          aria-label="Select all loaded findings"
+        />
+      </div>
       <div className="min-w-0">Timestamp</div>
       <div className="min-w-0">Category / Rule</div>
       <div className="min-w-0">Severity</div>
@@ -400,6 +445,7 @@ function RiskEventsRows({
   policyScoreById,
   scrollRef,
   onSelectChat,
+  selection,
 }: {
   error: Error | null;
   isLoading: boolean;
@@ -408,6 +454,7 @@ function RiskEventsRows({
   policyScoreById: Map<string, number>;
   scrollRef: RefObject<HTMLDivElement | null>;
   onSelectChat: (chatId: string | null) => void;
+  selection: RowSelection<RiskResult>;
 }) {
   const rowVirtualizer = useVirtualizer({
     count: results.length,
@@ -481,6 +528,7 @@ function RiskEventsRows({
               policyName={policyNameById.get(result.policyId)}
               policyScore={policyScoreById.get(result.policyId)}
               onSelectChat={onSelectChat}
+              selection={selection}
             />
           </div>
         );
@@ -494,11 +542,13 @@ function RiskEventsRow({
   policyName,
   policyScore,
   onSelectChat,
+  selection,
 }: {
   result: RiskResult;
   policyName: string | undefined;
   policyScore: number | undefined;
   onSelectChat: (chatId: string | null) => void;
+  selection: RowSelection<RiskResult>;
 }) {
   const isShadowMCP = result.source === "shadow_mcp";
   const isEventSource = isJudgeSource(result.source);
@@ -569,6 +619,13 @@ function RiskEventsRow({
         }
       }}
     >
+      <div className="min-w-0">
+        <Checkbox
+          checked={selection.isSelected(result.id)}
+          onCheckedChange={() => selection.toggle(result.id)}
+          aria-label="Select finding"
+        />
+      </div>
       <div className="text-muted-foreground min-w-0 font-mono text-xs">
         {result.createdAt ? new Date(result.createdAt).toLocaleString() : "-"}
       </div>

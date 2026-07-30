@@ -28,6 +28,7 @@ import {
   TabsContent,
 } from "@/components/ui/tabs";
 import { ExclusionsTab, type ExclusionSheetState } from "./ExclusionsTab";
+import { DismissedFindingsTab } from "./DismissedFindingsTab";
 import {
   Badge,
   Button,
@@ -562,9 +563,9 @@ function PolicyCenterContent() {
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
   const [policyToDelete, setPolicyToDelete] = useState<PolicyRow | null>(null);
 
-  const [activeTab, setActiveTab] = useState<"policies" | "exclusions">(
-    "policies",
-  );
+  const [activeTab, setActiveTab] = useState<
+    "policies" | "exclusions" | "dismissed"
+  >("policies");
   const [exclusionSheet, setExclusionSheet] =
     useState<ExclusionSheetState | null>(null);
 
@@ -952,7 +953,7 @@ function PolicyCenterContent() {
             <Tabs
               value={activeTab}
               onValueChange={(value) =>
-                setActiveTab(value as "policies" | "exclusions")
+                setActiveTab(value as "policies" | "exclusions" | "dismissed")
               }
             >
               <div className="border-b">
@@ -961,6 +962,7 @@ function PolicyCenterContent() {
                   <PageTabsTrigger value="exclusions">
                     Exclusions
                   </PageTabsTrigger>
+                  <PageTabsTrigger value="dismissed">Dismissed</PageTabsTrigger>
                 </PageTabsList>
               </div>
               <TabsContent value="policies" className="mt-6">
@@ -972,6 +974,9 @@ function PolicyCenterContent() {
                   sheet={exclusionSheet}
                   onSheetChange={setExclusionSheet}
                 />
+              </TabsContent>
+              <TabsContent value="dismissed" className="mt-6">
+                <DismissedFindingsTab />
               </TabsContent>
             </Tabs>
           </Page.Section.Body>

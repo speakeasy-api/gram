@@ -14,6 +14,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { MoreActions, type Action } from "@/components/ui/more-actions";
+import { showUndoToast } from "@/lib/toast-undo";
+import {
+  dismissFindings,
+  undoDismiss,
+  useDismissedIds,
+} from "@/pages/security/false-positive-demo-store";
 import {
   collapseToMatchWindows,
   getMatchStrings,
@@ -188,6 +195,7 @@ type TranscriptFinding = {
   tags?: string[];
   count?: number;
   showRuleId?: boolean;
+  onMarkFalsePositive?: () => void;
 };
 
 // spansOf returns a finding's matched spans: the spans array when the backend
@@ -239,6 +247,20 @@ function TranscriptFindingsCard({
                   >
                     ×{finding.count}
                   </Badge>
+                )}
+                {finding.onMarkFalsePositive && (
+                  <div className={(finding.count ?? 1) > 1 ? "" : "ml-auto"}>
+                    <MoreActions
+                      actions={
+                        [
+                          {
+                            label: "Mark false positive",
+                            onClick: finding.onMarkFalsePositive,
+                          },
+                        ] satisfies Action[]
+                      }
+                    />
+                  </div>
                 )}
               </div>
               {finding.rationale && (
@@ -303,10 +325,12 @@ function riskResultToTranscriptFinding({
   result,
   spans,
   count,
+  onMarkFalsePositive,
 }: {
   result: RiskResult;
   spans: FindingSpan[];
   count: number;
+  onMarkFalsePositive?: () => void;
 }): TranscriptFinding {
   return {
     id: result.id,
@@ -318,6 +342,7 @@ function riskResultToTranscriptFinding({
     tags: result.tags,
     count,
     showRuleId: shouldShowRiskRuleId(result),
+    onMarkFalsePositive,
   };
 }
 
@@ -334,12 +359,14 @@ export function RiskBadge({
    * to the default destructive badge. */
   trigger?: ReactElement;
 }): ReactNode {
+  const dismissedIds = useDismissedIds();
   const findings = useMemo(() => {
     const grouped = new Map<
       string,
       { result: RiskResult; spans: FindingSpan[]; count: number }
     >();
     for (const r of results) {
+      if (dismissedIds.has(r.id)) continue;
       const spans = spansOf(r);
       const key = `${r.source}|${r.ruleId ?? ""}|${spans
         .map((s) => `${s.field ?? ""}:${s.path ?? ""}:${s.match}`)
@@ -349,7 +376,7 @@ export function RiskBadge({
       else grouped.set(key, { result: r, spans, count: 1 });
     }
     return [...grouped.values()];
-  }, [results]);
+  }, [results, dismissedIds]);
 
   return (
     <Popover>
@@ -379,7 +406,17 @@ export function RiskBadge({
         onClick={(e) => e.stopPropagation()}
       >
         <TranscriptFindingsCard
-          findings={findings.map(riskResultToTranscriptFinding)}
+          findings={findings.map((f) =>
+            riskResultToTranscriptFinding({
+              ...f,
+              onMarkFalsePositive: () => {
+                dismissFindings([f.result]);
+                showUndoToast("Marked as false positive", () =>
+                  undoDismiss(f.result.id),
+                );
+              },
+            }),
+          )}
         />
       </PopoverContent>
     </Popover>
