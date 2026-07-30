@@ -12040,6 +12040,7 @@ paths:
                     enum:
                         - agent_active
                         - agent_stale
+                        - agent_other_device
                         - no_agent
                         - no_email
                         - unresolved_email
@@ -53725,16 +53726,30 @@ components:
             properties:
                 active_window_minutes:
                     type: integer
-                    description: 'Freshness window: an assigned user counts as active when their agent heartbeat is within this many minutes.'
+                    description: 'Freshness window: an agent counts as active when its heartbeat is within this many minutes.'
                     format: int64
                 agent_active:
                     type: integer
-                    description: Devices whose assigned user has an agent heartbeat within the window.
+                    description: Devices with an agent heartbeat within the window. What that attests depends on the matching mode and, per device, on whether the match was by serial or by email — compare against agent_active_device_attested.
+                    format: int64
+                agent_active_device_attested:
+                    type: integer
+                    description: How many of agent_active are backed by that machine's OWN heartbeat (serial match). Under user-level matching this is 0; under device-level matching a value below agent_active means some devices fell back to the assigned-user email, which is the weaker claim.
+                    format: int64
+                agent_other_device:
+                    type: integer
+                    description: 'Device-level matching only: devices whose assigned user runs the agent, but not on this machine. Always 0 under user-level matching, which cannot distinguish this from agent_active.'
                     format: int64
                 agent_stale:
                     type: integer
-                    description: Devices whose assigned user has an agent that went quiet — the drift/disable case.
+                    description: Devices with a known agent that went quiet — the drift/disable case.
                     format: int64
+                attestation:
+                    type: string
+                    description: 'The strongest claim that holds for EVERY active device in this response — not merely the org''s matching mode. "device": every active device was matched on its own hardware serial, so each one ran the agent. "user": at least one active device was matched only on its assigned-user email, so the set as a whole supports only the weaker claim that assigned users ran the agent somewhere.'
+                    enum:
+                        - device
+                        - user
                 missing:
                     type: integer
                     description: Devices absent from the latest completed MDM snapshot.
@@ -53762,12 +53777,15 @@ components:
                     type: integer
                     description: Devices whose assigned email matches neither an agent user nor an org member.
                     format: int64
-            description: 'Agent-coverage summary across the org''s connected MDM inventories. Buckets attest the assigned user''s agent (the heartbeat is per user), not the device itself: agent_active means the device''s assigned user has a fresh agent heartbeat somewhere.'
+            description: 'Agent-coverage summary across the org''s connected MDM inventories. What a bucket attests depends on the org''s matching mode: under device-level matching (hardware serial) agent_active means THIS machine reported in, while under user-level matching it means only that the device''s assigned user has a fresh heartbeat somewhere.'
             required:
                 - organization_id
                 - active_window_minutes
+                - attestation
                 - agent_active
+                - agent_active_device_attested
                 - agent_stale
+                - agent_other_device
                 - no_agent
                 - no_email
                 - unresolved_email
@@ -58481,14 +58499,15 @@ components:
             properties:
                 agent_last_seen_at:
                     type: string
-                    description: The assigned user's latest device-agent heartbeat. Omitted when the user has never synced an agent.
+                    description: 'The device-agent heartbeat that classified this device: the machine''s own under device-level matching, otherwise its assigned user''s. Omitted when no agent has ever synced.'
                     format: date-time
                 coverage_bucket:
                     type: string
-                    description: Coverage classification for the device.
+                    description: Coverage classification for the device. What agent_active attests depends on the org's matching mode and on whether this device matched by serial or by assigned-user email.
                     enum:
                         - agent_active
                         - agent_stale
+                        - agent_other_device
                         - no_agent
                         - no_email
                         - unresolved_email
@@ -58534,7 +58553,7 @@ components:
                 user_id:
                     type: string
                     description: Resolved Gram user for the assigned email. Omitted when the email is missing or does not resolve to an org member.
-            description: One device from a connected MDM's inventory, annotated with its agent-coverage bucket. Agent presence is attested per assigned user (the agent heartbeat is keyed by user email), not per device.
+            description: 'One device from a connected MDM''s inventory, annotated with its agent-coverage bucket. What that bucket attests depends on the organization''s matching mode: under device-level matching a device may be classified by its own hardware serial (this machine ran the agent) or, when no serial heartbeat exists for it, by its assigned-user email (only that user ran the agent somewhere). Under user-level matching only the latter applies.'
             required:
                 - id
                 - provider

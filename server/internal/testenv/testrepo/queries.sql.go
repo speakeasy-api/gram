@@ -353,6 +353,30 @@ func (q *Queries) InsertChatMessage(ctx context.Context, arg InsertChatMessagePa
 	return id, err
 }
 
+const insertDeviceAgentDeviceSyncFixture = `-- name: InsertDeviceAgentDeviceSyncFixture :exec
+INSERT INTO device_agent_device_syncs (organization_id, serial_number, email, hostname, first_seen_at, last_seen_at)
+VALUES ($1, $2, $3, NULLIF($4::text, ''), $5, $5)
+`
+
+type InsertDeviceAgentDeviceSyncFixtureParams struct {
+	OrganizationID string
+	SerialNumber   string
+	Email          string
+	Hostname       string
+	SeenAt         pgtype.Timestamptz
+}
+
+func (q *Queries) InsertDeviceAgentDeviceSyncFixture(ctx context.Context, arg InsertDeviceAgentDeviceSyncFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertDeviceAgentDeviceSyncFixture,
+		arg.OrganizationID,
+		arg.SerialNumber,
+		arg.Email,
+		arg.Hostname,
+		arg.SeenAt,
+	)
+	return err
+}
+
 const insertDeviceAgentSyncFixture = `-- name: InsertDeviceAgentSyncFixture :exec
 INSERT INTO device_agent_syncs (organization_id, email, first_seen_at, last_seen_at)
 VALUES ($1, $2, $3, $3)
@@ -370,8 +394,8 @@ func (q *Queries) InsertDeviceAgentSyncFixture(ctx context.Context, arg InsertDe
 }
 
 const insertMdmDeviceFixture = `-- name: InsertMdmDeviceFixture :exec
-INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, missing_since)
-VALUES ($1, $2, $3, NULLIF($4::text, ''), $5::text, $6::timestamptz)
+INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, serial_number, missing_since)
+VALUES ($1, $2, $3, NULLIF($4::text, ''), $5::text, NULLIF($6::text, ''), $7::timestamptz)
 `
 
 type InsertMdmDeviceFixtureParams struct {
@@ -380,6 +404,7 @@ type InsertMdmDeviceFixtureParams struct {
 	ExternalID                string
 	UserEmail                 string
 	UserID                    pgtype.Text
+	SerialNumber              string
 	MissingSince              pgtype.Timestamptz
 }
 
@@ -390,6 +415,7 @@ func (q *Queries) InsertMdmDeviceFixture(ctx context.Context, arg InsertMdmDevic
 		arg.ExternalID,
 		arg.UserEmail,
 		arg.UserID,
+		arg.SerialNumber,
 		arg.MissingSince,
 	)
 	return err

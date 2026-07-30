@@ -224,11 +224,18 @@ function MdmIntegrationDetailInner({
   );
 }
 
-// The headline number an admin acts on: of the devices this vendor manages,
-// how many have an assigned user with a live agent heartbeat. Floors so the
-// headline never claims 100% while any device is uncovered.
+// The headline number an admin acts on. The sentence follows the server's
+// attestation field, which reports the strongest claim holding for EVERY
+// active device — not merely the org's matching mode. That distinction
+// matters: agent_active is reachable through the email fallback even under
+// device-level matching, so a mixed response is reported as "user" and must
+// not print the per-machine sentence. Floors so the headline never claims
+// 100% while any device is uncovered.
 function coverageHeadlineCopy(coverage: DeviceIntegrationCoverage): string {
   const noun = coverage.totalDevices === 1 ? "device" : "devices";
+  if (coverage.attestation === "device") {
+    return `of ${coverage.totalDevices} managed ${noun} are running the agent`;
+  }
   return `of ${coverage.totalDevices} managed ${noun} have an assigned user with an active agent`;
 }
 
