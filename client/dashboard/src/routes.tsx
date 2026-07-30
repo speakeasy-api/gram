@@ -81,6 +81,7 @@ import PromptPage from "./pages/prompts/Prompt";
 import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
 import Access from "./pages/access/Access";
+import RequestAccess from "./pages/access/RequestAccess";
 import Settings from "./pages/settings/Settings";
 import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
 import SecurityOverview, {
@@ -1020,6 +1021,11 @@ const ORG_ROUTE_STRUCTURE = {
         component: Access,
       },
     },
+  },
+  requestAccess: {
+    title: "Request Access",
+    url: "request-access",
+    component: RequestAccess,
   },
   collections: {
     title: "Collections",

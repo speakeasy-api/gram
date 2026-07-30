@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -57,6 +59,8 @@ type Service struct {
 	roleMgr         *RoleManager
 	productFeatures ProductFeatures
 	audit           *audit.Logger
+	email           *email.Service
+	siteURL         *url.URL
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -72,6 +76,8 @@ func NewService(
 	authz *authz.Engine,
 	productFeatures ProductFeatures,
 	auditLogger *audit.Logger,
+	emailService *email.Service,
+	siteURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
 
@@ -85,6 +91,8 @@ func NewService(
 		roleMgr:         roleMgr,
 		productFeatures: productFeatures,
 		audit:           auditLogger,
+		email:           emailService,
+		siteURL:         siteURL,
 	}
 }
 
@@ -1211,4 +1219,97 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 	}
 
 	return &gen.ResolveChallengesResult{Resolutions: resolutions}, nil
+}
+
+// RequestAccess sends email notifications to organization administrators when a user
+// requests access to a scope they don't have permission for.
+func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessPayload) (*gen.RequestAccessResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+
+	logger := s.logger.With(
+		attr.SlogOrganizationID(ac.ActiveOrganizationID),
+		attr.SlogUserID(ac.UserID),
+	)
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+	)
+
+	// Get the requester's info
+	requester, err := usersrepo.New(s.db).GetUser(ctx, ac.UserID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get requester info").LogError(ctx, logger)
+	}
+
+	// Get organization info
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization info").LogError(ctx, logger)
+	}
+
+	// Get list of org admin emails
+	adminEmails, err := repo.New(s.db).ListOrgAdminEmails(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list org admin emails").LogError(ctx, logger)
+	}
+
+	if len(adminEmails) == 0 {
+		logger.WarnContext(ctx, "no org admins found to notify for access request")
+		return &gen.RequestAccessResult{SentToCount: 0}, nil
+	}
+
+	// Build the manage access link
+	manageAccessLink := ""
+	if s.siteURL != nil {
+		manageAccessLink = s.siteURL.JoinPath(org.Slug, "access").String()
+	}
+
+	// Build email template
+	requesterName := conv.Default(requester.DisplayName, requester.Email)
+	resourceName := ""
+	if payload.ResourceName != nil {
+		resourceName = *payload.ResourceName
+	}
+	message := ""
+	if payload.Message != nil {
+		message = *payload.Message
+	}
+
+	tmpl := email.AccessRequest{
+		RequesterName:    requesterName,
+		RequesterEmail:   requester.Email,
+		OrganizationName: org.Name,
+		Scope:            payload.Scope,
+		ResourceName:     resourceName,
+		Message:          message,
+		ManageAccessLink: manageAccessLink,
+	}
+
+	// Send emails to all admins
+	sentCount := 0
+	for _, adminEmail := range adminEmails {
+		if adminEmail == "" {
+			continue
+		}
+		if err := s.email.Send(ctx, adminEmail, tmpl); err != nil {
+			// Log but don't fail the entire request if one email fails
+			logger.WarnContext(ctx, "failed to send access request email",
+				attr.SlogError(err),
+				slog.String("admin_email", adminEmail),
+			)
+			continue
+		}
+		sentCount++
+	}
+
+	logger.InfoContext(ctx, "access request emails sent",
+		slog.Int("sent_count", sentCount),
+		slog.Int("admin_count", len(adminEmails)),
+		slog.String("scope", payload.Scope),
+	)
+
+	return &gen.RequestAccessResult{SentToCount: sentCount}, nil
 }

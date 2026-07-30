@@ -1904,6 +1904,51 @@ func (q *Queries) UpsertOrganizationRoleAssignment(ctx context.Context, arg Upse
 	return result.RowsAffected(), nil
 }
 
+const listOrgAdminEmails = `-- name: ListOrgAdminEmails :many
+SELECT DISTINCT
+  users.email
+FROM organization_role_assignments AS ora
+JOIN users
+  ON ora.user_id = users.id
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = $1
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) = 'admin'
+  AND ora.deleted_at IS NULL
+  AND users.deleted_at IS NULL
+  AND users.email <> ''
+ORDER BY users.email
+`
+
+// Returns email addresses of users with the admin role in the organization.
+// Used for sending access request notifications to org admins.
+func (q *Queries) ListOrgAdminEmails(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listOrgAdminEmails, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var email string
+		if err := rows.Scan(&email); err != nil {
+			return nil, err
+		}
+		items = append(items, email)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertPrincipalGrant = `-- name: UpsertPrincipalGrant :one
 INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
 VALUES ($1, $2, $3, $4, $5)

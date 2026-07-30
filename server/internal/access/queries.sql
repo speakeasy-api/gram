@@ -529,6 +529,30 @@ WHERE our.organization_id = @organization_id
   AND users.email <> ''
 ORDER BY users.email, users.id;
 
+-- name: ListOrgAdminEmails :many
+-- Returns email addresses of users with the admin role in the organization.
+-- Used for sending access request notifications to org admins.
+SELECT DISTINCT
+  users.email
+FROM organization_role_assignments AS ora
+JOIN users
+  ON ora.user_id = users.id
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = @organization_id
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) = 'admin'
+  AND ora.deleted_at IS NULL
+  AND users.deleted_at IS NULL
+  AND users.email <> ''
+ORDER BY users.email;
+
 -- name: ListMemberRolePrincipalsByWorkosUser :many
 SELECT
   COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,

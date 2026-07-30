@@ -18,6 +18,7 @@ import { accessListRoles } from "../funcs/accessListRoles.js";
 import { accessListScopes } from "../funcs/accessListScopes.js";
 import { accessListShadowMCPInventory } from "../funcs/accessListShadowMCPInventory.js";
 import { accessListShadowMCPInventoryUsers } from "../funcs/accessListShadowMCPInventoryUsers.js";
+import { accessRequestAccess } from "../funcs/accessRequestAccess.js";
 import { accessResolveChallenge } from "../funcs/accessResolveChallenge.js";
 import { accessResolveShadowMCPInventoryRequest } from "../funcs/accessResolveShadowMCPInventoryRequest.js";
 import { accessUpdateMemberRoles } from "../funcs/accessUpdateMemberRoles.js";
@@ -35,6 +36,7 @@ import { ListShadowMCPInventoryResult } from "../models/components/listshadowmcp
 import { ListShadowMCPInventoryUsersResult } from "../models/components/listshadowmcpinventoryusersresult.js";
 import { ListUserGrantsResult } from "../models/components/listusergrantsresult.js";
 import { RBACStatus } from "../models/components/rbacstatus.js";
+import { RequestAccessResult } from "../models/components/requestaccessresult.js";
 import { ResolveChallengesResult } from "../models/components/resolvechallengesresult.js";
 import { Role } from "../models/components/role.js";
 import { ShadowMCPInventoryServer } from "../models/components/shadowmcpinventoryserver.js";
@@ -103,6 +105,10 @@ import {
   ListShadowMCPInventoryUsersRequest,
   ListShadowMCPInventoryUsersSecurity,
 } from "../models/operations/listshadowmcpinventoryusers.js";
+import {
+  RequestAccessRequest,
+  RequestAccessSecurity,
+} from "../models/operations/requestaccess.js";
 import {
   ResolveChallengeRequest,
   ResolveChallengeSecurity,
@@ -427,6 +433,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListShadowMCPInventoryUsersResult> {
     return unwrapAsync(accessListShadowMCPInventoryUsers(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * requestAccess access
+   *
+   * @remarks
+   * Request access to a scope by sending an email notification to organization administrators.
+   */
+  async requestAccess(
+    request: RequestAccessRequest,
+    security?: RequestAccessSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RequestAccessResult> {
+    return unwrapAsync(accessRequestAccess(
       this,
       request,
       security,

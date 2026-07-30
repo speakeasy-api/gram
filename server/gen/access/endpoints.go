@@ -32,6 +32,7 @@ type Endpoints struct {
 	UpsertShadowMCPInventoryPolicyBypass goa.Endpoint
 	DeleteShadowMCPInventoryPolicyBypass goa.Endpoint
 	ResolveShadowMCPInventoryRequest     goa.Endpoint
+	RequestAccess                        goa.Endpoint
 	GetRBACStatus                        goa.Endpoint
 	EnableRBAC                           goa.Endpoint
 	DisableRBAC                          goa.Endpoint
@@ -61,6 +62,7 @@ func NewEndpoints(s Service) *Endpoints {
 		UpsertShadowMCPInventoryPolicyBypass: NewUpsertShadowMCPInventoryPolicyBypassEndpoint(s, a.APIKeyAuth),
 		DeleteShadowMCPInventoryPolicyBypass: NewDeleteShadowMCPInventoryPolicyBypassEndpoint(s, a.APIKeyAuth),
 		ResolveShadowMCPInventoryRequest:     NewResolveShadowMCPInventoryRequestEndpoint(s, a.APIKeyAuth),
+		RequestAccess:                        NewRequestAccessEndpoint(s, a.APIKeyAuth),
 		GetRBACStatus:                        NewGetRBACStatusEndpoint(s, a.APIKeyAuth),
 		EnableRBAC:                           NewEnableRBACEndpoint(s, a.APIKeyAuth),
 		DisableRBAC:                          NewDisableRBACEndpoint(s, a.APIKeyAuth),
@@ -88,6 +90,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpsertShadowMCPInventoryPolicyBypass = m(e.UpsertShadowMCPInventoryPolicyBypass)
 	e.DeleteShadowMCPInventoryPolicyBypass = m(e.DeleteShadowMCPInventoryPolicyBypass)
 	e.ResolveShadowMCPInventoryRequest = m(e.ResolveShadowMCPInventoryRequest)
+	e.RequestAccess = m(e.RequestAccess)
 	e.GetRBACStatus = m(e.GetRBACStatus)
 	e.EnableRBAC = m(e.EnableRBAC)
 	e.DisableRBAC = m(e.DisableRBAC)
@@ -572,6 +575,41 @@ func NewResolveShadowMCPInventoryRequestEndpoint(s Service, authAPIKeyFn securit
 			return nil, err
 		}
 		return s.ResolveShadowMCPInventoryRequest(ctx, p)
+	}
+}
+
+// NewRequestAccessEndpoint returns an endpoint function that calls the method
+// "requestAccess" of service "access".
+func NewRequestAccessEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RequestAccessPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"consumer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.RequestAccess(ctx, p)
 	}
 }
 
