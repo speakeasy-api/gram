@@ -22,7 +22,7 @@ func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatc
 		judgeMessages[i] = batchJudgeMessage(messages[i])
 		judgeUserIDs[i] = messages[i].UserID
 	}
-	a.publishPromptInjectionScanRequests(ctx, args, requestID, messages)
+	a.publishPromptInjectionScanRequests(ctx, args, requestID, chatMessageAnchored(messages))
 
 	results, err := a.promptInjectionScanner.ScanBatch(ctx, contents, args.OrganizationID, args.ProjectID.String(), judgeUserIDs, judgeMessages)
 	if err != nil {

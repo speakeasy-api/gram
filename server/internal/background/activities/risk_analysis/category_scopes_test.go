@@ -189,7 +189,7 @@ func TestRecommendedCategoryScopesAccountIdentityUntouched(t *testing.T) {
 
 	messageID := uuid.New()
 	ids, findings := mergeSessionFindings(
-		[]uuid.UUID{},
+		[]batchMessage{},
 		[][]scanners.Finding{},
 		[]sessionFinding{{
 			messageID: messageID,
@@ -197,7 +197,8 @@ func TestRecommendedCategoryScopesAccountIdentityUntouched(t *testing.T) {
 		}},
 		NewExclusionSet(nil),
 	)
-	require.Equal(t, []uuid.UUID{messageID}, ids)
+	require.Len(t, ids, 1)
+	require.Equal(t, messageID, ids[0].ID)
 	require.Len(t, findings, 1)
 	require.Len(t, findings[0], 1)
 }

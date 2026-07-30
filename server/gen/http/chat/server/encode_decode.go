@@ -2575,6 +2575,22 @@ func marshalChatChatMessageToChatMessageResponseBody(v *chat.ChatMessage) *ChatM
 	return res
 }
 
+// marshalChatChatContentPartToChatContentPartResponseBody builds a value of
+// type *ChatContentPartResponseBody from a value of type *chat.ChatContentPart.
+func marshalChatChatContentPartToChatContentPartResponseBody(v *chat.ChatContentPart) *ChatContentPartResponseBody {
+	res := &ChatContentPartResponseBody{
+		ID:                  v.ID,
+		Kind:                v.Kind,
+		Content:             v.Content,
+		ParentChatMessageID: v.ParentChatMessageID,
+		Metadata:            v.Metadata,
+		IsRisk:              v.IsRisk,
+		CreatedAt:           v.CreatedAt,
+	}
+
+	return res
+}
+
 // marshalChatRiskSegmentToRiskSegmentResponseBody builds a value of type
 // *RiskSegmentResponseBody from a value of type *chat.RiskSegment.
 func marshalChatRiskSegmentToRiskSegmentResponseBody(v *chat.RiskSegment) *RiskSegmentResponseBody {

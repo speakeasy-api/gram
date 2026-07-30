@@ -1,0 +1,65 @@
+name: Impeccable
+
+# Scans the frontend for UI anti-patterns and "AI slop" tells (side-tab accent
+# borders, gradient headings, bounce easing, AI-favourite color palettes, ...)
+# using https://npmjs.com/package/impeccable.
+#
+# The tree is clean as of this workflow's introduction, so the whole frontend is
+# scanned rather than just the PR diff — a full scan takes ~3 seconds and also
+# catches regressions in files the PR did not touch.
+#
+# Rule waivers live in .impeccable/config.json (see `impeccable ignores --help`)
+# or as inline `impeccable-disable-next-line <rule>` comments.
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Pin the CLI so a new release cannot turn a green PR red without a commit.
+  IMPECCABLE_VERSION: "3.4.0"
+  # puppeteer is an optional dependency only used for scanning live URLs. We
+  # scan files, so skip the ~150MB Chromium download.
+  PUPPETEER_SKIP_DOWNLOAD: "1"
+
+jobs:
+  detect-ui-slop:
+    name: Detect UI anti-patterns
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    # The scan itself takes ~3s; this only guards against a hung npx install.
+    timeout-minutes: 5
+    steps:
+      - name: Checkout source code
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Run impeccable
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          # `detect` exits 0 when clean and 2 when anti-patterns are found.
+          npx --yes "impeccable@${IMPECCABLE_VERSION}" detect --json \
+            client ts-framework functions > findings.json
+          status=$?
+
+          if [ "$status" -ne 0 ] && [ "$status" -ne 2 ]; then
+            echo "::error::impeccable exited with unexpected status $status"
+            cat findings.json || true
+            exit "$status"
+          fi
+
+          node .github/scripts/impeccable-summary.mjs findings.json

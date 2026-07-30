@@ -475,6 +475,7 @@ var ChatOverview = Type("ChatOverview", func() {
 var Chat = Type("Chat", func() {
 	Extend(ChatOverview)
 	Attribute("messages", ArrayOf(ChatMessage), "The list of messages in the chat for the returned generation, ordered oldest to newest by `seq`.")
+	Attribute("content_parts", ArrayOf(ChatContentPart), "Non-turn content attached to this chat, such as prompt attachments.")
 	Attribute("generation", Int, "The generation that this response's messages belong to. A generation is an immutable snapshot of the transcript; a new one is opened on compaction or message edits, while normal turns append to the current one.")
 	Attribute("max_generation", Int, "The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.")
 	Attribute("has_more_before", Boolean, "Whether older messages exist before the first message in this page (within the returned generation). Load them with a `before_seq` cursor.")
@@ -485,7 +486,24 @@ var Chat = Type("Chat", func() {
 	Attribute("totals", ChatTotals, "Whole-generation trace-entry totals for the returned generation. Because messages are paginated, callers must use these (not the length of `messages`) to render filter-bar counts.")
 	Attribute("work_units_report", String, "Full work-units analysis verdict as JSON (per-task breakdown, rationales, and flags). Present only when `work_units` is present.")
 
-	Required("messages", "generation", "max_generation", "has_more_before", "has_more_after")
+	Required("messages", "content_parts", "generation", "max_generation", "has_more_before", "has_more_after")
+})
+
+var ChatContentPart = Type("ChatContentPart", func() {
+	Attribute("id", String, "The ID of the content part.")
+	Attribute("kind", String, "The content kind, such as prompt_attachment.")
+	Attribute("content", String, "The text content.")
+	Attribute("parent_chat_message_id", String, "The chat message this content hangs off, when resolved.")
+	Attribute("metadata", Any, "Sparse metadata for the content kind.", func() {
+		Meta("struct:field:type", "json.RawMessage", "encoding/json")
+	})
+	Attribute("is_risk", Boolean, "Whether this content part has an active risk finding.")
+	Attribute("created_at", String, func() {
+		Description("When the content part was created.")
+		Format(FormatDateTime)
+	})
+
+	Required("id", "kind", "content", "is_risk", "created_at")
 })
 
 var ChatTotals = Type("ChatTotals", func() {
