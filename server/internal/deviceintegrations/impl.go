@@ -287,22 +287,22 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 		return nil, err
 	}
 
-	// Give the provider a chance to create its vendor-side object (e.g. a Drata
-	// Custom Connection) and fold the resulting ids into settings. Runs before
-	// the transaction — it's an external round-trip — and persists as part of
-	// the same save below.
-	settings, err = s.provisionIfSupported(ctx, desc, creds, settings)
-	if err != nil {
-		return nil, err
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	result, err := s.store.upsertWithTx(ctx, dbtx, desc, authCtx.ActiveOrganizationID, creds, settings, payload.Enabled)
+	// Provisioning (creating the provider's vendor-side object, e.g. a Drata
+	// Custom Connection) is handed to the store so it runs on the merged
+	// effective config and inside the (org, provider) advisory lock — a partial
+	// update provisions correctly, and concurrent first-time connects can't
+	// double-create. Nil for providers with nothing to provision.
+	provision := func(ctx context.Context, creds providers.Credentials, settings providers.Settings) (providers.Settings, error) {
+		return s.provisionIfSupported(ctx, desc, creds, settings)
+	}
+
+	result, err := s.store.upsertWithTx(ctx, dbtx, desc, authCtx.ActiveOrganizationID, creds, settings, payload.Enabled, provision)
 	if err != nil {
 		return nil, err
 	}
@@ -456,10 +456,12 @@ func (s *Service) probeProvider(ctx context.Context, desc providers.Descriptor, 
 
 // provisionIfSupported lets a provider that implements providers.Provisioner
 // create its vendor-side object (e.g. a Drata Custom Connection) during
-// connect, returning settings to persist. It runs OUTSIDE the config
-// transaction — provisioning is an external side effect that must not hold the
-// row lock across a vendor round-trip — so the caller persists what it returns.
-// A no-op passthrough for providers that don't provision. A provisioning
+// connect, returning settings to persist. It is invoked by the store's upsert
+// on the merged effective config and under the (org, provider) advisory lock,
+// so a partial update provisions correctly and concurrent first-time connects
+// cannot double-create; the provider itself no-ops when nothing needs
+// provisioning, so the common re-save makes no vendor call while holding the
+// lock. A no-op passthrough for providers that don't provision. A provisioning
 // failure surfaces as an actionable bad-request so the customer fixes the
 // credentials/workspace instead of saving a config that can never sync.
 func (s *Service) provisionIfSupported(ctx context.Context, desc providers.Descriptor, creds providers.Credentials, settings providers.Settings) (providers.Settings, error) {

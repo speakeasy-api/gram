@@ -255,7 +255,16 @@ type UpsertResult struct {
 // rotating a secret must not orphan the synced fleet inventory. Saving is
 // also the user's "try again" signal: machine-initiated auto-pauses are
 // lifted, while user-initiated schedule disables are deliberately untouched.
-func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, desc providers.Descriptor, orgID string, creds providers.Credentials, settings providers.Settings, enabled bool) (UpsertResult, error) {
+// ProvisionFunc creates the provider's vendor-side object (e.g. a Drata Custom
+// Connection) and returns settings to persist. It is invoked inside the upsert
+// — after the effective credentials/settings are merged from stored state, and
+// while the (org, provider) advisory lock is held — so it sees a complete
+// config even on a partial update, and concurrent first-time connects cannot
+// race to create duplicate vendor objects. Nil when the caller has nothing to
+// provision.
+type ProvisionFunc func(context.Context, providers.Credentials, providers.Settings) (providers.Settings, error)
+
+func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, desc providers.Descriptor, orgID string, creds providers.Credentials, settings providers.Settings, enabled bool, provision ProvisionFunc) (UpsertResult, error) {
 	q := repo.New(dbtx)
 
 	// Serialize concurrent upserts: the advisory lock covers the absent-row
@@ -335,6 +344,30 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, desc providers
 	// declares secret fields; a secretless provider is legitimate.
 	if !exists && !credentialsSupplied && len(desc.SecretFields()) > 0 {
 		return UpsertResult{}, oops.E(oops.CodeInvalid, nil, "credentials are required to connect %s", desc.ID)
+	}
+
+	// Provision the vendor-side object now — on the merged effective config, so
+	// a partial update (a stored key/connection id the client omitted) still
+	// provisions correctly, and under the advisory lock, so two first-time
+	// connects can't both create a duplicate. Runs only when there's something
+	// to provision (nil callback, or the provider no-ops when already set).
+	if provision != nil {
+		// The settings merge above already made stored settings effective. The
+		// credentials merge only ran when the client supplied secrets, so on a
+		// settings-only update decrypt the stored credentials for provisioning
+		// too — without them a save that still needs a connection would fail
+		// with the secret sitting right there in the row.
+		provisionCreds := creds
+		if len(provisionCreds) == 0 && exists {
+			if stored, decErr := s.decryptCredentials(existingRow.CredentialsEncrypted); decErr == nil {
+				provisionCreds = stored
+			}
+		}
+		provisioned, err := provision(ctx, provisionCreds, settings)
+		if err != nil {
+			return UpsertResult{}, err
+		}
+		settings = provisioned
 	}
 
 	settingsDoc, err := json.Marshal(settings)
