@@ -57,6 +57,8 @@ package drata
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -101,9 +103,12 @@ const (
 	fieldConnectionID = "connection_id"
 	fieldAPIKey       = "api_key"
 
-	// provisionConnectionName is the deterministic name of the connection Gram
-	// creates and reuses on the customer's behalf. Find-or-create keys on it,
-	// so a re-save reuses the same connection instead of spawning duplicates.
+	// provisionConnectionName is the display-name stem of the connection Gram
+	// creates and reuses on the customer's behalf. The effective name appends a
+	// per-Gram-org suffix (see connectionNameForOrg): find-or-create keys on the
+	// full name, so a re-save reuses the same connection, and two Gram orgs that
+	// happen to share one Drata tenant each own a distinct connection instead of
+	// racing to create — or later clobbering — a single shared one.
 	provisionConnectionName = "Speakeasy Device Agent Coverage"
 
 	// defaultWorkspaceID is the workspace a connection is created in when the
@@ -407,7 +412,7 @@ func (s *sink) cancelStrandedSessions(ctx context.Context, creds providers.Crede
 // is already configured, and a fresh provision first looks for an existing
 // Gram-created connection by name before creating one, so a re-save never
 // spawns a duplicate.
-func (s *sink) Provision(ctx context.Context, creds providers.Credentials, settings providers.Settings) (providers.Settings, error) {
+func (s *sink) Provision(ctx context.Context, orgID string, creds providers.Credentials, settings providers.Settings) (providers.Settings, error) {
 	if strings.TrimSpace(settings[fieldConnectionID]) != "" {
 		return settings, nil
 	}
@@ -420,12 +425,13 @@ func (s *sink) Provision(ctx context.Context, creds providers.Credentials, setti
 		return nil, fmt.Errorf("drata provisioning: %w", err)
 	}
 
-	connID, err := s.findConnectionByName(ctx, creds, base, provisionConnectionName)
+	name := connectionNameForOrg(orgID)
+	connID, err := s.findConnectionByName(ctx, creds, base, name)
 	if err != nil {
 		return nil, fmt.Errorf("drata provisioning: find existing connection: %w", err)
 	}
 	if connID == "" {
-		connID, err = s.createConnection(ctx, creds, base, workspaceID)
+		connID, err = s.createConnection(ctx, creds, base, name, workspaceID)
 		if err != nil {
 			return nil, fmt.Errorf("drata provisioning: create connection: %w", err)
 		}
@@ -435,6 +441,17 @@ func (s *sink) Provision(ctx context.Context, creds providers.Credentials, setti
 	maps.Copy(out, settings)
 	out[fieldConnectionID] = connID
 	return out, nil
+}
+
+// connectionNameForOrg is the deterministic connection name for one Gram org.
+// Encoding the org into the find-or-create key is what makes provisioning
+// correct when two Gram orgs share a single Drata tenant: each owns a distinct
+// connection, so they neither race to create a duplicate nor later resolve to —
+// and overwrite — each other's evidence. A short hash keeps the customer-facing
+// name tidy while staying stable and collision-resistant across orgs.
+func connectionNameForOrg(orgID string) string {
+	sum := sha256.Sum256([]byte(orgID))
+	return fmt.Sprintf("%s (%s)", provisionConnectionName, hex.EncodeToString(sum[:4]))
 }
 
 // parseWorkspaceID reads the customer-supplied workspace, defaulting to the
@@ -506,9 +523,9 @@ func (s *sink) findConnectionByName(ctx context.Context, creds providers.Credent
 
 // createConnection creates the dedicated Custom Connection with the exact
 // record schema the push path expects.
-func (s *sink) createConnection(ctx context.Context, creds providers.Credentials, base string, workspaceID int) (string, error) {
+func (s *sink) createConnection(ctx context.Context, creds providers.Credentials, base, name string, workspaceID int) (string, error) {
 	payload := map[string]any{
-		"name":           provisionConnectionName,
+		"name":           name,
 		"providerTypes":  []string{"CUSTOM"},
 		"workspaceIds":   []int{workspaceID},
 		"displayNameKey": displayNameKey,

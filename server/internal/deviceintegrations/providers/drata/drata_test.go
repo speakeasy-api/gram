@@ -20,6 +20,7 @@ import (
 const (
 	testConnectionID = "8711"
 	testResourceID   = "42"
+	testOrgID        = "org_test"
 )
 
 // fakeDrata is an httptest stand-in for the Custom Connections API: the
@@ -783,13 +784,14 @@ func TestProvisionCreatesConnection(t *testing.T) {
 	fake := newFakeDrata(t)
 	s := fake.newSink(t)
 
-	out, err := s.Provision(t.Context(), fake.creds(), providers.Settings{fieldRegion: "us"})
+	out, err := s.Provision(t.Context(), testOrgID, fake.creds(), providers.Settings{fieldRegion: "us"})
 	require.NoError(t, err)
 	require.NotEmpty(t, out[fieldConnectionID], "provision fills in the created connection id")
 
 	require.Len(t, fake.createdConnections, 1)
 	body := fake.createdConnections[0]
-	require.Equal(t, provisionConnectionName, body["name"])
+	require.Equal(t, connectionNameForOrg(testOrgID), body["name"], "the connection is named per Gram org")
+	require.Contains(t, body["name"], provisionConnectionName, "the org-scoped name keeps the readable stem")
 	require.Equal(t, []any{"CUSTOM"}, body["providerTypes"])
 	require.Equal(t, displayNameKey, body["displayNameKey"])
 	require.Equal(t, []any{float64(defaultWorkspaceID)}, body["workspaceIds"], "blank workspace defaults to 1")
@@ -813,14 +815,38 @@ func TestProvisionReusesExistingConnection(t *testing.T) {
 	fake := newFakeDrata(t)
 	fake.existingConnections = []map[string]any{
 		{"id": 42, "clientAlias": "Some Other Connection"},
-		{"id": 777, "clientAlias": provisionConnectionName},
+		// The bare-stemmed name from before org-scoping was added must NOT
+		// match — only this org's fully-scoped connection is reused.
+		{"id": 43, "clientAlias": provisionConnectionName},
+		{"id": 777, "clientAlias": connectionNameForOrg(testOrgID)},
 	}
 	s := fake.newSink(t)
 
-	out, err := s.Provision(t.Context(), fake.creds(), providers.Settings{fieldRegion: "us"})
+	out, err := s.Provision(t.Context(), testOrgID, fake.creds(), providers.Settings{fieldRegion: "us"})
 	require.NoError(t, err)
-	require.Equal(t, "777", out[fieldConnectionID], "reuses the existing Gram connection by name")
+	require.Equal(t, "777", out[fieldConnectionID], "reuses this org's existing Gram connection by name")
 	require.Empty(t, fake.createdConnections, "a matching connection must never be duplicated")
+}
+
+func TestProvisionSeparatesConnectionsPerOrg(t *testing.T) {
+	t.Parallel()
+
+	// Two Gram orgs sharing one Drata tenant: the second must not resolve to
+	// (and clobber) the first's connection — it provisions its own.
+	fake := newFakeDrata(t)
+	s := fake.newSink(t)
+
+	firstOrg := "org_first"
+	secondOrg := "org_second"
+	require.NotEqual(t, connectionNameForOrg(firstOrg), connectionNameForOrg(secondOrg))
+
+	first, err := s.Provision(t.Context(), firstOrg, fake.creds(), providers.Settings{fieldRegion: "us"})
+	require.NoError(t, err)
+	second, err := s.Provision(t.Context(), secondOrg, fake.creds(), providers.Settings{fieldRegion: "us"})
+	require.NoError(t, err)
+
+	require.NotEqual(t, first[fieldConnectionID], second[fieldConnectionID], "each org owns a distinct connection")
+	require.Len(t, fake.createdConnections, 2, "the shared tenant gets one connection per Gram org")
 }
 
 func TestProvisionFindsConnectionOnLaterPage(t *testing.T) {
@@ -838,11 +864,11 @@ func TestProvisionFindsConnectionOnLaterPage(t *testing.T) {
 	}
 	fake.existingConnections = append(fake.existingConnections, map[string]any{
 		"id":          9999,
-		"clientAlias": provisionConnectionName,
+		"clientAlias": connectionNameForOrg(testOrgID),
 	})
 	s := fake.newSink(t)
 
-	out, err := s.Provision(t.Context(), fake.creds(), providers.Settings{fieldRegion: "us"})
+	out, err := s.Provision(t.Context(), testOrgID, fake.creds(), providers.Settings{fieldRegion: "us"})
 	require.NoError(t, err)
 	require.Equal(t, "9999", out[fieldConnectionID], "cursor-following finds the connection past the first page")
 	require.Empty(t, fake.createdConnections, "a matching connection must never be duplicated")
@@ -855,7 +881,7 @@ func TestProvisionNoOpWhenConfigured(t *testing.T) {
 	s := fake.newSink(t)
 
 	in := providers.Settings{fieldRegion: "us", fieldConnectionID: "existing-123"}
-	out, err := s.Provision(t.Context(), fake.creds(), in)
+	out, err := s.Provision(t.Context(), testOrgID, fake.creds(), in)
 	require.NoError(t, err)
 	require.Equal(t, "existing-123", out[fieldConnectionID])
 	require.Empty(t, fake.createdConnections, "a configured connection is never re-provisioned")
@@ -868,7 +894,7 @@ func TestProvisionWorkspaceID(t *testing.T) {
 		t.Parallel()
 		fake := newFakeDrata(t)
 		s := fake.newSink(t)
-		_, err := s.Provision(t.Context(), fake.creds(), providers.Settings{fieldRegion: "us", fieldWorkspaceID: "3"})
+		_, err := s.Provision(t.Context(), testOrgID, fake.creds(), providers.Settings{fieldRegion: "us", fieldWorkspaceID: "3"})
 		require.NoError(t, err)
 		require.Equal(t, []any{float64(3)}, fake.createdConnections[0]["workspaceIds"])
 	})
@@ -877,7 +903,7 @@ func TestProvisionWorkspaceID(t *testing.T) {
 		t.Parallel()
 		fake := newFakeDrata(t)
 		s := fake.newSink(t)
-		_, err := s.Provision(t.Context(), fake.creds(), providers.Settings{fieldRegion: "us", fieldWorkspaceID: "not-a-number"})
+		_, err := s.Provision(t.Context(), testOrgID, fake.creds(), providers.Settings{fieldRegion: "us", fieldWorkspaceID: "not-a-number"})
 		require.ErrorContains(t, err, "workspace_id")
 		require.Empty(t, fake.createdConnections)
 	})

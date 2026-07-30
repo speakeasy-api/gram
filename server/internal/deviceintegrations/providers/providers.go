@@ -215,20 +215,25 @@ type EvidenceSink interface {
 // Provision during the config upsert, after credentials and settings are
 // merged with any stored values, and stores the returned Settings — so a
 // provider can hand back the id of whatever it created (a connection id, a
-// resource id) for later syncs to use.
+// resource id) for later syncs to use. orgID is the Gram organization the
+// config belongs to; encode it into the vendor object's identity so two Gram
+// orgs that share one vendor account each own a distinct object.
 //
 // Two hard requirements:
 //   - Idempotent (find-or-create): a re-save must reuse the existing vendor
 //     object, never create a duplicate. Return the settings unchanged when
-//     nothing needs provisioning.
-//   - Self-contained on the vendor: Provision must work from only the creds and
-//     settings it is handed. It runs inside the config-upsert transaction (under
-//     the same advisory lock that serializes upserts), so it must not read
-//     Gram-side state that the not-yet-committed transaction would not see, and
-//     it must not block on slow vendor I/O longer than the upsert can hold that
-//     lock — see provisionTimeout in impl.go.
+//     nothing needs provisioning. The org-scoped identity above is also what
+//     keeps this correct across orgs: the Gram-side advisory lock only
+//     serializes one (org, provider), so nothing stops two different orgs
+//     sharing a vendor account from provisioning concurrently.
+//   - Self-contained on the vendor: Provision must work from only the orgID,
+//     creds, and settings it is handed. It runs inside the config-upsert
+//     transaction (under the same advisory lock that serializes upserts), so it
+//     must not read Gram-side state that the not-yet-committed transaction would
+//     not see, and it must not block on slow vendor I/O longer than the upsert
+//     can hold that lock — see provisionTimeout in impl.go.
 type Provisioner interface {
-	Provision(ctx context.Context, creds Credentials, settings Settings) (Settings, error)
+	Provision(ctx context.Context, orgID string, creds Credentials, settings Settings) (Settings, error)
 }
 
 // Descriptor declares one vendor to the framework.

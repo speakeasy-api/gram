@@ -302,7 +302,7 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	// update provisions correctly, and concurrent first-time connects can't
 	// double-create. Nil for providers with nothing to provision.
 	provision := func(ctx context.Context, creds providers.Credentials, settings providers.Settings) (providers.Settings, error) {
-		return s.provisionIfSupported(ctx, desc, creds, settings)
+		return s.provisionIfSupported(ctx, authCtx.ActiveOrganizationID, desc, creds, settings)
 	}
 
 	result, err := s.store.upsertWithTx(ctx, dbtx, desc, authCtx.ActiveOrganizationID, creds, settings, payload.Enabled, provision)
@@ -467,7 +467,7 @@ func (s *Service) probeProvider(ctx context.Context, desc providers.Descriptor, 
 // lock. A no-op passthrough for providers that don't provision. A provisioning
 // failure surfaces as an actionable bad-request so the customer fixes the
 // credentials/workspace instead of saving a config that can never sync.
-func (s *Service) provisionIfSupported(ctx context.Context, desc providers.Descriptor, creds providers.Credentials, settings providers.Settings) (providers.Settings, error) {
+func (s *Service) provisionIfSupported(ctx context.Context, orgID string, desc providers.Descriptor, creds providers.Credentials, settings providers.Settings) (providers.Settings, error) {
 	deps := providers.Deps{Client: boundedProviderClient(s.guardian)}
 	var prov providers.Provisioner
 	switch {
@@ -486,7 +486,7 @@ func (s *Service) provisionIfSupported(ctx context.Context, desc providers.Descr
 
 	provCtx, cancel := context.WithTimeout(ctx, provisionTimeout)
 	defer cancel()
-	out, err := prov.Provision(provCtx, creds, settings)
+	out, err := prov.Provision(provCtx, orgID, creds, settings)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "provision %s connection", desc.ID)
 	}
