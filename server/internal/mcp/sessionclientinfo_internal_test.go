@@ -2,94 +2,49 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
-// mapCache is a minimal in-process cache.Cache for exercising resolution
-// precedence without a Redis round trip. Values round-trip through JSON so the
-// stored shape matches production.
-type mapCache struct {
-	entries map[string][]byte
+// fakeClientInfoStore records identities in memory so resolution precedence can
+// be exercised without Redis. The Redis-backed behaviour (scoping, eviction)
+// has its own tests in the sessionclientinfo package.
+type fakeClientInfoStore struct {
+	records map[string]sessionclientinfo.Info
 }
 
-var _ cache.Cache = (*mapCache)(nil)
+func newFakeClientInfoStore() *fakeClientInfoStore {
+	return &fakeClientInfoStore{records: map[string]sessionclientinfo.Info{}}
+}
 
-func newMapCache() *mapCache { return &mapCache{entries: map[string][]byte{}} }
+func (f *fakeClientInfoStore) key(projectID uuid.UUID, toolsetSlug, sessionID string) string {
+	return projectID.String() + ":" + toolsetSlug + ":" + sessionID
+}
 
-func (c *mapCache) Get(_ context.Context, key string, value any) error {
-	raw, ok := c.entries[key]
+func (f *fakeClientInfoStore) Store(_ context.Context, projectID uuid.UUID, toolsetSlug, sessionID string, info sessionclientinfo.Info, _ int64) error {
+	f.records[f.key(projectID, toolsetSlug, sessionID)] = info
+	return nil
+}
+
+func (f *fakeClientInfoStore) Load(_ context.Context, projectID uuid.UUID, toolsetSlug, sessionID string, _ int64) (sessionclientinfo.Info, error) {
+	info, ok := f.records[f.key(projectID, toolsetSlug, sessionID)]
 	if !ok {
-		return errNoTestCacheEntry
+		return sessionclientinfo.Info{}, sessionclientinfo.ErrNotFound
 	}
-	if err := json.Unmarshal(raw, value); err != nil {
-		return errNoTestCacheEntry
-	}
-	return nil
+	return info, nil
 }
 
-func (c *mapCache) Set(_ context.Context, key string, value any, _ time.Duration) error {
-	raw, err := json.Marshal(value)
-	if err != nil {
-		return err //nolint:wrapcheck // test double
-	}
-	c.entries[key] = raw
-	return nil
-}
-
-func (c *mapCache) GetAndDelete(ctx context.Context, key string, value any) error {
-	if err := c.Get(ctx, key, value); err != nil {
-		return err
-	}
-	delete(c.entries, key)
-	return nil
-}
-
-func (c *mapCache) Add(_ context.Context, key string, _ time.Duration) (bool, error) {
-	if _, ok := c.entries[key]; ok {
-		return false, nil
-	}
-	c.entries[key] = []byte("{}")
-	return true, nil
-}
-
-func (c *mapCache) Update(ctx context.Context, key string, value any) error {
-	return c.Set(ctx, key, value, 0)
-}
-
-func (c *mapCache) Delete(_ context.Context, key string) error {
-	delete(c.entries, key)
-	return nil
-}
-
-func (c *mapCache) Expire(context.Context, string, time.Duration) error { return nil }
-
-func (c *mapCache) ListAppend(context.Context, string, any, time.Duration) error { return nil }
-
-func (c *mapCache) ListRange(context.Context, string, int64, int64, any) error { return nil }
-
-func (c *mapCache) DeleteByPrefix(context.Context, string) error { return nil }
-
-var errNoTestCacheEntry = errors.New("no cache entry for key")
-
-func newClientIdentityFixture(t *testing.T) (*cache.TypedCacheObject[SessionClientInfo], *mcpInputs) {
+func newClientIdentityFixture(t *testing.T) (*fakeClientInfoStore, *mcpInputs) {
 	t.Helper()
 
-	backing := newMapCache()
-	typed := cache.NewTypedObjectCache[SessionClientInfo](testenv.NewLogger(t), backing, cache.SuffixNone)
-
-	return &typed, &mcpInputs{
+	return newFakeClientInfoStore(), &mcpInputs{
 		projectID:             uuid.New(),
 		toolset:               "widgets",
 		environment:           "",
@@ -108,49 +63,16 @@ func newClientIdentityFixture(t *testing.T) (*cache.TypedCacheObject[SessionClie
 	}
 }
 
-// TestSessionClientInfoCacheKey_DistinguishesLongSessionIDs guards the reason
-// the session id is hashed: a prefix-truncated key would map every id sharing
-// that prefix onto one entry, handing one session another's cached identity.
-func TestSessionClientInfoCacheKey_DistinguishesLongSessionIDs(t *testing.T) {
-	t.Parallel()
-
-	projectID := uuid.New()
-	shared := strings.Repeat("s", 4096)
-
-	first := SessionClientInfoCacheKey(projectID, "widgets", shared+"a")
-	second := SessionClientInfoCacheKey(projectID, "widgets", shared+"b")
-
-	require.NotEqual(t, first, second)
-	require.Len(t, second, len(first), "keys are fixed length regardless of session id size")
-	require.NotContains(t, first, shared, "the raw session id must not land in the keyspace")
-}
-
-func TestSessionClientInfoCacheKey_ScopedPerProjectAndToolset(t *testing.T) {
-	t.Parallel()
-
-	sessionID := "session-1"
-	projectA, projectB := uuid.New(), uuid.New()
-
-	require.NotEqual(t,
-		SessionClientInfoCacheKey(projectA, "widgets", sessionID),
-		SessionClientInfoCacheKey(projectB, "widgets", sessionID),
-	)
-	require.NotEqual(t,
-		SessionClientInfoCacheKey(projectA, "widgets", sessionID),
-		SessionClientInfoCacheKey(projectA, "gadgets", sessionID),
-	)
-}
-
 func TestResolveClientIdentity_FallsBackToHandshake(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
-	clientInfoCache, payload := newClientIdentityFixture(t)
+	store, payload := newClientIdentityFixture(t)
 
-	storeSessionClientInfo(ctx, logger, clientInfoCache, payload, "handshake-client", "1.2.3")
+	storeSessionClientInfo(ctx, logger, store, payload, "handshake-client", "1.2.3")
 
-	identity := resolveClientIdentity(ctx, logger, clientInfoCache, payload, nil)
+	identity := resolveClientIdentity(ctx, logger, store, payload, nil)
 	require.Equal(t, toolconfig.MCPClientIdentity{
 		Name:          "handshake-client",
 		Version:       "1.2.3",
@@ -167,11 +89,11 @@ func TestResolveClientIdentity_PerCallHintWins(t *testing.T) {
 
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
-	clientInfoCache, payload := newClientIdentityFixture(t)
+	store, payload := newClientIdentityFixture(t)
 
-	storeSessionClientInfo(ctx, logger, clientInfoCache, payload, "handshake-client", "1.2.3")
+	storeSessionClientInfo(ctx, logger, store, payload, "handshake-client", "1.2.3")
 
-	identity := resolveClientIdentity(ctx, logger, clientInfoCache, payload, &mcpClientInfoHint{
+	identity := resolveClientIdentity(ctx, logger, store, payload, &mcpClientInfoHint{
 		Name:    "per-call-client",
 		Version: "9.9.9",
 	})
@@ -186,11 +108,11 @@ func TestResolveClientIdentity_NamelessHintFallsBack(t *testing.T) {
 
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
-	clientInfoCache, payload := newClientIdentityFixture(t)
+	store, payload := newClientIdentityFixture(t)
 
-	storeSessionClientInfo(ctx, logger, clientInfoCache, payload, "handshake-client", "1.2.3")
+	storeSessionClientInfo(ctx, logger, store, payload, "handshake-client", "1.2.3")
 
-	identity := resolveClientIdentity(ctx, logger, clientInfoCache, payload, &mcpClientInfoHint{
+	identity := resolveClientIdentity(ctx, logger, store, payload, &mcpClientInfoHint{
 		Name:    "",
 		Version: "9.9.9",
 	})
@@ -203,14 +125,45 @@ func TestResolveClientIdentity_BoundsPerCallHint(t *testing.T) {
 
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
-	clientInfoCache, payload := newClientIdentityFixture(t)
+	store, payload := newClientIdentityFixture(t)
 
-	identity := resolveClientIdentity(ctx, logger, clientInfoCache, payload, &mcpClientInfoHint{
+	identity := resolveClientIdentity(ctx, logger, store, payload, &mcpClientInfoHint{
 		Name:    "ev\x00il\nclient",
 		Version: "1.\t0",
 	})
 	require.Equal(t, "evilclient", identity.Name)
 	require.Equal(t, "1.0", identity.Version)
+}
+
+// TestStoreSessionClientInfo_BoundsRecordedFields pins that the untrusted
+// handshake values are cleaned before they are recorded, not just on the way
+// out.
+func TestStoreSessionClientInfo_BoundsRecordedFields(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	store, payload := newClientIdentityFixture(t)
+
+	storeSessionClientInfo(ctx, logger, store, payload, "ev\x00il\nclient", "1.\t0")
+
+	info, err := store.Load(ctx, payload.projectID, payload.toolset, payload.sessionID, 0)
+	require.NoError(t, err)
+	require.Equal(t, "evilclient", info.Name)
+	require.Equal(t, "1.0", info.Version)
+}
+
+func TestStoreSessionClientInfo_NamelessClientRecordsNothing(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	store, payload := newClientIdentityFixture(t)
+
+	storeSessionClientInfo(ctx, logger, store, payload, "", "1.2.3")
+
+	_, err := store.Load(ctx, payload.projectID, payload.toolset, payload.sessionID, 0)
+	require.ErrorIs(t, err, sessionclientinfo.ErrNotFound)
 }
 
 // TestResolveClientIdentity_OAuthClientIsIndependent pins the split between the
@@ -220,10 +173,10 @@ func TestResolveClientIdentity_OAuthClientIsIndependent(t *testing.T) {
 	t.Parallel()
 
 	logger := testenv.NewLogger(t)
-	clientInfoCache, payload := newClientIdentityFixture(t)
+	store, payload := newClientIdentityFixture(t)
 	ctx := contextvalues.SetOAuthClientID(t.Context(), "oauth-client-1")
 
-	identity := resolveClientIdentity(ctx, logger, clientInfoCache, payload, nil)
+	identity := resolveClientIdentity(ctx, logger, store, payload, nil)
 	require.Empty(t, identity.Name, "no client reported an identity")
 	require.Equal(t, "oauth-client-1", identity.OAuthClientID)
 }
@@ -233,7 +186,7 @@ func TestResolveClientIdentity_UnknownCallerIsZero(t *testing.T) {
 
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
-	clientInfoCache, payload := newClientIdentityFixture(t)
+	store, payload := newClientIdentityFixture(t)
 
-	require.True(t, resolveClientIdentity(ctx, logger, clientInfoCache, payload, nil).IsZero())
+	require.True(t, resolveClientIdentity(ctx, logger, store, payload, nil).IsZero())
 }

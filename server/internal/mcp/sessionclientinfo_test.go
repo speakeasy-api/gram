@@ -8,11 +8,21 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
+
+// newClientInfoStore reads the same records the server writes, so these tests
+// assert against real Redis rather than the service's own view of it.
+func newClientInfoStore(t *testing.T) *sessionclientinfo.Store {
+	t.Helper()
+
+	client, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+
+	return sessionclientinfo.NewStore(client, 0)
+}
 
 // makeInitializeBodyWithClientInfo builds an initialize request reporting a
 // specific client identity.
@@ -52,8 +62,7 @@ func TestServePublic_InitializeCachesClientInfo(t *testing.T) {
 	sessionID := w.Header().Get("Mcp-Session-Id")
 	require.NotEmpty(t, sessionID)
 
-	clientInfoCache := cache.NewTypedObjectCache[mcp.SessionClientInfo](ti.logger, ti.cacheAdapter, cache.SuffixNone)
-	info, err := clientInfoCache.Get(ctx, mcp.SessionClientInfoCacheKey(*authCtx.ProjectID, toolset.Slug, sessionID))
+	info, err := newClientInfoStore(t).Load(ctx, *authCtx.ProjectID, toolset.Slug, sessionID, 0)
 	require.NoError(t, err, "the handshake identity must outlive initialize; tool calls have no other source for it")
 	require.Equal(t, "test-client", info.Name)
 	require.Equal(t, "1.0.0", info.Version)
@@ -82,8 +91,7 @@ func TestServePublic_InitializeBoundsCachedClientInfo(t *testing.T) {
 	sessionID := w.Header().Get("Mcp-Session-Id")
 	require.NotEmpty(t, sessionID)
 
-	clientInfoCache := cache.NewTypedObjectCache[mcp.SessionClientInfo](ti.logger, ti.cacheAdapter, cache.SuffixNone)
-	info, err := clientInfoCache.Get(ctx, mcp.SessionClientInfoCacheKey(*authCtx.ProjectID, toolset.Slug, sessionID))
+	info, err := newClientInfoStore(t).Load(ctx, *authCtx.ProjectID, toolset.Slug, sessionID, 0)
 	require.NoError(t, err)
 	require.Equal(t, "evilclient"+strings.Repeat("x", 90), info.Name)
 	require.Len(t, info.Name, 100)
@@ -112,7 +120,6 @@ func TestServePublic_InitializeWithoutClientInfoCachesNothing(t *testing.T) {
 	sessionID := w.Header().Get("Mcp-Session-Id")
 	require.NotEmpty(t, sessionID)
 
-	clientInfoCache := cache.NewTypedObjectCache[mcp.SessionClientInfo](ti.logger, ti.cacheAdapter, cache.SuffixNone)
-	_, err = clientInfoCache.Get(ctx, mcp.SessionClientInfoCacheKey(*authCtx.ProjectID, toolset.Slug, sessionID))
-	require.Error(t, err)
+	_, err = newClientInfoStore(t).Load(ctx, *authCtx.ProjectID, toolset.Slug, sessionID, 0)
+	require.ErrorIs(t, err, sessionclientinfo.ErrNotFound)
 }

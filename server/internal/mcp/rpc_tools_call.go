@@ -97,7 +97,7 @@ func handleToolsCall(
 	mcpMetadataRepo *mcpmetadata_repo.Queries,
 	auditLogger *audit.Logger,
 	platformExtras []platformtools.ExternalTool,
-	clientInfoCache *cache.TypedCacheObject[SessionClientInfo],
+	clientInfoStore sessionClientInfoStore,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -286,7 +286,7 @@ func handleToolsCall(
 		OAuthToken: oauthToken,
 		GramEmail:  gramEmail,
 		GramChatID: payload.chatID,
-		MCPClient:  resolveClientIdentity(ctx, logger, clientInfoCache, payload, clientInfoHint),
+		MCPClient:  resolveClientIdentity(ctx, logger, clientInfoStore, payload, clientInfoHint),
 	}
 
 	err = filterOmittedEnvVars(ctx, toolCallEnv, mcpMetadataRepo, toolsetID)

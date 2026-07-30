@@ -2,8 +2,7 @@ package mcp
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
@@ -11,105 +10,57 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
-const (
-	// maxClientInfoFieldLength bounds each stored client identity field. The
-	// same cap is applied to the PostHog properties recorded at initialize.
-	maxClientInfoFieldLength = 100
-	// sessionClientInfoTTL is how long a handshake identity outlives its
-	// initialize. Matches the default anonymous tunnel session lifetime.
-	sessionClientInfoTTL = 24 * time.Hour
-)
+// maxClientInfoFieldLength bounds each stored client identity field. The same
+// cap is applied to the PostHog properties recorded at initialize.
+const maxClientInfoFieldLength = 100
 
-// SessionClientInfo is the MCP client identity reported during the initialize
-// handshake, cached so later requests on the same session can resolve it.
-//
-// Under the currently-shipped MCP protocol `clientInfo` is sent only at
-// initialize, and Gram's hosted MCP path is otherwise stateless — without this
-// entry the identity is gone by the time the client calls a tool.
-//
-// The values are untrusted and self-reported. They are for observability and
-// convenience only, never authorization.
-type SessionClientInfo struct {
-	// ProjectID and ToolsetSlug scope the entry. Session ids arrive on a
-	// client-supplied header, so scoping the key keeps one tenant's sessions
-	// from addressing another's.
-	ProjectID   uuid.UUID `json:"-"`
-	ToolsetSlug string    `json:"-"`
-	SessionID   string    `json:"-"`
-
-	Name    string `json:"name"`
-	Version string `json:"version"`
+// sessionClientInfoStore records and resolves the identity a client reported
+// during the initialize handshake. Narrow interface so resolution can be
+// exercised without Redis; the production implementation is
+// sessionclientinfo.Store.
+type sessionClientInfoStore interface {
+	Store(ctx context.Context, projectID uuid.UUID, toolsetSlug, sessionID string, info sessionclientinfo.Info, nowMillis int64) error
+	Load(ctx context.Context, projectID uuid.UUID, toolsetSlug, sessionID string, nowMillis int64) (sessionclientinfo.Info, error)
 }
 
-var _ cache.CacheableObject[SessionClientInfo] = (*SessionClientInfo)(nil)
-
-// SessionClientInfoCacheKey builds the cache key for one session's handshake
-// identity. Exported so readers can look an entry up without materializing a
-// partial SessionClientInfo.
-//
-// The session id is hashed rather than embedded. It arrives on a
-// client-supplied header of unbounded length, and it doubles as the bearer of
-// the session — hashing gives a fixed-length key that neither bloats Redis nor
-// writes the raw value into a keyspace that gets logged and enumerated.
-// Truncating instead would collide every id sharing a prefix, letting one
-// session read another's cached identity.
-func SessionClientInfoCacheKey(projectID uuid.UUID, toolsetSlug, sessionID string) string {
-	digest := sha256.Sum256([]byte(sessionID))
-	return "mcpClientInfo:" + projectID.String() + ":" + toolsetSlug + ":" + hex.EncodeToString(digest[:])
-}
-
-// CacheKey implements cache.CacheableObject.
-func (s SessionClientInfo) CacheKey() string {
-	return SessionClientInfoCacheKey(s.ProjectID, s.ToolsetSlug, s.SessionID)
-}
-
-// AdditionalCacheKeys implements cache.CacheableObject. Single-key entry; no
-// fan-out.
-func (s SessionClientInfo) AdditionalCacheKeys() []string { return []string{} }
-
-// TTL implements cache.CacheableObject.
-func (s SessionClientInfo) TTL() time.Duration { return sessionClientInfoTTL }
-
-// storeSessionClientInfo caches the identity a client reported at initialize.
-// A client that reports no name leaves no entry, and a store failure is logged
-// rather than surfaced: losing the identity must never fail the handshake.
-func storeSessionClientInfo(ctx context.Context, logger *slog.Logger, clientInfoCache *cache.TypedCacheObject[SessionClientInfo], payload *mcpInputs, name, version string) {
+// storeSessionClientInfo records the identity a client reported at initialize.
+// A client that reports no name leaves no record, and a write failure is
+// logged rather than surfaced: losing the identity must never fail the
+// handshake.
+func storeSessionClientInfo(ctx context.Context, logger *slog.Logger, store sessionClientInfoStore, payload *mcpInputs, name, version string) {
 	name = sanitizeClientInfoField(name)
 	if name == "" || payload.sessionID == "" {
 		return
 	}
 
-	err := clientInfoCache.Store(ctx, SessionClientInfo{
-		ProjectID:   payload.projectID,
-		ToolsetSlug: payload.toolset,
-		SessionID:   payload.sessionID,
-		Name:        name,
-		Version:     sanitizeClientInfoField(version),
-	})
+	err := store.Store(ctx, payload.projectID, payload.toolset, payload.sessionID, sessionclientinfo.Info{
+		Name:    name,
+		Version: sanitizeClientInfoField(version),
+	}, time.Now().UnixMilli())
 	if err != nil {
-		logger.WarnContext(ctx, "failed to cache mcp session client info", attr.SlogError(err))
+		logger.WarnContext(ctx, "failed to record mcp session client info", attr.SlogError(err))
 	}
 }
 
 // resolveClientIdentity determines who is calling a tool.
 //
 // The client identity has two possible sources. Under the currently-shipped
-// protocol it comes from the initialize handshake, which is why it was cached.
-// Under the draft stateless model (SEP-2575) the client repeats it on every
-// request in `_meta`, and that per-call hint wins — it is the fresher of the
-// two, and a client sending it may never have handshaked at all. This matches
-// the precedence `@gram-ai/functions` already applies when a function serves
-// MCP itself.
+// protocol it comes from the initialize handshake, which is why it was
+// recorded. Under the draft stateless model (SEP-2575) the client repeats it
+// on every request in `_meta`, and that per-call hint wins — it is the fresher
+// of the two, and a client sending it may never have handshaked at all. This
+// matches the precedence `@gram-ai/functions` already applies when a function
+// serves MCP itself.
 //
 // The OAuth client id comes from the verified bearer token instead, so it is
 // unaffected by whatever the caller reports about itself.
-func resolveClientIdentity(ctx context.Context, logger *slog.Logger, clientInfoCache *cache.TypedCacheObject[SessionClientInfo], payload *mcpInputs, hint *mcpClientInfoHint) toolconfig.MCPClientIdentity {
+func resolveClientIdentity(ctx context.Context, logger *slog.Logger, store sessionClientInfoStore, payload *mcpInputs, hint *mcpClientInfoHint) toolconfig.MCPClientIdentity {
 	identity := toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""}
 	if clientID, ok := contextvalues.GetOAuthClientID(ctx); ok {
 		identity.OAuthClientID = clientID
@@ -127,11 +78,14 @@ func resolveClientIdentity(ctx context.Context, logger *slog.Logger, clientInfoC
 		return identity
 	}
 
-	// A miss is an ordinary outcome — no Redis, an expired entry, a client
-	// that never reported a name — so it stays at debug level.
-	info, err := clientInfoCache.Get(ctx, SessionClientInfoCacheKey(payload.projectID, payload.toolset, payload.sessionID))
-	if err != nil {
-		logger.DebugContext(ctx, "no cached mcp session client info", attr.SlogError(err))
+	info, err := store.Load(ctx, payload.projectID, payload.toolset, payload.sessionID, time.Now().UnixMilli())
+	switch {
+	case errors.Is(err, sessionclientinfo.ErrNotFound):
+		// An unknown caller is ordinary: no Redis, an evicted record, or a
+		// client that never reported a name.
+		return identity
+	case err != nil:
+		logger.WarnContext(ctx, "failed to load mcp session client info", attr.SlogError(err))
 		return identity
 	}
 
