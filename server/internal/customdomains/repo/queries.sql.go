@@ -117,6 +117,32 @@ func (q *Queries) DeleteCustomDomain(ctx context.Context, organizationID string)
 	return err
 }
 
+const disableCustomDomainForHealth = `-- name: DisableCustomDomainForHealth :one
+UPDATE custom_domains
+SET
+    verified = FALSE,
+    activated = FALSE,
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+RETURNING id
+`
+
+type DisableCustomDomainForHealthParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Clearing activated drops the domain from health sweeps; clearing verified
+// puts it back into the dashboard reverify flow. Caller tears down k8s.
+func (q *Queries) DisableCustomDomainForHealth(ctx context.Context, arg DisableCustomDomainForHealthParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, disableCustomDomainForHealth, arg.ID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const ensureCustomDomainResourceNames = `-- name: EnsureCustomDomainResourceNames :execrows
 UPDATE custom_domains
 SET
