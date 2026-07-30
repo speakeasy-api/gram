@@ -97,8 +97,8 @@ export function ExternalOAuthForm({
       issuerUrl: string;
       purpose: DiscoveryPurpose;
     }) => {
-      const draft = await client.remoteSessionIssuers.discover({
-        discoverRemoteSessionIssuerRequestBody: { issuer: issuerUrl },
+      const draft = await client.remoteSessionIssuers.fetchMetadata({
+        fetchIssuerMetadataRequestBody: { issuer: issuerUrl },
       });
       const metadataJson = JSON.stringify(
         metadataFromIssuerDraft(issuerUrl, draft),

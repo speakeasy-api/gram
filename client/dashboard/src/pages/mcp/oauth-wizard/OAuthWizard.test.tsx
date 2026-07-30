@@ -88,7 +88,7 @@ vi.mock("@/contexts/Fetcher", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     remoteSessionIssuers: {
-      discover: mocks.discoverIssuer,
+      fetchMetadata: mocks.discoverIssuer,
     },
   }),
 }));
@@ -280,7 +280,7 @@ describe("OAuthWizard — rendering", () => {
 
     await waitFor(() => {
       expect(mocks.discoverIssuer).toHaveBeenCalledWith({
-        discoverRemoteSessionIssuerRequestBody: {
+        fetchIssuerMetadataRequestBody: {
           issuer: "https://auth.example.com",
         },
       });
