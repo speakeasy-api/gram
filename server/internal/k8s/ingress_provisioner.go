@@ -14,9 +14,10 @@ import (
 )
 
 type IngressProvisioner struct {
-	clientset kubernetes.Interface
-	namespace string
-	logger    *slog.Logger
+	clientset      kubernetes.Interface
+	namespace      string
+	backendService string
+	logger         *slog.Logger
 }
 
 func (p *IngressProvisioner) Kind() ProvisionerKind { return ProvisionerKindIngress }
@@ -187,7 +188,7 @@ func (p *IngressProvisioner) buildIngress(domain string, ipAllowlist []string) (
 									PathType: &pathTypePrefix,
 									Backend: networkingv1.IngressBackend{
 										Service: &networkingv1.IngressServiceBackend{
-											Name: "gram-server",
+											Name: p.backendService,
 											Port: networkingv1.ServiceBackendPort{Number: 80},
 										},
 									},
@@ -197,7 +198,7 @@ func (p *IngressProvisioner) buildIngress(domain string, ipAllowlist []string) (
 									PathType: &pathTypePrefix,
 									Backend: networkingv1.IngressBackend{
 										Service: &networkingv1.IngressServiceBackend{
-											Name: "gram-server",
+											Name: p.backendService,
 											Port: networkingv1.ServiceBackendPort{Number: 80},
 										},
 									},
@@ -207,7 +208,7 @@ func (p *IngressProvisioner) buildIngress(domain string, ipAllowlist []string) (
 									PathType: &pathTypeExact,
 									Backend: networkingv1.IngressBackend{
 										Service: &networkingv1.IngressServiceBackend{
-											Name: "gram-server",
+											Name: p.backendService,
 											Port: networkingv1.ServiceBackendPort{Number: 80},
 										},
 									},
@@ -219,7 +220,7 @@ func (p *IngressProvisioner) buildIngress(domain string, ipAllowlist []string) (
 									PathType: &pathTypeImplementationSpecific,
 									Backend: networkingv1.IngressBackend{
 										Service: &networkingv1.IngressServiceBackend{
-											Name: "gram-server",
+											Name: p.backendService,
 											Port: networkingv1.ServiceBackendPort{Number: 80},
 										},
 									},
@@ -229,7 +230,7 @@ func (p *IngressProvisioner) buildIngress(domain string, ipAllowlist []string) (
 									PathType: &pathTypeImplementationSpecific,
 									Backend: networkingv1.IngressBackend{
 										Service: &networkingv1.IngressServiceBackend{
-											Name: "gram-server",
+											Name: p.backendService,
 											Port: networkingv1.ServiceBackendPort{Number: 80},
 										},
 									},
@@ -286,7 +287,7 @@ func (p *IngressProvisioner) buildRootIngress(name, domain, secretName string, i
 									PathType: &pathTypeImplementationSpecific,
 									Backend: networkingv1.IngressBackend{
 										Service: &networkingv1.IngressServiceBackend{
-											Name: "gram-server",
+											Name: p.backendService,
 											Port: networkingv1.ServiceBackendPort{Number: 80},
 										},
 									},
@@ -342,7 +343,7 @@ func (p *IngressProvisioner) buildWellKnownRootIngress(name, domain, secretName 
 									PathType: &pathTypeImplementationSpecific,
 									Backend: networkingv1.IngressBackend{
 										Service: &networkingv1.IngressServiceBackend{
-											Name: "gram-server",
+											Name: p.backendService,
 											Port: networkingv1.ServiceBackendPort{Number: 80},
 										},
 									},

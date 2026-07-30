@@ -19,9 +19,10 @@ func newIngressProvisioner(t *testing.T) (*IngressProvisioner, *fake.Clientset) 
 	t.Helper()
 	cs := fake.NewSimpleClientset()
 	return &IngressProvisioner{
-		clientset: cs,
-		namespace: ingressTestNamespace,
-		logger:    testenv.NewLogger(t),
+		clientset:      cs,
+		namespace:      ingressTestNamespace,
+		backendService: "gram-server",
+		logger:         testenv.NewLogger(t),
 	}, cs
 }
 
