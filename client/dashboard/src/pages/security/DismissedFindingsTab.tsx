@@ -1,31 +1,55 @@
 import { Type } from "@/components/ui/type";
 import { MoreActions, type Action } from "@/components/ui/more-actions";
-import { type Column, Table } from "@speakeasy-api/moonshine";
-import { useQueryClient } from "@tanstack/react-query";
+import { Button, type Column, Table } from "@speakeasy-api/moonshine";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
+import { toast } from "sonner";
 import type { JSX } from "react";
+import { useMemo } from "react";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
-import {
-  invalidateAllRiskListDismissedResults,
-  useRiskListDismissedResults,
-} from "@gram/client/react-query/riskListDismissedResults.js";
+import { invalidateAllRiskListDismissedResults } from "@gram/client/react-query/riskListDismissedResults.js";
 import { useRiskUnmarkResultsFalsePositiveMutation } from "@gram/client/react-query/riskUnmarkResultsFalsePositive.js";
 import { invalidateAllRiskOverview } from "@gram/client/react-query/riskOverview.js";
+import { invalidateAllRiskRuleBreakdown } from "@gram/client/react-query/riskRuleBreakdown.js";
+import { invalidateAllRiskUserBreakdown } from "@gram/client/react-query/riskUserBreakdown.js";
+import { useSdkClient } from "@/contexts/Sdk";
 import { CategoryLabel, RuleLabel } from "./risk-ui";
 
 export function DismissedFindingsTab(): JSX.Element {
+  const client = useSdkClient();
   const queryClient = useQueryClient();
-  const { data, isLoading } = useRiskListDismissedResults({});
-  const findings = data?.results ?? [];
+
+  const resultsQuery = useInfiniteQuery({
+    queryKey: ["risk", "results", "list-dismissed"],
+    queryFn: async ({ pageParam }) => {
+      return client.risk.results.listDismissed({
+        cursor: pageParam,
+        limit: 50,
+      });
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+  });
+
+  const findings = useMemo(
+    () => resultsQuery.data?.pages.flatMap((p) => p.results) ?? [],
+    [resultsQuery.data],
+  );
+
+  const invalidateLists = () => {
+    void invalidateAllRiskListDismissedResults(queryClient);
+    void queryClient.invalidateQueries({
+      queryKey: ["risk", "results", "list"],
+    });
+    void invalidateAllRiskOverview(queryClient);
+    void invalidateAllRiskRuleBreakdown(queryClient);
+    void invalidateAllRiskUserBreakdown(queryClient);
+  };
 
   const unmarkMutation = useRiskUnmarkResultsFalsePositiveMutation({
-    onSuccess: () => {
-      void invalidateAllRiskListDismissedResults(queryClient);
-      void queryClient.invalidateQueries({
-        queryKey: ["risk", "results", "list"],
-      });
-      void invalidateAllRiskOverview(queryClient);
-    },
+    onSuccess: invalidateLists,
+    onError: () =>
+      toast.error("Failed to undo — the finding is still dismissed."),
   });
 
   const columns: Column<RiskResult>[] = [
@@ -90,9 +114,25 @@ export function DismissedFindingsTab(): JSX.Element {
     },
   ];
 
-  if (isLoading) {
+  if (resultsQuery.isLoading) {
     return (
       <Type className="text-muted-foreground">Loading dismissed findings…</Type>
+    );
+  }
+
+  if (resultsQuery.isError) {
+    return (
+      <div className="bg-background flex h-[360px] w-full flex-col items-center justify-center gap-4 rounded-xl border">
+        <div className="space-y-1 text-center">
+          <Type className="font-medium">Couldn't load dismissed findings</Type>
+          <Type small muted>
+            Something went wrong fetching this list.
+          </Type>
+        </div>
+        <Button variant="secondary" onClick={() => void resultsQuery.refetch()}>
+          Retry
+        </Button>
+      </div>
     );
   }
 
@@ -100,7 +140,21 @@ export function DismissedFindingsTab(): JSX.Element {
     return <DismissedEmptyState />;
   }
 
-  return <Table columns={columns} data={findings} rowKey={(f) => f.id} />;
+  return (
+    <div className="flex flex-col gap-3">
+      <Table columns={columns} data={findings} rowKey={(f) => f.id} />
+      {resultsQuery.hasNextPage && (
+        <Button
+          variant="secondary"
+          className="self-center"
+          disabled={resultsQuery.isFetchingNextPage}
+          onClick={() => void resultsQuery.fetchNextPage()}
+        >
+          {resultsQuery.isFetchingNextPage ? "Loading…" : "Load more"}
+        </Button>
+      )}
+    </div>
+  );
 }
 
 function DismissedEmptyState() {

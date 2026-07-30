@@ -19202,6 +19202,9 @@ func ValidateMarkRiskResultsFalsePositiveRequestBody(body *MarkRiskResultsFalseP
 	if len(body.ResultIds) < 1 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.result_ids", body.ResultIds, len(body.ResultIds), 1, true))
 	}
+	if len(body.ResultIds) > 500 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.result_ids", body.ResultIds, len(body.ResultIds), 500, false))
+	}
 	return
 }
 
@@ -19213,6 +19216,9 @@ func ValidateUnmarkRiskResultsFalsePositiveRequestBody(body *UnmarkRiskResultsFa
 	}
 	if len(body.ResultIds) < 1 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.result_ids", body.ResultIds, len(body.ResultIds), 1, true))
+	}
+	if len(body.ResultIds) > 500 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.result_ids", body.ResultIds, len(body.ResultIds), 500, false))
 	}
 	return
 }

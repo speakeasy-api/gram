@@ -456,6 +456,7 @@ var _ = Service("risk", func() {
 			security.ProjectPayload()
 			Attribute("result_ids", ArrayOf(String), "IDs of the risk results to mark as false positive.", func() {
 				MinLength(1)
+				MaxLength(500)
 			})
 			Attribute("reason", String, "Optional free-text reason for the dismissal.")
 			Required("result_ids")
@@ -484,6 +485,7 @@ var _ = Service("risk", func() {
 			security.ProjectPayload()
 			Attribute("result_ids", ArrayOf(String), "IDs of the risk results to restore.", func() {
 				MinLength(1)
+				MaxLength(500)
 			})
 			Required("result_ids")
 		})

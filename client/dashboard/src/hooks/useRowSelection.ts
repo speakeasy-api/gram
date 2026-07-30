@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 export type RowSelection<T> = {
   selectedIds: Set<string>;
@@ -46,6 +46,18 @@ export function useRowSelection<T>(
 
   const clear = useCallback(() => setSelectedIds(new Set()), []);
 
+  // Prune ids that fell out of `items` (e.g. a filter change, or the item was
+  // dismissed) so selectedCount/selectedItems can't stay stuck referencing
+  // rows the user can no longer see or act on.
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const currentIds = new Set(items.map(getId));
+      const next = new Set([...prev].filter((id) => currentIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [items, getId]);
+
   const allState = useMemo((): boolean | "indeterminate" => {
     if (items.length === 0 || selectedIds.size === 0) return false;
     const allSelected = items.every((i) => selectedIds.has(getId(i)));
@@ -60,7 +72,11 @@ export function useRowSelection<T>(
 
   return {
     selectedIds,
-    selectedCount: selectedIds.size,
+    // Derived from selectedItems (current-list-filtered), not selectedIds.size,
+    // so the count showing in the bulk-action bar always matches what the
+    // action would actually operate on — pruning above is async (an effect),
+    // so this avoids a one-frame mismatch after items changes.
+    selectedCount: selectedItems.length,
     isSelected,
     toggle,
     toggleAll,

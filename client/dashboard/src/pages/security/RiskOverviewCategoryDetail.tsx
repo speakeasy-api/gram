@@ -221,16 +221,26 @@ function RiskOverviewCategoryDetailContent() {
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
               <MetricCard
                 title="Findings"
-                // Before overviewQuery resolves, totalCount (from the
-                // category-filtered results list) is a reasonable interim
-                // estimate. Once it has resolved, a category absent from
-                // topCategories has zero findings — not totalCount, which is
-                // project-wide and would otherwise flash a stale-looking
-                // number after every finding in the category is dismissed.
+                // overviewCategory.findings is the authoritative count for a
+                // category ranked in the overview's top 10. A category can be
+                // absent from that ranking for two different reasons that
+                // look identical from here — it has zero findings, or it
+                // simply isn't top-ranked — so falling back to totalCount
+                // unconditionally is wrong in both directions: totalCount is
+                // project-wide (not category-scoped) server-side, so it both
+                // under-represents a genuinely large unranked category and
+                // keeps showing a stale nonzero number after every finding in
+                // a small one is dismissed. Once resultsQuery has loaded every
+                // page for this category (no hasNextPage left), its own
+                // length is an exact category-filtered count and is always
+                // preferred; only fall back to the imprecise totalCount while
+                // still paginating an unranked category.
                 value={
-                  overviewQuery.data
-                    ? (overviewCategory?.findings ?? 0)
-                    : totalCount
+                  overviewCategory
+                    ? overviewCategory.findings
+                    : !resultsQuery.hasNextPage
+                      ? results.length
+                      : totalCount
                 }
                 format="compact"
                 icon="flag"

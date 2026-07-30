@@ -1416,16 +1416,20 @@ RETURNING *;
 -- for stable pagination, matching the ListRiskResultsByProjectFound
 -- convention. block_id is always the nil UUID (foundRowToResult maps that to
 -- a nil pointer) since the Dismissed tab doesn't need durable tool-call-block
--- links.
+-- links. LEFT JOINs both anchor tables (a result is anchored to exactly one,
+-- per risk_results_anchor_check) so content-part-anchored dismissals are not
+-- silently dropped, matching the ListRiskResultsByProjectFound convention.
 SELECT
     rr.id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id,
     rr.source, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos,
     rr.confidence, rr.tags, rr.spans, rr.created_at,
     rr.false_positive_at, rr.false_positive_reason,
-    cm.chat_id, cm.replayed, c.title AS chat_title, c.external_user_id AS chat_user_id
+    COALESCE(cm.chat_id, ccp.chat_id) AS chat_id,
+    c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
-LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
+LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
+LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
 WHERE rr.project_id = @project_id
   AND rr.false_positive_at IS NOT NULL
   AND (

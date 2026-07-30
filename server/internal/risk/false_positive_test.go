@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
@@ -173,4 +174,79 @@ func TestMarkRiskResultsFalsePositive_RejectsBatchTooLarge(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+}
+
+// TestMarkRiskResultsFalsePositive_ContentPartAnchoredFindingIsListable
+// guards against a real regression: ListFalsePositiveRiskResults originally
+// INNER JOINed chat_messages, which silently dropped any dismissed finding
+// anchored to a chat_content_part_id instead (per risk_results_anchor_check,
+// a result carries exactly one of the two) — such a finding could be marked
+// false positive but would never appear in the Dismissed tab, making it
+// permanently unrestorable through the UI.
+func TestMarkRiskResultsFalsePositive_ContentPartAnchoredFindingIsListable(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Content Part False Positive Test")})
+	require.NoError(t, err)
+	policyID, err := uuid.Parse(policy.ID)
+	require.NoError(t, err)
+
+	chatID, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+
+	repo := riskrepo.New(ti.conn)
+	partID, err := repo.CreateChatContentPartForTest(ctx, riskrepo.CreateChatContentPartForTestParams{
+		ChatID:              chatID,
+		ProjectID:           uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		Kind:                "prompt_attachment",
+		ContentAssetUrl:     "gs://test-bucket/content-part.txt",
+		ParentChatMessageID: uuid.NullUUID{UUID: msgID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	resultID, err := uuid.NewV7()
+	require.NoError(t, err)
+	match := "SECRET_ATTACHMENT_TOKEN"
+	_, err = repo.InsertRiskResults(ctx, []riskrepo.InsertRiskResultsParams{{
+		ID:                resultID,
+		ProjectID:         *authCtx.ProjectID,
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		RiskPolicyID:      policyID,
+		RiskPolicyVersion: 1,
+		ChatMessageID:     uuid.NullUUID{},
+		ChatContentPartID: uuid.NullUUID{UUID: partID, Valid: true},
+		Source:            "gitleaks",
+		Found:             true,
+		RuleID:            pgtype.Text{String: "generic-api-key", Valid: true},
+		Description:       pgtype.Text{String: "Generic API key", Valid: true},
+		Match:             pgtype.Text{String: match, Valid: true},
+		StartPos:          pgtype.Int4{Int32: 0, Valid: true},
+		EndPos:            pgtype.Int4{Int32: int32(len(match)), Valid: true},
+		Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},
+	}})
+	require.NoError(t, err)
+
+	err = ti.service.MarkRiskResultsFalsePositive(ctx, &gen.MarkRiskResultsFalsePositivePayload{
+		ResultIds: []string{resultID.String()},
+	})
+	require.NoError(t, err)
+
+	dismissed, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{})
+	require.NoError(t, err)
+	require.Len(t, dismissed.Results, 1, "a content-part-anchored dismissal must still be listable")
+	require.Equal(t, resultID.String(), dismissed.Results[0].ID)
+
+	err = ti.service.UnmarkRiskResultsFalsePositive(ctx, &gen.UnmarkRiskResultsFalsePositivePayload{
+		ResultIds: []string{resultID.String()},
+	})
+	require.NoError(t, err)
+
+	afterUndo, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{})
+	require.NoError(t, err)
+	require.Empty(t, afterUndo.Results)
 }

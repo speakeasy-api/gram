@@ -889,6 +889,9 @@ func BuildMarkRiskResultsFalsePositivePayload(riskMarkRiskResultsFalsePositiveBo
 		if len(body.ResultIds) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.result_ids", body.ResultIds, len(body.ResultIds), 1, true))
 		}
+		if len(body.ResultIds) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.result_ids", body.ResultIds, len(body.ResultIds), 500, false))
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -944,6 +947,9 @@ func BuildUnmarkRiskResultsFalsePositivePayload(riskUnmarkRiskResultsFalsePositi
 		}
 		if len(body.ResultIds) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.result_ids", body.ResultIds, len(body.ResultIds), 1, true))
+		}
+		if len(body.ResultIds) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.result_ids", body.ResultIds, len(body.ResultIds), 500, false))
 		}
 		if err != nil {
 			return nil, err

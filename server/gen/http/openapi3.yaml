@@ -59100,6 +59100,7 @@ components:
                         type: string
                     description: IDs of the risk results to mark as false positive.
                     minItems: 1
+                    maxItems: 500
             required:
                 - result_ids
         MarketplaceSettingsResult:
@@ -68658,6 +68659,7 @@ components:
                         type: string
                     description: IDs of the risk results to restore.
                     minItems: 1
+                    maxItems: 500
             required:
                 - result_ids
         UnshareSkillRequestBody:

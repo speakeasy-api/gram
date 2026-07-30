@@ -226,15 +226,21 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 		// Set only on messages republished by risk.markResultsFalsePositive /
 		// risk.unmarkResultsFalsePositive to append a state-change row for an
 		// already-persisted finding (see mirrorFalsePositiveToClickHouse). Empty
-		// on every finding a scanner produces.
+		// on every finding a scanner produces. A parse failure must skip the
+		// message rather than fall through with falsePositiveAt left nil: this
+		// row would still be appended with a fresh (and so dedup-winning)
+		// inserted_at, silently un-dismissing a finding whose true state this
+		// message never actually conveyed.
 		var falsePositiveAt *time.Time
 		if raw := message.GetFalsePositiveAt(); raw != "" {
-			if t, err := time.Parse(time.RFC3339, raw); err != nil {
+			t, err := time.Parse(time.RFC3339, raw)
+			if err != nil {
 				logger.ErrorContext(ctx, "finding has invalid false_positive_at timestamp", attr.SlogError(err), attr.SlogValueString(raw))
-			} else {
-				utc := t.UTC()
-				falsePositiveAt = &utc
+				w.metrics.RecordFindingCHSkipped(ctx, "invalid_false_positive_at")
+				continue
 			}
+			utc := t.UTC()
+			falsePositiveAt = &utc
 		}
 
 		rows = append(rows, chrepo.RiskFindingRow{
