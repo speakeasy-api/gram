@@ -32,7 +32,9 @@ type fakeVanta struct {
 	// expiresIn is the token lifetime the fake reports.
 	expiresIn   int
 	putRequests int
-	rejectNext  int
+	// rejectNext makes the next PUT fail the whole request with a 4xx, as
+	// Vanta does for any schema violation (its sync is all-or-nothing).
+	rejectNext bool
 	// respondEmpty makes the next PUT return a bare {} — a drifted response
 	// envelope that must not read as success.
 	respondEmpty   bool
@@ -52,7 +54,7 @@ func newFakeVanta(t *testing.T) *fakeVanta {
 		tokenMints:     0,
 		expiresIn:      3600,
 		putRequests:    0,
-		rejectNext:     0,
+		rejectNext:     false,
 		respondEmpty:   false,
 		resources:      nil,
 		lastResourceID: "",
@@ -131,17 +133,21 @@ func newFakeVanta(t *testing.T) *fakeVanta {
 			return
 		}
 
-		rejected := f.rejectNext
-		f.rejectNext = 0
-		accepted := len(envelope.Resources) - rejected
-		if rejected == 0 {
-			// Full-state replace: this PUT is now the authoritative set.
-			f.resources = envelope.Resources
+		if f.rejectNext {
+			// Vanta's full-state PUT is all-or-nothing: any schema violation
+			// fails the whole request with a 4xx and an {"error": ...} body,
+			// leaving the authoritative set untouched.
+			f.rejectNext = false
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"/0/customProperties: must have property 'hostname'"}`))
+			return
 		}
+
+		// Full-state replace: this PUT is now the authoritative set.
+		f.resources = envelope.Resources
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"results": map[string]any{"accepted": accepted, "rejected": rejected},
-		})
+		_ = json.NewEncoder(w).Encode(map[string]any{"success": true})
 	})
 	f.server = httptest.NewTLSServer(mux)
 	t.Cleanup(f.server.Close)
@@ -257,13 +263,14 @@ func TestRejectedRecordsFailLoudly(t *testing.T) {
 	s := fake.newSink()
 
 	fake.mu.Lock()
-	fake.rejectNext = 2
+	fake.rejectNext = true
 	fake.mu.Unlock()
 
-	// Full-state semantics make rejections dangerous: a rejected record is
-	// absent from the authoritative set, which reads as "device gone".
+	// Vanta's sync is all-or-nothing: a schema violation fails the whole PUT
+	// with a 4xx, so no partial set is published as authoritative.
 	err := s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(5))
-	require.ErrorContains(t, err, "rejected 2 of 5")
+	require.ErrorContains(t, err, "failed with status 400")
+	require.Empty(t, fake.resources, "a rejected push leaves the authoritative set untouched")
 }
 
 func TestExternalTokenRevocationRecoversInRun(t *testing.T) {
@@ -302,27 +309,28 @@ func TestShortTokenLifetimeStillCaches(t *testing.T) {
 	require.Equal(t, 1, fake.tokenMints, "the cache serves back-to-back pushes even under a short lifetime — every extra mint revokes someone's token")
 }
 
-func TestResponseAccountingMismatchFailsLoudly(t *testing.T) {
+func TestDriftedSuccessEnvelopeFailsLoudly(t *testing.T) {
 	t.Parallel()
 
 	fake := newFakeVanta(t)
 	s := fake.newSink()
 
-	// A drifted 2xx envelope (bare {}) decodes to zero counts; that must
-	// not read as success while records silently vanish from the set.
+	// A drifted 2xx envelope (bare {}, no "success" field) must not read as a
+	// completed sync — a renamed or dropped field could otherwise let a
+	// no-op response pass for a successful full-state replace.
 	fake.mu.Lock()
 	fake.respondEmpty = true
 	fake.mu.Unlock()
 	err := s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(3))
-	require.ErrorContains(t, err, "accounting")
+	require.ErrorContains(t, err, "did not report success")
 
-	// The empty-fleet edge: zero records sent must not "match" the zero
-	// counts a drifted envelope decodes to.
+	// The empty-fleet edge: a clear (zero records) must also confirm success
+	// from the body, not from the bare 2xx.
 	fake.mu.Lock()
 	fake.respondEmpty = true
 	fake.mu.Unlock()
 	err = s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(0))
-	require.ErrorContains(t, err, "accounting")
+	require.ErrorContains(t, err, "did not report success")
 }
 
 func TestSnapshotIntegrityGuards(t *testing.T) {

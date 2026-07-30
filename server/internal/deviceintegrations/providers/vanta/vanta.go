@@ -356,30 +356,21 @@ func (s *sink) putResources(ctx context.Context, token string, resource string, 
 	if err != nil {
 		return fmt.Errorf("read resource sync response: %w", err)
 	}
-	// Pointer fields track presence: a drifted 2xx envelope (a bare {} or
-	// renamed fields) must fail even for an empty-fleet push, where zero
-	// records sent would otherwise "match" zero-decoded counts.
+	// Vanta's full-state PUT is all-or-nothing: a valid set returns 200
+	// {"success": true}, and any schema violation fails the whole request
+	// with a 4xx {"error": ...} (already handled by the status switch above)
+	// — there is no per-record accepted/rejected accounting, verified against
+	// the live API. Success is confirmed by the body rather than the bare
+	// 2xx: a success field present and false, or a drifted envelope missing
+	// it, must not be read as a completed sync.
 	var result struct {
-		Results *struct {
-			Accepted *int `json:"accepted"`
-			Rejected *int `json:"rejected"`
-		} `json:"results"`
+		Success *bool `json:"success"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
 		return fmt.Errorf("decode resource sync response: %w", err)
 	}
-	if result.Results == nil || result.Results.Accepted == nil || result.Results.Rejected == nil {
-		return fmt.Errorf("resource sync response carried no accepted/rejected accounting")
-	}
-	// Full-state semantics make rejections dangerous, not cosmetic: a
-	// rejected record is missing from the set Vanta accepted, which reads
-	// as "device gone" to any Custom Test. The counts must also account for
-	// every record sent.
-	if *result.Results.Rejected > 0 {
-		return fmt.Errorf("resource sync rejected %d of %d records", *result.Results.Rejected, recordCount)
-	}
-	if *result.Results.Accepted != recordCount {
-		return fmt.Errorf("resource sync response accounted for %d of %d records", *result.Results.Accepted, recordCount)
+	if result.Success == nil || !*result.Success {
+		return fmt.Errorf("resource sync of %d records did not report success", recordCount)
 	}
 	return nil
 }
