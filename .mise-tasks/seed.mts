@@ -631,7 +631,7 @@ async function deployAssets(init: {
   projectSlug: string;
   projectName: string;
   assets: Asset[];
-}): Promise<string> {
+}): Promise<string | null> {
   const { sessionId, projectSlug, projectName, assets } = init;
 
   const oapi: Array<{ assetId: string; name: string; slug: string }> = [];
@@ -763,8 +763,17 @@ async function deployAssets(init: {
     `evolve deployment for '${projectSlug}'`,
   );
 
+  // Best-effort: evolve is the first seed step that needs Temporal, so it is
+  // the one that fails when the worker or Temporal itself is briefly
+  // unavailable. Aborting here discarded every later seed step — org members,
+  // telemetry, chats — for one flaky workflow start, leaving a dashboard with
+  // nothing in it. Skipping the project instead withholds the completion
+  // marker (see seedStepFailures), so the next `mise run seed` retries it.
   if (!evolveRes.ok) {
-    abort(`Failed to evolve project \`${projectName}\``, evolveRes.error);
+    log.stepFailed(
+      `Failed to evolve project \`${projectName}\`: ${evolveRes.error}`,
+    );
+    return null;
   }
 
   const deploymentId = evolveRes.value.deployment?.id;
@@ -5096,6 +5105,11 @@ async function seed() {
       projectName: name,
       assets: seedAssets,
     });
+    if (deploymentId === null) {
+      // Toolsets below are keyed off the deployment, so this project has
+      // nothing more to seed. Later projects and seed sections still run.
+      continue;
+    }
     log.info(
       `Deployed assets into '${projectSlug}' (deployment_id = ${deploymentId})`,
     );
