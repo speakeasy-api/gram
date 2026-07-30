@@ -132,6 +132,7 @@ server/gen/http/chat/client/encode_decode.go
   s_3d388cbf35fcf4::t_d225983e5055c1 2514-2529
 server/design/shared/risk.go
   s_3d388cbf35fcf4::t_13768e2ed6ba3e 154,265-268,338-341,361
+  s_3d388cbf35fcf4::t_8fb37dc14db18a 289
 server/internal/background/risk_analysis_coordinator.go
   s_3d388cbf35fcf4::t_aa443d546dd8b4 86,97,114-130,146
   s_d91d1a4a046c46::t_e86f3e95031edf 131-132,142-144,147-148
