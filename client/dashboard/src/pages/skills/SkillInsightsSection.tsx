@@ -118,8 +118,7 @@ export function SkillInsightsSection({
 }): JSX.Element {
   const project = useProject();
   const { hasScope, isLoading: isRBACLoading } = useRBAC();
-  const canReadChats =
-    !isRBACLoading && hasScope("chat:read", project.id);
+  const canReadChats = !isRBACLoading && hasScope("chat:read", project.id);
   const query = useSkillEfficacyInsights(
     {
       skillIds: [data.skill.id],
