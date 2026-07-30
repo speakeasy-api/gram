@@ -1250,6 +1250,28 @@ WHERE s.project_id = @project_id
   AND s.id = @skill_id
   AND s.archived_at IS NULL;
 
+-- CountSkills handles empty cursor pages. Keep its filters in sync with ListSkills
+-- so normal pages avoid a second query.
+-- name: CountSkills :one
+SELECT COUNT(*)
+FROM skills
+WHERE project_id = @project_id
+  AND archived_at IS NULL
+  AND (
+    sqlc.narg(search)::text IS NULL
+    OR name ILIKE '%' || sqlc.narg(search)::text || '%'
+    OR display_name ILIKE '%' || sqlc.narg(search)::text || '%'
+    OR COALESCE(summary, '') ILIKE '%' || sqlc.narg(search)::text || '%'
+  )
+  AND (
+    COALESCE(cardinality(@source_kinds::text[]), 0) = 0
+    OR source_kind = ANY(@source_kinds::text[])
+  )
+  AND (
+    COALESCE(cardinality(@classifications::text[]), 0) = 0
+    OR classification = ANY(@classifications::text[])
+  );
+
 -- name: ListSkills :many
 SELECT
   sqlc.embed(s),
@@ -1259,7 +1281,27 @@ SELECT
   EXISTS (
     SELECT 1 FROM skill_versions sv
     WHERE sv.skill_id = s.id AND sv.spec_valid IS TRUE
-  )::boolean AS has_valid_version
+  )::boolean AS has_valid_version,
+  (
+    SELECT COUNT(*)
+    FROM skills counted
+    WHERE counted.project_id = @project_id
+      AND counted.archived_at IS NULL
+      AND (
+        sqlc.narg(search)::text IS NULL
+        OR counted.name ILIKE '%' || sqlc.narg(search)::text || '%'
+        OR counted.display_name ILIKE '%' || sqlc.narg(search)::text || '%'
+        OR COALESCE(counted.summary, '') ILIKE '%' || sqlc.narg(search)::text || '%'
+      )
+      AND (
+        COALESCE(cardinality(@source_kinds::text[]), 0) = 0
+        OR counted.source_kind = ANY(@source_kinds::text[])
+      )
+      AND (
+        COALESCE(cardinality(@classifications::text[]), 0) = 0
+        OR counted.classification = ANY(@classifications::text[])
+      )
+  )::bigint AS total_count
 FROM skills s
 LEFT JOIN LATERAL (
   SELECT
@@ -1276,10 +1318,42 @@ LEFT JOIN skill_share_links l
 WHERE s.project_id = @project_id
   AND s.archived_at IS NULL
   AND (
-    sqlc.narg(cursor_name)::text IS NULL
-    OR s.name > sqlc.narg(cursor_name)::text
+    sqlc.narg(search)::text IS NULL
+    OR s.name ILIKE '%' || sqlc.narg(search)::text || '%'
+    OR s.display_name ILIKE '%' || sqlc.narg(search)::text || '%'
+    OR COALESCE(s.summary, '') ILIKE '%' || sqlc.narg(search)::text || '%'
   )
-ORDER BY s.name ASC
+  AND (
+    COALESCE(cardinality(@source_kinds::text[]), 0) = 0
+    OR s.source_kind = ANY(@source_kinds::text[])
+  )
+  AND (
+    COALESCE(cardinality(@classifications::text[]), 0) = 0
+    OR s.classification = ANY(@classifications::text[])
+  )
+  AND (
+    (
+      COALESCE(NULLIF(@sort_order::text, ''), 'name') = 'name'
+      AND (
+        sqlc.narg(cursor_name)::text IS NULL
+        OR s.name > sqlc.narg(cursor_name)::text
+      )
+    )
+    OR (
+      COALESCE(NULLIF(@sort_order::text, ''), 'name') = 'updated'
+      AND (
+        sqlc.narg(cursor_updated_at)::timestamptz IS NULL
+        OR (s.updated_at, s.id) < (
+          sqlc.narg(cursor_updated_at)::timestamptz,
+          sqlc.narg(cursor_id)::uuid
+        )
+      )
+    )
+  )
+ORDER BY
+  CASE WHEN COALESCE(NULLIF(@sort_order::text, ''), 'name') = 'name' THEN s.name END ASC,
+  CASE WHEN COALESCE(NULLIF(@sort_order::text, ''), 'name') = 'updated' THEN s.updated_at END DESC,
+  CASE WHEN COALESCE(NULLIF(@sort_order::text, ''), 'name') = 'updated' THEN s.id END DESC
 LIMIT @page_limit;
 
 -- name: ListSkillVersions :many

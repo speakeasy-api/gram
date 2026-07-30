@@ -990,6 +990,10 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		var (
 			cursor           *string
 			limit            int
+			search           *string
+			sourceKinds      []string
+			classifications  []string
+			sort             string
 			sessionToken     *string
 			apikeyToken      *string
 			projectSlugInput *string
@@ -1018,6 +1022,36 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		if limit > 200 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
 		}
+		searchRaw := qp.Get("search")
+		if searchRaw != "" {
+			search = &searchRaw
+		}
+		if search != nil {
+			if utf8.RuneCountInString(*search) > 256 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("search", *search, utf8.RuneCountInString(*search), 256, false))
+			}
+		}
+		sourceKinds = qp["source_kinds"]
+		for _, e := range sourceKinds {
+			if !(e == "manual" || e == "captured") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("source_kinds[*]", e, []any{"manual", "captured"}))
+			}
+		}
+		classifications = qp["classifications"]
+		for _, e := range classifications {
+			if !(e == "custom" || e == "built_in") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("classifications[*]", e, []any{"custom", "built_in"}))
+			}
+		}
+		sortRaw := qp.Get("sort")
+		if sortRaw != "" {
+			sort = sortRaw
+		} else {
+			sort = "name"
+		}
+		if !(sort == "name" || sort == "updated") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"name", "updated"}))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -1033,7 +1067,7 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListPayload(cursor, limit, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListPayload(cursor, limit, search, sourceKinds, classifications, sort, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

@@ -216,6 +216,8 @@ type UpdateResponseBody struct {
 type ListResponseBody struct {
 	// The active skills in this page.
 	Skills []*SkillResponseBody `form:"skills" json:"skills" xml:"skills"`
+	// The total number of active skills matching the filters.
+	TotalCount int64 `form:"total_count" json:"total_count" xml:"total_count"`
 	// Cursor for the next page; absent when exhausted.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
@@ -4600,6 +4602,7 @@ func NewUpdateResponseBody(res *types.Skill) *UpdateResponseBody {
 // "list" endpoint of the "skills" service.
 func NewListResponseBody(res *skills.ListSkillsResult) *ListResponseBody {
 	body := &ListResponseBody{
+		TotalCount: res.TotalCount,
 		NextCursor: res.NextCursor,
 	}
 	if res.Skills != nil {
@@ -7928,10 +7931,14 @@ func NewUpdatePayload(body *UpdateRequestBody, sessionToken *string, apikeyToken
 }
 
 // NewListPayload builds a skills service list endpoint payload.
-func NewListPayload(cursor *string, limit int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.ListPayload {
+func NewListPayload(cursor *string, limit int, search *string, sourceKinds []string, classifications []string, sort string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.ListPayload {
 	v := &skills.ListPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.Search = search
+	v.SourceKinds = sourceKinds
+	v.Classifications = classifications
+	v.Sort = sort
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

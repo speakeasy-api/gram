@@ -284,7 +284,15 @@ type ListPayload struct {
 	// Cursor for the next page of skills.
 	Cursor *string
 	// The number of skills to return per page.
-	Limit            int
+	Limit int
+	// Search skill names, display names, and summaries.
+	Search *string
+	// Only return skills from these sources.
+	SourceKinds []string
+	// Only return skills with these classifications.
+	Classifications []string
+	// How to order skills.
+	Sort             string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -339,6 +347,8 @@ type ListSkillVersionsResult struct {
 type ListSkillsResult struct {
 	// The active skills in this page.
 	Skills []*types.Skill
+	// The total number of active skills matching the filters.
+	TotalCount int64
 	// Cursor for the next page; absent when exhausted.
 	NextCursor *string
 }

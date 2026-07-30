@@ -1028,6 +1028,16 @@ func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 			values.Add("cursor", *p.Cursor)
 		}
 		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		if p.Search != nil {
+			values.Add("search", *p.Search)
+		}
+		for _, value := range p.SourceKinds {
+			values.Add("source_kinds", value)
+		}
+		for _, value := range p.Classifications {
+			values.Add("classifications", value)
+		}
+		values.Add("sort", p.Sort)
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

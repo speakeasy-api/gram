@@ -214,6 +214,8 @@ type UpdateResponseBody struct {
 type ListResponseBody struct {
 	// The active skills in this page.
 	Skills []*SkillResponseBody `form:"skills,omitempty" json:"skills,omitempty" xml:"skills,omitempty"`
+	// The total number of active skills matching the filters.
+	TotalCount *int64 `form:"total_count,omitempty" json:"total_count,omitempty" xml:"total_count,omitempty"`
 	// Cursor for the next page; absent when exhausted.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
@@ -5310,6 +5312,7 @@ func NewUpdateGatewayError(body *UpdateGatewayErrorResponseBody) *goa.ServiceErr
 // a HTTP "OK" response.
 func NewListSkillsResultOK(body *ListResponseBody) *skills.ListSkillsResult {
 	v := &skills.ListSkillsResult{
+		TotalCount: *body.TotalCount,
 		NextCursor: body.NextCursor,
 	}
 	v.Skills = make([]*types.Skill, len(body.Skills))
@@ -8239,6 +8242,9 @@ func ValidateUpdateResponseBody(body *UpdateResponseBody) (err error) {
 func ValidateListResponseBody(body *ListResponseBody) (err error) {
 	if body.Skills == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("skills", "body"))
+	}
+	if body.TotalCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_count", "body"))
 	}
 	for _, e := range body.Skills {
 		if e != nil {
