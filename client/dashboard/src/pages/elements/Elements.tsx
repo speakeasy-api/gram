@@ -1728,7 +1728,7 @@ function SearchPreview() {
       </div>
       {/* Results */}
       <div className="flex-1 space-y-1.5">
-        <div className="rounded border-l-2 border-violet-400 bg-violet-50 p-1.5">
+        <div className="rounded bg-violet-50 p-1.5 ring-1 ring-violet-300">
           <div className="mb-1 h-1.5 w-full rounded bg-slate-400" />
           <div className="h-1.5 w-3/4 rounded bg-slate-300" />
         </div>
@@ -1773,7 +1773,7 @@ function NotificationsPreview() {
           </div>
         </div>
         <div className="flex gap-1.5 rounded p-1">
-          <div className="h-4 w-4 shrink-0 rounded-full bg-linear-to-br from-purple-400 to-pink-500" />
+          <div className="h-4 w-4 shrink-0 rounded-full bg-linear-to-br from-sky-400 to-blue-500" />
           <div className="flex-1">
             <div className="mb-1 h-1.5 w-full rounded bg-slate-300" />
             <div className="h-1.5 w-3/4 rounded bg-slate-200" />
