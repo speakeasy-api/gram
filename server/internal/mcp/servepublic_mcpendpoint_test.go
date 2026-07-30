@@ -670,12 +670,12 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_ResolvesG
 	// the issuer URN (remote-backed endpoints bind the audience to the
 	// issuer, not the backend id). Subject is the dev user, an active member
 	// of the org, so PrepareContext can resolve principals.
-	token, _, err := usersessions.NewSigner("test-jwt-secret").Mint(
-		urn.NewUserSubject(mockidp.MockUserID),
-		urn.NewUserSessionIssuer(issuerID).String(),
-		ti.serverURL.String()+"/x/mcp/"+endpointSlug,
-		time.Hour,
-	)
+	token, _, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
+		Subject:  urn.NewUserSubject(mockidp.MockUserID),
+		Audience: urn.NewUserSessionIssuer(issuerID).String(),
+		Issuer:   ti.serverURL.String() + "/x/mcp/" + endpointSlug,
+		Lifetime: time.Hour,
+	})
 	require.NoError(t, err)
 
 	// A plain context (no session auth) so the only credential is the bearer
@@ -734,12 +734,12 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_RequiresC
 	endpointSlug := "endpoint-" + uuid.NewString()
 	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "private", issuerID)
 
-	token, _, err := usersessions.NewSigner("test-jwt-secret").Mint(
-		urn.NewUserSubject(mockidp.MockUserID),
-		urn.NewUserSessionIssuer(issuerID).String(),
-		ti.serverURL.String()+"/x/mcp/"+endpointSlug,
-		time.Hour,
-	)
+	token, _, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
+		Subject:  urn.NewUserSubject(mockidp.MockUserID),
+		Audience: urn.NewUserSessionIssuer(issuerID).String(),
+		Issuer:   ti.serverURL.String() + "/x/mcp/" + endpointSlug,
+		Lifetime: time.Hour,
+	})
 	require.NoError(t, err)
 
 	_, err = servePublicHTTP(t, context.Background(), ti, endpointSlug, makeInitializeBody(), token, nil)

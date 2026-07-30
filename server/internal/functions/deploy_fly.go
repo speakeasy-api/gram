@@ -220,6 +220,7 @@ func (f *FlyRunner) ToolCall(ctx context.Context, req RunnerToolCallRequest) (ht
 		ToolName:    req.ToolName,
 		Input:       req.Input,
 		Environment: req.Environment,
+		Meta:        req.Meta,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal function tool payload").LogError(ctx, logger)
