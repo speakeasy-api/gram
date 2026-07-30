@@ -12,20 +12,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// setupDocsFixture picks a published guide that exercises every lookup key
-// unambiguously: its slug, one registry alias, and one endpoint URL all resolve
-// to that guide alone. Deriving the fixture from the SDK rather than naming a
-// vendor keeps these tests pinned to the endpoint's resolution and mapping
-// behaviour, so re-publishing the guide catalog can't silently break them.
+// setupDocsFixture picks a published guide that exercises both lookup keys
+// unambiguously: one registry alias and one endpoint URL each resolve to that
+// guide alone. Deriving the fixture from the SDK rather than naming a vendor
+// keeps these tests pinned to the endpoint's resolution and mapping behaviour,
+// so re-publishing the guide catalog can't silently break them.
 func setupDocsFixture(t *testing.T) (guides.Guide, string, guides.Remote) {
 	t.Helper()
 
 	for _, guide := range guides.Guides() {
-		bySlug := guides.Resolve(string(guide.Slug))
-		if len(bySlug) != 1 || bySlug[0].Kind != guides.MatchSlug {
-			continue
-		}
-
 		for _, alias := range guide.Aliases {
 			byAlias := guides.Resolve(alias)
 			if len(byAlias) == 0 || byAlias[0].Kind != guides.MatchAlias {
@@ -46,7 +41,7 @@ func setupDocsFixture(t *testing.T) (guides.Guide, string, guides.Remote) {
 		}
 	}
 
-	t.Fatal("no published setup guide resolves unambiguously by slug, alias, and endpoint URL")
+	t.Fatal("no published setup guide resolves unambiguously by both registry alias and endpoint URL")
 
 	return guides.Guide{}, "", guides.Remote{}
 }
@@ -97,26 +92,34 @@ func TestExternalMCP_GetSetupDocs_ByRegistrySpecifier(t *testing.T) {
 	}
 }
 
-func TestExternalMCP_GetSetupDocs_ByGuideSlug(t *testing.T) {
+// registry_specifier means a registry specifier, the identifier listCatalog
+// returns per entry. The SDK also indexes guides by docs-catalog identity (a
+// guide slug, a canonical "slug/remote-id" ref), and neither is accepted here:
+// they name a guide rather than a server in a registry, and no caller of this
+// endpoint holds one.
+func TestExternalMCP_GetSetupDocs_DocsCatalogIdentifiersAreNotAccepted(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestExternalMCPService(t)
-	guide, _, _ := setupDocsFixture(t)
+	guide, _, remote := setupDocsFixture(t)
 
-	slug := string(guide.Slug)
-	result, err := ti.service.GetSetupDocs(ctx, &gen.GetSetupDocsPayload{
-		SessionToken:      nil,
-		ApikeyToken:       nil,
-		ProjectSlugInput:  nil,
-		ServerURL:         nil,
-		RegistrySpecifier: &slug,
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Guides, 1)
-	require.Equal(t, slug, result.Guides[0].Slug)
-	require.Equal(t, "slug", result.Guides[0].MatchKind)
-	// A slug names the guide, not one of its endpoints.
-	require.Empty(t, result.Guides[0].MatchedRemoteIds)
+	for _, specifier := range []string{
+		string(guide.Slug),
+		guides.ServerRef{Guide: guide.Slug, Remote: remote.ID}.String(),
+	} {
+		// The SDK does resolve these; the endpoint is what declines them.
+		require.NotEmpty(t, guides.Resolve(specifier), "fixture no longer resolves %q", specifier)
+
+		result, err := ti.service.GetSetupDocs(ctx, &gen.GetSetupDocsPayload{
+			SessionToken:      nil,
+			ApikeyToken:       nil,
+			ProjectSlugInput:  nil,
+			ServerURL:         nil,
+			RegistrySpecifier: &specifier,
+		})
+		require.NoError(t, err, "specifier %q", specifier)
+		require.Empty(t, result.Guides, "specifier %q", specifier)
+	}
 }
 
 func TestExternalMCP_GetSetupDocs_ByServerURL(t *testing.T) {
@@ -193,69 +196,74 @@ func TestExternalMCP_GetSetupDocs_EndpointMatchOutranksGuideLevelMatch(t *testin
 	ctx, ti := newTestExternalMCPService(t)
 	urlGuide, _, remote := setupDocsFixture(t)
 
-	var otherSlug string
+	var otherAlias string
+	var otherSlug guides.GuideSlug
 	for _, guide := range guides.Guides() {
 		if guide.Slug == urlGuide.Slug {
 			continue
 		}
-		if m := guides.Resolve(string(guide.Slug)); len(m) == 1 && m[0].Kind == guides.MatchSlug {
-			otherSlug = string(guide.Slug)
+		for _, alias := range guide.Aliases {
+			if m := guides.Resolve(alias); len(m) > 0 && m[0].Kind == guides.MatchAlias && allMatchGuide(m, guide.Slug) {
+				otherAlias, otherSlug = alias, guide.Slug
+				break
+			}
+		}
+		if otherAlias != "" {
 			break
 		}
 	}
-	require.NotEmpty(t, otherSlug, "no second published guide resolves unambiguously by slug")
+	require.NotEmpty(t, otherAlias, "no second published guide resolves unambiguously by registry alias")
 
 	result, err := ti.service.GetSetupDocs(ctx, &gen.GetSetupDocsPayload{
 		SessionToken:      nil,
 		ApikeyToken:       nil,
 		ProjectSlugInput:  nil,
 		ServerURL:         &remote.URL,
-		RegistrySpecifier: &otherSlug,
+		RegistrySpecifier: &otherAlias,
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Guides, 2)
 
 	require.Equal(t, string(urlGuide.Slug), result.Guides[0].Slug)
 	require.Equal(t, "endpoint", result.Guides[0].MatchKind)
-	require.Equal(t, otherSlug, result.Guides[1].Slug)
-	require.Equal(t, "slug", result.Guides[1].MatchKind)
+	require.Equal(t, string(otherSlug), result.Guides[1].Slug)
+	require.Equal(t, "alias", result.Guides[1].MatchKind)
 }
 
-// Provenance matches are not exposed. The SDK keys them by the section titles of
-// the upstream docs a guide was derived from, so they answer a lookup for one
-// vendor's server with another vendor's guide, and a single title can pull in
-// most of the catalog. Sweeping every published identifier pins both halves of
-// that: no lookup reports an unexpected kind, and a lookup that only named a
-// guide never claims to have selected one of its endpoints.
-func TestExternalMCP_GetSetupDocs_GuideLevelLookupsSelectNoEndpoint(t *testing.T) {
+// Sweeping every published registry alias pins the two invariants that the
+// unexposed SDK indexes used to break. Provenance is keyed by the section titles
+// of the upstream docs a guide was derived from, so it answered a lookup for one
+// vendor's server with another vendor's guide, and it also leaked an endpoint
+// into matched_remote_ids whenever a guide's docs happened to carry a section
+// titled with the alias. So: no alias reports a kind other than "alias", and no
+// alias claims to have selected one of the guide's endpoints.
+func TestExternalMCP_GetSetupDocs_AliasLookupsSelectNoEndpoint(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestExternalMCPService(t)
 
+	var swept int
 	for _, guide := range guides.Guides() {
-		for _, specifier := range append([]string{string(guide.Slug)}, guide.Aliases...) {
+		for _, alias := range guide.Aliases {
 			result, err := ti.service.GetSetupDocs(ctx, &gen.GetSetupDocsPayload{
 				SessionToken:      nil,
 				ApikeyToken:       nil,
 				ProjectSlugInput:  nil,
 				ServerURL:         nil,
-				RegistrySpecifier: &specifier,
+				RegistrySpecifier: &alias,
 			})
-			require.NoError(t, err, "specifier %q", specifier)
-			require.NotEmpty(t, result.Guides, "specifier %q", specifier)
+			require.NoError(t, err, "alias %q", alias)
+			require.NotEmpty(t, result.Guides, "alias %q", alias)
+			swept++
 
 			for _, got := range result.Guides {
-				switch got.MatchKind {
-				case "slug", "alias":
-					require.Empty(t, got.MatchedRemoteIds, "specifier %q matched guide %q", specifier, got.Slug)
-				case "server_ref", "endpoint":
-					require.NotEmpty(t, got.MatchedRemoteIds, "specifier %q matched guide %q", specifier, got.Slug)
-				default:
-					t.Fatalf("specifier %q reported unexpected match_kind %q", specifier, got.MatchKind)
-				}
+				require.Equal(t, "alias", got.MatchKind, "alias %q matched guide %q", alias, got.Slug)
+				require.Empty(t, got.MatchedRemoteIds, "alias %q matched guide %q", alias, got.Slug)
 			}
 		}
 	}
+
+	require.NotZero(t, swept, "no published guide declares a registry alias")
 }
 
 func TestExternalMCP_GetSetupDocs_UnknownServerReturnsNoGuides(t *testing.T) {

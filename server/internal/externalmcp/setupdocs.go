@@ -12,24 +12,32 @@ import (
 // setupGuideMatchKind maps the guides SDK's match classification onto the wire
 // enum, paired with a specificity rank (lower is more specific).
 //
-// Two SDK kinds are deliberately not exposed. guides.MatchProvenance is keyed by
-// the section titles of the upstream docs a guide was derived from ("API",
-// "OAuth", "Speakeasy setup canonical section"), not by anything a caller holds
-// as a server identifier, so it can only ever fire by accident: it would answer
-// a lookup for one vendor's server with another vendor's guide, and a single
-// title can pull in most of the catalog at once. A kind added by a future SDK
-// release reports ok=false for the same reason: an unrecognised match is dropped
-// rather than reported under a kind it isn't.
+// Only the two kinds the endpoint's inputs actually name are exposed, one per
+// lookup key: an endpoint URL for server_url, a registry alias for
+// registry_specifier. The SDK indexes guides three further ways, and each would
+// answer under a key that does not mean it:
+//
+//   - Provenance is keyed by the section titles of the upstream docs a guide was
+//     derived from ("API", "OAuth", "Speakeasy setup canonical section"), so it
+//     can only fire by accident: it would answer a lookup for one vendor's
+//     server with another vendor's guide, and a single title pulls in as many as
+//     15 guides at once.
+//   - A guide slug and the SDK's canonical "slug/remote-id" ref are real
+//     identifiers, but they identify a guide in the docs catalog, not a server in
+//     a registry, which is what registry_specifier means everywhere else in this
+//     service. Neither intended caller holds one: a catalog detail page has the
+//     registry_specifier that listCatalog gave it, and an MCP detail page has the
+//     server's URL. They can be re-exposed under their own payload key if a
+//     docs-browsing surface ever needs them.
+//
+// A kind added by a future SDK release reports ok=false for the same reason: an
+// unrecognised match is dropped rather than reported under a kind it isn't.
 func setupGuideMatchKind(kind guides.MatchKind) (wire string, rank int, ok bool) {
 	switch kind {
-	case guides.MatchServerRef:
-		return "server_ref", 0, true
 	case guides.MatchEndpoint:
-		return "endpoint", 1, true
-	case guides.MatchSlug:
-		return "slug", 2, true
+		return "endpoint", 0, true
 	case guides.MatchAlias:
-		return "alias", 3, true
+		return "alias", 1, true
 	default:
 		return "", 0, false
 	}
@@ -42,7 +50,7 @@ func setupGuideMatchKind(kind guides.MatchKind) (wire string, rank int, ok bool)
 // most specific match for a guide wins its match_kind, and every endpoint the
 // lookup selected for it lands in matched_remote_ids. Guides are returned in
 // descending specificity, which has to be sorted for rather than inherited from
-// the SDK's check order: that order is per-lookup-key, so without a sort a loose
+// the SDK's check order: that order is per-lookup-key, so without a sort an alias
 // match on the identifier would outrank an exact endpoint match on the URL.
 func resolveSetupGuides(registrySpecifier, serverURL string) []*types.MCPSetupGuide {
 	var matches []guides.Match
