@@ -198,11 +198,14 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 		}
 
 		rows = append(rows, chrepo.RiskFindingRow{
-			ID:                       id,
-			CreatedAt:                createdAt.UTC(),
-			OrganizationID:           message.GetOrganizationId(),
-			ProjectID:                message.GetProjectId(),
-			RequestID:                message.GetRequestId(),
+			ID:             id,
+			CreatedAt:      createdAt.UTC(),
+			OrganizationID: message.GetOrganizationId(),
+			ProjectID:      message.GetProjectId(),
+			RequestID:      message.GetRequestId(),
+			// The part anchor is carried through in a follow-up; async
+			// scanners only publish chat-message-anchored findings today.
+			ContentPartID:            "",
 			ChatMessageID:            message.GetChatMessageId(),
 			RiskPolicyID:             message.GetRiskPolicyId(),
 			RiskPolicyVersion:        message.GetRiskPolicyVersion(),

@@ -24,6 +24,7 @@ export type ListManagedDevicesSecurity = {
 export const CoverageBucket = {
   AgentActive: "agent_active",
   AgentStale: "agent_stale",
+  AgentOtherDevice: "agent_other_device",
   NoAgent: "no_agent",
   NoEmail: "no_email",
   UnresolvedEmail: "unresolved_email",

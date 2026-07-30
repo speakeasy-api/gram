@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 
@@ -19,7 +20,7 @@ func TestSkillSuggestionWorkflowIdentityIsPerSkill(t *testing.T) {
 	t.Parallel()
 
 	skillID := uuid.New()
-	params := SkillSuggestionParams{ProjectID: uuid.New(), SkillID: skillID}
+	params := SkillSuggestionParams{ProjectID: uuid.New(), SkillID: skillID, Force: false}
 	require.Equal(t, "v1:skill-suggestion:"+skillID.String(), skillSuggestionWorkflowID(skillID))
 	require.Equal(t, "v1:skill-suggestion:"+skillID.String()+"/signal", skillSuggestionSignal(params))
 	require.NotEqual(t, skillSuggestionWorkflowID(uuid.New()), skillSuggestionWorkflowID(skillID))
@@ -32,7 +33,7 @@ func TestSkillSuggestionWorkflowCompletesSkippedPass(t *testing.T) {
 
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
-	params := SkillSuggestionParams{ProjectID: uuid.New(), SkillID: uuid.New()}
+	params := SkillSuggestionParams{ProjectID: uuid.New(), SkillID: uuid.New(), Force: false}
 	calls := 0
 	env.RegisterActivityWithOptions(func(_ context.Context, input activities.AnalyzeSkillSuggestionParams) (*suggest.Result, error) {
 		calls++
@@ -54,7 +55,7 @@ func TestSkillSuggestionWorkflowReenqueuesBaseRace(t *testing.T) {
 
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
-	params := SkillSuggestionParams{ProjectID: uuid.New(), SkillID: uuid.New()}
+	params := SkillSuggestionParams{ProjectID: uuid.New(), SkillID: uuid.New(), Force: false}
 	env.RegisterActivityWithOptions(func(_ context.Context, _ activities.AnalyzeSkillSuggestionParams) (*suggest.Result, error) {
 		return &suggest.Result{Kind: suggest.ResultBaseMoved, Reenqueue: true, FeedbackConsumed: 0, SuggestionID: uuid.NullUUID{}}, nil
 	}, activity.RegisterOptions{Name: "AnalyzeSkillSuggestion"})
@@ -71,7 +72,7 @@ func TestSkillSuggestionWorkflowCoalescesSignalDuringAnalysis(t *testing.T) {
 
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
-	params := SkillSuggestionParams{ProjectID: uuid.New(), SkillID: uuid.New()}
+	params := SkillSuggestionParams{ProjectID: uuid.New(), SkillID: uuid.New(), Force: false}
 	env.RegisterActivityWithOptions(func(_ context.Context, _ activities.AnalyzeSkillSuggestionParams) (*suggest.Result, error) {
 		env.SignalWorkflow(skillSuggestionSignal(params), "enqueue")
 		env.SignalWorkflow(skillSuggestionSignal(params), "enqueue")
@@ -89,7 +90,7 @@ func TestSkillSuggestionWorkflowDrainsStartDelayBurstBeforeAnalysis(t *testing.T
 
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
-	params := SkillSuggestionParams{ProjectID: uuid.New(), SkillID: uuid.New()}
+	params := SkillSuggestionParams{ProjectID: uuid.New(), SkillID: uuid.New(), Force: false}
 	calls := 0
 	env.RegisterActivityWithOptions(func(_ context.Context, _ activities.AnalyzeSkillSuggestionParams) (*suggest.Result, error) {
 		calls++
@@ -105,6 +106,48 @@ func TestSkillSuggestionWorkflowDrainsStartDelayBurstBeforeAnalysis(t *testing.T
 
 	require.NoError(t, env.GetWorkflowError())
 	require.Equal(t, 1, calls)
+}
+
+func TestSkillSuggestionWorkflowCoalescesManualSignalIntoForcedPass(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	params := SkillSuggestionParams{ProjectID: uuid.New(), SkillID: uuid.New(), Force: false}
+	env.RegisterActivityWithOptions(func(_ context.Context, input activities.AnalyzeSkillSuggestionParams) (*suggest.Result, error) {
+		require.True(t, input.Force)
+		return &suggest.Result{Kind: suggest.ResultSkipped, Reenqueue: false, FeedbackConsumed: 0, SuggestionID: uuid.NullUUID{}}, nil
+	}, activity.RegisterOptions{Name: "AnalyzeSkillSuggestion"})
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(skillSuggestionSignal(params), skillSuggestionForceMessage)
+	}, 0)
+
+	env.ExecuteWorkflow(SkillSuggestionWorkflow, params)
+
+	require.NoError(t, env.GetWorkflowError())
+}
+
+func TestSkillSuggestionWorkflowPreservesForcedPassOnReenqueue(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	params := SkillSuggestionParams{ProjectID: uuid.New(), SkillID: uuid.New(), Force: false}
+	env.RegisterActivityWithOptions(func(_ context.Context, input activities.AnalyzeSkillSuggestionParams) (*suggest.Result, error) {
+		require.True(t, input.Force)
+		return &suggest.Result{Kind: suggest.ResultBaseMoved, Reenqueue: true, FeedbackConsumed: 0, SuggestionID: uuid.NullUUID{}}, nil
+	}, activity.RegisterOptions{Name: "AnalyzeSkillSuggestion"})
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(skillSuggestionSignal(params), skillSuggestionForceMessage)
+	}, 0)
+
+	env.ExecuteWorkflow(SkillSuggestionWorkflow, params)
+
+	var continueErr *workflow.ContinueAsNewError
+	require.ErrorAs(t, env.GetWorkflowError(), &continueErr)
+	var nextParams SkillSuggestionParams
+	require.NoError(t, converter.GetDefaultDataConverter().FromPayloads(continueErr.Input, &nextParams))
+	require.True(t, nextParams.Force)
 }
 
 func TestSkillSuggestionSweepPagesActiveSkillsAndSignalsExactIdentity(t *testing.T) {

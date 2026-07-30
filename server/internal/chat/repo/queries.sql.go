@@ -1257,12 +1257,21 @@ FROM chat_content_parts ccp
 WHERE ccp.chat_id = $2
   AND (ccp.project_id IS NULL OR ccp.project_id = $1::uuid)
   AND ccp.deleted IS FALSE
+  -- Only the parts the requested page can actually render: one anchored to a
+  -- message on this page, or an unparented one the client places by time
+  -- proximity. Without this a page request reads every attachment body in the
+  -- chat from asset storage, then discards the ones it cannot anchor.
+  AND (
+    ccp.parent_chat_message_id IS NULL
+    OR ccp.parent_chat_message_id = ANY($3::uuid[])
+  )
 ORDER BY created_at ASC, id ASC
 `
 
 type ListChatContentPartsByChatIDParams struct {
-	ProjectID uuid.UUID
-	ChatID    uuid.UUID
+	ProjectID            uuid.UUID
+	ChatID               uuid.UUID
+	ParentChatMessageIds []uuid.UUID
 }
 
 type ListChatContentPartsByChatIDRow struct {
@@ -1285,7 +1294,7 @@ type ListChatContentPartsByChatIDRow struct {
 }
 
 func (q *Queries) ListChatContentPartsByChatID(ctx context.Context, arg ListChatContentPartsByChatIDParams) ([]ListChatContentPartsByChatIDRow, error) {
-	rows, err := q.db.Query(ctx, listChatContentPartsByChatID, arg.ProjectID, arg.ChatID)
+	rows, err := q.db.Query(ctx, listChatContentPartsByChatID, arg.ProjectID, arg.ChatID, arg.ParentChatMessageIds)
 	if err != nil {
 		return nil, err
 	}

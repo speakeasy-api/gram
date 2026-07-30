@@ -76,7 +76,7 @@ import {
 import { useChatTranscript } from "./useChatTranscript";
 import { useWindowedTranscript } from "./useWindowedTranscript";
 import { CreateExclusionContext } from "./exclusionContext";
-import { findingToExclusionState } from "./chatHelpers";
+import { findingToExclusionState, riskResultAnchorId } from "./chatHelpers";
 import {
   ChatTranscript,
   type RowContext,
@@ -1117,9 +1117,12 @@ function ChatDetailPanel({
   const riskResultsByMessage = useMemo(() => {
     const map = new Map<string, RiskResult[]>();
     for (const r of riskResults) {
-      const existing = map.get(r.chatMessageId);
+      const anchorId = riskResultAnchorId(r);
+      if (!anchorId) continue;
+
+      const existing = map.get(anchorId);
       if (existing) existing.push(r);
-      else map.set(r.chatMessageId, [r]);
+      else map.set(anchorId, [r]);
     }
     return map;
   }, [riskResults]);
@@ -1147,8 +1150,8 @@ function ChatDetailPanel({
   }, [chat?.agentUsage]);
 
   const transcriptRows = useMemo(
-    () => buildTranscript(chatMessages),
-    [chatMessages],
+    () => buildTranscript(chatMessages, chat?.contentParts ?? []),
+    [chatMessages, chat?.contentParts],
   );
   // Apply the header filters at the row level so generation dividers and risk
   // gaps recompute against exactly what's shown (no orphaned dividers).

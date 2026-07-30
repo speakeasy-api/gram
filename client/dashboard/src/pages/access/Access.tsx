@@ -9,7 +9,6 @@ import {
 } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useOrgRoutes } from "@/routes";
 import { Alert } from "@speakeasy-api/moonshine";
 import { useMembers } from "@gram/client/react-query/members.js";
@@ -33,16 +32,10 @@ const tabDisplayNames: Record<string, string> = {
 
 export default function Access(): JSX.Element {
   const location = useLocation();
-  const telemetry = useTelemetry();
-  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
 
   const pathSegments = location.pathname.split("/");
   const lastSegment = pathSegments[pathSegments.length - 1];
   const shouldRedirect = lastSegment === "access";
-
-  if (!isRbacEnabled) {
-    return <Navigate to=".." replace />;
-  }
 
   if (shouldRedirect) {
     return <Navigate to="roles" replace />;

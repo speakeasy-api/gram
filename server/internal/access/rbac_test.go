@@ -262,11 +262,6 @@ func TestService_UpdateMemberRole_AllowsOrgAdminGrant(t *testing.T) {
 func withRBACGrants(t *testing.T, ctx context.Context, grants ...authz.Grant) context.Context {
 	t.Helper()
 
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	authCtx.AccountType = "enterprise"
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
-
 	for i := range grants {
 		if grants[i].Effect == "" {
 			grants[i].Effect = authz.PolicyEffectAllow

@@ -4,6 +4,7 @@ import { unixNanoToMs } from "@/components/chart/chartUtils";
 import { type TimeSeriesStack } from "@/components/stacked-time-series";
 import { StackedTimeSeriesPanel } from "@/components/stacked-time-series-panel";
 import { type StackMode } from "./breakdown-options";
+import { TumDefinitionHint } from "./tum-definition";
 
 // The billing page's tokens-under-management breakdown: the shared stacked
 // time-series panel fed with daily token buckets, stacked by a chosen
@@ -48,10 +49,6 @@ function formatTokensAxis(value: number): string {
 // points grid by index — the same shape the shared panel consumes, so the
 // rows (rollup flag included) pass straight through as stacks.
 export type GroupSeries = TimeSeriesStack;
-
-// The header info copy for the panel.
-const HEADER_HINT =
-  "Tokens under management — the agent traffic the platform observes from your users' sessions (including Claude Code, Cowork, Cursor, and Codex): input, output, and cache-write tokens. Cache reads are excluded (re-read cached content isn't new traffic), and so is inference the platform itself runs (risk-policy analysis, hosted chat).";
 
 // The daily stack series for the selected mode, aligned to the points grid.
 // The panel drops all-zero stacks, so modes whose series don't apply (e.g.
@@ -127,7 +124,7 @@ export function TokenUsagePanel({
   return (
     <StackedTimeSeriesPanel
       title="Token Usage Time Series"
-      headerHint={HEADER_HINT}
+      headerHint={<TumDefinitionHint />}
       bucketsMs={bucketsMs}
       stacks={stacks}
       headerControls={breakdownPicker}

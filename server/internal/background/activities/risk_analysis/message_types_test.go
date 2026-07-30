@@ -9,33 +9,34 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/message"
-	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
-func TestFilterMessagesByMessageTypes(t *testing.T) {
+func TestFilterBatchMessagesByMessageTypes(t *testing.T) {
 	t.Parallel()
 
 	userID := uuid.New()
 	assistantID := uuid.New()
 	toolRequestID := uuid.New()
 	toolResponseID := uuid.New()
+	promptAttachmentID := uuid.New()
 
-	messages := []repo.GetMessageContentBatchRow{
-		{ID: userID, Role: "user", Content: "hello"},
-		{ID: assistantID, Role: "assistant", Content: "thinking"},
-		{ID: toolRequestID, Role: "assistant", Content: "", ToolCalls: []byte(`[]`)},
-		{ID: toolResponseID, Role: "tool", Content: "done"},
-		{ID: uuid.New(), Role: "system", Content: "ignore"},
+	messages := []batchMessage{
+		{ID: userID, Type: message.User},
+		{ID: assistantID, Type: message.Assistant},
+		{ID: toolRequestID, Type: message.ToolRequest},
+		{ID: toolResponseID, Type: message.ToolResponse},
+		{ID: promptAttachmentID, Type: message.PromptAttachment, ContentPart: true},
 	}
 
-	filtered := filterMessagesByMessageTypes(messages, []string{message.ToolRequest, message.ToolResponse})
-	require.Len(t, filtered, 2)
+	filtered := filterBatchMessagesByMessageTypes(messages, []string{message.ToolRequest, message.ToolResponse, message.PromptAttachment})
+	require.Len(t, filtered, 3)
 	require.Equal(t, toolRequestID, filtered[0].ID)
 	require.Equal(t, toolResponseID, filtered[1].ID)
+	require.Equal(t, promptAttachmentID, filtered[2].ID)
 
-	all := filterMessagesByMessageTypes(messages, nil)
-	require.Len(t, all, 4)
-	require.Equal(t, []uuid.UUID{userID, assistantID, toolRequestID, toolResponseID}, []uuid.UUID{all[0].ID, all[1].ID, all[2].ID, all[3].ID})
+	all := filterBatchMessagesByMessageTypes(messages, nil)
+	require.Len(t, all, 5)
+	require.Equal(t, []uuid.UUID{userID, assistantID, toolRequestID, toolResponseID, promptAttachmentID}, []uuid.UUID{all[0].ID, all[1].ID, all[2].ID, all[3].ID, all[4].ID})
 }
 
 func TestParseRecordedToolCallsMalformedFallback(t *testing.T) {

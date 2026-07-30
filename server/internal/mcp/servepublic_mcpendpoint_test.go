@@ -35,7 +35,6 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -633,7 +632,7 @@ func decodeMCPResult(t *testing.T, body []byte) map[string]any {
 // Before the fix, serveRemoteBackend only called authz.PrepareContext on the
 // non-issuer-gated path. For issuer-gated callers the proxy still attached
 // the tools/list mcp:connect filter and the tools/call authz interceptor;
-// with an enterprise org + session principal + RBAC enabled, those ran
+// with a session principal + RBAC enabled, those ran
 // FindMatched / Require against a context with no prepared grants, returned
 // ErrMissingGrants (mapped to CodeUnexpected), and the proxy substituted a
 // JSON-RPC error event — yielding zero tools and a broken tools/call even
@@ -651,15 +650,6 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_ResolvesG
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
-
-	// Mark the caller's org enterprise so authz.ShouldEnforce returns true
-	// (enterprise + session principal + the test engine's always-on RBAC
-	// flag). Without this the missing-grants path is dead — RBAC never
-	// enforces and the bug cannot reproduce.
-	require.NoError(t, orgsrepo.New(ti.conn).SetAccountType(ctx, orgsrepo.SetAccountTypeParams{
-		GramAccountType: "enterprise",
-		ID:              authCtx.ActiveOrganizationID,
-	}))
 
 	const toolName = "ping"
 	upstream := newStatelessRemoteMCPUpstream(t, toolName)
@@ -731,11 +721,6 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_RequiresC
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
-
-	require.NoError(t, orgsrepo.New(ti.conn).SetAccountType(ctx, orgsrepo.SetAccountTypeParams{
-		GramAccountType: "enterprise",
-		ID:              authCtx.ActiveOrganizationID,
-	}))
 
 	upstreamHit := make(chan struct{}, 1)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

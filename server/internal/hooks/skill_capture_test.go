@@ -125,6 +125,22 @@ func TestIngest_RecordsExplicitAndInferredSkillObservations(t *testing.T) {
 	require.False(t, rows[1].RawSha256.Valid, "malformed hashes degrade to name-only observations")
 }
 
+func TestIngest_ScopedSkillNameStoredCanonically(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	payload := skillPayload("claude", eventTypeSkillActivated, "scoped-session", "vendor-plugin: repo-review", "")
+	_, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+
+	rows, err := ti.service.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "repo-review", rows[0].SkillName)
+}
+
 func TestIngest_SkillObservationDurableIdempotencyIgnoresRedisDuplicate(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)

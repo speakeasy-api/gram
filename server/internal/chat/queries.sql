@@ -272,6 +272,14 @@ FROM chat_content_parts ccp
 WHERE ccp.chat_id = @chat_id
   AND (ccp.project_id IS NULL OR ccp.project_id = @project_id::uuid)
   AND ccp.deleted IS FALSE
+  -- Only the parts the requested page can actually render: one anchored to a
+  -- message on this page, or an unparented one the client places by time
+  -- proximity. Without this a page request reads every attachment body in the
+  -- chat from asset storage, then discards the ones it cannot anchor.
+  AND (
+    ccp.parent_chat_message_id IS NULL
+    OR ccp.parent_chat_message_id = ANY(@parent_chat_message_ids::uuid[])
+  )
 ORDER BY created_at ASC, id ASC;
 
 -- name: CreateExternalChatMessage :execrows

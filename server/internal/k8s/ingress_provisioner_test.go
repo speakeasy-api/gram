@@ -155,3 +155,23 @@ func TestIngressProvisioner_Delete(t *testing.T) {
 	_, err = cs.CoreV1().Secrets(ingressTestNamespace).Get(ctx, result.SecretName, metav1.GetOptions{})
 	require.True(t, k8serrors.IsNotFound(err))
 }
+func TestIngressProvisioner_Delete_MissingResourcesIsNoop(t *testing.T) {
+	t.Parallel()
+	p, _ := newIngressProvisioner(t)
+
+	// Models a retry after the previous attempt already deleted both resources.
+	require.NoError(t, p.Delete(t.Context(), "never-created", "never-created-tls"))
+}
+
+func TestIngressProvisioner_Delete_EmptySecretNameSkipsSecret(t *testing.T) {
+	t.Parallel()
+	p, cs := newIngressProvisioner(t)
+
+	result, err := p.Setup(t.Context(), "nosecret.example.com", nil)
+	require.NoError(t, err)
+
+	require.NoError(t, p.Delete(t.Context(), result.ResourceName, ""))
+
+	_, err = cs.NetworkingV1().Ingresses(ingressTestNamespace).Get(t.Context(), result.ResourceName, metav1.GetOptions{})
+	require.True(t, k8serrors.IsNotFound(err))
+}

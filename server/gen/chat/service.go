@@ -92,6 +92,8 @@ type Chat struct {
 	// The list of messages in the chat for the returned generation, ordered oldest
 	// to newest by `seq`.
 	Messages []*ChatMessage
+	// Non-turn content attached to this chat, such as prompt attachments.
+	ContentParts []*ChatContentPart
 	// The generation that this response's messages belong to. A generation is an
 	// immutable snapshot of the transcript; a new one is opened on compaction or
 	// message edits, while normal turns append to the current one.
@@ -174,6 +176,23 @@ type Chat struct {
 	Summary *string
 	// When the session summary was last generated.
 	SummaryGeneratedAt *string
+}
+
+type ChatContentPart struct {
+	// The ID of the content part.
+	ID string
+	// The content kind, such as prompt_attachment.
+	Kind string
+	// The text content.
+	Content string
+	// The chat message this content hangs off, when resolved.
+	ParentChatMessageID *string
+	// Sparse metadata for the content kind.
+	Metadata json.RawMessage
+	// Whether this content part has an active risk finding.
+	IsRisk bool
+	// When the content part was created.
+	CreatedAt string
 }
 
 type ChatMessage struct {

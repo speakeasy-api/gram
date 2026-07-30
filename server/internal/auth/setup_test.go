@@ -122,7 +122,7 @@ func createMockWorkOSServer(userInfo *MockUserInfo) *httptest.Server {
 func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, *testInstance) {
 	t.Helper()
 
-	ctx := t.Context()
+	ctx := authztest.WithAdminGrants(t.Context())
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 
@@ -172,7 +172,7 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.Context, *testInstance) {
 	t.Helper()
 
-	ctx := t.Context()
+	ctx := authztest.WithAdminGrants(t.Context())
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 

@@ -74,6 +74,9 @@ const TIMESTAMP_PATTERNS = [
 
 const LEVEL_PATTERN = /^\[?(WARN|WARNING|INFO|DEBUG|ERROR|OK)\]?\s+(.*)$/i;
 
+/** Marks the log line targeted by j/k keyboard navigation. */
+const HIGHLIGHTED_LOG_CLASS = "ring-foreground/40 ring-1 ring-inset";
+
 function formatLogTimestamp(createdAt: string): string {
   const date = new Date(createdAt);
   return dateTimeFormatters.logTimestamp.format(date);
@@ -802,8 +805,7 @@ export const LogsTabContent = ({
                           isError && "bg-destructive/10 text-destructive",
                           isWarn && "bg-warning/10 text-warning",
                           isSkipped && "bg-muted/50 text-muted-foreground",
-                          isHighlighted &&
-                            "border-l-foreground border-l-4 pl-2",
+                          isHighlighted && HIGHLIGHTED_LOG_CLASS,
                         )}
                       >
                         <div className="flex min-w-0 items-center gap-2.5">
@@ -866,7 +868,7 @@ export const LogsTabContent = ({
                     isError && "bg-destructive/10 text-destructive",
                     isWarn && "bg-warning/10 text-warning",
                     isSkipped && "bg-muted/50 text-muted-foreground",
-                    isHighlighted && "border-l-foreground border-l-4 pl-2",
+                    isHighlighted && HIGHLIGHTED_LOG_CLASS,
                   )}
                 >
                   <div className="flex min-w-0 items-center gap-2.5">

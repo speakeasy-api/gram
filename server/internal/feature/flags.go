@@ -23,6 +23,16 @@ const (
 	// per-category detection scopes. Default off during rollout.
 	FlagRiskRecommendedScopes Flag = "risk-recommended-scopes"
 
+	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
+	// device's assigned-user email against user-keyed heartbeats to matching
+	// its hardware serial against device-keyed ones, falling back to email
+	// when no serial match exists. Gated because the flip is visible: an org
+	// whose agents predate hardware reporting sees the same numbers, but one
+	// mid-upgrade sees devices move between buckets as serials arrive.
+	// Targeted by PostHog organization group (org slug), like FlagBudgets.
+	// Removed once device-level matching is GA.
+	FlagDeviceLevelCoverage Flag = "device-level-coverage"
+
 	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
 	FlagRiskAsyncScanShadow  Flag = "risk-async-scan-shadow"
 	// FlagRiskOverviewFromClickHouse serves the risk overview endpoint from

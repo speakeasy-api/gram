@@ -204,14 +204,31 @@ type ListManagedDevicesResponseBody struct {
 type GetCoverageResponseBody struct {
 	// Organization the coverage describes.
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// Freshness window: an assigned user counts as active when their agent
-	// heartbeat is within this many minutes.
+	// Freshness window: an agent counts as active when its heartbeat is within
+	// this many minutes.
 	ActiveWindowMinutes *int `form:"active_window_minutes,omitempty" json:"active_window_minutes,omitempty" xml:"active_window_minutes,omitempty"`
-	// Devices whose assigned user has an agent heartbeat within the window.
+	// The strongest claim that holds for EVERY active device in this response —
+	// not merely the org's matching mode. "device": every active device was
+	// matched on its own hardware serial, so each one ran the agent. "user": at
+	// least one active device was matched only on its assigned-user email, so the
+	// set as a whole supports only the weaker claim that assigned users ran the
+	// agent somewhere.
+	Attestation *string `form:"attestation,omitempty" json:"attestation,omitempty" xml:"attestation,omitempty"`
+	// Devices with an agent heartbeat within the window. What that attests depends
+	// on the matching mode and, per device, on whether the match was by serial or
+	// by email — compare against agent_active_device_attested.
 	AgentActive *int64 `form:"agent_active,omitempty" json:"agent_active,omitempty" xml:"agent_active,omitempty"`
-	// Devices whose assigned user has an agent that went quiet — the drift/disable
-	// case.
+	// How many of agent_active are backed by that machine's OWN heartbeat (serial
+	// match). Under user-level matching this is 0; under device-level matching a
+	// value below agent_active means some devices fell back to the assigned-user
+	// email, which is the weaker claim.
+	AgentActiveDeviceAttested *int64 `form:"agent_active_device_attested,omitempty" json:"agent_active_device_attested,omitempty" xml:"agent_active_device_attested,omitempty"`
+	// Devices with a known agent that went quiet — the drift/disable case.
 	AgentStale *int64 `form:"agent_stale,omitempty" json:"agent_stale,omitempty" xml:"agent_stale,omitempty"`
+	// Device-level matching only: devices whose assigned user runs the agent, but
+	// not on this machine. Always 0 under user-level matching, which cannot
+	// distinguish this from agent_active.
+	AgentOtherDevice *int64 `form:"agent_other_device,omitempty" json:"agent_other_device,omitempty" xml:"agent_other_device,omitempty"`
 	// Devices whose assigned email resolves to an org member with no agent at all.
 	NoAgent *int64 `form:"no_agent,omitempty" json:"no_agent,omitempty" xml:"no_agent,omitempty"`
 	// Devices the MDM reports with no assigned-user email.
@@ -2194,10 +2211,13 @@ type ManagedDeviceResponseBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// Last device check-in as reported by the MDM.
 	MdmLastCheckInAt *string `form:"mdm_last_check_in_at,omitempty" json:"mdm_last_check_in_at,omitempty" xml:"mdm_last_check_in_at,omitempty"`
-	// The assigned user's latest device-agent heartbeat. Omitted when the user has
-	// never synced an agent.
+	// The device-agent heartbeat that classified this device: the machine's own
+	// under device-level matching, otherwise its assigned user's. Omitted when no
+	// agent has ever synced.
 	AgentLastSeenAt *string `form:"agent_last_seen_at,omitempty" json:"agent_last_seen_at,omitempty" xml:"agent_last_seen_at,omitempty"`
-	// Coverage classification for the device.
+	// Coverage classification for the device. What agent_active attests depends on
+	// the org's matching mode and on whether this device matched by serial or by
+	// assigned-user email.
 	CoverageBucket *string `form:"coverage_bucket,omitempty" json:"coverage_bucket,omitempty" xml:"coverage_bucket,omitempty"`
 	// When the device went absent from the MDM inventory. Omitted while present.
 	MissingSince *string `form:"missing_since,omitempty" json:"missing_since,omitempty" xml:"missing_since,omitempty"`
@@ -3774,16 +3794,19 @@ func NewListManagedDevicesGatewayError(body *ListManagedDevicesGatewayErrorRespo
 // service "getCoverage" endpoint result from a HTTP "OK" response.
 func NewGetCoverageDeviceIntegrationCoverageOK(body *GetCoverageResponseBody) *deviceintegrations.DeviceIntegrationCoverage {
 	v := &deviceintegrations.DeviceIntegrationCoverage{
-		OrganizationID:      *body.OrganizationID,
-		ActiveWindowMinutes: *body.ActiveWindowMinutes,
-		AgentActive:         *body.AgentActive,
-		AgentStale:          *body.AgentStale,
-		NoAgent:             *body.NoAgent,
-		NoEmail:             *body.NoEmail,
-		UnresolvedEmail:     *body.UnresolvedEmail,
-		Missing:             *body.Missing,
-		TotalDevices:        *body.TotalDevices,
-		UnmanagedAgentUsers: *body.UnmanagedAgentUsers,
+		OrganizationID:            *body.OrganizationID,
+		ActiveWindowMinutes:       *body.ActiveWindowMinutes,
+		Attestation:               *body.Attestation,
+		AgentActive:               *body.AgentActive,
+		AgentActiveDeviceAttested: *body.AgentActiveDeviceAttested,
+		AgentStale:                *body.AgentStale,
+		AgentOtherDevice:          *body.AgentOtherDevice,
+		NoAgent:                   *body.NoAgent,
+		NoEmail:                   *body.NoEmail,
+		UnresolvedEmail:           *body.UnresolvedEmail,
+		Missing:                   *body.Missing,
+		TotalDevices:              *body.TotalDevices,
+		UnmanagedAgentUsers:       *body.UnmanagedAgentUsers,
 	}
 
 	return v
@@ -4135,11 +4158,20 @@ func ValidateGetCoverageResponseBody(body *GetCoverageResponseBody) (err error) 
 	if body.ActiveWindowMinutes == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("active_window_minutes", "body"))
 	}
+	if body.Attestation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attestation", "body"))
+	}
 	if body.AgentActive == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_active", "body"))
 	}
+	if body.AgentActiveDeviceAttested == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_active_device_attested", "body"))
+	}
 	if body.AgentStale == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_stale", "body"))
+	}
+	if body.AgentOtherDevice == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_other_device", "body"))
 	}
 	if body.NoAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("no_agent", "body"))
@@ -4158,6 +4190,11 @@ func ValidateGetCoverageResponseBody(body *GetCoverageResponseBody) (err error) 
 	}
 	if body.UnmanagedAgentUsers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("unmanaged_agent_users", "body"))
+	}
+	if body.Attestation != nil {
+		if !(*body.Attestation == "device" || *body.Attestation == "user") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.attestation", *body.Attestation, []any{"device", "user"}))
+		}
 	}
 	return
 }
@@ -6698,8 +6735,8 @@ func ValidateManagedDeviceResponseBody(body *ManagedDeviceResponseBody) (err err
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_last_seen_at", *body.AgentLastSeenAt, goa.FormatDateTime))
 	}
 	if body.CoverageBucket != nil {
-		if !(*body.CoverageBucket == "agent_active" || *body.CoverageBucket == "agent_stale" || *body.CoverageBucket == "no_agent" || *body.CoverageBucket == "no_email" || *body.CoverageBucket == "unresolved_email" || *body.CoverageBucket == "missing") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.coverage_bucket", *body.CoverageBucket, []any{"agent_active", "agent_stale", "no_agent", "no_email", "unresolved_email", "missing"}))
+		if !(*body.CoverageBucket == "agent_active" || *body.CoverageBucket == "agent_stale" || *body.CoverageBucket == "agent_other_device" || *body.CoverageBucket == "no_agent" || *body.CoverageBucket == "no_email" || *body.CoverageBucket == "unresolved_email" || *body.CoverageBucket == "missing") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.coverage_bucket", *body.CoverageBucket, []any{"agent_active", "agent_stale", "agent_other_device", "no_agent", "no_email", "unresolved_email", "missing"}))
 		}
 	}
 	if body.MissingSince != nil {

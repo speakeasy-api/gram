@@ -101,10 +101,6 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 		return GrantsToContext(ctx, GrantsFromOverrides(overrides)), nil
 	}
 
-	if authCtx.AccountType != "enterprise" {
-		return ctx, nil
-	}
-
 	enabled, err := e.isEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		e.logger.WarnContext(ctx, "failed to check RBAC feature flag, skipping grant loading",
@@ -608,14 +604,10 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 	}
 
 	// When the caller has active scope overrides, enforce so the override scopes
-	// take effect regardless of account type or feature flag. Checked after
+	// take effect regardless of the feature flag. Checked after
 	// API key exclusion so the toolbar doesn't interfere with API key auth flows.
 	if _, ok := e.GetScopeOverrides(ctx); ok {
 		return true, nil
-	}
-
-	if authCtx.AccountType != "enterprise" {
-		return false, nil
 	}
 
 	_, isAssistant := contextvalues.GetAssistantPrincipal(ctx)
