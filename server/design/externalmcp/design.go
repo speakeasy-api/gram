@@ -145,7 +145,7 @@ var _ = Service("mcpRegistries", func() {
 			Attribute("server_url", String, "URL of the upstream MCP server endpoint", func() {
 				Example("https://mcp.box.com")
 			})
-			Attribute("registry_specifier", String, "Registry identifier for the server (e.g., 'com.pulsemcp.mirror/box')", func() {
+			Attribute("registry_specifier", String, "Registry identifier for the server: a registry alias (e.g., 'com.pulsemcp.mirror/box'), a guide slug, or a canonical 'slug/remote-id' ref", func() {
 				Example("com.pulsemcp.mirror/box")
 			})
 
@@ -284,9 +284,9 @@ var MCPSetupGuide = Type("MCPSetupGuide", func() {
 	Attribute("add_server_flow", String, "How the server is meant to be added in Gram, when the guide states one (e.g., 'catalog', 'custom-remote')")
 	Attribute("aliases", ArrayOf(String), "Registry identifiers the guide is also published under")
 	Attribute("remotes", ArrayOf(MCPSetupGuideRemote), "Endpoints documented by the guide")
-	Attribute("matched_remote_ids", ArrayOf(String), "IDs of the documented endpoints the lookup matched. Empty when the lookup only identified the guide and not a specific endpoint.")
-	Attribute("match_kind", String, "How the lookup matched this guide", func() {
-		Enum("server_ref", "slug", "alias", "provenance", "endpoint")
+	Attribute("matched_remote_ids", ArrayOf(String), "IDs of the documented endpoints the lookup matched. Empty when the lookup only identified the guide and not a specific endpoint, which is always the case for a 'slug' or 'alias' match.")
+	Attribute("match_kind", String, "How the lookup matched this guide. The most specific kind, when more than one lookup key matched it.", func() {
+		Enum("server_ref", "endpoint", "slug", "alias")
 	})
 	Attribute("external_markdown", String, "Markdown instructions for the setup work that happens in the upstream provider")
 	Attribute("speakeasy_markdown", String, "Markdown instructions for the setup work that happens in Gram")
@@ -305,8 +305,11 @@ var MCPSetupGuideRemote = Type("MCPSetupGuideRemote", func() {
 	Attribute("url", String, "URL of the endpoint", func() {
 		Format(FormatURI)
 	})
-	Attribute("transport_type", String, "Transport type (sse or streamable-http)", func() {
-		Enum("sse", "streamable-http")
+	// Left an open string rather than an enum: the value is passthrough data from
+	// the guides SDK that Gram does not control, so a closed enum would turn an
+	// upstream publish into a decode failure in every generated client.
+	Attribute("transport_type", String, "Transport type as published by the guide (e.g., 'streamable-http', 'sse')", func() {
+		Example("streamable-http")
 	})
 	Attribute("tenanted", Boolean, "Whether the endpoint URL is customer-specific and has to be filled in per tenant")
 

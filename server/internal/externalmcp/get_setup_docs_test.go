@@ -157,8 +157,9 @@ func TestExternalMCP_GetSetupDocs_BothKeysResolveToOneGuide(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Guides, 1)
 	require.Equal(t, string(guide.Slug), result.Guides[0].Slug)
-	// The identifier is checked ahead of the URL, so it wins the match kind.
-	require.Equal(t, "alias", result.Guides[0].MatchKind)
+	// The identifier is resolved first, but the URL pinned an exact endpoint, so
+	// the more specific of the two matches wins the match kind.
+	require.Equal(t, "endpoint", result.Guides[0].MatchKind)
 	require.Contains(t, result.Guides[0].MatchedRemoteIds, string(remote.ID))
 }
 
@@ -181,6 +182,80 @@ func TestExternalMCP_GetSetupDocs_NormalizesServerURL(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Guides, 1)
 	require.Equal(t, string(guide.Slug), result.Guides[0].Slug)
+}
+
+// The identifier is resolved before the URL, so ordering has to be sorted for
+// rather than inherited from resolution order: a guide the caller only named
+// must not outrank one whose exact endpoint the caller supplied.
+func TestExternalMCP_GetSetupDocs_EndpointMatchOutranksGuideLevelMatch(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestExternalMCPService(t)
+	urlGuide, _, remote := setupDocsFixture(t)
+
+	var otherSlug string
+	for _, guide := range guides.Guides() {
+		if guide.Slug == urlGuide.Slug {
+			continue
+		}
+		if m := guides.Resolve(string(guide.Slug)); len(m) == 1 && m[0].Kind == guides.MatchSlug {
+			otherSlug = string(guide.Slug)
+			break
+		}
+	}
+	require.NotEmpty(t, otherSlug, "no second published guide resolves unambiguously by slug")
+
+	result, err := ti.service.GetSetupDocs(ctx, &gen.GetSetupDocsPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ServerURL:         &remote.URL,
+		RegistrySpecifier: &otherSlug,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Guides, 2)
+
+	require.Equal(t, string(urlGuide.Slug), result.Guides[0].Slug)
+	require.Equal(t, "endpoint", result.Guides[0].MatchKind)
+	require.Equal(t, otherSlug, result.Guides[1].Slug)
+	require.Equal(t, "slug", result.Guides[1].MatchKind)
+}
+
+// Provenance matches are not exposed. The SDK keys them by the section titles of
+// the upstream docs a guide was derived from, so they answer a lookup for one
+// vendor's server with another vendor's guide, and a single title can pull in
+// most of the catalog. Sweeping every published identifier pins both halves of
+// that: no lookup reports an unexpected kind, and a lookup that only named a
+// guide never claims to have selected one of its endpoints.
+func TestExternalMCP_GetSetupDocs_GuideLevelLookupsSelectNoEndpoint(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestExternalMCPService(t)
+
+	for _, guide := range guides.Guides() {
+		for _, specifier := range append([]string{string(guide.Slug)}, guide.Aliases...) {
+			result, err := ti.service.GetSetupDocs(ctx, &gen.GetSetupDocsPayload{
+				SessionToken:      nil,
+				ApikeyToken:       nil,
+				ProjectSlugInput:  nil,
+				ServerURL:         nil,
+				RegistrySpecifier: &specifier,
+			})
+			require.NoError(t, err, "specifier %q", specifier)
+			require.NotEmpty(t, result.Guides, "specifier %q", specifier)
+
+			for _, got := range result.Guides {
+				switch got.MatchKind {
+				case "slug", "alias":
+					require.Empty(t, got.MatchedRemoteIds, "specifier %q matched guide %q", specifier, got.Slug)
+				case "server_ref", "endpoint":
+					require.NotEmpty(t, got.MatchedRemoteIds, "specifier %q matched guide %q", specifier, got.Slug)
+				default:
+					t.Fatalf("specifier %q reported unexpected match_kind %q", specifier, got.MatchKind)
+				}
+			}
+		}
+	}
 }
 
 func TestExternalMCP_GetSetupDocs_UnknownServerReturnsNoGuides(t *testing.T) {
