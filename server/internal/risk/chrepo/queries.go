@@ -43,6 +43,14 @@ type RiskFindingRow struct {
 	UserID         string `ch:"user_id"`
 	ExternalUserID string `ch:"external_user_id"`
 
+	// MessageCreatedAt is the scanned chat message's event time, the sort and
+	// cursor key for the Risk Events listing. Falls back to CreatedAt (scan
+	// time) when attribution is unresolved, matching the column's DEFAULT for
+	// pre-column rows. AssistantID is the chat's live assistant link at ingest,
+	// empty when the chat has none.
+	MessageCreatedAt time.Time `ch:"message_created_at"`
+	AssistantID      string    `ch:"assistant_id"`
+
 	// Category is the canonical risk category for (source, rule_id), computed
 	// via internal/risk/categories at ingest. Empty for dead-letter sentinels.
 	Category string `ch:"category"`
@@ -115,6 +123,8 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			"fingerprint_tenant_hs256",
 			"excluded_at",
 			"exclusion_id",
+			"message_created_at",
+			"assistant_id",
 		)
 
 	for _, row := range rows {
@@ -151,6 +161,8 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			// the column binds as NULL.
 			chNullable(row.ExcludedAt),
 			chNullable(row.ExclusionID),
+			row.MessageCreatedAt,
+			row.AssistantID,
 		)
 	}
 

@@ -1559,23 +1559,45 @@ JOIN organization_user_relationships our
 WHERE u.id = ANY(@ids::text[]);
 
 -- name: GetChatMessageAttribution :many
--- Resolves the denormalized attribution (chat id, user ids) the ClickHouse
--- finding writer stamps on risk_findings rows at ingest. Message-level ids win
--- over chat-level ids; both empty and NULL collapse to ''.
+-- Resolves the denormalized attribution (chat id, user ids, message event
+-- time, assistant link) the ClickHouse finding writer stamps on risk_findings
+-- rows at ingest. Message-level ids win over chat-level ids; both empty and
+-- NULL collapse to ''. The assistant id is the chat's most recent live
+-- assistant_threads link, or the nil UUID when the chat has no assistant.
 SELECT
     cm.id
   , cm.chat_id
+  , cm.created_at AS message_created_at
   , COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id
   , COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
+  , COALESCE(thread.assistant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS assistant_id
 FROM chat_messages cm
 LEFT JOIN chats c
   ON c.id = cm.chat_id
   AND c.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT at.assistant_id
+  FROM assistant_threads at
+  WHERE at.chat_id = cm.chat_id
+    AND at.deleted IS FALSE
+  ORDER BY at.created_at DESC
+  LIMIT 1
+) thread ON TRUE
 WHERE cm.id = ANY(@ids::uuid[]);
 
 -- name: CreateChatForTest :one
 INSERT INTO chats (project_id, organization_id, user_id, external_user_id)
 VALUES (@project_id, @organization_id, @user_id, @external_user_id)
+RETURNING id;
+
+-- name: CreateAssistantForTest :one
+INSERT INTO assistants (project_id, organization_id, name, model, instructions)
+VALUES (@project_id, @organization_id, @name, 'test-model', '')
+RETURNING id;
+
+-- name: CreateAssistantThreadForTest :one
+INSERT INTO assistant_threads (assistant_id, project_id, correlation_id, chat_id, source_kind)
+VALUES (@assistant_id, @project_id, @correlation_id, @chat_id, 'test')
 RETURNING id;
 
 -- name: CreateChatMessageForTest :one

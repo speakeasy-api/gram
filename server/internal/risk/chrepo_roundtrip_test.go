@@ -61,6 +61,8 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 		FingerprintTenantHS256:   "tenant-fp",
 		ExcludedAt:               nil,
 		ExclusionID:              nil,
+		MessageCreatedAt:         createdAt.Add(-time.Minute),
+		AssistantID:              "assistant-1",
 	}
 
 	// An excluded row: excluded_at / exclusion_id are populated.
@@ -78,7 +80,7 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 	// flushes, so poll until both are visible.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		rows, err := conn.Query(t.Context(), `
-			SELECT id, tags, match_redacted, chat_id, user_id, external_user_id, category, excluded_at, exclusion_id
+			SELECT id, tags, match_redacted, chat_id, user_id, external_user_id, category, excluded_at, exclusion_id, message_created_at, assistant_id
 			FROM risk_findings
 			WHERE organization_id = ?
 			ORDER BY created_at
@@ -89,14 +91,16 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 		defer func() { _ = rows.Close() }()
 
 		type foundRow struct {
-			tags           []string
-			redacted       string
-			chatID         string
-			userID         string
-			externalUserID string
-			category       string
-			excludedAt     *time.Time
-			exclusionID    *uuid.UUID
+			tags             []string
+			redacted         string
+			chatID           string
+			userID           string
+			externalUserID   string
+			category         string
+			excludedAt       *time.Time
+			exclusionID      *uuid.UUID
+			messageCreatedAt time.Time
+			assistantID      string
 		}
 		got := map[uuid.UUID]foundRow{}
 		for rows.Next() {
@@ -104,7 +108,7 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 				id  uuid.UUID
 				row foundRow
 			)
-			if !assert.NoError(c, rows.Scan(&id, &row.tags, &row.redacted, &row.chatID, &row.userID, &row.externalUserID, &row.category, &row.excludedAt, &row.exclusionID)) {
+			if !assert.NoError(c, rows.Scan(&id, &row.tags, &row.redacted, &row.chatID, &row.userID, &row.externalUserID, &row.category, &row.excludedAt, &row.exclusionID, &row.messageCreatedAt, &row.assistantID)) {
 				return
 			}
 			got[id] = row
@@ -123,6 +127,8 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 		assert.Equal(c, plain.Category, p.category, "category round-trips")
 		assert.Nil(c, p.excludedAt, "non-excluded row stores NULL excluded_at")
 		assert.Nil(c, p.exclusionID, "non-excluded row stores NULL exclusion_id")
+		assert.True(c, plain.MessageCreatedAt.Equal(p.messageCreatedAt), "message_created_at round-trips")
+		assert.Equal(c, plain.AssistantID, p.assistantID, "assistant_id round-trips")
 
 		e := got[excluded.ID]
 		if assert.NotNil(c, e.excludedAt, "excluded row stores excluded_at") {
