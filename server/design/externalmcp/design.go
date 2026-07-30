@@ -138,6 +138,42 @@ var _ = Service("mcpRegistries", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "getServerDetails")
 	})
 
+	Method("getSetupDocs", func() {
+		Description("Get the published setup documentation for an upstream MCP server, located by endpoint URL and/or registry identifier")
+
+		Payload(func() {
+			Attribute("server_url", String, "URL of the upstream MCP server endpoint", func() {
+				Example("https://mcp.box.com")
+			})
+			Attribute("registry_specifier", String, "Registry identifier for the server (e.g., 'com.pulsemcp.mirror/box')", func() {
+				Example("com.pulsemcp.mirror/box")
+			})
+
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(func() {
+			Attribute("guides", ArrayOf(MCPSetupGuide), "Matching setup guides, most specific match first. Empty when no guide has been published for the server.")
+			Required("guides")
+		})
+
+		HTTP(func() {
+			GET("/rpc/mcpRegistries.getSetupDocs")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Param("server_url")
+			Param("registry_specifier")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getMCPSetupDocs")
+		Meta("openapi:extension:x-speakeasy-name-override", "getSetupDocs")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetMCPSetupDocs"}`)
+	})
+
 })
 
 var ExternalMCPServer = Type("ExternalMCPServer", func() {
@@ -231,6 +267,50 @@ var MCPRegistry = Type("MCPRegistry", func() {
 	Attribute("url", String, "URL of the registry")
 
 	Required("id", "name", "url")
+})
+
+var MCPSetupGuide = Type("MCPSetupGuide", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("Published setup documentation for an upstream MCP server")
+
+	Attribute("slug", String, "Stable identifier of the guide", func() {
+		Example("box")
+	})
+	Attribute("title", String, "Display title of the guide", func() {
+		Example("Box")
+	})
+	Attribute("summary", String, "One-line summary of what the guide covers")
+	Attribute("add_server_flow", String, "How the server is meant to be added in Gram, when the guide states one (e.g., 'catalog', 'custom-remote')")
+	Attribute("aliases", ArrayOf(String), "Registry identifiers the guide is also published under")
+	Attribute("remotes", ArrayOf(MCPSetupGuideRemote), "Endpoints documented by the guide")
+	Attribute("matched_remote_ids", ArrayOf(String), "IDs of the documented endpoints the lookup matched. Empty when the lookup only identified the guide and not a specific endpoint.")
+	Attribute("match_kind", String, "How the lookup matched this guide", func() {
+		Enum("server_ref", "slug", "alias", "provenance", "endpoint")
+	})
+	Attribute("external_markdown", String, "Markdown instructions for the setup work that happens in the upstream provider")
+	Attribute("speakeasy_markdown", String, "Markdown instructions for the setup work that happens in Gram")
+
+	Required("slug", "title", "summary", "aliases", "remotes", "matched_remote_ids", "match_kind", "external_markdown", "speakeasy_markdown")
+})
+
+var MCPSetupGuideRemote = Type("MCPSetupGuideRemote", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("An MCP server endpoint documented by a setup guide")
+
+	Attribute("id", String, "Stable identifier of the endpoint within the guide", func() {
+		Example("hosted")
+	})
+	Attribute("url", String, "URL of the endpoint", func() {
+		Format(FormatURI)
+	})
+	Attribute("transport_type", String, "Transport type (sse or streamable-http)", func() {
+		Enum("sse", "streamable-http")
+	})
+	Attribute("tenanted", Boolean, "Whether the endpoint URL is customer-specific and has to be filled in per tenant")
+
+	Required("id", "url", "transport_type", "tenanted")
 })
 
 var ExternalMCPTool = Type("ExternalMCPTool", func() {
