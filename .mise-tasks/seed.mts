@@ -26,6 +26,7 @@ import { projectsCreate } from "#gram/client/funcs/projectsCreate.js";
 import { projectsRead } from "#gram/client/funcs/projectsRead.js";
 import { resourcesList } from "#gram/client/funcs/resourcesList.js";
 import { skillsCreate } from "#gram/client/funcs/skillsCreate.js";
+import { skillsList } from "#gram/client/funcs/skillsList.js";
 import { toolsList } from "#gram/client/funcs/toolsList.js";
 import { toolsetsCreate } from "#gram/client/funcs/toolsetsCreate.js";
 import { toolsetsUpdateBySlug } from "#gram/client/funcs/toolsetsUpdateBySlug.js";
@@ -4728,8 +4729,9 @@ function abort(message: string, ...values: unknown[]): never {
 // incremental (diffed against what the changes before it produce), matching
 // what the engine stores — regenerate them with skilldiff.Unified if the base
 // content changes.
+const SEED_SKILL_NAME = "support-refunds";
 const SEED_SKILL_CONTENT = `---
-name: support-refunds
+name: ${SEED_SKILL_NAME}
 description: Handle customer refund requests end to end.
 ---
 
@@ -4810,16 +4812,36 @@ async function seedSkillEditSuggestion(init: {
   projectSlug: string;
 }): Promise<void> {
   const { gram, sessionId, projectSlug } = init;
+  const security = {
+    option1: {
+      projectSlugHeaderGramProject: projectSlug,
+      sessionHeaderGramSession: sessionId,
+    },
+  };
+
+  // Creating a skill with an existing normalized name adds a new current
+  // version to that skill. Check every page first so this fixture can never
+  // replace a developer's skill (or edits made to a previous seed fixture).
+  const pages = await skillsList(gram, { limit: 100 }, security);
+  for await (const page of pages) {
+    if (!page.ok) {
+      log.stepFailed(`Failed to check for existing seed skill: ${page.error}`);
+      return;
+    }
+    if (
+      page.value.result.skills.some((skill) => skill.name === SEED_SKILL_NAME)
+    ) {
+      log.info(
+        `Skipped seed skill '${SEED_SKILL_NAME}' in '${projectSlug}' because that name already exists`,
+      );
+      return;
+    }
+  }
 
   const created = await skillsCreate(
     gram,
     { createSkillRequestBody: { content: SEED_SKILL_CONTENT } },
-    {
-      option1: {
-        projectSlugHeaderGramProject: projectSlug,
-        sessionHeaderGramSession: sessionId,
-      },
-    },
+    security,
   );
   if (!created.ok) {
     log.stepFailed(`Failed to create seed skill: ${created.error}`);
@@ -4879,7 +4901,7 @@ WHERE e.skill_id = '${skillId}'
   })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -tA -f -`.quiet();
 
   log.info(
-    `Seeded skill 'support-refunds' in '${projectSlug}' (an open edit suggestion with ${SEED_SKILL_SUGGESTION_CHANGES.length} changes is added while the skill is at its seeded base version)`,
+    `Seeded skill '${SEED_SKILL_NAME}' in '${projectSlug}' (an open edit suggestion with ${SEED_SKILL_SUGGESTION_CHANGES.length} changes is added while the skill is at its seeded base version)`,
   );
 }
 
