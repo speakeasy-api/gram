@@ -177,7 +177,7 @@ func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.Ingest
 		return nil, false, nil
 	}
 	skill := payload.Data.Skill
-	name := strings.TrimSpace(skill.Name)
+	name := canonicalSkillName(payload)
 	if name == "" || !isExplicitSkillActivation(payload) && blockReason != "" {
 		return nil, false, nil
 	}
@@ -1508,11 +1508,18 @@ func canonicalMessageText(payload *gen.IngestPayload) string {
 	return ""
 }
 
+// canonicalSkillName strips a single `<scope>:` plugin prefix from the
+// reported skill name so activations attribute to one canonical skill no
+// matter which plugin distributed it.
 func canonicalSkillName(payload *gen.IngestPayload) string {
-	if payload != nil && payload.Data != nil && payload.Data.Skill != nil {
-		return strings.TrimSpace(payload.Data.Skill.Name)
+	if payload == nil || payload.Data == nil || payload.Data.Skill == nil {
+		return ""
 	}
-	return ""
+	name := strings.TrimSpace(payload.Data.Skill.Name)
+	if scope, rest, scoped := strings.Cut(name, ":"); scoped && strings.TrimSpace(scope) != "" && !strings.Contains(rest, ":") {
+		name = strings.TrimSpace(rest)
+	}
+	return name
 }
 
 func canonicalChatTitle(payload *gen.IngestPayload, fallback string) string {
