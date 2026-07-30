@@ -4,7 +4,7 @@ import type {
 } from "@/hooks/useProxiedMcpTools";
 import type { ToolMetadataForm } from "@gram/client/models/components/toolmetadataform.js";
 import type { ToolMetadata } from "@gram/client/models/components/toolmetadata.js";
-import type { ToolMetadataByName } from "./useToolMetadata";
+import type { ToolMetadataByName } from "@/hooks/useToolMetadata";
 
 /** The annotation fields Speakeasy mirrors from a tool's MCP `annotations` object. */
 const METADATA_FIELDS = [

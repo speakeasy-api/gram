@@ -18,6 +18,9 @@ import (
 type Service interface {
 	// Get the custom domain for an organization
 	GetDomain(context.Context, *GetDomainPayload) (res *CustomDomain, err error)
+	// List the custom domains for an organization. The result is empty when no
+	// custom domain has been configured.
+	ListDomains(context.Context, *ListDomainsPayload) (res *ListCustomDomainsResult, err error)
 	// Create a custom domain for an organization
 	CreateDomain(context.Context, *CreateDomainPayload) (err error)
 	// Update the IP allowlist for the organization's custom domain
@@ -53,7 +56,7 @@ const ServiceName = "domains"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"getDomain", "createDomain", "updateDomain", "checkHealth", "deleteDomain", "listMcpEndpoints"}
+var MethodNames = [7]string{"getDomain", "listDomains", "createDomain", "updateDomain", "checkHealth", "deleteDomain", "listMcpEndpoints"}
 
 // CheckHealthPayload is the payload type of the domains service checkHealth
 // method.
@@ -149,6 +152,18 @@ type GetDomainPayload struct {
 // listMcpEndpoints method.
 type ListCustomDomainMcpEndpointsResult struct {
 	McpEndpoints []*CustomDomainMcpEndpoint
+}
+
+// ListCustomDomainsResult is the result type of the domains service
+// listDomains method.
+type ListCustomDomainsResult struct {
+	Domains []*CustomDomain
+}
+
+// ListDomainsPayload is the payload type of the domains service listDomains
+// method.
+type ListDomainsPayload struct {
+	SessionToken *string
 }
 
 // ListMcpEndpointsPayload is the payload type of the domains service

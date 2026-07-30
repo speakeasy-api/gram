@@ -320,6 +320,8 @@ func TestServeInstallPage_Instructions(t *testing.T) {
 	body := rr.Body.String()
 	assert.Contains(t, body, "Server Instructions", "Should contain instructions section header")
 	assert.Contains(t, body, "Test Hub - Search and analyze test data", "Should contain instructions content")
+	assert.Contains(t, body, "https://www.speakeasy.com/product/mcp-gateway", "Should link to Speakeasy")
+	assert.NotContains(t, body, "https://getgram.ai", "Should not link to the retired Gram marketing site")
 }
 
 func TestServeInstallPage_ToolDetails(t *testing.T) {

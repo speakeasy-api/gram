@@ -18,7 +18,9 @@ const testState = vi.hoisted(() => ({
   isFetchNextPageError: false,
   error: null as Error | null,
   insightsError: null as Error | null,
-  insightsData: { insights: [] } as { insights: unknown[] } | undefined,
+  insightsData: { result: { insights: [] } } as
+    | { result: { insights: unknown[] } }
+    | undefined,
   insightsRefetch: vi.fn().mockResolvedValue(undefined),
   skills: [] as Array<Record<string, unknown>>,
   unknownActivations: [] as Array<Record<string, unknown>>,
@@ -251,7 +253,7 @@ beforeEach(() => {
   testState.isFetchNextPageError = false;
   testState.error = null;
   testState.insightsError = null;
-  testState.insightsData = { insights: [] };
+  testState.insightsData = { result: { insights: [] } };
   testState.insightsRefetch.mockReset();
   testState.insightsRefetch.mockResolvedValue(undefined);
   testState.skills = makeSkills(250);

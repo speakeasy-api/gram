@@ -2,10 +2,13 @@ package skillefficacy
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -102,9 +105,14 @@ func (s *Service) QueryInsights(ctx context.Context, payload *gen.QueryInsightsP
 		}
 	}
 	includeScoredSessions := payload.IncludeScoredSessions != nil && *payload.IncludeScoredSessions
+	var cursorScoredAt time.Time
+	var cursorID string
 	if includeScoredSessions {
 		if len(skillIDs) == 0 {
 			return nil, oops.E(oops.CodeInvalid, nil, "skill_ids are required when including scored sessions")
+		}
+		if payload.Limit < 1 || payload.Limit > 100 {
+			return nil, oops.E(oops.CodeBadRequest, nil, "scored sessions limit must be between 1 and 100")
 		}
 		if err := s.authz.Require(ctx, authz.Check{
 			Scope:        authz.ScopeChatRead,
@@ -113,6 +121,10 @@ func (s *Service) QueryInsights(ctx context.Context, payload *gen.QueryInsightsP
 			Dimensions:   nil,
 		}); err != nil {
 			return nil, err
+		}
+		cursorScoredAt, cursorID, err = decodeScoredSessionsCursor(payload.Cursor)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid scored sessions cursor")
 		}
 	}
 	from, to, err := resolveInsightsWindow(payload.From, payload.To)
@@ -160,12 +172,22 @@ func (s *Service) QueryInsights(ctx context.Context, payload *gen.QueryInsightsP
 			SkillIDs:       skillIDs,
 			From:           from,
 			To:             to,
-			Limit:          100,
+			CursorScoredAt: cursorScoredAt,
+			CursorID:       cursorID,
+			Limit:          uint64(payload.Limit + 1), //nolint:gosec // The limit is validated above.
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "list scored skill sessions").LogError(ctx, logger)
 		}
+		hasMore := len(scores) > payload.Limit
+		if hasMore {
+			scores = scores[:payload.Limit]
+		}
 		result.ScoredSessions = buildScoredSessionViews(scores)
+		if hasMore {
+			cursor := encodeScoredSessionsCursor(scores[len(scores)-1].ScoredAt, scores[len(scores)-1].ID)
+			result.NextCursor = &cursor
+		}
 	}
 	return result, nil
 }
@@ -312,6 +334,7 @@ func buildInsightsView(skillIDs []string, rows []telemetryrepo.SkillInsightBucke
 		ScoresAvailable: scoresAvailable,
 		Insights:        make([]*gen.SkillEfficacyInsight, 0, len(skillIDs)),
 		ScoredSessions:  []*gen.SkillEfficacyScoredSession{},
+		NextCursor:      nil,
 	}
 	for _, skillID := range skillIDs {
 		var aggregate telemetryrepo.SkillInsightBucket
@@ -331,6 +354,34 @@ func buildInsightsView(skillIDs []string, rows []telemetryrepo.SkillInsightBucke
 		result.Insights = append(result.Insights, &gen.SkillEfficacyInsight{SkillID: skillID, Metrics: buildMetricsView(aggregate), Versions: versions, RegressionSignal: nil})
 	}
 	return result
+}
+
+func encodeScoredSessionsCursor(scoredAt time.Time, id string) string {
+	payload := scoredAt.UTC().Format(time.RFC3339Nano) + "|" + id
+	return base64.RawURLEncoding.EncodeToString([]byte(payload))
+}
+
+func decodeScoredSessionsCursor(cursor *string) (time.Time, string, error) {
+	if cursor == nil {
+		return time.Time{}, "", nil
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(*cursor)
+	if err != nil {
+		return time.Time{}, "", fmt.Errorf("decode scored sessions cursor: %w", err)
+	}
+	timestampText, idText, ok := strings.Cut(string(decoded), "|")
+	if !ok || strings.Contains(idText, "|") {
+		return time.Time{}, "", errors.New("decode scored sessions cursor: invalid format")
+	}
+	scoredAt, err := time.Parse(time.RFC3339Nano, timestampText)
+	if err != nil || scoredAt.UTC().Format(time.RFC3339Nano) != timestampText {
+		return time.Time{}, "", errors.New("decode scored sessions cursor: invalid timestamp")
+	}
+	id, err := uuid.Parse(idText)
+	if err != nil || id == uuid.Nil || id.String() != idText {
+		return time.Time{}, "", errors.New("decode scored sessions cursor: invalid id")
+	}
+	return scoredAt, idText, nil
 }
 
 func addInsightRow(dst *telemetryrepo.SkillInsightBucket, src telemetryrepo.SkillInsightBucket) {

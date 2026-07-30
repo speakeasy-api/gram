@@ -21,7 +21,10 @@ import { ToolAnnotationIndicators } from "./ToolAnnotationIndicators";
 import { ToolMetadataDriftPanel } from "./ToolMetadataDriftPanel";
 import { computeDrift } from "./toolMetadataSync";
 import { useSyncToolMetadata } from "./useSyncToolMetadata";
-import { useToolMetadata, type ToolMetadataByName } from "./useToolMetadata";
+import {
+  useToolMetadata,
+  type ToolMetadataByName,
+} from "@/hooks/useToolMetadata";
 import { Badge, Button } from "@speakeasy-api/moonshine";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { PlugZap } from "lucide-react";

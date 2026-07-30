@@ -12961,6 +12961,87 @@ paths:
             x-speakeasy-name-override: getDomain
             x-speakeasy-react-hook:
                 name: getDomain
+    /rpc/domain.list:
+        get:
+            description: List the custom domains for an organization. The result is empty when no custom domain has been configured.
+            operationId: listDomains
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListCustomDomainsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listDomains domains
+            tags:
+                - domains
+            x-speakeasy-name-override: listDomains
+            x-speakeasy-react-hook:
+                name: listDomains
     /rpc/domain.listMcpEndpoints:
         get:
             description: List the MCP endpoints registered under the organization's custom domain across every project. Returns enriched rows that include the parent MCP server and project so callers can preview what a custom-domain deletion would cascade through.
@@ -35963,12 +36044,30 @@ paths:
                     description: Include per-version daily trends.
                     type: boolean
                 - allowEmptyValue: true
-                  description: Include up to 100 recent scored sessions. Intended for one skill detail view.
+                  description: Include a newest-first page of scored sessions. Intended for one skill detail view.
                   in: query
                   name: include_scored_sessions
                   schema:
-                    description: Include up to 100 recent scored sessions. Intended for one skill detail view.
+                    description: Include a newest-first page of scored sessions. Intended for one skill detail view.
                     type: boolean
+                - allowEmptyValue: true
+                  description: Cursor for the next page of scored sessions.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor for the next page of scored sessions.
+                    type: string
+                - allowEmptyValue: true
+                  description: The number of scored sessions to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 20
+                    description: The number of scored sessions to return per page.
+                    format: int64
+                    maximum: 100
+                    minimum: 1
+                    type: integer
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -36051,6 +36150,14 @@ paths:
             tags:
                 - skillEfficacy
             x-speakeasy-name-override: queryInsights
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
             x-speakeasy-react-hook:
                 name: SkillEfficacyInsights
                 type: query
@@ -57080,6 +57187,16 @@ components:
             description: Result of listing the MCP endpoints registered under an organization's custom domain.
             required:
                 - mcp_endpoints
+        ListCustomDomainsResult:
+            type: object
+            properties:
+                domains:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/CustomDomain'
+            description: Result of listing an organization's custom domains.
+            required:
+                - domains
         ListDeploymentForm:
             type: object
             properties:
@@ -64757,6 +64874,9 @@ components:
                 interval_seconds:
                     type: integer
                     format: int64
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page of scored sessions; absent when exhausted.
                 scored_sessions:
                     type: array
                     items:

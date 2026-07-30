@@ -212,38 +212,37 @@ function OrgApiKeysInner() {
           </Button>
         </RequireScope>
       </Stack>
-      <Table
-        columns={apiKeyColumns}
-        data={filteredKeys}
-        rowKey={(row) => row.id}
-        className="max-h-[500px] overflow-y-auto"
-        noResultsMessage={
-          <Stack
-            gap={2}
-            className="bg-background h-full gap-4 p-4 py-6"
-            align="center"
-            justify="center"
-          >
-            <Type variant="body">
-              {apiKeySearch ? "No matching API keys" : "No API keys yet"}
-            </Type>
-            {!apiKeySearch && (
-              <RequireScope scope="org:admin" level="component">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => setIsCreateDialogOpen(true)}
-                >
-                  <Button.LeftIcon>
-                    <Icon name="key-round" className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Create Key</Button.Text>
-                </Button>
-              </RequireScope>
-            )}
-          </Stack>
-        }
-      />
+      {filteredKeys.length > 0 ? (
+        <Table
+          columns={apiKeyColumns}
+          data={filteredKeys}
+          rowKey={(row) => row.id}
+          className="max-h-[500px] overflow-y-auto"
+        />
+      ) : (
+        <div
+          role="status"
+          className="border-border bg-background flex min-h-32 flex-col items-center justify-center gap-4 rounded-md border p-6"
+        >
+          <Type variant="body">
+            {apiKeySearch ? "No matching API keys" : "No API keys yet"}
+          </Type>
+          {!apiKeySearch && (
+            <RequireScope scope="org:admin" level="component">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setIsCreateDialogOpen(true)}
+              >
+                <Button.LeftIcon>
+                  <Icon name="key-round" className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Create Key</Button.Text>
+              </Button>
+            </RequireScope>
+          )}
+        </div>
+      )}
 
       <Dialog open={isCreateDialogOpen} onOpenChange={handleCloseCreateDialog}>
         <Dialog.Content>
