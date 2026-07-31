@@ -39,6 +39,12 @@ import (
 const (
 	defaultUserEmail       = "test@devidptest.local"
 	defaultUserDisplayName = "Test User"
+
+	// LoginClientID is the statically provisioned first-party client id the
+	// launched instance accepts without dynamic client registration, mirroring
+	// GRAM_IDP_CLIENT_ID in local dev. Use it to drive the non-interactive
+	// login flow; any other client_id must register first.
+	LoginClientID = "devidptest-login-client"
 )
 
 // Mode discriminator strings persisted by dev-idp on its auth_codes,
@@ -157,7 +163,7 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 	server := httptest.NewUnstartedServer(outer)
 	pubURL := "http://" + server.Listener.Addr().String()
 
-	oauth21H := oauth21.NewHandler(oauth21.Config{ExternalURL: pubURL}, ks, logger, tp, db)
+	oauth21H := oauth21.NewHandler(oauth21.Config{ExternalURL: pubURL, LoginClientID: LoginClientID}, ks, logger, tp, db)
 	outer.Handle(oauth21.Prefix+"/", http.StripPrefix(oauth21.Prefix, oauth21H.Handler()))
 	oauth21H.RegisterRootRoutes(outer)
 

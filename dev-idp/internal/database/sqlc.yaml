@@ -38,6 +38,9 @@ sql:
             go_type:
               import: "github.com/google/uuid"
               type: "UUID"
+          # oauth_clients
+          - column: "oauth_clients.rotate_refresh_tokens"
+            go_type: "bool"
           # auth_codes
           - column: "auth_codes.user_id"
             go_type:
