@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/collections"
-	tgen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -16,6 +15,7 @@ import (
 	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -88,8 +88,25 @@ func TestCollectionsService_ListServers_PreservesOriginLineage(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Servers, 1)
-	require.NotNil(t, toolset.McpSlug)
-	require.Equal(t, "com.speakeasy.registry/"+string(*toolset.McpSlug), result.Servers[0].RegistrySpecifier)
+
+	// New toolsets publish through their wrapper's endpoint; the registry
+	// specifier derives from the endpoint slug.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	wrappers, err := mcpserversRepo.New(ti.conn).GetMCPServersByToolsetID(ctx, mcpserversRepo.GetMCPServersByToolsetIDParams{
+		ToolsetID: uuid.NullUUID{UUID: uuid.MustParse(toolset.ID), Valid: true},
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, wrappers, 1)
+	wrapperEndpoints, err := mcpendpointsRepo.New(ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsRepo.ListMCPEndpointsByMCPServerIDParams{
+		ProjectID:   *authCtx.ProjectID,
+		McpServerID: wrappers[0].ID,
+	})
+	require.NoError(t, err)
+	require.Len(t, wrapperEndpoints, 1)
+	require.Equal(t, "com.speakeasy.registry/"+wrapperEndpoints[0].Slug, result.Servers[0].RegistrySpecifier)
 	require.NotNil(t, result.Servers[0].ToolsetID)
 	require.Equal(t, toolset.ID, *result.Servers[0].ToolsetID)
 	require.Nil(t, result.Servers[0].RegistryID)
@@ -134,23 +151,27 @@ func TestCollectionsService_ListServers_IncludesUserProvidedEnvironmentHeaders(t
 	)
 	toolsetID, err := uuid.Parse(toolset.ID)
 	require.NoError(t, err)
-	// Flip publicness through the toolsets service so the change mirrors onto
-	// the wrapper mcp_server's visibility, matching production writes.
-	mcpIsPublic := true
-	_, err = ti.toolsets.UpdateToolset(ctx, &tgen.UpdateToolsetPayload{
-		SessionToken:           nil,
-		ApikeyToken:            nil,
-		Slug:                   toolset.Slug,
-		Name:                   nil,
-		Description:            nil,
-		DefaultEnvironmentSlug: nil,
-		ToolUrns:               nil,
-		ResourceUrns:           nil,
-		PromptTemplateNames:    nil,
-		McpSlug:                nil,
-		McpIsPublic:            &mcpIsPublic,
-		McpEnabled:             nil,
-		CustomDomainID:         nil,
+	// Publicness lives on the wrapper mcp_server's visibility; flip it the
+	// way the mcpServers management API would.
+	wrappers, err := mcpserversRepo.New(ti.conn).GetMCPServersByToolsetID(ctx, mcpserversRepo.GetMCPServersByToolsetIDParams{
+		ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true},
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, wrappers, 1)
+	publicWrapper := wrappers[0]
+	_, err = mcpserversRepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversRepo.UpdateMCPServerParams{
+		ID:                    publicWrapper.ID,
+		ProjectID:             publicWrapper.ProjectID,
+		Name:                  publicWrapper.Name,
+		Slug:                  publicWrapper.Slug,
+		EnvironmentID:         publicWrapper.EnvironmentID,
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:     publicWrapper.RemoteMcpServerID,
+		TunneledMcpServerID:   publicWrapper.TunneledMcpServerID,
+		ToolsetID:             publicWrapper.ToolsetID,
+		ToolVariationsGroupID: publicWrapper.ToolVariationsGroupID,
+		Visibility:            "public",
 	})
 	require.NoError(t, err)
 

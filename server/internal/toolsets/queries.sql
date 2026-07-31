@@ -135,6 +135,13 @@ UPDATE toolsets
 SET mcp_enabled = @mcp_enabled
 WHERE id = @id AND project_id = @project_id;
 
+-- name: SetToolsetMCPSlugByID :exec
+-- Test fixture: seeds pre-swap publishing columns so translation-path
+-- coverage can exercise rows that predate the mcp_servers swap.
+UPDATE toolsets
+SET mcp_slug = @mcp_slug
+WHERE id = @id AND project_id = @project_id;
+
 -- name: GetHTTPSecurityDefinitions :many
 SELECT *
 FROM http_security

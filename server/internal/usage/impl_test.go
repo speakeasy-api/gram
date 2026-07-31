@@ -179,9 +179,15 @@ func seedEnabledToolsets(t *testing.T, db repo.DBTX, orgID string, serverCount i
 	for i := range serverCount {
 		toolsetID := uuid.New()
 		_, err = db.Exec(ctx, `
-			INSERT INTO toolsets (id, organization_id, project_id, name, slug, mcp_enabled)
-			VALUES ($1, $2, $3, $4, $5, TRUE)
+			INSERT INTO toolsets (id, organization_id, project_id, name, slug)
+			VALUES ($1, $2, $3, $4, $5)
 		`, toolsetID, orgID, projectID, "Enabled Server", fmt.Sprintf("enabled-%d-%s", i, toolsetID.String()[:8]))
+		require.NoError(t, err)
+		// Availability is counted from wrapper mcp_servers visibility.
+		_, err = db.Exec(ctx, `
+			INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id, visibility)
+			VALUES ($1, $2, 'Enabled Server', $3, $4, 'private')
+		`, uuid.New(), projectID, fmt.Sprintf("enabled-srv-%d-%s", i, toolsetID.String()[:8]), toolsetID)
 		require.NoError(t, err)
 	}
 }

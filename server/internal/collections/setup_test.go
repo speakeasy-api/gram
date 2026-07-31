@@ -125,26 +125,37 @@ func createMCPEnabledToolset(
 	})
 	require.NoError(t, err)
 
-	mcpEnabled := true
-	updated, err := ti.toolsets.UpdateToolset(ctx, &tgen.UpdateToolsetPayload{
-		SessionToken:           nil,
-		ApikeyToken:            nil,
-		Slug:                   created.Slug,
-		Name:                   nil,
-		Description:            nil,
-		DefaultEnvironmentSlug: nil,
-		ToolUrns:               nil,
-		ResourceUrns:           nil,
-		PromptTemplateNames:    nil,
-		McpSlug:                nil,
-		McpIsPublic:            nil,
-		McpEnabled:             &mcpEnabled,
-		CustomDomainID:         nil,
+	// Availability lives on the wrapper mcp_servers row after the write
+	// freeze; make the toolset's server available the way the mcpServers
+	// management API would.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	serversRepo := mcpserversRepo.New(ti.conn)
+	wrappers, err := serversRepo.GetMCPServersByToolsetID(ctx, mcpserversRepo.GetMCPServersByToolsetIDParams{
+		ToolsetID: uuid.NullUUID{UUID: uuid.MustParse(created.ID), Valid: true},
+		ProjectID: *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
-	require.True(t, *updated.McpEnabled)
+	require.Len(t, wrappers, 1)
+	wrapper := wrappers[0]
+	_, err = serversRepo.UpdateMCPServer(ctx, mcpserversRepo.UpdateMCPServerParams{
+		ID:                    wrapper.ID,
+		ProjectID:             wrapper.ProjectID,
+		Name:                  wrapper.Name,
+		Slug:                  wrapper.Slug,
+		EnvironmentID:         wrapper.EnvironmentID,
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:     wrapper.RemoteMcpServerID,
+		TunneledMcpServerID:   wrapper.TunneledMcpServerID,
+		ToolsetID:             wrapper.ToolsetID,
+		ToolVariationsGroupID: wrapper.ToolVariationsGroupID,
+		Visibility:            "private",
+	})
+	require.NoError(t, err)
 
-	return updated
+	return created
 }
 
 // mcpServerFixture is a toolset-backed mcp_server with a single endpoint,

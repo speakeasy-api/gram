@@ -416,6 +416,10 @@ func TestToolsetsService_UpdateToolset_McpEnabled(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// Publishing-field updates only translate for rows that still carry
+	// pre-swap columns; backdate the toolset to that shape.
+	seedPublishingColumns(t, ctx, ti, uuid.MustParse(created.ID), "seed-"+string(created.Slug), false)
+
 	// Update to enable MCP
 	result, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
 		SessionToken:           nil,
@@ -637,6 +641,10 @@ func TestToolsetsService_UpdateToolset_ClearsExternalOAuth_AuditLog(t *testing.T
 	ctx, ti := newTestToolsetsService(t)
 	ctx = withProAccount(t, ctx)
 	toolset := createMinimalPublicToolset(t, ctx, ti, "Audit Clear External OAuth Toolset")
+	// The visibility-flip OAuth-clear semantics belong to the pre-swap
+	// column path; backdate the toolset to that shape.
+	seedPublishingColumns(t, ctx, ti, uuid.MustParse(toolset.ID), "seed-"+string(toolset.Slug), true)
+	seedPublishingPublicColumn(t, ctx, ti, uuid.MustParse(toolset.ID), true)
 	attached, err := ti.service.AddExternalOAuthServer(ctx, &gen.AddExternalOAuthServerPayload{
 		SessionToken: nil,
 		ApikeyToken:  nil,
@@ -773,6 +781,10 @@ func TestToolsetsService_UpdateToolset_EnableMcp_AttachesToDefaultPlugin(t *test
 	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
 	require.NoError(t, err)
 	require.Len(t, servers, 1, "only the auto-enabled first toolset should be attached so far")
+
+	// Publishing-field updates only translate for rows that still carry
+	// pre-swap columns; backdate the second toolset to that shape.
+	seedPublishingColumns(t, ctx, ti, uuid.MustParse(second.ID), "seed-"+string(second.Slug), false)
 
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerAdd)
 	require.NoError(t, err)

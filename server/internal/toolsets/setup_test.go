@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -29,11 +30,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/externalmcptest"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functionstest"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -43,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
+	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 var (
@@ -506,32 +510,86 @@ func createMinimalPrivateToolset(t *testing.T, ctx context.Context, ti *testInst
 	return created
 }
 
+// createMinimalPublicToolset creates a toolset and makes its MCP surface
+// public by flipping the wrapper mcp_servers visibility — the canonical
+// publishing state after the write freeze.
 func createMinimalPublicToolset(t *testing.T, ctx context.Context, ti *testInstance, name string) *types.Toolset {
 	t.Helper()
 
 	created := createMinimalPrivateToolset(t, ctx, ti, name)
-	public := true
+	setWrapperVisibility(t, ctx, ti, uuid.MustParse(created.ID), "public")
 
-	updated, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
-		SessionToken:           nil,
-		ApikeyToken:            nil,
-		Slug:                   created.Slug,
-		Name:                   nil,
-		Description:            nil,
-		DefaultEnvironmentSlug: nil,
-		ToolUrns:               nil,
-		ResourceUrns:           nil,
-		PromptTemplateNames:    nil,
-		McpSlug:                nil,
-		McpEnabled:             nil,
-		McpIsPublic:            &public,
-		CustomDomainID:         nil,
-		ProjectSlugInput:       nil,
+	return created
+}
+
+// setWrapperVisibility flips the wrapper mcp_servers row's visibility for a
+// toolset, mirroring what the mcpServers management API does.
+func setWrapperVisibility(t *testing.T, ctx context.Context, ti *testInstance, toolsetID uuid.UUID, visibility string) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	serversRepo := mcpserversRepo.New(ti.conn)
+	wrappers, err := serversRepo.GetMCPServersByToolsetID(ctx, mcpserversRepo.GetMCPServersByToolsetIDParams{
+		ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true},
+		ProjectID: *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
-	require.NotNil(t, updated)
-	require.NotNil(t, updated.McpIsPublic)
-	require.True(t, *updated.McpIsPublic)
+	require.Len(t, wrappers, 1)
 
-	return updated
+	wrapper := wrappers[0]
+	_, err = serversRepo.UpdateMCPServer(ctx, mcpserversRepo.UpdateMCPServerParams{
+		ID:                    wrapper.ID,
+		ProjectID:             wrapper.ProjectID,
+		Name:                  wrapper.Name,
+		Slug:                  wrapper.Slug,
+		EnvironmentID:         wrapper.EnvironmentID,
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:     wrapper.RemoteMcpServerID,
+		TunneledMcpServerID:   wrapper.TunneledMcpServerID,
+		ToolsetID:             wrapper.ToolsetID,
+		ToolVariationsGroupID: wrapper.ToolVariationsGroupID,
+		Visibility:            visibility,
+	})
+	require.NoError(t, err)
+}
+
+// seedPublishingColumns backdates a toolset to the pre-swap shape by writing
+// its publishing columns directly, so translation-path coverage can exercise
+// rows that predate the mcp_servers swap.
+func seedPublishingColumns(t *testing.T, ctx context.Context, ti *testInstance, toolsetID uuid.UUID, mcpSlug string, enabled bool) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	tr := toolsetsRepo.New(ti.conn)
+	require.NoError(t, tr.SetToolsetMCPSlugByID(ctx, toolsetsRepo.SetToolsetMCPSlugByIDParams{
+		McpSlug:   conv.ToPGText(mcpSlug),
+		ID:        toolsetID,
+		ProjectID: *authCtx.ProjectID,
+	}))
+	require.NoError(t, tr.SetToolsetMCPEnabledByID(ctx, toolsetsRepo.SetToolsetMCPEnabledByIDParams{
+		McpEnabled: enabled,
+		ID:         toolsetID,
+		ProjectID:  *authCtx.ProjectID,
+	}))
+}
+
+// seedPublishingPublicColumn sets the pre-swap mcp_is_public column directly.
+func seedPublishingPublicColumn(t *testing.T, ctx context.Context, ti *testInstance, toolsetID uuid.UUID, public bool) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	require.NoError(t, toolsetsRepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsRepo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: public,
+		ID:          toolsetID,
+		ProjectID:   *authCtx.ProjectID,
+	}))
 }

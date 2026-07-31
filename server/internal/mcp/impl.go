@@ -590,6 +590,10 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
+	// Post-freeze every published toolset should resolve through its
+	// wrapper endpoint; any hit here is a candidate row the backfill has
+	// not covered and blocks the schema contraction.
+	logger.WarnContext(ctx, "request served via direct toolset mcp_slug fallback")
 	s.metrics.RecordToolsetSlugFallback(ctx, toolsetFallbackSurfaceServe, mcpSlug)
 
 	// Legacy toolset-by-slug path has no mcp_server, so there is no

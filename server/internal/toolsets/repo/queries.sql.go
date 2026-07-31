@@ -1403,6 +1403,25 @@ func (q *Queries) SetToolsetMCPPublicBySlug(ctx context.Context, arg SetToolsetM
 	return err
 }
 
+const setToolsetMCPSlugByID = `-- name: SetToolsetMCPSlugByID :exec
+UPDATE toolsets
+SET mcp_slug = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type SetToolsetMCPSlugByIDParams struct {
+	McpSlug   pgtype.Text
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Test fixture: seeds pre-swap publishing columns so translation-path
+// coverage can exercise rows that predate the mcp_servers swap.
+func (q *Queries) SetToolsetMCPSlugByID(ctx context.Context, arg SetToolsetMCPSlugByIDParams) error {
+	_, err := q.db.Exec(ctx, setToolsetMCPSlugByID, arg.McpSlug, arg.ID, arg.ProjectID)
+	return err
+}
+
 const updateToolset = `-- name: UpdateToolset :one
 UPDATE toolsets
 SET

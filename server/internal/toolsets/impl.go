@@ -35,7 +35,9 @@ import (
 	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpmetadataRepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -143,13 +145,18 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate random slug").LogError(ctx, logger)
 	}
 
-	mcpSlug := authCtx.OrganizationSlug + "-" + slugSuffix
+	endpointSlug := authCtx.OrganizationSlug + "-" + slugSuffix
 
 	enabledServerCount, err := s.usageRepo.GetEnabledServerCount(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		// don't block the user from creating a toolset
 		logger.ErrorContext(ctx, "error getting enabled server count", attr.SlogError(err), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
+
+	// New toolsets carry no publishing columns: publishing state is born on
+	// the wrapper mcp_servers/mcp_endpoints rows created below. The first
+	// server in an organization is automatically made available (private).
+	wrapperVisibility := conv.Ternary(enabledServerCount == 0, mcpservers.VisibilityPrivate, mcpservers.VisibilityDisabled)
 
 	createToolParams := repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
@@ -158,8 +165,8 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		Slug:                   conv.ToSlug(payload.Name),
 		Description:            conv.PtrToPGText(payload.Description),
 		DefaultEnvironmentSlug: conv.PtrToPGText(nil),
-		McpSlug:                conv.ToPGText(mcpSlug),
-		McpEnabled:             enabledServerCount == 0, // we automatically enable the first available toolset in an organization as an MCP server
+		McpSlug:                conv.PtrToPGText(nil),
+		McpEnabled:             false,
 	}
 
 	if payload.DefaultEnvironmentSlug != nil {
@@ -219,8 +226,8 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		return nil, err
 	}
 
-	if _, err := s.mirrorPublishingState(ctx, dbtx, createdToolset, authCtx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to mirror toolset publishing state").LogError(ctx, logger)
+	if err := s.createWrapperForNewToolset(ctx, dbtx, createdToolset, endpointSlug, wrapperVisibility); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create toolset mcp server").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogToolsetCreate(ctx, dbtx, audit.LogToolsetCreateEvent{
@@ -237,7 +244,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	}
 
 	var pluginCreated bool
-	if createToolParams.McpEnabled {
+	if wrapperVisibility != mcpservers.VisibilityDisabled {
 		pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, createdToolset.ID, createdToolset.Name)
 		if err != nil {
 			return nil, err
@@ -474,6 +481,15 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 			}
 			updateParams.McpSlug = conv.ToPGText(conv.ToLower(*payload.McpSlug))
 		}
+	}
+
+	// Publishing for toolsets created after the write freeze (no mcp_slug
+	// column) is managed exclusively through the mcpServers/mcpEndpoints
+	// APIs; the toolset-column fields only translate for rows that predate
+	// the swap and still carry columns for the mirror to project.
+	usesPublishingFields := payload.McpSlug != nil || payload.McpIsPublic != nil || payload.McpEnabled != nil || payload.CustomDomainID != nil
+	if usesPublishingFields && !existingToolset.McpSlug.Valid {
+		return nil, oops.E(oops.CodeBadRequest, nil, "MCP publishing for this toolset is managed through the mcpServers API")
 	}
 
 	if payload.McpIsPublic != nil {
@@ -931,8 +947,26 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 }
 
 func (s *Service) CheckMCPSlugAvailability(ctx context.Context, payload *gen.CheckMCPSlugAvailabilityPayload) (bool, error) {
-	//nolint:wrapcheck // Wrapping adds no value here
-	return s.repo.CheckMCPSlugAvailability(ctx, conv.ToPGText(conv.ToLower(payload.Slug)))
+	slug := conv.ToLower(payload.Slug)
+	available, err := s.repo.CheckMCPSlugAvailability(ctx, conv.ToPGText(slug))
+	if err != nil {
+		return false, fmt.Errorf("check toolset mcp slug availability: %w", err)
+	}
+	if !available {
+		return false, nil
+	}
+	// The mcp_endpoints platform namespace is authoritative for /mcp/{slug}
+	// addressing; a slug held by an endpoint is taken even when no toolset
+	// column claims it.
+	endpointAvailable, err := mcpendpointsRepo.New(s.db).CheckSlugAvailability(ctx, mcpendpointsRepo.CheckSlugAvailabilityParams{
+		Slug:           slug,
+		CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID: "",
+	})
+	if err != nil {
+		return false, fmt.Errorf("check mcp endpoint slug availability: %w", err)
+	}
+	return endpointAvailable.Valid && endpointAvailable.Bool, nil
 }
 
 func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddExternalOAuthServerPayload) (*types.Toolset, error) {
@@ -962,7 +996,11 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 		return nil, err
 	}
 
-	if existingToolset.McpIsPublic == nil || !*existingToolset.McpIsPublic {
+	effectivePublic, err := s.effectiveMcpPublic(ctx, *authCtx.ProjectID, uuid.MustParse(existingToolset.ID), existingToolset.McpIsPublic, existingToolset.McpSlug != nil)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve toolset publishing state").LogError(ctx, s.logger)
+	}
+	if !effectivePublic {
 		return nil, oops.E(oops.CodeBadRequest, nil, "private MCP servers cannot have external OAuth servers").LogError(ctx, s.logger)
 	}
 
@@ -1219,7 +1257,10 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 	}
 
 	// Validate provider_type against public/private status
-	isPublic := toolsetDetails.McpIsPublic != nil && *toolsetDetails.McpIsPublic
+	isPublic, err := s.effectiveMcpPublic(ctx, *authCtx.ProjectID, uuid.MustParse(toolsetDetails.ID), toolsetDetails.McpIsPublic, toolsetDetails.McpSlug != nil)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve toolset publishing state").LogError(ctx, s.logger)
+	}
 	if providerType == oauth.OAuthProxyProviderTypeGram && isPublic {
 		return nil, oops.E(oops.CodeBadRequest, nil, "gram provider type can only be used with private MCP servers").LogError(ctx, s.logger)
 	}

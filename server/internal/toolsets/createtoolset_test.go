@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -425,7 +426,8 @@ func TestToolsetsService_CreateToolset_AttachesToDefaultPlugin(t *testing.T) {
 		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
-	require.True(t, *result.McpEnabled)
+	wrapper := wrapperForToolset(t, ti, uuid.MustParse(result.ID), *authCtx.ProjectID)
+	require.Equal(t, mcpservers.VisibilityPrivate, wrapper.Visibility, "first server in an organization is auto-enabled as private")
 
 	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
 	require.NoError(t, err)
