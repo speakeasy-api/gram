@@ -4,11 +4,8 @@ import "slices"
 
 // TumComponent is one token measure summed into tokens under management.
 type TumComponent struct {
-	// Key is the component's stable snake_case identifier, used to key
-	// reporting line items across surfaces.
+	// Key is the component's stable snake_case identifier.
 	Key string
-	// Label is the customer-facing display name for the component.
-	Label string
 	// Column is the attribute_metrics_summaries aggregate column holding the
 	// component's token count (read back with sumIfMerge).
 	Column string
@@ -22,22 +19,20 @@ type TumComponent struct {
 // prompt content being observed for the first time, so it counts.
 //
 // This registry is the single source of truth for what TUM is made of: the
-// billing queries build their measure expression from it and customer-facing
-// reports (the weekly usage summary email) iterate it for their line items,
-// so adding or removing a component here changes what is billed and what is
-// reported in lockstep. The population side of the definition — WHICH rows
+// billing queries and customer-facing reports (the weekly usage summary
+// email's total) build their measure expression from it, so adding or
+// removing a component here changes what is billed and what is reported in
+// lockstep. The population side of the definition — WHICH rows
 // these columns are summed over — is GramHostedHookSourceStrings, the
 // observed-traffic exclusion list.
 var tumComponents = []TumComponent{
-	{Key: "input_tokens", Label: "Input tokens", Column: "total_input_tokens"},
-	{Key: "output_tokens", Label: "Output tokens", Column: "total_output_tokens"},
-	{Key: "cache_write_tokens", Label: "Cache write tokens", Column: "cache_creation_input_tokens"},
+	{Key: "input_tokens", Column: "total_input_tokens"},
+	{Key: "output_tokens", Column: "total_output_tokens"},
+	{Key: "cache_write_tokens", Column: "cache_creation_input_tokens"},
 }
 
 // TumComponents lists the token measures that make up tokens under
-// management, in stable registry order. Consumers that display line items
-// (the weekly usage summary email) re-sort by usage; registry order is the
-// tie-break.
+// management.
 func TumComponents() []TumComponent {
 	return slices.Clone(tumComponents)
 }

@@ -1,17 +1,12 @@
 package activities
 
 import (
-	"bytes"
-	"cmp"
 	"context"
 	"fmt"
-	"html/template"
 	"log/slog"
 	"math"
 	"net/url"
-	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -48,9 +43,10 @@ type SendWeeklyUsageSummaryArgs struct {
 // WeeklyUsageSummary emails each organization's billing alert contact a
 // weekly digest of tokens-under-management usage so far in the active
 // billing cycle, compared against the same elapsed point of the previous
-// cycle. Line items come from the billing.TumComponents registry (via
-// GetTumComponentTotals), so changes to the TUM definition show up in the
-// email without any change here.
+// cycle. The reported total is computed by the same registry-driven measure
+// that billing uses (billing.TumComponents via GetTumWindowTotal), so
+// changes to the TUM definition show up in the email without any change
+// here.
 type WeeklyUsageSummary struct {
 	logger        *slog.Logger
 	db            *pgxpool.Pool
@@ -129,7 +125,7 @@ func (a *WeeklyUsageSummary) Send(ctx context.Context, args SendWeeklyUsageSumma
 		previousPoint = previous.End
 	}
 
-	currentTotals, err := a.telemetryRepo.GetTumComponentTotals(ctx, telemetryrepo.GetTokensUnderManagementParams{
+	currentTotal, err := a.telemetryRepo.GetTumWindowTotal(ctx, telemetryrepo.GetTokensUnderManagementParams{
 		ProjectIDs:          ids,
 		StartUnixNano:       current.Start.UnixNano(),
 		EndUnixNano:         now.UnixNano(),
@@ -138,7 +134,7 @@ func (a *WeeklyUsageSummary) Send(ctx context.Context, args SendWeeklyUsageSumma
 	if err != nil {
 		return fmt.Errorf("compute current cycle usage: %w", err)
 	}
-	previousTotals, err := a.telemetryRepo.GetTumComponentTotals(ctx, telemetryrepo.GetTokensUnderManagementParams{
+	previousTotal, err := a.telemetryRepo.GetTumWindowTotal(ctx, telemetryrepo.GetTokensUnderManagementParams{
 		ProjectIDs:          ids,
 		StartUnixNano:       previous.Start.UnixNano(),
 		EndUnixNano:         previousPoint.UnixNano(),
@@ -148,21 +144,9 @@ func (a *WeeklyUsageSummary) Send(ctx context.Context, args SendWeeklyUsageSumma
 		return fmt.Errorf("compute previous cycle usage: %w", err)
 	}
 
-	var currentTotal, previousTotal int64
-	for _, c := range currentTotals {
-		currentTotal += c.Tokens
-	}
-	for _, p := range previousTotals {
-		previousTotal += p.Tokens
-	}
 	if currentTotal == 0 && previousTotal == 0 {
 		logger.InfoContext(ctx, "skipping weekly usage summary for org without usage")
 		return nil
-	}
-
-	rowsHTML, rowsText, err := renderWeeklyUsageRows(currentTotals, previousTotals, currentTotal, previousTotal)
-	if err != nil {
-		return fmt.Errorf("render weekly usage rows: %w", err)
 	}
 
 	viewUsageURL := ""
@@ -174,13 +158,11 @@ func (a *WeeklyUsageSummary) Send(ctx context.Context, args SendWeeklyUsageSumma
 		OrganizationName: conv.Default(target.OrganizationName, "your organization"),
 		// Cycle ends are exclusive; the email shows the last covered day.
 		CycleEndDate:        current.End.AddDate(0, 0, -1).Format("January 2, 2006"),
-		DaysRemaining:       strconv.Itoa(daysUntil(now, current.End)),
+		DaysRemaining:       formatDaysRemaining(daysUntil(now, current.End)),
 		CycleElapsedPercent: strconv.Itoa(elapsedPercent(current, now)),
 		TotalTokens:         formatTokenCount(currentTotal),
 		PreviousTotalTokens: formatTokenCount(previousTotal),
 		TotalChangePercent:  usageChangePercent(currentTotal, previousTotal),
-		UsageRowsHTML:       rowsHTML,
-		UsageRowsText:       rowsText,
 		ViewUsageURL:        viewUsageURL,
 	}
 
@@ -200,6 +182,16 @@ func daysUntil(now, end time.Time) int {
 		return 0
 	}
 	return int(math.Ceil(end.Sub(now).Hours() / 24))
+}
+
+// formatDaysRemaining renders a day count with its unit ("1 day", "5 days")
+// so the email copy pluralizes correctly; the Loops template inserts the
+// phrase as-is.
+func formatDaysRemaining(days int) string {
+	if days == 1 {
+		return "1 day"
+	}
+	return fmt.Sprintf("%d days", days)
 }
 
 // elapsedPercent is how far through the billing cycle now sits, clamped to
@@ -226,87 +218,4 @@ func usageChangePercent(current, previous int64) string {
 	}
 	pct := int(math.Round(float64(current-previous) / float64(previous) * 100))
 	return fmt.Sprintf("%+d%%", pct)
-}
-
-// weeklyUsageRow is one rendered line item of the summary table.
-type weeklyUsageRow struct {
-	Label    string
-	Current  string
-	Previous string
-	Change   string
-}
-
-// weeklyUsageRowsTemplate renders the line-item table injected into the
-// Loops template as a single HTML variable. Styling is inline and minimal —
-// email clients ignore stylesheets — and kept visually neutral so it sits
-// inside whatever chrome the Loops template provides.
-var weeklyUsageRowsTemplate = template.Must(template.New("weekly_usage_rows").Parse(strings.TrimSpace(`
-<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="border-collapse:collapse;font-size:14px;color:#111111;">
-	<tr>
-		<td style="padding:8px 0;color:#666666;font-weight:600;">Usage so far this cycle</td>
-		<td align="right" style="padding:8px 0;color:#666666;font-weight:600;">Tokens</td>
-		<td align="right" style="padding:8px 0;color:#666666;font-weight:600;">Change</td>
-	</tr>
-{{- range .Rows}}
-	<tr>
-		<td style="padding:10px 0;border-top:1px solid #e5e5e5;">{{.Label}}<br /><span style="color:#8a8a8a;font-size:12px;">Previous cycle at this point: {{.Previous}}</span></td>
-		<td align="right" style="padding:10px 0;border-top:1px solid #e5e5e5;vertical-align:top;">{{.Current}}</td>
-		<td align="right" style="padding:10px 0;border-top:1px solid #e5e5e5;vertical-align:top;color:#8a8a8a;">{{.Change}}</td>
-	</tr>
-{{- end}}
-	<tr>
-		<td style="padding:12px 0;border-top:2px solid #111111;font-weight:700;">Total<br /><span style="color:#8a8a8a;font-size:12px;font-weight:400;">Previous cycle at this point: {{.Total.Previous}}</span></td>
-		<td align="right" style="padding:12px 0;border-top:2px solid #111111;font-weight:700;vertical-align:top;">{{.Total.Current}}</td>
-		<td align="right" style="padding:12px 0;border-top:2px solid #111111;font-weight:700;vertical-align:top;">{{.Total.Change}}</td>
-	</tr>
-</table>
-`)))
-
-// renderWeeklyUsageRows renders the per-component usage table as HTML plus a
-// plain-text fallback. Components arrive in billing.TumComponents order and
-// are paired by key, so the table shape follows the TUM definition; line
-// items are ordered by current-cycle usage, largest first, with registry
-// order breaking ties.
-func renderWeeklyUsageRows(current, previous []telemetryrepo.TumComponentTotal, currentTotal, previousTotal int64) (string, string, error) {
-	previousByKey := make(map[string]int64, len(previous))
-	for _, p := range previous {
-		previousByKey[p.Key] = p.Tokens
-	}
-
-	ordered := slices.Clone(current)
-	slices.SortStableFunc(ordered, func(a, b telemetryrepo.TumComponentTotal) int {
-		return cmp.Compare(b.Tokens, a.Tokens)
-	})
-
-	rows := make([]weeklyUsageRow, 0, len(ordered))
-	textLines := make([]string, 0, len(ordered)+1)
-	for _, c := range ordered {
-		prev := previousByKey[c.Key]
-		row := weeklyUsageRow{
-			Label:    c.Label,
-			Current:  formatTokenCount(c.Tokens),
-			Previous: formatTokenCount(prev),
-			Change:   usageChangePercent(c.Tokens, prev),
-		}
-		rows = append(rows, row)
-		textLines = append(textLines, fmt.Sprintf("%s: %s (previous cycle at this point: %s, %s)", row.Label, row.Current, row.Previous, row.Change))
-	}
-
-	total := weeklyUsageRow{
-		Label:    "Total",
-		Current:  formatTokenCount(currentTotal),
-		Previous: formatTokenCount(previousTotal),
-		Change:   usageChangePercent(currentTotal, previousTotal),
-	}
-	textLines = append(textLines, fmt.Sprintf("Total: %s (previous cycle at this point: %s, %s)", total.Current, total.Previous, total.Change))
-
-	var html bytes.Buffer
-	if err := weeklyUsageRowsTemplate.Execute(&html, struct {
-		Rows  []weeklyUsageRow
-		Total weeklyUsageRow
-	}{Rows: rows, Total: total}); err != nil {
-		return "", "", fmt.Errorf("execute weekly usage rows template: %w", err)
-	}
-
-	return html.String(), strings.Join(textLines, "\n"), nil
 }

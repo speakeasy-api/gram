@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTumComponents_KeysLabelsColumnsNonEmptyAndUnique(t *testing.T) {
+func TestTumComponents_KeysColumnsNonEmptyAndUnique(t *testing.T) {
 	t.Parallel()
 
 	components := TumComponents()
@@ -16,7 +16,6 @@ func TestTumComponents_KeysLabelsColumnsNonEmptyAndUnique(t *testing.T) {
 	columns := make(map[string]bool, len(components))
 	for _, c := range components {
 		require.NotEmpty(t, c.Key, "component key must be set")
-		require.NotEmpty(t, c.Label, "component label must be set")
 		require.NotEmpty(t, c.Column, "component column must be set")
 		require.False(t, keys[c.Key], "duplicate component key %q", c.Key)
 		require.False(t, columns[c.Column], "duplicate component column %q", c.Column)

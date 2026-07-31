@@ -6370,68 +6370,43 @@ func (q *Queries) GetTokensUnderManagementByDay(ctx context.Context, arg GetToke
 	return buckets, nil
 }
 
-// TumComponentTotal is one tokens-under-management component's window total,
-// keyed by the billing.TumComponents registry.
-type TumComponentTotal struct {
-	Key    string
-	Label  string
-	Tokens int64
-}
-
-// GetTumComponentTotals sums each tokens-under-management component over the
-// window, scoped identically to the billed totals — the components sum to
-// the TUM measure by construction (both derive from billing.TumComponents).
-// The result follows the registry's display order, so callers rendering
-// line items automatically track additions to and removals from the TUM
-// definition. Windows with no usage return zero totals, never a short or
-// empty slice.
+// GetTumWindowTotal sums the tokens-under-management measure over the
+// window, scoped identically to the billed totals: the measure expression
+// derives from the billing.TumComponents registry (see tumMeasureExpr) and
+// the population from ExcludedHookSources, so the total automatically
+// tracks additions to and removals from the TUM definition. Windows with no
+// usage return zero.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) GetTumComponentTotals(ctx context.Context, arg GetTokensUnderManagementParams) ([]TumComponentTotal, error) {
-	components := billing.TumComponents()
-	totals := make([]TumComponentTotal, len(components))
-	for i, c := range components {
-		totals[i] = TumComponentTotal{Key: c.Key, Label: c.Label, Tokens: 0}
-	}
+func (q *Queries) GetTumWindowTotal(ctx context.Context, arg GetTokensUnderManagementParams) (int64, error) {
 	if len(arg.ProjectIDs) == 0 {
-		return totals, nil
+		return 0, nil
 	}
 
-	cols := make([]string, len(components))
-	for i, c := range components {
-		cols[i] = fmt.Sprintf("toInt64(sumIfMerge(%s)) AS component_%d", c.Column, i)
-	}
-	sb := tumObservedBase(sq.Select(cols...), arg)
+	sb := tumObservedBase(sq.Select(tumMeasureExpr+" AS tokens"), arg)
 
 	query, args, err := sb.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("building tum component totals query: %w", err)
+		return 0, fmt.Errorf("building tum window total query: %w", err)
 	}
 
 	rows, err := q.conn.Query(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	defer rows.Close()
 
+	var total int64
 	if rows.Next() {
-		scanned := make([]int64, len(components))
-		ptrs := make([]any, len(components))
-		for i := range scanned {
-			ptrs[i] = &scanned[i]
-		}
-		if err := rows.Scan(ptrs...); err != nil {
-			return nil, fmt.Errorf("scanning tum component totals row: %w", err)
-		}
-		for i, tokens := range scanned {
-			totals[i].Tokens = tokens
+		if err := rows.Scan(&total); err != nil {
+			return 0, fmt.Errorf("scanning tum window total row: %w", err)
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return 0, err
 	}
 
-	return totals, nil
+	return total, nil
 }
 
 // TumBreakdownDayBucket is one UTC day of tokens under management split by

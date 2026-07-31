@@ -28,7 +28,7 @@ import (
 
 // insertWeeklyUsageComponents seeds one observed session's aggregate row into
 // attribute_metrics_summaries with distinct per-component token counts so the
-// weekly summary's line items are individually verifiable. Like
+// weekly summary's total exercises every column of the TUM measure. Like
 // insertStoredSession, it writes the aggregate row directly (bypassing the
 // MV's ingestion cutoff) with generation 0 / is_active 1 to match a live row.
 func insertWeeklyUsageComponents(t *testing.T, ctx context.Context, chConn clickhouse.Conn, projectID string, timestamp time.Time, input, output, cacheWrite, cacheRead int64) {
@@ -87,8 +87,7 @@ func insertWeeklyUsageComponents(t *testing.T, ctx context.Context, chConn click
 //	  mise exec -- go test -tags live_email ./internal/background/activities/ -run TestWeeklyUsageSummary_LiveSendThroughLoops -v
 //
 // Because it exercises the real template, it also proves Loops accepts the
-// variables the server sends that the template does not reference
-// (usage_rows_text, previous_total_tokens).
+// exact variable set the server sends.
 func TestWeeklyUsageSummary_LiveSendThroughLoops(t *testing.T) {
 	t.Parallel()
 
@@ -134,9 +133,9 @@ func TestWeeklyUsageSummary_LiveSendThroughLoops(t *testing.T) {
 	require.NoError(t, err)
 
 	// Seed usage in the current cycle and at the comparable elapsed point of
-	// the previous cycle so every line item renders a change badge. The cache
-	// read tokens must NOT surface anywhere in the email: they are excluded
-	// from the TUM definition.
+	// the previous cycle so the total renders a change badge. The cache read
+	// tokens must NOT count toward the totals: they are excluded from the
+	// TUM definition.
 	now := time.Now().UTC()
 	cycles := usage.BillingCycles(now, anchorDay, 2)
 	previous, current := cycles[0], cycles[1]
@@ -170,5 +169,5 @@ func TestWeeklyUsageSummary_LiveSendThroughLoops(t *testing.T) {
 		RunTime: now,
 	}))
 
-	t.Logf("weekly usage summary sent to %s — verify the inbox: three line items with change badges, totals excluding cache reads", recipient)
+	t.Logf("weekly usage summary sent to %s — verify the inbox: cycle-to-date total with change badge, cache reads excluded", recipient)
 }
