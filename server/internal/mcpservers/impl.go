@@ -20,6 +20,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/mcp_servers/server"
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -134,6 +135,9 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	}
 	if err := validateServerBackendExclusivity(ids); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
+	}
+	if err := requireStaffForUnproxiedBackend(ctx, authCtx, ids.UnproxiedMcpServerID, logger); err != nil {
+		return nil, err
 	}
 
 	// Generate the server ID up front so the slug can include its suffix and
@@ -501,6 +505,16 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 
 	beforeView := mv.BuildMcpServerView(existing)
 
+	// Only gate on staff when the unproxied backend reference is actually
+	// changing: a non-staff project member with write access must still be
+	// able to manage (rename, re-publish, delete) a server staff already
+	// attached to an unproxied backend.
+	if ids.UnproxiedMcpServerID != existing.UnproxiedMcpServerID {
+		if err := requireStaffForUnproxiedBackend(ctx, authCtx, ids.UnproxiedMcpServerID, logger); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := verifyServerReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, ids); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
@@ -522,13 +536,23 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").LogError(ctx, logger)
 	}
 
+	// NULL leaves the stored issuer untouched (the update query COALESCEs).
+	// A backend switch onto remote/tunneled from a backend that never carried
+	// one (toolset, unproxied) needs a fresh mint here, or the insert trips
+	// mcp_servers_issuer_required_check.
+	issuerID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if (ids.RemoteMcpServerID.Valid || ids.TunneledMcpServerID.Valid) && !existing.UserSessionIssuerID.Valid {
+		issuerID, err = mintServerUserSessionIssuer(ctx, dbtx, *authCtx.ProjectID, slug)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "mint mcp server issuer").LogError(ctx, logger)
+		}
+	}
+
 	updated, err := txRepo.UpdateMCPServer(ctx, repo.UpdateMCPServerParams{
-		Name:          name,
-		Slug:          conv.ToPGText(slug),
-		EnvironmentID: ids.EnvironmentID,
-		// Always NULL: the query COALESCEs to the stored issuer, which is
-		// attached at create time for the server's lifetime.
-		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Name:                  name,
+		Slug:                  conv.ToPGText(slug),
+		EnvironmentID:         ids.EnvironmentID,
+		UserSessionIssuerID:   issuerID,
 		RemoteMcpServerID:     ids.RemoteMcpServerID,
 		TunneledMcpServerID:   ids.TunneledMcpServerID,
 		ToolsetID:             ids.ToolsetID,
@@ -1084,6 +1108,28 @@ func backendFilterCount(ids ...uuid.NullUUID) int {
 		}
 	}
 	return count
+}
+
+// requireStaffForUnproxiedBackend rejects attaching an mcp_servers row to an
+// unproxied backend unless the caller is Speakeasy staff. Unproxied MCP
+// servers are a staff-curated catalog (see unproxiedmcp.CreateServer); without
+// this check, any project member could wrap an existing unproxied_mcp_servers
+// row in their own mcp_servers entry and distribute it, bypassing the
+// staff-only restriction on that catalog.
+func requireStaffForUnproxiedBackend(ctx context.Context, authCtx *contextvalues.AuthContext, unproxiedMcpServerID uuid.NullUUID, logger *slog.Logger) error {
+	if !unproxiedMcpServerID.Valid {
+		return nil
+	}
+
+	email := ""
+	if authCtx.Email != nil {
+		email = *authCtx.Email
+	}
+	if !access.IsSpeakeasyStaffEmail(email) {
+		return oops.E(oops.CodeForbidden, nil, "unproxied MCP servers can only be attached by Speakeasy staff").LogWarn(ctx, logger)
+	}
+
+	return nil
 }
 
 // verifyServerReferenceOwnership checks that every non-null referenced

@@ -254,6 +254,14 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
+	email := ""
+	if authCtx.Email != nil {
+		email = *authCtx.Email
+	}
+	if !access.IsSpeakeasyStaffEmail(email) {
+		return oops.E(oops.CodeForbidden, nil, "unproxied MCP servers can only be deleted by Speakeasy staff").LogWarn(ctx, logger)
+	}
+
 	serverID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid server id").LogError(ctx, logger)

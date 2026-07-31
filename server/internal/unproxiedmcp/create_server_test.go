@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/unproxied_mcp"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -104,4 +105,37 @@ func TestCreateServer_ListAndGet(t *testing.T) {
 		ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestDeleteServer_RejectsNonStaff(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	staffCtx := withStaffEmail(t, ctx)
+
+	created, err := ti.service.CreateServer(staffCtx, &gen.CreateServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Name:             nil,
+		URL:              "https://vendor.example.com/mcp",
+		Description:      nil,
+	})
+	require.NoError(t, err)
+
+	// withStaffEmail mutates the shared AuthContext in place (both ctx and
+	// staffCtx point at the same struct), so restore the original non-staff
+	// email before exercising the delete-as-non-staff path below.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	nonStaffEmail := "dev@example.com"
+	authCtx.Email = &nonStaffEmail
+
+	err = ti.service.DeleteServer(ctx, &gen.DeleteServerPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
 }

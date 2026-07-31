@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
+	unproxiedmcprepo "github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -157,6 +158,40 @@ func seedTunneledMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	require.NoError(t, err)
 
 	return server.ID
+}
+
+// seedUnproxiedMcpServer inserts an unproxied_mcp_servers row directly
+// through the generated repo so we have a valid backend FK for mcp_servers
+// tests.
+func seedUnproxiedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	server, err := unproxiedmcprepo.New(conn).CreateServer(ctx, unproxiedmcprepo.CreateServerParams{
+		ID:          uuid.New(),
+		ProjectID:   projectID,
+		Name:        pgtype.Text{String: "", Valid: false},
+		Slug:        pgtype.Text{String: "test-unproxied-mcp-server-" + uuid.NewString(), Valid: true},
+		Url:         "https://vendor.example.com/mcp",
+		Description: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	return server.ID
+}
+
+// withStaffEmail overrides the auth context's email to a Speakeasy-owned
+// domain so an unproxied-backend check passes.
+func withStaffEmail(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	email := "staffer@speakeasyapi.dev"
+	authCtx.Email = &email
+
+	return contextvalues.SetAuthContext(ctx, authCtx)
 }
 
 func enableTunneledPublicConsent(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, tunneledServerID uuid.UUID) {
