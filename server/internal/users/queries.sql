@@ -59,9 +59,11 @@ WHERE u.workos_id = ANY(@workos_ids::text[])
   AND our.deleted_at IS NULL;
 
 -- name: GetConnectedUserByEmail :one
+-- Callers must pass a lowercased email (conv.NormalizeEmail); stored emails are
+-- lowered here since WorkOS-synced rows can preserve the original casing.
 SELECT u.* FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
-WHERE u.email = @email
+WHERE lower(u.email) = @email
   AND our.organization_id = @organization_id
   AND our.deleted_at IS NULL
 LIMIT 1;
