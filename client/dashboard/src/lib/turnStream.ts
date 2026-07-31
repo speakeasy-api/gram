@@ -83,33 +83,20 @@ export async function streamTurn(args: {
    */
   projectSlug: string;
 }): Promise<void> {
-  const {
-    chatId,
-    writer: rawWriter,
-    abortSignal,
-    sessionToken,
-    projectSlug,
-  } = args;
-
-  // Temporary: the turn renders correctly and the stream completes without
-  // error, yet assistant-ui still re-sends the turn. Log the exact chunk
-  // sequence so the emitted stream can be compared against what the resume
-  // check expects, instead of inferring it from the network trace.
-  const writer = {
-    ...rawWriter,
-    write: (chunk: Parameters<typeof rawWriter.write>[0]) => {
-      const c = chunk as { type: string; id?: string; toolCallId?: string };
-      console.log("[turnstream chunk]", c.type, c.id ?? c.toolCallId ?? "");
-      return rawWriter.write(chunk);
-    },
-  } as typeof rawWriter;
+  const { chatId, writer, abortSignal, sessionToken, projectSlug } = args;
 
   let cursor = "";
   let reconnects = 0;
-  // Each persisted assistant row opens its own step, so the turn's final,
-  // text-only row lands in a step with no tool calls — assistant-ui's resume
+  // Each persisted assistant row's content gets its own step, so the turn's
+  // final text lands in a step with no tool calls — assistant-ui's resume
   // check inspects the last step, and a step carrying resolved tool calls
   // makes it re-send a turn the server already finished.
+  //
+  // A step is only observable once something is written into it: the AI
+  // SDK pushes the `step-start` part on `start-step` but does not flush the
+  // message, so an empty trailing step never reaches the consumer. Steps have
+  // to be arranged so the turn's last CONTENT is free of tool calls; opening a
+  // bare step after them does nothing.
   let stepOpen = false;
   // Text arrives before the row that will contain it, so the part id is per
   // message index rather than per row id.
@@ -161,14 +148,18 @@ export async function streamTurn(args: {
       } catch (err) {
         if (abortSignal?.aborted) throw err;
         if (++reconnects > MAX_RECONNECTS) throw err;
-        await new Promise((r) => setTimeout(r, RECONNECT_DELAY_MS));
+        await new Promise((r) => {
+          setTimeout(r, RECONNECT_DELAY_MS);
+        });
         continue;
       }
       if (!response.ok || !response.body) {
         if (++reconnects > MAX_RECONNECTS) {
           throw new Error(`turn stream failed: ${response.status}`);
         }
-        await new Promise((r) => setTimeout(r, RECONNECT_DELAY_MS));
+        await new Promise((r) => {
+          setTimeout(r, RECONNECT_DELAY_MS);
+        });
         continue;
       }
       reconnects = 0;
@@ -210,6 +201,15 @@ export async function streamTurn(args: {
           switch (frame.kind) {
             case "text": {
               if (!frame.text) break;
+              // Text that arrives after a row has landed belongs to the NEXT
+              // row, so it opens a step of its own. Sharing the previous row's
+              // step put the turn's closing text in the same step as the tool
+              // calls that preceded it, and assistant-ui's resume check
+              // (`lastAssistantMessageIsCompleteWithToolCalls`) inspects the
+              // last step: finding resolved tool calls there, it re-sent a turn
+              // the server had already finished — forever, since every resend
+              // reproduced the same shape.
+              if (stepHasMessage) closeStep();
               openStep();
               // assistant-ui addresses text parts by id and rejects a delta
               // for a part it has not been told about, so each part is opened
@@ -249,13 +249,11 @@ export async function streamTurn(args: {
                 sawTextThisMessage = false;
               }
               const calls = parseFrameToolCalls(frame.tool_calls);
-              // Every row gets its own step, including the final text-only
-              // one. That is what keeps the turn's last step free of tool
-              // calls: assistant-ui's resume check inspects only the last
-              // step, and if it finds tool calls there it re-sends a turn the
-              // server already finished. Skipping the step for a row with no
-              // tool calls left the tool-calling step last and restarted that
-              // loop.
+              // A row that follows another opens its own step, so a row's tool
+              // calls never share a step with the next row's content. The step
+              // this opens is only real once something is written into it (see
+              // `stepOpen` above), which is why the turn's closing text opens
+              // its step itself rather than relying on this.
               if (stepHasMessage) closeStep();
               openStep();
               stepHasMessage = true;
@@ -299,7 +297,9 @@ export async function streamTurn(args: {
       if (++reconnects > MAX_RECONNECTS) {
         throw new Error("turn stream ended before the turn finished");
       }
-      await new Promise((r) => setTimeout(r, RECONNECT_DELAY_MS));
+      await new Promise((r) => {
+        setTimeout(r, RECONNECT_DELAY_MS);
+      });
     }
   } finally {
     // A turn that ended without an output for some call would otherwise be
