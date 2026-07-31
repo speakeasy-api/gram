@@ -3906,10 +3906,29 @@ func unmarshalModelConfig(raw []byte) *types.RiskPolicyModelConfig {
 	}
 }
 
-// fallbackPromptPolicyName derives a stable display name from the guardrail
-// prompt when the LLM namer is unavailable.
+// fallbackPromptPolicyName is used when the LLM naming call is unavailable
+// or fails. It must not just truncate the raw prompt to some length: the
+// dashboard's policy table renders the prompt itself (truncated to 60 runes)
+// right next to the name, so a name that's merely a differently-truncated
+// prefix of the same text reads as pointless duplication. Prefixing it and
+// excerpting much shorter (breaking on a word boundary, not mid-word) keeps
+// it visually distinct at a glance, even though it's still deterministic
+// and prompt-derived (unlike the LLM path, this can't produce a genuine
+// summary).
 func fallbackPromptPolicyName(prompt string, existing []string) string {
-	return promptPolicyNameFromBase(prompt, existing)
+	base := strings.TrimSpace(strings.Join(strings.Fields(prompt), " "))
+	const maxExcerptRunes = 30
+	if r := []rune(base); len(r) > maxExcerptRunes {
+		excerpt := string(r[:maxExcerptRunes])
+		if i := strings.LastIndex(excerpt, " "); i > 0 {
+			excerpt = excerpt[:i]
+		}
+		base = excerpt + "…"
+	}
+	if base == "" {
+		return promptPolicyNameFromBase("Prompt Policy", existing)
+	}
+	return promptPolicyNameFromBase("Prompt Policy: "+base, existing)
 }
 
 func promptPolicyNameFromBase(base string, existing []string) string {
