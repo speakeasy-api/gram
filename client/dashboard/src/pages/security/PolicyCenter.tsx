@@ -58,7 +58,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import { useQueryState } from "nuqs";
+import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
@@ -525,6 +525,15 @@ function PolicyDateCell({ date }: { date: Date }): JSX.Element {
   );
 }
 
+const POLICY_CENTER_TABS = ["policies", "exclusions", "dismissed"] as const;
+type PolicyCenterTab = (typeof POLICY_CENTER_TABS)[number];
+
+function toPolicyCenterTab(value: string): PolicyCenterTab {
+  return (POLICY_CENTER_TABS as readonly string[]).includes(value)
+    ? (value as PolicyCenterTab)
+    : "policies";
+}
+
 export default function PolicyCenter(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">
@@ -563,9 +572,10 @@ function PolicyCenterContent() {
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
   const [policyToDelete, setPolicyToDelete] = useState<PolicyRow | null>(null);
 
-  const [activeTab, setActiveTab] = useState<
-    "policies" | "exclusions" | "dismissed"
-  >("policies");
+  const [activeTab, setActiveTab] = useQueryState(
+    "tab",
+    parseAsStringLiteral(POLICY_CENTER_TABS).withDefault("policies"),
+  );
   const [exclusionSheet, setExclusionSheet] =
     useState<ExclusionSheetState | null>(null);
 
@@ -953,16 +963,18 @@ function PolicyCenterContent() {
             <Tabs
               value={activeTab}
               onValueChange={(value) =>
-                setActiveTab(value as "policies" | "exclusions" | "dismissed")
+                void setActiveTab(toPolicyCenterTab(value))
               }
             >
               <div className="border-b">
                 <PageTabsList>
                   <PageTabsTrigger value="policies">Policies</PageTabsTrigger>
                   <PageTabsTrigger value="exclusions">
-                    Exclusions
+                    Exclusion rules
                   </PageTabsTrigger>
-                  <PageTabsTrigger value="dismissed">Dismissed</PageTabsTrigger>
+                  <PageTabsTrigger value="dismissed">
+                    False Positives
+                  </PageTabsTrigger>
                 </PageTabsList>
               </div>
               <TabsContent value="policies" className="mt-6">
