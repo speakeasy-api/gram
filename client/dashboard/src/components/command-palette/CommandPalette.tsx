@@ -5,11 +5,13 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
+} from "@/components/ui/Command";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { useSlugs } from "@/contexts/Sdk";
-import { Icon, IconName, Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
+import { IconName } from "@/components/ui/Icon/names";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { requestAskAi } from "./askAiBridge";

@@ -1,10 +1,11 @@
 import { InfoField, InfoSection, InfoText } from "@/components/detail-fields";
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import type { GcpIamCredential } from "@gram/client/models/components/gcpiamcredential.js";
 import type { VerifyPlatformCredentialResult } from "@gram/client/models/components/verifyplatformcredentialresult.js";
 import { useVerifyGcpIamPlatformCredentialMutation } from "@gram/client/react-query/verifyGcpIamPlatformCredential";
-import { Alert, Button } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import { useState } from "react";
 import { gcpAuthMode, providerLabel, verifySourceLabel } from "../providers";
 
@@ -85,9 +86,9 @@ export function OverviewTab({
       </InfoSection>
 
       <InfoSection title="Verify">
-        <Type small muted>
+        <Text small muted>
           Run a credential identity probe and report the effective principal.
-        </Type>
+        </Text>
         <div>
           <Button onClick={handleVerify} disabled={verify.isPending}>
             <Button.Text>
@@ -113,19 +114,19 @@ function VerifyResult({
 }): JSX.Element {
   return (
     <div className="border-border flex flex-col gap-1 rounded-md border p-4">
-      <Type small className="font-medium">
+      <Text small className="font-medium">
         {result.verified ? "Verified" : "Not verified"}
-      </Type>
-      {result.principal && <Type small>Principal: {result.principal}</Type>}
+      </Text>
+      {result.principal && <Text small>Principal: {result.principal}</Text>}
       {result.identitySource && (
-        <Type small muted>
+        <Text small muted>
           Resolved via {verifySourceLabel(result.identitySource)}.
-        </Type>
+        </Text>
       )}
       {result.detail && (
-        <Type small muted>
+        <Text small muted>
           {result.detail}
-        </Type>
+        </Text>
       )}
     </div>
   );

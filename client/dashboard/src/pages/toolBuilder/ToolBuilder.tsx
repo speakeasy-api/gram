@@ -3,7 +3,7 @@ import { DeleteButton } from "@/components/delete-button";
 import { EditableText } from "@/components/editable-text";
 import { Page } from "@/components/page-layout";
 import { ToolBadge } from "@/components/tool-badge";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/Badge";
 import {
   Command,
   CommandEmpty,
@@ -11,15 +11,15 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
-import { Heading } from "@/components/ui/heading";
+} from "@/components/ui/Command";
+import { Heading } from "@/components/ui/Heading";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Popover";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useToolset } from "@/hooks/toolTypes";
@@ -40,7 +40,10 @@ import {
 } from "@gram/client/react-query/template.js";
 import { invalidateAllTemplates } from "@gram/client/react-query/templates.js";
 import { useUpdateTemplateMutation } from "@gram/client/react-query/updateTemplate.js";
-import { Button, Icon, ResizablePanel, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { ResizablePanel } from "@/components/ui/ResizablePanel";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
@@ -512,7 +515,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
                 onSubmit={setDescription}
                 lines={4}
               >
-                <Type variant="subheading">{description}</Type>
+                <Text variant="subheading">{description}</Text>
               </EditableText>
             </BlockInner>
           </Block>
@@ -533,10 +536,10 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
             <BlockInner>
               <div className="flex flex-wrap gap-2">
                 {inputs.length === 0 && (
-                  <Type
+                  <Text
                     muted
                     italic
-                  >{`Inputs will appear here. Use {{braces}} in step instructions to create or reference them.`}</Type>
+                  >{`Inputs will appear here. Use {{braces}} in step instructions to create or reference them.`}</Text>
                 )}
                 {inputs.map((input) => (
                   <EditableText
@@ -734,9 +737,9 @@ const StepCard = ({
           className="group/heading border-b border-stone-300 px-4 py-3 dark:border-stone-700"
         >
           {step.canonicalTool ? (
-            <Type variant="subheading">Use the {toolBadge} tool to...</Type>
+            <Text variant="subheading">Use the {toolBadge} tool to...</Text>
           ) : (
-            <Type variant="subheading">{noToolText}</Type>
+            <Text variant="subheading">{noToolText}</Text>
           )}
           <Stack
             direction="horizontal"
@@ -781,7 +784,7 @@ const StepCard = ({
               step.update?.({ ...step, instructions });
             }}
           >
-            <Type
+            <Text
               small
               className={cn(
                 step.instructions === instructionsPlaceholder &&
@@ -789,7 +792,7 @@ const StepCard = ({
               )}
             >
               <MustacheHighlight>{step.instructions}</MustacheHighlight>
-            </Type>
+            </Text>
           </EditableText>
         </div>
       </Stack>

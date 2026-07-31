@@ -34,7 +34,7 @@ import {
   INSIGHTS_SUGGESTION_ICONS,
   type InsightsSuggestion,
 } from "@/lib/insights-suggestions";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import type { UIMessage } from "ai";
 import {
   ArrowLeft,

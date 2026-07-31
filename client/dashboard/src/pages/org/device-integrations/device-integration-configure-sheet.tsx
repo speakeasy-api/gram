@@ -3,9 +3,9 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+} from "@/components/ui/Collapsible";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import {
   Sheet,
   SheetContent,
@@ -13,13 +13,15 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import type { DeviceIntegrationProvider } from "@gram/client/models/components/deviceintegrationprovider.js";
 import type { DeviceIntegrationProviderField } from "@gram/client/models/components/deviceintegrationproviderfield.js";
-import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import {
   CheckCircle2,
   ChevronRight,
@@ -143,9 +145,9 @@ export function DeviceIntegrationConfigureSheet({
           {form.isConfigured ? (
             <TestConnectionRow form={form} />
           ) : (
-            <Type variant="body" className="text-muted-foreground text-xs">
+            <Text variant="body" className="text-muted-foreground text-xs">
               Save the connection first to enable the connection test.
-            </Type>
+            </Text>
           )}
         </Stack>
 
@@ -319,11 +321,11 @@ function TestConnectionRow({ form }: { form: DeviceIntegrationConfigForm }) {
         </Button>
         <TestResultBadge form={form} />
       </Stack>
-      <Type variant="body" className="text-muted-foreground text-xs">
+      <Text variant="body" className="text-muted-foreground text-xs">
         {dirty
           ? "Unsaved changes — save first. The test always runs against the saved credentials."
           : "Runs a real request against the vendor using the saved credentials."}
-      </Type>
+      </Text>
     </Stack>
   );
 }

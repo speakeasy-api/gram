@@ -1,10 +1,11 @@
 import { RequireScope } from "@/components/require-scope";
-import { Switch } from "@/components/ui/switch";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+import { Switch } from "@/components/ui/Switch";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
 import type { DeviceIntegrationProvider } from "@gram/client/models/components/deviceintegrationprovider.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { ChevronRight, PlugZap } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
@@ -79,17 +80,17 @@ export function DeviceIntegrationConnectionRow({
               className="min-w-0"
             >
               <Icon className="text-foreground h-4 w-4 shrink-0" />
-              <Type variant="body" className="min-w-0 truncate font-medium">
+              <Text variant="body" className="min-w-0 truncate font-medium">
                 {provider.displayName}
-              </Type>
+              </Text>
               <ConnectionStatusBadge
                 enabled={form.enabled}
                 configured={form.isConfigured}
               />
             </Stack>
-            <Type muted small className="ml-6 truncate">
+            <Text muted small className="ml-6 truncate">
               {ui.description}
-            </Type>
+            </Text>
           </Stack>
         </Link>
 
@@ -101,9 +102,9 @@ export function DeviceIntegrationConnectionRow({
         >
           {/* Secondary info: drop it before squeezing the provider name.
               Sized against the main content container, not the viewport. */}
-          <Type muted small className="hidden whitespace-nowrap @3xl:block">
+          <Text muted small className="hidden whitespace-nowrap @3xl:block">
             {summary}
-          </Type>
+          </Text>
           <RequireScope scope="org:admin" level="component">
             <SimpleTooltip
               tooltip={

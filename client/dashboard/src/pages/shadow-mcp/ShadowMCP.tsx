@@ -7,7 +7,7 @@ import {
   eligibleShadowMCPAllowRulePolicies,
   shadowMCPPolicyState,
 } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
-import { SkeletonTable } from "@/components/ui/skeleton";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
 import { useMembers } from "@gram/client/react-query/members.js";

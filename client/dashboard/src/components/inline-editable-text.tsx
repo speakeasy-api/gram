@@ -3,7 +3,7 @@ import {
   InputGroupAddon,
   InputGroupButton,
   InputGroupInput,
-} from "@/components/ui/input-group";
+} from "@/components/ui/InputGroup";
 import { cn } from "@/lib/utils";
 import { Check, Pencil } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -114,7 +114,7 @@ export function InlineEditableText({
               onMouseDown={(event) => event.preventDefault()}
               size="icon-sm"
               title="Save change"
-              variant="ghost"
+              variant="tertiary"
             >
               <Check />
             </InputGroupButton>

@@ -8,14 +8,6 @@ vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => children,
 }));
 
-vi.mock("@speakeasy-api/moonshine", () => {
-  const Button = ({ children }: { children: ReactNode }) => (
-    <button>{children}</button>
-  );
-  Button.Text = ({ children }: { children: ReactNode }) => children;
-  return { Button };
-});
-
 afterEach(cleanup);
 
 const defaultProps = {

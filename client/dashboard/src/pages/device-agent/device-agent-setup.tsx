@@ -1,22 +1,23 @@
 import { CodeBlock } from "@/components/code";
 import { Page } from "@/components/page-layout";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Dialog } from "@/components/ui/dialog";
-import { Link as ExternalLink } from "@/components/ui/link";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
+import { Dialog } from "@/components/ui/Dialog";
+import { Link as ExternalLink } from "@/components/ui/Link";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
+import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useAgentToken } from "@/hooks/useAgentToken";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ChevronRight, Download } from "lucide-react";
 import React, { useEffect, useState } from "react";
@@ -201,15 +202,15 @@ speakeasyd -service start`,
 };
 
 function SubHeading({ children }: { children: React.ReactNode }) {
-  return <Type className="mb-2 font-medium">{children}</Type>;
+  return <Text className="mb-2 font-medium">{children}</Text>;
 }
 
 // StepNote renders the muted "why" line under a step's command block.
 function StepNote({ children }: { children: React.ReactNode }) {
   return (
-    <Type small muted>
+    <Text small muted>
       {children}
-    </Type>
+    </Text>
   );
 }
 
@@ -307,9 +308,9 @@ function ManualDownload({ os }: { os: OsKey }) {
 
   if (isLoading) {
     return (
-      <Type small muted>
+      <Text small muted>
         Loading the latest release…
-      </Type>
+      </Text>
     );
   }
 
@@ -317,13 +318,17 @@ function ManualDownload({ os }: { os: OsKey }) {
   const cli = data?.latest?.["speakeasy"];
   if (isError || !daemon || !cli) {
     return (
-      <Type small muted>
+      <Text small muted>
         Couldn't load the latest release — open the{" "}
-        <ExternalLink to={MANIFEST_URL} external>
+        <ExternalLink
+          href={MANIFEST_URL}
+          target="_blank"
+          iconSuffixName="external-link"
+        >
           release manifest
         </ExternalLink>{" "}
         for the current version and download URLs.
-      </Type>
+      </Text>
     );
   }
 
@@ -381,10 +386,10 @@ function ManualDownload({ os }: { os: OsKey }) {
           );
         })}
       </div>
-      <Type small muted>
+      <Text small muted>
         Hover a button for its <code>sha256</code>. Then press{" "}
         <strong className="font-medium">Next step</strong>.
-      </Type>
+      </Text>
     </div>
   );
 }
@@ -442,16 +447,16 @@ function BinaryLegend() {
 function ManualIdentity() {
   return (
     <div className="flex flex-col gap-4">
-      <Type muted>
+      <Text muted>
         On a device that isn't MDM-managed, set identity by signing in once
         after installing with no <code>managed.json</code> required.
-      </Type>
+      </Text>
       <CodeBlock language="bash">{`speakeasy enroll`}</CodeBlock>
-      <Type small muted>
+      <Text small muted>
         It opens a browser, you sign in, and the agent stores your email locally
         in <code>local.json</code>. If IT later pushes a{" "}
         <code>managed.json</code>, that takes precedence.
-      </Type>
+      </Text>
     </div>
   );
 }
@@ -579,23 +584,23 @@ function FleetIdentity() {
 
   return (
     <div className="flex flex-col gap-8">
-      <Type muted>
+      <Text muted>
         On an MDM-managed device the agent reads its identity from a{" "}
         <code>managed.json</code> that IT deploys (Kandji, Jamf, Intune, ...)
         with no per-user enrollment. IT owns this file; the agent only reads it,
         and it wins over anything a user sets locally.
-      </Type>
+      </Text>
 
       <div>
         <SubHeading>File location</SubHeading>
-        <Type small muted className="mb-3">
+        <Text small muted className="mb-3">
           Deploy the file to the fixed system path for each OS. Create the
           directory <code>0755</code> and the file <code>0640</code> (or
           equivalent ACLs on Windows). The file must be{" "}
           <strong>readable by the user the agent runs as</strong> — the agent
           runs as the logged-in user, not root. The agent only reads this file;
           it never writes it.
-        </Type>
+        </Text>
         <Table headers={["OS", "Path", "Owner"]}>
           {MANAGED_CONFIG_PATHS.map((row) => (
             <tr key={row.os} className="border-t">
@@ -612,7 +617,7 @@ function FleetIdentity() {
         <CodeBlock language="json" slots={slots}>
           {exampleManagedJson}
         </CodeBlock>
-        <Type small muted className="mt-2">
+        <Text small muted className="mt-2">
           <code>org_slug</code> and <code>org_name</code> are pre-filled for
           this org. <code>email</code> is per-user; have your MDM substitute its
           per-user email variable (Kandji / Jamf <code>$EMAIL</code>, or your
@@ -623,7 +628,7 @@ function FleetIdentity() {
             {hasExistingAgentKey ? "Rotate token" : "Generate token"}
           </strong>{" "}
           in the example to mint the <code>org_token</code>.
-        </Type>
+        </Text>
 
         <div className="mt-4 flex flex-col gap-3">
           {generatedToken && (
@@ -650,7 +655,7 @@ function FleetIdentity() {
           )}
 
           {isError && (
-            <Alert variant="destructive">
+            <Alert variant="error">
               <Icon name="triangle-alert" className="h-4 w-4" />
               <AlertTitle>Couldn't generate a token</AlertTitle>
               <AlertDescription>
@@ -668,7 +673,7 @@ function FleetIdentity() {
 
       <div>
         <SubHeading>Deploying via MDM</SubHeading>
-        <Type small muted>
+        <Text small muted>
           Package <code>managed.json</code> as a custom configuration profile
           that drops the file at the path above with the right permissions, then
           scope it to your target device groups. <code>org_token</code> is a
@@ -676,7 +681,7 @@ function FleetIdentity() {
           don't commit it or paste it into chat. If the agent isn't picking up
           the file, confirm the path with <code>speakeasy config path</code>,
           check that it's readable by the logged-in user, and validate the JSON.
-        </Type>
+        </Text>
       </div>
 
       <Dialog open={rotateConfirmOpen} onOpenChange={setRotateConfirmOpen}>
@@ -687,7 +692,7 @@ function FleetIdentity() {
               This expires the token currently deployed in your MDM settings.
             </Dialog.Description>
           </Dialog.Header>
-          <Alert variant="destructive">
+          <Alert variant="error">
             <Icon name="triangle-alert" className="h-4 w-4" />
             <AlertTitle>
               Your current MDM integration will stop working
@@ -735,10 +740,10 @@ const MANAGED_CONFIG_PATHS = [
 function IdentityStep() {
   return (
     <div className="flex flex-col gap-6">
-      <Type small muted>
+      <Text small muted>
         How the agent learns who's on the device. Fleet is the recommended path
         for an org; personal enrollment is handy for testing.
-      </Type>
+      </Text>
       <Tabs defaultValue="fleet" className="gap-6">
         <TabsList className="grid h-auto w-full grid-cols-2 items-stretch gap-3 bg-transparent p-0">
           <SetupTab
@@ -999,9 +1004,9 @@ export function DeviceAgentSetup(): React.JSX.Element {
               platform's walkthrough covers it.
             </AlertDescription>
           </Alert>
-          <Type small muted>
+          <Text small muted>
             Pick the platform you're installing on to walk through setup.
-          </Type>
+          </Text>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {OS_ORDER.map((os) => (
               <OsTile key={os} os={os} onClick={() => setSheetOs(os)} />

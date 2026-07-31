@@ -1,4 +1,4 @@
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import { CircleDashed, TriangleAlert } from "lucide-react";
 import type { McpActivityStatus } from "./mcp-activity";

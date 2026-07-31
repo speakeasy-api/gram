@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { LinkIcon, TerminalIcon, UploadIcon } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { FullWidthUpload } from "@/components/upload";
-import { Spinner } from "@/components/ui/spinner";
+import { Spinner } from "@/components/ui/Spinner";
 import { useMutation } from "@tanstack/react-query";
 import { useSdkClient } from "@/contexts/Sdk";
 import { UploadOpenAPIv3Result } from "@gram/client/models/components/uploadopenapiv3result.js";

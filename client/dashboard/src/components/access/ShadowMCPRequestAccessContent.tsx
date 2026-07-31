@@ -1,9 +1,11 @@
 import { GramLogo } from "@/components/gram-logo";
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import { useSession } from "@/contexts/Auth";
 import { buildLoginRedirectURL } from "@/lib/utils";
 import { useRiskCreatePolicyBypassRequestMutation } from "@gram/client/react-query/riskCreatePolicyBypassRequest.js";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { useEffect, useState } from "react";
 
 const REQUEST_TOKEN_STORAGE_KEY = "riskPolicyBypassRequestToken";
@@ -164,12 +166,12 @@ function RequestAccessMessage({
           <Icon name="check" className="text-primary h-5 w-5" />
         </div>
         <Stack gap={1} align="center">
-          <Type variant="subheading" className="text-center">
+          <Text variant="subheading" className="text-center">
             Request sent
-          </Type>
-          <Type muted small className="text-center">
+          </Text>
+          <Text muted small className="text-center">
             You can close this page.
-          </Type>
+          </Text>
         </Stack>
       </Stack>
     );
@@ -182,9 +184,9 @@ function RequestAccessMessage({
           name="loader-circle"
           className="text-muted-foreground h-6 w-6 animate-spin"
         />
-        <Type muted small className="text-center">
+        <Text muted small className="text-center">
           Redirecting to sign in...
-        </Type>
+        </Text>
       </Stack>
     );
   }
@@ -196,13 +198,13 @@ function RequestAccessMessage({
           <Icon name="circle-x" className="text-destructive h-5 w-5" />
         </div>
         <Stack gap={1} align="center">
-          <Type variant="subheading" className="text-center">
+          <Text variant="subheading" className="text-center">
             Link expired
-          </Type>
-          <Type muted small className="text-center">
+          </Text>
+          <Text muted small className="text-center">
             This request link is no longer valid. Try the blocked MCP action
             again to generate a new request.
-          </Type>
+          </Text>
         </Stack>
       </Stack>
     );
@@ -215,12 +217,12 @@ function RequestAccessMessage({
           <Icon name="circle-x" className="text-destructive h-5 w-5" />
         </div>
         <Stack gap={1} align="center">
-          <Type variant="subheading" className="text-center">
+          <Text variant="subheading" className="text-center">
             Request failed
-          </Type>
-          <Type muted small className="text-center">
+          </Text>
+          <Text muted small className="text-center">
             We could not send this request. Check your connection and try again.
-          </Type>
+          </Text>
         </Stack>
         <Button variant="secondary" onClick={onRetry}>
           <Button.LeftIcon>
@@ -238,9 +240,9 @@ function RequestAccessMessage({
         name="loader-circle"
         className="text-muted-foreground h-6 w-6 animate-spin"
       />
-      <Type muted small className="text-center">
+      <Text muted small className="text-center">
         {isPending ? "Submitting request..." : "Preparing request..."}
-      </Type>
+      </Text>
     </Stack>
   );
 }

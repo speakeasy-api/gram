@@ -1,18 +1,18 @@
 import { formatCost } from "@/lib/money";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { type QueryRow } from "@gram/client/models/components/queryrow.js";
@@ -468,7 +468,7 @@ export function EntityProfile({
   // The default dimension table; replaced by `tableOverride` (the session list)
   // when one is supplied.
   const dimensionTable = isError ? (
-    <Type className="text-muted-foreground">Failed to load cost data.</Type>
+    <Text className="text-muted-foreground">Failed to load cost data.</Text>
   ) : (
     <CostTable
       // Remount on a lens switch so the default sort (work units vs cost)

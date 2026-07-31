@@ -1,6 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
-import { Type } from "@/components/ui/type";
-import { Button } from "@speakeasy-api/moonshine";
+import { Text } from "@/components/ui/Text";
+import { Button } from "@/components/ui/Button";
 import type { ReactNode } from "react";
 import type { ProtectedResourceProbeStatus } from "./useProtectedResourceMetadata";
 
@@ -32,11 +32,11 @@ export function AuthenticationSetupActions({
             <Button.Text>Use Discovered</Button.Text>
           </Button>
         ) : (
-          <Type muted small>
+          <Text muted small>
             {probing
               ? "Checking for advertised OAuth metadata…"
               : "OAuth metadata was not advertised by this server."}
-          </Type>
+          </Text>
         )}
         <Button variant="secondary" onClick={onStartManual}>
           <Button.Text>Configure Manually</Button.Text>

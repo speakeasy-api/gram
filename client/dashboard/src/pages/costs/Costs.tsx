@@ -6,7 +6,7 @@ import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
-} from "@/components/ui/tabs";
+} from "@/components/ui/Tabs";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { BudgetsContent } from "@/pages/budgets/Budgets";
 import { useMemo, useState, type JSX } from "react";

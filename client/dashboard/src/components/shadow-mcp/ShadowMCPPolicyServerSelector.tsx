@@ -1,18 +1,14 @@
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Type } from "@/components/ui/type";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Input } from "@/components/ui/Input";
+import { Text } from "@/components/ui/Text";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
-import {
-  Badge,
-  Button,
-  type Column,
-  Dialog,
-  Icon,
-  type SortDescriptor,
-  Table,
-  sortTableData,
-} from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Icon } from "@/components/ui/Icon";
+import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
+import { sortTableData } from "@/components/ui/Table/sorting";
 import { useCallback, useDeferredValue, useMemo, useState } from "react";
 import {
   ShadowMCPInventoryServerCell,
@@ -118,13 +114,13 @@ function EmptyServerSelection({ onSelect }: { onSelect: () => void }) {
           className="text-muted-foreground h-6 w-6"
         />
       </div>
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         No servers allowed yet
-      </Type>
-      <Type small muted className="mb-4 max-w-md">
+      </Text>
+      <Text small muted className="mb-4 max-w-md">
         Select any Shadow MCP servers that should remain available when this
         policy blocks access.
-      </Type>
+      </Text>
       <Button type="button" variant="primary" onClick={onSelect}>
         Select servers
       </Button>
@@ -161,9 +157,9 @@ const APPLIED_SERVER_COLUMNS: Column<PolicyServerChange>[] = [
     render: ({ server }) => {
       const label = serverLabel(server);
       return (
-        <Type variant="small" className="truncate font-medium" title={label}>
+        <Text variant="small" className="truncate font-medium" title={label}>
           {label}
-        </Type>
+        </Text>
       );
     },
   },
@@ -174,14 +170,14 @@ const APPLIED_SERVER_COLUMNS: Column<PolicyServerChange>[] = [
     sortValue: ({ server }) => server.canonicalServerUrl.trim().toLowerCase(),
     width: "1fr",
     render: ({ server }) => (
-      <Type
+      <Text
         muted
         small
         className="truncate font-mono text-xs"
         title={server.canonicalServerUrl}
       >
         {server.canonicalServerUrl}
-      </Type>
+      </Text>
     ),
   },
 ];
@@ -338,7 +334,7 @@ export function ShadowMCPPolicyServerSelector({
         sortValue: (server) => server.lastCalled?.getTime() ?? 0,
         width: "0.7fr",
         render: (server) => (
-          <Type variant="small">{formatShortDate(server.lastCalled)}</Type>
+          <Text variant="small">{formatShortDate(server.lastCalled)}</Text>
         ),
       },
       {
@@ -385,16 +381,16 @@ export function ShadowMCPPolicyServerSelector({
   let selectionContent: JSX.Element;
   if (isLoading) {
     selectionContent = (
-      <Type muted small>
+      <Text muted small>
         Loading Shadow MCP inventory…
-      </Type>
+      </Text>
     );
   } else if (error) {
     selectionContent = (
       <div className="border-border bg-muted/20 flex items-center justify-between gap-4 rounded-md border px-4 py-3">
-        <Type muted small>
+        <Text muted small>
           Shadow MCP inventory could not be loaded.
-        </Type>
+        </Text>
         <Button type="button" variant="tertiary" size="sm" onClick={onRetry}>
           Retry
         </Button>
@@ -415,17 +411,17 @@ export function ShadowMCPPolicyServerSelector({
     >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <Type
+          <Text
             id="shadow-mcp-policy-server-selector-title"
             variant="body"
             className="font-medium"
           >
             Servers allowed by this policy
-          </Type>
-          <Type muted small className="mt-1">
+          </Text>
+          <Text muted small className="mt-1">
             These Shadow MCP servers remain available when the policy blocks
             access.
-          </Type>
+          </Text>
         </div>
         {showHeaderAction && (
           <Button
@@ -443,9 +439,9 @@ export function ShadowMCPPolicyServerSelector({
       {selectionContent}
 
       {hasAppliedRows && (
-        <Type muted small>
+        <Text muted small>
           {selectedCountLabel(selectedURLs.size)}
-        </Type>
+        </Text>
       )}
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -487,18 +483,18 @@ export function ShadowMCPPolicyServerSelector({
               rowKey={(server) => server.canonicalServerUrl}
               onRowClick={(server) => toggleURL(server.canonicalServerUrl)}
               noResultsMessage={
-                <Type muted small>
+                <Text muted small>
                   {selectorEmptyMessage(deferredSearch)}
-                </Type>
+                </Text>
               }
               className="min-h-0 content-start overflow-y-auto"
             />
           </Table>
 
           <Dialog.Footer className="items-center sm:justify-between">
-            <Type muted small>
+            <Text muted small>
               {draftURLs.size} of {servers.length} servers selected
-            </Type>
+            </Text>
             <div className="flex items-center gap-2">
               <Button
                 type="button"

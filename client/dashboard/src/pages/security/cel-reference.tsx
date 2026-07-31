@@ -4,7 +4,7 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
+} from "@/components/ui/Sheet";
 import { BookOpen } from "lucide-react";
 import { useState, type JSX } from "react";
 import { useCelEngine } from "./use-cel-engine";

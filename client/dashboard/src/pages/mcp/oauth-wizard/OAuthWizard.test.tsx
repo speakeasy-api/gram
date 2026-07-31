@@ -118,29 +118,6 @@ vi.mock("@/components/FeatureRequestModal", () => ({
 
 // moonshine bundles dynamic icon imports that don't resolve in vitest. Stub
 // it down to plain HTML matching the existing test pattern.
-vi.mock("@speakeasy-api/moonshine", () => {
-  const Button = ({
-    children,
-    onClick,
-    disabled,
-  }: {
-    children: ReactNode;
-    onClick?: () => void;
-    disabled?: boolean;
-  }) => (
-    <button onClick={onClick} disabled={disabled}>
-      {children}
-    </button>
-  );
-  Button.Text = ({ children }: { children: ReactNode }) => children;
-  Button.RightIcon = ({ children }: { children: ReactNode }) => children;
-  return {
-    Button,
-    Stack: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-    Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
-  };
-});
-
 // ---------------------------------------------------------------------------
 // Now import the component (after mocks are registered).
 // ---------------------------------------------------------------------------

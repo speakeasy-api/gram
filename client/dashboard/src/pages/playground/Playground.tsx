@@ -1,14 +1,14 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
 import {
   useRegisterEnvironmentTelemetry,
@@ -30,7 +30,7 @@ import {
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateTemplate } from "@gram/client/react-query/template.js";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
-import { ResizablePanel } from "@speakeasy-api/moonshine";
+import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { useQueryClient } from "@tanstack/react-query";
 import { MessageCircle, Plus, ScrollTextIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -141,13 +141,13 @@ function PlaygroundEmptyState({ onCreate }: { onCreate: () => void }) {
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <MessageCircle className="text-muted-foreground h-6 w-6" />
       </div>
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         No MCP servers yet
-      </Type>
-      <Type small muted className="mb-4 max-w-md text-center">
+      </Text>
+      <Text small muted className="mb-4 max-w-md text-center">
         The playground lets you chat with tools from an MCP server. Create one
         to start testing.
-      </Type>
+      </Text>
       <RequireScope scope="mcp:write" level="component">
         {({ disabled }) => (
           <Button onClick={onCreate} disabled={disabled}>
@@ -269,7 +269,7 @@ function PlaygroundInner() {
   }
 
   const logsButton = (
-    <Button size="sm" variant="ghost" onClick={() => setShowLogs(!showLogs)}>
+    <Button size="sm" variant="tertiary" onClick={() => setShowLogs(!showLogs)}>
       <ScrollTextIcon className="mr-2 size-4" />
       {showLogs ? "Hide" : "Show"} Logs
     </Button>
@@ -326,7 +326,7 @@ function PlaygroundInner() {
             <div className="flex h-full flex-col">
               {!selectedServer && (
                 <div className="flex h-full items-center justify-center">
-                  <Type muted>Select an MCP server to start chatting</Type>
+                  <Text muted>Select an MCP server to start chatting</Text>
                 </div>
               )}
               {selectedServer?.kind === "toolset" && (

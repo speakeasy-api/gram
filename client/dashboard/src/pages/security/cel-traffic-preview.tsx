@@ -4,7 +4,7 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
+} from "@/components/ui/Sheet";
 import { cn } from "@/lib/utils";
 import { chatLoad } from "@gram/client/funcs/chatLoad.js";
 import { SortBy, SortOrder } from "@gram/client/models/operations/listchats.js";
