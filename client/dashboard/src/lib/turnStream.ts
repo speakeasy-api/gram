@@ -217,12 +217,16 @@ export async function streamTurn(args: {
                 messageIndex++;
                 sawTextThisMessage = false;
               }
+              const calls = parseFrameToolCalls(frame.tool_calls);
+              // A terminal row carries no tool calls and its text is already
+              // rendered, so it needs no step of its own. Opening one left an
+              // empty step hanging at the end of the turn, which reads as
+              // "still working" — the spinner that outlived the reply.
+              if (calls.length === 0) break;
               if (stepHasMessage) closeStep();
               openStep();
               stepHasMessage = true;
-              // The text is already on screen from its deltas; only the tool
-              // calls are new information.
-              for (const call of parseFrameToolCalls(frame.tool_calls)) {
+              for (const call of calls) {
                 writer.write({
                   type: "tool-input-available",
                   toolCallId: call.id,
