@@ -1223,8 +1223,8 @@ type GetUnproxiedMcpServerUsageTimeSeriesParams struct {
 }
 
 type UnproxiedMcpServerUsageBucket struct {
-	BucketDate string
-	CallCount  uint64
+	BucketDate string `ch:"bucket_date"`
+	CallCount  uint64 `ch:"call_count"`
 }
 
 // GetUnproxiedMcpServerUsageTimeSeries buckets Shadow MCP's per-trace

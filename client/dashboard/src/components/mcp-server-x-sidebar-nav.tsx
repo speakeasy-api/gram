@@ -13,6 +13,7 @@ import {
   getMcpServerArgs,
   remoteMcpRouteParam,
   tunneledMcpRouteParam,
+  unproxiedMcpRouteParam,
 } from "@/lib/sources";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -100,13 +101,17 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const activeTab = activeTabFromPath(location.pathname, idOrSlug);
   const isRemoteBacked = !!mcpServer?.remoteMcpServerId;
   const isTunneledBacked = !!mcpServer?.tunneledMcpServerId;
-  const isSourceBacked = isRemoteBacked || isTunneledBacked;
+  const isUnproxied = !!mcpServer?.unproxiedMcpServerId;
+  const isSourceBacked = isRemoteBacked || isTunneledBacked || isUnproxied;
   const canViewTeamAccess =
     !!mcpServer && hasScope("org:read") && hasScope("mcp:read", mcpServer.id);
 
   let authenticationDescription =
     "Attach a remote identity provider so users can access the upstream service.";
-  if (hasRemoteIdentityProvider) {
+  if (isUnproxied) {
+    authenticationDescription =
+      "Not applicable — the customer connects directly using the vendor's own credentials.";
+  } else if (hasRemoteIdentityProvider) {
     authenticationDescription =
       "A remote identity provider is attached to this server.";
   } else if (isTunneledBacked) {
@@ -128,6 +133,12 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       "tunneledmcp",
       tunneledMcpRouteParam({ id: mcpServer.tunneledMcpServerId }),
     );
+  } else if (mcpServer?.unproxiedMcpServerId) {
+    sourceDescription = "Backed by an unproxied MCP server.";
+    sourceHref = routes.sources.source.href(
+      "unproxiedmcp",
+      unproxiedMcpRouteParam({ id: mcpServer.unproxiedMcpServerId }),
+    );
   }
 
   const readinessChecks: ReadinessCheck[] = mcpServer
@@ -135,17 +146,22 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         {
           key: "server-url",
           label: "Server URL",
-          description: mcpUrl
-            ? "Endpoint is live and ready to connect to."
-            : "Add an endpoint so this server has a URL to connect to.",
-          ready: !!mcpUrl,
-          href: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_SERVER_URL_SECTION_ID}`,
+          description: isUnproxied
+            ? "Not applicable — unproxied servers have no Gram-hosted endpoint."
+            : mcpUrl
+              ? "Endpoint is live and ready to connect to."
+              : "Add an endpoint so this server has a URL to connect to.",
+          ready: isUnproxied || !!mcpUrl,
+          href: isUnproxied
+            ? undefined
+            : `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_SERVER_URL_SECTION_ID}`,
         },
         {
           key: "authentication",
           label: "Authentication",
           description: authenticationDescription,
           ready:
+            isUnproxied ||
             hasRemoteIdentityProvider ||
             (isTunneledBacked && !!userSessionIssuerId),
           href: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`,

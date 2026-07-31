@@ -69,16 +69,28 @@ export function UnproxiedMcpOverviewTab({
               No activity observed yet.
             </Text>
           ) : (
-            <div className="flex h-32 items-end gap-1">
+            <div className="flex items-end justify-start gap-3">
               {buckets.map((bucket) => (
                 <div
                   key={bucket.date}
-                  className="bg-primary/70 min-w-[4px] flex-1 rounded-t"
-                  style={{
-                    height: `${Math.max(4, (bucket.callCount / maxCount) * 100)}%`,
-                  }}
+                  className="flex w-12 flex-col items-center gap-1"
                   title={`${bucket.date}: ${bucket.callCount} call${bucket.callCount === 1 ? "" : "s"}`}
-                />
+                >
+                  <div className="flex h-24 w-full items-end">
+                    <div
+                      className="bg-primary/70 w-full rounded-t"
+                      style={{
+                        height: `${Math.max(4, (bucket.callCount / maxCount) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <Text small muted className="text-center">
+                    {bucket.callCount}
+                  </Text>
+                  <Text small muted className="text-center text-xs">
+                    {bucket.date.slice(5)}
+                  </Text>
+                </div>
               ))}
             </div>
           )}
