@@ -4485,6 +4485,17 @@ CREATE INDEX IF NOT EXISTS risk_results_excluded_exclusion_idx
 ON risk_results (excluded_exclusion_id)
 WHERE excluded_exclusion_id IS NOT NULL;
 
+-- Serves the False Positives tab (ListFalsePositiveRiskResults,
+-- CountFalsePositiveRiskResults): every other partial index on this table
+-- filters on false_positive_at IS NULL, so a project with a large
+-- risk_results table forced a sequential scan for the IS NOT NULL case. The
+-- (false_positive_at DESC, id DESC) trailing order matches the keyset
+-- pagination cursor exactly, letting the list query walk the index directly
+-- instead of sorting, and lets the count query run as an index-only scan.
+CREATE INDEX IF NOT EXISTS risk_results_project_false_positive_idx
+ON risk_results (project_id, false_positive_at DESC, id DESC)
+WHERE false_positive_at IS NOT NULL;
+
 -- risk_policy_eval_reviews is the durable "regression set" for a prompt-based
 -- risk policy: a reviewer's ground-truth verdict on whether a given chat session
 -- should be flagged by the policy. The policy-eval workbench replays the
