@@ -115,7 +115,10 @@ export function billedDaysFromCycles(cycles: BillingCycle[]): BilledDays {
   for (const c of cycles) {
     const daysSum = c.days.reduce((sum, d) => sum + d.tokens, 0);
     if (daysSum === 0) {
-      if (c.tokens === 0) {
+      // A zero-token cycle is fully known ONLY once sealed: the active
+      // cycle reads zero before its first snapshot lands, and marking it
+      // covered would report billed zeros over real live traffic.
+      if (c.tokens === 0 && !c.current) {
         covered.push({ start: c.start.getTime(), end: c.end.getTime() });
       }
       continue;
@@ -200,7 +203,7 @@ export function formatPeriodLabel(period: BillingPeriod): string {
 // Whether the billed daily series fully answers a period: its bounds sit on
 // UTC day boundaries and every day falls inside a covered cycle window.
 // Cycles are contiguous, so a sorted sweep over the windows suffices.
-export function periodCoveredByBilled(
+function periodCoveredByBilled(
   period: { start: Date; end: Date },
   covered: { start: number; end: number }[],
 ): boolean {
@@ -219,7 +222,7 @@ export function periodCoveredByBilled(
 
 // Sum of a per-UTC-day series over a period. Keys are "YYYY-MM-DD", which
 // parse back to the day's start instant.
-export function sumDaysInPeriod(
+function sumDaysInPeriod(
   byDate: Map<string, number>,
   period: { start: Date; end: Date },
 ): number {
@@ -258,6 +261,49 @@ export function overageDaysFromBilled(
     }
   }
   return overage;
+}
+
+// The billed answers for one period, resolved once so the usage card, the
+// chart headline, and the details table all read the same numbers — their
+// agreement is structural, not three recomputations that must be kept in
+// lockstep.
+export type PeriodFigures = {
+  // Whether the billed daily series fully answers the period's window.
+  covered: boolean;
+  // Billed tokens in the period; null when the billed data can't answer it
+  // (consumers fall back to the analytics totals).
+  tokens: number | null;
+  // Billed overage tokens in the period; null when not attributable (no
+  // contracted allowance, or an uncovered window).
+  overage: number | null;
+};
+
+export function resolvePeriodFigures(
+  period: BillingPeriod,
+  billedDays: BilledDays,
+  overageDays: Map<string, number> | null,
+  limit: number | null,
+): PeriodFigures {
+  const cycle = period.cycle;
+  const covered = periodCoveredByBilled(period, billedDays.covered);
+  if (cycle) {
+    return {
+      covered,
+      tokens: cycle.tokens,
+      overage: limit != null ? Math.max(0, cycle.tokens - limit) : null,
+    };
+  }
+  if (!covered) {
+    return { covered, tokens: null, overage: null };
+  }
+  return {
+    covered,
+    tokens: sumDaysInPeriod(billedDays.byDate, period),
+    overage:
+      overageDays != null
+        ? Math.round(sumDaysInPeriod(overageDays, period))
+        : null,
+  };
 }
 
 // React Query staleTime for data scoped to a period: closed windows are

@@ -14,6 +14,7 @@ import {
   cyclesFromTum,
   overageDaysFromBilled,
   periodDisplayRange,
+  resolvePeriodFigures,
 } from "./billing-cycles";
 import { TumDefinitionTooltip } from "./tum-definition";
 import { TumDetailsTable } from "./tum-details-table";
@@ -69,6 +70,17 @@ export const TumUsageSection = (): JSX.Element => {
     [cycles, billedDays, monthlyLimit],
   );
 
+  // The billed answers for the effective period, resolved once and handed to
+  // the card, the chart headline, and the details table — their agreement is
+  // structural, not three parallel recomputations.
+  const figures = useMemo(
+    () =>
+      period == null
+        ? null
+        : resolvePeriodFigures(period, billedDays, overageDays, monthlyLimit),
+    [period, billedDays, overageDays, monthlyLimit],
+  );
+
   return (
     <Page.Section>
       <Page.Section.Title>Billing</Page.Section.Title>
@@ -78,7 +90,7 @@ export const TumUsageSection = (): JSX.Element => {
         excluded, as is inference the platform runs itself.
       </Page.Section.Description>
       <Page.Section.Body>
-        {tum && period ? (
+        {tum && period && figures ? (
           <Stack gap={3} className="mb-6">
             <Stack direction="horizontal" align="center" gap={1}>
               <Text variant="body" className="font-medium">
@@ -118,8 +130,7 @@ export const TumUsageSection = (): JSX.Element => {
             <PeriodUsageCard
               period={period}
               cycles={cycles}
-              billedDays={billedDays}
-              overageDays={overageDays}
+              figures={figures}
               limit={monthlyLimit}
             />
             <div className="mt-8">
@@ -128,6 +139,7 @@ export const TumUsageSection = (): JSX.Element => {
                 period={period}
                 projectNames={projectNames}
                 billedDays={billedDays}
+                figures={figures}
                 onSelectRange={selectBarRange}
               />
             </div>
@@ -139,6 +151,7 @@ export const TumUsageSection = (): JSX.Element => {
                 limit={monthlyLimit}
                 billedDays={billedDays}
                 overageDays={overageDays}
+                figures={figures}
               />
             </div>
           </Stack>

@@ -8,17 +8,37 @@ import { useOrganization } from "@/contexts/Auth";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useQuery } from "@tanstack/react-query";
 import {
-  type BilledDays,
   type BillingCycle,
   type BillingPeriod,
+  type PeriodFigures,
   formatCycleName,
   formatPeriodLabel,
-  periodCoveredByBilled,
-  sumDaysInPeriod,
 } from "./billing-cycles";
 import { tumDetailsQuery } from "./tum-queries";
 
 const HOUR_MS = 60 * 60 * 1000;
+
+// Keyboard-reachable info tooltip beside a stat label: a real button so the
+// explanation is reachable by keyboard focus, not just pointer hover.
+function InfoHint({
+  label,
+  tooltip,
+}: {
+  label: string;
+  tooltip: string;
+}): JSX.Element {
+  return (
+    <SimpleTooltip tooltip={tooltip}>
+      <button
+        type="button"
+        aria-label={label}
+        className="inline-flex shrink-0 cursor-help"
+      >
+        <Info aria-hidden className="size-3" />
+      </button>
+    </SimpleTooltip>
+  );
+}
 
 // The selectable units for the average-rate stat.
 type AverageUnit = "hour" | "day" | "week";
@@ -32,11 +52,22 @@ const AVERAGE_UNITS: { unit: AverageUnit; ms: number }[] = [
 // The window the period's averages describe: the full window once it has
 // passed, the elapsed portion while it is still underway (a whole-window
 // denominator would dilute the rate with time that hasn't happened yet).
-// Clamped to at least an hour so a just-opened window doesn't extrapolate
-// absurd rates.
-function averagingWindowMs(period: BillingPeriod, now: number): number {
-  const end = Math.min(now, period.end.getTime());
-  return Math.max(end - period.start.getTime(), HOUR_MS);
+// Which cycle is active is the server's call — a sealed cycle always
+// averages over its full window, so a skewed browser clock can't shrink a
+// complete cycle's denominator. Clamped to at least an hour so a just-opened
+// window doesn't extrapolate absurd rates.
+function averagingWindow(
+  period: BillingPeriod,
+  now: number,
+): { ms: number; partial: boolean } {
+  const clampToNow = period.cycle ? period.cycle.current : true;
+  const end = clampToNow
+    ? Math.min(now, period.end.getTime())
+    : period.end.getTime();
+  return {
+    ms: Math.max(end - period.start.getTime(), HOUR_MS),
+    partial: clampToNow && period.end.getTime() > now,
+  };
 }
 
 // One average-rate figure with a unit switcher: the period's tokens expressed
@@ -44,18 +75,34 @@ function averagingWindowMs(period: BillingPeriod, now: number): number {
 function AverageStat({
   period,
   tokens,
+  failed,
 }: {
   period: BillingPeriod;
-  // Billed tokens within the period; null while the total is still loading.
+  // Billed tokens within the period; null while the total is still loading
+  // or when the fallback request failed.
   tokens: number | null;
+  // Whether the total is null because the fallback request failed.
+  failed: boolean;
 }): JSX.Element {
   const [unit, setUnit] = useState<AverageUnit>("day");
-  const now = Date.now();
-  const windowMs = averagingWindowMs(period, now);
+  const avgWindow = averagingWindow(period, Date.now());
   const unitMs = AVERAGE_UNITS.find((u) => u.unit === unit)?.ms ?? HOUR_MS;
   const average =
-    tokens != null ? Math.round((tokens * unitMs) / windowMs) : null;
-  const stillRunning = period.end.getTime() > now;
+    tokens != null ? Math.round((tokens * unitMs) / avgWindow.ms) : null;
+
+  let value: JSX.Element;
+  if (average != null) {
+    value = (
+      <span className="text-xl font-semibold tabular-nums">
+        {average.toLocaleString()}
+      </span>
+    );
+  } else if (failed) {
+    value = <span className="text-xl font-semibold tabular-nums">—</span>;
+  } else {
+    value = <Skeleton className="h-7 w-24" />;
+  }
+
   return (
     <div className="flex flex-col gap-0.5">
       {/* Pinned to the text-xs line height so the pill's chrome overflows
@@ -76,31 +123,16 @@ function AverageStat({
             </ToggleButton>
           ))}
         </span>
-        <SimpleTooltip
+        <InfoHint
+          label="How the average is calculated"
           tooltip={
-            stillRunning
+            avgWindow.partial
               ? "Averaged over the elapsed portion of the selected period."
               : "Averaged over the full selected period."
           }
-        >
-          {/* A real button so the explanation is reachable by keyboard
-              focus, not just pointer hover. */}
-          <button
-            type="button"
-            aria-label="How the average is calculated"
-            className="inline-flex shrink-0 cursor-help"
-          >
-            <Info aria-hidden className="size-3" />
-          </button>
-        </SimpleTooltip>
+        />
       </span>
-      {average != null ? (
-        <span className="text-xl font-semibold tabular-nums">
-          {average.toLocaleString()}
-        </span>
-      ) : (
-        <Skeleton className="h-7 w-24" />
-      )}
+      {value}
     </div>
   );
 }
@@ -124,17 +156,7 @@ function Stat({
     <div className="flex flex-col gap-0.5">
       <span className="text-muted-foreground flex h-4 items-center gap-1 text-xs">
         {label}
-        {hint && (
-          <SimpleTooltip tooltip={hint}>
-            <button
-              type="button"
-              aria-label={`About ${label}`}
-              className="inline-flex shrink-0 cursor-help"
-            >
-              <Info aria-hidden className="size-3" />
-            </button>
-          </SimpleTooltip>
-        )}
+        {hint && <InfoHint label={`About ${label}`} tooltip={hint} />}
       </span>
       {value != null ? (
         <span
@@ -186,34 +208,29 @@ function overageHintFor(
 }
 
 /**
- * Resolves the usage card's figures for the effective period. Full cycles
- * render their billed position directly; custom ranges sum the billed daily
- * series when it covers every day of the range (falling back to the shared
- * details query's analytics total when it doesn't) and attribute overage by
- * the covered cycles' allowance-crossing days — the same numbers the details
- * table's Overage column pins to.
+ * Resolves the usage card's numbers for the effective period from the shared
+ * PeriodFigures (the same object the chart headline and details table read),
+ * falling back to the analytics total from the shared details query for
+ * ranges the billed daily series can't answer.
  */
 export function PeriodUsageCard({
   period,
   cycles,
-  billedDays,
-  overageDays,
+  figures,
   limit,
 }: {
   period: BillingPeriod;
   cycles: BillingCycle[];
-  billedDays: BilledDays;
-  // Per-day billed overage across covered cycles; null when no allowance.
-  overageDays: Map<string, number> | null;
+  // The billed answers for the period, resolved once in the section.
+  figures: PeriodFigures;
   limit: number | null;
 }): JSX.Element {
   const client = useGramContext();
   const organization = useOrganization();
   const fullCycle = period.cycle;
-  const covered = periodCoveredByBilled(period, billedDays.covered);
   // Fallback total for ranges the billed daily series can't answer — the
   // same request (identical query key) the chart and details table share.
-  const { data: details } = useQuery(
+  const { data: details, isError } = useQuery(
     tumDetailsQuery({ client, orgId: organization.id, period }),
   );
 
@@ -230,29 +247,19 @@ export function PeriodUsageCard({
     [fullCycle, cycles, period],
   );
 
-  let tokens: number | null;
-  if (fullCycle) {
-    tokens = fullCycle.tokens;
-  } else if (covered) {
-    tokens = sumDaysInPeriod(billedDays.byDate, period);
-  } else {
-    tokens = details?.totals?.totalTokens ?? null;
-  }
-
-  let overage: number | null = null;
-  if (limit != null && fullCycle) {
-    overage = Math.max(0, fullCycle.tokens - limit);
-  } else if (covered && overageDays != null) {
-    overage = Math.round(sumDaysInPeriod(overageDays, period));
-  }
+  const tokens = figures.tokens ?? details?.totals?.totalTokens ?? null;
+  // Only the fallback path depends on the details request; when it failed
+  // with nothing cached, say so instead of skeleting forever.
+  const failed = figures.tokens == null && !details && isError;
 
   return (
     <TumUsageCard
       period={period}
       containingCycle={containingCycle}
       tokens={tokens}
-      overage={overage}
+      overage={figures.overage}
       limit={limit}
+      failed={failed}
     />
   );
 }
@@ -271,6 +278,7 @@ function TumUsageCard({
   tokens,
   overage,
   limit,
+  failed,
 }: {
   // The effective page period the card describes.
   period: BillingPeriod;
@@ -284,6 +292,9 @@ function TumUsageCard({
   overage: number | null;
   // Contracted monthly allowance; null when the org has no contracted cap.
   limit: number | null;
+  // Whether the tokens total is unavailable because its request failed —
+  // rendered as an explicit dash, never as an endless loading skeleton.
+  failed: boolean;
 }): JSX.Element {
   const fullCycle = period.cycle;
 
@@ -298,6 +309,18 @@ function TumUsageCard({
       )}
     </>
   );
+
+  let tokensValue: string | null;
+  if (tokens != null) {
+    tokensValue = tokens.toLocaleString();
+  } else if (failed) {
+    tokensValue = "—";
+  } else {
+    tokensValue = null;
+  }
+  const tokensHint = failed
+    ? "Couldn't load usage for this range. Try again shortly."
+    : undefined;
 
   const overageValue = overage != null ? overage.toLocaleString() : "—";
   const meter =
@@ -315,10 +338,7 @@ function TumUsageCard({
         {fullCycle ? formatCycleName(fullCycle) : rangeTitle}
       </div>
       <div className="flex flex-wrap items-start gap-x-10 gap-y-3">
-        <Stat
-          label="Tokens Managed"
-          value={tokens != null ? tokens.toLocaleString() : null}
-        />
+        <Stat label="Tokens Managed" value={tokensValue} hint={tokensHint} />
         {fullCycle != null && (
           <Stat
             label="Included allowance"
@@ -334,7 +354,7 @@ function TumUsageCard({
             hint={overageHintFor(fullCycle, overage)}
           />
         )}
-        <AverageStat period={period} tokens={tokens} />
+        <AverageStat period={period} tokens={tokens} failed={failed} />
         {usedPercent != null && (
           <span
             className={cn(

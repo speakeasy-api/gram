@@ -6,8 +6,8 @@ import { useMemo, useState } from "react";
 import {
   type BilledDays,
   type BillingPeriod,
+  type PeriodFigures,
   bucketDateKey,
-  periodCoveredByBilled,
 } from "./billing-cycles";
 import {
   BREAKDOWN_TOTAL,
@@ -31,13 +31,17 @@ export function TumTokenBreakdown({
   period,
   projectNames,
   billedDays,
+  figures,
   onSelectRange,
 }: {
   period: BillingPeriod;
   // Project id → name, for labeling the Project breakdown's UUID values.
   projectNames: Map<string, string>;
-  // The billed per-day series and the cycle windows it fully describes.
+  // The billed per-day series the headline stack plots.
   billedDays: BilledDays;
+  // The shared resolved figures — the coverage gate the card and details
+  // table also read.
+  figures: PeriodFigures;
   // Bar-click drill-down: narrows the page's period to the clicked bucket.
   onSelectRange: (start: Date, end: Date) => void;
 }): JSX.Element {
@@ -79,11 +83,11 @@ export function TumTokenBreakdown({
   // charting misleading numbers.
   const billedSeries = useMemo(() => {
     if (points.length === 0) return null;
-    if (!periodCoveredByBilled(period, billedDays.covered)) return null;
+    if (!figures.covered) return null;
     return points.map(
       (p) => billedDays.byDate.get(bucketDateKey(p.bucketTimeUnixNano)) ?? 0,
     );
-  }, [points, billedDays, period]);
+  }, [points, billedDays, figures.covered]);
 
   const breakdownPicker = (
     <BreakdownPicker

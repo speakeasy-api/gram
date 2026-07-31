@@ -10,22 +10,24 @@ import {
 // picker's parse label when it came from one (e.g. "Last 7 days").
 export type CustomRange = { start: Date; end: Date; label?: string };
 
-// The range picker's calendar hands back local midnights for both ends. The
-// page's data is bucketed by UTC day (matching the billing-cycle boundaries),
-// so a picked day means that UTC calendar day — otherwise a one-day pick
-// spans two UTC buckets and the chart grows a phantom extra day. The last day
-// is inclusive. Natural-language parses carry real times and pass through
-// untouched.
+// The range picker's calendar hands back the start of the local day for both
+// ends. The page's data is bucketed by UTC day (matching the billing-cycle
+// boundaries), so a picked day means that UTC calendar day — otherwise a
+// one-day pick spans two UTC buckets and the chart grows a phantom extra
+// day. The last day is inclusive. Natural-language parses carry real times
+// and pass through untouched.
 function customRangeFromPicker(
   from: Date,
   to: Date,
 ): { start: Date; end: Date } {
-  const isLocalMidnight = (d: Date) =>
-    d.getHours() === 0 &&
-    d.getMinutes() === 0 &&
-    d.getSeconds() === 0 &&
-    d.getMilliseconds() === 0;
-  if (!isLocalMidnight(from) || !isLocalMidnight(to)) {
+  // "Start of the local day", not "local midnight": on a DST spring-forward
+  // day that skips midnight (e.g. 00:00 → 01:00 in Chile or Cuba), the
+  // calendar pick lands at 01:00 and a midnight check would silently drop
+  // the UTC-day mapping for that pick.
+  const isStartOfLocalDay = (d: Date) =>
+    d.getTime() ===
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  if (!isStartOfLocalDay(from) || !isStartOfLocalDay(to)) {
     return { start: from, end: to };
   }
   return {
