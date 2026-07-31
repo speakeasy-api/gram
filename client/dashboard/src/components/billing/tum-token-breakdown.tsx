@@ -52,7 +52,7 @@ export function TumTokenBreakdown({
 
   const scope = { client, orgId: organization.id, period };
   // Shared with the details table (same key — one request).
-  const { data, isFetching } = useQuery(tumDetailsQuery(scope));
+  const { data, isFetching, isError } = useQuery(tumDetailsQuery(scope));
 
   const points = useMemo(() => data?.points ?? [], [data]);
 
@@ -107,6 +107,7 @@ export function TumTokenBreakdown({
       stackBy={stackBy}
       breakdownPicker={breakdownPicker}
       loading={isFetching && !data}
+      failed={!isFetching && !data && isError}
       onSelectRange={onSelectRange}
     />
   );

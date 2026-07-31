@@ -3915,9 +3915,14 @@ async function seedObservabilityData(init: {
 
       // Cache-heavy token mix (agent sessions replay large cached prompts);
       // ~15% are light API-style calls with little cache traffic. Sessions
-      // in the active billing cycle carry the overage boost.
+      // in the active billing cycle carry the overage boost, divided by the
+      // day's weekend session damping so every in-cycle day contributes
+      // roughly the same volume — otherwise an early-month seed whose only
+      // elapsed days are a weekend would miss the overage target.
       const cycleBoost =
-        dayStartMs >= currentCycleStartMs ? currentCycleBoost : 1;
+        dayStartMs >= currentCycleStartMs
+          ? currentCycleBoost / weekendFactor
+          : 1;
       const cacheDiv = r() < 0.15 ? 10 : 1;
       const inputTokens = Math.round(
         (800 + Math.floor(r() * 7_000)) * anonBoost * cycleBoost,

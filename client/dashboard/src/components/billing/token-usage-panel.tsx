@@ -90,6 +90,7 @@ export function TokenUsagePanel({
   stackBy,
   breakdownPicker,
   loading,
+  failed,
   onSelectRange,
 }: {
   // Gap-filled daily buckets from the billing details response — the axis
@@ -107,6 +108,9 @@ export function TokenUsagePanel({
   // the head of the control row.
   breakdownPicker: ReactNode;
   loading: boolean;
+  // Whether the details request failed with nothing to show — renders a
+  // distinct failure message so an outage can't read as an empty period.
+  failed: boolean;
   // Called when a bar is clicked with the bucket's time range — the caller
   // narrows the page's period to it (drill-down). Bars aren't clickable
   // without it.
@@ -130,7 +134,11 @@ export function TokenUsagePanel({
       headerControls={breakdownPicker}
       formatValue={formatTokens}
       formatAxisValue={formatTokensAxis}
-      emptyMessage="No token usage in this range."
+      emptyMessage={
+        failed
+          ? "Couldn't load usage for this range. Try again shortly."
+          : "No token usage in this range."
+      }
       loading={loading}
       onSelectRange={onSelectRange}
     />

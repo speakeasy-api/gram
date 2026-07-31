@@ -180,7 +180,7 @@ function overageHintFor(
 ): string | undefined {
   if (fullCycle) return undefined;
   if (overage == null) {
-    return "Overage can't be attributed for this range — it extends beyond the billed daily data.";
+    return "Overage can't be attributed for this range — it cannot be fully represented by the billed daily data.";
   }
   return "Tokens in this range recorded after the organization's cumulative cycle usage crossed the included allowance. The crossing day is prorated.";
 }

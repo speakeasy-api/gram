@@ -291,7 +291,7 @@ function totalTooltipFor(billedNormalized: boolean): string {
   if (billedNormalized) {
     return "Billed tokens under management, attributed across metrics by the analytics distribution.";
   }
-  return "Tokens for the selected range, from the analytics aggregates. This range extends beyond the billed daily data, so billed normalization does not apply.";
+  return "Tokens for the selected range, from the analytics aggregates. Billed normalization does not apply because this range cannot be fully represented by the billed daily data.";
 }
 
 // What the Overage column means in the current view: full-cycle attribution,
@@ -306,7 +306,7 @@ function overageTooltipFor(
   if (attributed) {
     return "The range's billed overage (tokens recorded after the cycle's cumulative usage crossed the included allowance), attributed to each metric by its tokens in that window. The crossing day is prorated.";
   }
-  return "Overage can't be attributed here — no contracted allowance is set, or the range extends beyond the billed daily data.";
+  return "Overage can't be attributed here — no contracted allowance is set, or the range cannot be fully represented by the billed daily data.";
 }
 
 /**

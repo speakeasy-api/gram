@@ -112,7 +112,14 @@ export const TumAdminSection = (): JSX.Element => {
           <Stack direction="horizontal" align="center" gap={3}>
             <Button
               onClick={handleSave}
-              disabled={mutation.isPending || limitInvalid || anchorDayInvalid}
+              // Gated on the prefill: saving before the current terms load
+              // would overwrite them with empty defaults.
+              disabled={
+                !prefilled ||
+                mutation.isPending ||
+                limitInvalid ||
+                anchorDayInvalid
+              }
             >
               {mutation.isPending ? "SAVING..." : "SAVE CONTRACT TERMS"}
             </Button>
