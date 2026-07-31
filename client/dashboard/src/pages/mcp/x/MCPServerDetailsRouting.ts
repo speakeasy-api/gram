@@ -80,10 +80,10 @@ export function initialTabFromHash(
 }
 
 // resolveTabForBackend maps a requested tab onto one that exists for the
-// server's backend kind, so old links keep working: source-backed servers
-// fold the toolset-only tabs into their nearest surviving surface (the Tools
-// tab was called Inspect before AGE-2876; authentication lives under
-// Settings), while toolset-backed servers send Inspect to Tools.
+// server's backend kind, so inbound links always land somewhere:
+// source-backed servers fold the toolset-only tabs into their nearest
+// equivalent surface (Inspect for tools, Settings for authentication), while
+// toolset-backed servers send Inspect to Tools.
 export function resolveTabForBackend(
   tab: TabValue,
   isToolsetBacked: boolean,

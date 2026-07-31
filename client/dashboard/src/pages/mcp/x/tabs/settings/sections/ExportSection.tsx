@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { SettingsSection } from "../SettingsSection";
 
 // The export endpoint is keyed by the public MCP slug, so prefer the
-// platform-hosted endpoint whose slug matches the historical export key.
+// platform-hosted endpoint's slug.
 function exportSlugFromEndpoints(endpoints: McpEndpoint[]): string | undefined {
   const platformEndpoint = endpoints.find((e) => !e.customDomainId);
   return (platformEndpoint ?? endpoints[0])?.slug ?? undefined;

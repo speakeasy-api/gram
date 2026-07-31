@@ -1,6 +1,6 @@
 // servepublic_mcpendpoint_test.go verifies that /mcp/{mcpSlug} resolves
-// through mcp_endpoints → mcp_servers, the only addressing path now that
-// the direct toolsets.mcp_slug lookup is retired.
+// through mcp_endpoints → mcp_servers, the only addressing path for hosted
+// MCP servers.
 package mcp_test
 
 import (
@@ -249,10 +249,10 @@ func TestServePublic_McpEndpoint_ToolsetBacked_ResolvesViaEndpoints(t *testing.T
 	require.NotEmpty(t, w.Header().Get("Mcp-Session-Id"))
 }
 
-// TestServePublic_NoMcpEndpoint_DirectSlugFallbackRetired documents the
-// retirement of the direct toolsets.mcp_slug fallback: a toolset without
-// an mcp_endpoints row is not addressable at /mcp/{slug} at all.
-func TestServePublic_NoMcpEndpoint_DirectSlugFallbackRetired(t *testing.T) {
+// TestServePublic_ToolsetWithoutEndpoint_NotAddressable pins the addressing
+// rule: a toolset without an mcp_endpoints row is not addressable at
+// /mcp/{slug} at all.
+func TestServePublic_ToolsetWithoutEndpoint_NotAddressable(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)

@@ -266,10 +266,11 @@ func NewResolvedMcpEndpointFromMcpServer(
 // ResolvedMcpEndpoint for a toolset-backed mcp_server whose own issuer
 // column is NULL but whose backing toolset carries a user-session
 // issuer. Identity (slug, custom domain, project, route surface) binds
-// to the mcp_endpoint; auth (issuer, JWT audience) stays on the toolset
-// so sessions minted before the toolsets → mcp_servers data-model swap
-// keep validating; visibility comes from the wrapper. Caller is
-// responsible for first checking toolset.UserSessionIssuerID.Valid.
+// to the mcp_endpoint; auth (issuer, JWT audience) binds to the toolset
+// carrying the issuer — sessions are minted against the toolset URN, so
+// they validate on any endpoint that serves the toolset; visibility
+// comes from the wrapper. Caller is responsible for first checking
+// toolset.UserSessionIssuerID.Valid.
 func newResolvedMcpEndpointFromToolsetBackedServer(
 	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
 	mcpServer *mcpservers_repo.McpServer,
@@ -294,14 +295,12 @@ func newResolvedMcpEndpointFromToolsetBackedServer(
 // loadResolvedMcpEndpointByRef resolves the cached EndpointRef stored
 // on an in-flight AuthnChallengeState back to a fresh
 // ResolvedMcpEndpoint and verifies its issuer FK is still live.
-// Resolution is mcp_endpoint-keyed only: refs cached by the removed
-// direct toolsets.mcp_slug path (McpServerID invalid) 404, closing any
-// pre-swap challenge that was still in flight across the deploy —
-// acceptable, the client simply restarts its OAuth flow. Returns
-// CodeNotFound when the underlying row is missing or no longer
-// issuer-gated. Used by HandleIDPCallback (mounted under both route
-// surfaces) to resume an in-flight challenge against the addressing path
-// it was minted under.
+// Resolution is mcp_endpoint-keyed: a ref must carry a valid
+// McpServerID, and anything else 404s — the client simply restarts its
+// OAuth flow. Returns CodeNotFound when the underlying row is missing
+// or not issuer-gated. Used by HandleIDPCallback (mounted under both
+// route surfaces) to resume an in-flight challenge against the
+// addressing path it was minted under.
 func (s *Service) loadResolvedMcpEndpointByRef(ctx context.Context, ref EndpointRef) (*ResolvedMcpEndpoint, error) {
 	endpoint, err := s.buildResolvedMcpEndpointByRef(ctx, ref)
 	if err != nil {

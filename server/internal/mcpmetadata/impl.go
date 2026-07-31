@@ -284,9 +284,9 @@ func (s *Service) GetMcpMetadata(ctx context.Context, payload *gen.GetMcpMetadat
 		return nil, err
 	}
 
-	// During the expand/contract publishing swap a toolset's metadata may
-	// live under either its own key or its wrapper mcp_server key, so reads
-	// accept both regardless of which identity the caller supplied.
+	// A toolset's metadata may live under either its own key or its wrapper
+	// mcp_server key, so reads accept both regardless of which identity the
+	// caller supplied.
 	keys, err := s.resolveMetadataKeys(ctx, s.mcpServersRepo, *authCtx.ProjectID, backend)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve metadata backend keys").LogError(ctx, logger)
@@ -747,9 +747,8 @@ type resolvedMetadataBackend struct {
 	mcpServer *mcpservers_repo.McpServer
 }
 
-// metadataKeys carries both metadata lookup keys for a backend during the
-// expand/contract publishing swap: the canonical wrapper mcp_server key (when
-// one exists) and the toolset key used by direct mcp_slug publishing.
+// metadataKeys carries both metadata lookup keys for a backend: the wrapper
+// mcp_server key (when one exists) and the toolset key.
 type metadataKeys struct {
 	mcpServerID uuid.NullUUID
 	toolsetID   uuid.NullUUID

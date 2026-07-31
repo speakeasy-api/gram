@@ -278,10 +278,10 @@ func TestHandleGetAuthorizationServer_IssuerGatedRemoteBackend_DanglingIssuerFK(
 	require.Empty(t, w.Body.String())
 }
 
-// TestHandleGetAuthorizationServer_DirectSlugFallbackRetired documents the
-// retirement of the direct toolsets.mcp_slug fallback on the well-known
-// surface: a toolset with no mcp_endpoint row is not addressable at all.
-func TestHandleGetAuthorizationServer_DirectSlugFallbackRetired(t *testing.T) {
+// TestHandleGetAuthorizationServer_ToolsetWithoutEndpoint_NotAddressable pins
+// the addressing rule on the well-known surface: a toolset with no
+// mcp_endpoint row is not addressable at all.
+func TestHandleGetAuthorizationServer_ToolsetWithoutEndpoint_NotAddressable(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -473,9 +473,9 @@ func TestHandleGetProtectedResource_IssuerGatedToolsetBackend_OnCustomDomain(t *
 	require.Equal(t, []any{expectedResource}, authServers)
 }
 
-// TestHandleGetProtectedResource_DirectSlugFallbackRetired is the
-// protected-resource companion of the fallback-retirement test.
-func TestHandleGetProtectedResource_DirectSlugFallbackRetired(t *testing.T) {
+// TestHandleGetProtectedResource_ToolsetWithoutEndpoint_NotAddressable is the
+// protected-resource companion of the addressing-rule test above.
+func TestHandleGetProtectedResource_ToolsetWithoutEndpoint_NotAddressable(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)

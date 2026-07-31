@@ -13,7 +13,7 @@ import (
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 )
 
-// wrapperIDForToolset resolves the mirror-created wrapper mcp_server for a
+// wrapperIDForToolset resolves the wrapper mcp_server provisioned for a
 // toolset created through the toolsets service.
 func wrapperIDForToolset(t *testing.T, ti *testInstance, toolsetID, projectID uuid.UUID) uuid.UUID {
 	t.Helper()
@@ -23,7 +23,7 @@ func wrapperIDForToolset(t *testing.T, ti *testInstance, toolsetID, projectID uu
 		ProjectID: projectID,
 	})
 	require.NoError(t, err)
-	require.Len(t, wrappers, 1, "expected the toolsets service to mirror exactly one wrapper")
+	require.Len(t, wrappers, 1, "expected the toolsets service to provision exactly one wrapper")
 	return wrappers[0].ID
 }
 

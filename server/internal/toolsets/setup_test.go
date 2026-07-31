@@ -509,8 +509,8 @@ func createMinimalPrivateToolset(t *testing.T, ctx context.Context, ti *testInst
 }
 
 // createMinimalPublicToolset creates a toolset and makes its MCP surface
-// public by flipping the wrapper mcp_servers visibility — the canonical
-// publishing state after the write freeze.
+// public by flipping the wrapper mcp_servers visibility — the wrapper's
+// visibility is the toolset's only publishing state.
 func createMinimalPublicToolset(t *testing.T, ctx context.Context, ti *testInstance, name string) *types.Toolset {
 	t.Helper()
 
@@ -521,7 +521,7 @@ func createMinimalPublicToolset(t *testing.T, ctx context.Context, ti *testInsta
 }
 
 // setWrapperVisibility flips the wrapper mcp_servers row's visibility for a
-// toolset, mirroring what the mcpServers management API does.
+// toolset, the same write the mcpServers management API performs.
 func setWrapperVisibility(t *testing.T, ctx context.Context, ti *testInstance, toolsetID uuid.UUID, visibility string) {
 	t.Helper()
 

@@ -12,10 +12,9 @@ import { useQueries } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 // PublishingTarget identifies the mcp_server being published. A toolset-backed
-// wrapper also carries its backing toolset id so attachments recorded against
-// the toolset before the mcp_servers cutover still read as published; writes
-// always key on mcp_server_id (the backend resolves either key to the same
-// attachment row).
+// wrapper also carries its backing toolset id so toolset-keyed attachments
+// read as published; writes always key on mcp_server_id (the backend resolves
+// either key to the same attachment row).
 export type PublishingTarget = {
   kind: "mcpServer";
   mcpServerId: string;

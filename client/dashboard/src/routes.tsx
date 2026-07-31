@@ -427,9 +427,9 @@ const ROUTE_STRUCTURE = {
           },
         },
       },
-      // Retired /mcp/:toolsetSlug detail path. The component resolves the
-      // toolset slug to its wrapper mcp_servers row and redirects to the
-      // details route above; the subPages keep old tab links routable.
+      // Redirect-only /mcp/:toolsetSlug detail path. The component resolves
+      // the toolset slug to its wrapper mcp_servers row and redirects to the
+      // details route above; the subPages keep inbound tab links routable.
       details: {
         title: "MCP Details",
         url: ":toolsetSlug",

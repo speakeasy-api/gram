@@ -827,8 +827,7 @@ type MoveCollectionAttachmentToMcpServerParams struct {
 
 // Rekeys a collection's live toolset-keyed attachment onto the toolset's
 // wrapper mcp_server in place, preserving the row id, published_at,
-// published_by, and created_at so publish history survives the
-// expand/contract swap from toolset-column publishing to mcp_servers.
+// published_by, and created_at so publish history survives the rekey.
 func (q *Queries) MoveCollectionAttachmentToMcpServer(ctx context.Context, arg MoveCollectionAttachmentToMcpServerParams) (int64, error) {
 	result, err := q.db.Exec(ctx, moveCollectionAttachmentToMcpServer,
 		arg.McpServerID,

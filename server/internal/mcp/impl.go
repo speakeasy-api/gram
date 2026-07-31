@@ -538,10 +538,7 @@ func writeOAuthProtectedResourceMetadataResponse(ctx context.Context, logger *sl
 // RemoteMcpServerID-backed rows proxy via remotemcp and ToolsetID-backed rows
 // delegate to ServeToolsetResolved.
 //
-// mcp_endpoints is authoritative for its slug: an address miss is a 404. The
-// direct toolsets.mcp_slug fallback that previously covered pre-swap rows was
-// removed after production observation showed zero fallback traffic
-// (mcp.toolset_slug_fallback stayed at zero post-backfill).
+// mcp_endpoints is authoritative for its slug: an address miss is a 404.
 func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	defer o11y.LogDefer(ctx, s.logger, func() error {

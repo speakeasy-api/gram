@@ -350,7 +350,7 @@ function DeleteMcpServerDialogContent({
   // Deleting the backing toolset tombstones the wrapper server and its
   // endpoints server-side, so the toolset delete is the whole operation. A
   // toolset holding an external MCP source also evicts that source from the
-  // deployment first, mirroring the removal flow the toolset page used.
+  // deployment first so no orphaned source lingers.
   const handleToolsetDelete = async (toolset: Toolset) => {
     setIsDeletingToolset(true);
     setToolsetDeleteError(null);

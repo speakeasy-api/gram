@@ -28,9 +28,8 @@ VALUES (
 RETURNING *;
 
 -- name: GetMCPServersByToolsetID :many
--- Live wrappers backed by a toolset. Used by the toolsets service to mirror
--- toolset publishing-column writes onto the canonical mcp_servers/
--- mcp_endpoints rows during the expand/contract data-model swap.
+-- Live wrappers backed by a toolset. Used by the toolsets service to
+-- resolve the mcp_servers/mcp_endpoints rows that publish a toolset.
 SELECT * FROM mcp_servers
 WHERE toolset_id = @toolset_id AND project_id = @project_id AND deleted IS FALSE
 ORDER BY created_at;

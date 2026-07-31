@@ -535,8 +535,8 @@ func TestCollectionsService_ListServers_MergesBackendsByPublishedAt(t *testing.T
 	// toolset id rides along.
 	require.NotNil(t, listed.Servers[0].ToolsetID)
 
-	// The toolset attach resolved to its mirror-created wrapper and was
-	// written server-keyed, so the entry carries both identities.
+	// The toolset attach resolved to its wrapper and was written
+	// server-keyed, so the entry carries both identities.
 	require.NotNil(t, listed.Servers[1].ToolsetID)
 	require.Equal(t, toolset.ID, *listed.Servers[1].ToolsetID)
 	require.NotNil(t, listed.Servers[1].McpServerID)

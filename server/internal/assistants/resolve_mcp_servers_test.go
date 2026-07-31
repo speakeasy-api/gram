@@ -60,9 +60,9 @@ func TestResolveAssistantMCPServers_UserToolsetsListedBeforePlatformServer(t *te
 }
 
 // A toolset that is attached to an assistant but whose wrapper is disabled
-// or has no Gram-hosted endpoint slug used to abort the entire bootstrap
-// with a silent 500. We now skip the broken toolset so the rest of the
-// thread admits — the assistant just won't see those tools.
+// or has no Gram-hosted endpoint slug is skipped rather than aborting the
+// entire bootstrap: the rest of the thread admits — the assistant just
+// won't see those tools.
 func TestResolveAssistantMCPServers_MisconfiguredToolsetIsOmitted(t *testing.T) {
 	t.Parallel()
 

@@ -149,9 +149,9 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		logger.ErrorContext(ctx, "error getting enabled server count", attr.SlogError(err), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
-	// New toolsets carry no publishing columns: publishing state is born on
-	// the wrapper mcp_servers/mcp_endpoints rows created below. The first
-	// server in an organization is automatically made available (private).
+	// Publishing state lives on the wrapper mcp_servers/mcp_endpoints rows
+	// created below. The first server in an organization is automatically
+	// made available (private).
 	wrapperVisibility := conv.Ternary(enabledServerCount == 0, mcpservers.VisibilityPrivate, mcpservers.VisibilityDisabled)
 
 	createToolParams := repo.CreateToolsetParams{
@@ -260,13 +260,12 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	return toolsetDetails, nil
 }
 
-// attachToDefaultPlugin adds a newly MCP-enabled toolset to the project's
+// attachToDefaultPlugin adds a newly published toolset to the project's
 // Default plugin so it's included in the auto-published marketplace without
 // a human visiting the Plugins page. Exactly one of toolsetID / mcpServerID
-// keys the attachment: column-less toolsets key by their wrapper mcp_server
-// while the pre-swap translation path (UpdateToolset enable) keys by the
-// toolset column its rows still carry. No-op if the server is already
-// attached. Returns pluginCreated=true if this call lazily created the
+// keys the attachment; toolsets attach by their wrapper mcp_server. No-op if
+// the server is already attached. Returns pluginCreated=true if this call
+// lazily created the
 // Default plugin (project predates this feature) — callers should enqueue
 // an initial publish for it, but only after their own transaction commits,
 // since this runs pre-commit and the DB writes could still roll back.
@@ -388,8 +387,8 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetSlug(string(payload.Slug)))
 
 	// Publishing is managed exclusively through the mcpServers/mcpEndpoints
-	// APIs: the four toolset publishing fields are rejected outright now that
-	// no toolset carries publishing columns.
+	// APIs: toolsets carry no publishing columns, so the four publishing
+	// fields are rejected outright.
 	if payload.McpSlug != nil || payload.McpIsPublic != nil || payload.McpEnabled != nil || payload.CustomDomainID != nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "MCP publishing for this toolset is managed through the mcpServers API")
 	}

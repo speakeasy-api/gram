@@ -21,8 +21,9 @@ import (
 
 // TestServePublic_Lockdown_DomainBoundEndpoint_AllowlistedDomainStillServes
 // covers the domain-bound shape under an IP allowlist: the platform host
-// never resolves a custom-domain endpoint (the platform alias is retired,
-// so the request 404s before the allowlist is even consulted), while the
+// never resolves a custom-domain endpoint (its slug resolves only under
+// its own domain, so the request 404s before the allowlist is even
+// consulted), while the
 // custom-domain request serves normally because the ingress already
 // enforced the allowlist.
 func TestServePublic_Lockdown_DomainBoundEndpoint_AllowlistedDomainStillServes(t *testing.T) {

@@ -35,9 +35,8 @@ func serverEntry(t *testing.T, files map[string][]byte, path, displayName string
 
 // A wrapped toolset must publish identically whether its plugin_servers row
 // is keyed by toolset_id or by the wrapper mcp_server_id, and whether its
-// mcp_metadata is toolset- or server-keyed — toolset-keyed rows persist in
-// production data until the wraptoolsets backfill's -move-plugins mode
-// re-keys them.
+// mcp_metadata is toolset- or server-keyed — both key shapes address the
+// same server, so publish output must not depend on which one a row uses.
 func TestPluginsService_PublishPlugins_ToolsetBackedWrapperParity(t *testing.T) {
 	t.Parallel()
 
@@ -94,8 +93,8 @@ func TestPluginsService_PublishPlugins_ToolsetBackedWrapperParity(t *testing.T) 
 	cursorBaseline := serverEntry(t, mock.lastPushedFiles, cursorPath, "Parity Server")
 	require.Contains(t, string(claudeBaseline), "${user_config.PARITY_API_KEY}")
 
-	// Phase B: the backfill has moved metadata server-side onto the wrapper,
-	// but the plugin_servers row is still toolset-keyed.
+	// Phase B: metadata is server-keyed on the wrapper while the
+	// plugin_servers row stays toolset-keyed.
 	moved, err := mcpRepo.MoveMetadataToMcpServer(ctx, mcpmetarepo.MoveMetadataToMcpServerParams{
 		McpServerID: uuid.NullUUID{UUID: wrapper.ID, Valid: true},
 		ToolsetID:   uuid.NullUUID{UUID: toolset.ID, Valid: true},
@@ -109,8 +108,8 @@ func TestPluginsService_PublishPlugins_ToolsetBackedWrapperParity(t *testing.T) 
 	require.JSONEq(t, string(claudeBaseline), string(serverEntry(t, mock.lastPushedFiles, claudePath, "Parity Server")))
 	require.JSONEq(t, string(cursorBaseline), string(serverEntry(t, mock.lastPushedFiles, cursorPath, "Parity Server")))
 
-	// Phase C: the plugin_servers row has moved onto the wrapper
-	// (-move-plugins), so generation takes the mcp_server-keyed branch.
+	// Phase C: the plugin_servers row is keyed by the wrapper, so
+	// generation takes the mcp_server-keyed branch.
 	require.NoError(t, ti.service.RemovePluginServer(ctx, &gen.RemovePluginServerPayload{
 		ID:       toolsetKeyed.ID,
 		PluginID: plugin.ID,

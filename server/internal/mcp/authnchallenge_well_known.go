@@ -82,11 +82,9 @@ type oauthAuthorizationServerMetadata struct {
 // — the only path a spec-compliant client constructs from a resource URL of
 // `<base>/mcp/{slug}`.
 //
-// Resolution mirrors ServePublic: mcp_endpoints → mcp_servers, then the
+// Resolution follows ServePublic: mcp_endpoints → mcp_servers, then the
 // shared per-backend dispatch (ServeWellKnownProtectedResourceForServer).
-// mcp_endpoints is authoritative for its slug — an address miss is a 404; the
-// direct toolsets.mcp_slug fallback was removed after production observation
-// showed zero fallback traffic.
+// mcp_endpoints is authoritative for its slug — an address miss is a 404.
 func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")

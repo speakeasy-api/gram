@@ -313,8 +313,8 @@ func publishToolset(
 }
 
 // setMcpServerVisibility flips the publishing state of a wrapper mcp_server,
-// carrying every other column through unchanged. This is the endpoint-model
-// equivalent of the old enable/disable/public toolset column writes.
+// carrying every other column through unchanged. Visibility on the
+// mcp_servers row is the single publishing control for a hosted server.
 func setMcpServerVisibility(
 	t *testing.T,
 	ctx context.Context,

@@ -12,7 +12,7 @@ import (
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 )
 
-// wrapperForToolset loads the single live wrapper mcp_servers row mirrored
+// wrapperForToolset loads the single live wrapper mcp_servers row provisioned
 // for a toolset, requiring exactly one to exist.
 func wrapperForToolset(t *testing.T, ti *testInstance, toolsetID, projectID uuid.UUID) mcpserversRepo.McpServer {
 	t.Helper()
@@ -21,11 +21,11 @@ func wrapperForToolset(t *testing.T, ti *testInstance, toolsetID, projectID uuid
 		ProjectID: projectID,
 	})
 	require.NoError(t, err)
-	require.Len(t, wrappers, 1, "expected exactly one mirrored wrapper mcp server")
+	require.Len(t, wrappers, 1, "expected exactly one wrapper mcp server")
 	return wrappers[0]
 }
 
-func TestCreateToolset_MirrorsWrapperAndEndpoint(t *testing.T) {
+func TestCreateToolset_ProvisionsWrapperAndEndpoint(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)

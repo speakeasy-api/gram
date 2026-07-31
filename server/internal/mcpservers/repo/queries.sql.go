@@ -355,9 +355,8 @@ type GetMCPServersByToolsetIDParams struct {
 	ProjectID uuid.UUID
 }
 
-// Live wrappers backed by a toolset. Used by the toolsets service to mirror
-// toolset publishing-column writes onto the canonical mcp_servers/
-// mcp_endpoints rows during the expand/contract data-model swap.
+// Live wrappers backed by a toolset. Used by the toolsets service to
+// resolve the mcp_servers/mcp_endpoints rows that publish a toolset.
 func (q *Queries) GetMCPServersByToolsetID(ctx context.Context, arg GetMCPServersByToolsetIDParams) ([]McpServer, error) {
 	rows, err := q.db.Query(ctx, getMCPServersByToolsetID, arg.ToolsetID, arg.ProjectID)
 	if err != nil {

@@ -70,11 +70,10 @@ func createPublicMCPToolsetWithCustomDomain(
 	return toolset, domain
 }
 
-// TestServePublic_CustomDomain_PlatformAliasRetired documents the deliberate
-// retirement of the platform-host alias for custom-domain endpoints: with the
-// direct mcp_slug fallback removed, a custom-domain endpoint's slug resolves
-// only under its own domain.
-func TestServePublic_CustomDomain_PlatformAliasRetired(t *testing.T) {
+// TestServePublic_CustomDomainEndpoint_NotResolvableOnPlatformHost pins the
+// endpoint scoping rule: a custom-domain endpoint's slug resolves only under
+// its own domain, never on the platform host.
+func TestServePublic_CustomDomainEndpoint_NotResolvableOnPlatformHost(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -210,10 +209,10 @@ func serveWellKnownHTTP(
 	return w, nil
 }
 
-// TestWellKnownOAuth_CustomDomain_PlatformAliasRetired mirrors the serving
-// retirement on the well-known surface: a custom-domain endpoint's slug has
-// no platform-host alias.
-func TestWellKnownOAuth_CustomDomain_PlatformAliasRetired(t *testing.T) {
+// TestWellKnownOAuth_CustomDomainEndpoint_NotResolvableOnPlatformHost pins
+// the same scoping rule on the well-known surface: a custom-domain endpoint's
+// slug has no platform-host alias.
+func TestWellKnownOAuth_CustomDomainEndpoint_NotResolvableOnPlatformHost(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)

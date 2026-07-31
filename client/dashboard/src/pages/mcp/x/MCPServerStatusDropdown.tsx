@@ -126,7 +126,7 @@ export function MCPServerStatusDropdown({
       await Promise.all([
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
-        // Toolset publishing mirrors read the wrapper's visibility, so stale
+        // Toolset publishing state reads the wrapper's visibility, so stale
         // toolset views must refresh alongside the server queries.
         invalidateAllToolset(queryClient, { refetchType: "all" }),
         // Enabling a disabled server (e.g. disabled -> private) auto-attaches
@@ -147,9 +147,9 @@ export function MCPServerStatusDropdown({
     },
   });
 
-  // Toolset-backed servers gate the Public option on system-provided env vars:
-  // going public can leak platform-managed credentials, so the old toolset
-  // surface warned first. Mirror that here with the same data dependencies.
+  // Toolset-backed servers gate the Public option on system-provided env
+  // vars: going public can leak platform-managed credentials, so warn before
+  // the visibility change is committed.
   const { data: environmentsData } = useListEnvironments(undefined, undefined, {
     enabled: isToolsetBacked,
     throwOnError: false,

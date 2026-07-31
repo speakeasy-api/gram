@@ -180,8 +180,7 @@ RETURNING *;
 -- name: MoveCollectionAttachmentToMcpServer :execrows
 -- Rekeys a collection's live toolset-keyed attachment onto the toolset's
 -- wrapper mcp_server in place, preserving the row id, published_at,
--- published_by, and created_at so publish history survives the
--- expand/contract swap from toolset-column publishing to mcp_servers.
+-- published_by, and created_at so publish history survives the rekey.
 WITH org_collection AS (
   SELECT omc.id FROM organization_mcp_collections omc
   WHERE omc.id = @collection_id AND omc.organization_id = @organization_id AND omc.deleted IS FALSE

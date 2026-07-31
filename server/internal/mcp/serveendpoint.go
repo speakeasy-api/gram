@@ -123,8 +123,8 @@ func (s *Service) serveResolvedMCPEndpoint(
 	}
 
 	// Toolset-backed servers can carry auth on the backing toolset instead
-	// of the wrapper (the toolsets → mcp_servers swap leaves the wrapper
-	// issuer NULL deliberately). Load the toolset up front: a toolset
+	// of the wrapper (a wrapper with a NULL issuer defers to its toolset's
+	// issuer). Load the toolset up front: a toolset
 	// issuer gates the request here with the endpoint's identity — so the
 	// challenge, cached ref, and WWW-Authenticate all name the address the
 	// client used — and the dispatch below reuses the loaded row.
@@ -281,7 +281,7 @@ func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.
 
 // LoadResolvedMcpEndpointBySlug resolves a slug to a *ResolvedMcpEndpoint
 // for the issuer-gated OAuth handlers, shared by both the /mcp and /x/mcp
-// surfaces. It mirrors the well-known handlers' resolution model:
+// surfaces. It shares the well-known handlers' resolution model:
 //
 //   - Addressing hit, issuer-gated: build the endpoint from the
 //     (mcp_endpoint, mcp_server) pair.
@@ -290,8 +290,7 @@ func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.
 //     non-issuer-gated remote-backed servers return not-found, matching
 //     the well-known surface.
 //   - Addressing miss: CodeNotFound. mcp_endpoints is authoritative for
-//     its slug; the direct toolsets.mcp_slug fallback was removed after
-//     production observation showed zero fallback traffic.
+//     its slug.
 //
 // mcpRouteBase ("mcp" or "x/mcp") propagates into the resolved endpoint's
 // URL building.

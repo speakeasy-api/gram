@@ -85,9 +85,8 @@ function mcpServerSource(server: McpServer): McpFacets["source"] {
   return server.tunneledMcpServerId ? "tunneled" : "remote";
 }
 
-// Plugin membership may reference the wrapper server directly or — until the
-// plugin ownership move — its backing toolset, so a toolset-backed wrapper
-// resolves both.
+// Plugin membership may reference the wrapper server directly or its backing
+// toolset, so a toolset-backed wrapper resolves both.
 function mcpServerPluginIds(
   server: McpServer,
   membership: PluginMembership,

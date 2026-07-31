@@ -1,6 +1,6 @@
-// Parsing helpers for the retired /mcp/:toolsetSlug detail URLs. The route
-// now redirects to the mcp_servers-backed details page (/mcp/x/:serverSlug),
-// and these helpers recover which tab an old link pointed at.
+// Parsing helpers for /mcp/:toolsetSlug detail URLs. The route redirects to
+// the mcp_servers-backed details page (/mcp/x/:serverSlug); these helpers
+// recover which tab an inbound link points at.
 
 const VALID_TABS = [
   "overview",

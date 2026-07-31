@@ -2759,8 +2759,8 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 // loadUserEnvConfigs resolves the published mcp_metadata for a server —
 // server-keyed rows first when a wrapper mcp_server id is known, then the
 // toolset-keyed row — and returns the user-facing environment configs. Both
-// keys are consulted during the expand/contract swap because the backfill
-// moves metadata ownership server-side before plugin_servers rows move.
+// key shapes are valid addresses for a toolset-backed server's metadata, so
+// both are consulted.
 func (s *Service) loadUserEnvConfigs(ctx context.Context, mcpMeta *mcpmetarepo.Queries, mcpServerID, toolsetID uuid.NullUUID) ([]ServerEnvConfig, error) {
 	var metadata mcpmetarepo.McpMetadatum
 	found := false

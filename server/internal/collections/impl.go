@@ -497,10 +497,10 @@ func (s *Service) DetachServer(ctx context.Context, payload *gen.DetachServerPay
 		return oops.E(oops.CodeUnexpected, err, "error accessing collection").LogError(ctx, s.logger)
 	}
 
-	// A toolset reference may be published under either key during the
-	// expand/contract swap: as a toolset-keyed attachment (direct mcp_slug
-	// publishing) or as a server-keyed attachment on its canonical wrapper.
-	// Detach resolves both so callers holding either identity fully unpublish.
+	// A toolset reference may be published under either key: as a
+	// toolset-keyed attachment or as a server-keyed attachment on its
+	// wrapper. Detach resolves both so callers holding either identity
+	// fully unpublish.
 	detachToolsetID := backend.toolsetID
 	detachMcpServerID := backend.mcpServerID
 	if backend.toolsetID.Valid {
@@ -725,8 +725,8 @@ type collectionServerEntry struct {
 
 // collectionRemoteHeaders derives the client-facing headers for a published
 // toolset (or its wrapper mcp_server). Metadata is read server-keyed first
-// when a wrapper id is known, then toolset-keyed — both keys are live during
-// the expand/contract publishing swap.
+// when a wrapper id is known, then toolset-keyed — both key shapes are valid
+// addresses for a toolset-backed server's metadata.
 func (s *Service) collectionRemoteHeaders(ctx context.Context, mcpMetaRepo *mcpmetadataRepo.Queries, mcpServerID, toolsetID uuid.NullUUID, mcpIsPublic bool) ([]*types.ExternalMCPRemoteHeader, error) {
 	headers := make([]*types.ExternalMCPRemoteHeader, 0)
 

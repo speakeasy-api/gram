@@ -50,11 +50,10 @@ func (s *Service) effectiveMcpPublic(ctx context.Context, projectID, toolsetID u
 	return wrappers[0].Visibility == mcpservers.VisibilityPublic, nil
 }
 
-// createWrapperForNewToolset provisions the canonical wrapper mcp_servers
-// row and platform mcp_endpoints row for a newly created toolset, returning
-// the wrapper's id. New toolsets carry no publishing columns — publishing
-// state is born on the wrapper — so this is a direct creation rather than a
-// column mirror.
+// createWrapperForNewToolset provisions the wrapper mcp_servers row and
+// platform mcp_endpoints row that publish a newly created toolset, returning
+// the wrapper's id. Publishing state lives entirely on the wrapper and its
+// endpoints; toolsets carry none.
 func (s *Service) createWrapperForNewToolset(ctx context.Context, dbtx pgx.Tx, toolset repo.Toolset, endpointSlug, visibility string) (uuid.UUID, error) {
 	var environmentID uuid.NullUUID
 	if slug := conv.FromPGText[string](toolset.DefaultEnvironmentSlug); slug != nil && *slug != "" {
@@ -223,8 +222,8 @@ func (s *Service) tombstoneWrapper(ctx context.Context, dbtx pgx.Tx, toolset rep
 }
 
 // reconcileMirroredDomains schedules ingress reconciliation for domains whose
-// root mapping was cleared by a mirror operation. Must run after the
-// mirroring transaction commits.
+// root mapping was cleared by a wrapper update. Must run after the clearing
+// transaction commits.
 func (s *Service) reconcileMirroredDomains(ctx context.Context, customDomainIDs []uuid.UUID) {
 	if s.temporalEnv == nil || len(customDomainIDs) == 0 {
 		return
