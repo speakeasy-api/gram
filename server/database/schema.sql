@@ -3145,6 +3145,60 @@ CREATE INDEX IF NOT EXISTS assistant_memories_tags_gin
   ON assistant_memories USING gin (tags)
   WHERE deleted IS FALSE;
 
+-- Organization knowledge extracted asynchronously from completed chat
+-- sessions. This first version is project-pinned for tenant isolation while
+-- retaining explicit structural/content scope fields for later retrieval.
+CREATE TABLE IF NOT EXISTS business_memories (
+  id                     uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id             uuid,
+  organization_id        TEXT NOT NULL,
+  body                   TEXT NOT NULL,
+  memory_type            TEXT NOT NULL,
+  structural_scope       TEXT NOT NULL,
+  content_scope          JSONB NOT NULL DEFAULT '[]'::jsonb,
+  embedding              halfvec(1024) NOT NULL,
+  embedding_model        TEXT NOT NULL,
+  extraction_model       TEXT NOT NULL,
+  source_evaluation_id   uuid,
+  source_candidate_index integer NOT NULL,
+  source_chat_id         uuid,
+  source_turn            integer,
+  source_author_id       TEXT,
+  extracted_at           timestamptz NOT NULL DEFAULT clock_timestamp(),
+  lifecycle_state        TEXT NOT NULL DEFAULT 'active',
+  created_at             timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at             timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at             timestamptz,
+  deleted                boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT business_memories_pkey PRIMARY KEY (id),
+  CONSTRAINT business_memories_project_id_fkey
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+  CONSTRAINT business_memories_source_evaluation_id_fkey
+    FOREIGN KEY (source_evaluation_id) REFERENCES chat_analysis_evaluations(id) ON DELETE SET NULL,
+  CONSTRAINT business_memories_source_chat_id_fkey
+    FOREIGN KEY (source_chat_id) REFERENCES chats(id) ON DELETE SET NULL,
+  CONSTRAINT business_memories_body_size_check CHECK (octet_length(body) <= 8192)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS business_memories_source_candidate_key
+  ON business_memories (source_evaluation_id, source_candidate_index);
+
+CREATE INDEX IF NOT EXISTS business_memories_project_id_idx
+  ON business_memories (project_id);
+
+CREATE INDEX IF NOT EXISTS business_memories_project_created_at_idx
+  ON business_memories (project_id, created_at DESC, id DESC)
+  WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS business_memories_content_scope_gin_idx
+  ON business_memories USING gin (content_scope)
+  WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS business_memories_embedding_hnsw_idx
+  ON business_memories USING hnsw (embedding halfvec_cosine_ops)
+  WHERE deleted IS FALSE AND lifecycle_state = 'active';
+
 -- Agent executions table
 CREATE TABLE IF NOT EXISTS agent_executions (
   id TEXT NOT NULL,
