@@ -15,10 +15,11 @@ import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 
 // The costs page's single control strip: the search box, the axes to re-cut
-// the page by (the track), the table actions (CSV export), and the page-scope
-// controls (dataset + date range). It sits at the top of the page because the
+// the page by (the track), page actions (Reset), and the page-scope controls
+// (dataset + date range). It sits at the top of the page because the
 // breakdown axis re-cuts every visualization below it — the chart and the
-// table — and the dataset/range scope every number on the page.
+// table — and the dataset/range scope every number on the page. CSV export
+// lives above the table itself, not here.
 //
 // The axis track replaced a bare "Breakdown by <select>": users didn't find
 // the dropdown, and the word "breakdown" reads as jargon until you've watched
@@ -71,8 +72,8 @@ export function BreakdownBar({
   searchValue: string;
   onSearchChange: (value: string) => void;
   searchPlaceholder: string;
-  // Controls that belong to the table below (e.g. CSV export), anchored to
-  // the right of the bar's top row.
+  // Page-level actions (e.g. Reset), anchored to the right of the bar's top
+  // row. Table-scoped actions like CSV export sit above the table instead.
   actions?: ReactNode;
   // Page-scope controls (dataset selector + date-range picker), leading the
   // bar's top row.
@@ -108,8 +109,8 @@ export function BreakdownBar({
   return (
     // A deliberate two-row control bar on the shared Page.Toolbar shell. The
     // data options read as one left-stacked block: dataset + range lead the
-    // top row with the breakdown axis track directly beneath them; table
-    // actions (export/reset) anchor top-right and the row search anchors
+    // top row with the breakdown axis track directly beneath them; page
+    // actions (Reset) anchor top-right and the row search anchors
     // bottom-right. Every row spans the full bar at every width, so nothing
     // clips and nothing rags.
     <Page.Toolbar>
