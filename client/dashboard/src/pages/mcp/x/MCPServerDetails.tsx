@@ -191,7 +191,12 @@ export default function MCPServerDetails(): JSX.Element {
       case "authentication":
         return renderToolsetTab((loaded) => (
           <RequireScope scope="mcp:write" level="page">
-            <MCPAuthenticationTab toolset={loaded} />
+            <MCPAuthenticationTab
+              toolset={loaded}
+              mcpServer={mcpServer}
+              endpoints={endpoints}
+              isLoadingEndpoints={isLoadingEndpoints}
+            />
           </RequireScope>
         ));
       case "performance":

@@ -11,10 +11,16 @@ import {
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
+import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
 import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpEnvironmentConfigInput } from "@gram/client/models/components/mcpenvironmentconfiginput.js";
+import type {
+  McpServer,
+  McpServerVisibility,
+} from "@gram/client/models/components/mcpserver.js";
 import { useCreateEnvironmentMutation } from "@gram/client/react-query/createEnvironment.js";
 import {
   invalidateAllGetMcpMetadata,
@@ -68,8 +74,14 @@ const EMPTY_ENVIRONMENTS: never[] = [];
 
 export function MCPAuthenticationTab({
   toolset,
+  mcpServer,
+  endpoints,
+  isLoadingEndpoints,
 }: {
   toolset: Toolset;
+  mcpServer: McpServer;
+  endpoints: McpEndpoint[];
+  isLoadingEndpoints: boolean;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
@@ -685,7 +697,12 @@ export function MCPAuthenticationTab({
 
   return (
     <Stack className="mb-4">
-      <OAuthSection toolset={toolset} />
+      <OAuthSection
+        toolset={toolset}
+        mcpServer={mcpServer}
+        endpoints={endpoints}
+        isLoadingEndpoints={isLoadingEndpoints}
+      />
 
       <PageSection
         heading="Environment Variables"
@@ -937,6 +954,9 @@ export function MCPAuthenticationTab({
 
 type OAuthSectionProps = {
   toolset: Toolset;
+  mcpServer: McpServer;
+  endpoints: McpEndpoint[];
+  isLoadingEndpoints: boolean;
 };
 
 /**
@@ -945,8 +965,14 @@ type OAuthSectionProps = {
  * clean slate gets the shared section; legacy OAuth keeps the old UI plus a
  * convert path.
  */
-function OAuthSection({ toolset }: OAuthSectionProps) {
+function OAuthSection({
+  toolset,
+  mcpServer,
+  endpoints,
+  isLoadingEndpoints,
+}: OAuthSectionProps) {
   const telemetry = useTelemetry();
+  const { mcpUrl } = useResolvedMcpServerUrl(endpoints, isLoadingEndpoints);
   const oauthParadigm = getOAuthParadigm(toolset);
   const surface = toolsetAuthSurface({
     flagEnabled:
@@ -957,11 +983,19 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
   });
 
   if (surface === "manage" || surface === "attach") {
-    return <ToolsetAuthenticationSection toolset={toolset} />;
+    return (
+      <ToolsetAuthenticationSection
+        toolset={toolset}
+        serverVisibility={mcpServer.visibility}
+        mcpUrl={mcpUrl}
+      />
+    );
   }
   return (
     <LegacyOAuthSection
       toolset={toolset}
+      serverVisibility={mcpServer.visibility}
+      mcpUrl={mcpUrl}
       convertAction={
         surface === "legacy" ? toolsetConvertAction(oauthParadigm) : null
       }
@@ -971,8 +1005,13 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
 
 function LegacyOAuthSection({
   toolset,
+  serverVisibility,
+  mcpUrl,
   convertAction,
-}: OAuthSectionProps & {
+}: {
+  toolset: Toolset;
+  serverVisibility: McpServerVisibility;
+  mcpUrl: string | undefined;
   /** Migration entry point to render; null when the flag is off. */
   convertAction: ToolsetConvertAction | null;
 }) {
@@ -998,8 +1037,8 @@ function LegacyOAuthSection({
   const externalMcpRequiresOAuth =
     externalMcpOAuthStatus === "required-unconfigured";
   const isOAuthEligible =
-    toolset.mcpEnabled &&
-    ((toolset.mcpIsPublic ? availableOAuthAuthCode : true) ||
+    serverVisibility !== "disabled" &&
+    ((serverVisibility === "public" ? availableOAuthAuthCode : true) ||
       externalMcpRequiresOAuth);
 
   const oauthParadigm = getOAuthParadigm(toolset);
@@ -1013,13 +1052,14 @@ function LegacyOAuthSection({
 
   const handleConfigureClick = () => {
     if (isOAuthConnected) return setIsOAuthDetailsModalOpen(true);
-    if (toolset.mcpIsPublic) return setIsOAuthModalOpen(true);
+    if (serverVisibility === "public") return setIsOAuthModalOpen(true);
     setIsGramOAuthModalOpen(true);
   };
 
-  const disabledTooltipText = !toolset.mcpEnabled
-    ? "Enable the MCP server to configure OAuth"
-    : "This MCP server does not require the OAuth authorization code flow";
+  const disabledTooltipText =
+    serverVisibility === "disabled"
+      ? "Enable the MCP server to configure OAuth"
+      : "This MCP server does not require the OAuth authorization code flow";
 
   // Flag holders with a wired issuer never reach this component (the
   // dispatcher sends them to the manage surface), but non-holders can land
@@ -1089,7 +1129,7 @@ function LegacyOAuthSection({
         loginSecured={loginSecured}
         showConfigureAction={!hideConfigureButton}
         oauthParadigm={oauthParadigm}
-        mcpEnabled={!!toolset.mcpEnabled}
+        mcpEnabled={serverVisibility !== "disabled"}
         proxyEnvironmentSlug={proxyEnvironmentSlug}
         proxyEnvironmentName={proxyEnvironmentName}
         onConfigureClick={handleConfigureClick}
@@ -1105,6 +1145,7 @@ function LegacyOAuthSection({
         isOpen={isOAuthDetailsModalOpen}
         onClose={() => setIsOAuthDetailsModalOpen(false)}
         toolset={toolset}
+        mcpUrl={mcpUrl}
         onEditRequest={() => {
           setIsOAuthDetailsModalOpen(false);
           setIsEditOAuthModalOpen(true);
@@ -1115,6 +1156,7 @@ function LegacyOAuthSection({
         onClose={() => setIsOAuthModalOpen(false)}
         toolsetSlug={toolset.slug}
         toolset={toolset}
+        mcpUrl={mcpUrl}
       />
       {toolset.oauthProxyServer && (
         <EditOAuthProxyModal

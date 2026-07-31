@@ -2,7 +2,6 @@ import { CodeBlock } from "@/components/code";
 import { Dialog } from "@/components/ui/Dialog";
 import { Text } from "@/components/ui/Text";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { Toolset } from "@/lib/toolTypes";
 import { useAddOAuthProxyServerMutation } from "@gram/client/react-query/addOAuthProxyServer.js";
 import { useRemoveOAuthServerMutation } from "@gram/client/react-query/removeOAuthServer.js";
@@ -14,18 +13,29 @@ import { Pencil, Trash2 } from "lucide-react";
 import React from "react";
 import { toast } from "sonner";
 
+// The RFC 8414 discovery URL for a runtime MCP URL: the well-known prefix is
+// inserted between the origin and the endpoint path.
+function oauthDiscoveryUrl(mcpUrl: string | undefined): string | undefined {
+  if (!mcpUrl) return undefined;
+  const url = new URL(mcpUrl);
+  const path = url.pathname === "/" ? "" : url.pathname;
+  return `${url.origin}/.well-known/oauth-authorization-server${path}`;
+}
+
 export function OAuthDetailsModal({
   isOpen,
   onClose,
   toolset,
+  mcpUrl,
   onEditRequest,
 }: {
   isOpen: boolean;
   onClose: () => void;
   toolset: Toolset;
+  /** The wrapper server's runtime URL, for the discovery URL display. */
+  mcpUrl: string | undefined;
   onEditRequest: () => void;
 }): React.JSX.Element {
-  const { url: mcpUrl } = useMcpUrl(toolset);
   const queryClient = useQueryClient();
 
   const removeOAuthMutation = useRemoveOAuthServerMutation({
@@ -247,11 +257,7 @@ export function OAuthDetailsModal({
                       OAuth Authorization Server Discovery URL:
                     </Text>
                     <CodeBlock className="mt-1">
-                      {mcpUrl
-                        ? `${new URL(mcpUrl).origin}/.well-known/oauth-authorization-server/mcp/${
-                            toolset.mcpSlug
-                          }`
-                        : ""}
+                      {oauthDiscoveryUrl(mcpUrl) ?? ""}
                     </CodeBlock>
                   </div>
                   <div>

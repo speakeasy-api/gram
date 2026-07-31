@@ -217,9 +217,8 @@ export function MCPServerStatusDropdown({
     const needsEnableDialog =
       next === "disabled" || server.visibility === "disabled";
     const needsPublicWarning = goingPublic && systemVarNames.length > 0;
-    // Guard on the toolset's public flag, not visibility: a disabled toolset
-    // can still carry mcp_is_public=true, and private OAuth requires a wired
-    // session issuer under the user-sessions flag.
+    // Private OAuth requires a wired session issuer under the user-sessions
+    // flag, so a public→private flip is blocked until conversion.
     const needsConvertBlock =
       next === "private" &&
       !!toolset &&
@@ -228,7 +227,7 @@ export function MCPServerStatusDropdown({
           telemetry.isFeatureEnabled(
             ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG,
           ) ?? false,
-        mcpIsPublic: toolset.mcpIsPublic ?? false,
+        mcpIsPublic: server.visibility === "public",
         userSessionIssuerWired: isUserSessionIssuerWired(toolset),
         oauthParadigm: getOAuthParadigm(toolset),
       });

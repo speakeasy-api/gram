@@ -1,5 +1,6 @@
 import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import type { Toolset } from "@/lib/toolTypes";
+import type { McpServerVisibility } from "@gram/client/models/components/mcpserver.js";
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { Button } from "@/components/ui/Button";
 import { useState } from "react";
@@ -21,14 +22,20 @@ import {
  */
 export function ToolsetAuthenticationSection({
   toolset,
+  serverVisibility,
+  mcpUrl,
 }: {
   toolset: Toolset;
+  serverVisibility: McpServerVisibility;
+  /** The wrapper server's runtime URL, seeding the OAuth wizard's issuer. */
+  mcpUrl: string | undefined;
 }): JSX.Element {
   const target = useToolsetAuthTarget(toolset);
   const [externalOAuthOpen, setExternalOAuthOpen] = useState(false);
   const externalMcpOAuthStatus = useExternalMcpOAuthConfigStatus(toolset.slug);
   const externalOAuthAvailable = canConfigureExternalOAuth(
     toolset,
+    serverVisibility,
     externalMcpOAuthStatus === "required-unconfigured",
   );
 
@@ -65,6 +72,7 @@ export function ToolsetAuthenticationSection({
         onClose={() => setExternalOAuthOpen(false)}
         toolsetSlug={toolset.slug}
         toolset={toolset}
+        mcpUrl={mcpUrl}
         initialPath="external"
       />
     </>
