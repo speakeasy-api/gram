@@ -205,6 +205,9 @@ export function createServerAssistantTransport(
             });
           } catch (err) {
             if (pollSignal.aborted) throw err;
+            // The fallback masks why the stream failed, and "it fell back" is
+            // indistinguishable from "it worked" in a network trace.
+            console.error("[turnstream] fell back to polling:", err);
             await pollForReplies({
               deps,
               chatId,
