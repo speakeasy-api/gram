@@ -106,6 +106,7 @@ func TestManagedAssistantSkillsToolsExposesCatalog(t *testing.T) {
 
 	tools := ManagedAssistantSkillsTools(nil, nil)
 	require.ElementsMatch(t, []string{
+		"platform_create_skill",
 		"platform_list_skills",
 		"platform_get_skill",
 		"platform_list_skill_versions",

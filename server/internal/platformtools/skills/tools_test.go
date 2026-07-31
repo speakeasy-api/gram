@@ -12,6 +12,7 @@ import (
 )
 
 type stubSkillsService struct {
+	createPayload            *genskills.CreatePayload
 	listPayload              *genskills.ListPayload
 	getPayload               *genskills.GetPayload
 	listVersionsPayload      *genskills.ListVersionsPayload
@@ -20,6 +21,16 @@ type stubSkillsService struct {
 	getResult                *genskills.GetSkillResult
 	getErr                   error
 	listVersionsResult       *genskills.ListSkillVersionsResult
+}
+
+func (s *stubSkillsService) Create(_ context.Context, payload *genskills.CreatePayload) (*genskills.RecordSkillResult, error) {
+	s.createPayload = payload
+	return &genskills.RecordSkillResult{
+		Skill:          nil,
+		Version:        nil,
+		CreatedSkill:   true,
+		CreatedVersion: true,
+	}, nil
 }
 
 func (s *stubSkillsService) List(_ context.Context, payload *genskills.ListPayload) (*genskills.ListSkillsResult, error) {
@@ -54,7 +65,7 @@ func (s *stubSkillsService) ListDistributions(_ context.Context, payload *genski
 	return &genskills.ListSkillDistributionsResult{Distributions: nil, NextCursor: nil}, nil
 }
 
-func TestToolsForwardReadFiltersWithoutAuthOverrides(t *testing.T) {
+func TestToolsForwardPayloadsWithoutAuthOverrides(t *testing.T) {
 	t.Parallel()
 
 	svc := &stubSkillsService{}
@@ -67,7 +78,15 @@ func TestToolsForwardReadFiltersWithoutAuthOverrides(t *testing.T) {
 	}
 	var out bytes.Buffer
 
-	err := NewListTool(svc).Call(t.Context(), env, bytes.NewBufferString(`{"cursor":"next"}`), &out)
+	err := NewCreateTool(svc).Call(t.Context(), env, bytes.NewBufferString(`{"content":"---\nname: test-skill\ndescription: Test.\n---\n\n# Test"}`), &out)
+	require.NoError(t, err)
+	require.Contains(t, svc.createPayload.Content, "name: test-skill")
+	require.Nil(t, svc.createPayload.SessionToken)
+	require.Nil(t, svc.createPayload.ApikeyToken)
+	require.Nil(t, svc.createPayload.ProjectSlugInput)
+
+	out.Reset()
+	err = NewListTool(svc).Call(t.Context(), env, bytes.NewBufferString(`{"cursor":"next"}`), &out)
 	require.NoError(t, err)
 	require.Equal(t, 50, svc.listPayload.Limit)
 	require.Equal(t, "next", *svc.listPayload.Cursor)
@@ -100,6 +119,46 @@ func TestToolsForwardReadFiltersWithoutAuthOverrides(t *testing.T) {
 	require.Nil(t, svc.listDistributionsPayload.SessionToken)
 	require.Nil(t, svc.listDistributionsPayload.ApikeyToken)
 	require.Nil(t, svc.listDistributionsPayload.ProjectSlugInput)
+}
+
+func TestCreateToolDescriptorMarksMutationAsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	descriptor := NewCreateTool(nil).Descriptor()
+	require.Equal(t, "platform_create_skill", descriptor.Name)
+	require.NotNil(t, descriptor.Annotations)
+	require.False(t, *descriptor.Annotations.ReadOnlyHint)
+	require.False(t, *descriptor.Annotations.DestructiveHint)
+	require.True(t, *descriptor.Annotations.IdempotentHint)
+	require.False(t, *descriptor.Annotations.OpenWorldHint)
+	require.JSONEq(t, `{
+		"$schema": "https://json-schema.org/draft/2020-12/schema",
+		"additionalProperties": false,
+		"properties": {
+			"content": {
+				"description": "The complete SKILL.md content, including YAML frontmatter and instructions.",
+				"type": "string"
+			}
+		},
+		"required": ["content"],
+		"type": "object"
+	}`, string(descriptor.InputSchema))
+}
+
+func TestCreateToolRejectsMissingContent(t *testing.T) {
+	t.Parallel()
+
+	svc := &stubSkillsService{}
+	var out bytes.Buffer
+	err := NewCreateTool(svc).Call(t.Context(), toolconfig.ToolCallEnv{
+		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
+		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
+		OAuthToken: "",
+		GramEmail:  "",
+		GramChatID: "",
+	}, bytes.NewBufferString(`{}`), &out)
+	require.ErrorContains(t, err, "content is required")
+	require.Nil(t, svc.createPayload)
 }
 
 func TestToolsRejectInvalidLimits(t *testing.T) {
