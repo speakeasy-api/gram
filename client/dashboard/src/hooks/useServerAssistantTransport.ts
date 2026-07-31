@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useAssistantsGetManaged } from "@gram/client/react-query/assistantsGetManaged.js";
 import { useEnsureManagedAssistantMutation } from "@gram/client/react-query/ensureManagedAssistant.js";
-import { useOrganization } from "@/contexts/Auth";
+import { useOrganization, useSession } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { isNotFoundError } from "@/lib/route-errors";
 import { createServerAssistantTransport } from "@/lib/ServerAssistantTransport";
@@ -49,6 +49,7 @@ export function useServerAssistantTransport(
 ): UseServerAssistantTransportResult {
   const client = useGramContext();
   const organization = useOrganization();
+  const { session } = useSession();
   const { hasScope, isLoading: rbacLoading } = useRBAC();
 
   // The hook can be called with a projectSlug that differs from the URL-active
@@ -139,7 +140,13 @@ export function useServerAssistantTransport(
 
   const transport = useMemo<ElementsTransportFactory | undefined>(() => {
     if (!ready) return undefined;
-    return createServerAssistantTransport({ client, assistantId, projectSlug });
+    return createServerAssistantTransport({
+      client,
+      assistantId,
+      projectSlug,
+      // The turn stream authenticates from headers, not cookies.
+      sessionToken: session,
+    });
   }, [ready, client, assistantId, projectSlug]);
 
   return { transport, assistantId, ready, error, needsAdmin };
