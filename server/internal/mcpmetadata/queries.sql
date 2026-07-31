@@ -104,6 +104,16 @@ RETURNING id,
           created_at,
           updated_at;
 
+-- name: MoveMetadataToMcpServer :execrows
+-- Rekeys a toolset-owned metadata row onto the toolset's wrapper mcp_server in
+-- place, preserving the row id and its mcp_environment_configs children.
+-- Callers must ensure no server-keyed row already exists for the wrapper (the
+-- partial unique index on mcp_server_id would reject the move).
+UPDATE mcp_metadata
+SET toolset_id = NULL, mcp_server_id = @mcp_server_id, updated_at = clock_timestamp()
+WHERE toolset_id = @toolset_id
+  AND project_id = @project_id;
+
 -- name: GetHeaderDisplayNames :one
 SELECT header_display_names
 FROM mcp_metadata

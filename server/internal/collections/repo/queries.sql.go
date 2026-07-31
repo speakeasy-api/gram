@@ -596,12 +596,69 @@ func (q *Queries) IsServerAttachedToOrganizationMcpCollection(ctx context.Contex
 	return exists, err
 }
 
+const listOrganizationMcpCollectionAttachmentRows = `-- name: ListOrganizationMcpCollectionAttachmentRows :many
+SELECT a.id, a.collection_id, a.toolset_id, a.mcp_server_id, a.published_at,
+       a.published_by, a.deleted_at
+FROM organization_mcp_collection_server_attachments a
+JOIN organization_mcp_collections c ON c.id = a.collection_id
+WHERE a.collection_id = $1
+  AND c.organization_id = $2
+ORDER BY a.id
+`
+
+type ListOrganizationMcpCollectionAttachmentRowsParams struct {
+	CollectionID   uuid.UUID
+	OrganizationID string
+}
+
+type ListOrganizationMcpCollectionAttachmentRowsRow struct {
+	ID           uuid.UUID
+	CollectionID uuid.UUID
+	ToolsetID    uuid.NullUUID
+	McpServerID  uuid.NullUUID
+	PublishedAt  pgtype.Timestamptz
+	PublishedBy  pgtype.Text
+	DeletedAt    pgtype.Timestamptz
+}
+
+// Test verification read: raw attachment rows (both backends, including
+// soft-deleted history) for a collection.
+func (q *Queries) ListOrganizationMcpCollectionAttachmentRows(ctx context.Context, arg ListOrganizationMcpCollectionAttachmentRowsParams) ([]ListOrganizationMcpCollectionAttachmentRowsRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationMcpCollectionAttachmentRows, arg.CollectionID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationMcpCollectionAttachmentRowsRow
+	for rows.Next() {
+		var i ListOrganizationMcpCollectionAttachmentRowsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CollectionID,
+			&i.ToolsetID,
+			&i.McpServerID,
+			&i.PublishedAt,
+			&i.PublishedBy,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOrganizationMcpCollectionMcpServerAttachments = `-- name: ListOrganizationMcpCollectionMcpServerAttachments :many
 SELECT
   s.id AS mcp_server_id,
   s.name AS mcp_server_name,
   s.slug AS mcp_server_slug,
   s.visibility AS mcp_server_visibility,
+  s.toolset_id AS backing_toolset_id,
+  t.description AS backing_toolset_description,
   ep.slug AS endpoint_slug,
   ep.custom_domain_id AS endpoint_custom_domain_id,
   ep.custom_domain AS endpoint_custom_domain,
@@ -610,6 +667,7 @@ FROM organization_mcp_collection_server_attachments rt
 JOIN organization_mcp_collections c ON c.id = rt.collection_id
 JOIN mcp_servers s ON s.id = rt.mcp_server_id
 JOIN projects p ON p.id = s.project_id
+LEFT JOIN toolsets t ON t.id = s.toolset_id AND t.deleted IS FALSE
 LEFT JOIN LATERAL (
   SELECT e.slug, e.custom_domain_id, cd.domain AS custom_domain, e.created_at
   FROM mcp_endpoints e
@@ -646,14 +704,16 @@ type ListOrganizationMcpCollectionMcpServerAttachmentsParams struct {
 }
 
 type ListOrganizationMcpCollectionMcpServerAttachmentsRow struct {
-	McpServerID            uuid.UUID
-	McpServerName          pgtype.Text
-	McpServerSlug          pgtype.Text
-	McpServerVisibility    string
-	EndpointSlug           string
-	EndpointCustomDomainID uuid.NullUUID
-	EndpointCustomDomain   pgtype.Text
-	PublishedAt            pgtype.Timestamptz
+	McpServerID               uuid.UUID
+	McpServerName             pgtype.Text
+	McpServerSlug             pgtype.Text
+	McpServerVisibility       string
+	BackingToolsetID          uuid.NullUUID
+	BackingToolsetDescription pgtype.Text
+	EndpointSlug              string
+	EndpointCustomDomainID    uuid.NullUUID
+	EndpointCustomDomain      pgtype.Text
+	PublishedAt               pgtype.Timestamptz
 }
 
 // mcp_server-backed attachments for a collection. Scoped through the
@@ -662,6 +722,9 @@ type ListOrganizationMcpCollectionMcpServerAttachmentsRow struct {
 // endpoint via a lateral pick: custom-domain endpoints win over platform
 // endpoints, then oldest created_at, limit 1 (AGE-2651; per-plugin endpoint
 // preference is a follow-up). Servers without a usable endpoint are dropped.
+// Toolset-backed servers additionally carry their backing toolset's identity
+// and description so the listing renders them with toolset publishing
+// semantics rather than remote-server semantics.
 func (q *Queries) ListOrganizationMcpCollectionMcpServerAttachments(ctx context.Context, arg ListOrganizationMcpCollectionMcpServerAttachmentsParams) ([]ListOrganizationMcpCollectionMcpServerAttachmentsRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationMcpCollectionMcpServerAttachments, arg.OrganizationID, arg.CollectionID)
 	if err != nil {
@@ -676,6 +739,8 @@ func (q *Queries) ListOrganizationMcpCollectionMcpServerAttachments(ctx context.
 			&i.McpServerName,
 			&i.McpServerSlug,
 			&i.McpServerVisibility,
+			&i.BackingToolsetID,
+			&i.BackingToolsetDescription,
 			&i.EndpointSlug,
 			&i.EndpointCustomDomainID,
 			&i.EndpointCustomDomain,
@@ -692,7 +757,17 @@ func (q *Queries) ListOrganizationMcpCollectionMcpServerAttachments(ctx context.
 }
 
 const listOrganizationMcpCollectionServerAttachments = `-- name: ListOrganizationMcpCollectionServerAttachments :many
-SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.user_session_issuer_id, t.tool_variations_group_id, t.created_at, t.updated_at, t.deleted_at, t.deleted, rt.published_at AS published_at FROM toolsets t
+SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.user_session_issuer_id, t.tool_variations_group_id, t.created_at, t.updated_at, t.deleted_at, t.deleted, rt.published_at AS published_at,
+  COALESCE((
+    SELECT ws.id
+    FROM mcp_servers ws
+    WHERE ws.toolset_id = t.id
+      AND ws.project_id = t.project_id
+      AND ws.deleted IS FALSE
+    ORDER BY ws.created_at
+    LIMIT 1
+  ), '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS wrapper_mcp_server_id
+FROM toolsets t
 JOIN organization_mcp_collection_server_attachments rt ON t.id = rt.toolset_id
 JOIN organization_mcp_collections c ON c.id = rt.collection_id
 WHERE
@@ -732,8 +807,13 @@ type ListOrganizationMcpCollectionServerAttachmentsRow struct {
 	DeletedAt              pgtype.Timestamptz
 	Deleted                bool
 	PublishedAt            pgtype.Timestamptz
+	WrapperMcpServerID     uuid.UUID
 }
 
+// The wrapper subquery resolves the toolset's single live wrapper mcp_server
+// (COALESCEd to the zero uuid — sqlc cannot infer scalar-subquery
+// nullability) so metadata reads can fall back to server-keyed rows once
+// ownership moves onto the wrapper.
 func (q *Queries) ListOrganizationMcpCollectionServerAttachments(ctx context.Context, arg ListOrganizationMcpCollectionServerAttachmentsParams) ([]ListOrganizationMcpCollectionServerAttachmentsRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationMcpCollectionServerAttachments, arg.CollectionID, arg.OrganizationID)
 	if err != nil {
@@ -765,6 +845,7 @@ func (q *Queries) ListOrganizationMcpCollectionServerAttachments(ctx context.Con
 			&i.DeletedAt,
 			&i.Deleted,
 			&i.PublishedAt,
+			&i.WrapperMcpServerID,
 		); err != nil {
 			return nil, err
 		}
@@ -823,6 +904,43 @@ func (q *Queries) ListOrganizationMcpCollections(ctx context.Context, organizati
 		return nil, err
 	}
 	return items, nil
+}
+
+const moveCollectionAttachmentToMcpServer = `-- name: MoveCollectionAttachmentToMcpServer :execrows
+WITH org_collection AS (
+  SELECT omc.id FROM organization_mcp_collections omc
+  WHERE omc.id = $3 AND omc.organization_id = $4 AND omc.deleted IS FALSE
+)
+UPDATE organization_mcp_collection_server_attachments
+SET toolset_id = NULL, mcp_server_id = $1, updated_at = clock_timestamp()
+WHERE
+  collection_id = (SELECT id FROM org_collection)
+  AND toolset_id = $2
+  AND deleted IS FALSE
+`
+
+type MoveCollectionAttachmentToMcpServerParams struct {
+	McpServerID    uuid.NullUUID
+	ToolsetID      uuid.NullUUID
+	CollectionID   uuid.UUID
+	OrganizationID string
+}
+
+// Rekeys a collection's live toolset-keyed attachment onto the toolset's
+// wrapper mcp_server in place, preserving the row id, published_at,
+// published_by, and created_at so publish history survives the
+// expand/contract swap from toolset-column publishing to mcp_servers.
+func (q *Queries) MoveCollectionAttachmentToMcpServer(ctx context.Context, arg MoveCollectionAttachmentToMcpServerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, moveCollectionAttachmentToMcpServer,
+		arg.McpServerID,
+		arg.ToolsetID,
+		arg.CollectionID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateOrganizationMcpCollection = `-- name: UpdateOrganizationMcpCollection :one

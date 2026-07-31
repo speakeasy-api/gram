@@ -89,6 +89,7 @@ func parseWrapToolsetsFlags(args []string) (wrapToolsetsConfig, error) {
 		projectIDStr    = fs.String("project-id", "", "restrict the candidate set to one project (uuid, optional)")
 		clearDeadDomain = fs.Bool("clear-dead-domain", false, "null a candidate's custom_domain_id when its domain row is soft-deleted and wrap it as a platform candidate")
 		moveDependents  = fs.Bool("move-dependents", false, "move mcp_metadata and collection attachment ownership onto the wrapper; run only after the server-keyed read release is deployed")
+		movePlugins     = fs.Bool("move-plugins", false, "second mode: rekey plugin_servers rows in place from toolset_id onto each toolset's live wrapper mcp_server; run only after the plugins service supports toolset-backed servers (see WRAPTOOLSETS.md)")
 		reportPath      = fs.String("report", "", "path to write the JSON report (optional)")
 	)
 	if err := fs.Parse(args); err != nil {
@@ -110,11 +111,15 @@ func parseWrapToolsetsFlags(args []string) (wrapToolsetsConfig, error) {
 			ProjectID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			ClearDeadDomain: *clearDeadDomain,
 			MoveDependents:  *moveDependents,
+			MovePlugins:     *movePlugins,
 		},
 	}
 
 	if cfg.dbURL == "" {
 		return cfg, errors.New("missing $GRAM_DATABASE_URL")
+	}
+	if cfg.opts.MovePlugins && cfg.opts.ClearDeadDomain {
+		return cfg, errors.New("-clear-dead-domain does not apply to -move-plugins")
 	}
 	if cfg.opts.Limit < 0 {
 		return cfg, errors.New("-limit must be zero or positive")
@@ -171,7 +176,9 @@ func printWrapToolsetsReport(cfg wrapToolsetsConfig, report *wraptoolsets.Report
 	for _, row := range report.Rows {
 		if row.Outcome == wraptoolsets.OutcomeCreated ||
 			row.Outcome == wraptoolsets.OutcomeWouldCreate ||
-			row.Outcome == wraptoolsets.OutcomeAlreadyComplete {
+			row.Outcome == wraptoolsets.OutcomeAlreadyComplete ||
+			row.Outcome == wraptoolsets.OutcomeMovedPlugins ||
+			row.Outcome == wraptoolsets.OutcomeWouldMovePlugins {
 			continue
 		}
 		if blocked == 0 {
@@ -186,7 +193,7 @@ func printWrapToolsetsReport(cfg wrapToolsetsConfig, report *wraptoolsets.Report
 	if report.LastCursor != nil {
 		fmt.Printf("\n  last cursor: %s\n", *report.LastCursor)
 	}
-	if cfg.opts.DryRun && report.Counts[wraptoolsets.OutcomeWouldCreate] > 0 {
+	if cfg.opts.DryRun && (report.Counts[wraptoolsets.OutcomeWouldCreate] > 0 || report.Counts[wraptoolsets.OutcomeWouldMovePlugins] > 0) {
 		fmt.Println()
 		fmt.Println("re-run with -dry-run=false to apply.")
 	}

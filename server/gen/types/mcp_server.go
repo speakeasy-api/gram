@@ -34,6 +34,12 @@ type McpServer struct {
 	ToolVariationsGroupID *string
 	// The visibility of the server
 	Visibility McpServerVisibility
+	// The kind of backend this server is configured with, derived from which
+	// backend reference is set.
+	BackendKind *McpServerBackendKind
+	// A compact summary of the backing toolset. Present only on toolset-backed
+	// servers returned by get and list reads.
+	ToolsetSummary *McpServerToolsetSummary
 	// When the MCP server was created
 	CreatedAt string
 	// When the MCP server was last updated

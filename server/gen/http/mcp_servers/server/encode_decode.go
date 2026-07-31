@@ -2808,6 +2808,32 @@ func EncodeDeleteMcpServerError(encoder func(context.Context, http.ResponseWrite
 	}
 }
 
+// marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody
+// builds a value of type *McpServerToolsetSummaryResponseBody from a value of
+// type *types.McpServerToolsetSummary.
+func marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(v *types.McpServerToolsetSummary) *McpServerToolsetSummaryResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &McpServerToolsetSummaryResponseBody{
+		ID:                      v.ID,
+		Slug:                    v.Slug,
+		Name:                    v.Name,
+		ToolCount:               v.ToolCount,
+		OriginRegistrySpecifier: v.OriginRegistrySpecifier,
+	}
+	if v.ToolUrns != nil {
+		res.ToolUrns = make([]string, len(v.ToolUrns))
+		for i, val := range v.ToolUrns {
+			res.ToolUrns[i] = val
+		}
+	} else {
+		res.ToolUrns = []string{}
+	}
+
+	return res
+}
+
 // marshalTypesMcpServerToMcpServerResponseBody builds a value of type
 // *McpServerResponseBody from a value of type *types.McpServer.
 func marshalTypesMcpServerToMcpServerResponseBody(v *types.McpServer) *McpServerResponseBody {
@@ -2825,6 +2851,13 @@ func marshalTypesMcpServerToMcpServerResponseBody(v *types.McpServer) *McpServer
 		Visibility:            string(v.Visibility),
 		CreatedAt:             v.CreatedAt,
 		UpdatedAt:             v.UpdatedAt,
+	}
+	if v.BackendKind != nil {
+		backendKind := string(*v.BackendKind)
+		res.BackendKind = &backendKind
+	}
+	if v.ToolsetSummary != nil {
+		res.ToolsetSummary = marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(v.ToolsetSummary)
 	}
 
 	return res

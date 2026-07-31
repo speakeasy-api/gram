@@ -8,6 +8,23 @@ import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  McpServerToolsetSummary,
+  McpServerToolsetSummary$inboundSchema,
+} from "./mcpservertoolsetsummary.js";
+
+/**
+ * The kind of backend an MCP server is configured with, derived from which backend reference is set: toolset_id, remote_mcp_server_id, or tunneled_mcp_server_id.
+ */
+export const BackendKind = {
+  Toolset: "toolset",
+  Remote: "remote",
+  Tunneled: "tunneled",
+} as const;
+/**
+ * The kind of backend an MCP server is configured with, derived from which backend reference is set: toolset_id, remote_mcp_server_id, or tunneled_mcp_server_id.
+ */
+export type BackendKind = ClosedEnum<typeof BackendKind>;
 
 /**
  * The visibility of an MCP server
@@ -26,6 +43,10 @@ export type McpServerVisibility = ClosedEnum<typeof McpServerVisibility>;
  * An MCP server configuration: authentication, environment, and backend selection for an MCP server.
  */
 export type McpServer = {
+  /**
+   * The kind of backend an MCP server is configured with, derived from which backend reference is set: toolset_id, remote_mcp_server_id, or tunneled_mcp_server_id.
+   */
+  backendKind?: BackendKind | undefined;
   /**
    * When the MCP server was created
    */
@@ -63,6 +84,10 @@ export type McpServer = {
    */
   toolsetId?: string | undefined;
   /**
+   * A compact summary of the toolset backing a toolset-backed MCP server, sufficient to render a listing card without a separate toolsets fetch.
+   */
+  toolsetSummary?: McpServerToolsetSummary | undefined;
+  /**
    * The ID of the tunneled MCP server used as the backend
    */
   tunneledMcpServerId?: string | undefined;
@@ -81,6 +106,10 @@ export type McpServer = {
 };
 
 /** @internal */
+export const BackendKind$inboundSchema: z.ZodMiniEnum<typeof BackendKind> = z
+  .enum(BackendKind);
+
+/** @internal */
 export const McpServerVisibility$inboundSchema: z.ZodMiniEnum<
   typeof McpServerVisibility
 > = z.enum(McpServerVisibility);
@@ -89,6 +118,7 @@ export const McpServerVisibility$inboundSchema: z.ZodMiniEnum<
 export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
   .pipe(
     z.object({
+      backend_kind: z.optional(BackendKind$inboundSchema),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -101,6 +131,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
       slug: z.optional(z.string()),
       tool_variations_group_id: z.optional(z.string()),
       toolset_id: z.optional(z.string()),
+      toolset_summary: z.optional(McpServerToolsetSummary$inboundSchema),
       tunneled_mcp_server_id: z.optional(z.string()),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),
@@ -111,12 +142,14 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
+        "backend_kind": "backendKind",
         "created_at": "createdAt",
         "environment_id": "environmentId",
         "project_id": "projectId",
         "remote_mcp_server_id": "remoteMcpServerId",
         "tool_variations_group_id": "toolVariationsGroupId",
         "toolset_id": "toolsetId",
+        "toolset_summary": "toolsetSummary",
         "tunneled_mcp_server_id": "tunneledMcpServerId",
         "updated_at": "updatedAt",
         "user_session_issuer_id": "userSessionIssuerId",

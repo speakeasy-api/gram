@@ -369,6 +369,29 @@ var McpServerVisibility = Type("McpServerVisibility", String, func() {
 	Meta("struct:pkg:path", "types")
 })
 
+var McpServerBackendKind = Type("McpServerBackendKind", String, func() {
+	Description("The kind of backend an MCP server is configured with, derived from which backend reference is set: toolset_id, remote_mcp_server_id, or tunneled_mcp_server_id.")
+	Enum("toolset", "remote", "tunneled")
+	Meta("struct:pkg:path", "types")
+})
+
+var McpServerToolsetSummary = Type("McpServerToolsetSummary", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("A compact summary of the toolset backing a toolset-backed MCP server, sufficient to render a listing card without a separate toolsets fetch.")
+
+	Attribute("id", String, "The ID of the backing toolset", func() {
+		Format(FormatUUID)
+	})
+	Attribute("slug", String, "The slug of the backing toolset")
+	Attribute("name", String, "The name of the backing toolset")
+	Attribute("tool_count", Int, "The number of tools in the toolset's latest version")
+	Attribute("tool_urns", ArrayOf(String), "The tool URNs in the toolset's latest version")
+	Attribute("origin_registry_specifier", String, "The registry specifier the toolset was installed from, when it originated from the catalog.")
+
+	Required("id", "slug", "name", "tool_count", "tool_urns")
+})
+
 var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 	Description("Form for creating a new MCP server. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.")
 
@@ -452,6 +475,8 @@ var McpServer = Type("McpServer", func() {
 		Format(FormatUUID)
 	})
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")
+	Attribute("backend_kind", McpServerBackendKind, "The kind of backend this server is configured with, derived from which backend reference is set.")
+	Attribute("toolset_summary", McpServerToolsetSummary, "A compact summary of the backing toolset. Present only on toolset-backed servers returned by get and list reads.")
 	Attribute("created_at", String, func() {
 		Description("When the MCP server was created")
 		Format(FormatDateTime)

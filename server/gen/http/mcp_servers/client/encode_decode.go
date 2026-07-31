@@ -2906,6 +2906,28 @@ func DecodeDeleteMcpServerResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// unmarshalMcpServerToolsetSummaryResponseBodyToTypesMcpServerToolsetSummary
+// builds a value of type *types.McpServerToolsetSummary from a value of type
+// *McpServerToolsetSummaryResponseBody.
+func unmarshalMcpServerToolsetSummaryResponseBodyToTypesMcpServerToolsetSummary(v *McpServerToolsetSummaryResponseBody) *types.McpServerToolsetSummary {
+	if v == nil {
+		return nil
+	}
+	res := &types.McpServerToolsetSummary{
+		ID:                      *v.ID,
+		Slug:                    *v.Slug,
+		Name:                    *v.Name,
+		ToolCount:               *v.ToolCount,
+		OriginRegistrySpecifier: v.OriginRegistrySpecifier,
+	}
+	res.ToolUrns = make([]string, len(v.ToolUrns))
+	for i, val := range v.ToolUrns {
+		res.ToolUrns[i] = val
+	}
+
+	return res
+}
+
 // unmarshalMcpServerResponseBodyToTypesMcpServer builds a value of type
 // *types.McpServer from a value of type *McpServerResponseBody.
 func unmarshalMcpServerResponseBodyToTypesMcpServer(v *McpServerResponseBody) *types.McpServer {
@@ -2923,6 +2945,13 @@ func unmarshalMcpServerResponseBodyToTypesMcpServer(v *McpServerResponseBody) *t
 		Visibility:            types.McpServerVisibility(*v.Visibility),
 		CreatedAt:             *v.CreatedAt,
 		UpdatedAt:             *v.UpdatedAt,
+	}
+	if v.BackendKind != nil {
+		backendKind := types.McpServerBackendKind(*v.BackendKind)
+		res.BackendKind = &backendKind
+	}
+	if v.ToolsetSummary != nil {
+		res.ToolsetSummary = unmarshalMcpServerToolsetSummaryResponseBodyToTypesMcpServerToolsetSummary(v.ToolsetSummary)
 	}
 
 	return res

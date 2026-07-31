@@ -106,6 +106,59 @@ FROM mcp_servers
 WHERE project_id = @project_id
 ORDER BY deleted ASC, created_at DESC;
 
+-- name: ListToolsetSummariesForProject :many
+-- Compact summaries of the toolsets backing toolset-backed mcp_servers rows,
+-- used by the management get/list views so the dashboard can render a
+-- toolset-backed server card without a parallel toolsets fetch. The lateral
+-- picks the latest live toolset version for a cheap tool count; the origin
+-- join surfaces the catalog registry specifier for source classification.
+SELECT
+  t.id,
+  t.slug,
+  t.name,
+  COALESCE(tv.tool_urns, ARRAY[]::TEXT[])::TEXT[] AS tool_urns,
+  toro.origin_registry_specifier
+FROM toolsets t
+LEFT JOIN LATERAL (
+  SELECT tool_urns
+  FROM toolset_versions
+  WHERE toolset_id = t.id AND deleted IS FALSE
+  ORDER BY version DESC
+  LIMIT 1
+) tv ON TRUE
+LEFT JOIN toolset_origins toro
+  ON toro.toolset_id = t.id
+  AND toro.organization_id = t.organization_id
+  AND toro.deleted IS FALSE
+WHERE t.id = ANY(@toolset_ids::uuid[])
+  AND t.project_id = @project_id
+  AND t.deleted IS FALSE;
+
+-- name: ListToolsetSummariesForOrganization :many
+-- Organization-scoped variant of ListToolsetSummariesForProject for the
+-- cross-project listForOrg view, anchored on toolsets.organization_id.
+SELECT
+  t.id,
+  t.slug,
+  t.name,
+  COALESCE(tv.tool_urns, ARRAY[]::TEXT[])::TEXT[] AS tool_urns,
+  toro.origin_registry_specifier
+FROM toolsets t
+LEFT JOIN LATERAL (
+  SELECT tool_urns
+  FROM toolset_versions
+  WHERE toolset_id = t.id AND deleted IS FALSE
+  ORDER BY version DESC
+  LIMIT 1
+) tv ON TRUE
+LEFT JOIN toolset_origins toro
+  ON toro.toolset_id = t.id
+  AND toro.organization_id = t.organization_id
+  AND toro.deleted IS FALSE
+WHERE t.id = ANY(@toolset_ids::uuid[])
+  AND t.organization_id = @organization_id
+  AND t.deleted IS FALSE;
+
 -- name: UpdateMCPServer :one
 UPDATE mcp_servers
 SET

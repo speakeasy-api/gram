@@ -124,6 +124,12 @@ type CreateMcpServerResponseBody struct {
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
 	// The visibility of the server
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
+	// The kind of backend this server is configured with, derived from which
+	// backend reference is set.
+	BackendKind *string `form:"backend_kind,omitempty" json:"backend_kind,omitempty" xml:"backend_kind,omitempty"`
+	// A compact summary of the backing toolset. Present only on toolset-backed
+	// servers returned by get and list reads.
+	ToolsetSummary *McpServerToolsetSummaryResponseBody `form:"toolset_summary,omitempty" json:"toolset_summary,omitempty" xml:"toolset_summary,omitempty"`
 	// When the MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP server was last updated
@@ -157,6 +163,12 @@ type GetMcpServerResponseBody struct {
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
 	// The visibility of the server
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
+	// The kind of backend this server is configured with, derived from which
+	// backend reference is set.
+	BackendKind *string `form:"backend_kind,omitempty" json:"backend_kind,omitempty" xml:"backend_kind,omitempty"`
+	// A compact summary of the backing toolset. Present only on toolset-backed
+	// servers returned by get and list reads.
+	ToolsetSummary *McpServerToolsetSummaryResponseBody `form:"toolset_summary,omitempty" json:"toolset_summary,omitempty" xml:"toolset_summary,omitempty"`
 	// When the MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP server was last updated
@@ -202,6 +214,12 @@ type UpdateMcpServerResponseBody struct {
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
 	// The visibility of the server
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
+	// The kind of backend this server is configured with, derived from which
+	// backend reference is set.
+	BackendKind *string `form:"backend_kind,omitempty" json:"backend_kind,omitempty" xml:"backend_kind,omitempty"`
+	// A compact summary of the backing toolset. Present only on toolset-backed
+	// servers returned by get and list reads.
+	ToolsetSummary *McpServerToolsetSummaryResponseBody `form:"toolset_summary,omitempty" json:"toolset_summary,omitempty" xml:"toolset_summary,omitempty"`
 	// When the MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP server was last updated
@@ -2522,6 +2540,24 @@ type DeleteMcpServerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// McpServerToolsetSummaryResponseBody is used to define fields on response
+// body types.
+type McpServerToolsetSummaryResponseBody struct {
+	// The ID of the backing toolset
+	ID string `form:"id" json:"id" xml:"id"`
+	// The slug of the backing toolset
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The name of the backing toolset
+	Name string `form:"name" json:"name" xml:"name"`
+	// The number of tools in the toolset's latest version
+	ToolCount int `form:"tool_count" json:"tool_count" xml:"tool_count"`
+	// The tool URNs in the toolset's latest version
+	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The registry specifier the toolset was installed from, when it originated
+	// from the catalog.
+	OriginRegistrySpecifier *string `form:"origin_registry_specifier,omitempty" json:"origin_registry_specifier,omitempty" xml:"origin_registry_specifier,omitempty"`
+}
+
 // McpServerResponseBody is used to define fields on response body types.
 type McpServerResponseBody struct {
 	// The ID of the MCP server
@@ -2548,6 +2584,12 @@ type McpServerResponseBody struct {
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
 	// The visibility of the server
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
+	// The kind of backend this server is configured with, derived from which
+	// backend reference is set.
+	BackendKind *string `form:"backend_kind,omitempty" json:"backend_kind,omitempty" xml:"backend_kind,omitempty"`
+	// A compact summary of the backing toolset. Present only on toolset-backed
+	// servers returned by get and list reads.
+	ToolsetSummary *McpServerToolsetSummaryResponseBody `form:"toolset_summary,omitempty" json:"toolset_summary,omitempty" xml:"toolset_summary,omitempty"`
 	// When the MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP server was last updated
@@ -2634,6 +2676,13 @@ func NewCreateMcpServerResponseBody(res *types.McpServer) *CreateMcpServerRespon
 		CreatedAt:             res.CreatedAt,
 		UpdatedAt:             res.UpdatedAt,
 	}
+	if res.BackendKind != nil {
+		backendKind := string(*res.BackendKind)
+		body.BackendKind = &backendKind
+	}
+	if res.ToolsetSummary != nil {
+		body.ToolsetSummary = marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(res.ToolsetSummary)
+	}
 	return body
 }
 
@@ -2654,6 +2703,13 @@ func NewGetMcpServerResponseBody(res *types.McpServer) *GetMcpServerResponseBody
 		Visibility:            string(res.Visibility),
 		CreatedAt:             res.CreatedAt,
 		UpdatedAt:             res.UpdatedAt,
+	}
+	if res.BackendKind != nil {
+		backendKind := string(*res.BackendKind)
+		body.BackendKind = &backendKind
+	}
+	if res.ToolsetSummary != nil {
+		body.ToolsetSummary = marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(res.ToolsetSummary)
 	}
 	return body
 }
@@ -2713,6 +2769,13 @@ func NewUpdateMcpServerResponseBody(res *types.McpServer) *UpdateMcpServerRespon
 		Visibility:            string(res.Visibility),
 		CreatedAt:             res.CreatedAt,
 		UpdatedAt:             res.UpdatedAt,
+	}
+	if res.BackendKind != nil {
+		backendKind := string(*res.BackendKind)
+		body.BackendKind = &backendKind
+	}
+	if res.ToolsetSummary != nil {
+		body.ToolsetSummary = marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(res.ToolsetSummary)
 	}
 	return body
 }

@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadataRepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -496,42 +497,74 @@ func (s *Service) DetachServer(ctx context.Context, payload *gen.DetachServerPay
 		return oops.E(oops.CodeUnexpected, err, "error accessing collection").LogError(ctx, s.logger)
 	}
 
-	var attached bool
-	if backend.mcpServerID.Valid {
-		attached, err = tx.IsMcpServerAttachedToOrganizationMcpCollection(ctx, repo.IsMcpServerAttachedToOrganizationMcpCollectionParams{
-			CollectionID:   collectionID,
+	// A toolset reference may be published under either key during the
+	// expand/contract swap: as a toolset-keyed attachment (direct mcp_slug
+	// publishing) or as a server-keyed attachment on its canonical wrapper.
+	// Detach resolves both so callers holding either identity fully unpublish.
+	detachToolsetID := backend.toolsetID
+	detachMcpServerID := backend.mcpServerID
+	if backend.toolsetID.Valid {
+		toolset, toolsetErr := s.toolsets.GetToolsetByIDAndOrganization(ctx, toolsetsRepo.GetToolsetByIDAndOrganizationParams{
+			ID:             backend.toolsetID.UUID,
 			OrganizationID: authCtx.ActiveOrganizationID,
-			McpServerID:    backend.mcpServerID,
 		})
-	} else {
-		attached, err = tx.IsServerAttachedToOrganizationMcpCollection(ctx, repo.IsServerAttachedToOrganizationMcpCollectionParams{
-			CollectionID:   collectionID,
-			OrganizationID: authCtx.ActiveOrganizationID,
-			ToolsetID:      backend.toolsetID,
-		})
+		switch {
+		case errors.Is(toolsetErr, pgx.ErrNoRows):
+			// Toolset gone: only the toolset-keyed attachment can remain.
+		case toolsetErr != nil:
+			return oops.E(oops.CodeUnexpected, toolsetErr, "error accessing toolset").LogError(ctx, s.logger)
+		default:
+			detachMcpServerID, err = s.resolveToolsetWrapper(ctx, toolset.ID, toolset.ProjectID)
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "resolve toolset wrapper mcp server").LogError(ctx, s.logger)
+			}
+		}
 	}
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error checking collection server attachment").LogError(ctx, s.logger)
+
+	var attached bool
+	if detachToolsetID.Valid {
+		toolsetAttached, checkErr := tx.IsServerAttachedToOrganizationMcpCollection(ctx, repo.IsServerAttachedToOrganizationMcpCollectionParams{
+			CollectionID:   collectionID,
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ToolsetID:      detachToolsetID,
+		})
+		if checkErr != nil {
+			return oops.E(oops.CodeUnexpected, checkErr, "error checking collection server attachment").LogError(ctx, s.logger)
+		}
+		attached = attached || toolsetAttached
+	}
+	if detachMcpServerID.Valid {
+		serverAttached, checkErr := tx.IsMcpServerAttachedToOrganizationMcpCollection(ctx, repo.IsMcpServerAttachedToOrganizationMcpCollectionParams{
+			CollectionID:   collectionID,
+			OrganizationID: authCtx.ActiveOrganizationID,
+			McpServerID:    detachMcpServerID,
+		})
+		if checkErr != nil {
+			return oops.E(oops.CodeUnexpected, checkErr, "error checking collection server attachment").LogError(ctx, s.logger)
+		}
+		attached = attached || serverAttached
 	}
 	if !attached {
 		return nil
 	}
 
-	if backend.mcpServerID.Valid {
-		err = tx.DetachMcpServerFromOrganizationMcpCollection(ctx, repo.DetachMcpServerFromOrganizationMcpCollectionParams{
+	if detachToolsetID.Valid {
+		if err := tx.DetachServerFromOrganizationMcpCollection(ctx, repo.DetachServerFromOrganizationMcpCollectionParams{
 			CollectionID:   collectionID,
 			OrganizationID: authCtx.ActiveOrganizationID,
-			McpServerID:    backend.mcpServerID,
-		})
-	} else {
-		err = tx.DetachServerFromOrganizationMcpCollection(ctx, repo.DetachServerFromOrganizationMcpCollectionParams{
-			CollectionID:   collectionID,
-			OrganizationID: authCtx.ActiveOrganizationID,
-			ToolsetID:      backend.toolsetID,
-		})
+			ToolsetID:      detachToolsetID,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to detach server from collection").LogError(ctx, s.logger)
+		}
 	}
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to detach server from collection").LogError(ctx, s.logger)
+	if detachMcpServerID.Valid {
+		if err := tx.DetachMcpServerFromOrganizationMcpCollection(ctx, repo.DetachMcpServerFromOrganizationMcpCollectionParams{
+			CollectionID:   collectionID,
+			OrganizationID: authCtx.ActiveOrganizationID,
+			McpServerID:    detachMcpServerID,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to detach server from collection").LogError(ctx, s.logger)
+		}
 	}
 
 	toolsetURN, mcpServerURN := backend.auditURNs()
@@ -614,7 +647,8 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 		}
 
 		remoteURL := s.serverURL.JoinPath("mcp", t.McpSlug.String).String()
-		remoteHeaders, err := s.collectionRemoteHeaders(ctx, mcpMetaRepo, t.ID, t.McpIsPublic)
+		wrapperID := uuid.NullUUID{UUID: t.WrapperMcpServerID, Valid: t.WrapperMcpServerID != uuid.Nil}
+		remoteHeaders, err := s.collectionRemoteHeaders(ctx, mcpMetaRepo, wrapperID, uuid.NullUUID{UUID: t.ID, Valid: true}, t.McpIsPublic)
 		if err != nil {
 			return nil, err
 		}
@@ -672,6 +706,25 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 			title = m.McpServerName.String
 		}
 
+		// Remote- and tunneled-backed servers authenticate via their user
+		// session issuer (OAuth), so there are no static headers for the
+		// client to collect. A toolset-backed server publishes with toolset
+		// semantics instead: visibility drives the Gram key/environment
+		// headers and user env configs come from its (server- or
+		// toolset-keyed) metadata, matching the toolset-keyed branch above.
+		description := ""
+		var toolsetID *string
+		remoteHeaders := []*types.ExternalMCPRemoteHeader{}
+		if m.BackingToolsetID.Valid {
+			description = conv.FromPGTextOrEmpty[string](m.BackingToolsetDescription)
+			toolsetID = conv.PtrEmpty(m.BackingToolsetID.UUID.String())
+			isPublic := m.McpServerVisibility == mcpservers.VisibilityPublic
+			remoteHeaders, err = s.collectionRemoteHeaders(ctx, mcpMetaRepo, uuid.NullUUID{UUID: m.McpServerID, Valid: true}, m.BackingToolsetID, isPublic)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		mcpServerID := m.McpServerID.String()
 		entries = append(entries, collectionServerEntry{
 			publishedAt: m.PublishedAt.Time,
@@ -679,8 +732,8 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 			server: &types.ExternalMCPServer{
 				RegistrySpecifier:                   specifier,
 				Version:                             "1.0.0",
-				Description:                         "",
-				ToolsetID:                           nil,
+				Description:                         description,
+				ToolsetID:                           toolsetID,
 				McpServerID:                         &mcpServerID,
 				RegistryID:                          nil,
 				OrganizationMcpCollectionRegistryID: &collectionRegistryIDStr,
@@ -688,14 +741,10 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 				IconURL:                             nil,
 				Meta:                                nil,
 				Tools:                               nil,
-				// mcp_server-backed servers authenticate via their user session
-				// issuer (OAuth), so there are no static headers for the client
-				// to collect. Environments are not yet wired to mcp_servers; when
-				// they are, per-variable headers would be derived here.
 				Remotes: []*types.ExternalMCPRemote{{
 					URL:           remoteURL,
 					TransportType: "streamable-http",
-					Headers:       []*types.ExternalMCPRemoteHeader{},
+					Headers:       remoteHeaders,
 				}},
 			},
 		})
@@ -726,7 +775,11 @@ type collectionServerEntry struct {
 	tiebreak    string
 }
 
-func (s *Service) collectionRemoteHeaders(ctx context.Context, mcpMetaRepo *mcpmetadataRepo.Queries, toolsetID uuid.UUID, mcpIsPublic bool) ([]*types.ExternalMCPRemoteHeader, error) {
+// collectionRemoteHeaders derives the client-facing headers for a published
+// toolset (or its wrapper mcp_server). Metadata is read server-keyed first
+// when a wrapper id is known, then toolset-keyed — both keys are live during
+// the expand/contract publishing swap.
+func (s *Service) collectionRemoteHeaders(ctx context.Context, mcpMetaRepo *mcpmetadataRepo.Queries, mcpServerID, toolsetID uuid.NullUUID, mcpIsPublic bool) ([]*types.ExternalMCPRemoteHeader, error) {
 	headers := make([]*types.ExternalMCPRemoteHeader, 0)
 
 	if !mcpIsPublic {
@@ -736,12 +789,34 @@ func (s *Service) collectionRemoteHeaders(ctx context.Context, mcpMetaRepo *mcpm
 		)
 	}
 
-	metadataRecord, err := mcpMetaRepo.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: toolsetID, Valid: true})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	var metadataRecord mcpmetadataRepo.McpMetadatum
+	found := false
+	if mcpServerID.Valid {
+		record, err := mcpMetaRepo.GetMetadataByMcpServerID(ctx, mcpServerID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			// Fall through to the toolset-keyed row.
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "load mcp metadata for collection server").LogError(ctx, s.logger)
+		default:
+			metadataRecord = record
+			found = true
+		}
+	}
+	if !found && toolsetID.Valid {
+		record, err := mcpMetaRepo.GetMetadataForToolset(ctx, toolsetID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return headers, nil
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "load mcp metadata for collection server").LogError(ctx, s.logger)
+		default:
+			metadataRecord = record
+			found = true
+		}
+	}
+	if !found {
 		return headers, nil
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "load mcp metadata for collection server").LogError(ctx, s.logger)
 	}
 
 	metadata, err := mcpmetadata.ToMCPMetadata(ctx, mcpMetaRepo, metadataRecord)
@@ -845,6 +920,18 @@ func (s *Service) attachServerToCollection(ctx context.Context, queries *repo.Qu
 		}
 		return oops.E(oops.CodeUnexpected, err, "error accessing toolset").LogError(ctx, s.logger)
 	}
+
+	// A toolset with a canonical wrapper publishes through mcp_servers now:
+	// resolve the reference and write a server-keyed attachment so new
+	// publishes stop re-creating toolset-keyed rows.
+	wrapperID, err := s.resolveToolsetWrapper(ctx, toolsetID, toolset.ProjectID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "resolve toolset wrapper mcp server").LogError(ctx, s.logger)
+	}
+	if wrapperID.Valid {
+		return s.attachWrappedToolsetToCollection(ctx, queries, collectionID, toolsetID, wrapperID.UUID, organizationID, userID)
+	}
+
 	if !toolset.McpEnabled || !toolset.McpSlug.Valid {
 		return oops.E(oops.CodeInvalid, nil, "cannot attach a toolset that is not enabled as an MCP server").LogError(ctx, s.logger)
 	}
@@ -861,6 +948,91 @@ func (s *Service) attachServerToCollection(ctx context.Context, queries *repo.Qu
 			return oops.E(oops.CodeConflict, err, "toolset already attached to collection").LogError(ctx, s.logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "failed to attach server to collection").LogError(ctx, s.logger)
+	}
+
+	return nil
+}
+
+// resolveToolsetWrapper returns the toolset's canonical wrapper: its single
+// live toolset-backed mcp_servers row. Zero wrappers (not yet wrapped) or
+// multiple wrappers (ambiguous — never guess which owns the published
+// address) both resolve to an invalid id, keeping the toolset-keyed path.
+func (s *Service) resolveToolsetWrapper(ctx context.Context, toolsetID, projectID uuid.UUID) (uuid.NullUUID, error) {
+	wrappers, err := mcpserversRepo.New(s.db).GetMCPServersByToolsetID(ctx, mcpserversRepo.GetMCPServersByToolsetIDParams{
+		ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true},
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, fmt.Errorf("list toolset wrapper mcp servers: %w", err)
+	}
+	switch len(wrappers) {
+	case 0:
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+	case 1:
+		return uuid.NullUUID{UUID: wrappers[0].ID, Valid: true}, nil
+	default:
+		s.logger.WarnContext(ctx, "toolset has multiple live wrapper mcp servers; keeping toolset-keyed collection publishing",
+			attr.SlogToolsetID(toolsetID.String()),
+		)
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+	}
+}
+
+// attachWrappedToolsetToCollection publishes a wrapped toolset by its wrapper
+// mcp_server. A live toolset-keyed attachment for the same collection is
+// rekeyed in place first (preserving publish history) so the collection can
+// never list the same toolset twice under both keys.
+func (s *Service) attachWrappedToolsetToCollection(ctx context.Context, queries *repo.Queries, collectionID, toolsetID, mcpServerID uuid.UUID, organizationID, userID string) error {
+	server, err := s.repo.GetMcpServerForOrganizationAttachment(ctx, repo.GetMcpServerForOrganizationAttachmentParams{
+		McpServerID:    mcpServerID,
+		OrganizationID: organizationID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.C(oops.CodeNotFound)
+		}
+		return oops.E(oops.CodeUnexpected, err, "error accessing toolset wrapper mcp server").LogError(ctx, s.logger)
+	}
+	if server.Visibility == mcpservers.VisibilityDisabled || !server.HasEndpoint {
+		return oops.E(oops.CodeInvalid, nil, "cannot attach a toolset that is not enabled as an MCP server").LogError(ctx, s.logger)
+	}
+
+	serverAttached, err := queries.IsMcpServerAttachedToOrganizationMcpCollection(ctx, repo.IsMcpServerAttachedToOrganizationMcpCollectionParams{
+		CollectionID:   collectionID,
+		OrganizationID: organizationID,
+		McpServerID:    uuid.NullUUID{UUID: mcpServerID, Valid: true},
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error checking collection server attachment").LogError(ctx, s.logger)
+	}
+	if serverAttached {
+		// The wrapper already holds the live attachment; tombstone any leftover
+		// toolset-keyed duplicate before the republish upsert below.
+		if err := queries.DetachServerFromOrganizationMcpCollection(ctx, repo.DetachServerFromOrganizationMcpCollectionParams{
+			CollectionID:   collectionID,
+			OrganizationID: organizationID,
+			ToolsetID:      uuid.NullUUID{UUID: toolsetID, Valid: true},
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to detach toolset-keyed collection attachment").LogError(ctx, s.logger)
+		}
+	} else {
+		if _, err := queries.MoveCollectionAttachmentToMcpServer(ctx, repo.MoveCollectionAttachmentToMcpServerParams{
+			CollectionID:   collectionID,
+			OrganizationID: organizationID,
+			McpServerID:    uuid.NullUUID{UUID: mcpServerID, Valid: true},
+			ToolsetID:      uuid.NullUUID{UUID: toolsetID, Valid: true},
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to move collection attachment to mcp server").LogError(ctx, s.logger)
+		}
+	}
+
+	if _, err := queries.AttachMcpServerToOrganizationMcpCollection(ctx, repo.AttachMcpServerToOrganizationMcpCollectionParams{
+		CollectionID:   collectionID,
+		OrganizationID: organizationID,
+		McpServerID:    uuid.NullUUID{UUID: mcpServerID, Valid: true},
+		PublishedBy:    conv.PtrToPGTextEmpty(&userID),
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to attach mcp server to collection").LogError(ctx, s.logger)
 	}
 
 	return nil

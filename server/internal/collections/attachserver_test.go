@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/collections"
+	tgen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -18,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
-	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -134,10 +134,23 @@ func TestCollectionsService_ListServers_IncludesUserProvidedEnvironmentHeaders(t
 	)
 	toolsetID, err := uuid.Parse(toolset.ID)
 	require.NoError(t, err)
-	err = toolsetsRepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsRepo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolsetID,
-		ProjectID:   *authCtx.ProjectID,
+	// Flip publicness through the toolsets service so the change mirrors onto
+	// the wrapper mcp_server's visibility, matching production writes.
+	mcpIsPublic := true
+	_, err = ti.toolsets.UpdateToolset(ctx, &tgen.UpdateToolsetPayload{
+		SessionToken:           nil,
+		ApikeyToken:            nil,
+		Slug:                   toolset.Slug,
+		Name:                   nil,
+		Description:            nil,
+		DefaultEnvironmentSlug: nil,
+		ToolUrns:               nil,
+		ResourceUrns:           nil,
+		PromptTemplateNames:    nil,
+		McpSlug:                nil,
+		McpIsPublic:            &mcpIsPublic,
+		McpEnabled:             nil,
+		CustomDomainID:         nil,
 	})
 	require.NoError(t, err)
 
@@ -256,15 +269,17 @@ func TestCollectionsService_AttachServer_McpServerBacked(t *testing.T) {
 	got := listed.Servers[0]
 	require.NotNil(t, got.McpServerID)
 	require.Equal(t, server.idStr, *got.McpServerID)
-	require.Nil(t, got.ToolsetID)
+	// The fixture server is toolset-backed, so its backing toolset id rides
+	// along and the private visibility drives the Gram environment/key headers
+	// — the same shape a toolset-keyed attachment produces.
+	require.NotNil(t, got.ToolsetID)
 	require.Equal(t, "com.speakeasy.registry/"+server.endpointSlug, got.RegistrySpecifier)
 	require.NotNil(t, got.OrganizationMcpCollectionRegistryID)
 
 	require.Len(t, got.Remotes, 1)
 	expectedURL := testenv.DefaultSiteURL(t).JoinPath("mcp", server.endpointSlug).String()
 	require.Equal(t, expectedURL, got.Remotes[0].URL)
-	// mcp_server-backed remotes authenticate via OAuth, so no static headers.
-	require.Empty(t, got.Remotes[0].Headers)
+	require.Len(t, got.Remotes[0].Headers, 2)
 }
 
 func TestCollectionsService_AttachServer_CustomDomainEndpointURL(t *testing.T) {
@@ -495,11 +510,15 @@ func TestCollectionsService_ListServers_MergesBackendsByPublishedAt(t *testing.T
 
 	require.NotNil(t, listed.Servers[0].McpServerID)
 	require.Equal(t, server.idStr, *listed.Servers[0].McpServerID)
-	require.Nil(t, listed.Servers[0].ToolsetID)
+	// The stand-in fixture server is itself toolset-backed, so its backing
+	// toolset id rides along.
+	require.NotNil(t, listed.Servers[0].ToolsetID)
 
+	// The toolset attach resolved to its mirror-created wrapper and was
+	// written server-keyed, so the entry carries both identities.
 	require.NotNil(t, listed.Servers[1].ToolsetID)
 	require.Equal(t, toolset.ID, *listed.Servers[1].ToolsetID)
-	require.Nil(t, listed.Servers[1].McpServerID)
+	require.NotNil(t, listed.Servers[1].McpServerID)
 }
 
 func TestCollectionsService_Audit_AttachAndDetachMcpServer(t *testing.T) {

@@ -64,6 +64,33 @@ func (q *Queries) CountConflictingCollectionAttachments(ctx context.Context, arg
 	return count, err
 }
 
+const countConflictingPluginAttachments = `-- name: CountConflictingPluginAttachments :one
+SELECT count(*)
+FROM plugin_servers wrapper_side
+WHERE wrapper_side.deleted IS FALSE
+  AND wrapper_side.mcp_server_id = $1
+  AND wrapper_side.plugin_id IN (
+    SELECT toolset_side.plugin_id
+    FROM plugin_servers toolset_side
+    WHERE toolset_side.toolset_id = $2 AND toolset_side.deleted IS FALSE
+  )
+`
+
+type CountConflictingPluginAttachmentsParams struct {
+	McpServerID uuid.NullUUID
+	ToolsetID   uuid.NullUUID
+}
+
+// Plugins where a live toolset-keyed row and a live wrapper-keyed row would
+// collide after the move (the partial unique index on
+// (plugin_id, mcp_server_id) covers live rows only).
+func (q *Queries) CountConflictingPluginAttachments(ctx context.Context, arg CountConflictingPluginAttachmentsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countConflictingPluginAttachments, arg.McpServerID, arg.ToolsetID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countMcpEndpointsInProject = `-- name: CountMcpEndpointsInProject :one
 SELECT count(*) FROM mcp_endpoints WHERE project_id = $1
 `
@@ -81,6 +108,20 @@ SELECT count(*) FROM mcp_servers WHERE project_id = $1
 
 func (q *Queries) CountMcpServersInProject(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countMcpServersInProject, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countToolsetKeyedPluginServers = `-- name: CountToolsetKeyedPluginServers :one
+SELECT count(*)
+FROM plugin_servers
+WHERE toolset_id = $1
+`
+
+// Live and soft-deleted rows both count: history moves too.
+func (q *Queries) CountToolsetKeyedPluginServers(ctx context.Context, toolsetID uuid.NullUUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countToolsetKeyedPluginServers, toolsetID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -332,7 +373,6 @@ func (q *Queries) GetMetadataRow(ctx context.Context, arg GetMetadataRowParams) 
 }
 
 const getToolsetRow = `-- name: GetToolsetRow :one
-
 SELECT id, project_id, custom_domain_id, mcp_slug, updated_at
 FROM toolsets
 WHERE id = $1 AND project_id = $2
@@ -351,7 +391,6 @@ type GetToolsetRowRow struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
-// Test fixtures and verification reads.
 func (q *Queries) GetToolsetRow(ctx context.Context, arg GetToolsetRowParams) (GetToolsetRowRow, error) {
 	row := q.db.QueryRow(ctx, getToolsetRow, arg.ID, arg.ProjectID)
 	var i GetToolsetRowRow
@@ -361,6 +400,84 @@ func (q *Queries) GetToolsetRow(ctx context.Context, arg GetToolsetRowParams) (G
 		&i.CustomDomainID,
 		&i.McpSlug,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const insertPluginFixture = `-- name: InsertPluginFixture :one
+
+INSERT INTO plugins (organization_id, project_id, name, slug)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type InsertPluginFixtureParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+	Slug           string
+}
+
+// Test fixtures and verification reads.
+func (q *Queries) InsertPluginFixture(ctx context.Context, arg InsertPluginFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertPluginFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Name,
+		arg.Slug,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertPluginServerFixture = `-- name: InsertPluginServerFixture :one
+INSERT INTO plugin_servers (plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order, deleted_at)
+VALUES (
+    $1
+  , $2::uuid
+  , $3::uuid
+  , $4
+  , $5
+  , $6
+  , $7::timestamptz
+)
+RETURNING id, plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
+`
+
+type InsertPluginServerFixtureParams struct {
+	PluginID    uuid.UUID
+	ToolsetID   uuid.NullUUID
+	McpServerID uuid.NullUUID
+	DisplayName string
+	Policy      string
+	SortOrder   int32
+	DeletedAt   pgtype.Timestamptz
+}
+
+func (q *Queries) InsertPluginServerFixture(ctx context.Context, arg InsertPluginServerFixtureParams) (PluginServer, error) {
+	row := q.db.QueryRow(ctx, insertPluginServerFixture,
+		arg.PluginID,
+		arg.ToolsetID,
+		arg.McpServerID,
+		arg.DisplayName,
+		arg.Policy,
+		arg.SortOrder,
+		arg.DeletedAt,
+	)
+	var i PluginServer
+	err := row.Scan(
+		&i.ID,
+		&i.PluginID,
+		&i.ToolsetID,
+		&i.McpServerID,
+		&i.DisplayName,
+		&i.Policy,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }
@@ -619,6 +736,108 @@ func (q *Queries) ListLiveToolsetWrappers(ctx context.Context, arg ListLiveTools
 	return items, nil
 }
 
+const listPluginMoveCandidateToolsets = `-- name: ListPluginMoveCandidateToolsets :many
+
+SELECT DISTINCT t.id, t.project_id
+FROM toolsets t
+INNER JOIN projects p ON p.id = t.project_id AND p.deleted IS FALSE
+INNER JOIN plugin_servers ps ON ps.toolset_id = t.id
+WHERE t.deleted IS FALSE
+  AND t.id > $1::uuid
+  AND ($2::uuid IS NULL OR t.project_id = $2::uuid)
+ORDER BY t.id
+LIMIT NULLIF($3::bigint, 0)
+`
+
+type ListPluginMoveCandidateToolsetsParams struct {
+	AfterID   uuid.UUID
+	ProjectID uuid.NullUUID
+	RowLimit  int64
+}
+
+type ListPluginMoveCandidateToolsetsRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Queries for the -move-plugins mode: rekeying plugin_servers rows from
+// toolset_id onto the toolset's live wrapper mcp_server.
+// Candidates are live toolsets in live projects that still have any
+// plugin_servers row (live or soft-deleted history) keyed by toolset_id.
+// After a successful move a toolset drops out of this scan, which is what
+// makes reruns naturally idempotent.
+func (q *Queries) ListPluginMoveCandidateToolsets(ctx context.Context, arg ListPluginMoveCandidateToolsetsParams) ([]ListPluginMoveCandidateToolsetsRow, error) {
+	rows, err := q.db.Query(ctx, listPluginMoveCandidateToolsets, arg.AfterID, arg.ProjectID, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPluginMoveCandidateToolsetsRow
+	for rows.Next() {
+		var i ListPluginMoveCandidateToolsetsRow
+		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPluginServerRowsByPluginID = `-- name: ListPluginServerRowsByPluginID :many
+SELECT id, plugin_id, toolset_id, mcp_server_id, display_name, policy,
+       sort_order, created_at, updated_at, deleted_at
+FROM plugin_servers
+WHERE plugin_id = $1
+ORDER BY id
+`
+
+type ListPluginServerRowsByPluginIDRow struct {
+	ID          uuid.UUID
+	PluginID    uuid.UUID
+	ToolsetID   uuid.NullUUID
+	McpServerID uuid.NullUUID
+	DisplayName string
+	Policy      string
+	SortOrder   int32
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
+}
+
+func (q *Queries) ListPluginServerRowsByPluginID(ctx context.Context, pluginID uuid.UUID) ([]ListPluginServerRowsByPluginIDRow, error) {
+	rows, err := q.db.Query(ctx, listPluginServerRowsByPluginID, pluginID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPluginServerRowsByPluginIDRow
+	for rows.Next() {
+		var i ListPluginServerRowsByPluginIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PluginID,
+			&i.ToolsetID,
+			&i.McpServerID,
+			&i.DisplayName,
+			&i.Policy,
+			&i.SortOrder,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listServerOwnedMetadata = `-- name: ListServerOwnedMetadata :many
 SELECT id
 FROM mcp_metadata
@@ -731,6 +950,43 @@ func (q *Queries) LockCandidateToolset(ctx context.Context, arg LockCandidateToo
 	return i, err
 }
 
+const lockPluginMoveToolset = `-- name: LockPluginMoveToolset :one
+SELECT id, organization_id, project_id, name, slug
+FROM toolsets
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockPluginMoveToolsetParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type LockPluginMoveToolsetRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+	Slug           string
+}
+
+// Unlike LockCandidateToolset there is no mcp_slug requirement: the wrapper
+// (not the toolset publishing columns) anchors the plugin move.
+func (q *Queries) LockPluginMoveToolset(ctx context.Context, arg LockPluginMoveToolsetParams) (LockPluginMoveToolsetRow, error) {
+	row := q.db.QueryRow(ctx, lockPluginMoveToolset, arg.ID, arg.ProjectID)
+	var i LockPluginMoveToolsetRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+	)
+	return i, err
+}
+
 const moveCollectionAttachmentOwnershipToServer = `-- name: MoveCollectionAttachmentOwnershipToServer :execrows
 UPDATE organization_mcp_collection_server_attachments
 SET toolset_id = NULL, mcp_server_id = $1
@@ -769,6 +1025,29 @@ type MoveMetadataOwnershipToServerParams struct {
 // mcp_environment_configs children are preserved.
 func (q *Queries) MoveMetadataOwnershipToServer(ctx context.Context, arg MoveMetadataOwnershipToServerParams) (int64, error) {
 	result, err := q.db.Exec(ctx, moveMetadataOwnershipToServer, arg.McpServerID, arg.ToolsetID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const movePluginServerOwnershipToServer = `-- name: MovePluginServerOwnershipToServer :execrows
+UPDATE plugin_servers
+SET toolset_id = NULL, mcp_server_id = $1
+WHERE toolset_id = $2
+`
+
+type MovePluginServerOwnershipToServerParams struct {
+	McpServerID uuid.NullUUID
+	ToolsetID   uuid.NullUUID
+}
+
+// Moves soft-deleted history rows too, preserving ids, display_name, policy,
+// sort_order, timestamps, and deleted_at; only the owner columns change. The
+// table has no project_id column, so tenancy is anchored on the locked
+// toolset row and the project-scoped wrapper lookup.
+func (q *Queries) MovePluginServerOwnershipToServer(ctx context.Context, arg MovePluginServerOwnershipToServerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, movePluginServerOwnershipToServer, arg.McpServerID, arg.ToolsetID)
 	if err != nil {
 		return 0, err
 	}

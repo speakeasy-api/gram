@@ -13,8 +13,10 @@ Wraps every live toolset that still publishes directly through the
   ownership moved in place from `toolset_id` to `mcp_server_id`, preserving
   row ids, timestamps, `published_by`, and soft-deletion state.
 
-`plugin_servers` and `assistant_toolsets` are deliberately untouched; they
-move in a later phase.
+In the default (wrap) mode, `plugin_servers` and `assistant_toolsets` are
+deliberately untouched. A second mode, `-move-plugins`, rekeys
+`plugin_servers` rows onto the wrapper once the plugins service understands
+toolset-backed servers (see below). `assistant_toolsets` never move.
 
 ## Invocation
 
@@ -37,6 +39,7 @@ GRAM_DATABASE_URL=postgres://USER:PASS@127.0.0.1:5432/gram \
 | `-project-id`        | (none)  | Restrict the candidate set to one project (canary runs).                                                                                                                                                              |
 | `-clear-dead-domain` | `false` | When a candidate's `custom_domain_id` references a soft-deleted domain, null it and wrap the toolset as a platform candidate — preserving the only URL that still resolves.                                           |
 | `-move-dependents`   | `false` | Move `mcp_metadata` and collection attachment ownership onto the wrapper. Run only after the release whose collections/metadata APIs read server-keyed rows is deployed — moving earlier orphans toolset-keyed reads. |
+| `-move-plugins`      | `false` | Switch to the second mode: rekey `plugin_servers` rows in place from `toolset_id` onto each toolset's live wrapper `mcp_server`. Incompatible with `-clear-dead-domain`.    |
 | `-report`            | (none)  | Path to write the JSON report.                                                                                                                                                                                        |
 
 ## Behavior
@@ -72,10 +75,36 @@ false` always wins as `disabled`; otherwise `mcp_is_public` picks `public` or
 | `blocked_ambiguous_wrapper`  | The toolset has live wrapper state the command cannot safely adopt: multiple wrappers, a wrapper without the exact endpoint, or invariant mismatches. |
 | `blocked_dependent_conflict` | A row already exists at a derived id without matching, both toolset and wrapper own metadata, or a collection holds live attachments to both sides.   |
 | `blocked_changed`            | The toolset or its project drifted between candidate listing and the locked re-read. Rerun once the state settles.                                    |
+| `moved_plugins`              | `-move-plugins` only: every `plugin_servers` row keyed by the toolset (including soft-deleted history) was rekeyed onto the wrapper.                  |
+| `would_move_plugins`         | Dry-run equivalent of `moved_plugins`.                                                                                                                |
+| `blocked_no_wrapper`         | `-move-plugins` only: the toolset has plugin attachments but no live wrapper. Run the wrap mode first.                                                |
 
 The JSON report contains per-outcome counts and per-row entries (toolset id,
 project id, published slug, outcome, reason, derived ids, moved-row counts).
 It contains ids and slugs only — never organization names or emails.
+
+## `-move-plugins` mode
+
+The second, independently idempotent mode. For every live toolset that still
+has any `plugin_servers` row keyed by `toolset_id` (live or soft-deleted
+history) and exactly one live wrapper, it updates those rows in place to
+`mcp_server_id`, preserving row ids, `display_name`, `policy`, `sort_order`,
+`created_at`/`updated_at`, and `deleted_at`. A plugin that already holds a
+live attachment to both the toolset and its wrapper reports
+`blocked_dependent_conflict` and nothing is written for that toolset.
+
+Deployment ordering is a hard prerequisite: run this mode ONLY after the
+plugins service release that publishes toolset-backed `mcp_server` plugin
+servers with toolset semantics (`resolvePluginInfos` wrapper branch:
+wrapper visibility drives `IsPublic`, OAuth stays on the backing toolset,
+public env configs load from server- or toolset-keyed metadata) is fully
+deployed. Moving rows earlier makes plugin generation treat wrapped toolsets
+as remote servers (`IsPublic=false`, `IsOAuth=true`, no env configs) and
+publishes broken configs.
+
+Dry-run is the default here too, and reruns are naturally idempotent: once a
+toolset has no toolset-keyed rows left it drops out of the candidate scan, so
+a verification rerun processes zero candidates and writes nothing.
 
 ## Run order
 
