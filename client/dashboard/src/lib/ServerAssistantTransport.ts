@@ -2,7 +2,6 @@ import { assistantsSendMessage } from "@gram/client/funcs/assistantsSendMessage"
 import { chatLoad } from "@gram/client/funcs/chatLoad";
 import type { GramCore } from "@gram/client/core";
 import { sleep, type ElementsTransportContext } from "@/elements";
-import { getServerURL } from "@/lib/utils";
 import {
   type ChatTransport,
   createUIMessageStream,
@@ -14,14 +13,12 @@ const DEFAULT_POLL_INTERVAL_MS = 1500;
 const DEFAULT_POLL_TIMEOUT_MS = 600_000;
 const MAX_CONSECUTIVE_POLL_FAILURES = 3;
 
-// Client-side streaming emulation, used only for replies the live delta
-// stream did not already render: a reply the poll discovers after the fact
-// (stream disconnected, disabled server-side, or a message whose text arrived
-// some other way) still lands as one blob, so we slice it into `text-delta`
-// events rather than having it appear all at once. Tuned to feel responsive
-// without dragging: short replies get a readable typing cadence; long replies
-// are paced to finish within the budget instead of crawling. assistant-ui
-// can't tell these deltas apart from the real ones.
+// Client-side streaming emulation. The server reply lands as one blob after
+// polling (there is no SSE endpoint), so we slice it into many `text-delta`
+// events to reproduce the token-by-token feel a real stream would have. Tuned
+// to feel responsive without dragging: short replies get a readable typing
+// cadence; long replies are paced to finish within the time budget instead of
+// crawling. assistant-ui can't tell these deltas apart from a real stream.
 const STREAM_BUDGET_MS = 600; // target wall-clock to stream a whole reply
 const STREAM_TICK_MS = 22; // upper bound on delay between chunks
 const STREAM_MIN_CHARS = 12; // below this, just emit in one shot
@@ -51,141 +48,6 @@ export interface ServerAssistantTransportDeps {
   /** Optional poll tuning. */
   pollIntervalMs?: number;
   pollTimeoutMs?: number;
-}
-
-/**
- * Live assistant text, streamed from `GET /chat/deltas` while the reply is
- * still being generated.
- *
- * The poll remains the source of truth: it is what discovers the persisted
- * row, its tool calls, and the turn's terminal state. This only moves the text
- * onto the screen earlier — first token instead of whole message — so if the
- * stream never connects, drops, or the deployment has it disabled, the poll
- * renders exactly as it always did.
- *
- * The two must not both render the same text. Each completed live message is
- * banked in `completed`; when the poll later surfaces the persisted row it
- * calls `consume` with that row's text, and a match means the text is already
- * on screen and the poll must skip it. A mismatch (or an empty bank) falls
- * through to the poll's own rendering, so divergence costs a re-render rather
- * than a lost reply.
- */
-interface LiveDeltaStream {
-  /** Text of each live message that has finished, oldest first. */
-  completed: string[];
-  /**
-   * True when `text` was already streamed live and the caller should not
-   * render it again. Consumes the matching banked entry.
-   */
-  consume: (text: string) => boolean;
-  close: () => void;
-}
-
-/**
- * Subscribes to a chat's live assistant deltas and writes them into the
- * stream as they arrive.
- *
- * Step framing mirrors what the poll would have written: a `start-step` before
- * a message's first delta and a `finish-step` when it completes, so a
- * live-rendered message is bracketed exactly like a polled one and the poll
- * can skip both for that row.
- */
-function subscribeToDeltas(args: {
-  chatId: string;
-  writer: UIMessageStreamWriter<UIMessage>;
-  abortSignal?: AbortSignal;
-}): LiveDeltaStream {
-  const { chatId, writer, abortSignal } = args;
-  const controller = new AbortController();
-  const signal = abortSignal
-    ? AbortSignal.any([abortSignal, controller.signal])
-    : controller.signal;
-
-  const completed: string[] = [];
-  let current = "";
-  let index = 0;
-  let stepOpen = false;
-
-  const partId = () => `live-${chatId}-${index}`;
-
-  void (async () => {
-    try {
-      // Absolute: the dashboard and the API are different origins in every
-      // environment, so a relative URL would ask the dashboard's own server
-      // for a route it does not serve.
-      const res = await fetch(
-        `${getServerURL()}/chat/deltas?chat_id=${encodeURIComponent(chatId)}`,
-        {
-          credentials: "include",
-          signal,
-          headers: { accept: "text/event-stream" },
-        },
-      );
-      if (!res.ok || !res.body) return;
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        // SSE frames are separated by a blank line; anything after the last
-        // separator is a partial frame and stays buffered.
-        const frames = buffer.split("\n\n");
-        buffer = frames.pop() ?? "";
-
-        for (const frame of frames) {
-          const line = frame.split("\n").find((l) => l.startsWith("data: "));
-          if (!line) continue;
-          let event: { text?: string; done?: boolean };
-          try {
-            event = JSON.parse(line.slice("data: ".length)) as typeof event;
-          } catch {
-            continue;
-          }
-
-          if (event.text) {
-            if (!stepOpen) {
-              writer.write({ type: "start-step" });
-              stepOpen = true;
-            }
-            current += event.text;
-            writer.write({
-              type: "text-delta",
-              id: partId(),
-              delta: event.text,
-            });
-          }
-          if (event.done) {
-            if (stepOpen) {
-              writer.write({ type: "finish-step" });
-              stepOpen = false;
-            }
-            if (current.trim()) completed.push(current.trim());
-            current = "";
-            index++;
-          }
-        }
-      }
-    } catch {
-      // A failed or aborted stream is not a failed turn — the poll still
-      // renders the reply. Nothing banked means nothing is suppressed.
-    }
-  })();
-
-  return {
-    completed,
-    consume: (text: string) => {
-      const idx = completed.indexOf(text.trim());
-      if (idx === -1) return false;
-      completed.splice(idx, 1);
-      return true;
-    },
-    close: () => controller.abort(),
-  };
 }
 
 interface Snapshot {
@@ -309,28 +171,13 @@ export function createServerAssistantTransport(
             adopt(chatId);
           }
 
-          // Subscribe only once the chat id is known — for a new conversation
-          // the server mints it on send, and there is nothing to subscribe to
-          // before that. Deltas for this turn start flowing the moment the
-          // model produces its first token, well before the row is persisted.
-          const live = subscribeToDeltas({
+          await pollForReplies({
+            deps,
             chatId,
+            snapshot,
             writer,
             abortSignal: pollSignal,
           });
-
-          try {
-            await pollForReplies({
-              deps,
-              chatId,
-              snapshot,
-              writer,
-              abortSignal: pollSignal,
-              live,
-            });
-          } finally {
-            live.close();
-          }
 
           writer.write({ type: "finish" });
         },
@@ -359,10 +206,8 @@ async function pollForReplies(args: {
   snapshot: Snapshot | null;
   writer: UIMessageStreamWriter<UIMessage>;
   abortSignal?: AbortSignal;
-  /** Text already rendered live for this turn; see LiveDeltaStream. */
-  live?: LiveDeltaStream;
 }): Promise<void> {
-  const { deps, chatId, snapshot, writer, abortSignal, live } = args;
+  const { deps, chatId, snapshot, writer, abortSignal } = args;
   const {
     client,
     pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
@@ -441,25 +286,19 @@ async function pollForReplies(args: {
           // auto-resends a turn the server already finished. Per-step framing
           // keeps the final text-only row in a step of its own, so that check
           // finds no pending tool calls and stays put.
+          if (stepOpen) {
+            writer.write({ type: "finish-step" });
+          }
+          writer.write({ type: "start-step" });
+          stepOpen = true;
           const text = contentText(m.content);
-          // Already on screen from the live stream, which wrote this message's
-          // step framing and text as it was generated. Re-emitting either
-          // would show the reply twice.
-          const alreadyLive = Boolean(text) && Boolean(live?.consume(text));
-          if (!alreadyLive) {
-            if (stepOpen) {
-              writer.write({ type: "finish-step" });
-            }
-            writer.write({ type: "start-step" });
-            stepOpen = true;
-            if (text) {
-              await writeStreamedText({
-                writer,
-                id: m.id,
-                text,
-                abortSignal,
-              });
-            }
+          if (text) {
+            await writeStreamedText({
+              writer,
+              id: m.id,
+              text,
+              abortSignal,
+            });
           }
           for (const call of parseToolCalls(m.toolCalls)) {
             writer.write({

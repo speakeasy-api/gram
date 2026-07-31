@@ -79,17 +79,6 @@ type Service struct {
 	telemetryService *telemetry.Service
 	billingRepo      billing.Repository
 	audit            *audit.Logger
-	// deltaBroker republishes assistant text deltas for dashboard subscribers.
-	// Nil disables teeing, which is what a deployment without Redis (and every
-	// test that does not exercise it) gets: turns still complete, the
-	// dashboard just falls back to polling for whole messages.
-	deltaBroker *DeltaBroker
-}
-
-// WithDeltaBroker enables streaming assistant deltas to dashboard subscribers.
-func (s *Service) WithDeltaBroker(broker *DeltaBroker) *Service {
-	s.deltaBroker = broker
-	return s
 }
 
 func NewService(
@@ -129,7 +118,6 @@ func NewService(
 		telemetryService: telemetryService,
 		billingRepo:      billingRepo,
 		audit:            auditLogger,
-		deltaBroker:      nil, // opt in via WithDeltaBroker
 	}
 }
 
@@ -142,7 +130,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	srv.Mount(mux, server)
 
 	o11y.AttachHandler(mux, "POST", "/chat/completions", oops.ErrHandle(service.logger, service.HandleCompletion).ServeHTTP)
-	o11y.AttachHandler(mux, "GET", "/chat/deltas", oops.ErrHandle(service.logger, service.HandleDeltaStream).ServeHTTP)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -1528,83 +1515,11 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	/**
 	 * Non-Streaming
 	 */
-	// A non-streaming caller with a watchable chat still gets its assembled
-	// JSON, but the tokens are streamed upstream and republished on the way
-	// past so the dashboard can render them as they are produced rather than
-	// waiting out the whole generation. Falls back to a plain completion when
-	// there is no chat to attribute deltas to or no broker configured.
-	if s.deltaBroker != nil && chatID != uuid.Nil {
-		response, err := s.teedCompletion(ctx, completionReq, chatID)
-		if err != nil {
-			return err
-		}
-		return s.writeCompletionResponse(ctx, w, response, getContextWindow, authCtx, chatID, metadata, assistantIDHeader, eventProperties)
-	}
-
 	response, err := s.completionClient.GetCompletion(ctx, completionReq)
 	if err != nil {
 		return s.classifyCompletionError(ctx, "completion failed", err)
 	}
 
-	return s.writeCompletionResponse(ctx, w, response, getContextWindow, authCtx, chatID, metadata, assistantIDHeader, eventProperties)
-}
-
-// teedCompletion runs a completion as an upstream stream, republishing each
-// text delta on the chat's channel as it arrives, and returns the assembled
-// result in the shape a non-streaming caller expects.
-//
-// Draining the reader to EOF and closing it is what drives the openrouter
-// client's own capture and telemetry, so both must happen even though the
-// bytes themselves are discarded here.
-func (s *Service) teedCompletion(ctx context.Context, req openrouter.CompletionRequest, chatID uuid.UUID) (*openrouter.CompletionResponse, error) {
-	streamBody, err := s.completionClient.GetCompletionStream(ctx, req)
-	if err != nil {
-		return nil, s.classifyCompletionError(ctx, "get completion stream", err)
-	}
-	defer o11y.NoLogDefer(func() error { return streamBody.Close() })
-
-	// Publishing rides the request context: if the caller goes away the turn is
-	// abandoned anyway, and a detached publish would outlive its only reader.
-	publish := func(text string) {
-		if err := s.deltaBroker.Publish(ctx, chatID, DeltaEvent{Text: text, Done: false}); err != nil {
-			s.logger.WarnContext(ctx, "publish assistant delta", attr.SlogError(err))
-		}
-	}
-
-	assembled, err := teeCompletionStream(streamBody, publish)
-	if err != nil {
-		return nil, s.classifyCompletionError(ctx, "completion failed", err)
-	}
-	if err := s.deltaBroker.Publish(ctx, chatID, DeltaEvent{Text: "", Done: true}); err != nil {
-		s.logger.WarnContext(ctx, "publish assistant delta terminator", attr.SlogError(err))
-	}
-
-	message := assembled.Message()
-	return &openrouter.CompletionResponse{
-		StartTime:    time.Now(),
-		Message:      &message,
-		MessageID:    assembled.MessageID,
-		Model:        assembled.Model,
-		Usage:        assembled.Usage,
-		FinishReason: assembled.FinishReason,
-		ToolCalls:    assembled.ToolCalls,
-		Content:      assembled.Content,
-	}, nil
-}
-
-// writeCompletionResponse renders a completed (streamed or not) response in the
-// OpenAI-compatible shape the proxy's non-streaming callers parse.
-func (s *Service) writeCompletionResponse(
-	ctx context.Context,
-	w http.ResponseWriter,
-	response *openrouter.CompletionResponse,
-	getContextWindow func() int,
-	authCtx *contextvalues.AuthContext,
-	chatID uuid.UUID,
-	metadata httpMetadata,
-	assistantIDHeader string,
-	eventProperties map[string]any,
-) error {
 	var gramMetadata *openrouter.GramMetadata
 	if cw := getContextWindow(); cw > 0 {
 		gramMetadata = &openrouter.GramMetadata{ContextWindow: cw}
