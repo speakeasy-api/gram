@@ -153,9 +153,18 @@ func (t *TurnStream) Subscribe(ctx context.Context, chatID uuid.UUID, after stri
 	if t == nil {
 		return nil, errors.New("turn stream is not configured")
 	}
-	backlog, err := t.Replay(ctx, chatID, after)
-	if err != nil {
-		return nil, err
+	// No cursor means "start from now", not "replay everything". A chat's
+	// retained frames span earlier turns, so replaying from the beginning would
+	// hand a client the previous turn's terminal frame and end the new turn
+	// before it began. Replay exists for reconnects, and a reconnecting client
+	// always carries the cursor it got to.
+	var backlog []TurnFrame
+	if after != "" {
+		replayed, err := t.Replay(ctx, chatID, after)
+		if err != nil {
+			return nil, err
+		}
+		backlog = replayed
 	}
 
 	out := make(chan TurnFrame, 64)
