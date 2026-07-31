@@ -33,7 +33,11 @@ export function UnproxiedMcpOverviewTab({
     id: unproxiedMcpServerId,
   });
 
-  const { data, isLoading } = useGetUnproxiedMcpServerUsage(
+  const {
+    data,
+    isLoading,
+    isError: isUsageError,
+  } = useGetUnproxiedMcpServerUsage(
     {
       getUnproxiedMcpServerUsageRequestBody: {
         url: server?.url ?? "",
@@ -77,6 +81,10 @@ export function UnproxiedMcpOverviewTab({
         <div className="mt-6">
           {isLoadingUsage ? (
             <Skeleton className="h-32 w-full" />
+          ) : isUsageError ? (
+            <Text small muted>
+              Couldn't load activity for this server. Try refreshing the page.
+            </Text>
           ) : !hasActivity ? (
             <Text small muted>
               No activity observed yet.
@@ -93,7 +101,10 @@ export function UnproxiedMcpOverviewTab({
                     <div
                       className="bg-primary/70 w-full rounded-t"
                       style={{
-                        height: `${Math.max(4, (bucket.callCount / maxCount) * 100)}%`,
+                        height:
+                          bucket.callCount === 0
+                            ? "0%"
+                            : `${Math.max(4, (bucket.callCount / maxCount) * 100)}%`,
                       }}
                     />
                   </div>
