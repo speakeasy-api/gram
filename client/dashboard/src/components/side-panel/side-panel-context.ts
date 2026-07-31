@@ -12,6 +12,12 @@ import { createContext, useContext } from "react";
 export type SidePanelDescriptor = {
   kind: "setup-guide";
   title: string;
+  /** Second header line, naming what the panel holds when the title names its subject. */
+  subtitle?: string;
+  /** The subject's own icon. Falls back to the panel kind's generic mark. */
+  iconUrl?: string;
+  /** Where the same material lives on the docs site, when it has one page. */
+  docsUrl?: string;
   props: { registrySpecifier?: string; serverUrl?: string };
 };
 

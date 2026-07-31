@@ -16,11 +16,14 @@ import { BookOpen, ExternalLink } from "lucide-react";
 export function SetupGuideCallout({
   registrySpecifier,
   serverUrl,
+  iconUrl,
 }: {
   registrySpecifier?: string;
   serverUrl?: string;
+  /** The server's icon, which the panel wears in its header. */
+  iconUrl?: string;
 }): React.JSX.Element | null {
-  const guide = useSetupGuide({ registrySpecifier, serverUrl });
+  const guide = useSetupGuide({ registrySpecifier, serverUrl, iconUrl });
   if (!guide) return null;
 
   return (

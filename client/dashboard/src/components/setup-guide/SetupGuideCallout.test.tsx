@@ -125,11 +125,36 @@ describe("SetupGuideCallout", () => {
     // Serializable keys only: the panel survives navigation away from here.
     expect(mocks.openPanel).toHaveBeenCalledWith({
       kind: "setup-guide",
-      title: "Setup Guide: BigQuery",
+      title: "BigQuery",
+      subtitle: "MCP setup guide",
+      iconUrl: undefined,
+      docsUrl:
+        "https://www.speakeasy.com/docs/ai-control-plane/guides/google-big-query",
       props: {
         registrySpecifier: "com.pulsemcp.mirror/box",
         serverUrl: "https://mcp.box.com",
       },
+    });
+  });
+
+  it("hands the server's icon to the panel without letting it reach the lookup", () => {
+    mocks.useGetMCPSetupDocs.mockReturnValue({ data: { guides: [guide()] } });
+
+    render(
+      <SetupGuideCallout
+        registrySpecifier="com.pulsemcp.mirror/box"
+        iconUrl="https://cdn.example.com/box.png"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Read the guide" }));
+
+    expect(mocks.openPanel.mock.calls[0]?.[0]).toMatchObject({
+      iconUrl: "https://cdn.example.com/box.png",
+      docsUrl: "https://www.speakeasy.com/docs/ai-control-plane/guides/box",
+    });
+    // A presentation detail has no business splitting the query cache.
+    expect(mocks.useGetMCPSetupDocs.mock.calls[0]?.[0]).toEqual({
+      registrySpecifier: "com.pulsemcp.mirror/box",
     });
   });
 
@@ -147,7 +172,7 @@ describe("SetupGuideCallout", () => {
     fireEvent.click(screen.getByRole("button", { name: "Read the guide" }));
 
     expect(mocks.openPanel.mock.calls[0]?.[0]).toMatchObject({
-      title: "Setup Guides",
+      title: "MCP setup guides",
     });
   });
 

@@ -22,7 +22,9 @@ import {
   useSidePanel,
 } from "./side-panel-context";
 
-function OpenButton() {
+type PanelChrome = { subtitle?: string; iconUrl?: string; docsUrl?: string };
+
+function OpenButton(chrome: PanelChrome) {
   const { openPanel } = useSidePanel();
   return (
     <button
@@ -30,7 +32,8 @@ function OpenButton() {
       onClick={() =>
         openPanel({
           kind: "setup-guide",
-          title: "Setup Guide: Box",
+          title: "Box",
+          ...chrome,
           props: { registrySpecifier: "com.pulsemcp.mirror/box" },
         })
       }
@@ -40,10 +43,15 @@ function OpenButton() {
   );
 }
 
-function harness() {
+// null opens a panel without that line, which a bare `undefined` cannot express
+// past the default.
+function harness(
+  subtitle: string | null = "MCP setup guide",
+  chrome: Omit<PanelChrome, "subtitle"> = {},
+) {
   return render(
     <SidePanelProvider>
-      <OpenButton />
+      <OpenButton subtitle={subtitle ?? undefined} {...chrome} />
       <SidePanelSurface />
     </SidePanelProvider>,
   );
@@ -97,12 +105,70 @@ describe("SidePanelSurface", () => {
     fireEvent.click(screen.getByRole("button", { name: "open" }));
 
     const panel = screen.getByRole("complementary", {
-      name: "Setup Guide: Box",
+      name: "Box MCP setup guide",
     });
     expect(panel.style.width).toBe(`${SIDE_PANEL_MAX_WIDTH}px`);
     expect(screen.getByTestId("panel-body").textContent).toBe(
       "rendered setup-guide",
     );
+  });
+
+  it("heads the panel with its subject, then what it is holding", () => {
+    harness();
+    fireEvent.click(screen.getByRole("button", { name: "open" }));
+
+    expect(screen.getByText("Box")).toBeTruthy();
+    expect(screen.getByText("MCP setup guide")).toBeTruthy();
+  });
+
+  it("leaves the second line off when the caller has no subtitle", () => {
+    harness(null);
+    fireEvent.click(screen.getByRole("button", { name: "open" }));
+
+    expect(screen.getByRole("complementary", { name: "Box" })).toBeTruthy();
+    expect(screen.queryByText("MCP setup guide")).toBeNull();
+  });
+
+  it("wears the subject's own icon when it has one", () => {
+    const { container } = harness("MCP setup guide", {
+      iconUrl: "https://cdn.example.com/box.png",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "open" }));
+
+    const icon = container.querySelector("img");
+    expect(icon?.getAttribute("src")).toBe("https://cdn.example.com/box.png");
+    // Decorative: the title beside it already names the server.
+    expect(icon?.getAttribute("alt")).toBe("");
+  });
+
+  it("falls back to a generic mark when the subject has no icon", () => {
+    const { container } = harness();
+    fireEvent.click(screen.getByRole("button", { name: "open" }));
+
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector("svg.lucide-book-open")).toBeTruthy();
+  });
+
+  it("links out to the docs from the header, in a new tab", () => {
+    harness("MCP setup guide", {
+      docsUrl: "https://www.speakeasy.com/docs/guides/box",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "open" }));
+
+    const docs = screen.getByRole("link", { name: "Docs" });
+    expect(docs.getAttribute("href")).toBe(
+      "https://www.speakeasy.com/docs/guides/box",
+    );
+    expect(docs.getAttribute("target")).toBe("_blank");
+    expect(docs.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+
+  it("leaves the docs link out when there is no single page to open", () => {
+    harness();
+    fireEvent.click(screen.getByRole("button", { name: "open" }));
+
+    expect(screen.queryByRole("link", { name: "Docs" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Close panel" })).toBeTruthy();
   });
 
   it("closes from the header button", async () => {
@@ -147,7 +213,7 @@ describe("SidePanelSurface", () => {
 
     const narrowed = SIDE_PANEL_MAX_WIDTH - 16;
     expect(
-      screen.getByRole("complementary", { name: "Setup Guide: Box" }).style
+      screen.getByRole("complementary", { name: "Box MCP setup guide" }).style
         .width,
     ).toBe(`${narrowed}px`);
     expect(window.localStorage.getItem(SIDE_PANEL_WIDTH_KEY)).toBe(
@@ -170,7 +236,7 @@ describe("SidePanelSurface", () => {
 
     const narrowed = SIDE_PANEL_MAX_WIDTH - 100;
     expect(
-      screen.getByRole("complementary", { name: "Setup Guide: Box" }).style
+      screen.getByRole("complementary", { name: "Box MCP setup guide" }).style
         .width,
     ).toBe(`${narrowed}px`);
     expect(window.localStorage.getItem(SIDE_PANEL_WIDTH_KEY)).toBeNull();
@@ -190,7 +256,7 @@ describe("SidePanelSurface", () => {
     fireEvent.keyDown(handle, { key: "ArrowLeft" });
 
     expect(
-      screen.getByRole("complementary", { name: "Setup Guide: Box" }).style
+      screen.getByRole("complementary", { name: "Box MCP setup guide" }).style
         .width,
     ).toBe(`${SIDE_PANEL_MAX_WIDTH}px`);
     expect(handle.getAttribute("aria-valuemin")).toBe(

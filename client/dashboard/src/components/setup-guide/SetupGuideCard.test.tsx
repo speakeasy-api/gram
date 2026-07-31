@@ -88,7 +88,11 @@ describe("SetupGuideCard", () => {
 
     expect(mocks.openPanel).toHaveBeenCalledWith({
       kind: "setup-guide",
-      title: "Setup Guide: Google BigQuery",
+      title: "Google BigQuery",
+      subtitle: "MCP setup guide",
+      iconUrl: undefined,
+      docsUrl:
+        "https://www.speakeasy.com/docs/ai-control-plane/guides/google-big-query",
       props: {
         registrySpecifier: undefined,
         serverUrl: "https://bigquery.googleapis.com/mcp",
@@ -105,7 +109,7 @@ describe("SetupGuideCard", () => {
     fireEvent.click(screen.getByRole("button", { name: /Read the guide/ }));
 
     expect(mocks.openPanel.mock.calls[0]?.[0]).toMatchObject({
-      title: "Setup Guides",
+      title: "MCP setup guides",
     });
   });
 

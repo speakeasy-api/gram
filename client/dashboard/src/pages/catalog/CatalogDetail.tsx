@@ -233,6 +233,7 @@ export default function CatalogDetail(): JSX.Element {
         <SetupGuideCallout
           registrySpecifier={server.registrySpecifier}
           serverUrl={filterToHttpRemotes(server).remotes?.[0]?.url}
+          iconUrl={server.iconUrl}
         />
         {/* Container query, not a viewport one: the side panel narrows this
             column without narrowing the window, and `lg:` would not notice. */}

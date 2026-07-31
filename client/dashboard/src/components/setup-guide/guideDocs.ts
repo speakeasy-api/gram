@@ -17,7 +17,19 @@ export function soleGuide(guides: MCPSetupGuide[]): MCPSetupGuide | undefined {
   return guides.length === 1 ? guides[0] : undefined;
 }
 
-export function setupGuideTitle(guides: MCPSetupGuide[]): string {
+/**
+ * How the panel header names a guide: the server on the first line, what the
+ * panel is holding on the second.
+ *
+ * Two lookup keys matching different guides leaves no single server to name, so
+ * the heading collapses back to one line.
+ */
+export function setupGuideHeading(guides: MCPSetupGuide[]): {
+  title: string;
+  subtitle?: string;
+} {
   const only = soleGuide(guides);
-  return only ? `Setup Guide: ${only.title}` : "Setup Guides";
+  return only
+    ? { title: only.title, subtitle: "MCP setup guide" }
+    : { title: "MCP setup guides" };
 }

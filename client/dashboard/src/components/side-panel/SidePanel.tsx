@@ -1,7 +1,7 @@
 import { Type } from "@/components/ui/type";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { cn } from "@/lib/utils";
-import { GripVertical, X } from "lucide-react";
+import { BookOpen, ExternalLink, GripVertical, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SidePanelKind } from "./panel-kinds";
 import {
@@ -105,7 +105,8 @@ export function SidePanelSurface(): React.JSX.Element | null {
   // border reads as a floating card sitting on top of the app.
   return (
     <aside
-      aria-label={shown.title}
+      // The header's two lines read as one name: "Google BigQuery MCP setup guide".
+      aria-label={[shown.title, shown.subtitle].filter(Boolean).join(" ")}
       inert={closing}
       style={{ width }}
       className={cn(
@@ -130,16 +131,53 @@ export function SidePanelSurface(): React.JSX.Element | null {
             and contents that resized along with it would re-wrap every frame.
             Instead they slide in from behind the right edge. */}
         <div style={{ width }} className="flex shrink-0 flex-col">
-          <div className="flex items-center justify-between gap-2 border-b py-3 pr-3 pl-5">
-            <Type className="truncate font-semibold">{shown.title}</Type>
-            <button
-              type="button"
-              onClick={closePanel}
-              aria-label="Close panel"
-              className="text-muted-foreground hover:text-foreground shrink-0 rounded-sm opacity-70 transition-opacity hover:opacity-100"
-            >
-              <X className="size-4" />
-            </button>
+          <div className="flex items-center gap-3 border-b py-3 pr-3 pl-5">
+            {/* Whatever the panel is about, wearing its own face. Servers that
+                publish no icon fall back to the mark for what the panel holds,
+                which is a guide. */}
+            <div className="bg-primary/5 flex size-8 shrink-0 items-center justify-center rounded-md dark:bg-neutral-800">
+              {shown.iconUrl ? (
+                <img
+                  src={shown.iconUrl}
+                  alt=""
+                  className="size-5 rounded object-contain"
+                />
+              ) : (
+                <BookOpen className="text-muted-foreground size-4" />
+              )}
+            </div>
+            <div className="flex min-w-0 flex-1 flex-col">
+              <Type className="truncate font-semibold">{shown.title}</Type>
+              {shown.subtitle && (
+                <Type variant="small" muted className="truncate">
+                  {shown.subtitle}
+                </Type>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              {/* The panel holds a reading copy; this is where the same
+                  material lives on the docs site. A new tab, so following it
+                  does not abandon a half-finished setup behind it. */}
+              {shown.docsUrl && (
+                <a
+                  href={shown.docsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-colors"
+                >
+                  Docs
+                  <ExternalLink className="size-3" />
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={closePanel}
+                aria-label="Close panel"
+                className="text-muted-foreground hover:text-foreground rounded-sm p-1 opacity-70 transition-opacity hover:opacity-100"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             <SidePanelKind descriptor={shown} />

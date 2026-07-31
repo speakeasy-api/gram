@@ -100,18 +100,22 @@ export function SetupGuidePanel({
       <div className="flex flex-col gap-10">
         {guides.map((guide) => (
           <div key={guide.slug} className="flex flex-col gap-6">
-            <Badge asChild variant="information" className="self-start">
-              <a
-                href={docsUrl(guide)}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Badge.Text>Open documentation</Badge.Text>
-                <Badge.RightIcon>
-                  <ExternalLink />
-                </Badge.RightIcon>
-              </a>
-            </Badge>
+            {/* One guide is linked from the panel header. Two have no single
+                page that could go up there, so each carries its own. */}
+            {!only && (
+              <Badge asChild variant="information" className="self-start">
+                <a
+                  href={docsUrl(guide)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Badge.Text>Open documentation</Badge.Text>
+                  <Badge.RightIcon>
+                    <ExternalLink />
+                  </Badge.RightIcon>
+                </a>
+              </Badge>
+            )}
             <SetupGuideSection
               heading={`Set up in ${guide.title}`}
               markdown={guide.externalMarkdown}

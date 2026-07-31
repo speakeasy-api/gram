@@ -152,7 +152,7 @@ describe("SetupGuidePanel", () => {
     expect(screen.queryByRole("link", { name: "here" })).toBeNull();
   });
 
-  it("links out to each guide's page on the docs site", () => {
+  it("leaves the docs link to the panel header when one guide matched", () => {
     mocks.useGetMCPSetupDocs.mockReturnValue({
       data: {
         guides: [guide({ slug: "google-big-query", title: "BigQuery" })],
@@ -161,13 +161,9 @@ describe("SetupGuidePanel", () => {
 
     render(<SetupGuidePanel registrySpecifier="com.pulsemcp.mirror/box" />);
 
-    const docs = screen.getByRole("link", { name: /Open documentation/ });
-    // The docs slug is the guide's, not the server's registry specifier.
-    expect(docs.getAttribute("href")).toBe(
-      "https://www.speakeasy.com/docs/ai-control-plane/guides/google-big-query",
-    );
-    expect(docs.getAttribute("target")).toBe("_blank");
-    expect(docs.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(
+      screen.queryByRole("link", { name: /Open documentation/ }),
+    ).toBeNull();
   });
 
   it("stacks every guide when the two lookup keys disagree", () => {
