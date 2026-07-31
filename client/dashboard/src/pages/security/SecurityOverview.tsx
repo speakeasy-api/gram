@@ -503,10 +503,6 @@ function RiskActivitySection({ children }: { children: ReactNode }) {
     return next;
   }, [location.search]);
 
-  const agentsParams = new URLSearchParams(carriedRangeParams);
-  agentsParams.set("has_risk", "true");
-  const agentsHref = `${routes.agentSessions.href()}?${agentsParams.toString()}`;
-
   const riskEventsHref = carriedRangeParams.toString()
     ? `${routes.riskEvents.href()}?${carriedRangeParams.toString()}`
     : routes.riskEvents.href();
@@ -519,24 +515,14 @@ function RiskActivitySection({ children }: { children: ReactNode }) {
         changes over time.
       </Page.Section.Description>
       <Page.Section.CTA>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" asChild>
-            <Link to={agentsHref}>
-              <Button.Text>View Sessions with Risk</Button.Text>
-              <Button.RightIcon>
-                <Icon name="arrow-right" />
-              </Button.RightIcon>
-            </Link>
-          </Button>
-          <Button variant="secondary" asChild>
-            <Link to={riskEventsHref}>
-              <Button.Text>View All Events</Button.Text>
-              <Button.RightIcon>
-                <Icon name="arrow-right" />
-              </Button.RightIcon>
-            </Link>
-          </Button>
-        </div>
+        <Button variant="secondary" asChild>
+          <Link to={riskEventsHref}>
+            <Button.Text>View All Events</Button.Text>
+            <Button.RightIcon>
+              <Icon name="arrow-right" />
+            </Button.RightIcon>
+          </Link>
+        </Button>
       </Page.Section.CTA>
       <Page.Section.Body>
         <div className="space-y-8">{children}</div>
