@@ -67,9 +67,9 @@ const (
 	// misbehaving response exhaust memory.
 	maxSitemapBytes = 16 << 20
 
-	// maxPageBytes caps a single page fetch. Docs pages run 1-12KB; 1MB is far
-	// above any real page but well below the ~90KB-and-growing HTML error
-	// shell the site can return on a miss.
+	// maxPageBytes caps a single page fetch. Docs pages run 1-12KB, so a
+	// response over 1MB is not a documentation page at all. Exceeding it is an
+	// error rather than a truncation — see Content.
 	maxPageBytes = 1 << 20
 
 	// minMeaningfulPageLen is the body length below which a page is treated as
@@ -286,9 +286,16 @@ func (c *Client) Content(ctx context.Context, path string) (string, error) {
 		return "", fmt.Errorf("fetch docs page %s: unexpected status %d", path, resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxPageBytes))
+	// Read one byte past the cap so an oversized page is detected rather than
+	// silently truncated. Half a page is worse than no page here: the model
+	// has no way to tell it was cut off, so it would present incomplete
+	// product guidance as though it were complete.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxPageBytes+1))
 	if err != nil {
 		return "", fmt.Errorf("read docs page %s: %w", path, err)
+	}
+	if len(body) > maxPageBytes {
+		return "", fmt.Errorf("read docs page %s: page exceeds the %d byte limit", path, maxPageBytes)
 	}
 
 	content := strings.TrimSpace(string(body))

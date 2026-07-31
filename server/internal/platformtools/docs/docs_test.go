@@ -3,6 +3,7 @@ package docs
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -211,6 +212,24 @@ func TestClientContentRejectsNotFound(t *testing.T) {
 	_, err := client.Content(t.Context(), "/docs/ai-control-plane/observe/tool-logs")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unexpected status 404")
+}
+
+func TestClientContentRejectsOversizedPage(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/markdown")
+		_, _ = w.Write([]byte("# Big\n\n" + strings.Repeat("x", maxPageBytes)))
+	}))
+	t.Cleanup(server.Close)
+
+	client := NewClient(server.Client(), server.URL)
+
+	// Truncating would hand the model a partial page it cannot tell is
+	// partial, so an over-cap response must fail loudly instead.
+	_, err := client.Content(t.Context(), "/docs/ai-control-plane/observe/tool-logs")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "exceeds the")
 }
 
 func TestClientContentRejectsHTMLServedAsMarkdown(t *testing.T) {
