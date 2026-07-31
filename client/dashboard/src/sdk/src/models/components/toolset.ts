@@ -74,6 +74,14 @@ export type Toolset = {
    */
   id: string;
   /**
+   * The custom domain that serves the toolset's MCP endpoint; absent for platform-domain endpoints
+   */
+  mcpEndpointDomain?: string | undefined;
+  /**
+   * A short url-friendly label that uniquely identifies a resource.
+   */
+  mcpEndpointSlug?: string | undefined;
+  /**
    * The name of the toolset
    */
   name: string;
@@ -164,6 +172,8 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
       z.array(FunctionEnvironmentVariable$inboundSchema),
     ),
     id: z.string(),
+    mcp_endpoint_domain: z.optional(z.string()),
+    mcp_endpoint_slug: z.optional(z.string()),
     name: z.string(),
     oauth_enablement_metadata: OAuthEnablementMetadata$inboundSchema,
     oauth_proxy_server: z.optional(OAuthProxyServer$inboundSchema),
@@ -196,6 +206,8 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
       "external_mcp_header_definitions": "externalMcpHeaderDefinitions",
       "external_oauth_server": "externalOauthServer",
       "function_environment_variables": "functionEnvironmentVariables",
+      "mcp_endpoint_domain": "mcpEndpointDomain",
+      "mcp_endpoint_slug": "mcpEndpointSlug",
       "oauth_enablement_metadata": "oauthEnablementMetadata",
       "oauth_proxy_server": "oauthProxyServer",
       "organization_id": "organizationId",

@@ -68764,6 +68764,14 @@ components:
                 id:
                     type: string
                     description: The ID of the toolset
+                mcp_endpoint_domain:
+                    type: string
+                    description: The custom domain that serves the toolset's MCP endpoint; absent for platform-domain endpoints
+                mcp_endpoint_slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
                 name:
                     type: string
                     description: The name of the toolset

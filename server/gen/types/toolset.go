@@ -52,6 +52,12 @@ type Toolset struct {
 	ToolSelectionMode string
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOrigin
+	// The public slug of the MCP server endpoint that serves this toolset; absent
+	// when the toolset is not published
+	McpEndpointSlug *Slug
+	// The custom domain that serves the toolset's MCP endpoint; absent for
+	// platform-domain endpoints
+	McpEndpointDomain *string
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServer
 	// The OAuth proxy server details

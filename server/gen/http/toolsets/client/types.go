@@ -145,6 +145,12 @@ type CreateToolsetResponseBody struct {
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
+	// The public slug of the MCP server endpoint that serves this toolset; absent
+	// when the toolset is not published
+	McpEndpointSlug *string `form:"mcp_endpoint_slug,omitempty" json:"mcp_endpoint_slug,omitempty" xml:"mcp_endpoint_slug,omitempty"`
+	// The custom domain that serves the toolset's MCP endpoint; absent for
+	// platform-domain endpoints
+	McpEndpointDomain *string `form:"mcp_endpoint_domain,omitempty" json:"mcp_endpoint_domain,omitempty" xml:"mcp_endpoint_domain,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -225,6 +231,12 @@ type UpdateToolsetResponseBody struct {
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
+	// The public slug of the MCP server endpoint that serves this toolset; absent
+	// when the toolset is not published
+	McpEndpointSlug *string `form:"mcp_endpoint_slug,omitempty" json:"mcp_endpoint_slug,omitempty" xml:"mcp_endpoint_slug,omitempty"`
+	// The custom domain that serves the toolset's MCP endpoint; absent for
+	// platform-domain endpoints
+	McpEndpointDomain *string `form:"mcp_endpoint_domain,omitempty" json:"mcp_endpoint_domain,omitempty" xml:"mcp_endpoint_domain,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -291,6 +303,12 @@ type GetToolsetResponseBody struct {
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
+	// The public slug of the MCP server endpoint that serves this toolset; absent
+	// when the toolset is not published
+	McpEndpointSlug *string `form:"mcp_endpoint_slug,omitempty" json:"mcp_endpoint_slug,omitempty" xml:"mcp_endpoint_slug,omitempty"`
+	// The custom domain that serves the toolset's MCP endpoint; absent for
+	// platform-domain endpoints
+	McpEndpointDomain *string `form:"mcp_endpoint_domain,omitempty" json:"mcp_endpoint_domain,omitempty" xml:"mcp_endpoint_domain,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -377,6 +395,12 @@ type CloneToolsetResponseBody struct {
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
+	// The public slug of the MCP server endpoint that serves this toolset; absent
+	// when the toolset is not published
+	McpEndpointSlug *string `form:"mcp_endpoint_slug,omitempty" json:"mcp_endpoint_slug,omitempty" xml:"mcp_endpoint_slug,omitempty"`
+	// The custom domain that serves the toolset's MCP endpoint; absent for
+	// platform-domain endpoints
+	McpEndpointDomain *string `form:"mcp_endpoint_domain,omitempty" json:"mcp_endpoint_domain,omitempty" xml:"mcp_endpoint_domain,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -443,6 +467,12 @@ type AddExternalOAuthServerResponseBody struct {
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
+	// The public slug of the MCP server endpoint that serves this toolset; absent
+	// when the toolset is not published
+	McpEndpointSlug *string `form:"mcp_endpoint_slug,omitempty" json:"mcp_endpoint_slug,omitempty" xml:"mcp_endpoint_slug,omitempty"`
+	// The custom domain that serves the toolset's MCP endpoint; absent for
+	// platform-domain endpoints
+	McpEndpointDomain *string `form:"mcp_endpoint_domain,omitempty" json:"mcp_endpoint_domain,omitempty" xml:"mcp_endpoint_domain,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -509,6 +539,12 @@ type RemoveOAuthServerResponseBody struct {
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
+	// The public slug of the MCP server endpoint that serves this toolset; absent
+	// when the toolset is not published
+	McpEndpointSlug *string `form:"mcp_endpoint_slug,omitempty" json:"mcp_endpoint_slug,omitempty" xml:"mcp_endpoint_slug,omitempty"`
+	// The custom domain that serves the toolset's MCP endpoint; absent for
+	// platform-domain endpoints
+	McpEndpointDomain *string `form:"mcp_endpoint_domain,omitempty" json:"mcp_endpoint_domain,omitempty" xml:"mcp_endpoint_domain,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -575,6 +611,12 @@ type AddOAuthProxyServerResponseBody struct {
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
+	// The public slug of the MCP server endpoint that serves this toolset; absent
+	// when the toolset is not published
+	McpEndpointSlug *string `form:"mcp_endpoint_slug,omitempty" json:"mcp_endpoint_slug,omitempty" xml:"mcp_endpoint_slug,omitempty"`
+	// The custom domain that serves the toolset's MCP endpoint; absent for
+	// platform-domain endpoints
+	McpEndpointDomain *string `form:"mcp_endpoint_domain,omitempty" json:"mcp_endpoint_domain,omitempty" xml:"mcp_endpoint_domain,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -641,6 +683,12 @@ type UpdateOAuthProxyServerResponseBody struct {
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
+	// The public slug of the MCP server endpoint that serves this toolset; absent
+	// when the toolset is not published
+	McpEndpointSlug *string `form:"mcp_endpoint_slug,omitempty" json:"mcp_endpoint_slug,omitempty" xml:"mcp_endpoint_slug,omitempty"`
+	// The custom domain that serves the toolset's MCP endpoint; absent for
+	// platform-domain endpoints
+	McpEndpointDomain *string `form:"mcp_endpoint_domain,omitempty" json:"mcp_endpoint_domain,omitempty" xml:"mcp_endpoint_domain,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -707,6 +755,12 @@ type SetUserSessionIssuerResponseBody struct {
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
+	// The public slug of the MCP server endpoint that serves this toolset; absent
+	// when the toolset is not published
+	McpEndpointSlug *string `form:"mcp_endpoint_slug,omitempty" json:"mcp_endpoint_slug,omitempty" xml:"mcp_endpoint_slug,omitempty"`
+	// The custom domain that serves the toolset's MCP endpoint; absent for
+	// platform-domain endpoints
+	McpEndpointDomain *string `form:"mcp_endpoint_domain,omitempty" json:"mcp_endpoint_domain,omitempty" xml:"mcp_endpoint_domain,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -773,6 +827,12 @@ type SetToolVariationsGroupResponseBody struct {
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
+	// The public slug of the MCP server endpoint that serves this toolset; absent
+	// when the toolset is not published
+	McpEndpointSlug *string `form:"mcp_endpoint_slug,omitempty" json:"mcp_endpoint_slug,omitempty" xml:"mcp_endpoint_slug,omitempty"`
+	// The custom domain that serves the toolset's MCP endpoint; absent for
+	// platform-domain endpoints
+	McpEndpointDomain *string `form:"mcp_endpoint_domain,omitempty" json:"mcp_endpoint_domain,omitempty" xml:"mcp_endpoint_domain,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -4441,6 +4501,7 @@ func NewCreateToolsetToolsetOK(body *CreateToolsetResponseBody) *types.Toolset {
 		Description:           body.Description,
 		ToolsetVersion:        *body.ToolsetVersion,
 		ToolSelectionMode:     *body.ToolSelectionMode,
+		McpEndpointDomain:     body.McpEndpointDomain,
 		UserSessionIssuerID:   body.UserSessionIssuerID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
 		CreatedAt:             *body.CreatedAt,
@@ -4449,6 +4510,10 @@ func NewCreateToolsetToolsetOK(body *CreateToolsetResponseBody) *types.Toolset {
 	if body.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := types.Slug(*body.DefaultEnvironmentSlug)
 		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if body.McpEndpointSlug != nil {
+		mcpEndpointSlug := types.Slug(*body.McpEndpointSlug)
+		v.McpEndpointSlug = &mcpEndpointSlug
 	}
 	if body.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := types.Slug(*body.UserSessionIssuerSlug)
@@ -5035,6 +5100,7 @@ func NewUpdateToolsetToolsetOK(body *UpdateToolsetResponseBody) *types.Toolset {
 		Description:           body.Description,
 		ToolsetVersion:        *body.ToolsetVersion,
 		ToolSelectionMode:     *body.ToolSelectionMode,
+		McpEndpointDomain:     body.McpEndpointDomain,
 		UserSessionIssuerID:   body.UserSessionIssuerID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
 		CreatedAt:             *body.CreatedAt,
@@ -5043,6 +5109,10 @@ func NewUpdateToolsetToolsetOK(body *UpdateToolsetResponseBody) *types.Toolset {
 	if body.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := types.Slug(*body.DefaultEnvironmentSlug)
 		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if body.McpEndpointSlug != nil {
+		mcpEndpointSlug := types.Slug(*body.McpEndpointSlug)
+		v.McpEndpointSlug = &mcpEndpointSlug
 	}
 	if body.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := types.Slug(*body.UserSessionIssuerSlug)
@@ -5447,6 +5517,7 @@ func NewGetToolsetToolsetOK(body *GetToolsetResponseBody) *types.Toolset {
 		Description:           body.Description,
 		ToolsetVersion:        *body.ToolsetVersion,
 		ToolSelectionMode:     *body.ToolSelectionMode,
+		McpEndpointDomain:     body.McpEndpointDomain,
 		UserSessionIssuerID:   body.UserSessionIssuerID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
 		CreatedAt:             *body.CreatedAt,
@@ -5455,6 +5526,10 @@ func NewGetToolsetToolsetOK(body *GetToolsetResponseBody) *types.Toolset {
 	if body.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := types.Slug(*body.DefaultEnvironmentSlug)
 		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if body.McpEndpointSlug != nil {
+		mcpEndpointSlug := types.Slug(*body.McpEndpointSlug)
+		v.McpEndpointSlug = &mcpEndpointSlug
 	}
 	if body.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := types.Slug(*body.UserSessionIssuerSlug)
@@ -6037,6 +6112,7 @@ func NewCloneToolsetToolsetOK(body *CloneToolsetResponseBody) *types.Toolset {
 		Description:           body.Description,
 		ToolsetVersion:        *body.ToolsetVersion,
 		ToolSelectionMode:     *body.ToolSelectionMode,
+		McpEndpointDomain:     body.McpEndpointDomain,
 		UserSessionIssuerID:   body.UserSessionIssuerID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
 		CreatedAt:             *body.CreatedAt,
@@ -6045,6 +6121,10 @@ func NewCloneToolsetToolsetOK(body *CloneToolsetResponseBody) *types.Toolset {
 	if body.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := types.Slug(*body.DefaultEnvironmentSlug)
 		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if body.McpEndpointSlug != nil {
+		mcpEndpointSlug := types.Slug(*body.McpEndpointSlug)
+		v.McpEndpointSlug = &mcpEndpointSlug
 	}
 	if body.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := types.Slug(*body.UserSessionIssuerSlug)
@@ -6299,6 +6379,7 @@ func NewAddExternalOAuthServerToolsetOK(body *AddExternalOAuthServerResponseBody
 		Description:           body.Description,
 		ToolsetVersion:        *body.ToolsetVersion,
 		ToolSelectionMode:     *body.ToolSelectionMode,
+		McpEndpointDomain:     body.McpEndpointDomain,
 		UserSessionIssuerID:   body.UserSessionIssuerID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
 		CreatedAt:             *body.CreatedAt,
@@ -6307,6 +6388,10 @@ func NewAddExternalOAuthServerToolsetOK(body *AddExternalOAuthServerResponseBody
 	if body.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := types.Slug(*body.DefaultEnvironmentSlug)
 		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if body.McpEndpointSlug != nil {
+		mcpEndpointSlug := types.Slug(*body.McpEndpointSlug)
+		v.McpEndpointSlug = &mcpEndpointSlug
 	}
 	if body.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := types.Slug(*body.UserSessionIssuerSlug)
@@ -6561,6 +6646,7 @@ func NewRemoveOAuthServerToolsetOK(body *RemoveOAuthServerResponseBody) *types.T
 		Description:           body.Description,
 		ToolsetVersion:        *body.ToolsetVersion,
 		ToolSelectionMode:     *body.ToolSelectionMode,
+		McpEndpointDomain:     body.McpEndpointDomain,
 		UserSessionIssuerID:   body.UserSessionIssuerID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
 		CreatedAt:             *body.CreatedAt,
@@ -6569,6 +6655,10 @@ func NewRemoveOAuthServerToolsetOK(body *RemoveOAuthServerResponseBody) *types.T
 	if body.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := types.Slug(*body.DefaultEnvironmentSlug)
 		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if body.McpEndpointSlug != nil {
+		mcpEndpointSlug := types.Slug(*body.McpEndpointSlug)
+		v.McpEndpointSlug = &mcpEndpointSlug
 	}
 	if body.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := types.Slug(*body.UserSessionIssuerSlug)
@@ -6823,6 +6913,7 @@ func NewAddOAuthProxyServerToolsetOK(body *AddOAuthProxyServerResponseBody) *typ
 		Description:           body.Description,
 		ToolsetVersion:        *body.ToolsetVersion,
 		ToolSelectionMode:     *body.ToolSelectionMode,
+		McpEndpointDomain:     body.McpEndpointDomain,
 		UserSessionIssuerID:   body.UserSessionIssuerID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
 		CreatedAt:             *body.CreatedAt,
@@ -6831,6 +6922,10 @@ func NewAddOAuthProxyServerToolsetOK(body *AddOAuthProxyServerResponseBody) *typ
 	if body.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := types.Slug(*body.DefaultEnvironmentSlug)
 		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if body.McpEndpointSlug != nil {
+		mcpEndpointSlug := types.Slug(*body.McpEndpointSlug)
+		v.McpEndpointSlug = &mcpEndpointSlug
 	}
 	if body.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := types.Slug(*body.UserSessionIssuerSlug)
@@ -7085,6 +7180,7 @@ func NewUpdateOAuthProxyServerToolsetOK(body *UpdateOAuthProxyServerResponseBody
 		Description:           body.Description,
 		ToolsetVersion:        *body.ToolsetVersion,
 		ToolSelectionMode:     *body.ToolSelectionMode,
+		McpEndpointDomain:     body.McpEndpointDomain,
 		UserSessionIssuerID:   body.UserSessionIssuerID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
 		CreatedAt:             *body.CreatedAt,
@@ -7093,6 +7189,10 @@ func NewUpdateOAuthProxyServerToolsetOK(body *UpdateOAuthProxyServerResponseBody
 	if body.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := types.Slug(*body.DefaultEnvironmentSlug)
 		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if body.McpEndpointSlug != nil {
+		mcpEndpointSlug := types.Slug(*body.McpEndpointSlug)
+		v.McpEndpointSlug = &mcpEndpointSlug
 	}
 	if body.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := types.Slug(*body.UserSessionIssuerSlug)
@@ -7347,6 +7447,7 @@ func NewSetUserSessionIssuerToolsetOK(body *SetUserSessionIssuerResponseBody) *t
 		Description:           body.Description,
 		ToolsetVersion:        *body.ToolsetVersion,
 		ToolSelectionMode:     *body.ToolSelectionMode,
+		McpEndpointDomain:     body.McpEndpointDomain,
 		UserSessionIssuerID:   body.UserSessionIssuerID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
 		CreatedAt:             *body.CreatedAt,
@@ -7355,6 +7456,10 @@ func NewSetUserSessionIssuerToolsetOK(body *SetUserSessionIssuerResponseBody) *t
 	if body.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := types.Slug(*body.DefaultEnvironmentSlug)
 		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if body.McpEndpointSlug != nil {
+		mcpEndpointSlug := types.Slug(*body.McpEndpointSlug)
+		v.McpEndpointSlug = &mcpEndpointSlug
 	}
 	if body.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := types.Slug(*body.UserSessionIssuerSlug)
@@ -7609,6 +7714,7 @@ func NewSetToolVariationsGroupToolsetOK(body *SetToolVariationsGroupResponseBody
 		Description:           body.Description,
 		ToolsetVersion:        *body.ToolsetVersion,
 		ToolSelectionMode:     *body.ToolSelectionMode,
+		McpEndpointDomain:     body.McpEndpointDomain,
 		UserSessionIssuerID:   body.UserSessionIssuerID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
 		CreatedAt:             *body.CreatedAt,
@@ -7617,6 +7723,10 @@ func NewSetToolVariationsGroupToolsetOK(body *SetToolVariationsGroupResponseBody
 	if body.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := types.Slug(*body.DefaultEnvironmentSlug)
 		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if body.McpEndpointSlug != nil {
+		mcpEndpointSlug := types.Slug(*body.McpEndpointSlug)
+		v.McpEndpointSlug = &mcpEndpointSlug
 	}
 	if body.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := types.Slug(*body.UserSessionIssuerSlug)
@@ -7984,6 +8094,14 @@ func ValidateCreateToolsetResponseBody(body *CreateToolsetResponseBody) (err err
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.McpEndpointSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_endpoint_slug", *body.McpEndpointSlug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.McpEndpointSlug != nil {
+		if utf8.RuneCountInString(*body.McpEndpointSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_endpoint_slug", *body.McpEndpointSlug, utf8.RuneCountInString(*body.McpEndpointSlug), 40, false))
+		}
+	}
 	if body.ExternalOauthServer != nil {
 		if err2 := ValidateExternalOAuthServerResponseBody(body.ExternalOauthServer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -8169,6 +8287,14 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.McpEndpointSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_endpoint_slug", *body.McpEndpointSlug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.McpEndpointSlug != nil {
+		if utf8.RuneCountInString(*body.McpEndpointSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_endpoint_slug", *body.McpEndpointSlug, utf8.RuneCountInString(*body.McpEndpointSlug), 40, false))
+		}
+	}
 	if body.ExternalOauthServer != nil {
 		if err2 := ValidateExternalOAuthServerResponseBody(body.ExternalOauthServer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -8320,6 +8446,14 @@ func ValidateGetToolsetResponseBody(body *GetToolsetResponseBody) (err error) {
 	if body.Origin != nil {
 		if err2 := ValidateToolsetOriginResponseBody(body.Origin); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.McpEndpointSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_endpoint_slug", *body.McpEndpointSlug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.McpEndpointSlug != nil {
+		if utf8.RuneCountInString(*body.McpEndpointSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_endpoint_slug", *body.McpEndpointSlug, utf8.RuneCountInString(*body.McpEndpointSlug), 40, false))
 		}
 	}
 	if body.ExternalOauthServer != nil {
@@ -8507,6 +8641,14 @@ func ValidateCloneToolsetResponseBody(body *CloneToolsetResponseBody) (err error
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.McpEndpointSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_endpoint_slug", *body.McpEndpointSlug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.McpEndpointSlug != nil {
+		if utf8.RuneCountInString(*body.McpEndpointSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_endpoint_slug", *body.McpEndpointSlug, utf8.RuneCountInString(*body.McpEndpointSlug), 40, false))
+		}
+	}
 	if body.ExternalOauthServer != nil {
 		if err2 := ValidateExternalOAuthServerResponseBody(body.ExternalOauthServer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -8658,6 +8800,14 @@ func ValidateAddExternalOAuthServerResponseBody(body *AddExternalOAuthServerResp
 	if body.Origin != nil {
 		if err2 := ValidateToolsetOriginResponseBody(body.Origin); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.McpEndpointSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_endpoint_slug", *body.McpEndpointSlug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.McpEndpointSlug != nil {
+		if utf8.RuneCountInString(*body.McpEndpointSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_endpoint_slug", *body.McpEndpointSlug, utf8.RuneCountInString(*body.McpEndpointSlug), 40, false))
 		}
 	}
 	if body.ExternalOauthServer != nil {
@@ -8813,6 +8963,14 @@ func ValidateRemoveOAuthServerResponseBody(body *RemoveOAuthServerResponseBody) 
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.McpEndpointSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_endpoint_slug", *body.McpEndpointSlug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.McpEndpointSlug != nil {
+		if utf8.RuneCountInString(*body.McpEndpointSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_endpoint_slug", *body.McpEndpointSlug, utf8.RuneCountInString(*body.McpEndpointSlug), 40, false))
+		}
+	}
 	if body.ExternalOauthServer != nil {
 		if err2 := ValidateExternalOAuthServerResponseBody(body.ExternalOauthServer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -8964,6 +9122,14 @@ func ValidateAddOAuthProxyServerResponseBody(body *AddOAuthProxyServerResponseBo
 	if body.Origin != nil {
 		if err2 := ValidateToolsetOriginResponseBody(body.Origin); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.McpEndpointSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_endpoint_slug", *body.McpEndpointSlug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.McpEndpointSlug != nil {
+		if utf8.RuneCountInString(*body.McpEndpointSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_endpoint_slug", *body.McpEndpointSlug, utf8.RuneCountInString(*body.McpEndpointSlug), 40, false))
 		}
 	}
 	if body.ExternalOauthServer != nil {
@@ -9119,6 +9285,14 @@ func ValidateUpdateOAuthProxyServerResponseBody(body *UpdateOAuthProxyServerResp
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.McpEndpointSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_endpoint_slug", *body.McpEndpointSlug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.McpEndpointSlug != nil {
+		if utf8.RuneCountInString(*body.McpEndpointSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_endpoint_slug", *body.McpEndpointSlug, utf8.RuneCountInString(*body.McpEndpointSlug), 40, false))
+		}
+	}
 	if body.ExternalOauthServer != nil {
 		if err2 := ValidateExternalOAuthServerResponseBody(body.ExternalOauthServer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -9272,6 +9446,14 @@ func ValidateSetUserSessionIssuerResponseBody(body *SetUserSessionIssuerResponse
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.McpEndpointSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_endpoint_slug", *body.McpEndpointSlug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.McpEndpointSlug != nil {
+		if utf8.RuneCountInString(*body.McpEndpointSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_endpoint_slug", *body.McpEndpointSlug, utf8.RuneCountInString(*body.McpEndpointSlug), 40, false))
+		}
+	}
 	if body.ExternalOauthServer != nil {
 		if err2 := ValidateExternalOAuthServerResponseBody(body.ExternalOauthServer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -9423,6 +9605,14 @@ func ValidateSetToolVariationsGroupResponseBody(body *SetToolVariationsGroupResp
 	if body.Origin != nil {
 		if err2 := ValidateToolsetOriginResponseBody(body.Origin); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.McpEndpointSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_endpoint_slug", *body.McpEndpointSlug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.McpEndpointSlug != nil {
+		if utf8.RuneCountInString(*body.McpEndpointSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_endpoint_slug", *body.McpEndpointSlug, utf8.RuneCountInString(*body.McpEndpointSlug), 40, false))
 		}
 	}
 	if body.ExternalOauthServer != nil {

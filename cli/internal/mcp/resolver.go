@@ -62,8 +62,12 @@ func ResolveToolsetInfo(ctx context.Context, opts *ResolverOptions) (*ToolsetInf
 			return nil, fmt.Errorf("failed to fetch toolset: %w", err)
 		}
 
-		// Construct MCP URL from toolset
-		info.URL = constructMCPURL(toolset, opts.APIURL.String())
+		// Construct MCP URL from the toolset's endpoint address
+		mcpURL, err := constructMCPURL(toolset, opts.APIURL.String())
+		if err != nil {
+			return nil, err
+		}
+		info.URL = mcpURL
 		opts.Logger.InfoContext(ctx, "derived MCP URL from toolset", slog.String("url", info.URL))
 
 		// Derive auth config from toolset if not explicitly provided
@@ -126,18 +130,17 @@ func ResolveToolsetInfo(ctx context.Context, opts *ResolverOptions) (*ToolsetInf
 	return info, nil
 }
 
-func constructMCPURL(toolset *types.Toolset, baseURL string) string {
-	// If toolset has a custom MCP slug, use it
-	if toolset.McpSlug != nil && *toolset.McpSlug != "" {
-		return fmt.Sprintf("%s/mcp/%s", baseURL, *toolset.McpSlug)
+// constructMCPURL builds the toolset's public MCP URL from its endpoint
+// address: the custom domain host when the endpoint is domain-bound,
+// otherwise the platform base URL.
+func constructMCPURL(toolset *types.Toolset, baseURL string) (string, error) {
+	if toolset.McpEndpointSlug == nil || *toolset.McpEndpointSlug == "" {
+		return "", fmt.Errorf("toolset %q has no MCP endpoint; publish it as an MCP server first", toolset.Slug)
 	}
-
-	// Otherwise construct from org/project/environment
-	return fmt.Sprintf("%s/mcp/%s/%s/%s",
-		baseURL,
-		toolset.OrganizationID,
-		toolset.ProjectID,
-		*toolset.DefaultEnvironmentSlug)
+	if toolset.McpEndpointDomain != nil && *toolset.McpEndpointDomain != "" {
+		return fmt.Sprintf("https://%s/mcp/%s", *toolset.McpEndpointDomain, *toolset.McpEndpointSlug), nil
+	}
+	return fmt.Sprintf("%s/mcp/%s", baseURL, *toolset.McpEndpointSlug), nil
 }
 
 func deriveAuthConfig(toolset *types.Toolset) (headerName string, envVarName string) {

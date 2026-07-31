@@ -88,6 +88,8 @@ var Toolset = Type("Toolset", func() {
 	Attribute("prompt_templates", ArrayOf(PromptTemplate), "The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts")
 	Attribute("tool_selection_mode", String, "The mode to use for tool selection")
 	Attribute("origin", ToolsetOrigin, "The registry lineage for toolsets installed from an external MCP catalog")
+	Attribute("mcp_endpoint_slug", Slug, "The public slug of the MCP server endpoint that serves this toolset; absent when the toolset is not published")
+	Attribute("mcp_endpoint_domain", String, "The custom domain that serves the toolset's MCP endpoint; absent for platform-domain endpoints")
 	Attribute("external_oauth_server", ExternalOAuthServer, "The external OAuth server details")
 	Attribute("oauth_proxy_server", OAuthProxyServer, "The OAuth proxy server details")
 	Attribute("user_session_issuer_id", String, "The id of the user_session_issuer wired to this toolset. Set via toolsets.setUserSessionIssuer; null when no USI is linked.")
