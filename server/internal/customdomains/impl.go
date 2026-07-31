@@ -268,7 +268,7 @@ func (s *Service) UpdateDomain(ctx context.Context, payload *gen.UpdateDomainPay
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit custom domain update").LogError(ctx, s.logger)
 	}
-	if payload.IPAllowlist != nil {
+	if payload.IPAllowlist != nil || payload.OpenaiAppsChallengeToken != nil {
 		if err := s.reconcileCustomDomain(ctx, domain.ID); err != nil {
 			return nil, err
 		}
