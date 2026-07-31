@@ -1095,6 +1095,9 @@ jobs:
       - name: Build tunnel gateway
         run: mise run build:tunnel-gateway --readonly
 
+      - name: Test CI tooling
+        run: mise run test:ci
+
       - name: Lint with golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
@@ -1409,9 +1412,16 @@ jobs:
         run: mise run git:porcelain
 
   server-test:
+    name: server-test (shard ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.server == 'true'
+    strategy:
+      # Every shard should report, otherwise a single failure hides the state of
+      # the rest of the suite.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     env:
       GOMAXPROCS: 8
       # The runner VM is destroyed after the job, and the reaper is the one
@@ -1447,7 +1457,7 @@ jobs:
         run: mise run install:go
 
       - name: Test
-        run: mise run test:server
+        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
   docker-build-client:
     runs-on: blacksmith-4vcpu-ubuntu-2404
