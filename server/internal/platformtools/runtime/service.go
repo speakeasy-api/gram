@@ -127,12 +127,15 @@ func AssistantSkillTools(logger *slog.Logger, db *pgxpool.Pool, recorder *feedba
 }
 
 // TriggerExternalTools returns the assistant self-config trigger tools
-// (list + configure). Both variants pin target_kind/target_ref to the calling
-// assistant principal and strip those fields from the schema so the LLM
-// cannot redirect a trigger at a sibling assistant in the same project.
+// (list + describe + configure). The list and configure variants pin
+// target_kind/target_ref to the calling assistant principal and strip those
+// fields from the schema so the LLM cannot redirect a trigger at a sibling
+// assistant in the same project. Describe serves the per-definition config
+// schema that configure_trigger deliberately no longer inlines.
 func TriggerExternalTools(db *pgxpool.Pool, app *bgtriggers.App, auditLogger *audit.Logger) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
 		{Executor: platformtriggers.NewAssistantListTriggersTool(db, app), RequiredFeature: ""},
+		{Executor: platformtriggers.NewAssistantDescribeTriggerDefinitionTool(), RequiredFeature: ""},
 		{Executor: platformtriggers.NewAssistantConfigureTriggerTool(db, app, auditLogger), RequiredFeature: ""},
 	}
 }

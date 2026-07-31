@@ -27,14 +27,15 @@ import (
 )
 
 const (
-	sourceTriggers         = "triggers"
-	toolNameListTriggers   = "platform_list_triggers"
-	toolNameConfigure      = "platform_configure_trigger"
-	targetKindAssistant    = bgtriggers.TargetKindAssistant
-	targetKindNoop         = bgtriggers.TargetKindNoop
-	triggerStatusActive    = bgtriggers.StatusActive
-	triggerStatusPaused    = bgtriggers.StatusPaused
-	triggerStatusCancelled = bgtriggers.StatusCancelled
+	sourceTriggers             = "triggers"
+	toolNameListTriggers       = "platform_list_triggers"
+	toolNameConfigure          = "platform_configure_trigger"
+	toolNameDescribeDefinition = "platform_describe_trigger_definition"
+	targetKindAssistant        = bgtriggers.TargetKindAssistant
+	targetKindNoop             = bgtriggers.TargetKindNoop
+	triggerStatusActive        = bgtriggers.StatusActive
+	triggerStatusPaused        = bgtriggers.StatusPaused
+	triggerStatusCancelled     = bgtriggers.StatusCancelled
 )
 
 type listTriggersInput struct {
@@ -178,31 +179,13 @@ func buildConfigureTriggerInputSchema(assistantSelfScoped bool) []byte {
 	}
 	inner["required"] = dedupeStrings(required)
 
-	branches := make([]any, 0, len(definitionSlugs))
-	for _, slug := range definitionSlugs {
-		definition, ok := bgtriggers.GetDefinition(slug)
-		if !ok {
-			panic(fmt.Errorf("missing trigger definition %q", slug))
-		}
-		configSchema := schemaBytesToMap(definition.ConfigSchema)
-		if slug == bgtriggers.DefinitionSlugWake {
-			// correlation_id is injected by the platform tool from the calling
-			// assistant principal; the LLM must not be allowed to forge one
-			// pointing at another thread.
-			stripSchemaProperty(configSchema, "correlation_id")
-		}
-		branches = append(branches, map[string]any{
-			"properties": map[string]any{
-				"definition_slug": map[string]any{
-					"const": slug,
-				},
-				"config": configSchema,
-			},
-			"required": []string{"definition_slug", "config"},
-		})
-	}
-	inner["oneOf"] = branches
-
+	// `config` stays an opaque object here. Inlining a oneOf branch per
+	// definition — each carrying that definition's full config schema — made
+	// this one tool ~7k tokens of every request's tool catalog, on every turn,
+	// for every assistant, whether or not triggers came up. The per-definition
+	// schema is served on demand by describe_trigger_definition instead. That
+	// is not an extra model round trip: tools are reached through `compose`,
+	// whose script can fetch the schema and configure the trigger in one call.
 	return mustMarshalSchemaMap(map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -227,6 +210,93 @@ func stripSchemaProperty(schema map[string]any, name string) {
 		}
 		schema["required"] = filtered
 	}
+}
+
+// DescribeTriggerDefinition serves one trigger definition's config schema on
+// demand. It exists so configure_trigger's own schema does not have to carry
+// every definition's config inline — see buildConfigureTriggerInputSchema.
+type DescribeTriggerDefinition struct {
+	assistantSelfScoped bool
+}
+
+// NewDescribeTriggerDefinitionTool returns the project-scoped describe tool.
+func NewDescribeTriggerDefinitionTool() *DescribeTriggerDefinition {
+	return &DescribeTriggerDefinition{assistantSelfScoped: false}
+}
+
+// NewAssistantDescribeTriggerDefinitionTool returns the assistant-scoped
+// describe tool. It hides the same fields the assistant-scoped
+// configure_trigger strips, so the schema an assistant reads matches the one
+// it is allowed to submit.
+func NewAssistantDescribeTriggerDefinitionTool() *DescribeTriggerDefinition {
+	return &DescribeTriggerDefinition{assistantSelfScoped: true}
+}
+
+type describeTriggerDefinitionInput struct {
+	DefinitionSlug string `json:"definition_slug" jsonschema:"Trigger definition whose config schema to return."`
+}
+
+type describeTriggerDefinitionResult struct {
+	DefinitionSlug string          `json:"definition_slug"`
+	ConfigSchema   json.RawMessage `json:"config_schema"`
+}
+
+func (t *DescribeTriggerDefinition) Descriptor() core.ToolDescriptor {
+	readOnly := true
+	destructive := false
+	idempotent := true
+	openWorld := false
+
+	return core.ToolDescriptor{
+		SourceSlug:  sourceTriggers,
+		HandlerName: "describe_trigger_definition",
+		Name:        toolNameDescribeDefinition,
+		Description: "Return the JSON Schema that " + toolNameConfigure + "'s `config` object must satisfy for one trigger definition. Call this before configuring a trigger, in the same compose script.",
+		InputSchema: core.BuildInputSchema[describeTriggerDefinitionInput](
+			core.WithPropertyEnum("definition_slug", stringSliceToAny(listDefinitionSlugs())...),
+		),
+		Annotations: triggerToolAnnotations(readOnly, destructive, idempotent, openWorld),
+		Managed:     true,
+		Variables:   nil,
+		OwnerKind:   nil,
+		OwnerID:     nil,
+	}
+}
+
+func (t *DescribeTriggerDefinition) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
+	if _, err := requireProjectAuthContext(ctx); err != nil {
+		return err
+	}
+
+	input := describeTriggerDefinitionInput{DefinitionSlug: ""}
+	if err := decodePayload(payload, &input); err != nil {
+		return err
+	}
+	slug := strings.TrimSpace(input.DefinitionSlug)
+	if slug == "" {
+		return fmt.Errorf("definition_slug is required")
+	}
+	definition, ok := bgtriggers.GetDefinition(slug)
+	if !ok {
+		return fmt.Errorf("unknown trigger definition %q", slug)
+	}
+
+	configSchema := schemaBytesToMap(definition.ConfigSchema)
+	if slug == bgtriggers.DefinitionSlugWake {
+		// correlation_id is injected by the platform tool from the calling
+		// assistant principal; the LLM must not be allowed to forge one
+		// pointing at another thread. Hidden here for the same reason it was
+		// hidden when this schema was inlined into configure_trigger.
+		stripSchemaProperty(configSchema, "correlation_id")
+	}
+
+	if err := json.NewEncoder(wr).Encode(describeTriggerDefinitionResult{
+		DefinitionSlug: slug,
+		ConfigSchema:   mustMarshalSchemaMap(configSchema),
+	}); err != nil {
+		return fmt.Errorf("encode describe trigger definition result: %w", err)
+	}
+	return nil
 }
 
 func listDefinitionSlugs() []string {
@@ -412,7 +482,7 @@ func (t *ConfigureTrigger) Descriptor() core.ToolDescriptor {
 		SourceSlug:  sourceTriggers,
 		HandlerName: "configure_trigger",
 		Name:        toolNameConfigure,
-		Description: "Create or update a trigger instance using a definition-specific config schema selected by definition_slug.",
+		Description: "Create or update a trigger instance. `config` is definition-specific and is NOT described by this tool's schema: call " + toolNameDescribeDefinition + " with the same definition_slug first to get the JSON Schema `config` must satisfy, then pass a matching object here. Both calls belong in a single compose script.",
 		InputSchema: t.inputSchema,
 		Annotations: triggerToolAnnotations(readOnly, destructive, idempotent, openWorld),
 		Managed:     true,

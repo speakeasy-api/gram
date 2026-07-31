@@ -29,6 +29,9 @@ var registry = []toolFactory{
 	func(deps Dependencies) PlatformToolExecutor {
 		return platformtriggers.NewListTriggersTool(deps.DB, deps.TriggerApp)
 	},
+	func(_ Dependencies) PlatformToolExecutor {
+		return platformtriggers.NewDescribeTriggerDefinitionTool()
+	},
 	func(deps Dependencies) PlatformToolExecutor {
 		return platformtriggers.NewConfigureTriggerTool(deps.DB, deps.TriggerApp, deps.Audit)
 	},
