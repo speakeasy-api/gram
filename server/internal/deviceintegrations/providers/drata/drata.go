@@ -478,11 +478,12 @@ func parseWorkspaceID(settings providers.Settings) (int, error) {
 // the Gram one onto a later page, and missing it there would create a duplicate
 // on every save.
 //
-// Only a null cursor (the true end of the list) counts as "not found"; a scan
-// that hits the page cap or a cursor that won't advance leaves the connection's
-// existence unproven, so it returns an error rather than "" — reporting "not
-// found" there would create a duplicate on every connect, the exact bug the
-// pagination is here to prevent.
+// Only an explicit null cursor (the true end of the list) counts as "not
+// found"; a scan that hits the page cap, a cursor that won't advance, or a
+// response that omits the cursor altogether leaves the connection's existence
+// unproven, so it returns an error rather than "" — reporting "not found" there
+// would create a duplicate on every connect, the exact bug the pagination is
+// here to prevent.
 func (s *sink) findConnectionByName(ctx context.Context, creds providers.Credentials, base, name string) (string, error) {
 	cursor := ""
 	for range maxConnectionListPages {
@@ -503,8 +504,11 @@ func (s *sink) findConnectionByName(ctx context.Context, creds providers.Credent
 				ClientAlias string `json:"clientAlias"`
 				Name        string `json:"name"`
 			} `json:"data"`
+			// RawMessage, not *string, so field presence survives decoding: an
+			// omitted cursor and an explicit null both decode a *string to nil,
+			// but only the explicit null is Drata's end-of-list signal.
 			Pagination struct {
-				Cursor *string `json:"cursor"`
+				Cursor json.RawMessage `json:"cursor"`
 			} `json:"pagination"`
 		}
 		if err := json.Unmarshal(body, &list); err != nil {
@@ -515,14 +519,23 @@ func (s *sink) findConnectionByName(ctx context.Context, creds providers.Credent
 				return string(c.ID), nil
 			}
 		}
-		if list.Pagination.Cursor == nil {
-			// A genuine null cursor is Drata's only end-of-list signal: no match
+		raw := bytes.TrimSpace(list.Pagination.Cursor)
+		if len(raw) == 0 {
+			// The cursor field is absent entirely (missing, or no pagination
+			// object): an incomplete response, not a proof of the end. Fail
+			// rather than mistake it for end-of-list and create a duplicate.
+			return "", fmt.Errorf("connection list response missing pagination cursor")
+		}
+		if string(raw) == "null" {
+			// An explicit null is Drata's only end-of-list signal: no match
 			// through the true end means the connection does not exist and the
-			// caller creates it. A present-but-empty cursor is NOT this signal —
-			// it falls through to the can't-advance error below.
+			// caller creates it.
 			return "", nil
 		}
-		next := *list.Pagination.Cursor
+		var next string
+		if err := json.Unmarshal(raw, &next); err != nil {
+			return "", fmt.Errorf("decode pagination cursor: %w", err)
+		}
 		if next == "" || next == cursor {
 			// A cursor that is empty or unchanged can't advance the scan and
 			// isn't proof of absence; fail rather than risk a duplicate.

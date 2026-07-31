@@ -75,6 +75,10 @@ type fakeDrata struct {
 	// connectionsCursorEmpty makes the list endpoint return a present-but-empty
 	// cursor — distinct from a null cursor, so it must NOT count as end-of-list.
 	connectionsCursorEmpty bool
+	// connectionsCursorMissing makes the list endpoint omit the pagination
+	// cursor entirely — an incomplete response that must not be mistaken for a
+	// null end-of-list cursor.
+	connectionsCursorMissing bool
 	// createdConnections records the bodies POSTed to the collection endpoint,
 	// so provisioning tests can assert the schema and workspace sent.
 	createdConnections []map[string]any
@@ -87,27 +91,28 @@ type fakeDrata struct {
 func newFakeDrata(t *testing.T) *fakeDrata {
 	t.Helper()
 	f := &fakeDrata{
-		t:                       t,
-		apiKey:                  "test-api-key",
-		resourceIDs:             []string{testResourceID},
-		mu:                      sync.Mutex{},
-		sessions:                map[string][]map[string]any{},
-		sessionStatus:           map[string]string{},
-		ignoreStatusFilter:      false,
-		failComplete:            false,
-		rejectRecordID:          "",
-		records:                 nil,
-		uploadRequests:          0,
-		completed:               nil,
-		canceled:                nil,
-		deletedRecords:          nil,
-		existingConnections:     nil,
-		connectionsPageForever:  false,
-		connectionsCursorFrozen: false,
-		connectionsCursorEmpty:  false,
-		createdConnections:      nil,
-		nextConnID:              900,
-		server:                  nil,
+		t:                        t,
+		apiKey:                   "test-api-key",
+		resourceIDs:              []string{testResourceID},
+		mu:                       sync.Mutex{},
+		sessions:                 map[string][]map[string]any{},
+		sessionStatus:            map[string]string{},
+		ignoreStatusFilter:       false,
+		failComplete:             false,
+		rejectRecordID:           "",
+		records:                  nil,
+		uploadRequests:           0,
+		completed:                nil,
+		canceled:                 nil,
+		deletedRecords:           nil,
+		existingConnections:      nil,
+		connectionsPageForever:   false,
+		connectionsCursorFrozen:  false,
+		connectionsCursorEmpty:   false,
+		connectionsCursorMissing: false,
+		createdConnections:       nil,
+		nextConnID:               900,
+		server:                   nil,
 	}
 
 	connBase := "/public/v2/custom-connections/" + testConnectionID
@@ -142,6 +147,12 @@ func newFakeDrata(t *testing.T) *fakeDrata {
 			if f.connectionsCursorEmpty {
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = fmt.Fprint(w, `{"data": [], "pagination": {"cursor": ""}}`)
+				return
+			}
+			if f.connectionsCursorMissing {
+				// No pagination cursor at all — an incomplete response.
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprint(w, `{"data": []}`)
 				return
 			}
 			// Paginate by the requested limit so find-existing's cursor-following
@@ -945,6 +956,20 @@ func TestProvisionFailsWhenCursorEmptyNotNull(t *testing.T) {
 	_, err := s.Provision(t.Context(), testOrgID, fake.creds(), providers.Settings{fieldRegion: "us"})
 	require.ErrorContains(t, err, "did not advance")
 	require.Empty(t, fake.createdConnections, "an empty non-null cursor must not create a connection")
+}
+
+func TestProvisionFailsWhenCursorMissing(t *testing.T) {
+	t.Parallel()
+
+	// A response that omits the cursor is incomplete, not end-of-list: it must
+	// not be mistaken for a null cursor and permit a duplicate create.
+	fake := newFakeDrata(t)
+	fake.connectionsCursorMissing = true
+	s := fake.newSink(t)
+
+	_, err := s.Provision(t.Context(), testOrgID, fake.creds(), providers.Settings{fieldRegion: "us"})
+	require.ErrorContains(t, err, "missing pagination cursor")
+	require.Empty(t, fake.createdConnections, "a missing cursor must not create a connection")
 }
 
 func TestProvisionNoOpWhenConfigured(t *testing.T) {
