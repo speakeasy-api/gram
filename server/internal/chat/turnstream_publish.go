@@ -167,8 +167,13 @@ func isTerminalRow(toolCalls []byte, finishReason string) bool {
 			return false
 		}
 	}
+	// Only an explicit natural stop ends the turn. An empty finish_reason is
+	// ambiguous — an intermediate row persisted before the model said why it
+	// stopped looks identical to a finished one — and treating it as terminal
+	// ended the stream after the first tool call, leaving the rest of the turn
+	// unstreamed.
 	switch finishReason {
-	case "stop", "end_turn", "":
+	case "stop", "end_turn":
 		return true
 	default:
 		return false
