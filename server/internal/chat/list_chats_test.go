@@ -746,10 +746,12 @@ func TestListChats_RiskFindingsCount_DedupesByRuleAndMatch(t *testing.T) {
 	require.Equal(t, 2, *result.Chats[0].RiskFindingsCount)
 }
 
-// TestListChats_MaxRiskScore verifies that max_risk_score reports the highest
-// severity score among a chat's active findings' policies, and is absent for
-// a chat with no active findings.
-func TestListChats_MaxRiskScore(t *testing.T) {
+// TestListChats_SeverityBandCounts verifies that low/medium/high risk
+// findings counts bucket a chat's active findings by their policy's severity
+// band (mirroring risk-utils.ts's scoreToRating, high/critical folded
+// together), and that a chat with no active findings reports zero for all
+// three.
+func TestListChats_SeverityBandCounts(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
 	ctx := externalUserCtx(t, ti, "ext-severity")
@@ -762,13 +764,21 @@ func TestListChats_MaxRiskScore(t *testing.T) {
 		Score:          3.0,
 	})
 	require.NoError(t, err)
+	mediumPolicyID, err := r.SeedRiskPolicyWithScore(ctx, repo.SeedRiskPolicyWithScoreParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		Score:          5.0,
+	})
+	require.NoError(t, err)
 	highPolicyID, err := r.SeedRiskPolicyWithScore(ctx, repo.SeedRiskPolicyWithScoreParams{
 		ProjectID:      ti.projectID,
 		OrganizationID: ti.orgID,
 		Score:          8.5,
 	})
 	require.NoError(t, err)
-	for _, policyID := range []uuid.UUID{lowPolicyID, highPolicyID} {
+	// Two low-severity findings (same policy, distinct messages) to also
+	// exercise that band counts don't accidentally dedupe across messages.
+	for _, policyID := range []uuid.UUID{lowPolicyID, lowPolicyID, mediumPolicyID, highPolicyID} {
 		msgID, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
 			ChatID:    scored,
 			ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
@@ -792,9 +802,22 @@ func TestListChats_MaxRiskScore(t *testing.T) {
 		byID[c.ID] = c
 	}
 
-	require.NotNil(t, byID[scored.String()].MaxRiskScore)
-	require.InDelta(t, 8.5, *byID[scored.String()].MaxRiskScore, 0.001)
-	require.Nil(t, byID[safe.String()].MaxRiskScore, "chat with no active findings must have no max_risk_score")
+	scoredChat := byID[scored.String()]
+	require.NotNil(t, scoredChat.LowRiskFindingsCount)
+	require.Equal(t, 2, *scoredChat.LowRiskFindingsCount)
+	require.NotNil(t, scoredChat.MediumRiskFindingsCount)
+	require.Equal(t, 1, *scoredChat.MediumRiskFindingsCount)
+	require.NotNil(t, scoredChat.HighRiskFindingsCount)
+	require.Equal(t, 1, *scoredChat.HighRiskFindingsCount)
+	require.Equal(t, 4, *scoredChat.RiskFindingsCount, "band counts must sum to the total")
+
+	safeChat := byID[safe.String()]
+	require.NotNil(t, safeChat.LowRiskFindingsCount)
+	require.Equal(t, 0, *safeChat.LowRiskFindingsCount)
+	require.NotNil(t, safeChat.MediumRiskFindingsCount)
+	require.Equal(t, 0, *safeChat.MediumRiskFindingsCount)
+	require.NotNil(t, safeChat.HighRiskFindingsCount)
+	require.Equal(t, 0, *safeChat.HighRiskFindingsCount)
 }
 
 // TestListChats_DisabledPolicyFinding_NotCounted verifies that a found risk

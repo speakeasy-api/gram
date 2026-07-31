@@ -7,11 +7,6 @@ import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
-import {
-  SEVERITY_RATING_LABEL,
-  scoreToRating,
-  type SeverityRating,
-} from "@/pages/security/risk-utils";
 import { WorkUnitsRowMetrics } from "@/pages/chatLogs/WorkUnitsMetrics";
 import { useSession } from "@/contexts/Auth";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
@@ -43,51 +38,78 @@ function getTraceId(chatId: string): string {
   return chatId.slice(0, 8);
 }
 
-// Border/text/bg for each severity rating, plus the no-findings case. Mirrors
-// SeverityBadge/SeverityScore's color bands (risk-ui.tsx) so this indicator
-// reads consistently with severity elsewhere — and, deliberately, only the
-// high/critical band uses the alarming destructive-red. A session whose
-// findings are all low/medium severity (e.g. an IP address) shouldn't look
-// as threatening as one with an actual secret leak.
-const RISK_INDICATOR_STYLE: Record<SeverityRating | "none", string> = {
-  none: "border-muted-foreground/30 text-muted-foreground/70",
-  low: "border-success/40 text-success bg-success/5",
-  medium: "border-warning/40 text-warning bg-warning/5",
-  high: "border-destructive/40 text-destructive bg-destructive/5",
-  critical: "border-destructive/40 text-destructive bg-destructive/5",
-};
+// bg-warning/bg-success resolve to a near-white pale tint in light mode
+// (meant for subtle fill backgrounds, e.g. an alert's own background) — using
+// them for a solid bar fill is illegible. The "-foreground" variants are the
+// same hue at a legible, saturated weight in both themes.
+const SEVERITY_BAND_STYLE = {
+  low: { bar: "bg-foreground/60", label: "Low" },
+  medium: { bar: "bg-warning-foreground", label: "Medium" },
+  high: { bar: "bg-destructive", label: "High" },
+} as const;
 
-function RiskIndicator({
-  count,
-  maxScore,
-  size = 44,
+const SEVERITY_BANDS = ["low", "medium", "high"] as const;
+
+/** Mini severity histogram: one bar per severity band, each bar's height a
+ * percentage of this session's total message count (capped at 100%) rather
+ * than a single flat-alarming color. A session with a few low-severity
+ * findings (e.g. an IP address) reads as informational, not threatening —
+ * only bands with actual high-severity findings draw a tall red bar. Bars
+ * use the same low/medium/high vocabulary as SeverityBadge/SeverityScore
+ * (risk-ui.tsx), just rendered as a histogram instead of a single score. */
+function RiskHistogram({
+  counts,
+  numMessages,
+  height = 44,
 }: {
-  count: number;
-  /** Highest CVSS-style severity (0.1-10) among this session's findings —
-   * grades the indicator's color instead of always rendering alarming red.
-   * Absent (or count 0) renders the neutral no-findings state. */
-  maxScore?: number;
-  size?: number;
+  counts: { low: number; medium: number; high: number };
+  numMessages: number;
+  height?: number;
 }) {
-  const hasRisk = count > 0;
-  const rating = hasRisk && maxScore != null ? scoreToRating(maxScore) : null;
+  const total = counts.low + counts.medium + counts.high;
+  const hasRisk = total > 0;
+  const percentFor = (count: number) =>
+    numMessages > 0 ? Math.min(100, (count / numMessages) * 100) : 0;
+
   return (
     <SimpleTooltip
       tooltip={
         hasRisk
-          ? `${count} distinct risk finding${count === 1 ? "" : "s"} on this session${rating ? ` · ${SEVERITY_RATING_LABEL[rating]} severity` : ""}`
+          ? SEVERITY_BANDS.filter((band) => counts[band] > 0)
+              .map(
+                (band) =>
+                  `${SEVERITY_BAND_STYLE[band].label}: ${counts[band]} (${percentFor(counts[band]).toFixed(0)}% of messages)`,
+              )
+              .join(" · ")
           : "No risk findings on this session"
       }
     >
       <div className="flex flex-col items-center gap-1">
         <div
           className={cn(
-            "flex items-center justify-center rounded-full border-[3px]",
-            RISK_INDICATOR_STYLE[rating ?? "none"],
+            "flex items-end justify-center gap-1 rounded-md border px-2",
+            hasRisk ? "border-transparent" : "border-muted-foreground/30",
           )}
-          style={{ width: size, height: size }}
+          style={{ width: 44, height }}
         >
-          <span className="text-sm font-semibold tabular-nums">{count}</span>
+          {SEVERITY_BANDS.map((band) => {
+            const pct = percentFor(counts[band]);
+            return (
+              <div
+                key={band}
+                className="bg-muted/60 flex w-2 items-end overflow-hidden rounded-t-[2px]"
+                style={{ height: height - 12 }}
+              >
+                <div
+                  className={cn(
+                    "w-full rounded-t-[2px]",
+                    SEVERITY_BAND_STYLE[band].bar,
+                  )}
+                  style={{ height: `${pct}%` }}
+                />
+              </div>
+            );
+          })}
         </div>
         <span className="text-muted-foreground text-[9px] font-medium tracking-wider uppercase">
           Risk
@@ -276,7 +298,11 @@ export function ChatLogsTable({
         {chats.map((chat) => {
           const isSelected = selectedChatId === chat.id;
           const source = chat.source;
-          const riskCount = chat.riskFindingsCount ?? 0;
+          const riskCounts = {
+            low: chat.lowRiskFindingsCount ?? 0,
+            medium: chat.mediumRiskFindingsCount ?? 0,
+            high: chat.highRiskFindingsCount ?? 0,
+          };
           const lastActivityTimestamp =
             chat.lastMessageTimestamp ?? chat.createdAt;
 
@@ -309,10 +335,9 @@ export function ChatLogsTable({
                 <div className="pointer-events-none relative z-20 flex items-center gap-5">
                   {/* Left: Risk findings indicator */}
                   <div className="shrink-0">
-                    <RiskIndicator
-                      count={riskCount}
-                      maxScore={chat.maxRiskScore}
-                      size={44}
+                    <RiskHistogram
+                      counts={riskCounts}
+                      numMessages={chat.numMessages}
                     />
                   </div>
 

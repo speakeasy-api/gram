@@ -34,6 +34,10 @@ export type ChatOverview = {
    */
   externalUserId?: string | undefined;
   /**
+   * Number of distinct active findings whose policy severity is high or critical (score >= 7.0). Only populated by endpoints that join risk data.
+   */
+  highRiskFindingsCount?: number | undefined;
+  /**
    * The ID of the chat
    */
   id: string;
@@ -42,9 +46,13 @@ export type ChatOverview = {
    */
   lastMessageTimestamp: Date;
   /**
-   * Highest CVSS-style severity score (0.1-10) among this chat's active risk findings' policies. Absent when the chat has no active findings. Only populated by endpoints that join risk data.
+   * Number of distinct active findings (same dedup as risk_findings_count) whose policy severity is low (score < 4.0). Only populated by endpoints that join risk data.
    */
-  maxRiskScore?: number | undefined;
+  lowRiskFindingsCount?: number | undefined;
+  /**
+   * Number of distinct active findings whose policy severity is medium (4.0 <= score < 7.0). Only populated by endpoints that join risk data.
+   */
+  mediumRiskFindingsCount?: number | undefined;
   /**
    * The number of messages in the chat
    */
@@ -116,12 +124,14 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
         z.transform(v => new Date(v)),
       ),
       external_user_id: z.optional(z.string()),
+      high_risk_findings_count: z.optional(z.int()),
       id: z.string(),
       last_message_timestamp: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
-      max_risk_score: z.optional(z.number()),
+      low_risk_findings_count: z.optional(z.int()),
+      medium_risk_findings_count: z.optional(z.int()),
       num_messages: z.int(),
       pinned: z.optional(z.boolean()),
       risk_findings_count: z.optional(z.int()),
@@ -150,8 +160,10 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
         "assistant_name": "assistantName",
         "created_at": "createdAt",
         "external_user_id": "externalUserId",
+        "high_risk_findings_count": "highRiskFindingsCount",
         "last_message_timestamp": "lastMessageTimestamp",
-        "max_risk_score": "maxRiskScore",
+        "low_risk_findings_count": "lowRiskFindingsCount",
+        "medium_risk_findings_count": "mediumRiskFindingsCount",
         "num_messages": "numMessages",
         "risk_findings_count": "riskFindingsCount",
         "summary_generated_at": "summaryGeneratedAt",

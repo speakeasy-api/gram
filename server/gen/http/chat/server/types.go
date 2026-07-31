@@ -147,10 +147,16 @@ type LoadChatResponseBody struct {
 	// excluded and false-positive results). Only populated by endpoints that join
 	// risk data; absent elsewhere.
 	RiskFindingsCount *int `form:"risk_findings_count,omitempty" json:"risk_findings_count,omitempty" xml:"risk_findings_count,omitempty"`
-	// Highest CVSS-style severity score (0.1-10) among this chat's active risk
-	// findings' policies. Absent when the chat has no active findings. Only
-	// populated by endpoints that join risk data.
-	MaxRiskScore *float64 `form:"max_risk_score,omitempty" json:"max_risk_score,omitempty" xml:"max_risk_score,omitempty"`
+	// Number of distinct active findings (same dedup as risk_findings_count) whose
+	// policy severity is low (score < 4.0). Only populated by endpoints that join
+	// risk data.
+	LowRiskFindingsCount *int `form:"low_risk_findings_count,omitempty" json:"low_risk_findings_count,omitempty" xml:"low_risk_findings_count,omitempty"`
+	// Number of distinct active findings whose policy severity is medium (4.0 <=
+	// score < 7.0). Only populated by endpoints that join risk data.
+	MediumRiskFindingsCount *int `form:"medium_risk_findings_count,omitempty" json:"medium_risk_findings_count,omitempty" xml:"medium_risk_findings_count,omitempty"`
+	// Number of distinct active findings whose policy severity is high or critical
+	// (score >= 7.0). Only populated by endpoints that join risk data.
+	HighRiskFindingsCount *int `form:"high_risk_findings_count,omitempty" json:"high_risk_findings_count,omitempty" xml:"high_risk_findings_count,omitempty"`
 	// Work units of value delivered in this chat as judged by the work-units
 	// analysis. Absent unless the organization has work-units analysis enabled and
 	// this chat has been scored.
@@ -2058,10 +2064,16 @@ type ChatOverviewResponseBody struct {
 	// excluded and false-positive results). Only populated by endpoints that join
 	// risk data; absent elsewhere.
 	RiskFindingsCount *int `form:"risk_findings_count,omitempty" json:"risk_findings_count,omitempty" xml:"risk_findings_count,omitempty"`
-	// Highest CVSS-style severity score (0.1-10) among this chat's active risk
-	// findings' policies. Absent when the chat has no active findings. Only
-	// populated by endpoints that join risk data.
-	MaxRiskScore *float64 `form:"max_risk_score,omitempty" json:"max_risk_score,omitempty" xml:"max_risk_score,omitempty"`
+	// Number of distinct active findings (same dedup as risk_findings_count) whose
+	// policy severity is low (score < 4.0). Only populated by endpoints that join
+	// risk data.
+	LowRiskFindingsCount *int `form:"low_risk_findings_count,omitempty" json:"low_risk_findings_count,omitempty" xml:"low_risk_findings_count,omitempty"`
+	// Number of distinct active findings whose policy severity is medium (4.0 <=
+	// score < 7.0). Only populated by endpoints that join risk data.
+	MediumRiskFindingsCount *int `form:"medium_risk_findings_count,omitempty" json:"medium_risk_findings_count,omitempty" xml:"medium_risk_findings_count,omitempty"`
+	// Number of distinct active findings whose policy severity is high or critical
+	// (score >= 7.0). Only populated by endpoints that join risk data.
+	HighRiskFindingsCount *int `form:"high_risk_findings_count,omitempty" json:"high_risk_findings_count,omitempty" xml:"high_risk_findings_count,omitempty"`
 	// Work units of value delivered in this chat as judged by the work-units
 	// analysis. Absent unless the organization has work-units analysis enabled and
 	// this chat has been scored.
@@ -2295,34 +2307,36 @@ func NewGetWorkUnitsTrendResponseBody(res *chat.WorkUnitsTrendResult) *GetWorkUn
 // "loadChat" endpoint of the "chat" service.
 func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 	body := &LoadChatResponseBody{
-		Generation:           res.Generation,
-		MaxGeneration:        res.MaxGeneration,
-		HasMoreBefore:        res.HasMoreBefore,
-		HasMoreAfter:         res.HasMoreAfter,
-		WorkUnitsReport:      res.WorkUnitsReport,
-		ID:                   res.ID,
-		Title:                res.Title,
-		UserID:               res.UserID,
-		ExternalUserID:       res.ExternalUserID,
-		AssistantID:          res.AssistantID,
-		AssistantName:        res.AssistantName,
-		NumMessages:          res.NumMessages,
-		Source:               res.Source,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
-		TotalInputTokens:     res.TotalInputTokens,
-		TotalOutputTokens:    res.TotalOutputTokens,
-		TotalTokens:          res.TotalTokens,
-		TotalCost:            res.TotalCost,
-		LastMessageTimestamp: res.LastMessageTimestamp,
-		RiskFindingsCount:    res.RiskFindingsCount,
-		MaxRiskScore:         res.MaxRiskScore,
-		WorkUnits:            res.WorkUnits,
-		AccountType:          res.AccountType,
-		AccountEmail:         res.AccountEmail,
-		Pinned:               res.Pinned,
-		Summary:              res.Summary,
-		SummaryGeneratedAt:   res.SummaryGeneratedAt,
+		Generation:              res.Generation,
+		MaxGeneration:           res.MaxGeneration,
+		HasMoreBefore:           res.HasMoreBefore,
+		HasMoreAfter:            res.HasMoreAfter,
+		WorkUnitsReport:         res.WorkUnitsReport,
+		ID:                      res.ID,
+		Title:                   res.Title,
+		UserID:                  res.UserID,
+		ExternalUserID:          res.ExternalUserID,
+		AssistantID:             res.AssistantID,
+		AssistantName:           res.AssistantName,
+		NumMessages:             res.NumMessages,
+		Source:                  res.Source,
+		CreatedAt:               res.CreatedAt,
+		UpdatedAt:               res.UpdatedAt,
+		TotalInputTokens:        res.TotalInputTokens,
+		TotalOutputTokens:       res.TotalOutputTokens,
+		TotalTokens:             res.TotalTokens,
+		TotalCost:               res.TotalCost,
+		LastMessageTimestamp:    res.LastMessageTimestamp,
+		RiskFindingsCount:       res.RiskFindingsCount,
+		LowRiskFindingsCount:    res.LowRiskFindingsCount,
+		MediumRiskFindingsCount: res.MediumRiskFindingsCount,
+		HighRiskFindingsCount:   res.HighRiskFindingsCount,
+		WorkUnits:               res.WorkUnits,
+		AccountType:             res.AccountType,
+		AccountEmail:            res.AccountEmail,
+		Pinned:                  res.Pinned,
+		Summary:                 res.Summary,
+		SummaryGeneratedAt:      res.SummaryGeneratedAt,
 	}
 	if res.Messages != nil {
 		body.Messages = make([]*ChatMessageResponseBody, len(res.Messages))

@@ -161,10 +161,16 @@ type Chat struct {
 	// excluded and false-positive results). Only populated by endpoints that join
 	// risk data; absent elsewhere.
 	RiskFindingsCount *int
-	// Highest CVSS-style severity score (0.1-10) among this chat's active risk
-	// findings' policies. Absent when the chat has no active findings. Only
-	// populated by endpoints that join risk data.
-	MaxRiskScore *float64
+	// Number of distinct active findings (same dedup as risk_findings_count) whose
+	// policy severity is low (score < 4.0). Only populated by endpoints that join
+	// risk data.
+	LowRiskFindingsCount *int
+	// Number of distinct active findings whose policy severity is medium (4.0 <=
+	// score < 7.0). Only populated by endpoints that join risk data.
+	MediumRiskFindingsCount *int
+	// Number of distinct active findings whose policy severity is high or critical
+	// (score >= 7.0). Only populated by endpoints that join risk data.
+	HighRiskFindingsCount *int
 	// Work units of value delivered in this chat as judged by the work-units
 	// analysis. Absent unless the organization has work-units analysis enabled and
 	// this chat has been scored.
@@ -274,10 +280,16 @@ type ChatOverview struct {
 	// excluded and false-positive results). Only populated by endpoints that join
 	// risk data; absent elsewhere.
 	RiskFindingsCount *int
-	// Highest CVSS-style severity score (0.1-10) among this chat's active risk
-	// findings' policies. Absent when the chat has no active findings. Only
-	// populated by endpoints that join risk data.
-	MaxRiskScore *float64
+	// Number of distinct active findings (same dedup as risk_findings_count) whose
+	// policy severity is low (score < 4.0). Only populated by endpoints that join
+	// risk data.
+	LowRiskFindingsCount *int
+	// Number of distinct active findings whose policy severity is medium (4.0 <=
+	// score < 7.0). Only populated by endpoints that join risk data.
+	MediumRiskFindingsCount *int
+	// Number of distinct active findings whose policy severity is high or critical
+	// (score >= 7.0). Only populated by endpoints that join risk data.
+	HighRiskFindingsCount *int
 	// Work units of value delivered in this chat as judged by the work-units
 	// analysis. Absent unless the organization has work-units analysis enabled and
 	// this chat has been scored.

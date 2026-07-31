@@ -663,10 +663,12 @@ SELECT
       AND rr.excluded_at IS NULL
       AND rr.false_positive_at IS NULL
   ) AS risk_findings_count,
-  -- Highest severity among this chat's active findings' policies, for a
-  -- severity-graded (rather than flat-alarming) risk indicator.
+  -- Distinct findings bucketed by their policy's severity band (mirrors
+  -- risk-utils.ts's scoreToRating, folding high/critical together since the
+  -- histogram only has three segments), for a mini per-session severity
+  -- histogram instead of a single flat-alarming indicator.
   (
-    SELECT MAX(rp.score)
+    SELECT COUNT(DISTINCT (rr.source, rr.rule_id, rr.match))::integer
     FROM risk_results rr
     JOIN chat_messages cm ON cm.id = rr.chat_message_id
     JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
@@ -675,7 +677,32 @@ SELECT
       AND rr.found IS TRUE
       AND rr.excluded_at IS NULL
       AND rr.false_positive_at IS NULL
-  ) AS max_risk_score,
+      AND rp.score < 4.0
+  ) AS low_risk_findings_count,
+  (
+    SELECT COUNT(DISTINCT (rr.source, rr.rule_id, rr.match))::integer
+    FROM risk_results rr
+    JOIN chat_messages cm ON cm.id = rr.chat_message_id
+    JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+    WHERE rr.project_id = @project_id
+      AND cm.chat_id = lc.id
+      AND rr.found IS TRUE
+      AND rr.excluded_at IS NULL
+      AND rr.false_positive_at IS NULL
+      AND rp.score >= 4.0 AND rp.score < 7.0
+  ) AS medium_risk_findings_count,
+  (
+    SELECT COUNT(DISTINCT (rr.source, rr.rule_id, rr.match))::integer
+    FROM risk_results rr
+    JOIN chat_messages cm ON cm.id = rr.chat_message_id
+    JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+    WHERE rr.project_id = @project_id
+      AND cm.chat_id = lc.id
+      AND rr.found IS TRUE
+      AND rr.excluded_at IS NULL
+      AND rr.false_positive_at IS NULL
+      AND rp.score >= 7.0
+  ) AS high_risk_findings_count,
   lc.account_type,
   lc.account_email,
   lc.assistant_id,
