@@ -192,7 +192,7 @@ func upsertProviderTx(t *testing.T, ctx context.Context, conn *pgxpool.Pool, sto
 	var result UpsertResult
 	err := pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
 		var err error
-		result, err = store.upsertWithTx(ctx, tx, desc, orgID, creds, settings, enabled)
+		result, err = store.upsertWithTx(ctx, tx, desc, orgID, creds, settings, enabled, nil)
 		return err
 	})
 	if err != nil {
