@@ -1138,6 +1138,12 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	for _, r := range raw.Results {
+		// ClickHouse-served rows are already store-redacted (Match nil,
+		// MatchRedacted stamped at ingest); re-deriving from a nil Match would
+		// clobber the real fingerprint with `<redacted len=0>`.
+		if r.Match == nil && r.MatchRedacted != nil {
+			continue
+		}
 		redactResultMatchInPlace(r, authCtx.ActiveOrganizationID)
 	}
 	return raw, nil
@@ -1234,6 +1240,17 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 	toTime, err := parseOptionalTimestamptz(payload.To)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid to").LogError(ctx, s.logger)
+	}
+
+	if s.listFromClickHouse(ctx, authCtx) {
+		var from, to *time.Time
+		if fromTime.Valid {
+			from = &fromTime.Time
+		}
+		if toTime.Valid {
+			to = &toTime.Time
+		}
+		return s.listResultsByProjectFromClickHouse(ctx, authCtx, cursor, pageSize, policyID, category, ruleID, userID, uniqueMatch, nonAssistant, assistantID, from, to)
 	}
 
 	var totalCount int64
@@ -1374,6 +1391,12 @@ func (s *Service) UnmaskRiskResult(ctx context.Context, payload *gen.UnmaskRiskR
 func redactRiskResult(r *types.RiskResult, orgID string) *types.RiskResultRedacted {
 	ruleID := conv.PtrValOrEmpty(r.RuleID, "")
 	matchRedacted := redactMatch(r.Source, ruleID, r.Match, orgID)
+	// ClickHouse-served rows arrive with no raw match and the ingest-time
+	// redaction already stamped; pass it through instead of deriving
+	// `<redacted len=0>` from the nil match.
+	if r.Match == nil && r.MatchRedacted != nil {
+		matchRedacted = *r.MatchRedacted
+	}
 
 	var spansRedacted []*types.RiskSpanRedacted
 	if len(r.Spans) > 0 {
@@ -1744,7 +1767,11 @@ func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, ra
 		cid := row.ChatID.String()
 		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, row.ChatContentPartID, &cid, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt))
 		if i == pageSize {
-			nextCursor = &riskResultsCursor{MessageCreatedAt: row.MessageCreatedAt.Time, ID: row.ID}
+			// Cursor from the LAST RETURNED row (not this extra row): the
+			// next-page predicate is a strict (message_created_at, id) <, so a
+			// cursor pointing at the extra row would skip it entirely.
+			last := rows[pageSize-1]
+			nextCursor = &riskResultsCursor{MessageCreatedAt: last.MessageCreatedAt.Time, ID: last.ID}
 		}
 	}
 	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
@@ -1776,7 +1803,11 @@ func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID,
 		chatID := row.ChatID.String()
 		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, row.ChatContentPartID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt))
 		if i == pageSize {
-			nextCursor = &riskResultsCursor{MessageCreatedAt: row.MessageCreatedAt.Time, ID: row.ID}
+			// Cursor from the LAST RETURNED row (not this extra row): the
+			// next-page predicate is a strict (message_created_at, id) <, so a
+			// cursor pointing at the extra row would skip it entirely.
+			last := rows[pageSize-1]
+			nextCursor = &riskResultsCursor{MessageCreatedAt: last.MessageCreatedAt.Time, ID: last.ID}
 		}
 	}
 	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
