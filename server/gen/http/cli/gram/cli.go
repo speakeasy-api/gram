@@ -110,7 +110,7 @@ func UsageCommands() []string {
 		"environments (create-environment|list-environments|update-environment|clone-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
 		"external-credentials (create-aws-iam-credential|update-aws-iam-credential|create-gcp-iam-credential|update-gcp-iam-credential|list-external-credentials|list-aws-iam-credentials|list-gcp-iam-credentials|get-aws-iam-credential|get-gcp-iam-credential|delete-aws-iam-credential|delete-gcp-iam-credential)",
 		"external-keys (create-aws-kms-key|update-aws-kms-key|create-gcp-kms-key|update-gcp-kms-key|list-external-keys|list-aws-kms-keys|list-gcp-kms-keys|get-aws-kms-key|get-gcp-kms-key|delete-aws-kms-key|delete-gcp-kms-key)",
-		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details)",
+		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details|get-setup-docs)",
 		"collections (create|list|update|delete|attach-server|detach-server|list-servers)",
 		"functions get-signed-asset-url",
 		"hooks-server-names (list|upsert|delete)",
@@ -998,6 +998,13 @@ func ParseEndpoint(
 		mcpRegistriesGetServerDetailsSessionTokenFlag     = mcpRegistriesGetServerDetailsFlags.String("session-token", "", "")
 		mcpRegistriesGetServerDetailsApikeyTokenFlag      = mcpRegistriesGetServerDetailsFlags.String("apikey-token", "", "")
 		mcpRegistriesGetServerDetailsProjectSlugInputFlag = mcpRegistriesGetServerDetailsFlags.String("project-slug-input", "", "")
+
+		mcpRegistriesGetSetupDocsFlags                 = flag.NewFlagSet("get-setup-docs", flag.ExitOnError)
+		mcpRegistriesGetSetupDocsServerURLFlag         = mcpRegistriesGetSetupDocsFlags.String("server-url", "", "")
+		mcpRegistriesGetSetupDocsRegistrySpecifierFlag = mcpRegistriesGetSetupDocsFlags.String("registry-specifier", "", "")
+		mcpRegistriesGetSetupDocsSessionTokenFlag      = mcpRegistriesGetSetupDocsFlags.String("session-token", "", "")
+		mcpRegistriesGetSetupDocsApikeyTokenFlag       = mcpRegistriesGetSetupDocsFlags.String("apikey-token", "", "")
+		mcpRegistriesGetSetupDocsProjectSlugInputFlag  = mcpRegistriesGetSetupDocsFlags.String("project-slug-input", "", "")
 
 		collectionsFlags = flag.NewFlagSet("collections", flag.ContinueOnError)
 
@@ -3254,6 +3261,7 @@ func ParseEndpoint(
 	mcpRegistriesListRegistriesFlags.Usage = mcpRegistriesListRegistriesUsage
 	mcpRegistriesListCatalogFlags.Usage = mcpRegistriesListCatalogUsage
 	mcpRegistriesGetServerDetailsFlags.Usage = mcpRegistriesGetServerDetailsUsage
+	mcpRegistriesGetSetupDocsFlags.Usage = mcpRegistriesGetSetupDocsUsage
 
 	collectionsFlags.Usage = collectionsUsage
 	collectionsCreateFlags.Usage = collectionsCreateUsage
@@ -4400,6 +4408,9 @@ func ParseEndpoint(
 
 			case "get-server-details":
 				epf = mcpRegistriesGetServerDetailsFlags
+
+			case "get-setup-docs":
+				epf = mcpRegistriesGetSetupDocsFlags
 
 			}
 
@@ -6210,6 +6221,9 @@ func ParseEndpoint(
 			case "get-server-details":
 				endpoint = c.GetServerDetails()
 				data, err = mcpregistriesc.BuildGetServerDetailsPayload(*mcpRegistriesGetServerDetailsRegistryIDFlag, *mcpRegistriesGetServerDetailsServerSpecifierFlag, *mcpRegistriesGetServerDetailsSessionTokenFlag, *mcpRegistriesGetServerDetailsApikeyTokenFlag, *mcpRegistriesGetServerDetailsProjectSlugInputFlag)
+			case "get-setup-docs":
+				endpoint = c.GetSetupDocs()
+				data, err = mcpregistriesc.BuildGetSetupDocsPayload(*mcpRegistriesGetSetupDocsServerURLFlag, *mcpRegistriesGetSetupDocsRegistrySpecifierFlag, *mcpRegistriesGetSetupDocsSessionTokenFlag, *mcpRegistriesGetSetupDocsApikeyTokenFlag, *mcpRegistriesGetSetupDocsProjectSlugInputFlag)
 			}
 		case "collections":
 			c := collectionsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -11083,6 +11097,7 @@ func mcpRegistriesUsage() {
 	fmt.Fprintln(os.Stderr, `    list-registries: List all MCP registries (admin only)`)
 	fmt.Fprintln(os.Stderr, `    list-catalog: List available MCP servers from configured registries`)
 	fmt.Fprintln(os.Stderr, `    get-server-details: Get detailed information about an MCP server including remotes`)
+	fmt.Fprintln(os.Stderr, `    get-setup-docs: Get the published setup documentation for an upstream MCP server, located by endpoint URL and/or registry identifier`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s mcp-registries COMMAND --help\n", os.Args[0])
@@ -11185,6 +11200,32 @@ func mcpRegistriesGetServerDetailsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries get-server-details --registry-id \"550e8400-e29b-41d4-a716-446655440000\" --server-specifier \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpRegistriesGetSetupDocsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-registries get-setup-docs", os.Args[0])
+	fmt.Fprint(os.Stderr, " -server-url STRING")
+	fmt.Fprint(os.Stderr, " -registry-specifier STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the published setup documentation for an upstream MCP server, located by endpoint URL and/or registry identifier`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -server-url STRING: `)
+	fmt.Fprintln(os.Stderr, `    -registry-specifier STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries get-setup-docs --server-url \"https://mcp.box.com\" --registry-specifier \"com.pulsemcp.mirror/box\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // collectionsUsage displays the usage of the collections command and its
