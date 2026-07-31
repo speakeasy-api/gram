@@ -39,5 +39,5 @@ ngrok http --url=gram-yourname.ngrok.app https://localhost:8080
 
 ## Test the OAuth Flow
 
-Add a Gram MCP server that uses OAuth to your desired app (any MCP client)
+Add a Gram MCP server that uses OAuth to your desired app
 and test the authentication flow.
