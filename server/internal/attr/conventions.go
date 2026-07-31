@@ -134,17 +134,30 @@ const (
 	// chat_analysis:work_units:score telemetry rows the chat analysis
 	// publisher emits once per scored session, and read back by
 	// attribute_metrics_summaries_mv's work-units measures.
-	ChatAnalysisWorkUnitsKey       = attribute.Key("gram.chat_analysis.work_units")
-	ChatAnalysisScoredCostKey      = attribute.Key("gram.chat_analysis.scored_cost")
-	ChatAnalysisScoredTokensKey    = attribute.Key("gram.chat_analysis.scored_tokens")
-	MCPRegistryIDKey               = attribute.Key("gram.mcp_registry.id")
-	MCPRegistryURLKey              = attribute.Key("gram.mcp_registry.url")
-	ExternalMCPIDKey               = attribute.Key("gram.external_mcp.id")
-	ExternalMCPSlugKey             = attribute.Key("gram.external_mcp.slug")
-	ExternalMCPNameKey             = attribute.Key("gram.external_mcp.name")
-	URLKey                         = attribute.Key("url")
-	CacheKeyKey                    = attribute.Key("gram.cache.key")
-	CacheNamespaceKey              = attribute.Key("gram.cache.namespace")
+	ChatAnalysisWorkUnitsKey    = attribute.Key("gram.chat_analysis.work_units")
+	ChatAnalysisScoredCostKey   = attribute.Key("gram.chat_analysis.scored_cost")
+	ChatAnalysisScoredTokensKey = attribute.Key("gram.chat_analysis.scored_tokens")
+	MCPRegistryIDKey            = attribute.Key("gram.mcp_registry.id")
+	MCPRegistryURLKey           = attribute.Key("gram.mcp_registry.url")
+	ExternalMCPIDKey            = attribute.Key("gram.external_mcp.id")
+	ExternalMCPSlugKey          = attribute.Key("gram.external_mcp.slug")
+	ExternalMCPNameKey          = attribute.Key("gram.external_mcp.name")
+	URLKey                      = attribute.Key("url")
+	CacheKeyKey                 = attribute.Key("gram.cache.key")
+	CacheNamespaceKey           = attribute.Key("gram.cache.namespace")
+
+	// CIMDOriginKey is the host of a Client ID Metadata Document URL — the
+	// per-metadata-host dimension on cimd.fetch.* metrics. Attacker-influenced
+	// on the unauthenticated OAuth surface until CIMD admission control
+	// (AIS-371) bounds accepted client_id URLs, so it is deliberately omitted
+	// for client_ids that fail URL-syntax validation before a fetch.
+	CIMDOriginKey = attribute.Key("gram.cimd.origin")
+
+	// CIMDValidationReasonKey is the machine-readable reason a Client ID
+	// Metadata Document (or its client_id URL) failed validation — the
+	// per-reason dimension on cimd.validation.failures.
+	CIMDValidationReasonKey = attribute.Key("gram.cimd.validation_reason")
+
 	ComponentKey                   = attribute.Key("gram.component")
 	DBDeletedRowsCountKey          = attribute.Key("gram.db.deleted_rows_count")
 	DeploymentIDKey                = attribute.Key("gram.deployment.id")
@@ -844,6 +857,17 @@ func SlogCacheKey(v string) slog.Attr      { return slog.String(string(CacheKeyK
 
 func CacheNamespace(v string) attribute.KeyValue { return CacheNamespaceKey.String(v) }
 func SlogCacheNamespace(v string) slog.Attr      { return slog.String(string(CacheNamespaceKey), v) }
+
+func CIMDOrigin(v string) attribute.KeyValue { return CIMDOriginKey.String(v) }
+func SlogCIMDOrigin(v string) slog.Attr      { return slog.String(string(CIMDOriginKey), v) }
+
+func CIMDValidationReason[V ~string](v V) attribute.KeyValue {
+	return CIMDValidationReasonKey.String(string(v))
+}
+
+func SlogCIMDValidationReason[V ~string](v V) slog.Attr {
+	return slog.String(string(CIMDValidationReasonKey), string(v))
+}
 
 func Component(v string) attribute.KeyValue { return ComponentKey.String(v) }
 func SlogComponent(v string) slog.Attr      { return slog.String(string(ComponentKey), v) }
