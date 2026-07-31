@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -425,12 +426,15 @@ func TestToolsetsService_CreateToolset_AttachesToDefaultPlugin(t *testing.T) {
 		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
-	require.True(t, *result.McpEnabled)
+	wrapper := wrapperForToolset(t, ti, uuid.MustParse(result.ID), *authCtx.ProjectID)
+	require.Equal(t, mcpservers.VisibilityPrivate, wrapper.Visibility, "first server in an organization is auto-enabled as private")
 
 	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
 	require.NoError(t, err)
 	require.Len(t, servers, 1)
-	require.Equal(t, uuid.MustParse(result.ID), servers[0].ToolsetID.UUID)
+	require.True(t, servers[0].McpServerID.Valid, "attachment is keyed by the wrapper mcp server")
+	require.Equal(t, wrapper.ID, servers[0].McpServerID.UUID)
+	require.False(t, servers[0].ToolsetID.Valid, "column-less toolsets carry no toolset-keyed attachment")
 	require.Equal(t, "Attach Toolset", servers[0].DisplayName)
 	require.Equal(t, "required", servers[0].Policy)
 
@@ -454,7 +458,7 @@ func TestToolsetsService_CreateToolset_SecondToolset_DoesNotAutoAttach(t *testin
 	})
 	require.NoError(t, err)
 
-	_, err = ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+	first, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "First Toolset",
 		Description:            nil,
@@ -480,7 +484,8 @@ func TestToolsetsService_CreateToolset_SecondToolset_DoesNotAutoAttach(t *testin
 	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
 	require.NoError(t, err)
 	require.Len(t, servers, 1, "only the auto-enabled first toolset should be attached")
-	require.NotEqual(t, uuid.MustParse(second.ID), servers[0].ToolsetID.UUID)
+	firstWrapper := wrapperForToolset(t, ti, uuid.MustParse(first.ID), *authCtx.ProjectID)
+	require.Equal(t, firstWrapper.ID, servers[0].McpServerID.UUID)
 }
 
 // TestToolsetsService_CreateToolset_LegacyProject_TriggersInitialPublish

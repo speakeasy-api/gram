@@ -266,13 +266,17 @@ type UpdateToolsetPayload struct {
 	ToolUrns []string
 	// List of resource URNs to include in the toolset
 	ResourceUrns []string
-	// Whether the toolset is enabled for MCP
+	// Deprecated: manage availability through the mcpServers API (visibility).
+	// Only accepted for toolsets that predate MCP servers.
 	McpEnabled *bool
-	// The slug of the MCP to use for the toolset
+	// Deprecated: manage addressing through the mcpEndpoints API. Only accepted
+	// for toolsets that predate MCP servers.
 	McpSlug *types.Slug
-	// Whether the toolset is public in MCP
+	// Deprecated: manage visibility through the mcpServers API. Only accepted for
+	// toolsets that predate MCP servers.
 	McpIsPublic *bool
-	// The ID of the custom domain to use for the toolset
+	// Deprecated: manage custom-domain addressing through the mcpEndpoints API.
+	// Only accepted for toolsets that predate MCP servers.
 	CustomDomainID *string
 	// The mode to use for tool selection
 	ToolSelectionMode *string

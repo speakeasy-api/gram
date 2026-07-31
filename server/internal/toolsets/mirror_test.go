@@ -44,7 +44,7 @@ func TestCreateToolset_MirrorsWrapperAndEndpoint(t *testing.T) {
 		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
-	require.NotNil(t, result.McpSlug)
+	require.Nil(t, result.McpSlug, "new toolsets carry no publishing columns")
 
 	wrapper := wrapperForToolset(t, ti, uuid.MustParse(result.ID), *authCtx.ProjectID)
 	require.True(t, wrapper.ToolsetID.Valid)
@@ -58,7 +58,7 @@ func TestCreateToolset_MirrorsWrapperAndEndpoint(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, endpoints, 1)
-	require.Equal(t, string(*result.McpSlug), endpoints[0].Slug, "endpoint slug mirrors toolsets.mcp_slug")
+	require.Contains(t, endpoints[0].Slug, "-", "platform endpoint slug is organization-prefixed")
 	require.False(t, endpoints[0].CustomDomainID.Valid, "new toolsets publish on the platform domain")
 }
 
@@ -80,6 +80,10 @@ func TestUpdateToolset_DisableMirrorsDisabledVisibility(t *testing.T) {
 		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
+
+	// The translation path only applies to rows that still carry pre-swap
+	// publishing columns.
+	seedPublishingColumns(t, ctx, ti, uuid.MustParse(created.ID), "seed-"+string(created.Slug), true)
 
 	_, err = ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
 		SessionToken:           nil,

@@ -46,6 +46,79 @@ func mirrorWrapperSlug(toolset repo.Toolset) string {
 	return toolset.Slug + "-" + compact[:8]
 }
 
+// effectiveMcpPublic reports whether a toolset's MCP surface is public.
+// Rows that still carry publishing columns (pre-swap) answer from the
+// column; column-less rows answer from their wrapper mcp_servers
+// visibility. Ambiguous wrapper state reads as not public.
+func (s *Service) effectiveMcpPublic(ctx context.Context, projectID, toolsetID uuid.UUID, columnPublic *bool, hasColumns bool) (bool, error) {
+	if hasColumns {
+		return columnPublic != nil && *columnPublic, nil
+	}
+	wrappers, err := mcpserversRepo.New(s.db).GetMCPServersByToolsetID(ctx, mcpserversRepo.GetMCPServersByToolsetIDParams{
+		ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true},
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return false, fmt.Errorf("load wrapper mcp servers for toolset: %w", err)
+	}
+	if len(wrappers) != 1 {
+		return false, nil
+	}
+	return wrappers[0].Visibility == mcpservers.VisibilityPublic, nil
+}
+
+// createWrapperForNewToolset provisions the canonical wrapper mcp_servers
+// row and platform mcp_endpoints row for a newly created toolset, returning
+// the wrapper's id. New toolsets carry no publishing columns — publishing
+// state is born on the wrapper — so this is a direct creation rather than a
+// column mirror.
+func (s *Service) createWrapperForNewToolset(ctx context.Context, dbtx pgx.Tx, toolset repo.Toolset, endpointSlug, visibility string) (uuid.UUID, error) {
+	var environmentID uuid.NullUUID
+	if slug := conv.FromPGText[string](toolset.DefaultEnvironmentSlug); slug != nil && *slug != "" {
+		env, err := environmentsRepo.New(dbtx).GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
+			Slug:      *slug,
+			ProjectID: toolset.ProjectID,
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+		case err != nil:
+			return uuid.Nil, fmt.Errorf("resolve toolset default environment: %w", err)
+		default:
+			environmentID = uuid.NullUUID{UUID: env.ID, Valid: true}
+		}
+	}
+
+	serverID, err := uuid.NewV7()
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("generate wrapper mcp server id: %w", err)
+	}
+	wrapper, err := mcpserversRepo.New(dbtx).CreateMCPServer(ctx, mcpserversRepo.CreateMCPServerParams{
+		ID:                    serverID,
+		ProjectID:             toolset.ProjectID,
+		Name:                  conv.ToPGText(toolset.Name),
+		Slug:                  conv.ToPGText(mirrorWrapperSlug(toolset)),
+		EnvironmentID:         environmentID,
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TunneledMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:            visibility,
+	})
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("create wrapper mcp server: %w", err)
+	}
+	if _, err := mcpendpointsRepo.New(dbtx).CreateMCPEndpoint(ctx, mcpendpointsRepo.CreateMCPEndpointParams{
+		ProjectID:      toolset.ProjectID,
+		CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:    wrapper.ID,
+		Slug:           endpointSlug,
+	}); err != nil {
+		return uuid.Nil, fmt.Errorf("create wrapper mcp endpoint: %w", err)
+	}
+	return wrapper.ID, nil
+}
+
 // mirrorPublishingState reconciles the canonical mcp_servers/mcp_endpoints
 // projection of a toolset's publishing columns (mcp_slug, mcp_enabled,
 // mcp_is_public, custom_domain_id, default_environment_slug) inside the

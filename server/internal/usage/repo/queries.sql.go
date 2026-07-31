@@ -36,12 +36,18 @@ func (q *Queries) GetBillingMetadata(ctx context.Context, organizationID string)
 
 const getEnabledServerCount = `-- name: GetEnabledServerCount :one
 SELECT COUNT(*)
-FROM toolsets
-WHERE organization_id = $1
-  AND mcp_enabled IS TRUE
-  AND deleted IS FALSE
+FROM mcp_servers s
+JOIN projects p ON p.id = s.project_id
+WHERE p.organization_id = $1
+  AND s.visibility <> 'disabled'
+  AND s.deleted IS FALSE
+  AND p.deleted IS FALSE
 `
 
+// Counts the organization's available MCP servers. mcp_servers visibility is
+// the canonical publishing state; toolsets that still carry pre-swap
+// publishing columns are mirrored onto wrapper rows, so counting servers
+// covers both generations without double counting.
 func (q *Queries) GetEnabledServerCount(ctx context.Context, organizationID string) (int64, error) {
 	row := q.db.QueryRow(ctx, getEnabledServerCount, organizationID)
 	var count int64

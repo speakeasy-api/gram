@@ -1,9 +1,15 @@
 -- name: GetEnabledServerCount :one
+-- Counts the organization's available MCP servers. mcp_servers visibility is
+-- the canonical publishing state; toolsets that still carry pre-swap
+-- publishing columns are mirrored onto wrapper rows, so counting servers
+-- covers both generations without double counting.
 SELECT COUNT(*)
-FROM toolsets
-WHERE organization_id = @organization_id
-  AND mcp_enabled IS TRUE
-  AND deleted IS FALSE;
+FROM mcp_servers s
+JOIN projects p ON p.id = s.project_id
+WHERE p.organization_id = @organization_id
+  AND s.visibility <> 'disabled'
+  AND s.deleted IS FALSE
+  AND p.deleted IS FALSE;
 
 -- name: GetBillingMetadata :one
 SELECT *
