@@ -41,11 +41,13 @@ export default function UnproxiedMCPDetails(): JSX.Element {
   });
 
   const unproxiedMcpServerId = server?.id ?? "";
-  const { data: mcpServersResult } = useMcpServers(
-    { unproxiedMcpServerId },
-    undefined,
-    { enabled: unproxiedMcpServerId !== "" },
-  );
+  const {
+    data: mcpServersResult,
+    isLoading: isLoadingLinkedServers,
+    isError: isErrorLinkedServers,
+  } = useMcpServers({ unproxiedMcpServerId }, undefined, {
+    enabled: unproxiedMcpServerId !== "",
+  });
   const linkedMcpServers = useMcpServersForUnproxied(
     mcpServersResult?.mcpServers,
     unproxiedMcpServerId,
@@ -110,7 +112,12 @@ export default function UnproxiedMCPDetails(): JSX.Element {
                 <div>
                   <Button
                     variant="secondary"
-                    disabled={disabled || !server}
+                    disabled={
+                      disabled ||
+                      !server ||
+                      isLoadingLinkedServers ||
+                      isErrorLinkedServers
+                    }
                     onClick={() => setIsRemoveOpen(true)}
                   >
                     <Button.LeftIcon>
@@ -118,6 +125,12 @@ export default function UnproxiedMCPDetails(): JSX.Element {
                     </Button.LeftIcon>
                     <Button.Text>Delete server</Button.Text>
                   </Button>
+                  {isErrorLinkedServers && (
+                    <Text small className="text-destructive mt-2">
+                      Couldn&apos;t check whether other servers depend on this
+                      one — refresh the page to try deleting again.
+                    </Text>
+                  )}
                 </div>
               )}
             </RequireScope>
