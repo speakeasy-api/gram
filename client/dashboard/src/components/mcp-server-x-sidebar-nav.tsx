@@ -8,8 +8,11 @@ import {
   type ReadinessCheck,
 } from "@/components/mcp-server-readiness-bar";
 import { SetupGuideCard } from "@/components/setup-guide/SetupGuideCard";
+import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
+import { useToolset } from "@/hooks/toolTypes";
+import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import {
   getMcpServerArgs,
   remoteMcpRouteParam,
@@ -17,7 +20,7 @@ import {
 } from "@/lib/sources";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { useRBAC } from "@/hooks/useRBAC";
-import { MCPServerStatusDropdown } from "@/pages/mcp/x/MCPServerDetails";
+import { MCPServerStatusDropdown } from "@/pages/mcp/x/MCPServerStatusDropdown";
 import {
   activeTabFromPath,
   mcpServerTabHref,
@@ -27,14 +30,21 @@ import { useAllRemoteSessionClients } from "@/pages/mcp/x/tabs/settings/sections
 import { MCP_SERVER_URL_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/ServerUrlSection";
 import { useRoutes } from "@/routes";
 import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
+import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { usePlugins } from "@gram/client/react-query/plugins";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import {
+  AlertTriangle,
   ArrowRight,
+  Database,
   ExternalLink,
+  Gauge,
+  KeyRound,
   LayoutDashboard,
+  MessageSquareText,
   Settings as SettingsIcon,
   Users,
   Wrench,
@@ -64,6 +74,33 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     endpoints,
     isLoadingEndpoints,
   );
+
+  const isToolsetBacked = mcpServer?.backendKind === "toolset";
+  const toolsetSlug = mcpServer?.toolsetSummary?.slug;
+  const { data: toolset } = useToolset(
+    isToolsetBacked ? toolsetSlug : undefined,
+  );
+  // The authentication warning mirrors the old hosted-server sidebar: missing
+  // required env vars or an unconfigured catalog OAuth requirement.
+  const { data: environmentsData } = useListEnvironments(undefined, undefined, {
+    enabled: isToolsetBacked,
+    throwOnError: false,
+  });
+  const { data: mcpMetadataData } = useGetMcpMetadata(
+    { mcpServerId },
+    undefined,
+    { enabled: isToolsetBacked && mcpServerId !== "", throwOnError: false },
+  );
+  const missingRequiredEnvVars = useMissingRequiredEnvVars(
+    toolset,
+    environmentsData?.environments ?? [],
+    toolset?.defaultEnvironmentSlug || "default",
+    mcpMetadataData?.metadata,
+  );
+  const oauthRequiredUnconfigured =
+    useExternalMcpOAuthConfigStatus(
+      isToolsetBacked ? toolsetSlug : undefined,
+    ) === "required-unconfigured";
 
   const remoteMcpServerId = mcpServer?.remoteMcpServerId ?? "";
   const { data: remoteMcpServer } = useGetRemoteMcpServer(
@@ -131,88 +168,156 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     );
   }
 
-  const readinessChecks: ReadinessCheck[] = mcpServer
+  // The readiness checklist walks a source-backed server to a working state;
+  // toolset-backed servers are born ready (tools, endpoint, auth surface).
+  const readinessChecks: ReadinessCheck[] =
+    mcpServer && !isToolsetBacked
+      ? [
+          {
+            key: "server-url",
+            label: "Server URL",
+            description: mcpUrl
+              ? "Endpoint is live and ready to connect to."
+              : "Add an endpoint so this server has a URL to connect to.",
+            ready: !!mcpUrl,
+            href: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_SERVER_URL_SECTION_ID}`,
+          },
+          {
+            key: "authentication",
+            label: "Authentication",
+            description: authenticationDescription,
+            ready:
+              hasRemoteIdentityProvider ||
+              (isTunneledBacked && !!userSessionIssuerId),
+            href: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`,
+          },
+          {
+            key: "source",
+            label: "Source",
+            description: sourceDescription,
+            ready: isSourceBacked,
+            href: sourceHref,
+          },
+          {
+            key: "plugin",
+            label: "Included in Plugin",
+            description: isTrulyIncluded
+              ? `Published to ${memberPlugins.length} plugin${memberPlugins.length > 1 ? "s" : ""}.`
+              : isPluginMember
+                ? "Marketplace needs publishing before this plugin is installable."
+                : "Add this server to a plugin so your team can install it.",
+            ready: isTrulyIncluded,
+            href: routes.plugins.href(),
+          },
+        ]
+      : [];
+
+  const teamAccessItems: McpSidebarNavItem[] = canViewTeamAccess
     ? [
         {
-          key: "server-url",
-          label: "Server URL",
-          description: mcpUrl
-            ? "Endpoint is live and ready to connect to."
-            : "Add an endpoint so this server has a URL to connect to.",
-          ready: !!mcpUrl,
-          href: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_SERVER_URL_SECTION_ID}`,
-        },
-        {
-          key: "authentication",
-          label: "Authentication",
-          description: authenticationDescription,
-          ready:
-            hasRemoteIdentityProvider ||
-            (isTunneledBacked && !!userSessionIssuerId),
-          href: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`,
-        },
-        {
-          key: "source",
-          label: "Source",
-          description: sourceDescription,
-          ready: isSourceBacked,
-          href: sourceHref,
-        },
-        {
-          key: "plugin",
-          label: "Included in Plugin",
-          description: isTrulyIncluded
-            ? `Published to ${memberPlugins.length} plugin${memberPlugins.length > 1 ? "s" : ""}.`
-            : isPluginMember
-              ? "Marketplace needs publishing before this plugin is installable."
-              : "Add this server to a plugin so your team can install it.",
-          ready: isTrulyIncluded,
-          href: routes.plugins.href(),
+          key: "team-access",
+          title: "Team Access",
+          Icon: Users,
+          href: mcpServerTabHref(routes, idOrSlug, "team-access"),
+          active: activeTab === "team-access",
         },
       ]
     : [];
 
-  const items: McpSidebarNavItem[] = [
-    {
-      key: "overview",
-      title: "Overview",
-      Icon: LayoutDashboard,
-      href: mcpServerTabHref(routes, idOrSlug, "overview"),
-      active: activeTab === "overview",
-    },
-    {
-      key: "inspect",
-      title: "Inspect",
-      Icon: Wrench,
-      href: mcpServerTabHref(routes, idOrSlug, "inspect"),
-      active: activeTab === "inspect",
-    },
-    ...(canViewTeamAccess
-      ? [
-          {
-            key: "team-access",
-            title: "Team Access",
-            Icon: Users,
-            href: mcpServerTabHref(routes, idOrSlug, "team-access"),
-            active: activeTab === "team-access",
-          },
-        ]
-      : []),
-    {
-      key: "settings",
-      title: "Settings",
-      Icon: SettingsIcon,
-      href: mcpServerTabHref(routes, idOrSlug, "settings"),
-      active: activeTab === "settings",
-    },
-  ];
+  const settingsItem: McpSidebarNavItem = {
+    key: "settings",
+    title: "Settings",
+    Icon: SettingsIcon,
+    href: mcpServerTabHref(routes, idOrSlug, "settings"),
+    active: activeTab === "settings",
+  };
+
+  const overviewItem: McpSidebarNavItem = {
+    key: "overview",
+    title: "Overview",
+    Icon: LayoutDashboard,
+    href: mcpServerTabHref(routes, idOrSlug, "overview"),
+    active: activeTab === "overview",
+  };
+
+  const items: McpSidebarNavItem[] = isToolsetBacked
+    ? [
+        overviewItem,
+        {
+          key: "tools",
+          title: "Tools",
+          Icon: Wrench,
+          href: mcpServerTabHref(routes, idOrSlug, "tools"),
+          active: activeTab === "tools",
+        },
+        {
+          key: "authentication",
+          title: "Authentication",
+          Icon: KeyRound,
+          titleNode: (
+            <span className="flex items-center gap-1.5">
+              Authentication
+              {(missingRequiredEnvVars > 0 || oauthRequiredUnconfigured) && (
+                <AlertTriangle className="text-warning h-3.5 w-3.5 shrink-0" />
+              )}
+            </span>
+          ),
+          href: mcpServerTabHref(routes, idOrSlug, "authentication"),
+          active: activeTab === "authentication",
+        },
+        {
+          key: "performance",
+          title: "Performance",
+          Icon: Gauge,
+          href: mcpServerTabHref(routes, idOrSlug, "performance"),
+          active: activeTab === "performance",
+        },
+        ...teamAccessItems,
+        {
+          key: "resources",
+          title: "Resources",
+          Icon: Database,
+          href: mcpServerTabHref(routes, idOrSlug, "resources"),
+          active: activeTab === "resources",
+        },
+        {
+          key: "prompts",
+          title: "Prompts",
+          Icon: MessageSquareText,
+          href: mcpServerTabHref(routes, idOrSlug, "prompts"),
+          active: activeTab === "prompts",
+        },
+        settingsItem,
+      ]
+    : [
+        overviewItem,
+        {
+          key: "inspect",
+          title: "Inspect",
+          Icon: Wrench,
+          href: mcpServerTabHref(routes, idOrSlug, "inspect"),
+          active: activeTab === "inspect",
+        },
+        ...teamAccessItems,
+        settingsItem,
+      ];
+
+  const serverDisplayName =
+    mcpServer?.name || mcpServer?.toolsetSummary?.name || "MCP Server";
+  const toolCount =
+    toolset?.tools?.length ?? mcpServer?.toolsetSummary?.toolCount;
+
+  let playgroundQueryParams: Record<string, string> | undefined;
+  if (isToolsetBacked && toolsetSlug) {
+    playgroundQueryParams = { toolset: toolsetSlug };
+  } else if (isSourceBacked && mcpServer) {
+    playgroundQueryParams = { mcpServer: mcpServer.id };
+  }
 
   const cardContent = mcpServer && (
     <>
       <div className="flex flex-col gap-0.5">
-        <Text className="truncate font-semibold">
-          {mcpServer.name || "MCP Server"}
-        </Text>
+        <Text className="truncate font-semibold">{serverDisplayName}</Text>
         {isRemoteBacked && (
           <McpSidebarInfoLabel>Remote MCP</McpSidebarInfoLabel>
         )}
@@ -268,6 +373,13 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         </div>
       )}
 
+      {isToolsetBacked && toolCount !== undefined && (
+        <div className="flex flex-col gap-1">
+          <McpSidebarInfoLabel>Tools</McpSidebarInfoLabel>
+          <Text variant="small">{toolCount}</Text>
+        </div>
+      )}
+
       <div className="border-border flex items-stretch border-t pt-3">
         {installPageUrl ? (
           <a
@@ -287,11 +399,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         )}
         <div className="bg-border w-px self-stretch" />
         <routes.playground.Link
-          queryParams={
-            isRemoteBacked || isTunneledBacked
-              ? { mcpServer: mcpServer.id }
-              : undefined
-          }
+          queryParams={playgroundQueryParams}
           className="flex flex-1 items-center justify-center hover:no-underline"
         >
           <span className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-semibold transition-colors">
@@ -306,7 +414,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   return (
     <McpSidebarNavShell
       backHref={routes.mcp.href()}
-      topTitle="Readiness"
+      topTitle={readinessChecks.length > 0 ? "Readiness" : undefined}
       topContent={
         readinessChecks.length > 0 ? (
           <div className="flex flex-col gap-3">

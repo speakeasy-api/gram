@@ -13,7 +13,6 @@ import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 import { InsightsDockResumeButton } from "./insights-dock-resume-button";
 import { BuiltInMcpSidebarNav } from "./built-in-mcp-sidebar-nav";
-import { McpDetailSidebarNav } from "./mcp-detail-sidebar-nav";
 import { McpServerXSidebarNav } from "./mcp-server-x-sidebar-nav";
 import { SkillDetailSidebarNav } from "./skill-detail-sidebar-nav";
 import { OnboardingResumeButton } from "./onboarding-resume-button";
@@ -149,7 +148,6 @@ export function AppSidebar({
     state === "collapsed" && activeGroup ? undefined : activeRoute?.title;
 
   const isWideSidebarDetailRoute =
-    routes.mcp.details.active ||
     routes.mcp.x.active ||
     routes.mcp.builtIn.active ||
     routes.skills.detail.active;
@@ -157,8 +155,6 @@ export function AppSidebar({
   let sidebarContent: React.ReactNode;
   if (rbacLoading) {
     sidebarContent = <SidebarNavSkeleton />;
-  } else if (routes.mcp.details.active) {
-    sidebarContent = <McpDetailSidebarNav />;
   } else if (routes.mcp.x.active) {
     sidebarContent = <McpServerXSidebarNav />;
   } else if (routes.mcp.builtIn.active) {

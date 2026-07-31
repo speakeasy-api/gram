@@ -5,7 +5,6 @@ import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Toolset } from "@/lib/toolTypes";
-import { getServerURL } from "@/lib/utils";
 import { useProductTier } from "@/hooks/useProductTier";
 import { invalidateAllGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { invalidateAllListEnvironments } from "@gram/client/react-query/listEnvironments.js";
@@ -39,12 +38,14 @@ function OAuthWizard({
   onClose,
   toolsetSlug,
   toolset,
+  mcpUrl,
   initialPath,
 }: {
   isOpen: boolean;
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
+  mcpUrl?: string;
   initialPath?: Input["initialPath"];
 }) {
   // Force the inner machine to remount after the modal close animation
@@ -66,6 +67,7 @@ function OAuthWizard({
           onClose={onClose}
           toolsetSlug={toolsetSlug}
           toolset={toolset}
+          mcpUrl={mcpUrl}
           initialPath={initialPath}
         />
       </Dialog.Content>
@@ -82,11 +84,13 @@ function WizardBody({
   onClose,
   toolsetSlug,
   toolset,
+  mcpUrl,
   initialPath,
 }: {
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
+  mcpUrl?: string;
   initialPath?: Input["initialPath"];
 }) {
   const client = useSdkClient();
@@ -95,7 +99,7 @@ function WizardBody({
   const session = useSession();
   const { fetch: authedFetch } = useFetcher();
 
-  const discovered = useDiscoveredOAuth(toolset);
+  const discovered = useDiscoveredOAuth(toolset, mcpUrl);
 
   const provided = useMemo(
     () =>
@@ -200,21 +204,22 @@ function WizardSteps({
 // Helpers
 // ---------------------------------------------------------------------------
 
-function useDiscoveredOAuth(toolset: Toolset): DiscoveredOAuth | null {
+function useDiscoveredOAuth(
+  toolset: Toolset,
+  mcpUrl: string | undefined,
+): DiscoveredOAuth | null {
   return useMemo<DiscoveredOAuth | null>(() => {
-    const baseURL = getServerURL();
-    const mcpSlug = toolset.mcpSlug;
     for (const tool of toolset.rawTools) {
       const def = tool.externalMcpToolDefinition;
       if (!def?.requiresOauth) continue;
       if (!def.oauthAuthorizationEndpoint && !def.oauthTokenEndpoint) continue;
 
       const metadata: Record<string, unknown> = {
-        issuer: `${baseURL}/mcp/${mcpSlug}`,
         response_types_supported: ["code"],
         grant_types_supported: ["authorization_code", "refresh_token"],
         code_challenge_methods_supported: ["S256"],
       };
+      if (mcpUrl) metadata.issuer = mcpUrl;
       if (def.oauthAuthorizationEndpoint)
         metadata.authorization_endpoint = def.oauthAuthorizationEndpoint;
       if (def.oauthTokenEndpoint)
@@ -232,7 +237,7 @@ function useDiscoveredOAuth(toolset: Toolset): DiscoveredOAuth | null {
       };
     }
     return null;
-  }, [toolset.rawTools, toolset.mcpSlug]);
+  }, [toolset.rawTools, mcpUrl]);
 }
 
 // ---------------------------------------------------------------------------
@@ -244,12 +249,15 @@ export function ConnectOAuthModal({
   onClose,
   toolsetSlug,
   toolset,
+  mcpUrl,
   initialPath,
 }: {
   isOpen: boolean;
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
+  /** The wrapper server's runtime URL, seeding the RFC 8414 issuer. */
+  mcpUrl?: string;
   initialPath?: Input["initialPath"];
 }): JSX.Element {
   const productTier = useProductTier();
@@ -276,6 +284,7 @@ export function ConnectOAuthModal({
       onClose={onClose}
       toolsetSlug={toolsetSlug}
       toolset={toolset}
+      mcpUrl={mcpUrl}
       initialPath={initialPath}
     />
   );

@@ -1,4 +1,5 @@
 import type { Toolset } from "@/lib/toolTypes";
+import type { McpServerVisibility } from "@gram/client/models/components/mcpserver.js";
 
 /**
  * Pure decision logic for which authentication surface the toolset detail
@@ -76,21 +77,22 @@ export function toolsetConvertAction(
 }
 
 /**
- * External OAuth is supported for enabled, public toolset servers whose tools
- * advertise OAuth or whose attached external MCP source requires it. Keep this
- * aligned with the legacy OAuth section so the user-sessions surface does not
- * expose a configuration the serve path cannot use.
+ * External OAuth is supported for public toolset servers (the wrapper
+ * mcp_server's visibility) whose tools advertise OAuth or whose attached
+ * external MCP source requires it. Keep this aligned with the legacy OAuth
+ * section so the user-sessions surface does not expose a configuration the
+ * serve path cannot use.
  */
 export function canConfigureExternalOAuth(
   toolset: Toolset,
+  serverVisibility: McpServerVisibility | undefined,
   externalMcpRequiresOAuth: boolean,
 ): boolean {
   const hasOAuthAuthorizationCodeFlow =
     (toolset.oauthEnablementMetadata?.oauth2SecurityCount ?? 0) > 0;
 
   return Boolean(
-    toolset.mcpEnabled &&
-    toolset.mcpIsPublic &&
+    serverVisibility === "public" &&
     (hasOAuthAuthorizationCodeFlow || externalMcpRequiresOAuth),
   );
 }

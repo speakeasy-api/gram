@@ -1,4 +1,6 @@
-import type { useRoutes } from "@/routes";
+// Parsing helpers for the retired /mcp/:toolsetSlug detail URLs. The route
+// now redirects to the mcp_servers-backed details page (/mcp/x/:serverSlug),
+// and these helpers recover which tab an old link pointed at.
 
 const VALID_TABS = [
   "overview",
@@ -10,8 +12,6 @@ const VALID_TABS = [
   "team-access",
   "settings",
 ] as const;
-
-export const MCP_DETAIL_TAB_URLS: string[] = [...VALID_TABS];
 
 export type TabValue = (typeof VALID_TABS)[number];
 
@@ -60,29 +60,4 @@ export function initialTabFromHash(hash: string): TabValue {
   const hashValue = hash.replace("#", "");
   if (!isValidTab(hashValue)) return "overview";
   return hashValue;
-}
-
-export function mcpDetailTabHref(
-  routes: ReturnType<typeof useRoutes>,
-  toolsetSlug: string,
-  tab: TabValue,
-): string {
-  switch (tab) {
-    case "overview":
-      return routes.mcp.details.overview.href(toolsetSlug);
-    case "tools":
-      return routes.mcp.details.tools.href(toolsetSlug);
-    case "resources":
-      return routes.mcp.details.resources.href(toolsetSlug);
-    case "prompts":
-      return routes.mcp.details.prompts.href(toolsetSlug);
-    case "authentication":
-      return routes.mcp.details.authentication.href(toolsetSlug);
-    case "performance":
-      return routes.mcp.details.performance.href(toolsetSlug);
-    case "team-access":
-      return routes.mcp.details.teamAccess.href(toolsetSlug);
-    case "settings":
-      return routes.mcp.details.settings.href(toolsetSlug);
-  }
 }

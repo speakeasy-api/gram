@@ -34,7 +34,11 @@ export function PublishingSection({
     toggleCollection,
     handleSave,
     handleDiscard,
-  } = usePublishing({ kind: "mcpServer", mcpServerId: mcpServer.id });
+  } = usePublishing({
+    kind: "mcpServer",
+    mcpServerId: mcpServer.id,
+    backingToolsetId: mcpServer.toolsetId,
+  });
 
   let body: React.ReactNode;
   if (!canPublish) {

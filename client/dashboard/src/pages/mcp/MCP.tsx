@@ -1,37 +1,45 @@
 import { InputDialog } from "@/components/input-dialog";
 import { RequireScope } from "@/components/require-scope";
 import { BuiltInMCPCard } from "@/components/mcp/BuiltInMCPCard";
-import { MCPCard, MCPCardSkeleton } from "@/components/mcp/MCPCard";
-import { MCPServerCard } from "@/components/mcp/MCPServerCard";
-import { MCPServerTableRow } from "@/components/mcp/MCPServerTableRow";
-import { MCPTableRow, MCPTableRowSkeleton } from "@/components/mcp/MCPTableRow";
+import { mcpServerDisplayName } from "@/components/mcp/mcp-server-listing";
+import {
+  MCPServerCard,
+  MCPServerCardSkeleton,
+} from "@/components/mcp/MCPServerCard";
+import {
+  MCPServerTableRow,
+  MCPServerTableRowSkeleton,
+} from "@/components/mcp/MCPServerTableRow";
 import { Page } from "@/components/page-layout";
 import { DotTable } from "@/components/ui/DotTable";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
+import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { useGetMcpServerActivity } from "@gram/client/react-query/getMcpServerActivity.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
-import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
+import {
+  invalidateAllMcpServers,
+  useMcpServers,
+} from "@gram/client/react-query/mcpServers.js";
 import {
   indexMcpActivity,
   lookupMcpActivity,
   mcpActivityStatus,
-  type McpActivityStatus,
   type McpActivityTargetType,
 } from "@/components/mcp/mcp-activity";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Outlet } from "react-router";
 import { toast } from "sonner";
-import { useToolsets } from "../toolsets/useToolsets";
 import { MCPEmptyState } from "./MCPEmptyState";
 import {
   useFilterState as useMcpDimensionFilters,
@@ -45,7 +53,6 @@ import {
   MCP_FILTER_OPTIONS,
   pluginFilterOptions,
   pluginMembership,
-  type PluginMembership,
 } from "./mcp-filter-schema";
 import { usePlugins } from "@gram/client/react-query/plugins.js";
 
@@ -58,119 +65,35 @@ const BUILT_IN_SERVERS = [
   },
 ];
 
-// A tunnelled mcp_servers row attributes its telemetry as "tunneled_mcp_server";
-// a remote-backed one attributes as "hosted_mcp_server" (same as hosted
-// toolsets). Deriving the type here lets the activity lookup disambiguate a
-// tunnelled server from a hosted toolset that happens to share its slug.
-function mcpServerTargetType(server: {
-  tunneledMcpServerId?: string;
-}): McpActivityTargetType {
-  return server.tunneledMcpServerId
-    ? "tunneled_mcp_server"
-    : "hosted_mcp_server";
-}
-
-// The listing renders mcp_servers rows only. A row is toolset-backed when the
-// server's `toolsetId` resolves to a toolset entry, which then supplies the
-// hosted card's data (name, tools, origin); every other row renders through
-// the mcp_servers card.
-type McpListingRow =
-  | { kind: "toolset"; server: McpServer; toolset: ToolsetEntry }
-  | { kind: "server"; server: McpServer };
-
-function rowDisplayName(row: McpListingRow): string {
-  return row.kind === "toolset" ? row.toolset.name : (row.server.name ?? "");
-}
-
-function rowMatchesQuery(row: McpListingRow, query: string): boolean {
-  const haystack =
-    row.kind === "toolset"
-      ? [row.toolset.name, row.toolset.slug, row.server.slug]
-      : [row.server.name, row.server.slug];
-  return haystack.some((value) => value?.toLowerCase().includes(query));
-}
-
-function rowFacets(row: McpListingRow, membership: PluginMembership) {
-  return mcpServerFacets(
-    row.server,
-    membership,
-    row.kind === "toolset" ? row.toolset : undefined,
-  );
-}
-
-// Telemetry still attributes toolset-backed servers by their toolset slug;
-// remote/tunnelled servers attribute by the mcp_servers slug.
-function rowActivityTarget(row: McpListingRow): {
+// Telemetry attributes toolset-backed servers by their toolset slug, a
+// tunneled mcp_servers row as "tunneled_mcp_server", and a remote-backed one
+// as "hosted_mcp_server" under the mcp_servers slug.
+function serverActivityTarget(server: McpServer): {
   targetType: McpActivityTargetType;
   targetId: string | undefined;
 } {
-  if (row.kind === "toolset") {
-    return { targetType: "hosted_mcp_server", targetId: row.toolset.slug };
+  if (server.toolsetSummary) {
+    return {
+      targetType: "hosted_mcp_server",
+      targetId: server.toolsetSummary.slug,
+    };
   }
   return {
-    targetType: mcpServerTargetType(row.server),
-    targetId: row.server.slug,
+    targetType: server.tunneledMcpServerId
+      ? "tunneled_mcp_server"
+      : "hosted_mcp_server",
+    targetId: server.slug,
   };
 }
 
-function McpListingCard({
-  row,
-  endpointCount,
-  activityStatus,
-  recentWindowDays,
-}: {
-  row: McpListingRow;
-  endpointCount: number;
-  activityStatus?: McpActivityStatus | null;
-  recentWindowDays?: number;
-}): JSX.Element {
-  if (row.kind === "toolset") {
-    return (
-      <MCPCard
-        toolset={row.toolset}
-        activityStatus={activityStatus}
-        recentWindowDays={recentWindowDays}
-      />
-    );
-  }
-  return (
-    <MCPServerCard
-      server={row.server}
-      endpointCount={endpointCount}
-      activityStatus={activityStatus}
-      recentWindowDays={recentWindowDays}
-    />
-  );
-}
-
-function McpListingTableRow({
-  row,
-  endpointCount,
-  activityStatus,
-  recentWindowDays,
-}: {
-  row: McpListingRow;
-  endpointCount: number;
-  activityStatus?: McpActivityStatus | null;
-  recentWindowDays?: number;
-}): JSX.Element {
-  if (row.kind === "toolset") {
-    return (
-      <MCPTableRow
-        toolset={row.toolset}
-        activityStatus={activityStatus}
-        recentWindowDays={recentWindowDays}
-      />
-    );
-  }
-  return (
-    <MCPServerTableRow
-      server={row.server}
-      endpointCount={endpointCount}
-      activityStatus={activityStatus}
-      recentWindowDays={recentWindowDays}
-    />
-  );
+function serverMatchesQuery(server: McpServer, query: string): boolean {
+  const haystack = [
+    server.name,
+    server.slug,
+    server.toolsetSummary?.name,
+    server.toolsetSummary?.slug,
+  ];
+  return haystack.some((value) => value?.toLowerCase().includes(query));
 }
 
 export function MCPRoot(): JSX.Element {
@@ -192,15 +115,16 @@ export const MCPPage = (): JSX.Element => {
   );
 };
 
+const NO_ENDPOINTS: McpEndpoint[] = [];
+
 function MCPOverview() {
-  const toolsets = useToolsets();
   const routes = useRoutes();
   const client = useSdkClient();
+  const queryClient = useQueryClient();
 
   // mcp_servers is the single listing source: every published toolset has a
-  // wrapper mcp_servers row, so the grid renders mcp_servers only and the
-  // useToolsets() fetch above hydrates toolset-backed rows with hosted card
-  // data instead of contributing rows of its own.
+  // wrapper mcp_servers row carrying a toolset summary, so the grid renders
+  // mcp_servers only.
   // These listing fetches are non-critical: degrade to the last good (or empty)
   // data with an inline indicator instead of throwing to the page error
   // boundary and replacing the whole screen. Key them by project so a tolerated
@@ -255,58 +179,38 @@ function MCPOverview() {
   // good `data` on error, so we must also gate on isError to avoid showing stale
   // markers after observability is disabled), or when the server has no
   // matchable identifier. We only flag a server once we can confirm its state.
-  const activityStatusFor = (
-    targetType: McpActivityTargetType,
-    targetId: string | undefined,
-  ) => {
+  const serverActivityStatus = (server: McpServer) => {
+    const { targetType, targetId } = serverActivityTarget(server);
     if (isActivityError || !activityResult || !targetId) return undefined;
     return mcpActivityStatus(
       lookupMcpActivity(activityByTarget, targetType, targetId),
     );
   };
-  const rowActivityStatus = (row: McpListingRow) => {
-    const { targetType, targetId } = rowActivityTarget(row);
-    return activityStatusFor(targetType, targetId);
-  };
   const handleRefresh = () => {
-    void toolsets.refetch();
     void refetchMcpServers();
     void refetchEndpoints();
     void refetchPlugins();
     void refetchActivity();
   };
   const isRefreshing =
-    isFetchingMcpServers ||
-    isFetchingEndpoints ||
-    isFetchingActivity ||
-    toolsets.isFetching;
-  const listingRows = useMemo<McpListingRow[]>(() => {
-    const toolsetById = new Map(toolsets.map((t) => [t.id, t] as const));
-    return (mcpServersResult?.mcpServers ?? []).map((server) => {
-      const toolset = server.toolsetId
-        ? toolsetById.get(server.toolsetId)
-        : undefined;
-      return toolset
-        ? { kind: "toolset", server, toolset }
-        : { kind: "server", server };
-    });
-  }, [mcpServersResult, toolsets]);
-  const endpointCountByServerId = useMemo(() => {
-    const counts = new Map<string, number>();
+    isFetchingMcpServers || isFetchingEndpoints || isFetchingActivity;
+  const servers = useMemo(
+    () => mcpServersResult?.mcpServers ?? [],
+    [mcpServersResult],
+  );
+  const endpointsByServerId = useMemo(() => {
+    const grouped = new Map<string, McpEndpoint[]>();
     for (const endpoint of endpointsResult?.mcpEndpoints ?? []) {
-      counts.set(
-        endpoint.mcpServerId,
-        (counts.get(endpoint.mcpServerId) ?? 0) + 1,
-      );
+      const existing = grouped.get(endpoint.mcpServerId);
+      if (existing) existing.push(endpoint);
+      else grouped.set(endpoint.mcpServerId, [endpoint]);
     }
-    return counts;
+    return grouped;
   }, [endpointsResult]);
 
-  const isLoading =
-    toolsets.isLoading || isLoadingMcpServers || isLoadingEndpoints;
+  const isLoading = isLoadingMcpServers || isLoadingEndpoints;
 
-  const hasRefreshError =
-    toolsets.isError || isMcpServersError || isEndpointsError;
+  const hasRefreshError = isMcpServersError || isEndpointsError;
 
   const [viewMode, setViewMode] = useViewMode();
   const [newMcpDialogOpen, setNewMcpDialogOpen] = useState(false);
@@ -321,27 +225,34 @@ function MCPOverview() {
     [plugins],
   );
 
-  const filteredRows = useMemo(() => {
+  const filteredServers = useMemo(() => {
     const query = search.toLowerCase();
-    return [...listingRows]
-      .filter((row) => {
-        if (!matchesMcpFilters(rowFacets(row, membership), mcpFilters.values))
+    return [...servers]
+      .filter((server) => {
+        if (
+          !matchesMcpFilters(
+            mcpServerFacets(server, membership),
+            mcpFilters.values,
+          )
+        )
           return false;
         if (!query) return true;
-        return rowMatchesQuery(row, query);
+        return serverMatchesQuery(server, query);
       })
-      .sort((a, b) => rowDisplayName(a).localeCompare(rowDisplayName(b)));
-  }, [listingRows, search, mcpFilters.values, membership]);
+      .sort((a, b) =>
+        mcpServerDisplayName(a).localeCompare(mcpServerDisplayName(b)),
+      );
+  }, [servers, search, mcpFilters.values, membership]);
 
   // Show the filter bar once there's anything to filter. Filters can drive the
   // result set to empty on their own, so the no-matches state must consider an
   // active filter, not just a search query.
-  const hasItems = listingRows.length > 0;
+  const hasItems = servers.length > 0;
   const showFilters = !isLoading && hasItems;
   const showNoMatches =
     !isLoading &&
     (search !== "" || hasActiveMcpFilters(mcpFilters.values)) &&
-    filteredRows.length === 0;
+    filteredServers.length === 0;
 
   const handleCreateMcpServerSubmit = async () => {
     const result = await client.toolsets.create({
@@ -351,8 +262,24 @@ function MCPOverview() {
     });
 
     toast.success(`MCP server "${result.name}" created`);
+    void invalidateAllMcpServers(queryClient, { refetchType: "all" });
 
-    routes.mcp.details.tools.goTo(result.slug);
+    // Creating a toolset also creates its wrapper mcp_servers row; resolve it
+    // so navigation lands on the server details page.
+    try {
+      const listing = await client.mcpServers.list({
+        gramProject,
+        toolsetId: result.id,
+      });
+      const wrapper = listing.mcpServers[0];
+      if (wrapper) {
+        routes.mcp.x.tools.goTo(mcpServerRouteParam(wrapper));
+        return;
+      }
+    } catch {
+      // Fall through to the listing below.
+    }
+    routes.mcp.goTo();
   };
 
   const newMcpServerButton = (
@@ -420,7 +347,7 @@ function MCPOverview() {
     </Page.Section>
   );
 
-  if (!isLoading && !hasRefreshError && listingRows.length === 0) {
+  if (!isLoading && !hasRefreshError && servers.length === 0) {
     return (
       <>
         <MCPEmptyState cta={newMcpServerButton} />
@@ -481,18 +408,19 @@ function MCPOverview() {
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               {isLoading ? (
                 <>
-                  <MCPCardSkeleton />
-                  <MCPCardSkeleton />
+                  <MCPServerCardSkeleton />
+                  <MCPServerCardSkeleton />
                 </>
               ) : (
-                filteredRows.map((row) => (
-                  <McpListingCard
-                    key={row.server.id}
-                    row={row}
-                    endpointCount={
-                      endpointCountByServerId.get(row.server.id) ?? 0
+                filteredServers.map((server) => (
+                  <MCPServerCard
+                    key={server.id}
+                    server={server}
+                    endpoints={
+                      endpointsByServerId.get(server.id) ?? NO_ENDPOINTS
                     }
-                    activityStatus={rowActivityStatus(row)}
+                    isLoadingEndpoints={isLoadingEndpoints}
+                    activityStatus={serverActivityStatus(server)}
                     recentWindowDays={recentWindowDays}
                   />
                 ))
@@ -509,18 +437,19 @@ function MCPOverview() {
             >
               {isLoading ? (
                 <>
-                  <MCPTableRowSkeleton />
-                  <MCPTableRowSkeleton />
+                  <MCPServerTableRowSkeleton />
+                  <MCPServerTableRowSkeleton />
                 </>
               ) : (
-                filteredRows.map((row) => (
-                  <McpListingTableRow
-                    key={row.server.id}
-                    row={row}
-                    endpointCount={
-                      endpointCountByServerId.get(row.server.id) ?? 0
+                filteredServers.map((server) => (
+                  <MCPServerTableRow
+                    key={server.id}
+                    server={server}
+                    endpoints={
+                      endpointsByServerId.get(server.id) ?? NO_ENDPOINTS
                     }
-                    activityStatus={rowActivityStatus(row)}
+                    isLoadingEndpoints={isLoadingEndpoints}
+                    activityStatus={serverActivityStatus(server)}
                     recentWindowDays={recentWindowDays}
                   />
                 ))
