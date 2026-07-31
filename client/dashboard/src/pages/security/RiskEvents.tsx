@@ -20,7 +20,7 @@ import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { History, Loader2, Sparkles } from "lucide-react";
+import { History } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -325,6 +325,16 @@ export default function RiskEvents(): JSX.Element {
             {viewingInactivePolicy ? (
               <InactivePolicyNotice policyName={selectedPolicy?.name} />
             ) : null}
+            {exclusionRule.sheet}
+            {resultsQuery.isFetching && results.length > 0 ? (
+              <div className="bg-primary/20 h-1 shrink-0">
+                <div className="bg-primary h-full animate-pulse" />
+              </div>
+            ) : null}
+          </>
+        }
+        header={
+          <div className="relative min-w-[1200px]">
             <BulkActionBar
               selectedCount={selection.selectedCount}
               actions={[
@@ -335,27 +345,11 @@ export default function RiskEvents(): JSX.Element {
                 {
                   label: "Set up exclusion rule",
                   onClick: handleSetupExclusionSelected,
-                  variant: "secondary",
-                  disabled: exclusionRule.isSuggesting,
-                  leftIcon: exclusionRule.isSuggesting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-4 w-4" />
-                  ),
                 },
               ]}
               onClear={selection.clear}
+              loading={exclusionRule.isSuggesting}
             />
-            {exclusionRule.sheet}
-            {resultsQuery.isFetching && results.length > 0 ? (
-              <div className="bg-primary/20 h-1 shrink-0">
-                <div className="bg-primary h-full animate-pulse" />
-              </div>
-            ) : null}
-          </>
-        }
-        header={
-          <div className="min-w-[1200px]">
             <RiskEventsHeader selection={selection} />
           </div>
         }

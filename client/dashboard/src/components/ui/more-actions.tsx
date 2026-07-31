@@ -25,9 +25,14 @@ export type Action = {
 export function MoreActions({
   actions,
   triggerLabel,
+  triggerLoading,
 }: {
   actions: Action[];
   triggerLabel?: string;
+  /** Shows a spinner in place of the trigger's kebab icon and disables it —
+   * for an async action (e.g. an AI suggestion) already in flight from a
+   * previous click. Only meaningful alongside `triggerLabel`. */
+  triggerLoading?: boolean;
 }): JSX.Element {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -43,9 +48,17 @@ export function MoreActions({
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
         {triggerLabel ? (
-          <Button size="sm">
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={triggerLoading}
+            aria-busy={triggerLoading}
+          >
+            <Icon
+              name={triggerLoading ? "loader-circle" : "ellipsis-vertical"}
+              className={cn("mr-1.5 size-4", triggerLoading && "animate-spin")}
+            />
             {triggerLabel}
-            <Icon name="chevron-down" className="ml-1 size-4" />
           </Button>
         ) : (
           <Button variant="ghost" size="sm" className="mx-[-4px] h-8 w-8 p-0">

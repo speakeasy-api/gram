@@ -26,7 +26,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { Loader2, Sparkles } from "lucide-react";
 import { useParams, useSearchParams } from "react-router";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
 import { getRuleTitleFallback, isJudgeSource } from "./risk-utils";
@@ -271,38 +270,34 @@ function RiskOverviewCategoryDetailContent() {
                   .filter(Boolean)}
               />
             </div>
-            <BulkActionBar
-              selectedCount={selection.selectedCount}
-              actions={[
-                {
-                  label: "Mark as false positive",
-                  onClick: handleDismissSelected,
-                },
-                {
-                  label: "Set up exclusion rule",
-                  onClick: handleSetupExclusionSelected,
-                  variant: "secondary",
-                  disabled: exclusionRule.isSuggesting,
-                  leftIcon: exclusionRule.isSuggesting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-4 w-4" />
-                  ),
-                },
-              ]}
-              onClear={selection.clear}
-            />
             {exclusionRule.sheet}
-            <ResultsTable
-              results={visibleResults}
-              isLoading={resultsQuery.isLoading}
-              scrollRef={scrollRef}
-              onScroll={handleScroll}
-              onSelectChat={setSelectedChatId}
-              selection={selection}
-              onDismiss={(r) => dismiss([r])}
-              onSetupExclusion={(r) => exclusionRule.open([r])}
-            />
+            <div className="relative">
+              <BulkActionBar
+                selectedCount={selection.selectedCount}
+                actions={[
+                  {
+                    label: "Mark as false positive",
+                    onClick: handleDismissSelected,
+                  },
+                  {
+                    label: "Set up exclusion rule",
+                    onClick: handleSetupExclusionSelected,
+                  },
+                ]}
+                onClear={selection.clear}
+                loading={exclusionRule.isSuggesting}
+              />
+              <ResultsTable
+                results={visibleResults}
+                isLoading={resultsQuery.isLoading}
+                scrollRef={scrollRef}
+                onScroll={handleScroll}
+                onSelectChat={setSelectedChatId}
+                selection={selection}
+                onDismiss={(r) => dismiss([r])}
+                onSetupExclusion={(r) => exclusionRule.open([r])}
+              />
+            </div>
           </div>
         </Page.Section.Body>
       </Page.Section>
