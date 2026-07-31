@@ -62,8 +62,8 @@ export type ListInvitesQueryError =
  * List pending WorkOS invitations for the active organization.
  */
 export function useListInvites(
-  request?: ListInvitesRequest  ,
-  security?: ListInvitesSecurity  ,
+  request?: ListInvitesRequest | undefined,
+  security?: ListInvitesSecurity | undefined,
   options?: QueryHookOptions<ListInvitesQueryData, ListInvitesQueryError>,
 ): UseQueryResult<ListInvitesQueryData, ListInvitesQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useListInvites(
  * List pending WorkOS invitations for the active organization.
  */
 export function useListInvitesSuspense(
-  request?: ListInvitesRequest  ,
-  security?: ListInvitesSecurity  ,
+  request?: ListInvitesRequest | undefined,
+  security?: ListInvitesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListInvitesQueryData,
     ListInvitesQueryError

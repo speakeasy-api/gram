@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function riskPolicyChallengesAcknowledge(
   client: GramCore,
   request: AcknowledgeRiskPolicyChallengeRequest,
-  security?: AcknowledgeRiskPolicyChallengeSecurity  ,
+  security?: AcknowledgeRiskPolicyChallengeSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function riskPolicyChallengesAcknowledge(
 async function $do(
   client: GramCore,
   request: AcknowledgeRiskPolicyChallengeRequest,
-  security?: AcknowledgeRiskPolicyChallengeSecurity  ,
+  security?: AcknowledgeRiskPolicyChallengeSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

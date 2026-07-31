@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function accessDeleteShadowMCPInventoryPolicyBypass(
   client: GramCore,
   request: DeleteShadowMCPInventoryPolicyBypassRequest,
-  security?: DeleteShadowMCPInventoryPolicyBypassSecurity  ,
+  security?: DeleteShadowMCPInventoryPolicyBypassSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function accessDeleteShadowMCPInventoryPolicyBypass(
 async function $do(
   client: GramCore,
   request: DeleteShadowMCPInventoryPolicyBypassRequest,
-  security?: DeleteShadowMCPInventoryPolicyBypassSecurity  ,
+  security?: DeleteShadowMCPInventoryPolicyBypassSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

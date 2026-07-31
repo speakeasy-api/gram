@@ -23,7 +23,7 @@ export function prefetchRiskPoliciesGet(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetRiskPolicyRequest,
-  security?: GetRiskPolicySecurity  ,
+  security?: GetRiskPolicySecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchRiskPoliciesGet(
 export function buildRiskPoliciesGetQuery(
   client$: GramCore,
   request: GetRiskPolicyRequest,
-  security?: GetRiskPolicySecurity  ,
+  security?: GetRiskPolicySecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

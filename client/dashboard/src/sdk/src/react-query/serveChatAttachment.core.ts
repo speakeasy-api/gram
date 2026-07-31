@@ -23,7 +23,7 @@ export function prefetchServeChatAttachment(
   queryClient: QueryClient,
   client$: GramCore,
   request: ServeChatAttachmentRequest,
-  security?: ServeChatAttachmentSecurity  ,
+  security?: ServeChatAttachmentSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchServeChatAttachment(
 export function buildServeChatAttachmentQuery(
   client$: GramCore,
   request: ServeChatAttachmentRequest,
-  security?: ServeChatAttachmentSecurity  ,
+  security?: ServeChatAttachmentSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -62,8 +62,8 @@ export type OrganizationQueryError =
  * Get the active organization from the session.
  */
 export function useOrganization(
-  request?: GetOrganizationRequest  ,
-  security?: GetOrganizationSecurity  ,
+  request?: GetOrganizationRequest | undefined,
+  security?: GetOrganizationSecurity | undefined,
   options?: QueryHookOptions<OrganizationQueryData, OrganizationQueryError>,
 ): UseQueryResult<OrganizationQueryData, OrganizationQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useOrganization(
  * Get the active organization from the session.
  */
 export function useOrganizationSuspense(
-  request?: GetOrganizationRequest  ,
-  security?: GetOrganizationSecurity  ,
+  request?: GetOrganizationRequest | undefined,
+  security?: GetOrganizationSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     OrganizationQueryData,
     OrganizationQueryError

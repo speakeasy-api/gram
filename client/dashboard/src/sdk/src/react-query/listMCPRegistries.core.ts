@@ -22,8 +22,8 @@ export type ListMCPRegistriesQueryData = ListRegistriesResponseBody;
 export function prefetchListMCPRegistries(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListMCPRegistriesRequest  ,
-  security?: ListMCPRegistriesSecurity  ,
+  request?: ListMCPRegistriesRequest | undefined,
+  security?: ListMCPRegistriesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListMCPRegistries(
 
 export function buildListMCPRegistriesQuery(
   client$: GramCore,
-  request?: ListMCPRegistriesRequest  ,
-  security?: ListMCPRegistriesSecurity  ,
+  request?: ListMCPRegistriesRequest | undefined,
+  security?: ListMCPRegistriesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -22,8 +22,8 @@ export type RemoteSessionIssuerQueryData = RemoteSessionIssuer;
 export function prefetchRemoteSessionIssuer(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetRemoteSessionIssuerRequest  ,
-  security?: GetRemoteSessionIssuerSecurity  ,
+  request?: GetRemoteSessionIssuerRequest | undefined,
+  security?: GetRemoteSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchRemoteSessionIssuer(
 
 export function buildRemoteSessionIssuerQuery(
   client$: GramCore,
-  request?: GetRemoteSessionIssuerRequest  ,
-  security?: GetRemoteSessionIssuerSecurity  ,
+  request?: GetRemoteSessionIssuerRequest | undefined,
+  security?: GetRemoteSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

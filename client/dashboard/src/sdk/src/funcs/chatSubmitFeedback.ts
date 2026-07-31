@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function chatSubmitFeedback(
   client: GramCore,
   request: SubmitFeedbackRequest,
-  security?: SubmitFeedbackSecurity  ,
+  security?: SubmitFeedbackSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function chatSubmitFeedback(
 async function $do(
   client: GramCore,
   request: SubmitFeedbackRequest,
-  security?: SubmitFeedbackSecurity  ,
+  security?: SubmitFeedbackSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

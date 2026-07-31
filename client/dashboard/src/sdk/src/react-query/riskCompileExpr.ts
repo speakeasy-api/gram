@@ -62,8 +62,8 @@ export type RiskCompileExprQueryError =
  * Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).
  */
 export function useRiskCompileExpr(
-  request?: CompileExprRequest  ,
-  security?: CompileExprSecurity  ,
+  request?: CompileExprRequest | undefined,
+  security?: CompileExprSecurity | undefined,
   options?: QueryHookOptions<
     RiskCompileExprQueryData,
     RiskCompileExprQueryError
@@ -88,8 +88,8 @@ export function useRiskCompileExpr(
  * Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).
  */
 export function useRiskCompileExprSuspense(
-  request?: CompileExprRequest  ,
-  security?: CompileExprSecurity  ,
+  request?: CompileExprRequest | undefined,
+  security?: CompileExprSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskCompileExprQueryData,
     RiskCompileExprQueryError

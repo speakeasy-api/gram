@@ -23,7 +23,7 @@ export function prefetchSpendRulesGetRule(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetSpendRuleRequest,
-  security?: GetSpendRuleSecurity  ,
+  security?: GetSpendRuleSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchSpendRulesGetRule(
 export function buildSpendRulesGetRuleQuery(
   client$: GramCore,
   request: GetSpendRuleRequest,
-  security?: GetSpendRuleSecurity  ,
+  security?: GetSpendRuleSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -22,8 +22,8 @@ export type ListToolsetsQueryData = ListToolsetsResult;
 export function prefetchListToolsets(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListToolsetsRequest  ,
-  security?: ListToolsetsSecurity  ,
+  request?: ListToolsetsRequest | undefined,
+  security?: ListToolsetsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListToolsets(
 
 export function buildListToolsetsQuery(
   client$: GramCore,
-  request?: ListToolsetsRequest  ,
-  security?: ListToolsetsSecurity  ,
+  request?: ListToolsetsRequest | undefined,
+  security?: ListToolsetsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function deploymentsRedeployDeployment(
   client: GramCore,
   request: RedeployDeploymentRequest,
-  security?: RedeployDeploymentSecurity  ,
+  security?: RedeployDeploymentSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function deploymentsRedeployDeployment(
 async function $do(
   client: GramCore,
   request: RedeployDeploymentRequest,
-  security?: RedeployDeploymentSecurity  ,
+  security?: RedeployDeploymentSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

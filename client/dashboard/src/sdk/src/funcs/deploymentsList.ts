@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function deploymentsList(
   client: GramCore,
-  request?: ListDeploymentsRequest  ,
-  security?: ListDeploymentsSecurity  ,
+  request?: ListDeploymentsRequest | undefined,
+  security?: ListDeploymentsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function deploymentsList(
 
 async function $do(
   client: GramCore,
-  request?: ListDeploymentsRequest  ,
-  security?: ListDeploymentsSecurity  ,
+  request?: ListDeploymentsRequest | undefined,
+  security?: ListDeploymentsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

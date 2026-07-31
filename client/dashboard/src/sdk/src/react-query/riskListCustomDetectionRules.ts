@@ -62,8 +62,8 @@ export type RiskListCustomDetectionRulesQueryError =
  * List custom detection rules for the current project.
  */
 export function useRiskListCustomDetectionRules(
-  request?: ListCustomDetectionRulesRequest  ,
-  security?: ListCustomDetectionRulesSecurity  ,
+  request?: ListCustomDetectionRulesRequest | undefined,
+  security?: ListCustomDetectionRulesSecurity | undefined,
   options?: QueryHookOptions<
     RiskListCustomDetectionRulesQueryData,
     RiskListCustomDetectionRulesQueryError
@@ -91,8 +91,8 @@ export function useRiskListCustomDetectionRules(
  * List custom detection rules for the current project.
  */
 export function useRiskListCustomDetectionRulesSuspense(
-  request?: ListCustomDetectionRulesRequest  ,
-  security?: ListCustomDetectionRulesSecurity  ,
+  request?: ListCustomDetectionRulesRequest | undefined,
+  security?: ListCustomDetectionRulesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskListCustomDetectionRulesQueryData,
     RiskListCustomDetectionRulesQueryError

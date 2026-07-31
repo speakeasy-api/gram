@@ -22,8 +22,8 @@ export type BuiltinExclusionsQueryData = ListBuiltinExclusionsResult;
 export function prefetchBuiltinExclusions(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListBuiltinExclusionsRequest  ,
-  security?: ListBuiltinExclusionsSecurity  ,
+  request?: ListBuiltinExclusionsRequest | undefined,
+  security?: ListBuiltinExclusionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchBuiltinExclusions(
 
 export function buildBuiltinExclusionsQuery(
   client$: GramCore,
-  request?: ListBuiltinExclusionsRequest  ,
-  security?: ListBuiltinExclusionsSecurity  ,
+  request?: ListBuiltinExclusionsRequest | undefined,
+  security?: ListBuiltinExclusionsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

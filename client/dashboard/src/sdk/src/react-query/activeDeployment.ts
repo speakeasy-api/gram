@@ -62,8 +62,8 @@ export type ActiveDeploymentQueryError =
  * Get the active deployment for a project.
  */
 export function useActiveDeployment(
-  request?: GetActiveDeploymentRequest  ,
-  security?: GetActiveDeploymentSecurity  ,
+  request?: GetActiveDeploymentRequest | undefined,
+  security?: GetActiveDeploymentSecurity | undefined,
   options?: QueryHookOptions<
     ActiveDeploymentQueryData,
     ActiveDeploymentQueryError
@@ -88,8 +88,8 @@ export function useActiveDeployment(
  * Get the active deployment for a project.
  */
 export function useActiveDeploymentSuspense(
-  request?: GetActiveDeploymentRequest  ,
-  security?: GetActiveDeploymentSecurity  ,
+  request?: GetActiveDeploymentRequest | undefined,
+  security?: GetActiveDeploymentSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ActiveDeploymentQueryData,
     ActiveDeploymentQueryError

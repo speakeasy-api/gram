@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function projectsListAllowedOrigins(
   client: GramCore,
-  request?: ListAllowedOriginsRequest  ,
-  security?: ListAllowedOriginsSecurity  ,
+  request?: ListAllowedOriginsRequest | undefined,
+  security?: ListAllowedOriginsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function projectsListAllowedOrigins(
 
 async function $do(
   client: GramCore,
-  request?: ListAllowedOriginsRequest  ,
-  security?: ListAllowedOriginsSecurity  ,
+  request?: ListAllowedOriginsRequest | undefined,
+  security?: ListAllowedOriginsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

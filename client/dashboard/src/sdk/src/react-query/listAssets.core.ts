@@ -22,8 +22,8 @@ export type ListAssetsQueryData = ListAssetsResult;
 export function prefetchListAssets(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListAssetsRequest  ,
-  security?: ListAssetsSecurity  ,
+  request?: ListAssetsRequest | undefined,
+  security?: ListAssetsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListAssets(
 
 export function buildListAssetsQuery(
   client$: GramCore,
-  request?: ListAssetsRequest  ,
-  security?: ListAssetsSecurity  ,
+  request?: ListAssetsRequest | undefined,
+  security?: ListAssetsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

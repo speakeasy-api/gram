@@ -44,8 +44,8 @@ import { Result } from "../types/fp.js";
  */
 export function pluginsDownloadCodexInstallScript(
   client: GramCore,
-  request?: DownloadCodexInstallScriptRequest  ,
-  security?: DownloadCodexInstallScriptSecurity  ,
+  request?: DownloadCodexInstallScriptRequest | undefined,
+  security?: DownloadCodexInstallScriptSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -71,8 +71,8 @@ export function pluginsDownloadCodexInstallScript(
 
 async function $do(
   client: GramCore,
-  request?: DownloadCodexInstallScriptRequest  ,
-  security?: DownloadCodexInstallScriptSecurity  ,
+  request?: DownloadCodexInstallScriptRequest | undefined,
+  security?: DownloadCodexInstallScriptSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

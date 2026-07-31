@@ -23,7 +23,7 @@ export function prefetchListMcpServerToolMetadata(
   queryClient: QueryClient,
   client$: GramCore,
   request: ListMcpServerToolMetadataRequest,
-  security?: ListMcpServerToolMetadataSecurity  ,
+  security?: ListMcpServerToolMetadataSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchListMcpServerToolMetadata(
 export function buildListMcpServerToolMetadataQuery(
   client$: GramCore,
   request: ListMcpServerToolMetadataRequest,
-  security?: ListMcpServerToolMetadataSecurity  ,
+  security?: ListMcpServerToolMetadataSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

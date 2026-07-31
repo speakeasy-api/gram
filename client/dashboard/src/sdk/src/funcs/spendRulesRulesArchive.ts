@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function spendRulesRulesArchive(
   client: GramCore,
   request: ArchiveSpendRuleRequest,
-  security?: ArchiveSpendRuleSecurity  ,
+  security?: ArchiveSpendRuleSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function spendRulesRulesArchive(
 async function $do(
   client: GramCore,
   request: ArchiveSpendRuleRequest,
-  security?: ArchiveSpendRuleSecurity  ,
+  security?: ArchiveSpendRuleSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

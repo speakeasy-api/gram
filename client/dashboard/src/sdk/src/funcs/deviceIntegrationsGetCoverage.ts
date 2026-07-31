@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function deviceIntegrationsGetCoverage(
   client: GramCore,
-  request?: GetDeviceIntegrationCoverageRequest  ,
-  security?: GetDeviceIntegrationCoverageSecurity  ,
+  request?: GetDeviceIntegrationCoverageRequest | undefined,
+  security?: GetDeviceIntegrationCoverageSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function deviceIntegrationsGetCoverage(
 
 async function $do(
   client: GramCore,
-  request?: GetDeviceIntegrationCoverageRequest  ,
-  security?: GetDeviceIntegrationCoverageSecurity  ,
+  request?: GetDeviceIntegrationCoverageRequest | undefined,
+  security?: GetDeviceIntegrationCoverageSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

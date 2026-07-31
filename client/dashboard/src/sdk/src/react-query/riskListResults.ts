@@ -62,8 +62,8 @@ export type RiskListResultsQueryError =
  * List risk analysis results for the current project.
  */
 export function useRiskListResults(
-  request?: ListRiskResultsRequest  ,
-  security?: ListRiskResultsSecurity  ,
+  request?: ListRiskResultsRequest | undefined,
+  security?: ListRiskResultsSecurity | undefined,
   options?: QueryHookOptions<
     RiskListResultsQueryData,
     RiskListResultsQueryError
@@ -88,8 +88,8 @@ export function useRiskListResults(
  * List risk analysis results for the current project.
  */
 export function useRiskListResultsSuspense(
-  request?: ListRiskResultsRequest  ,
-  security?: ListRiskResultsSecurity  ,
+  request?: ListRiskResultsRequest | undefined,
+  security?: ListRiskResultsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskListResultsQueryData,
     RiskListResultsQueryError

@@ -81,8 +81,8 @@ export type UserSessionsQueryError =
  * List issued user_sessions in the caller's project. refresh_token_hash is never returned.
  */
 export function useUserSessions(
-  request?: ListUserSessionsRequest  ,
-  security?: ListUserSessionsSecurity  ,
+  request?: ListUserSessionsRequest | undefined,
+  security?: ListUserSessionsSecurity | undefined,
   options?: QueryHookOptions<UserSessionsQueryData, UserSessionsQueryError>,
 ): UseQueryResult<UserSessionsQueryData, UserSessionsQueryError> {
   const client = useGramContext();
@@ -104,8 +104,8 @@ export function useUserSessions(
  * List issued user_sessions in the caller's project. refresh_token_hash is never returned.
  */
 export function useUserSessionsSuspense(
-  request?: ListUserSessionsRequest  ,
-  security?: ListUserSessionsSecurity  ,
+  request?: ListUserSessionsRequest | undefined,
+  security?: ListUserSessionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     UserSessionsQueryData,
     UserSessionsQueryError
@@ -130,8 +130,8 @@ export function useUserSessionsSuspense(
  * List issued user_sessions in the caller's project. refresh_token_hash is never returned.
  */
 export function useUserSessionsInfinite(
-  request?: ListUserSessionsRequest  ,
-  security?: ListUserSessionsSecurity  ,
+  request?: ListUserSessionsRequest | undefined,
+  security?: ListUserSessionsSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     UserSessionsInfiniteQueryData,
     UserSessionsQueryError
@@ -167,8 +167,8 @@ export function useUserSessionsInfinite(
  * List issued user_sessions in the caller's project. refresh_token_hash is never returned.
  */
 export function useUserSessionsInfiniteSuspense(
-  request?: ListUserSessionsRequest  ,
-  security?: ListUserSessionsSecurity  ,
+  request?: ListUserSessionsRequest | undefined,
+  security?: ListUserSessionsSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     UserSessionsInfiniteQueryData,
     UserSessionsQueryError

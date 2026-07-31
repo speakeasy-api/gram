@@ -63,7 +63,7 @@ export type ServeFunctionQueryError =
  */
 export function useServeFunction(
   request: ServeFunctionRequest,
-  security?: ServeFunctionSecurity  ,
+  security?: ServeFunctionSecurity | undefined,
   options?: QueryHookOptions<ServeFunctionQueryData, ServeFunctionQueryError>,
 ): UseQueryResult<ServeFunctionQueryData, ServeFunctionQueryError> {
   const client = useGramContext();
@@ -86,7 +86,7 @@ export function useServeFunction(
  */
 export function useServeFunctionSuspense(
   request: ServeFunctionRequest,
-  security?: ServeFunctionSecurity  ,
+  security?: ServeFunctionSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ServeFunctionQueryData,
     ServeFunctionQueryError

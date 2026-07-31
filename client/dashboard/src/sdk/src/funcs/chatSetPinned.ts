@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function chatSetPinned(
   client: GramCore,
   request: SetChatPinnedRequest,
-  security?: SetChatPinnedSecurity  ,
+  security?: SetChatPinnedSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function chatSetPinned(
 async function $do(
   client: GramCore,
   request: SetChatPinnedRequest,
-  security?: SetChatPinnedSecurity  ,
+  security?: SetChatPinnedSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

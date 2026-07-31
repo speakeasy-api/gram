@@ -50,8 +50,8 @@ import {
  */
 export function skillEfficacyQueryInsights(
   client: GramCore,
-  request?: QuerySkillEfficacyInsightsRequest  ,
-  security?: QuerySkillEfficacyInsightsSecurity  ,
+  request?: QuerySkillEfficacyInsightsRequest | undefined,
+  security?: QuerySkillEfficacyInsightsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   PageIterator<
@@ -80,8 +80,8 @@ export function skillEfficacyQueryInsights(
 
 async function $do(
   client: GramCore,
-  request?: QuerySkillEfficacyInsightsRequest  ,
-  security?: QuerySkillEfficacyInsightsSecurity  ,
+  request?: QuerySkillEfficacyInsightsRequest | undefined,
+  security?: QuerySkillEfficacyInsightsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

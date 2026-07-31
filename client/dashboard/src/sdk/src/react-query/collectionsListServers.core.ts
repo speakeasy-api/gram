@@ -23,7 +23,7 @@ export function prefetchCollectionsListServers(
   queryClient: QueryClient,
   client$: GramCore,
   request: ListCollectionServersRequest,
-  security?: ListCollectionServersSecurity  ,
+  security?: ListCollectionServersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchCollectionsListServers(
 export function buildCollectionsListServersQuery(
   client$: GramCore,
   request: ListCollectionServersRequest,
-  security?: ListCollectionServersSecurity  ,
+  security?: ListCollectionServersSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

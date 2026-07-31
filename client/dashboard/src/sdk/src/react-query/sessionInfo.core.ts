@@ -22,8 +22,8 @@ export type SessionInfoQueryData = SessionInfoResponse;
 export function prefetchSessionInfo(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: SessionInfoRequest  ,
-  security?: SessionInfoSecurity  ,
+  request?: SessionInfoRequest | undefined,
+  security?: SessionInfoSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchSessionInfo(
 
 export function buildSessionInfoQuery(
   client$: GramCore,
-  request?: SessionInfoRequest  ,
-  security?: SessionInfoSecurity  ,
+  request?: SessionInfoRequest | undefined,
+  security?: SessionInfoSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

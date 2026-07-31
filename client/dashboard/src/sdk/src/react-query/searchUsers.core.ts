@@ -23,7 +23,7 @@ export function prefetchSearchUsers(
   queryClient: QueryClient,
   client$: GramCore,
   request: SearchUsersRequest,
-  security?: SearchUsersSecurity  ,
+  security?: SearchUsersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchSearchUsers(
 export function buildSearchUsersQuery(
   client$: GramCore,
   request: SearchUsersRequest,
-  security?: SearchUsersSecurity  ,
+  security?: SearchUsersSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

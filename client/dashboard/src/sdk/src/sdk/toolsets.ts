@@ -93,7 +93,7 @@ export class Toolsets extends ClientSDK {
    */
   async addExternalOAuthServer(
     request: AddExternalOAuthServerRequest,
-    security?: AddExternalOAuthServerSecurity  ,
+    security?: AddExternalOAuthServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Toolset> {
     return unwrapAsync(toolsetsAddExternalOAuthServer(
@@ -112,7 +112,7 @@ export class Toolsets extends ClientSDK {
    */
   async addOAuthProxyServer(
     request: AddOAuthProxyServerRequest,
-    security?: AddOAuthProxyServerSecurity  ,
+    security?: AddOAuthProxyServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Toolset> {
     return unwrapAsync(toolsetsAddOAuthProxyServer(
@@ -131,7 +131,7 @@ export class Toolsets extends ClientSDK {
    */
   async checkMCPSlugAvailability(
     request: CheckMCPSlugAvailabilityRequest,
-    security?: CheckMCPSlugAvailabilitySecurity  ,
+    security?: CheckMCPSlugAvailabilitySecurity | undefined,
     options?: RequestOptions,
   ): Promise<boolean> {
     return unwrapAsync(toolsetsCheckMCPSlugAvailability(
@@ -150,7 +150,7 @@ export class Toolsets extends ClientSDK {
    */
   async cloneBySlug(
     request: CloneToolsetRequest,
-    security?: CloneToolsetSecurity  ,
+    security?: CloneToolsetSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Toolset> {
     return unwrapAsync(toolsetsCloneBySlug(
@@ -169,7 +169,7 @@ export class Toolsets extends ClientSDK {
    */
   async create(
     request: CreateToolsetRequest,
-    security?: CreateToolsetSecurity  ,
+    security?: CreateToolsetSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Toolset> {
     return unwrapAsync(toolsetsCreate(
@@ -188,7 +188,7 @@ export class Toolsets extends ClientSDK {
    */
   async deleteBySlug(
     request: DeleteToolsetRequest,
-    security?: DeleteToolsetSecurity  ,
+    security?: DeleteToolsetSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(toolsetsDeleteBySlug(
@@ -207,7 +207,7 @@ export class Toolsets extends ClientSDK {
    */
   async getBySlug(
     request: GetToolsetRequest,
-    security?: GetToolsetSecurity  ,
+    security?: GetToolsetSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Toolset> {
     return unwrapAsync(toolsetsGetBySlug(
@@ -225,8 +225,8 @@ export class Toolsets extends ClientSDK {
    * List all toolsets for a project
    */
   async list(
-    request?: ListToolsetsRequest  ,
-    security?: ListToolsetsSecurity  ,
+    request?: ListToolsetsRequest | undefined,
+    security?: ListToolsetsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListToolsetsResult> {
     return unwrapAsync(toolsetsList(
@@ -244,8 +244,8 @@ export class Toolsets extends ClientSDK {
    * List all toolsets across the organization (summary view)
    */
   async listForOrg(
-    request?: ListToolsetsForOrgRequest  ,
-    security?: ListToolsetsForOrgSecurity  ,
+    request?: ListToolsetsForOrgRequest | undefined,
+    security?: ListToolsetsForOrgSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListToolsetSummariesResult> {
     return unwrapAsync(toolsetsListForOrg(
@@ -264,7 +264,7 @@ export class Toolsets extends ClientSDK {
    */
   async listToolFilters(
     request: ListToolsetToolFiltersRequest,
-    security?: ListToolsetToolFiltersSecurity  ,
+    security?: ListToolsetToolFiltersSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListToolFiltersResult> {
     return unwrapAsync(toolsetsListToolFilters(
@@ -283,7 +283,7 @@ export class Toolsets extends ClientSDK {
    */
   async removeOAuthServer(
     request: RemoveOAuthServerRequest,
-    security?: RemoveOAuthServerSecurity  ,
+    security?: RemoveOAuthServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Toolset> {
     return unwrapAsync(toolsetsRemoveOAuthServer(
@@ -302,7 +302,7 @@ export class Toolsets extends ClientSDK {
    */
   async setToolVariationsGroup(
     request: SetToolsetToolVariationsGroupRequest,
-    security?: SetToolsetToolVariationsGroupSecurity  ,
+    security?: SetToolsetToolVariationsGroupSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Toolset> {
     return unwrapAsync(toolsetsSetToolVariationsGroup(
@@ -321,7 +321,7 @@ export class Toolsets extends ClientSDK {
    */
   async setUserSessionIssuer(
     request: SetToolsetUserSessionIssuerRequest,
-    security?: SetToolsetUserSessionIssuerSecurity  ,
+    security?: SetToolsetUserSessionIssuerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Toolset> {
     return unwrapAsync(toolsetsSetUserSessionIssuer(
@@ -340,7 +340,7 @@ export class Toolsets extends ClientSDK {
    */
   async updateBySlug(
     request: UpdateToolsetRequest,
-    security?: UpdateToolsetSecurity  ,
+    security?: UpdateToolsetSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Toolset> {
     return unwrapAsync(toolsetsUpdateBySlug(
@@ -359,7 +359,7 @@ export class Toolsets extends ClientSDK {
    */
   async updateOAuthProxyServer(
     request: UpdateOAuthProxyServerRequest,
-    security?: UpdateOAuthProxyServerSecurity  ,
+    security?: UpdateOAuthProxyServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Toolset> {
     return unwrapAsync(toolsetsUpdateOAuthProxyServer(

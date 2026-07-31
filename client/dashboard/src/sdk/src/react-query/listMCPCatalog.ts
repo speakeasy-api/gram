@@ -62,8 +62,8 @@ export type ListMCPCatalogQueryError =
  * List available MCP servers from configured registries
  */
 export function useListMCPCatalog(
-  request?: ListMCPCatalogRequest  ,
-  security?: ListMCPCatalogSecurity  ,
+  request?: ListMCPCatalogRequest | undefined,
+  security?: ListMCPCatalogSecurity | undefined,
   options?: QueryHookOptions<ListMCPCatalogQueryData, ListMCPCatalogQueryError>,
 ): UseQueryResult<ListMCPCatalogQueryData, ListMCPCatalogQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useListMCPCatalog(
  * List available MCP servers from configured registries
  */
 export function useListMCPCatalogSuspense(
-  request?: ListMCPCatalogRequest  ,
-  security?: ListMCPCatalogSecurity  ,
+  request?: ListMCPCatalogRequest | undefined,
+  security?: ListMCPCatalogSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListMCPCatalogQueryData,
     ListMCPCatalogQueryError

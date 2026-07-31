@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function riskCategoriesList(
   client: GramCore,
-  request?: ListRiskCategoriesRequest  ,
-  security?: ListRiskCategoriesSecurity  ,
+  request?: ListRiskCategoriesRequest | undefined,
+  security?: ListRiskCategoriesSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function riskCategoriesList(
 
 async function $do(
   client: GramCore,
-  request?: ListRiskCategoriesRequest  ,
-  security?: ListRiskCategoriesSecurity  ,
+  request?: ListRiskCategoriesRequest | undefined,
+  security?: ListRiskCategoriesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

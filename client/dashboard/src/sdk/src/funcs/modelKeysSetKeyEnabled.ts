@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function modelKeysSetKeyEnabled(
   client: GramCore,
   request: SetModelProviderKeyEnabledRequest,
-  security?: SetModelProviderKeyEnabledSecurity  ,
+  security?: SetModelProviderKeyEnabledSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function modelKeysSetKeyEnabled(
 async function $do(
   client: GramCore,
   request: SetModelProviderKeyEnabledRequest,
-  security?: SetModelProviderKeyEnabledSecurity  ,
+  security?: SetModelProviderKeyEnabledSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

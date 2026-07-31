@@ -63,7 +63,7 @@ export type RiskGetBlockQueryError =
  */
 export function useRiskGetBlock(
   request: GetRiskBlockRequest,
-  security?: GetRiskBlockSecurity  ,
+  security?: GetRiskBlockSecurity | undefined,
   options?: QueryHookOptions<RiskGetBlockQueryData, RiskGetBlockQueryError>,
 ): UseQueryResult<RiskGetBlockQueryData, RiskGetBlockQueryError> {
   const client = useGramContext();
@@ -86,7 +86,7 @@ export function useRiskGetBlock(
  */
 export function useRiskGetBlockSuspense(
   request: GetRiskBlockRequest,
-  security?: GetRiskBlockSecurity  ,
+  security?: GetRiskBlockSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskGetBlockQueryData,
     RiskGetBlockQueryError

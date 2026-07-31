@@ -62,8 +62,8 @@ export type ListAssetsQueryError =
  * List all assets for a project.
  */
 export function useListAssets(
-  request?: ListAssetsRequest  ,
-  security?: ListAssetsSecurity  ,
+  request?: ListAssetsRequest | undefined,
+  security?: ListAssetsSecurity | undefined,
   options?: QueryHookOptions<ListAssetsQueryData, ListAssetsQueryError>,
 ): UseQueryResult<ListAssetsQueryData, ListAssetsQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useListAssets(
  * List all assets for a project.
  */
 export function useListAssetsSuspense(
-  request?: ListAssetsRequest  ,
-  security?: ListAssetsSecurity  ,
+  request?: ListAssetsRequest | undefined,
+  security?: ListAssetsSecurity | undefined,
   options?: SuspenseQueryHookOptions<ListAssetsQueryData, ListAssetsQueryError>,
 ): UseSuspenseQueryResult<ListAssetsQueryData, ListAssetsQueryError> {
   const client = useGramContext();

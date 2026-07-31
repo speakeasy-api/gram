@@ -62,8 +62,8 @@ export type MarketplaceSettingsQueryError =
  * Get the marketplace settings for the current project, including the effective marketplace name and the server-side default.
  */
 export function useMarketplaceSettings(
-  request?: GetMarketplaceSettingsRequest  ,
-  security?: GetMarketplaceSettingsSecurity  ,
+  request?: GetMarketplaceSettingsRequest | undefined,
+  security?: GetMarketplaceSettingsSecurity | undefined,
   options?: QueryHookOptions<
     MarketplaceSettingsQueryData,
     MarketplaceSettingsQueryError
@@ -88,8 +88,8 @@ export function useMarketplaceSettings(
  * Get the marketplace settings for the current project, including the effective marketplace name and the server-side default.
  */
 export function useMarketplaceSettingsSuspense(
-  request?: GetMarketplaceSettingsRequest  ,
-  security?: GetMarketplaceSettingsSecurity  ,
+  request?: GetMarketplaceSettingsRequest | undefined,
+  security?: GetMarketplaceSettingsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     MarketplaceSettingsQueryData,
     MarketplaceSettingsQueryError

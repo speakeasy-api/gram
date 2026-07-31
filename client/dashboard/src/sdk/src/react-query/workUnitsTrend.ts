@@ -62,8 +62,8 @@ export type WorkUnitsTrendQueryError =
  * Aggregate work-units analysis results over time for the project: work done and cost/token efficiency per UTC day.
  */
 export function useWorkUnitsTrend(
-  request?: GetWorkUnitsTrendRequest  ,
-  security?: GetWorkUnitsTrendSecurity  ,
+  request?: GetWorkUnitsTrendRequest | undefined,
+  security?: GetWorkUnitsTrendSecurity | undefined,
   options?: QueryHookOptions<WorkUnitsTrendQueryData, WorkUnitsTrendQueryError>,
 ): UseQueryResult<WorkUnitsTrendQueryData, WorkUnitsTrendQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useWorkUnitsTrend(
  * Aggregate work-units analysis results over time for the project: work done and cost/token efficiency per UTC day.
  */
 export function useWorkUnitsTrendSuspense(
-  request?: GetWorkUnitsTrendRequest  ,
-  security?: GetWorkUnitsTrendSecurity  ,
+  request?: GetWorkUnitsTrendRequest | undefined,
+  security?: GetWorkUnitsTrendSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     WorkUnitsTrendQueryData,
     WorkUnitsTrendQueryError

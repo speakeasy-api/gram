@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function chatListSources(
   client: GramCore,
-  request?: ListChatSourcesRequest  ,
-  security?: ListChatSourcesSecurity  ,
+  request?: ListChatSourcesRequest | undefined,
+  security?: ListChatSourcesSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function chatListSources(
 
 async function $do(
   client: GramCore,
-  request?: ListChatSourcesRequest  ,
-  security?: ListChatSourcesSecurity  ,
+  request?: ListChatSourcesRequest | undefined,
+  security?: ListChatSourcesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -26,7 +26,7 @@ export function prefetchOrganizationRemoteSessionIssuerMigratePreflight(
   request: GetOrganizationRemoteSessionIssuerMigratePreflightRequest,
   security?:
     | GetOrganizationRemoteSessionIssuerMigratePreflightSecurity
-     ,
+    | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -44,7 +44,7 @@ export function buildOrganizationRemoteSessionIssuerMigratePreflightQuery(
   request: GetOrganizationRemoteSessionIssuerMigratePreflightRequest,
   security?:
     | GetOrganizationRemoteSessionIssuerMigratePreflightSecurity
-     ,
+    | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

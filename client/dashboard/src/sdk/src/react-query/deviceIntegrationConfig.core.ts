@@ -23,7 +23,7 @@ export function prefetchDeviceIntegrationConfig(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetDeviceIntegrationConfigRequest,
-  security?: GetDeviceIntegrationConfigSecurity  ,
+  security?: GetDeviceIntegrationConfigSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchDeviceIntegrationConfig(
 export function buildDeviceIntegrationConfigQuery(
   client$: GramCore,
   request: GetDeviceIntegrationConfigRequest,
-  security?: GetDeviceIntegrationConfigSecurity  ,
+  security?: GetDeviceIntegrationConfigSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

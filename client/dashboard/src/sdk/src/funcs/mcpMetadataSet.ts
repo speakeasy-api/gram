@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function mcpMetadataSet(
   client: GramCore,
   request: SetMcpMetadataRequest,
-  security?: SetMcpMetadataSecurity  ,
+  security?: SetMcpMetadataSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function mcpMetadataSet(
 async function $do(
   client: GramCore,
   request: SetMcpMetadataRequest,
-  security?: SetMcpMetadataSecurity  ,
+  security?: SetMcpMetadataSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

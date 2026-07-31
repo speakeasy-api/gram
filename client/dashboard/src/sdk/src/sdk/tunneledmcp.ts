@@ -54,7 +54,7 @@ export class TunneledMcp extends ClientSDK {
    */
   async createServer(
     request: CreateTunneledMcpServerRequest,
-    security?: CreateTunneledMcpServerSecurity  ,
+    security?: CreateTunneledMcpServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<CreateTunneledMcpServerResult> {
     return unwrapAsync(tunneledMcpCreateServer(
@@ -73,7 +73,7 @@ export class TunneledMcp extends ClientSDK {
    */
   async deleteServer(
     request: DeleteTunneledMcpServerRequest,
-    security?: DeleteTunneledMcpServerSecurity  ,
+    security?: DeleteTunneledMcpServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(tunneledMcpDeleteServer(
@@ -92,7 +92,7 @@ export class TunneledMcp extends ClientSDK {
    */
   async getServer(
     request: GetTunneledMcpServerRequest,
-    security?: GetTunneledMcpServerSecurity  ,
+    security?: GetTunneledMcpServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<TunneledMcpServer> {
     return unwrapAsync(tunneledMcpGetServer(
@@ -111,7 +111,7 @@ export class TunneledMcp extends ClientSDK {
    */
   async listServerConnections(
     request: ListTunneledMcpServerConnectionsRequest,
-    security?: ListTunneledMcpServerConnectionsSecurity  ,
+    security?: ListTunneledMcpServerConnectionsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<TunneledMcpServerConnections> {
     return unwrapAsync(tunneledMcpListServerConnections(
@@ -129,8 +129,8 @@ export class TunneledMcp extends ClientSDK {
    * List all tunneled MCP server sources for a project
    */
   async listServers(
-    request?: ListTunneledMcpServersRequest  ,
-    security?: ListTunneledMcpServersSecurity  ,
+    request?: ListTunneledMcpServersRequest | undefined,
+    security?: ListTunneledMcpServersSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListTunneledMcpServersResult> {
     return unwrapAsync(tunneledMcpListServers(
@@ -149,7 +149,7 @@ export class TunneledMcp extends ClientSDK {
    */
   async rotateServerKey(
     request: RotateTunneledMcpServerKeyRequest,
-    security?: RotateTunneledMcpServerKeySecurity  ,
+    security?: RotateTunneledMcpServerKeySecurity | undefined,
     options?: RequestOptions,
   ): Promise<RotateTunneledMcpServerKeyResult> {
     return unwrapAsync(tunneledMcpRotateServerKey(
@@ -168,7 +168,7 @@ export class TunneledMcp extends ClientSDK {
    */
   async updateServer(
     request: UpdateTunneledMcpServerRequest,
-    security?: UpdateTunneledMcpServerSecurity  ,
+    security?: UpdateTunneledMcpServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<TunneledMcpServer> {
     return unwrapAsync(tunneledMcpUpdateServer(

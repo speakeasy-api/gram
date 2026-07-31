@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function toolsetsRemoveOAuthServer(
   client: GramCore,
   request: RemoveOAuthServerRequest,
-  security?: RemoveOAuthServerSecurity  ,
+  security?: RemoveOAuthServerSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function toolsetsRemoveOAuthServer(
 async function $do(
   client: GramCore,
   request: RemoveOAuthServerRequest,
-  security?: RemoveOAuthServerSecurity  ,
+  security?: RemoveOAuthServerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

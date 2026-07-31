@@ -80,8 +80,8 @@ export type UserSessionIssuersQueryError =
  * List user_session_issuers in the caller's project.
  */
 export function useUserSessionIssuers(
-  request?: ListUserSessionIssuersRequest  ,
-  security?: ListUserSessionIssuersSecurity  ,
+  request?: ListUserSessionIssuersRequest | undefined,
+  security?: ListUserSessionIssuersSecurity | undefined,
   options?: QueryHookOptions<
     UserSessionIssuersQueryData,
     UserSessionIssuersQueryError
@@ -106,8 +106,8 @@ export function useUserSessionIssuers(
  * List user_session_issuers in the caller's project.
  */
 export function useUserSessionIssuersSuspense(
-  request?: ListUserSessionIssuersRequest  ,
-  security?: ListUserSessionIssuersSecurity  ,
+  request?: ListUserSessionIssuersRequest | undefined,
+  security?: ListUserSessionIssuersSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     UserSessionIssuersQueryData,
     UserSessionIssuersQueryError
@@ -135,8 +135,8 @@ export function useUserSessionIssuersSuspense(
  * List user_session_issuers in the caller's project.
  */
 export function useUserSessionIssuersInfinite(
-  request?: ListUserSessionIssuersRequest  ,
-  security?: ListUserSessionIssuersSecurity  ,
+  request?: ListUserSessionIssuersRequest | undefined,
+  security?: ListUserSessionIssuersSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     UserSessionIssuersInfiniteQueryData,
     UserSessionIssuersQueryError
@@ -178,8 +178,8 @@ export function useUserSessionIssuersInfinite(
  * List user_session_issuers in the caller's project.
  */
 export function useUserSessionIssuersInfiniteSuspense(
-  request?: ListUserSessionIssuersRequest  ,
-  security?: ListUserSessionIssuersSecurity  ,
+  request?: ListUserSessionIssuersRequest | undefined,
+  security?: ListUserSessionIssuersSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     UserSessionIssuersInfiniteQueryData,
     UserSessionIssuersQueryError

@@ -27,8 +27,8 @@ export type ListChatsQueryData = ListChatsResult;
 export function prefetchListChats(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListChatsRequest  ,
-  security?: ListChatsSecurity  ,
+  request?: ListChatsRequest | undefined,
+  security?: ListChatsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -43,8 +43,8 @@ export function prefetchListChats(
 
 export function buildListChatsQuery(
   client$: GramCore,
-  request?: ListChatsRequest  ,
-  security?: ListChatsSecurity  ,
+  request?: ListChatsRequest | undefined,
+  security?: ListChatsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -19,8 +19,8 @@ export class Tools extends ClientSDK {
    * List all tools for a project
    */
   async list(
-    request?: ListToolsRequest  ,
-    security?: ListToolsSecurity  ,
+    request?: ListToolsRequest | undefined,
+    security?: ListToolsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListToolsResult> {
     return unwrapAsync(toolsList(

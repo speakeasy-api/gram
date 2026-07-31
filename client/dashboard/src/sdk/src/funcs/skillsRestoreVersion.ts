@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function skillsRestoreVersion(
   client: GramCore,
   request: RestoreSkillVersionRequest,
-  security?: RestoreSkillVersionSecurity  ,
+  security?: RestoreSkillVersionSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function skillsRestoreVersion(
 async function $do(
   client: GramCore,
   request: RestoreSkillVersionRequest,
-  security?: RestoreSkillVersionSecurity  ,
+  security?: RestoreSkillVersionSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

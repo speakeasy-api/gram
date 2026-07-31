@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function environmentsUpdateBySlug(
   client: GramCore,
   request: UpdateEnvironmentRequest,
-  security?: UpdateEnvironmentSecurity  ,
+  security?: UpdateEnvironmentSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function environmentsUpdateBySlug(
 async function $do(
   client: GramCore,
   request: UpdateEnvironmentRequest,
-  security?: UpdateEnvironmentSecurity  ,
+  security?: UpdateEnvironmentSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

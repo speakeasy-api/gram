@@ -54,7 +54,7 @@ export class Templates extends ClientSDK {
    */
   async create(
     request: CreateTemplateRequest,
-    security?: CreateTemplateSecurity  ,
+    security?: CreateTemplateSecurity | undefined,
     options?: RequestOptions,
   ): Promise<CreatePromptTemplateResult> {
     return unwrapAsync(templatesCreate(
@@ -72,8 +72,8 @@ export class Templates extends ClientSDK {
    * Delete prompt template by its ID or name.
    */
   async delete(
-    request?: DeleteTemplateRequest  ,
-    security?: DeleteTemplateSecurity  ,
+    request?: DeleteTemplateRequest | undefined,
+    security?: DeleteTemplateSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(templatesDelete(
@@ -91,8 +91,8 @@ export class Templates extends ClientSDK {
    * Get prompt template by its ID or name.
    */
   async get(
-    request?: GetTemplateRequest  ,
-    security?: GetTemplateSecurity  ,
+    request?: GetTemplateRequest | undefined,
+    security?: GetTemplateSecurity | undefined,
     options?: RequestOptions,
   ): Promise<GetPromptTemplateResult> {
     return unwrapAsync(templatesGet(
@@ -110,8 +110,8 @@ export class Templates extends ClientSDK {
    * List available prompt template.
    */
   async list(
-    request?: ListTemplatesRequest  ,
-    security?: ListTemplatesSecurity  ,
+    request?: ListTemplatesRequest | undefined,
+    security?: ListTemplatesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListPromptTemplatesResult> {
     return unwrapAsync(templatesList(
@@ -130,7 +130,7 @@ export class Templates extends ClientSDK {
    */
   async renderByID(
     request: RenderTemplateByIDRequest,
-    security?: RenderTemplateByIDSecurity  ,
+    security?: RenderTemplateByIDSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RenderTemplateResult> {
     return unwrapAsync(templatesRenderByID(
@@ -149,7 +149,7 @@ export class Templates extends ClientSDK {
    */
   async render(
     request: RenderTemplateRequest,
-    security?: RenderTemplateSecurity  ,
+    security?: RenderTemplateSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RenderTemplateResult> {
     return unwrapAsync(templatesRender(
@@ -168,7 +168,7 @@ export class Templates extends ClientSDK {
    */
   async update(
     request: UpdateTemplateRequest,
-    security?: UpdateTemplateSecurity  ,
+    security?: UpdateTemplateSecurity | undefined,
     options?: RequestOptions,
   ): Promise<UpdatePromptTemplateResult> {
     return unwrapAsync(templatesUpdate(

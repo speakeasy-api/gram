@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function mcpServersSetToolMetadataBatch(
   client: GramCore,
   request: SetMcpServerToolMetadataBatchRequest,
-  security?: SetMcpServerToolMetadataBatchSecurity  ,
+  security?: SetMcpServerToolMetadataBatchSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function mcpServersSetToolMetadataBatch(
 async function $do(
   client: GramCore,
   request: SetMcpServerToolMetadataBatchRequest,
-  security?: SetMcpServerToolMetadataBatchSecurity  ,
+  security?: SetMcpServerToolMetadataBatchSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

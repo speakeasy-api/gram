@@ -62,8 +62,8 @@ export type ListScopesQueryError =
  * List all available scopes and their resource types.
  */
 export function useListScopes(
-  request?: ListScopesRequest  ,
-  security?: ListScopesSecurity  ,
+  request?: ListScopesRequest | undefined,
+  security?: ListScopesSecurity | undefined,
   options?: QueryHookOptions<ListScopesQueryData, ListScopesQueryError>,
 ): UseQueryResult<ListScopesQueryData, ListScopesQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useListScopes(
  * List all available scopes and their resource types.
  */
 export function useListScopesSuspense(
-  request?: ListScopesRequest  ,
-  security?: ListScopesSecurity  ,
+  request?: ListScopesRequest | undefined,
+  security?: ListScopesSecurity | undefined,
   options?: SuspenseQueryHookOptions<ListScopesQueryData, ListScopesQueryError>,
 ): UseSuspenseQueryResult<ListScopesQueryData, ListScopesQueryError> {
   const client = useGramContext();

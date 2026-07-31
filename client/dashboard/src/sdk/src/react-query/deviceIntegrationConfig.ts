@@ -63,7 +63,7 @@ export type DeviceIntegrationConfigQueryError =
  */
 export function useDeviceIntegrationConfig(
   request: GetDeviceIntegrationConfigRequest,
-  security?: GetDeviceIntegrationConfigSecurity  ,
+  security?: GetDeviceIntegrationConfigSecurity | undefined,
   options?: QueryHookOptions<
     DeviceIntegrationConfigQueryData,
     DeviceIntegrationConfigQueryError
@@ -92,7 +92,7 @@ export function useDeviceIntegrationConfig(
  */
 export function useDeviceIntegrationConfigSuspense(
   request: GetDeviceIntegrationConfigRequest,
-  security?: GetDeviceIntegrationConfigSecurity  ,
+  security?: GetDeviceIntegrationConfigSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     DeviceIntegrationConfigQueryData,
     DeviceIntegrationConfigQueryError

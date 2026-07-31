@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function spendRulesRulesGet(
   client: GramCore,
   request: GetSpendRuleRequest,
-  security?: GetSpendRuleSecurity  ,
+  security?: GetSpendRuleSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function spendRulesRulesGet(
 async function $do(
   client: GramCore,
   request: GetSpendRuleRequest,
-  security?: GetSpendRuleSecurity  ,
+  security?: GetSpendRuleSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function accessResolveShadowMCPInventoryRequest(
   client: GramCore,
   request: ResolveShadowMCPInventoryRequestRequest,
-  security?: ResolveShadowMCPInventoryRequestSecurity  ,
+  security?: ResolveShadowMCPInventoryRequestSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function accessResolveShadowMCPInventoryRequest(
 async function $do(
   client: GramCore,
   request: ResolveShadowMCPInventoryRequestRequest,
-  security?: ResolveShadowMCPInventoryRequestSecurity  ,
+  security?: ResolveShadowMCPInventoryRequestSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

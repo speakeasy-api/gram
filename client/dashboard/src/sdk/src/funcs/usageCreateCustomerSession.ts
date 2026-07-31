@@ -42,8 +42,8 @@ import { Result } from "../types/fp.js";
  */
 export function usageCreateCustomerSession(
   client: GramCore,
-  request?: CreateCustomerSessionRequest  ,
-  security?: CreateCustomerSessionSecurity  ,
+  request?: CreateCustomerSessionRequest | undefined,
+  security?: CreateCustomerSessionSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -69,8 +69,8 @@ export function usageCreateCustomerSession(
 
 async function $do(
   client: GramCore,
-  request?: CreateCustomerSessionRequest  ,
-  security?: CreateCustomerSessionSecurity  ,
+  request?: CreateCustomerSessionRequest | undefined,
+  security?: CreateCustomerSessionSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

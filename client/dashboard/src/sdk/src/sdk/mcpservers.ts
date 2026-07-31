@@ -81,7 +81,7 @@ export class McpServers extends ClientSDK {
    */
   async addToolMetadataBatch(
     request: AddMcpServerToolMetadataBatchRequest,
-    security?: AddMcpServerToolMetadataBatchSecurity  ,
+    security?: AddMcpServerToolMetadataBatchSecurity | undefined,
     options?: RequestOptions,
   ): Promise<AddToolMetadataBatchResult> {
     return unwrapAsync(mcpServersAddToolMetadataBatch(
@@ -100,7 +100,7 @@ export class McpServers extends ClientSDK {
    */
   async create(
     request: CreateMcpServerRequest,
-    security?: CreateMcpServerSecurity  ,
+    security?: CreateMcpServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<McpServer> {
     return unwrapAsync(mcpServersCreate(
@@ -119,7 +119,7 @@ export class McpServers extends ClientSDK {
    */
   async delete(
     request: DeleteMcpServerRequest,
-    security?: DeleteMcpServerSecurity  ,
+    security?: DeleteMcpServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(mcpServersDelete(
@@ -138,7 +138,7 @@ export class McpServers extends ClientSDK {
    */
   async deleteToolMetadata(
     request: DeleteMcpServerToolMetadataRequest,
-    security?: DeleteMcpServerToolMetadataSecurity  ,
+    security?: DeleteMcpServerToolMetadataSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(mcpServersDeleteToolMetadata(
@@ -156,8 +156,8 @@ export class McpServers extends ClientSDK {
    * Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
    */
   async get(
-    request?: GetMcpServerRequest  ,
-    security?: GetMcpServerSecurity  ,
+    request?: GetMcpServerRequest | undefined,
+    security?: GetMcpServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<McpServer> {
     return unwrapAsync(mcpServersGet(
@@ -175,8 +175,8 @@ export class McpServers extends ClientSDK {
    * List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
    */
   async list(
-    request?: ListMcpServersRequest  ,
-    security?: ListMcpServersSecurity  ,
+    request?: ListMcpServersRequest | undefined,
+    security?: ListMcpServersSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListMcpServersResult> {
     return unwrapAsync(mcpServersList(
@@ -194,8 +194,8 @@ export class McpServers extends ClientSDK {
    * List all MCP servers across the organization
    */
   async listForOrg(
-    request?: ListMcpServersForOrgRequest  ,
-    security?: ListMcpServersForOrgSecurity  ,
+    request?: ListMcpServersForOrgRequest | undefined,
+    security?: ListMcpServersForOrgSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListMcpServersResult> {
     return unwrapAsync(mcpServersListForOrg(
@@ -213,8 +213,8 @@ export class McpServers extends ClientSDK {
    * List the tool filter scopes (tags) available on an MCP server and the tools under each, including tools excluded from all filters. Exactly one of id or slug must be provided. Read-only; reflects the explicit tool variations group resolved from the chain (mcp_servers then toolsets), deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.
    */
   async listToolFilters(
-    request?: ListMcpServerToolFiltersRequest  ,
-    security?: ListMcpServerToolFiltersSecurity  ,
+    request?: ListMcpServerToolFiltersRequest | undefined,
+    security?: ListMcpServerToolFiltersSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListToolFiltersResult> {
     return unwrapAsync(mcpServersListToolFilters(
@@ -233,7 +233,7 @@ export class McpServers extends ClientSDK {
    */
   async listToolMetadata(
     request: ListMcpServerToolMetadataRequest,
-    security?: ListMcpServerToolMetadataSecurity  ,
+    security?: ListMcpServerToolMetadataSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListToolMetadataResult> {
     return unwrapAsync(mcpServersListToolMetadata(
@@ -252,7 +252,7 @@ export class McpServers extends ClientSDK {
    */
   async setToolMetadata(
     request: SetMcpServerToolMetadataRequest,
-    security?: SetMcpServerToolMetadataSecurity  ,
+    security?: SetMcpServerToolMetadataSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ToolMetadata> {
     return unwrapAsync(mcpServersSetToolMetadata(
@@ -271,7 +271,7 @@ export class McpServers extends ClientSDK {
    */
   async setToolMetadataBatch(
     request: SetMcpServerToolMetadataBatchRequest,
-    security?: SetMcpServerToolMetadataBatchSecurity  ,
+    security?: SetMcpServerToolMetadataBatchSecurity | undefined,
     options?: RequestOptions,
   ): Promise<SetToolMetadataBatchResult> {
     return unwrapAsync(mcpServersSetToolMetadataBatch(
@@ -290,7 +290,7 @@ export class McpServers extends ClientSDK {
    */
   async update(
     request: UpdateMcpServerRequest,
-    security?: UpdateMcpServerSecurity  ,
+    security?: UpdateMcpServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<McpServer> {
     return unwrapAsync(mcpServersUpdate(

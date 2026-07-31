@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function riskPolicyBypassRequestsCreate(
   client: GramCore,
   request: CreateRiskPolicyBypassRequestRequest,
-  security?: CreateRiskPolicyBypassRequestSecurity  ,
+  security?: CreateRiskPolicyBypassRequestSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function riskPolicyBypassRequestsCreate(
 async function $do(
   client: GramCore,
   request: CreateRiskPolicyBypassRequestRequest,
-  security?: CreateRiskPolicyBypassRequestSecurity  ,
+  security?: CreateRiskPolicyBypassRequestSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -63,7 +63,7 @@ export type ListAttributeKeysQueryError =
  */
 export function useListAttributeKeys(
   request: ListAttributeKeysRequest,
-  security?: ListAttributeKeysSecurity  ,
+  security?: ListAttributeKeysSecurity | undefined,
   options?: QueryHookOptions<
     ListAttributeKeysQueryData,
     ListAttributeKeysQueryError
@@ -89,7 +89,7 @@ export function useListAttributeKeys(
  */
 export function useListAttributeKeysSuspense(
   request: ListAttributeKeysRequest,
-  security?: ListAttributeKeysSecurity  ,
+  security?: ListAttributeKeysSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListAttributeKeysQueryData,
     ListAttributeKeysQueryError

@@ -62,8 +62,8 @@ export type HooksServerNamesListServerNameOverridesQueryError =
  * List all server name display overrides for a project
  */
 export function useHooksServerNamesListServerNameOverrides(
-  request?: ListServerNameOverridesRequest  ,
-  security?: ListServerNameOverridesSecurity  ,
+  request?: ListServerNameOverridesRequest | undefined,
+  security?: ListServerNameOverridesSecurity | undefined,
   options?: QueryHookOptions<
     HooksServerNamesListServerNameOverridesQueryData,
     HooksServerNamesListServerNameOverridesQueryError
@@ -91,8 +91,8 @@ export function useHooksServerNamesListServerNameOverrides(
  * List all server name display overrides for a project
  */
 export function useHooksServerNamesListServerNameOverridesSuspense(
-  request?: ListServerNameOverridesRequest  ,
-  security?: ListServerNameOverridesSecurity  ,
+  request?: ListServerNameOverridesRequest | undefined,
+  security?: ListServerNameOverridesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     HooksServerNamesListServerNameOverridesQueryData,
     HooksServerNamesListServerNameOverridesQueryError

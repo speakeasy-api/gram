@@ -23,7 +23,7 @@ export function prefetchAiIntegrationConfig(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetAIIntegrationConfigRequest,
-  security?: GetAIIntegrationConfigSecurity  ,
+  security?: GetAIIntegrationConfigSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchAiIntegrationConfig(
 export function buildAiIntegrationConfigQuery(
   client$: GramCore,
   request: GetAIIntegrationConfigRequest,
-  security?: GetAIIntegrationConfigSecurity  ,
+  security?: GetAIIntegrationConfigSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

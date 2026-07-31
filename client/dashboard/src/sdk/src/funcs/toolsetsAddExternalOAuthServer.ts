@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function toolsetsAddExternalOAuthServer(
   client: GramCore,
   request: AddExternalOAuthServerRequest,
-  security?: AddExternalOAuthServerSecurity  ,
+  security?: AddExternalOAuthServerSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function toolsetsAddExternalOAuthServer(
 async function $do(
   client: GramCore,
   request: AddExternalOAuthServerRequest,
-  security?: AddExternalOAuthServerSecurity  ,
+  security?: AddExternalOAuthServerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

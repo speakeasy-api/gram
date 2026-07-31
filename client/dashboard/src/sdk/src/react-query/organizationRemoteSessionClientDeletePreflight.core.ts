@@ -26,7 +26,7 @@ export function prefetchOrganizationRemoteSessionClientDeletePreflight(
   request: GetOrganizationRemoteSessionClientDeletePreflightRequest,
   security?:
     | GetOrganizationRemoteSessionClientDeletePreflightSecurity
-     ,
+    | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -44,7 +44,7 @@ export function buildOrganizationRemoteSessionClientDeletePreflightQuery(
   request: GetOrganizationRemoteSessionClientDeletePreflightRequest,
   security?:
     | GetOrganizationRemoteSessionClientDeletePreflightSecurity
-     ,
+    | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

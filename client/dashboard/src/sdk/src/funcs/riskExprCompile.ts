@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function riskExprCompile(
   client: GramCore,
-  request?: CompileExprRequest  ,
-  security?: CompileExprSecurity  ,
+  request?: CompileExprRequest | undefined,
+  security?: CompileExprSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function riskExprCompile(
 
 async function $do(
   client: GramCore,
-  request?: CompileExprRequest  ,
-  security?: CompileExprSecurity  ,
+  request?: CompileExprRequest | undefined,
+  security?: CompileExprSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

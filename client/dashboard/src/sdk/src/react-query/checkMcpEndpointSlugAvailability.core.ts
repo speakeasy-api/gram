@@ -22,7 +22,7 @@ export function prefetchCheckMcpEndpointSlugAvailability(
   queryClient: QueryClient,
   client$: GramCore,
   request: CheckMcpEndpointSlugAvailabilityRequest,
-  security?: CheckMcpEndpointSlugAvailabilitySecurity  ,
+  security?: CheckMcpEndpointSlugAvailabilitySecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,7 +38,7 @@ export function prefetchCheckMcpEndpointSlugAvailability(
 export function buildCheckMcpEndpointSlugAvailabilityQuery(
   client$: GramCore,
   request: CheckMcpEndpointSlugAvailabilityRequest,
-  security?: CheckMcpEndpointSlugAvailabilitySecurity  ,
+  security?: CheckMcpEndpointSlugAvailabilitySecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

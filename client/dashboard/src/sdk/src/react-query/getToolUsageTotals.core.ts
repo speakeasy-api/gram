@@ -23,7 +23,7 @@ export function prefetchGetToolUsageTotals(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetToolUsageTotalsRequest,
-  security?: GetToolUsageTotalsSecurity  ,
+  security?: GetToolUsageTotalsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchGetToolUsageTotals(
 export function buildGetToolUsageTotalsQuery(
   client$: GramCore,
   request: GetToolUsageTotalsRequest,
-  security?: GetToolUsageTotalsSecurity  ,
+  security?: GetToolUsageTotalsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

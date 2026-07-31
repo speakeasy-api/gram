@@ -62,8 +62,8 @@ export type ListToolsetsQueryError =
  * List all toolsets for a project
  */
 export function useListToolsets(
-  request?: ListToolsetsRequest  ,
-  security?: ListToolsetsSecurity  ,
+  request?: ListToolsetsRequest | undefined,
+  security?: ListToolsetsSecurity | undefined,
   options?: QueryHookOptions<ListToolsetsQueryData, ListToolsetsQueryError>,
 ): UseQueryResult<ListToolsetsQueryData, ListToolsetsQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useListToolsets(
  * List all toolsets for a project
  */
 export function useListToolsetsSuspense(
-  request?: ListToolsetsRequest  ,
-  security?: ListToolsetsSecurity  ,
+  request?: ListToolsetsRequest | undefined,
+  security?: ListToolsetsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListToolsetsQueryData,
     ListToolsetsQueryError

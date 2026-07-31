@@ -22,8 +22,8 @@ export type OtelForwardingConfigQueryData = OtelForwardingConfig;
 export function prefetchOtelForwardingConfig(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetOtelForwardingConfigRequest  ,
-  security?: GetOtelForwardingConfigSecurity  ,
+  request?: GetOtelForwardingConfigRequest | undefined,
+  security?: GetOtelForwardingConfigSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchOtelForwardingConfig(
 
 export function buildOtelForwardingConfigQuery(
   client$: GramCore,
-  request?: GetOtelForwardingConfigRequest  ,
-  security?: GetOtelForwardingConfigSecurity  ,
+  request?: GetOtelForwardingConfigRequest | undefined,
+  security?: GetOtelForwardingConfigSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

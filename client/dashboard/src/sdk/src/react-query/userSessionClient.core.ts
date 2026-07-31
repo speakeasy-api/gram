@@ -23,7 +23,7 @@ export function prefetchUserSessionClient(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetUserSessionClientRequest,
-  security?: GetUserSessionClientSecurity  ,
+  security?: GetUserSessionClientSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchUserSessionClient(
 export function buildUserSessionClientQuery(
   client$: GramCore,
   request: GetUserSessionClientRequest,
-  security?: GetUserSessionClientSecurity  ,
+  security?: GetUserSessionClientSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

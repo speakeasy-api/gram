@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function usageGetTokensUnderManagement(
   client: GramCore,
-  request?: GetTokensUnderManagementRequest  ,
-  security?: GetTokensUnderManagementSecurity  ,
+  request?: GetTokensUnderManagementRequest | undefined,
+  security?: GetTokensUnderManagementSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function usageGetTokensUnderManagement(
 
 async function $do(
   client: GramCore,
-  request?: GetTokensUnderManagementRequest  ,
-  security?: GetTokensUnderManagementSecurity  ,
+  request?: GetTokensUnderManagementRequest | undefined,
+  security?: GetTokensUnderManagementSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

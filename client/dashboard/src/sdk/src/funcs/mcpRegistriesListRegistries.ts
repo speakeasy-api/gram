@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function mcpRegistriesListRegistries(
   client: GramCore,
-  request?: ListMCPRegistriesRequest  ,
-  security?: ListMCPRegistriesSecurity  ,
+  request?: ListMCPRegistriesRequest | undefined,
+  security?: ListMCPRegistriesSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function mcpRegistriesListRegistries(
 
 async function $do(
   client: GramCore,
-  request?: ListMCPRegistriesRequest  ,
-  security?: ListMCPRegistriesSecurity  ,
+  request?: ListMCPRegistriesRequest | undefined,
+  security?: ListMCPRegistriesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

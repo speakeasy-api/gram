@@ -62,8 +62,8 @@ export type RiskOverviewQueryError =
  * Get risk overview metrics and trend data for the current project.
  */
 export function useRiskOverview(
-  request?: GetRiskOverviewRequest  ,
-  security?: GetRiskOverviewSecurity  ,
+  request?: GetRiskOverviewRequest | undefined,
+  security?: GetRiskOverviewSecurity | undefined,
   options?: QueryHookOptions<RiskOverviewQueryData, RiskOverviewQueryError>,
 ): UseQueryResult<RiskOverviewQueryData, RiskOverviewQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useRiskOverview(
  * Get risk overview metrics and trend data for the current project.
  */
 export function useRiskOverviewSuspense(
-  request?: GetRiskOverviewRequest  ,
-  security?: GetRiskOverviewSecurity  ,
+  request?: GetRiskOverviewRequest | undefined,
+  security?: GetRiskOverviewSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskOverviewQueryData,
     RiskOverviewQueryError

@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function packagesCreate(
   client: GramCore,
   request: CreatePackageRequest,
-  security?: CreatePackageSecurity  ,
+  security?: CreatePackageSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function packagesCreate(
 async function $do(
   client: GramCore,
   request: CreatePackageRequest,
-  security?: CreatePackageSecurity  ,
+  security?: CreatePackageSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

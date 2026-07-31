@@ -63,7 +63,7 @@ export type GetProjectOverviewQueryError =
  */
 export function useGetProjectOverview(
   request: GetProjectOverviewRequest,
-  security?: GetProjectOverviewSecurity  ,
+  security?: GetProjectOverviewSecurity | undefined,
   options?: QueryHookOptions<
     GetProjectOverviewQueryData,
     GetProjectOverviewQueryError
@@ -89,7 +89,7 @@ export function useGetProjectOverview(
  */
 export function useGetProjectOverviewSuspense(
   request: GetProjectOverviewRequest,
-  security?: GetProjectOverviewSecurity  ,
+  security?: GetProjectOverviewSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetProjectOverviewQueryData,
     GetProjectOverviewQueryError

@@ -23,7 +23,7 @@ export function prefetchSearchChats(
   queryClient: QueryClient,
   client$: GramCore,
   request: SearchChatsRequest,
-  security?: SearchChatsSecurity  ,
+  security?: SearchChatsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchSearchChats(
 export function buildSearchChatsQuery(
   client$: GramCore,
   request: SearchChatsRequest,
-  security?: SearchChatsSecurity  ,
+  security?: SearchChatsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

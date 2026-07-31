@@ -44,7 +44,7 @@ export class Packages extends ClientSDK {
    */
   async create(
     request: CreatePackageRequest,
-    security?: CreatePackageSecurity  ,
+    security?: CreatePackageSecurity | undefined,
     options?: RequestOptions,
   ): Promise<CreatePackageResult> {
     return unwrapAsync(packagesCreate(
@@ -62,8 +62,8 @@ export class Packages extends ClientSDK {
    * List all packages for a project.
    */
   async list(
-    request?: ListPackagesRequest  ,
-    security?: ListPackagesSecurity  ,
+    request?: ListPackagesRequest | undefined,
+    security?: ListPackagesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListPackagesResult> {
     return unwrapAsync(packagesList(
@@ -82,7 +82,7 @@ export class Packages extends ClientSDK {
    */
   async listVersions(
     request: ListVersionsRequest,
-    security?: ListVersionsSecurity  ,
+    security?: ListVersionsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListVersionsResult> {
     return unwrapAsync(packagesListVersions(
@@ -101,7 +101,7 @@ export class Packages extends ClientSDK {
    */
   async publish(
     request: PublishRequest,
-    security?: PublishSecurity  ,
+    security?: PublishSecurity | undefined,
     options?: RequestOptions,
   ): Promise<PublishPackageResult> {
     return unwrapAsync(packagesPublish(
@@ -120,7 +120,7 @@ export class Packages extends ClientSDK {
    */
   async update(
     request: UpdatePackageRequest,
-    security?: UpdatePackageSecurity  ,
+    security?: UpdatePackageSecurity | undefined,
     options?: RequestOptions,
   ): Promise<UpdatePackageResponse> {
     return unwrapAsync(packagesUpdate(

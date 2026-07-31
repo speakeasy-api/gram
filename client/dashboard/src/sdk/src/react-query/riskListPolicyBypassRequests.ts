@@ -63,8 +63,8 @@ export type RiskListPolicyBypassRequestsQueryError =
  * List current risk policy bypass request workflow records.
  */
 export function useRiskListPolicyBypassRequests(
-  request?: ListRiskPolicyBypassRequestsRequest  ,
-  security?: ListRiskPolicyBypassRequestsSecurity  ,
+  request?: ListRiskPolicyBypassRequestsRequest | undefined,
+  security?: ListRiskPolicyBypassRequestsSecurity | undefined,
   options?: QueryHookOptions<
     RiskListPolicyBypassRequestsQueryData,
     RiskListPolicyBypassRequestsQueryError
@@ -92,8 +92,8 @@ export function useRiskListPolicyBypassRequests(
  * List current risk policy bypass request workflow records.
  */
 export function useRiskListPolicyBypassRequestsSuspense(
-  request?: ListRiskPolicyBypassRequestsRequest  ,
-  security?: ListRiskPolicyBypassRequestsSecurity  ,
+  request?: ListRiskPolicyBypassRequestsRequest | undefined,
+  security?: ListRiskPolicyBypassRequestsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskListPolicyBypassRequestsQueryData,
     RiskListPolicyBypassRequestsQueryError

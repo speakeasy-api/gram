@@ -63,7 +63,7 @@ export type GetToolUsageSummaryQueryError =
  */
 export function useGetToolUsageSummary(
   request: GetToolUsageSummaryRequest,
-  security?: GetToolUsageSummarySecurity  ,
+  security?: GetToolUsageSummarySecurity | undefined,
   options?: QueryHookOptions<
     GetToolUsageSummaryQueryData,
     GetToolUsageSummaryQueryError
@@ -89,7 +89,7 @@ export function useGetToolUsageSummary(
  */
 export function useGetToolUsageSummarySuspense(
   request: GetToolUsageSummaryRequest,
-  security?: GetToolUsageSummarySecurity  ,
+  security?: GetToolUsageSummarySecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetToolUsageSummaryQueryData,
     GetToolUsageSummaryQueryError

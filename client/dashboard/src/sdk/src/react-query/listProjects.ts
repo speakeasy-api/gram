@@ -63,7 +63,7 @@ export type ListProjectsQueryError =
  */
 export function useListProjects(
   request: ListProjectsRequest,
-  security?: ListProjectsSecurity  ,
+  security?: ListProjectsSecurity | undefined,
   options?: QueryHookOptions<ListProjectsQueryData, ListProjectsQueryError>,
 ): UseQueryResult<ListProjectsQueryData, ListProjectsQueryError> {
   const client = useGramContext();
@@ -86,7 +86,7 @@ export function useListProjects(
  */
 export function useListProjectsSuspense(
   request: ListProjectsRequest,
-  security?: ListProjectsSecurity  ,
+  security?: ListProjectsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListProjectsQueryData,
     ListProjectsQueryError

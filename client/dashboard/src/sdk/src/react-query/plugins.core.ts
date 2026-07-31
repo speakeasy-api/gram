@@ -22,8 +22,8 @@ export type PluginsQueryData = ListPluginsResult;
 export function prefetchPlugins(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListPluginsRequest  ,
-  security?: ListPluginsSecurity  ,
+  request?: ListPluginsRequest | undefined,
+  security?: ListPluginsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchPlugins(
 
 export function buildPluginsQuery(
   client$: GramCore,
-  request?: ListPluginsRequest  ,
-  security?: ListPluginsSecurity  ,
+  request?: ListPluginsRequest | undefined,
+  security?: ListPluginsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

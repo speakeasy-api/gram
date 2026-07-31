@@ -63,8 +63,8 @@ export type ChallengeBucketsQueryError =
  * List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.
  */
 export function useChallengeBuckets(
-  request?: ListChallengeBucketsRequest  ,
-  security?: ListChallengeBucketsSecurity  ,
+  request?: ListChallengeBucketsRequest | undefined,
+  security?: ListChallengeBucketsSecurity | undefined,
   options?: QueryHookOptions<
     ChallengeBucketsQueryData,
     ChallengeBucketsQueryError
@@ -89,8 +89,8 @@ export function useChallengeBuckets(
  * List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.
  */
 export function useChallengeBucketsSuspense(
-  request?: ListChallengeBucketsRequest  ,
-  security?: ListChallengeBucketsSecurity  ,
+  request?: ListChallengeBucketsRequest | undefined,
+  security?: ListChallengeBucketsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ChallengeBucketsQueryData,
     ChallengeBucketsQueryError

@@ -62,8 +62,8 @@ export type GetMcpEndpointQueryError =
  * Get an MCP endpoint by id or by (custom_domain_id, slug). Provide either id, or slug with an optional custom_domain_id — not both.
  */
 export function useGetMcpEndpoint(
-  request?: GetMcpEndpointRequest  ,
-  security?: GetMcpEndpointSecurity  ,
+  request?: GetMcpEndpointRequest | undefined,
+  security?: GetMcpEndpointSecurity | undefined,
   options?: QueryHookOptions<GetMcpEndpointQueryData, GetMcpEndpointQueryError>,
 ): UseQueryResult<GetMcpEndpointQueryData, GetMcpEndpointQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useGetMcpEndpoint(
  * Get an MCP endpoint by id or by (custom_domain_id, slug). Provide either id, or slug with an optional custom_domain_id — not both.
  */
 export function useGetMcpEndpointSuspense(
-  request?: GetMcpEndpointRequest  ,
-  security?: GetMcpEndpointSecurity  ,
+  request?: GetMcpEndpointRequest | undefined,
+  security?: GetMcpEndpointSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetMcpEndpointQueryData,
     GetMcpEndpointQueryError

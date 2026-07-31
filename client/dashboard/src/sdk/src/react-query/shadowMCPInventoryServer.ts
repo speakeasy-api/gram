@@ -63,7 +63,7 @@ export type ShadowMCPInventoryServerQueryError =
  */
 export function useShadowMCPInventoryServer(
   request: GetShadowMCPInventoryServerRequest,
-  security?: GetShadowMCPInventoryServerSecurity  ,
+  security?: GetShadowMCPInventoryServerSecurity | undefined,
   options?: QueryHookOptions<
     ShadowMCPInventoryServerQueryData,
     ShadowMCPInventoryServerQueryError
@@ -92,7 +92,7 @@ export function useShadowMCPInventoryServer(
  */
 export function useShadowMCPInventoryServerSuspense(
   request: GetShadowMCPInventoryServerRequest,
-  security?: GetShadowMCPInventoryServerSecurity  ,
+  security?: GetShadowMCPInventoryServerSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ShadowMCPInventoryServerQueryData,
     ShadowMCPInventoryServerQueryError

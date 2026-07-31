@@ -37,8 +37,8 @@ export class UserSessions extends ClientSDK {
    * List issued user_sessions in the caller's project. refresh_token_hash is never returned.
    */
   async list(
-    request?: ListUserSessionsRequest  ,
-    security?: ListUserSessionsSecurity  ,
+    request?: ListUserSessionsRequest | undefined,
+    security?: ListUserSessionsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<PageIterator<ListUserSessionsResponse, { cursor: string }>> {
     return unwrapResultIterator(userSessionsList(
@@ -56,8 +56,8 @@ export class UserSessions extends ClientSDK {
    * List available user session facet values (clients, users, servers) in the caller's project.
    */
   async listFacets(
-    request?: ListUserSessionFacetsRequest  ,
-    security?: ListUserSessionFacetsSecurity  ,
+    request?: ListUserSessionFacetsRequest | undefined,
+    security?: ListUserSessionFacetsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListUserSessionFacetsResult> {
     return unwrapAsync(userSessionsListFacets(
@@ -76,7 +76,7 @@ export class UserSessions extends ClientSDK {
    */
   async mint(
     request: MintUserSessionRequest,
-    security?: MintUserSessionSecurity  ,
+    security?: MintUserSessionSecurity | undefined,
     options?: RequestOptions,
   ): Promise<MintUserSessionResponseBody> {
     return unwrapAsync(userSessionsMint(
@@ -95,7 +95,7 @@ export class UserSessions extends ClientSDK {
    */
   async revoke(
     request: RevokeUserSessionRequest,
-    security?: RevokeUserSessionSecurity  ,
+    security?: RevokeUserSessionSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(userSessionsRevoke(

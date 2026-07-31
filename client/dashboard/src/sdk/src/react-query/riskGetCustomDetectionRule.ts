@@ -63,7 +63,7 @@ export type RiskGetCustomDetectionRuleQueryError =
  */
 export function useRiskGetCustomDetectionRule(
   request: GetCustomDetectionRuleRequest,
-  security?: GetCustomDetectionRuleSecurity  ,
+  security?: GetCustomDetectionRuleSecurity | undefined,
   options?: QueryHookOptions<
     RiskGetCustomDetectionRuleQueryData,
     RiskGetCustomDetectionRuleQueryError
@@ -92,7 +92,7 @@ export function useRiskGetCustomDetectionRule(
  */
 export function useRiskGetCustomDetectionRuleSuspense(
   request: GetCustomDetectionRuleRequest,
-  security?: GetCustomDetectionRuleSecurity  ,
+  security?: GetCustomDetectionRuleSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskGetCustomDetectionRuleQueryData,
     RiskGetCustomDetectionRuleQueryError

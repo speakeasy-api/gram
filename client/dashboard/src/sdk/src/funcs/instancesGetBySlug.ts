@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function instancesGetBySlug(
   client: GramCore,
   request: GetInstanceRequest,
-  security?: GetInstanceSecurity  ,
+  security?: GetInstanceSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function instancesGetBySlug(
 async function $do(
   client: GramCore,
   request: GetInstanceRequest,
-  security?: GetInstanceSecurity  ,
+  security?: GetInstanceSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

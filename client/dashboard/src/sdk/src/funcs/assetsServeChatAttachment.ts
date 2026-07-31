@@ -45,7 +45,7 @@ import { Result } from "../types/fp.js";
 export function assetsServeChatAttachment(
   client: GramCore,
   request: ServeChatAttachmentRequest,
-  security?: ServeChatAttachmentSecurity  ,
+  security?: ServeChatAttachmentSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -72,7 +72,7 @@ export function assetsServeChatAttachment(
 async function $do(
   client: GramCore,
   request: ServeChatAttachmentRequest,
-  security?: ServeChatAttachmentSecurity  ,
+  security?: ServeChatAttachmentSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

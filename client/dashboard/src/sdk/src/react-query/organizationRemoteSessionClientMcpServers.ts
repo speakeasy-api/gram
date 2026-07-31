@@ -63,7 +63,7 @@ export type OrganizationRemoteSessionClientMcpServersQueryError =
  */
 export function useOrganizationRemoteSessionClientMcpServers(
   request: ListOrganizationRemoteSessionClientMcpServersRequest,
-  security?: ListOrganizationRemoteSessionClientMcpServersSecurity  ,
+  security?: ListOrganizationRemoteSessionClientMcpServersSecurity | undefined,
   options?: QueryHookOptions<
     OrganizationRemoteSessionClientMcpServersQueryData,
     OrganizationRemoteSessionClientMcpServersQueryError
@@ -92,7 +92,7 @@ export function useOrganizationRemoteSessionClientMcpServers(
  */
 export function useOrganizationRemoteSessionClientMcpServersSuspense(
   request: ListOrganizationRemoteSessionClientMcpServersRequest,
-  security?: ListOrganizationRemoteSessionClientMcpServersSecurity  ,
+  security?: ListOrganizationRemoteSessionClientMcpServersSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     OrganizationRemoteSessionClientMcpServersQueryData,
     OrganizationRemoteSessionClientMcpServersQueryError

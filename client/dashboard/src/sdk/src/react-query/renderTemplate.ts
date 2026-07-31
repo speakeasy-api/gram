@@ -63,7 +63,7 @@ export type RenderTemplateQueryError =
  */
 export function useRenderTemplate(
   request: RenderTemplateRequest,
-  security?: RenderTemplateSecurity  ,
+  security?: RenderTemplateSecurity | undefined,
   options?: QueryHookOptions<RenderTemplateQueryData, RenderTemplateQueryError>,
 ): UseQueryResult<RenderTemplateQueryData, RenderTemplateQueryError> {
   const client = useGramContext();
@@ -86,7 +86,7 @@ export function useRenderTemplate(
  */
 export function useRenderTemplateSuspense(
   request: RenderTemplateRequest,
-  security?: RenderTemplateSecurity  ,
+  security?: RenderTemplateSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RenderTemplateQueryData,
     RenderTemplateQueryError

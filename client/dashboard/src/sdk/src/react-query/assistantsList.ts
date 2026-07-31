@@ -62,8 +62,8 @@ export type AssistantsListQueryError =
  * List assistants for the current project.
  */
 export function useAssistantsList(
-  request?: ListAssistantsRequest  ,
-  security?: ListAssistantsSecurity  ,
+  request?: ListAssistantsRequest | undefined,
+  security?: ListAssistantsSecurity | undefined,
   options?: QueryHookOptions<AssistantsListQueryData, AssistantsListQueryError>,
 ): UseQueryResult<AssistantsListQueryData, AssistantsListQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useAssistantsList(
  * List assistants for the current project.
  */
 export function useAssistantsListSuspense(
-  request?: ListAssistantsRequest  ,
-  security?: ListAssistantsSecurity  ,
+  request?: ListAssistantsRequest | undefined,
+  security?: ListAssistantsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     AssistantsListQueryData,
     AssistantsListQueryError

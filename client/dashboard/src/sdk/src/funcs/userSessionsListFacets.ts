@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function userSessionsListFacets(
   client: GramCore,
-  request?: ListUserSessionFacetsRequest  ,
-  security?: ListUserSessionFacetsSecurity  ,
+  request?: ListUserSessionFacetsRequest | undefined,
+  security?: ListUserSessionFacetsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function userSessionsListFacets(
 
 async function $do(
   client: GramCore,
-  request?: ListUserSessionFacetsRequest  ,
-  security?: ListUserSessionFacetsSecurity  ,
+  request?: ListUserSessionFacetsRequest | undefined,
+  security?: ListUserSessionFacetsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -44,7 +44,7 @@ import { Result } from "../types/fp.js";
 export function accessCreateRole(
   client: GramCore,
   request: CreateRoleRequest,
-  security?: CreateRoleSecurity  ,
+  security?: CreateRoleSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -71,7 +71,7 @@ export function accessCreateRole(
 async function $do(
   client: GramCore,
   request: CreateRoleRequest,
-  security?: CreateRoleSecurity  ,
+  security?: CreateRoleSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

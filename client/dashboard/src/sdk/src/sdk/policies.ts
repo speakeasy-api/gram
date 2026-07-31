@@ -52,7 +52,7 @@ export class Policies extends ClientSDK {
    */
   async create(
     request: CreateRiskPolicyRequest,
-    security?: CreateRiskPolicySecurity  ,
+    security?: CreateRiskPolicySecurity | undefined,
     options?: RequestOptions,
   ): Promise<RiskPolicy> {
     return unwrapAsync(riskPoliciesCreate(
@@ -71,7 +71,7 @@ export class Policies extends ClientSDK {
    */
   async delete(
     request: DeleteRiskPolicyRequest,
-    security?: DeleteRiskPolicySecurity  ,
+    security?: DeleteRiskPolicySecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(riskPoliciesDelete(
@@ -90,7 +90,7 @@ export class Policies extends ClientSDK {
    */
   async get(
     request: GetRiskPolicyRequest,
-    security?: GetRiskPolicySecurity  ,
+    security?: GetRiskPolicySecurity | undefined,
     options?: RequestOptions,
   ): Promise<RiskPolicy> {
     return unwrapAsync(riskPoliciesGet(
@@ -109,7 +109,7 @@ export class Policies extends ClientSDK {
    */
   async status(
     request: GetRiskPolicyStatusRequest,
-    security?: GetRiskPolicyStatusSecurity  ,
+    security?: GetRiskPolicyStatusSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RiskPolicyStatus> {
     return unwrapAsync(riskPoliciesStatus(
@@ -127,8 +127,8 @@ export class Policies extends ClientSDK {
    * List all risk analysis policies for the current project.
    */
   async list(
-    request?: ListRiskPoliciesRequest  ,
-    security?: ListRiskPoliciesSecurity  ,
+    request?: ListRiskPoliciesRequest | undefined,
+    security?: ListRiskPoliciesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListRiskPoliciesResult> {
     return unwrapAsync(riskPoliciesList(
@@ -147,7 +147,7 @@ export class Policies extends ClientSDK {
    */
   async trigger(
     request: TriggerRiskAnalysisRequest,
-    security?: TriggerRiskAnalysisSecurity  ,
+    security?: TriggerRiskAnalysisSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(riskPoliciesTrigger(
@@ -166,7 +166,7 @@ export class Policies extends ClientSDK {
    */
   async update(
     request: UpdateRiskPolicyRequest,
-    security?: UpdateRiskPolicySecurity  ,
+    security?: UpdateRiskPolicySecurity | undefined,
     options?: RequestOptions,
   ): Promise<RiskPolicy> {
     return unwrapAsync(riskPoliciesUpdate(

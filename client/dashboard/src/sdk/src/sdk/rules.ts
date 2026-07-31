@@ -20,7 +20,7 @@ export class Rules extends ClientSDK {
    */
   async test(
     request: TestDetectionRuleRequest,
-    security?: TestDetectionRuleSecurity  ,
+    security?: TestDetectionRuleSecurity | undefined,
     options?: RequestOptions,
   ): Promise<TestDetectionRuleResult> {
     return unwrapAsync(riskRulesTest(

@@ -26,8 +26,8 @@ export class Auditlogs extends ClientSDK {
    * List audit logs across organization and projects.
    */
   async list(
-    request?: ListAuditLogsRequest  ,
-    security?: ListAuditLogsSecurity  ,
+    request?: ListAuditLogsRequest | undefined,
+    security?: ListAuditLogsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<PageIterator<ListAuditLogsResponse, { cursor: string }>> {
     return unwrapResultIterator(auditlogsList(
@@ -45,8 +45,8 @@ export class Auditlogs extends ClientSDK {
    * List available audit log facet values across organization and projects.
    */
   async listFacets(
-    request?: ListAuditLogFacetsRequest  ,
-    security?: ListAuditLogFacetsSecurity  ,
+    request?: ListAuditLogFacetsRequest | undefined,
+    security?: ListAuditLogFacetsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListAuditLogFacetsResult> {
     return unwrapAsync(auditlogsListFacets(

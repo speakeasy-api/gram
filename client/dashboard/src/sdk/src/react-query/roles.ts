@@ -57,8 +57,8 @@ export type RolesQueryError =
  * List all roles for the current organization.
  */
 export function useRoles(
-  request?: ListRolesRequest  ,
-  security?: ListRolesSecurity  ,
+  request?: ListRolesRequest | undefined,
+  security?: ListRolesSecurity | undefined,
   options?: QueryHookOptions<RolesQueryData, RolesQueryError>,
 ): UseQueryResult<RolesQueryData, RolesQueryError> {
   const client = useGramContext();
@@ -80,8 +80,8 @@ export function useRoles(
  * List all roles for the current organization.
  */
 export function useRolesSuspense(
-  request?: ListRolesRequest  ,
-  security?: ListRolesSecurity  ,
+  request?: ListRolesRequest | undefined,
+  security?: ListRolesSecurity | undefined,
   options?: SuspenseQueryHookOptions<RolesQueryData, RolesQueryError>,
 ): UseSuspenseQueryResult<RolesQueryData, RolesQueryError> {
   const client = useGramContext();

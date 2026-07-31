@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function accessUpsertShadowMCPInventoryPolicyBypass(
   client: GramCore,
   request: UpsertShadowMCPInventoryPolicyBypassRequest,
-  security?: UpsertShadowMCPInventoryPolicyBypassSecurity  ,
+  security?: UpsertShadowMCPInventoryPolicyBypassSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function accessUpsertShadowMCPInventoryPolicyBypass(
 async function $do(
   client: GramCore,
   request: UpsertShadowMCPInventoryPolicyBypassRequest,
-  security?: UpsertShadowMCPInventoryPolicyBypassSecurity  ,
+  security?: UpsertShadowMCPInventoryPolicyBypassSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

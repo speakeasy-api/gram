@@ -22,8 +22,8 @@ export type UserSessionFacetsQueryData = ListUserSessionFacetsResult;
 export function prefetchUserSessionFacets(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListUserSessionFacetsRequest  ,
-  security?: ListUserSessionFacetsSecurity  ,
+  request?: ListUserSessionFacetsRequest | undefined,
+  security?: ListUserSessionFacetsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchUserSessionFacets(
 
 export function buildUserSessionFacetsQuery(
   client$: GramCore,
-  request?: ListUserSessionFacetsRequest  ,
-  security?: ListUserSessionFacetsSecurity  ,
+  request?: ListUserSessionFacetsRequest | undefined,
+  security?: ListUserSessionFacetsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

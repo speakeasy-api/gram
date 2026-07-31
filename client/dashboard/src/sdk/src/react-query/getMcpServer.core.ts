@@ -22,8 +22,8 @@ export type GetMcpServerQueryData = McpServer;
 export function prefetchGetMcpServer(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetMcpServerRequest  ,
-  security?: GetMcpServerSecurity  ,
+  request?: GetMcpServerRequest | undefined,
+  security?: GetMcpServerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchGetMcpServer(
 
 export function buildGetMcpServerQuery(
   client$: GramCore,
-  request?: GetMcpServerRequest  ,
-  security?: GetMcpServerSecurity  ,
+  request?: GetMcpServerRequest | undefined,
+  security?: GetMcpServerSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

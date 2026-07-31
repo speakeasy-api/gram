@@ -37,8 +37,8 @@ export class Results extends ClientSDK {
    * List risk analysis results for the current project.
    */
   async list(
-    request?: ListRiskResultsRequest  ,
-    security?: ListRiskResultsSecurity  ,
+    request?: ListRiskResultsRequest | undefined,
+    security?: ListRiskResultsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListRiskResultsResult> {
     return unwrapAsync(riskResultsList(
@@ -56,8 +56,8 @@ export class Results extends ClientSDK {
    * List risk results grouped by chat session for the current project.
    */
   async byChat(
-    request?: ListRiskResultsByChatRequest  ,
-    security?: ListRiskResultsByChatSecurity  ,
+    request?: ListRiskResultsByChatRequest | undefined,
+    security?: ListRiskResultsByChatSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListRiskResultsByChatResult> {
     return unwrapAsync(riskResultsByChat(
@@ -75,8 +75,8 @@ export class Results extends ClientSDK {
    * List risk analysis results with the `match` field redacted to an opaque length+sha256-prefix fingerprint. Matches the payload and pagination semantics of listRiskResults. Designed for AI assistant / MCP consumption so secret content (gitleaks captures, presidio entities, prompt-injection payloads) never reaches the model context. For shadow_mcp findings the `match` value — a non-sensitive server URL or command identifier — is passed through verbatim.
    */
   async listForAgent(
-    request?: ListRiskResultsForAgentRequest  ,
-    security?: ListRiskResultsForAgentSecurity  ,
+    request?: ListRiskResultsForAgentRequest | undefined,
+    security?: ListRiskResultsForAgentSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListRiskResultsForAgentResult> {
     return unwrapAsync(riskResultsListForAgent(
@@ -95,7 +95,7 @@ export class Results extends ClientSDK {
    */
   async unmask(
     request: UnmaskRiskResultRequest,
-    security?: UnmaskRiskResultSecurity  ,
+    security?: UnmaskRiskResultSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RiskUnmaskResultResult> {
     return unwrapAsync(riskResultsUnmask(

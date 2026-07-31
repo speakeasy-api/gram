@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function environmentsGetByToolset(
   client: GramCore,
   request: GetToolsetEnvironmentRequest,
-  security?: GetToolsetEnvironmentSecurity  ,
+  security?: GetToolsetEnvironmentSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function environmentsGetByToolset(
 async function $do(
   client: GramCore,
   request: GetToolsetEnvironmentRequest,
-  security?: GetToolsetEnvironmentSecurity  ,
+  security?: GetToolsetEnvironmentSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -51,7 +51,7 @@ import {
 export function organizationRemoteSessionsList(
   client: GramCore,
   request: ListOrganizationRemoteSessionClientSessionsRequest,
-  security?: ListOrganizationRemoteSessionClientSessionsSecurity  ,
+  security?: ListOrganizationRemoteSessionClientSessionsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   PageIterator<
@@ -81,7 +81,7 @@ export function organizationRemoteSessionsList(
 async function $do(
   client: GramCore,
   request: ListOrganizationRemoteSessionClientSessionsRequest,
-  security?: ListOrganizationRemoteSessionClientSessionsSecurity  ,
+  security?: ListOrganizationRemoteSessionClientSessionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

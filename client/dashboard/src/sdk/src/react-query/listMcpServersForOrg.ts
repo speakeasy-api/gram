@@ -62,8 +62,8 @@ export type ListMcpServersForOrgQueryError =
  * List all MCP servers across the organization
  */
 export function useListMcpServersForOrg(
-  request?: ListMcpServersForOrgRequest  ,
-  security?: ListMcpServersForOrgSecurity  ,
+  request?: ListMcpServersForOrgRequest | undefined,
+  security?: ListMcpServersForOrgSecurity | undefined,
   options?: QueryHookOptions<
     ListMcpServersForOrgQueryData,
     ListMcpServersForOrgQueryError
@@ -91,8 +91,8 @@ export function useListMcpServersForOrg(
  * List all MCP servers across the organization
  */
 export function useListMcpServersForOrgSuspense(
-  request?: ListMcpServersForOrgRequest  ,
-  security?: ListMcpServersForOrgSecurity  ,
+  request?: ListMcpServersForOrgRequest | undefined,
+  security?: ListMcpServersForOrgSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListMcpServersForOrgQueryData,
     ListMcpServersForOrgQueryError

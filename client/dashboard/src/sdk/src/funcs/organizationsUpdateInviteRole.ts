@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function organizationsUpdateInviteRole(
   client: GramCore,
   request: UpdateInviteRoleRequest,
-  security?: UpdateInviteRoleSecurity  ,
+  security?: UpdateInviteRoleSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function organizationsUpdateInviteRole(
 async function $do(
   client: GramCore,
   request: UpdateInviteRoleRequest,
-  security?: UpdateInviteRoleSecurity  ,
+  security?: UpdateInviteRoleSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -62,8 +62,8 @@ export type ValidateAPIKeyQueryError =
  * Verify an api key
  */
 export function useValidateAPIKey(
-  request?: ValidateAPIKeyRequest  ,
-  security?: ValidateAPIKeySecurity  ,
+  request?: ValidateAPIKeyRequest | undefined,
+  security?: ValidateAPIKeySecurity | undefined,
   options?: QueryHookOptions<ValidateAPIKeyQueryData, ValidateAPIKeyQueryError>,
 ): UseQueryResult<ValidateAPIKeyQueryData, ValidateAPIKeyQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useValidateAPIKey(
  * Verify an api key
  */
 export function useValidateAPIKeySuspense(
-  request?: ValidateAPIKeyRequest  ,
-  security?: ValidateAPIKeySecurity  ,
+  request?: ValidateAPIKeyRequest | undefined,
+  security?: ValidateAPIKeySecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ValidateAPIKeyQueryData,
     ValidateAPIKeyQueryError

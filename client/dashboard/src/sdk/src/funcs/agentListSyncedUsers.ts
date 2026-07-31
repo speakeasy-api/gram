@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function agentListSyncedUsers(
   client: GramCore,
-  request?: ListSyncedAgentUsersRequest  ,
-  security?: ListSyncedAgentUsersSecurity  ,
+  request?: ListSyncedAgentUsersRequest | undefined,
+  security?: ListSyncedAgentUsersSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function agentListSyncedUsers(
 
 async function $do(
   client: GramCore,
-  request?: ListSyncedAgentUsersRequest  ,
-  security?: ListSyncedAgentUsersSecurity  ,
+  request?: ListSyncedAgentUsersRequest | undefined,
+  security?: ListSyncedAgentUsersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

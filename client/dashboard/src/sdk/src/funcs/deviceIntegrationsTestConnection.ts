@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function deviceIntegrationsTestConnection(
   client: GramCore,
   request: TestDeviceIntegrationConnectionRequest,
-  security?: TestDeviceIntegrationConnectionSecurity  ,
+  security?: TestDeviceIntegrationConnectionSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function deviceIntegrationsTestConnection(
 async function $do(
   client: GramCore,
   request: TestDeviceIntegrationConnectionRequest,
-  security?: TestDeviceIntegrationConnectionSecurity  ,
+  security?: TestDeviceIntegrationConnectionSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function pluginsSetPluginAssignments(
   client: GramCore,
   request: SetPluginAssignmentsRequest,
-  security?: SetPluginAssignmentsSecurity  ,
+  security?: SetPluginAssignmentsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function pluginsSetPluginAssignments(
 async function $do(
   client: GramCore,
   request: SetPluginAssignmentsRequest,
-  security?: SetPluginAssignmentsSecurity  ,
+  security?: SetPluginAssignmentsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

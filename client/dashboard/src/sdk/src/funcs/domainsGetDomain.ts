@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function domainsGetDomain(
   client: GramCore,
-  request?: GetDomainRequest  ,
-  security?: GetDomainSecurity  ,
+  request?: GetDomainRequest | undefined,
+  security?: GetDomainSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function domainsGetDomain(
 
 async function $do(
   client: GramCore,
-  request?: GetDomainRequest  ,
-  security?: GetDomainSecurity  ,
+  request?: GetDomainRequest | undefined,
+  security?: GetDomainSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

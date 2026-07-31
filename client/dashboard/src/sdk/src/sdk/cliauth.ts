@@ -23,7 +23,7 @@ export class CliAuth extends ClientSDK {
    */
   async authorize(
     request: CliAuthAuthorizeRequest,
-    security?: CliAuthAuthorizeSecurity  ,
+    security?: CliAuthAuthorizeSecurity | undefined,
     options?: RequestOptions,
   ): Promise<AuthorizeResponseBody> {
     return unwrapAsync(cliAuthAuthorize(

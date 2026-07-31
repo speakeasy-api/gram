@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function riskResultsUnmask(
   client: GramCore,
   request: UnmaskRiskResultRequest,
-  security?: UnmaskRiskResultSecurity  ,
+  security?: UnmaskRiskResultSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function riskResultsUnmask(
 async function $do(
   client: GramCore,
   request: UnmaskRiskResultRequest,
-  security?: UnmaskRiskResultSecurity  ,
+  security?: UnmaskRiskResultSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

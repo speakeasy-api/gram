@@ -22,8 +22,8 @@ export type ListEnvironmentsQueryData = ListEnvironmentsResult;
 export function prefetchListEnvironments(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListEnvironmentsRequest  ,
-  security?: ListEnvironmentsSecurity  ,
+  request?: ListEnvironmentsRequest | undefined,
+  security?: ListEnvironmentsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListEnvironments(
 
 export function buildListEnvironmentsQuery(
   client$: GramCore,
-  request?: ListEnvironmentsRequest  ,
-  security?: ListEnvironmentsSecurity  ,
+  request?: ListEnvironmentsRequest | undefined,
+  security?: ListEnvironmentsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

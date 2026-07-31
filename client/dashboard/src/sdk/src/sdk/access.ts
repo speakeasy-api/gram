@@ -138,7 +138,7 @@ export class Access extends ClientSDK {
    */
   async createRole(
     request: CreateRoleRequest,
-    security?: CreateRoleSecurity  ,
+    security?: CreateRoleSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Role> {
     return unwrapAsync(accessCreateRole(
@@ -157,7 +157,7 @@ export class Access extends ClientSDK {
    */
   async deleteRole(
     request: DeleteRoleRequest,
-    security?: DeleteRoleSecurity  ,
+    security?: DeleteRoleSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(accessDeleteRole(
@@ -176,7 +176,7 @@ export class Access extends ClientSDK {
    */
   async deleteShadowMCPInventoryPolicyBypass(
     request: DeleteShadowMCPInventoryPolicyBypassRequest,
-    security?: DeleteShadowMCPInventoryPolicyBypassSecurity  ,
+    security?: DeleteShadowMCPInventoryPolicyBypassSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ShadowMCPInventoryURLState> {
     return unwrapAsync(accessDeleteShadowMCPInventoryPolicyBypass(
@@ -194,8 +194,8 @@ export class Access extends ClientSDK {
    * Disable RBAC enforcement for the current organization.
    */
   async disableRBAC(
-    request?: DisableRBACRequest  ,
-    security?: DisableRBACSecurity  ,
+    request?: DisableRBACRequest | undefined,
+    security?: DisableRBACSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(accessDisableRBAC(
@@ -213,8 +213,8 @@ export class Access extends ClientSDK {
    * Enable RBAC for the current organization. Seeds default grants for system roles.
    */
   async enableRBAC(
-    request?: EnableRBACRequest  ,
-    security?: EnableRBACSecurity  ,
+    request?: EnableRBACRequest | undefined,
+    security?: EnableRBACSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(accessEnableRBAC(
@@ -232,8 +232,8 @@ export class Access extends ClientSDK {
    * Returns whether RBAC is currently enabled for the current organization.
    */
   async getRBACStatus(
-    request?: GetRBACStatusRequest  ,
-    security?: GetRBACStatusSecurity  ,
+    request?: GetRBACStatusRequest | undefined,
+    security?: GetRBACStatusSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RBACStatus> {
     return unwrapAsync(accessGetRBACStatus(
@@ -252,7 +252,7 @@ export class Access extends ClientSDK {
    */
   async getRole(
     request: GetRoleRequest,
-    security?: GetRoleSecurity  ,
+    security?: GetRoleSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Role> {
     return unwrapAsync(accessGetRole(
@@ -271,7 +271,7 @@ export class Access extends ClientSDK {
    */
   async getShadowMCPInventoryServer(
     request: GetShadowMCPInventoryServerRequest,
-    security?: GetShadowMCPInventoryServerSecurity  ,
+    security?: GetShadowMCPInventoryServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ShadowMCPInventoryServer> {
     return unwrapAsync(accessGetShadowMCPInventoryServer(
@@ -289,8 +289,8 @@ export class Access extends ClientSDK {
    * List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.
    */
   async listChallengeBuckets(
-    request?: ListChallengeBucketsRequest  ,
-    security?: ListChallengeBucketsSecurity  ,
+    request?: ListChallengeBucketsRequest | undefined,
+    security?: ListChallengeBucketsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListChallengeBucketsResult> {
     return unwrapAsync(accessListChallengeBuckets(
@@ -308,8 +308,8 @@ export class Access extends ClientSDK {
    * List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.
    */
   async listChallenges(
-    request?: ListChallengesRequest  ,
-    security?: ListChallengesSecurity  ,
+    request?: ListChallengesRequest | undefined,
+    security?: ListChallengesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListChallengesResult> {
     return unwrapAsync(accessListChallenges(
@@ -327,8 +327,8 @@ export class Access extends ClientSDK {
    * List the current user's effective grants, including inherited role grants.
    */
   async listGrants(
-    request?: ListGrantsRequest  ,
-    security?: ListGrantsSecurity  ,
+    request?: ListGrantsRequest | undefined,
+    security?: ListGrantsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListUserGrantsResult> {
     return unwrapAsync(accessListGrants(
@@ -346,8 +346,8 @@ export class Access extends ClientSDK {
    * List all team members with their role assignments.
    */
   async listMembers(
-    request?: ListMembersRequest  ,
-    security?: ListMembersSecurity  ,
+    request?: ListMembersRequest | undefined,
+    security?: ListMembersSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListMembersResult> {
     return unwrapAsync(accessListMembers(
@@ -365,8 +365,8 @@ export class Access extends ClientSDK {
    * List all roles for the current organization.
    */
   async listRoles(
-    request?: ListRolesRequest  ,
-    security?: ListRolesSecurity  ,
+    request?: ListRolesRequest | undefined,
+    security?: ListRolesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListRolesResult> {
     return unwrapAsync(accessListRoles(
@@ -384,8 +384,8 @@ export class Access extends ClientSDK {
    * List all available scopes and their resource types.
    */
   async listScopes(
-    request?: ListScopesRequest  ,
-    security?: ListScopesSecurity  ,
+    request?: ListScopesRequest | undefined,
+    security?: ListScopesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListScopesResult> {
     return unwrapAsync(accessListScopes(
@@ -404,7 +404,7 @@ export class Access extends ClientSDK {
    */
   async listShadowMCPInventory(
     request: ListShadowMCPInventoryRequest,
-    security?: ListShadowMCPInventorySecurity  ,
+    security?: ListShadowMCPInventorySecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListShadowMCPInventoryResult> {
     return unwrapAsync(accessListShadowMCPInventory(
@@ -423,7 +423,7 @@ export class Access extends ClientSDK {
    */
   async listShadowMCPInventoryUsers(
     request: ListShadowMCPInventoryUsersRequest,
-    security?: ListShadowMCPInventoryUsersSecurity  ,
+    security?: ListShadowMCPInventoryUsersSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListShadowMCPInventoryUsersResult> {
     return unwrapAsync(accessListShadowMCPInventoryUsers(
@@ -442,7 +442,7 @@ export class Access extends ClientSDK {
    */
   async resolveChallenge(
     request: ResolveChallengeRequest,
-    security?: ResolveChallengeSecurity  ,
+    security?: ResolveChallengeSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ResolveChallengesResult> {
     return unwrapAsync(accessResolveChallenge(
@@ -461,7 +461,7 @@ export class Access extends ClientSDK {
    */
   async resolveShadowMCPInventoryRequest(
     request: ResolveShadowMCPInventoryRequestRequest,
-    security?: ResolveShadowMCPInventoryRequestSecurity  ,
+    security?: ResolveShadowMCPInventoryRequestSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ShadowMCPInventoryURLState> {
     return unwrapAsync(accessResolveShadowMCPInventoryRequest(
@@ -480,7 +480,7 @@ export class Access extends ClientSDK {
    */
   async updateMemberRoles(
     request: UpdateMemberRolesRequest,
-    security?: UpdateMemberRolesSecurity  ,
+    security?: UpdateMemberRolesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<AccessMember> {
     return unwrapAsync(accessUpdateMemberRoles(
@@ -499,7 +499,7 @@ export class Access extends ClientSDK {
    */
   async updateRole(
     request: UpdateRoleRequest,
-    security?: UpdateRoleSecurity  ,
+    security?: UpdateRoleSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Role> {
     return unwrapAsync(accessUpdateRole(
@@ -518,7 +518,7 @@ export class Access extends ClientSDK {
    */
   async updateShadowMCPInventoryServerName(
     request: UpdateShadowMCPInventoryServerNameRequest,
-    security?: UpdateShadowMCPInventoryServerNameSecurity  ,
+    security?: UpdateShadowMCPInventoryServerNameSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(accessUpdateShadowMCPInventoryServerName(
@@ -537,7 +537,7 @@ export class Access extends ClientSDK {
    */
   async upsertShadowMCPInventoryPolicyBypass(
     request: UpsertShadowMCPInventoryPolicyBypassRequest,
-    security?: UpsertShadowMCPInventoryPolicyBypassSecurity  ,
+    security?: UpsertShadowMCPInventoryPolicyBypassSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ShadowMCPInventoryURLState> {
     return unwrapAsync(accessUpsertShadowMCPInventoryPolicyBypass(

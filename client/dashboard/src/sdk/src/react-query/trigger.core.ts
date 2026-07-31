@@ -23,7 +23,7 @@ export function prefetchTrigger(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetTriggerInstanceRequest,
-  security?: GetTriggerInstanceSecurity  ,
+  security?: GetTriggerInstanceSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchTrigger(
 export function buildTriggerQuery(
   client$: GramCore,
   request: GetTriggerInstanceRequest,
-  security?: GetTriggerInstanceSecurity  ,
+  security?: GetTriggerInstanceSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

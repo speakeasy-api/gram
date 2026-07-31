@@ -62,8 +62,8 @@ export type ListEnvironmentsQueryError =
  * List all environments for an organization
  */
 export function useListEnvironments(
-  request?: ListEnvironmentsRequest  ,
-  security?: ListEnvironmentsSecurity  ,
+  request?: ListEnvironmentsRequest | undefined,
+  security?: ListEnvironmentsSecurity | undefined,
   options?: QueryHookOptions<
     ListEnvironmentsQueryData,
     ListEnvironmentsQueryError
@@ -88,8 +88,8 @@ export function useListEnvironments(
  * List all environments for an organization
  */
 export function useListEnvironmentsSuspense(
-  request?: ListEnvironmentsRequest  ,
-  security?: ListEnvironmentsSecurity  ,
+  request?: ListEnvironmentsRequest | undefined,
+  security?: ListEnvironmentsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListEnvironmentsQueryData,
     ListEnvironmentsQueryError

@@ -42,8 +42,8 @@ import { Result } from "../types/fp.js";
  */
 export function domainsDeleteDomain(
   client: GramCore,
-  request?: DeleteDomainRequest  ,
-  security?: DeleteDomainSecurity  ,
+  request?: DeleteDomainRequest | undefined,
+  security?: DeleteDomainSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -69,8 +69,8 @@ export function domainsDeleteDomain(
 
 async function $do(
   client: GramCore,
-  request?: DeleteDomainRequest  ,
-  security?: DeleteDomainSecurity  ,
+  request?: DeleteDomainRequest | undefined,
+  security?: DeleteDomainSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

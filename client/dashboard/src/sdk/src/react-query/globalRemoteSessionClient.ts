@@ -63,7 +63,7 @@ export type GlobalRemoteSessionClientQueryError =
  */
 export function useGlobalRemoteSessionClient(
   request: GetGlobalRemoteSessionClientRequest,
-  security?: GetGlobalRemoteSessionClientSecurity  ,
+  security?: GetGlobalRemoteSessionClientSecurity | undefined,
   options?: QueryHookOptions<
     GlobalRemoteSessionClientQueryData,
     GlobalRemoteSessionClientQueryError
@@ -92,7 +92,7 @@ export function useGlobalRemoteSessionClient(
  */
 export function useGlobalRemoteSessionClientSuspense(
   request: GetGlobalRemoteSessionClientRequest,
-  security?: GetGlobalRemoteSessionClientSecurity  ,
+  security?: GetGlobalRemoteSessionClientSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GlobalRemoteSessionClientQueryData,
     GlobalRemoteSessionClientQueryError

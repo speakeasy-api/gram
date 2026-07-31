@@ -49,7 +49,7 @@ export function organizationRemoteSessionIssuersGetDeletePreflight(
   request: GetOrganizationRemoteSessionIssuerDeletePreflightRequest,
   security?:
     | GetOrganizationRemoteSessionIssuerDeletePreflightSecurity
-     ,
+    | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -78,7 +78,7 @@ async function $do(
   request: GetOrganizationRemoteSessionIssuerDeletePreflightRequest,
   security?:
     | GetOrganizationRemoteSessionIssuerDeletePreflightSecurity
-     ,
+    | undefined,
   options?: RequestOptions,
 ): Promise<
   [

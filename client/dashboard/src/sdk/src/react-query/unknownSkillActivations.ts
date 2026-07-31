@@ -80,8 +80,8 @@ export type UnknownSkillActivationsQueryError =
  * List terminal skill activations that could not be attributed to a skill version.
  */
 export function useUnknownSkillActivations(
-  request?: ListUnknownSkillActivationsRequest  ,
-  security?: ListUnknownSkillActivationsSecurity  ,
+  request?: ListUnknownSkillActivationsRequest | undefined,
+  security?: ListUnknownSkillActivationsSecurity | undefined,
   options?: QueryHookOptions<
     UnknownSkillActivationsQueryData,
     UnknownSkillActivationsQueryError
@@ -109,8 +109,8 @@ export function useUnknownSkillActivations(
  * List terminal skill activations that could not be attributed to a skill version.
  */
 export function useUnknownSkillActivationsSuspense(
-  request?: ListUnknownSkillActivationsRequest  ,
-  security?: ListUnknownSkillActivationsSecurity  ,
+  request?: ListUnknownSkillActivationsRequest | undefined,
+  security?: ListUnknownSkillActivationsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     UnknownSkillActivationsQueryData,
     UnknownSkillActivationsQueryError
@@ -138,8 +138,8 @@ export function useUnknownSkillActivationsSuspense(
  * List terminal skill activations that could not be attributed to a skill version.
  */
 export function useUnknownSkillActivationsInfinite(
-  request?: ListUnknownSkillActivationsRequest  ,
-  security?: ListUnknownSkillActivationsSecurity  ,
+  request?: ListUnknownSkillActivationsRequest | undefined,
+  security?: ListUnknownSkillActivationsSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     UnknownSkillActivationsInfiniteQueryData,
     UnknownSkillActivationsQueryError
@@ -181,8 +181,8 @@ export function useUnknownSkillActivationsInfinite(
  * List terminal skill activations that could not be attributed to a skill version.
  */
 export function useUnknownSkillActivationsInfiniteSuspense(
-  request?: ListUnknownSkillActivationsRequest  ,
-  security?: ListUnknownSkillActivationsSecurity  ,
+  request?: ListUnknownSkillActivationsRequest | undefined,
+  security?: ListUnknownSkillActivationsSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     UnknownSkillActivationsInfiniteQueryData,
     UnknownSkillActivationsQueryError

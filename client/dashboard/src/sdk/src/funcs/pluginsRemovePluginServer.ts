@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function pluginsRemovePluginServer(
   client: GramCore,
   request: RemovePluginServerRequest,
-  security?: RemovePluginServerSecurity  ,
+  security?: RemovePluginServerSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function pluginsRemovePluginServer(
 async function $do(
   client: GramCore,
   request: RemovePluginServerRequest,
-  security?: RemovePluginServerSecurity  ,
+  security?: RemovePluginServerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

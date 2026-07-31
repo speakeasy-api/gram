@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function chatSessionsCreate(
   client: GramCore,
   request: CreateChatSessionRequest,
-  security?: CreateChatSessionSecurity  ,
+  security?: CreateChatSessionSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function chatSessionsCreate(
 async function $do(
   client: GramCore,
   request: CreateChatSessionRequest,
-  security?: CreateChatSessionSecurity  ,
+  security?: CreateChatSessionSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

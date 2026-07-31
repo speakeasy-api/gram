@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function collectionsListServers(
   client: GramCore,
   request: ListCollectionServersRequest,
-  security?: ListCollectionServersSecurity  ,
+  security?: ListCollectionServersSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function collectionsListServers(
 async function $do(
   client: GramCore,
   request: ListCollectionServersRequest,
-  security?: ListCollectionServersSecurity  ,
+  security?: ListCollectionServersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function riskEvalsSaveReview(
   client: GramCore,
   request: SaveRiskEvalReviewRequest,
-  security?: SaveRiskEvalReviewSecurity  ,
+  security?: SaveRiskEvalReviewSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function riskEvalsSaveReview(
 async function $do(
   client: GramCore,
   request: SaveRiskEvalReviewRequest,
-  security?: SaveRiskEvalReviewSecurity  ,
+  security?: SaveRiskEvalReviewSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

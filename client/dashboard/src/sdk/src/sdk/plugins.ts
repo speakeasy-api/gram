@@ -105,7 +105,7 @@ export class Plugins extends ClientSDK {
    */
   async addPluginServer(
     request: AddPluginServerRequest,
-    security?: AddPluginServerSecurity  ,
+    security?: AddPluginServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<PluginServer> {
     return unwrapAsync(pluginsAddPluginServer(
@@ -124,7 +124,7 @@ export class Plugins extends ClientSDK {
    */
   async createPlugin(
     request: CreatePluginRequest,
-    security?: CreatePluginSecurity  ,
+    security?: CreatePluginSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Plugin> {
     return unwrapAsync(pluginsCreatePlugin(
@@ -143,7 +143,7 @@ export class Plugins extends ClientSDK {
    */
   async deletePlugin(
     request: DeletePluginRequest,
-    security?: DeletePluginSecurity  ,
+    security?: DeletePluginSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(pluginsDeletePlugin(
@@ -161,8 +161,8 @@ export class Plugins extends ClientSDK {
    * Download a bash install script that registers the Codex observability marketplace and pre-approves all hook events. Requires a published marketplace.
    */
   async downloadCodexInstallScript(
-    request?: DownloadCodexInstallScriptRequest  ,
-    security?: DownloadCodexInstallScriptSecurity  ,
+    request?: DownloadCodexInstallScriptRequest | undefined,
+    security?: DownloadCodexInstallScriptSecurity | undefined,
     options?: RequestOptions,
   ): Promise<DownloadCodexInstallScriptResponse> {
     return unwrapAsync(pluginsDownloadCodexInstallScript(
@@ -181,7 +181,7 @@ export class Plugins extends ClientSDK {
    */
   async downloadObservabilityPlugin(
     request: DownloadObservabilityPluginRequest,
-    security?: DownloadObservabilityPluginSecurity  ,
+    security?: DownloadObservabilityPluginSecurity | undefined,
     options?: RequestOptions,
   ): Promise<DownloadObservabilityPluginResponse> {
     return unwrapAsync(pluginsDownloadObservabilityPlugin(
@@ -200,7 +200,7 @@ export class Plugins extends ClientSDK {
    */
   async downloadPluginPackage(
     request: DownloadPluginPackageRequest,
-    security?: DownloadPluginPackageSecurity  ,
+    security?: DownloadPluginPackageSecurity | undefined,
     options?: RequestOptions,
   ): Promise<DownloadPluginPackageResponse> {
     return unwrapAsync(pluginsDownloadPluginPackage(
@@ -218,8 +218,8 @@ export class Plugins extends ClientSDK {
    * Get the marketplace settings for the current project, including the effective marketplace name and the server-side default.
    */
   async getMarketplaceSettings(
-    request?: GetMarketplaceSettingsRequest  ,
-    security?: GetMarketplaceSettingsSecurity  ,
+    request?: GetMarketplaceSettingsRequest | undefined,
+    security?: GetMarketplaceSettingsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<MarketplaceSettingsResult> {
     return unwrapAsync(pluginsGetMarketplaceSettings(
@@ -238,7 +238,7 @@ export class Plugins extends ClientSDK {
    */
   async getPlugin(
     request: GetPluginRequest,
-    security?: GetPluginSecurity  ,
+    security?: GetPluginSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Plugin> {
     return unwrapAsync(pluginsGetPlugin(
@@ -256,8 +256,8 @@ export class Plugins extends ClientSDK {
    * Check whether GitHub publishing is configured and connected for this project.
    */
   async getPublishStatus(
-    request?: GetPublishStatusRequest  ,
-    security?: GetPublishStatusSecurity  ,
+    request?: GetPublishStatusRequest | undefined,
+    security?: GetPublishStatusSecurity | undefined,
     options?: RequestOptions,
   ): Promise<PublishStatusResult> {
     return unwrapAsync(pluginsGetPublishStatus(
@@ -275,8 +275,8 @@ export class Plugins extends ClientSDK {
    * List all plugins for the current project.
    */
   async listPlugins(
-    request?: ListPluginsRequest  ,
-    security?: ListPluginsSecurity  ,
+    request?: ListPluginsRequest | undefined,
+    security?: ListPluginsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListPluginsResult> {
     return unwrapAsync(pluginsListPlugins(
@@ -295,7 +295,7 @@ export class Plugins extends ClientSDK {
    */
   async publishPlugins(
     request: PublishPluginsRequest,
-    security?: PublishPluginsSecurity  ,
+    security?: PublishPluginsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<PublishPluginsResult> {
     return unwrapAsync(pluginsPublishPlugins(
@@ -314,7 +314,7 @@ export class Plugins extends ClientSDK {
    */
   async removePluginServer(
     request: RemovePluginServerRequest,
-    security?: RemovePluginServerSecurity  ,
+    security?: RemovePluginServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(pluginsRemovePluginServer(
@@ -333,7 +333,7 @@ export class Plugins extends ClientSDK {
    */
   async setPluginAssignments(
     request: SetPluginAssignmentsRequest,
-    security?: SetPluginAssignmentsSecurity  ,
+    security?: SetPluginAssignmentsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<SetPluginAssignmentsResponseBody> {
     return unwrapAsync(pluginsSetPluginAssignments(
@@ -352,7 +352,7 @@ export class Plugins extends ClientSDK {
    */
   async updateMarketplaceSettings(
     request: UpdateMarketplaceSettingsRequest,
-    security?: UpdateMarketplaceSettingsSecurity  ,
+    security?: UpdateMarketplaceSettingsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<UpdateMarketplaceSettingsResult> {
     return unwrapAsync(pluginsUpdateMarketplaceSettings(
@@ -371,7 +371,7 @@ export class Plugins extends ClientSDK {
    */
   async updatePlugin(
     request: UpdatePluginRequest,
-    security?: UpdatePluginSecurity  ,
+    security?: UpdatePluginSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Plugin> {
     return unwrapAsync(pluginsUpdatePlugin(
@@ -390,7 +390,7 @@ export class Plugins extends ClientSDK {
    */
   async updatePluginServer(
     request: UpdatePluginServerRequest,
-    security?: UpdatePluginServerSecurity  ,
+    security?: UpdatePluginServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<PluginServer> {
     return unwrapAsync(pluginsUpdatePluginServer(

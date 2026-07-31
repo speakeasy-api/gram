@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function externalKeysDeleteAwsKms(
   client: GramCore,
   request: DeleteAwsKmsKeyRequest,
-  security?: DeleteAwsKmsKeySecurity  ,
+  security?: DeleteAwsKmsKeySecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function externalKeysDeleteAwsKms(
 async function $do(
   client: GramCore,
   request: DeleteAwsKmsKeyRequest,
-  security?: DeleteAwsKmsKeySecurity  ,
+  security?: DeleteAwsKmsKeySecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

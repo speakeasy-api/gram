@@ -47,7 +47,7 @@ export class AiIntegrations extends ClientSDK {
    */
   async deleteConfig(
     request: DeleteAIIntegrationConfigRequest,
-    security?: DeleteAIIntegrationConfigSecurity  ,
+    security?: DeleteAIIntegrationConfigSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(aiIntegrationsDeleteConfig(
@@ -66,7 +66,7 @@ export class AiIntegrations extends ClientSDK {
    */
   async getConfig(
     request: GetAIIntegrationConfigRequest,
-    security?: GetAIIntegrationConfigSecurity  ,
+    security?: GetAIIntegrationConfigSecurity | undefined,
     options?: RequestOptions,
   ): Promise<AIIntegrationConfig> {
     return unwrapAsync(aiIntegrationsGetConfig(
@@ -85,7 +85,7 @@ export class AiIntegrations extends ClientSDK {
    */
   async listSchedules(
     request: ListAIIntegrationSchedulesRequest,
-    security?: ListAIIntegrationSchedulesSecurity  ,
+    security?: ListAIIntegrationSchedulesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListAIIntegrationSchedulesResult> {
     return unwrapAsync(aiIntegrationsListSchedules(
@@ -104,7 +104,7 @@ export class AiIntegrations extends ClientSDK {
    */
   async retrySchedule(
     request: RetryAIIntegrationScheduleRequest,
-    security?: RetryAIIntegrationScheduleSecurity  ,
+    security?: RetryAIIntegrationScheduleSecurity | undefined,
     options?: RequestOptions,
   ): Promise<AIIntegrationScheduleState> {
     return unwrapAsync(aiIntegrationsRetrySchedule(
@@ -123,7 +123,7 @@ export class AiIntegrations extends ClientSDK {
    */
   async setScheduleEnabled(
     request: SetAIIntegrationScheduleEnabledRequest,
-    security?: SetAIIntegrationScheduleEnabledSecurity  ,
+    security?: SetAIIntegrationScheduleEnabledSecurity | undefined,
     options?: RequestOptions,
   ): Promise<AIIntegrationScheduleState> {
     return unwrapAsync(aiIntegrationsSetScheduleEnabled(
@@ -142,7 +142,7 @@ export class AiIntegrations extends ClientSDK {
    */
   async upsertConfig(
     request: UpsertAIIntegrationConfigRequest,
-    security?: UpsertAIIntegrationConfigSecurity  ,
+    security?: UpsertAIIntegrationConfigSecurity | undefined,
     options?: RequestOptions,
   ): Promise<AIIntegrationConfig> {
     return unwrapAsync(aiIntegrationsUpsertConfig(

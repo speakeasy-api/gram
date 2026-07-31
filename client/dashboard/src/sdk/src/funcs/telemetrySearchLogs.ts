@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function telemetrySearchLogs(
   client: GramCore,
   request: SearchLogsRequest,
-  security?: SearchLogsSecurity  ,
+  security?: SearchLogsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function telemetrySearchLogs(
 async function $do(
   client: GramCore,
   request: SearchLogsRequest,
-  security?: SearchLogsSecurity  ,
+  security?: SearchLogsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

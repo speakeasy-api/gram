@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function telemetryGetMcpServerActivity(
   client: GramCore,
   request: GetMcpServerActivityRequest,
-  security?: GetMcpServerActivitySecurity  ,
+  security?: GetMcpServerActivitySecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function telemetryGetMcpServerActivity(
 async function $do(
   client: GramCore,
   request: GetMcpServerActivityRequest,
-  security?: GetMcpServerActivitySecurity  ,
+  security?: GetMcpServerActivitySecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function spendRulesEventsList(
   client: GramCore,
-  request?: ListSpendRuleEventsRequest  ,
-  security?: ListSpendRuleEventsSecurity  ,
+  request?: ListSpendRuleEventsRequest | undefined,
+  security?: ListSpendRuleEventsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function spendRulesEventsList(
 
 async function $do(
   client: GramCore,
-  request?: ListSpendRuleEventsRequest  ,
-  security?: ListSpendRuleEventsSecurity  ,
+  request?: ListSpendRuleEventsRequest | undefined,
+  security?: ListSpendRuleEventsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

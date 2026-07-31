@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function mcpRegistriesListCatalog(
   client: GramCore,
-  request?: ListMCPCatalogRequest  ,
-  security?: ListMCPCatalogSecurity  ,
+  request?: ListMCPCatalogRequest | undefined,
+  security?: ListMCPCatalogSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function mcpRegistriesListCatalog(
 
 async function $do(
   client: GramCore,
-  request?: ListMCPCatalogRequest  ,
-  security?: ListMCPCatalogSecurity  ,
+  request?: ListMCPCatalogRequest | undefined,
+  security?: ListMCPCatalogSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

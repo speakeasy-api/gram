@@ -64,7 +64,7 @@ export type GetSourceEnvironmentQueryError =
  */
 export function useGetSourceEnvironment(
   request: GetSourceEnvironmentRequest,
-  security?: GetSourceEnvironmentSecurity  ,
+  security?: GetSourceEnvironmentSecurity | undefined,
   options?: QueryHookOptions<
     GetSourceEnvironmentQueryData,
     GetSourceEnvironmentQueryError
@@ -93,7 +93,7 @@ export function useGetSourceEnvironment(
  */
 export function useGetSourceEnvironmentSuspense(
   request: GetSourceEnvironmentRequest,
-  security?: GetSourceEnvironmentSecurity  ,
+  security?: GetSourceEnvironmentSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetSourceEnvironmentQueryData,
     GetSourceEnvironmentQueryError

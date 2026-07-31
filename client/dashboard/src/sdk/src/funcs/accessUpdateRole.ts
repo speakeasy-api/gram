@@ -44,7 +44,7 @@ import { Result } from "../types/fp.js";
 export function accessUpdateRole(
   client: GramCore,
   request: UpdateRoleRequest,
-  security?: UpdateRoleSecurity  ,
+  security?: UpdateRoleSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -71,7 +71,7 @@ export function accessUpdateRole(
 async function $do(
   client: GramCore,
   request: UpdateRoleRequest,
-  security?: UpdateRoleSecurity  ,
+  security?: UpdateRoleSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

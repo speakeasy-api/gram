@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function pluginsAddPluginServer(
   client: GramCore,
   request: AddPluginServerRequest,
-  security?: AddPluginServerSecurity  ,
+  security?: AddPluginServerSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function pluginsAddPluginServer(
 async function $do(
   client: GramCore,
   request: AddPluginServerRequest,
-  security?: AddPluginServerSecurity  ,
+  security?: AddPluginServerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

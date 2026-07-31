@@ -58,7 +58,7 @@ export type RoleQueryError =
  */
 export function useRole(
   request: GetRoleRequest,
-  security?: GetRoleSecurity  ,
+  security?: GetRoleSecurity | undefined,
   options?: QueryHookOptions<RoleQueryData, RoleQueryError>,
 ): UseQueryResult<RoleQueryData, RoleQueryError> {
   const client = useGramContext();
@@ -81,7 +81,7 @@ export function useRole(
  */
 export function useRoleSuspense(
   request: GetRoleRequest,
-  security?: GetRoleSecurity  ,
+  security?: GetRoleSecurity | undefined,
   options?: SuspenseQueryHookOptions<RoleQueryData, RoleQueryError>,
 ): UseSuspenseQueryResult<RoleQueryData, RoleQueryError> {
   const client = useGramContext();

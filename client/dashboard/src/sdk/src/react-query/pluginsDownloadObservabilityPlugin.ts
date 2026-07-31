@@ -64,7 +64,7 @@ export type PluginsDownloadObservabilityPluginQueryError =
  */
 export function usePluginsDownloadObservabilityPlugin(
   request: DownloadObservabilityPluginRequest,
-  security?: DownloadObservabilityPluginSecurity  ,
+  security?: DownloadObservabilityPluginSecurity | undefined,
   options?: QueryHookOptions<
     PluginsDownloadObservabilityPluginQueryData,
     PluginsDownloadObservabilityPluginQueryError
@@ -93,7 +93,7 @@ export function usePluginsDownloadObservabilityPlugin(
  */
 export function usePluginsDownloadObservabilityPluginSuspense(
   request: DownloadObservabilityPluginRequest,
-  security?: DownloadObservabilityPluginSecurity  ,
+  security?: DownloadObservabilityPluginSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     PluginsDownloadObservabilityPluginQueryData,
     PluginsDownloadObservabilityPluginQueryError

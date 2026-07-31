@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function adminRemoteSessionsDeleteGlobalIssuer(
   client: GramCore,
   request: DeleteGlobalRemoteSessionIssuerRequest,
-  security?: DeleteGlobalRemoteSessionIssuerSecurity  ,
+  security?: DeleteGlobalRemoteSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function adminRemoteSessionsDeleteGlobalIssuer(
 async function $do(
   client: GramCore,
   request: DeleteGlobalRemoteSessionIssuerRequest,
-  security?: DeleteGlobalRemoteSessionIssuerSecurity  ,
+  security?: DeleteGlobalRemoteSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

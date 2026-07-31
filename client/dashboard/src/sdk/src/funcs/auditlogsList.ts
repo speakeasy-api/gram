@@ -50,8 +50,8 @@ import {
  */
 export function auditlogsList(
   client: GramCore,
-  request?: ListAuditLogsRequest  ,
-  security?: ListAuditLogsSecurity  ,
+  request?: ListAuditLogsRequest | undefined,
+  security?: ListAuditLogsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   PageIterator<
@@ -80,8 +80,8 @@ export function auditlogsList(
 
 async function $do(
   client: GramCore,
-  request?: ListAuditLogsRequest  ,
-  security?: ListAuditLogsSecurity  ,
+  request?: ListAuditLogsRequest | undefined,
+  security?: ListAuditLogsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

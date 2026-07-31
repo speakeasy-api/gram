@@ -63,7 +63,7 @@ export type GetGcpIamPlatformCredentialQueryError =
  */
 export function useGetGcpIamPlatformCredential(
   request: GetGcpIamPlatformCredentialRequest,
-  security?: GetGcpIamPlatformCredentialSecurity  ,
+  security?: GetGcpIamPlatformCredentialSecurity | undefined,
   options?: QueryHookOptions<
     GetGcpIamPlatformCredentialQueryData,
     GetGcpIamPlatformCredentialQueryError
@@ -92,7 +92,7 @@ export function useGetGcpIamPlatformCredential(
  */
 export function useGetGcpIamPlatformCredentialSuspense(
   request: GetGcpIamPlatformCredentialRequest,
-  security?: GetGcpIamPlatformCredentialSecurity  ,
+  security?: GetGcpIamPlatformCredentialSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetGcpIamPlatformCredentialQueryData,
     GetGcpIamPlatformCredentialQueryError

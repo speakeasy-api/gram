@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function cliAuthAuthorize(
   client: GramCore,
   request: CliAuthAuthorizeRequest,
-  security?: CliAuthAuthorizeSecurity  ,
+  security?: CliAuthAuthorizeSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function cliAuthAuthorize(
 async function $do(
   client: GramCore,
   request: CliAuthAuthorizeRequest,
-  security?: CliAuthAuthorizeSecurity  ,
+  security?: CliAuthAuthorizeSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

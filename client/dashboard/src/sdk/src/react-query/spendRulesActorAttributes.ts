@@ -62,8 +62,8 @@ export type SpendRulesActorAttributesQueryError =
  * List the member attributes a rule target condition can be written against, with each attribute's value kind. Static reference data that powers the rule editor's attribute picker.
  */
 export function useSpendRulesActorAttributes(
-  request?: ListSpendRuleActorAttributesRequest  ,
-  security?: ListSpendRuleActorAttributesSecurity  ,
+  request?: ListSpendRuleActorAttributesRequest | undefined,
+  security?: ListSpendRuleActorAttributesSecurity | undefined,
   options?: QueryHookOptions<
     SpendRulesActorAttributesQueryData,
     SpendRulesActorAttributesQueryError
@@ -91,8 +91,8 @@ export function useSpendRulesActorAttributes(
  * List the member attributes a rule target condition can be written against, with each attribute's value kind. Static reference data that powers the rule editor's attribute picker.
  */
 export function useSpendRulesActorAttributesSuspense(
-  request?: ListSpendRuleActorAttributesRequest  ,
-  security?: ListSpendRuleActorAttributesSecurity  ,
+  request?: ListSpendRuleActorAttributesRequest | undefined,
+  security?: ListSpendRuleActorAttributesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     SpendRulesActorAttributesQueryData,
     SpendRulesActorAttributesQueryError

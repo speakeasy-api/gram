@@ -62,7 +62,7 @@ export class RemoteSessionClients extends ClientSDK {
    */
   async attachUserSessionIssuer(
     request: AttachUserSessionIssuerRequest,
-    security?: AttachUserSessionIssuerSecurity  ,
+    security?: AttachUserSessionIssuerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RemoteSessionClient> {
     return unwrapAsync(remoteSessionClientsAttachUserSessionIssuer(
@@ -81,7 +81,7 @@ export class RemoteSessionClients extends ClientSDK {
    */
   async cloneClientFromOAuthProxyProvider(
     request: CloneClientFromOAuthProxyProviderRequest,
-    security?: CloneClientFromOAuthProxyProviderSecurity  ,
+    security?: CloneClientFromOAuthProxyProviderSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RemoteSessionClient> {
     return unwrapAsync(remoteSessionClientsCloneClientFromOAuthProxyProvider(
@@ -100,7 +100,7 @@ export class RemoteSessionClients extends ClientSDK {
    */
   async create(
     request: CreateRemoteSessionClientRequest,
-    security?: CreateRemoteSessionClientSecurity  ,
+    security?: CreateRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RemoteSessionClient> {
     return unwrapAsync(remoteSessionClientsCreate(
@@ -119,7 +119,7 @@ export class RemoteSessionClients extends ClientSDK {
    */
   async createCimd(
     request: CreateCimdRemoteSessionClientRequest,
-    security?: CreateCimdRemoteSessionClientSecurity  ,
+    security?: CreateCimdRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RemoteSessionClient> {
     return unwrapAsync(remoteSessionClientsCreateCimd(
@@ -138,7 +138,7 @@ export class RemoteSessionClients extends ClientSDK {
    */
   async delete(
     request: DeleteRemoteSessionClientRequest,
-    security?: DeleteRemoteSessionClientSecurity  ,
+    security?: DeleteRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(remoteSessionClientsDelete(
@@ -157,7 +157,7 @@ export class RemoteSessionClients extends ClientSDK {
    */
   async detachUserSessionIssuer(
     request: DetachUserSessionIssuerRequest,
-    security?: DetachUserSessionIssuerSecurity  ,
+    security?: DetachUserSessionIssuerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RemoteSessionClient> {
     return unwrapAsync(remoteSessionClientsDetachUserSessionIssuer(
@@ -176,7 +176,7 @@ export class RemoteSessionClients extends ClientSDK {
    */
   async get(
     request: GetRemoteSessionClientRequest,
-    security?: GetRemoteSessionClientSecurity  ,
+    security?: GetRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RemoteSessionClient> {
     return unwrapAsync(remoteSessionClientsGet(
@@ -194,8 +194,8 @@ export class RemoteSessionClients extends ClientSDK {
    * List remote_session_clients in the caller's project.
    */
   async list(
-    request?: ListRemoteSessionClientsRequest  ,
-    security?: ListRemoteSessionClientsSecurity  ,
+    request?: ListRemoteSessionClientsRequest | undefined,
+    security?: ListRemoteSessionClientsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<
     PageIterator<ListRemoteSessionClientsResponse, { cursor: string }>
@@ -216,7 +216,7 @@ export class RemoteSessionClients extends ClientSDK {
    */
   async update(
     request: UpdateRemoteSessionClientRequest,
-    security?: UpdateRemoteSessionClientSecurity  ,
+    security?: UpdateRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RemoteSessionClient> {
     return unwrapAsync(remoteSessionClientsUpdate(

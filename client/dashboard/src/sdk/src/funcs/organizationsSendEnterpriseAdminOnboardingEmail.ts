@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function organizationsSendEnterpriseAdminOnboardingEmail(
   client: GramCore,
   request: SendEnterpriseAdminOnboardingEmailRequest,
-  security?: SendEnterpriseAdminOnboardingEmailSecurity  ,
+  security?: SendEnterpriseAdminOnboardingEmailSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function organizationsSendEnterpriseAdminOnboardingEmail(
 async function $do(
   client: GramCore,
   request: SendEnterpriseAdminOnboardingEmailRequest,
-  security?: SendEnterpriseAdminOnboardingEmailSecurity  ,
+  security?: SendEnterpriseAdminOnboardingEmailSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

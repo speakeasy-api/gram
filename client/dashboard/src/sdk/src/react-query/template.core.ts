@@ -22,8 +22,8 @@ export type TemplateQueryData = GetPromptTemplateResult;
 export function prefetchTemplate(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetTemplateRequest  ,
-  security?: GetTemplateSecurity  ,
+  request?: GetTemplateRequest | undefined,
+  security?: GetTemplateSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchTemplate(
 
 export function buildTemplateQuery(
   client$: GramCore,
-  request?: GetTemplateRequest  ,
-  security?: GetTemplateSecurity  ,
+  request?: GetTemplateRequest | undefined,
+  security?: GetTemplateSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

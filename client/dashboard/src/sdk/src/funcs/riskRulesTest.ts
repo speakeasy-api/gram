@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function riskRulesTest(
   client: GramCore,
   request: TestDetectionRuleRequest,
-  security?: TestDetectionRuleSecurity  ,
+  security?: TestDetectionRuleSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function riskRulesTest(
 async function $do(
   client: GramCore,
   request: TestDetectionRuleRequest,
-  security?: TestDetectionRuleSecurity  ,
+  security?: TestDetectionRuleSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

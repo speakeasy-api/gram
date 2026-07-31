@@ -62,8 +62,8 @@ export type UserSessionIssuerQueryError =
  * Get a user_session_issuer by id or by slug. Provide exactly one.
  */
 export function useUserSessionIssuer(
-  request?: GetUserSessionIssuerRequest  ,
-  security?: GetUserSessionIssuerSecurity  ,
+  request?: GetUserSessionIssuerRequest | undefined,
+  security?: GetUserSessionIssuerSecurity | undefined,
   options?: QueryHookOptions<
     UserSessionIssuerQueryData,
     UserSessionIssuerQueryError
@@ -88,8 +88,8 @@ export function useUserSessionIssuer(
  * Get a user_session_issuer by id or by slug. Provide exactly one.
  */
 export function useUserSessionIssuerSuspense(
-  request?: GetUserSessionIssuerRequest  ,
-  security?: GetUserSessionIssuerSecurity  ,
+  request?: GetUserSessionIssuerRequest | undefined,
+  security?: GetUserSessionIssuerSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     UserSessionIssuerQueryData,
     UserSessionIssuerQueryError

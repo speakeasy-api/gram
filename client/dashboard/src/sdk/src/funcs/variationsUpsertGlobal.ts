@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function variationsUpsertGlobal(
   client: GramCore,
   request: UpsertGlobalVariationRequest,
-  security?: UpsertGlobalVariationSecurity  ,
+  security?: UpsertGlobalVariationSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function variationsUpsertGlobal(
 async function $do(
   client: GramCore,
   request: UpsertGlobalVariationRequest,
-  security?: UpsertGlobalVariationSecurity  ,
+  security?: UpsertGlobalVariationSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

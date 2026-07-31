@@ -65,7 +65,7 @@ export function useOrganizationRemoteSessionIssuerMigratePreflight(
   request: GetOrganizationRemoteSessionIssuerMigratePreflightRequest,
   security?:
     | GetOrganizationRemoteSessionIssuerMigratePreflightSecurity
-     ,
+    | undefined,
   options?: QueryHookOptions<
     OrganizationRemoteSessionIssuerMigratePreflightQueryData,
     OrganizationRemoteSessionIssuerMigratePreflightQueryError
@@ -96,7 +96,7 @@ export function useOrganizationRemoteSessionIssuerMigratePreflightSuspense(
   request: GetOrganizationRemoteSessionIssuerMigratePreflightRequest,
   security?:
     | GetOrganizationRemoteSessionIssuerMigratePreflightSecurity
-     ,
+    | undefined,
   options?: SuspenseQueryHookOptions<
     OrganizationRemoteSessionIssuerMigratePreflightQueryData,
     OrganizationRemoteSessionIssuerMigratePreflightQueryError

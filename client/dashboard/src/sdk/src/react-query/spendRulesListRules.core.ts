@@ -22,8 +22,8 @@ export type SpendRulesListRulesQueryData = ListSpendRulesResult;
 export function prefetchSpendRulesListRules(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListSpendRulesRequest  ,
-  security?: ListSpendRulesSecurity  ,
+  request?: ListSpendRulesRequest | undefined,
+  security?: ListSpendRulesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchSpendRulesListRules(
 
 export function buildSpendRulesListRulesQuery(
   client$: GramCore,
-  request?: ListSpendRulesRequest  ,
-  security?: ListSpendRulesSecurity  ,
+  request?: ListSpendRulesRequest | undefined,
+  security?: ListSpendRulesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

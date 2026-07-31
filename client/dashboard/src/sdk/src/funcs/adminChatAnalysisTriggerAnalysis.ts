@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function adminChatAnalysisTriggerAnalysis(
   client: GramCore,
-  request?: TriggerChatAnalysisRequest  ,
-  security?: TriggerChatAnalysisSecurity  ,
+  request?: TriggerChatAnalysisRequest | undefined,
+  security?: TriggerChatAnalysisSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function adminChatAnalysisTriggerAnalysis(
 
 async function $do(
   client: GramCore,
-  request?: TriggerChatAnalysisRequest  ,
-  security?: TriggerChatAnalysisSecurity  ,
+  request?: TriggerChatAnalysisRequest | undefined,
+  security?: TriggerChatAnalysisSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

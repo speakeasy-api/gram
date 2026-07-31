@@ -23,8 +23,8 @@ export type PluginsDownloadCodexInstallScriptQueryData =
 export function prefetchPluginsDownloadCodexInstallScript(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: DownloadCodexInstallScriptRequest  ,
-  security?: DownloadCodexInstallScriptSecurity  ,
+  request?: DownloadCodexInstallScriptRequest | undefined,
+  security?: DownloadCodexInstallScriptSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,8 +39,8 @@ export function prefetchPluginsDownloadCodexInstallScript(
 
 export function buildPluginsDownloadCodexInstallScriptQuery(
   client$: GramCore,
-  request?: DownloadCodexInstallScriptRequest  ,
-  security?: DownloadCodexInstallScriptSecurity  ,
+  request?: DownloadCodexInstallScriptRequest | undefined,
+  security?: DownloadCodexInstallScriptSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

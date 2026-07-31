@@ -22,8 +22,8 @@ export type SpendRulesActorAttributesQueryData = ListActorAttributesResult;
 export function prefetchSpendRulesActorAttributes(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListSpendRuleActorAttributesRequest  ,
-  security?: ListSpendRuleActorAttributesSecurity  ,
+  request?: ListSpendRuleActorAttributesRequest | undefined,
+  security?: ListSpendRuleActorAttributesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchSpendRulesActorAttributes(
 
 export function buildSpendRulesActorAttributesQuery(
   client$: GramCore,
-  request?: ListSpendRuleActorAttributesRequest  ,
-  security?: ListSpendRuleActorAttributesSecurity  ,
+  request?: ListSpendRuleActorAttributesRequest | undefined,
+  security?: ListSpendRuleActorAttributesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

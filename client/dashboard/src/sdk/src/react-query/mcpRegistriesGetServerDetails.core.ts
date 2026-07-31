@@ -23,7 +23,7 @@ export function prefetchMcpRegistriesGetServerDetails(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetMCPServerDetailsRequest,
-  security?: GetMCPServerDetailsSecurity  ,
+  security?: GetMCPServerDetailsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchMcpRegistriesGetServerDetails(
 export function buildMcpRegistriesGetServerDetailsQuery(
   client$: GramCore,
   request: GetMCPServerDetailsRequest,
-  security?: GetMCPServerDetailsSecurity  ,
+  security?: GetMCPServerDetailsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

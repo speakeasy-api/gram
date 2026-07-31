@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function deploymentsLatest(
   client: GramCore,
-  request?: GetLatestDeploymentRequest  ,
-  security?: GetLatestDeploymentSecurity  ,
+  request?: GetLatestDeploymentRequest | undefined,
+  security?: GetLatestDeploymentSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function deploymentsLatest(
 
 async function $do(
   client: GramCore,
-  request?: GetLatestDeploymentRequest  ,
-  security?: GetLatestDeploymentSecurity  ,
+  request?: GetLatestDeploymentRequest | undefined,
+  security?: GetLatestDeploymentSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

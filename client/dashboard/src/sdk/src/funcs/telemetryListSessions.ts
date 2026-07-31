@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function telemetryListSessions(
   client: GramCore,
   request: ListSessionsRequest,
-  security?: ListSessionsSecurity  ,
+  security?: ListSessionsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function telemetryListSessions(
 async function $do(
   client: GramCore,
   request: ListSessionsRequest,
-  security?: ListSessionsSecurity  ,
+  security?: ListSessionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

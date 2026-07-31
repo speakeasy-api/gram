@@ -50,8 +50,8 @@ import {
  */
 export function deviceIntegrationsListManagedDevices(
   client: GramCore,
-  request?: ListManagedDevicesRequest  ,
-  security?: ListManagedDevicesSecurity  ,
+  request?: ListManagedDevicesRequest | undefined,
+  security?: ListManagedDevicesSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   PageIterator<
@@ -80,8 +80,8 @@ export function deviceIntegrationsListManagedDevices(
 
 async function $do(
   client: GramCore,
-  request?: ListManagedDevicesRequest  ,
-  security?: ListManagedDevicesSecurity  ,
+  request?: ListManagedDevicesRequest | undefined,
+  security?: ListManagedDevicesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

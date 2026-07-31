@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function assistantsSendMessage(
   client: GramCore,
   request: SendAssistantMessageRequest,
-  security?: SendAssistantMessageSecurity  ,
+  security?: SendAssistantMessageSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function assistantsSendMessage(
 async function $do(
   client: GramCore,
   request: SendAssistantMessageRequest,
-  security?: SendAssistantMessageSecurity  ,
+  security?: SendAssistantMessageSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

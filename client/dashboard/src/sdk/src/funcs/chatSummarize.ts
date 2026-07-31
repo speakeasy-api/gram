@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function chatSummarize(
   client: GramCore,
   request: SummarizeChatRequest,
-  security?: SummarizeChatSecurity  ,
+  security?: SummarizeChatSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function chatSummarize(
 async function $do(
   client: GramCore,
   request: SummarizeChatRequest,
-  security?: SummarizeChatSecurity  ,
+  security?: SummarizeChatSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -140,7 +140,7 @@ export class Skills extends ClientSDK {
    */
   async addVersion(
     request: AddSkillVersionRequest,
-    security?: AddSkillVersionSecurity  ,
+    security?: AddSkillVersionSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RecordSkillResult> {
     return unwrapAsync(skillsAddVersion(
@@ -158,8 +158,8 @@ export class Skills extends ClientSDK {
    * Snapshot and independently process selected skill edit suggestions, or every open suggestion when no IDs are supplied. One conflict or failure does not stop the remaining approvals.
    */
   async approveAllSuggestions(
-    request?: ApproveAllSkillSuggestionsRequest  ,
-    security?: ApproveAllSkillSuggestionsSecurity  ,
+    request?: ApproveAllSkillSuggestionsRequest | undefined,
+    security?: ApproveAllSkillSuggestionsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ApproveAllSkillSuggestionsResult> {
     return unwrapAsync(skillsApproveAllSuggestions(
@@ -178,7 +178,7 @@ export class Skills extends ClientSDK {
    */
   async approveSuggestion(
     request: ApproveSkillSuggestionRequest,
-    security?: ApproveSkillSuggestionSecurity  ,
+    security?: ApproveSkillSuggestionSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ApproveSkillSuggestionResult> {
     return unwrapAsync(skillsApproveSuggestion(
@@ -197,7 +197,7 @@ export class Skills extends ClientSDK {
    */
   async archive(
     request: ArchiveSkillRequest,
-    security?: ArchiveSkillSecurity  ,
+    security?: ArchiveSkillSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(skillsArchive(
@@ -216,7 +216,7 @@ export class Skills extends ClientSDK {
    */
   async create(
     request: CreateSkillRequest,
-    security?: CreateSkillSecurity  ,
+    security?: CreateSkillSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RecordSkillResult> {
     return unwrapAsync(skillsCreate(
@@ -235,7 +235,7 @@ export class Skills extends ClientSDK {
    */
   async dismissSuggestion(
     request: DismissSkillSuggestionRequest,
-    security?: DismissSkillSuggestionSecurity  ,
+    security?: DismissSkillSuggestionSecurity | undefined,
     options?: RequestOptions,
   ): Promise<SkillEditSuggestion> {
     return unwrapAsync(skillsDismissSuggestion(
@@ -254,7 +254,7 @@ export class Skills extends ClientSDK {
    */
   async distribute(
     request: DistributeSkillRequest,
-    security?: DistributeSkillSecurity  ,
+    security?: DistributeSkillSecurity | undefined,
     options?: RequestOptions,
   ): Promise<SkillDistribution> {
     return unwrapAsync(skillsDistribute(
@@ -273,7 +273,7 @@ export class Skills extends ClientSDK {
    */
   async get(
     request: GetSkillRequest,
-    security?: GetSkillSecurity  ,
+    security?: GetSkillSecurity | undefined,
     options?: RequestOptions,
   ): Promise<GetSkillResult> {
     return unwrapAsync(skillsGet(
@@ -308,8 +308,8 @@ export class Skills extends ClientSDK {
    * List active skills in the project. The implementation requires the skills product feature and skill read scope.
    */
   async list(
-    request?: ListSkillsRequest  ,
-    security?: ListSkillsSecurity  ,
+    request?: ListSkillsRequest | undefined,
+    security?: ListSkillsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<PageIterator<ListSkillsResponse, { cursor: string }>> {
     return unwrapResultIterator(skillsList(
@@ -327,8 +327,8 @@ export class Skills extends ClientSDK {
    * List active plugin skill distributions for the current project.
    */
   async listDistributions(
-    request?: ListSkillDistributionsRequest  ,
-    security?: ListSkillDistributionsSecurity  ,
+    request?: ListSkillDistributionsRequest | undefined,
+    security?: ListSkillDistributionsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<PageIterator<ListSkillDistributionsResponse, { cursor: string }>> {
     return unwrapResultIterator(skillsListDistributions(
@@ -347,7 +347,7 @@ export class Skills extends ClientSDK {
    */
   async listFeedback(
     request: ListSkillFeedbackRequest,
-    security?: ListSkillFeedbackSecurity  ,
+    security?: ListSkillFeedbackSecurity | undefined,
     options?: RequestOptions,
   ): Promise<PageIterator<ListSkillFeedbackResponse, { cursor: string }>> {
     return unwrapResultIterator(skillsListFeedback(
@@ -366,7 +366,7 @@ export class Skills extends ClientSDK {
    */
   async listSuggestionFeedback(
     request: ListSkillSuggestionFeedbackRequest,
-    security?: ListSkillSuggestionFeedbackSecurity  ,
+    security?: ListSkillSuggestionFeedbackSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListSkillSuggestionFeedbackResult> {
     return unwrapAsync(skillsListSuggestionFeedback(
@@ -384,8 +384,8 @@ export class Skills extends ClientSDK {
    * List open skill edit suggestions in the project, newest first. The implementation requires the skills product feature and skill read scope.
    */
   async listSuggestions(
-    request?: ListSkillSuggestionsRequest  ,
-    security?: ListSkillSuggestionsSecurity  ,
+    request?: ListSkillSuggestionsRequest | undefined,
+    security?: ListSkillSuggestionsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<PageIterator<ListSkillSuggestionsResponse, { cursor: string }>> {
     return unwrapResultIterator(skillsListSuggestions(
@@ -403,8 +403,8 @@ export class Skills extends ClientSDK {
    * List terminal skill activations that could not be attributed to a skill version.
    */
   async listUnknownActivations(
-    request?: ListUnknownSkillActivationsRequest  ,
-    security?: ListUnknownSkillActivationsSecurity  ,
+    request?: ListUnknownSkillActivationsRequest | undefined,
+    security?: ListUnknownSkillActivationsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<
     PageIterator<ListUnknownSkillActivationsResponse, { cursor: string }>
@@ -425,7 +425,7 @@ export class Skills extends ClientSDK {
    */
   async listVersions(
     request: ListSkillVersionsRequest,
-    security?: ListSkillVersionsSecurity  ,
+    security?: ListSkillVersionsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<PageIterator<ListSkillVersionsResponse, { cursor: string }>> {
     return unwrapResultIterator(skillsListVersions(
@@ -444,7 +444,7 @@ export class Skills extends ClientSDK {
    */
   async restoreVersion(
     request: RestoreSkillVersionRequest,
-    security?: RestoreSkillVersionSecurity  ,
+    security?: RestoreSkillVersionSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RecordSkillResult> {
     return unwrapAsync(skillsRestoreVersion(
@@ -463,7 +463,7 @@ export class Skills extends ClientSDK {
    */
   async share(
     request: ShareSkillRequest,
-    security?: ShareSkillSecurity  ,
+    security?: ShareSkillSecurity | undefined,
     options?: RequestOptions,
   ): Promise<SkillShareLink> {
     return unwrapAsync(skillsShare(
@@ -501,7 +501,7 @@ export class Skills extends ClientSDK {
    */
   async undistribute(
     request: UndistributeSkillRequest,
-    security?: UndistributeSkillSecurity  ,
+    security?: UndistributeSkillSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(skillsUndistribute(
@@ -520,7 +520,7 @@ export class Skills extends ClientSDK {
    */
   async unshare(
     request: UnshareSkillRequest,
-    security?: UnshareSkillSecurity  ,
+    security?: UnshareSkillSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(skillsUnshare(
@@ -539,7 +539,7 @@ export class Skills extends ClientSDK {
    */
   async update(
     request: UpdateSkillRequest,
-    security?: UpdateSkillSecurity  ,
+    security?: UpdateSkillSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Skill> {
     return unwrapAsync(skillsUpdate(

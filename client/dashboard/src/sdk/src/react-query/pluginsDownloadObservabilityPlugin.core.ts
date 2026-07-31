@@ -25,7 +25,7 @@ export function prefetchPluginsDownloadObservabilityPlugin(
   queryClient: QueryClient,
   client$: GramCore,
   request: DownloadObservabilityPluginRequest,
-  security?: DownloadObservabilityPluginSecurity  ,
+  security?: DownloadObservabilityPluginSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -41,7 +41,7 @@ export function prefetchPluginsDownloadObservabilityPlugin(
 export function buildPluginsDownloadObservabilityPluginQuery(
   client$: GramCore,
   request: DownloadObservabilityPluginRequest,
-  security?: DownloadObservabilityPluginSecurity  ,
+  security?: DownloadObservabilityPluginSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

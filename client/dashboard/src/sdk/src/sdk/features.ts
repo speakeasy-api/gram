@@ -24,8 +24,8 @@ export class Features extends ClientSDK {
    * Get the current state of all product feature flags.
    */
   async get(
-    request?: GetProductFeaturesRequest  ,
-    security?: GetProductFeaturesSecurity  ,
+    request?: GetProductFeaturesRequest | undefined,
+    security?: GetProductFeaturesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<GetProductFeaturesResponseBody> {
     return unwrapAsync(featuresGet(
@@ -44,7 +44,7 @@ export class Features extends ClientSDK {
    */
   async set(
     request: SetProductFeatureRequest,
-    security?: SetProductFeatureSecurity  ,
+    security?: SetProductFeatureSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(featuresSet(

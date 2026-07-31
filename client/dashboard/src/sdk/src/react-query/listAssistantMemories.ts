@@ -81,7 +81,7 @@ export type ListAssistantMemoriesQueryError =
  */
 export function useListAssistantMemories(
   request: ListAssistantMemoriesRequest,
-  security?: ListAssistantMemoriesSecurity  ,
+  security?: ListAssistantMemoriesSecurity | undefined,
   options?: QueryHookOptions<
     ListAssistantMemoriesQueryData,
     ListAssistantMemoriesQueryError
@@ -110,7 +110,7 @@ export function useListAssistantMemories(
  */
 export function useListAssistantMemoriesSuspense(
   request: ListAssistantMemoriesRequest,
-  security?: ListAssistantMemoriesSecurity  ,
+  security?: ListAssistantMemoriesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListAssistantMemoriesQueryData,
     ListAssistantMemoriesQueryError
@@ -139,7 +139,7 @@ export function useListAssistantMemoriesSuspense(
  */
 export function useListAssistantMemoriesInfinite(
   request: ListAssistantMemoriesRequest,
-  security?: ListAssistantMemoriesSecurity  ,
+  security?: ListAssistantMemoriesSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     ListAssistantMemoriesInfiniteQueryData,
     ListAssistantMemoriesQueryError
@@ -182,7 +182,7 @@ export function useListAssistantMemoriesInfinite(
  */
 export function useListAssistantMemoriesInfiniteSuspense(
   request: ListAssistantMemoriesRequest,
-  security?: ListAssistantMemoriesSecurity  ,
+  security?: ListAssistantMemoriesSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     ListAssistantMemoriesInfiniteQueryData,
     ListAssistantMemoriesQueryError

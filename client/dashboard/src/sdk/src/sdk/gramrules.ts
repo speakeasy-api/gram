@@ -47,7 +47,7 @@ export class GramRules extends ClientSDK {
    */
   async archive(
     request: ArchiveSpendRuleRequest,
-    security?: ArchiveSpendRuleSecurity  ,
+    security?: ArchiveSpendRuleSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(spendRulesRulesArchive(
@@ -66,7 +66,7 @@ export class GramRules extends ClientSDK {
    */
   async create(
     request: CreateSpendRuleRequest,
-    security?: CreateSpendRuleSecurity  ,
+    security?: CreateSpendRuleSecurity | undefined,
     options?: RequestOptions,
   ): Promise<SpendRule> {
     return unwrapAsync(spendRulesRulesCreate(
@@ -85,7 +85,7 @@ export class GramRules extends ClientSDK {
    */
   async get(
     request: GetSpendRuleRequest,
-    security?: GetSpendRuleSecurity  ,
+    security?: GetSpendRuleSecurity | undefined,
     options?: RequestOptions,
   ): Promise<SpendRule> {
     return unwrapAsync(spendRulesRulesGet(
@@ -103,8 +103,8 @@ export class GramRules extends ClientSDK {
    * List all budget rules for the current organization.
    */
   async list(
-    request?: ListSpendRulesRequest  ,
-    security?: ListSpendRulesSecurity  ,
+    request?: ListSpendRulesRequest | undefined,
+    security?: ListSpendRulesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListSpendRulesResult> {
     return unwrapAsync(spendRulesRulesList(
@@ -123,7 +123,7 @@ export class GramRules extends ClientSDK {
    */
   async preview(
     request: PreviewSpendRuleRequest,
-    security?: PreviewSpendRuleSecurity  ,
+    security?: PreviewSpendRuleSecurity | undefined,
     options?: RequestOptions,
   ): Promise<PreviewSpendRuleResult> {
     return unwrapAsync(spendRulesRulesPreview(
@@ -142,7 +142,7 @@ export class GramRules extends ClientSDK {
    */
   async update(
     request: UpdateSpendRuleRequest,
-    security?: UpdateSpendRuleSecurity  ,
+    security?: UpdateSpendRuleSecurity | undefined,
     options?: RequestOptions,
   ): Promise<SpendRule> {
     return unwrapAsync(spendRulesRulesUpdate(

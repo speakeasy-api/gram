@@ -63,7 +63,7 @@ export type RiskEvaluatePromptGuardrailQueryError =
  */
 export function useRiskEvaluatePromptGuardrail(
   request: EvaluatePromptGuardrailRequest,
-  security?: EvaluatePromptGuardrailSecurity  ,
+  security?: EvaluatePromptGuardrailSecurity | undefined,
   options?: QueryHookOptions<
     RiskEvaluatePromptGuardrailQueryData,
     RiskEvaluatePromptGuardrailQueryError
@@ -92,7 +92,7 @@ export function useRiskEvaluatePromptGuardrail(
  */
 export function useRiskEvaluatePromptGuardrailSuspense(
   request: EvaluatePromptGuardrailRequest,
-  security?: EvaluatePromptGuardrailSecurity  ,
+  security?: EvaluatePromptGuardrailSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskEvaluatePromptGuardrailQueryData,
     RiskEvaluatePromptGuardrailQueryError

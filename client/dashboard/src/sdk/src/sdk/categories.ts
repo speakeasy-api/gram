@@ -19,8 +19,8 @@ export class Categories extends ClientSDK {
    * Return the canonical risk category definitions: metadata (label/description/icon) plus the classification (source / rule_id list / rule_id prefix) used to bucket findings. Dashboards and CLIs should call this instead of maintaining their own copy of the mapping.
    */
   async list(
-    request?: ListRiskCategoriesRequest  ,
-    security?: ListRiskCategoriesSecurity  ,
+    request?: ListRiskCategoriesRequest | undefined,
+    security?: ListRiskCategoriesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RiskCategoriesResult> {
     return unwrapAsync(riskCategoriesList(

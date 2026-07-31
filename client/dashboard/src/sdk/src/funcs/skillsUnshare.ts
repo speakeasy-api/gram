@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function skillsUnshare(
   client: GramCore,
   request: UnshareSkillRequest,
-  security?: UnshareSkillSecurity  ,
+  security?: UnshareSkillSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function skillsUnshare(
 async function $do(
   client: GramCore,
   request: UnshareSkillRequest,
-  security?: UnshareSkillSecurity  ,
+  security?: UnshareSkillSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

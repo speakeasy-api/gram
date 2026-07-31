@@ -62,8 +62,8 @@ export type GetDomainQueryError =
  * Get the custom domain for an organization
  */
 export function useGetDomain(
-  request?: GetDomainRequest  ,
-  security?: GetDomainSecurity  ,
+  request?: GetDomainRequest | undefined,
+  security?: GetDomainSecurity | undefined,
   options?: QueryHookOptions<GetDomainQueryData, GetDomainQueryError>,
 ): UseQueryResult<GetDomainQueryData, GetDomainQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useGetDomain(
  * Get the custom domain for an organization
  */
 export function useGetDomainSuspense(
-  request?: GetDomainRequest  ,
-  security?: GetDomainSecurity  ,
+  request?: GetDomainRequest | undefined,
+  security?: GetDomainSecurity | undefined,
   options?: SuspenseQueryHookOptions<GetDomainQueryData, GetDomainQueryError>,
 ): UseSuspenseQueryResult<GetDomainQueryData, GetDomainQueryError> {
   const client = useGramContext();

@@ -23,7 +23,7 @@ export function prefetchGetAssistantMemory(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetAssistantMemoryRequest,
-  security?: GetAssistantMemorySecurity  ,
+  security?: GetAssistantMemorySecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchGetAssistantMemory(
 export function buildGetAssistantMemoryQuery(
   client$: GramCore,
   request: GetAssistantMemoryRequest,
-  security?: GetAssistantMemorySecurity  ,
+  security?: GetAssistantMemorySecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function mcpServersDeleteToolMetadata(
   client: GramCore,
   request: DeleteMcpServerToolMetadataRequest,
-  security?: DeleteMcpServerToolMetadataSecurity  ,
+  security?: DeleteMcpServerToolMetadataSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function mcpServersDeleteToolMetadata(
 async function $do(
   client: GramCore,
   request: DeleteMcpServerToolMetadataRequest,
-  security?: DeleteMcpServerToolMetadataSecurity  ,
+  security?: DeleteMcpServerToolMetadataSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

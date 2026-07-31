@@ -62,8 +62,8 @@ export type CustomDomainMcpEndpointsQueryError =
  * List the MCP endpoints registered under the organization's custom domain across every project. Returns enriched rows that include the parent MCP server and project so callers can preview what a custom-domain deletion would cascade through.
  */
 export function useCustomDomainMcpEndpoints(
-  request?: ListCustomDomainMcpEndpointsRequest  ,
-  security?: ListCustomDomainMcpEndpointsSecurity  ,
+  request?: ListCustomDomainMcpEndpointsRequest | undefined,
+  security?: ListCustomDomainMcpEndpointsSecurity | undefined,
   options?: QueryHookOptions<
     CustomDomainMcpEndpointsQueryData,
     CustomDomainMcpEndpointsQueryError
@@ -91,8 +91,8 @@ export function useCustomDomainMcpEndpoints(
  * List the MCP endpoints registered under the organization's custom domain across every project. Returns enriched rows that include the parent MCP server and project so callers can preview what a custom-domain deletion would cascade through.
  */
 export function useCustomDomainMcpEndpointsSuspense(
-  request?: ListCustomDomainMcpEndpointsRequest  ,
-  security?: ListCustomDomainMcpEndpointsSecurity  ,
+  request?: ListCustomDomainMcpEndpointsRequest | undefined,
+  security?: ListCustomDomainMcpEndpointsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     CustomDomainMcpEndpointsQueryData,
     CustomDomainMcpEndpointsQueryError

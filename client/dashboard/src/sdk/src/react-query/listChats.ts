@@ -67,8 +67,8 @@ export type ListChatsQueryError =
  * List all chats for a project
  */
 export function useListChats(
-  request?: ListChatsRequest  ,
-  security?: ListChatsSecurity  ,
+  request?: ListChatsRequest | undefined,
+  security?: ListChatsSecurity | undefined,
   options?: QueryHookOptions<ListChatsQueryData, ListChatsQueryError>,
 ): UseQueryResult<ListChatsQueryData, ListChatsQueryError> {
   const client = useGramContext();
@@ -90,8 +90,8 @@ export function useListChats(
  * List all chats for a project
  */
 export function useListChatsSuspense(
-  request?: ListChatsRequest  ,
-  security?: ListChatsSecurity  ,
+  request?: ListChatsRequest | undefined,
+  security?: ListChatsSecurity | undefined,
   options?: SuspenseQueryHookOptions<ListChatsQueryData, ListChatsQueryError>,
 ): UseSuspenseQueryResult<ListChatsQueryData, ListChatsQueryError> {
   const client = useGramContext();

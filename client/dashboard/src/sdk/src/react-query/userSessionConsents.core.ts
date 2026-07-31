@@ -34,8 +34,8 @@ export type UserSessionConsentsPageParams = PageIterator<
 export function prefetchUserSessionConsents(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListUserSessionConsentsRequest  ,
-  security?: ListUserSessionConsentsSecurity  ,
+  request?: ListUserSessionConsentsRequest | undefined,
+  security?: ListUserSessionConsentsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -51,8 +51,8 @@ export function prefetchUserSessionConsents(
 export function prefetchUserSessionConsentsInfinite(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListUserSessionConsentsRequest  ,
-  security?: ListUserSessionConsentsSecurity  ,
+  request?: ListUserSessionConsentsRequest | undefined,
+  security?: ListUserSessionConsentsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -70,8 +70,8 @@ export function prefetchUserSessionConsentsInfinite(
 
 export function buildUserSessionConsentsQuery(
   client$: GramCore,
-  request?: ListUserSessionConsentsRequest  ,
-  security?: ListUserSessionConsentsSecurity  ,
+  request?: ListUserSessionConsentsRequest | undefined,
+  security?: ListUserSessionConsentsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -116,8 +116,8 @@ export function buildUserSessionConsentsQuery(
 
 export function buildUserSessionConsentsInfiniteQuery(
   client$: GramCore,
-  request?: ListUserSessionConsentsRequest  ,
-  security?: ListUserSessionConsentsSecurity  ,
+  request?: ListUserSessionConsentsRequest | undefined,
+  security?: ListUserSessionConsentsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

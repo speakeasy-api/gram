@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function assetsUploadOpenAPIv3(
   client: GramCore,
   request: UploadOpenAPIv3AssetRequest,
-  security?: UploadOpenAPIv3AssetSecurity  ,
+  security?: UploadOpenAPIv3AssetSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function assetsUploadOpenAPIv3(
 async function $do(
   client: GramCore,
   request: UploadOpenAPIv3AssetRequest,
-  security?: UploadOpenAPIv3AssetSecurity  ,
+  security?: UploadOpenAPIv3AssetSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

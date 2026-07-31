@@ -81,7 +81,7 @@ export type OrganizationRemoteSessionClientsQueryError =
  */
 export function useOrganizationRemoteSessionClients(
   request: ListOrganizationRemoteSessionClientsRequest,
-  security?: ListOrganizationRemoteSessionClientsSecurity  ,
+  security?: ListOrganizationRemoteSessionClientsSecurity | undefined,
   options?: QueryHookOptions<
     OrganizationRemoteSessionClientsQueryData,
     OrganizationRemoteSessionClientsQueryError
@@ -110,7 +110,7 @@ export function useOrganizationRemoteSessionClients(
  */
 export function useOrganizationRemoteSessionClientsSuspense(
   request: ListOrganizationRemoteSessionClientsRequest,
-  security?: ListOrganizationRemoteSessionClientsSecurity  ,
+  security?: ListOrganizationRemoteSessionClientsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     OrganizationRemoteSessionClientsQueryData,
     OrganizationRemoteSessionClientsQueryError
@@ -139,7 +139,7 @@ export function useOrganizationRemoteSessionClientsSuspense(
  */
 export function useOrganizationRemoteSessionClientsInfinite(
   request: ListOrganizationRemoteSessionClientsRequest,
-  security?: ListOrganizationRemoteSessionClientsSecurity  ,
+  security?: ListOrganizationRemoteSessionClientsSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     OrganizationRemoteSessionClientsInfiniteQueryData,
     OrganizationRemoteSessionClientsQueryError
@@ -182,7 +182,7 @@ export function useOrganizationRemoteSessionClientsInfinite(
  */
 export function useOrganizationRemoteSessionClientsInfiniteSuspense(
   request: ListOrganizationRemoteSessionClientsRequest,
-  security?: ListOrganizationRemoteSessionClientsSecurity  ,
+  security?: ListOrganizationRemoteSessionClientsSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     OrganizationRemoteSessionClientsInfiniteQueryData,
     OrganizationRemoteSessionClientsQueryError

@@ -45,7 +45,7 @@ export function organizationRemoteSessionClientsRemoveFromMcpServer(
   request: RemoveOrganizationRemoteSessionClientFromMcpServerRequest,
   security?:
     | RemoveOrganizationRemoteSessionClientFromMcpServerSecurity
-     ,
+    | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ async function $do(
   request: RemoveOrganizationRemoteSessionClientFromMcpServerRequest,
   security?:
     | RemoveOrganizationRemoteSessionClientFromMcpServerSecurity
-     ,
+    | undefined,
   options?: RequestOptions,
 ): Promise<
   [

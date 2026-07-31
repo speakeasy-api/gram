@@ -64,7 +64,7 @@ export class OrganizationRemoteSessionClients extends ClientSDK {
    */
   async create(
     request: CreateOrganizationRemoteSessionClientRequest,
-    security?: CreateOrganizationRemoteSessionClientSecurity  ,
+    security?: CreateOrganizationRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RemoteSessionClient> {
     return unwrapAsync(organizationRemoteSessionClientsCreate(
@@ -83,7 +83,7 @@ export class OrganizationRemoteSessionClients extends ClientSDK {
    */
   async createCimd(
     request: CreateCimdOrganizationRemoteSessionClientRequest,
-    security?: CreateCimdOrganizationRemoteSessionClientSecurity  ,
+    security?: CreateCimdOrganizationRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RemoteSessionClient> {
     return unwrapAsync(organizationRemoteSessionClientsCreateCimd(
@@ -102,7 +102,7 @@ export class OrganizationRemoteSessionClients extends ClientSDK {
    */
   async delete(
     request: DeleteOrganizationRemoteSessionClientRequest,
-    security?: DeleteOrganizationRemoteSessionClientSecurity  ,
+    security?: DeleteOrganizationRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(organizationRemoteSessionClientsDelete(
@@ -121,7 +121,7 @@ export class OrganizationRemoteSessionClients extends ClientSDK {
    */
   async get(
     request: GetOrganizationRemoteSessionClientRequest,
-    security?: GetOrganizationRemoteSessionClientSecurity  ,
+    security?: GetOrganizationRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RemoteSessionClient> {
     return unwrapAsync(organizationRemoteSessionClientsGet(
@@ -142,7 +142,7 @@ export class OrganizationRemoteSessionClients extends ClientSDK {
     request: GetOrganizationRemoteSessionClientDeletePreflightRequest,
     security?:
       | GetOrganizationRemoteSessionClientDeletePreflightSecurity
-       ,
+      | undefined,
     options?: RequestOptions,
   ): Promise<OrganizationClientDeletePreflight> {
     return unwrapAsync(organizationRemoteSessionClientsGetDeletePreflight(
@@ -161,7 +161,7 @@ export class OrganizationRemoteSessionClients extends ClientSDK {
    */
   async list(
     request: ListOrganizationRemoteSessionClientsRequest,
-    security?: ListOrganizationRemoteSessionClientsSecurity  ,
+    security?: ListOrganizationRemoteSessionClientsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<
     PageIterator<
@@ -187,7 +187,7 @@ export class OrganizationRemoteSessionClients extends ClientSDK {
     request: ListOrganizationRemoteSessionClientMcpServersRequest,
     security?:
       | ListOrganizationRemoteSessionClientMcpServersSecurity
-       ,
+      | undefined,
     options?: RequestOptions,
   ): Promise<ListOrganizationMcpServersResult> {
     return unwrapAsync(organizationRemoteSessionClientsListMcpServers(
@@ -208,7 +208,7 @@ export class OrganizationRemoteSessionClients extends ClientSDK {
     request: RemoveOrganizationRemoteSessionClientFromMcpServerRequest,
     security?:
       | RemoveOrganizationRemoteSessionClientFromMcpServerSecurity
-       ,
+      | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(organizationRemoteSessionClientsRemoveFromMcpServer(
@@ -227,7 +227,7 @@ export class OrganizationRemoteSessionClients extends ClientSDK {
    */
   async update(
     request: UpdateOrganizationRemoteSessionClientRequest,
-    security?: UpdateOrganizationRemoteSessionClientSecurity  ,
+    security?: UpdateOrganizationRemoteSessionClientSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RemoteSessionClient> {
     return unwrapAsync(organizationRemoteSessionClientsUpdate(

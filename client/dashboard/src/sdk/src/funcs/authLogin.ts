@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  */
 export function authLogin(
   client: GramCore,
-  request?: AuthLoginRequest  ,
+  request?: AuthLoginRequest | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -67,7 +67,7 @@ export function authLogin(
 
 async function $do(
   client: GramCore,
-  request?: AuthLoginRequest  ,
+  request?: AuthLoginRequest | undefined,
   options?: RequestOptions,
 ): Promise<
   [

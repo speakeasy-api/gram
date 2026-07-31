@@ -63,7 +63,7 @@ export type TelemetryQueryTumDetailsQueryError =
  */
 export function useTelemetryQueryTumDetails(
   request: QueryTumDetailsRequest,
-  security?: QueryTumDetailsSecurity  ,
+  security?: QueryTumDetailsSecurity | undefined,
   options?: QueryHookOptions<
     TelemetryQueryTumDetailsQueryData,
     TelemetryQueryTumDetailsQueryError
@@ -92,7 +92,7 @@ export function useTelemetryQueryTumDetails(
  */
 export function useTelemetryQueryTumDetailsSuspense(
   request: QueryTumDetailsRequest,
-  security?: QueryTumDetailsSecurity  ,
+  security?: QueryTumDetailsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     TelemetryQueryTumDetailsQueryData,
     TelemetryQueryTumDetailsQueryError

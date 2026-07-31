@@ -32,7 +32,7 @@ export class PolicyChallenges extends ClientSDK {
    */
   async acknowledge(
     request: AcknowledgeRiskPolicyChallengeRequest,
-    security?: AcknowledgeRiskPolicyChallengeSecurity  ,
+    security?: AcknowledgeRiskPolicyChallengeSecurity | undefined,
     options?: RequestOptions,
   ): Promise<AcknowledgeRiskPolicyChallengeResponseBody> {
     return unwrapAsync(riskPolicyChallengesAcknowledge(
@@ -51,7 +51,7 @@ export class PolicyChallenges extends ClientSDK {
    */
   async decline(
     request: DeclineRiskPolicyChallengeRequest,
-    security?: DeclineRiskPolicyChallengeSecurity  ,
+    security?: DeclineRiskPolicyChallengeSecurity | undefined,
     options?: RequestOptions,
   ): Promise<DeclineRiskPolicyChallengeResponseBody> {
     return unwrapAsync(riskPolicyChallengesDecline(
@@ -70,7 +70,7 @@ export class PolicyChallenges extends ClientSDK {
    */
   async get(
     request: GetRiskPolicyChallengeRequest,
-    security?: GetRiskPolicyChallengeSecurity  ,
+    security?: GetRiskPolicyChallengeSecurity | undefined,
     options?: RequestOptions,
   ): Promise<GetRiskPolicyChallengeResponseBody> {
     return unwrapAsync(riskPolicyChallengesGet(

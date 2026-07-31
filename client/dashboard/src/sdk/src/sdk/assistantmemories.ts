@@ -32,7 +32,7 @@ export class AssistantMemories extends ClientSDK {
    */
   async delete(
     request: DeleteAssistantMemoryRequest,
-    security?: DeleteAssistantMemorySecurity  ,
+    security?: DeleteAssistantMemorySecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(assistantMemoriesDelete(
@@ -51,7 +51,7 @@ export class AssistantMemories extends ClientSDK {
    */
   async get(
     request: GetAssistantMemoryRequest,
-    security?: GetAssistantMemorySecurity  ,
+    security?: GetAssistantMemorySecurity | undefined,
     options?: RequestOptions,
   ): Promise<AssistantMemory> {
     return unwrapAsync(assistantMemoriesGet(
@@ -70,7 +70,7 @@ export class AssistantMemories extends ClientSDK {
    */
   async list(
     request: ListAssistantMemoriesRequest,
-    security?: ListAssistantMemoriesSecurity  ,
+    security?: ListAssistantMemoriesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<PageIterator<ListAssistantMemoriesResponse, { cursor: string }>> {
     return unwrapResultIterator(assistantMemoriesList(

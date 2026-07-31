@@ -22,8 +22,8 @@ export type RiskCompileExprQueryData = ExprCompileResult;
 export function prefetchRiskCompileExpr(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: CompileExprRequest  ,
-  security?: CompileExprSecurity  ,
+  request?: CompileExprRequest | undefined,
+  security?: CompileExprSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchRiskCompileExpr(
 
 export function buildRiskCompileExprQuery(
   client$: GramCore,
-  request?: CompileExprRequest  ,
-  security?: CompileExprSecurity  ,
+  request?: CompileExprRequest | undefined,
+  security?: CompileExprSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

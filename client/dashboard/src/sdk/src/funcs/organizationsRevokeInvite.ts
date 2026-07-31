@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function organizationsRevokeInvite(
   client: GramCore,
   request: RevokeInviteRequest,
-  security?: RevokeInviteSecurity  ,
+  security?: RevokeInviteSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function organizationsRevokeInvite(
 async function $do(
   client: GramCore,
   request: RevokeInviteRequest,
-  security?: RevokeInviteSecurity  ,
+  security?: RevokeInviteSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

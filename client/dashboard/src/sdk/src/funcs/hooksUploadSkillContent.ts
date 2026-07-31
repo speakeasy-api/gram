@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function hooksUploadSkillContent(
   client: GramCore,
   request: UploadSkillContentRequest,
-  security?: UploadSkillContentSecurity  ,
+  security?: UploadSkillContentSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function hooksUploadSkillContent(
 async function $do(
   client: GramCore,
   request: UploadSkillContentRequest,
-  security?: UploadSkillContentSecurity  ,
+  security?: UploadSkillContentSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

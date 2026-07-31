@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function chatGenerateTitle(
   client: GramCore,
   request: GenerateTitleRequest,
-  security?: GenerateTitleSecurity  ,
+  security?: GenerateTitleSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function chatGenerateTitle(
 async function $do(
   client: GramCore,
   request: GenerateTitleRequest,
-  security?: GenerateTitleSecurity  ,
+  security?: GenerateTitleSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

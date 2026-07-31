@@ -22,8 +22,8 @@ export type WorkUnitsTrendQueryData = WorkUnitsTrendResult;
 export function prefetchWorkUnitsTrend(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetWorkUnitsTrendRequest  ,
-  security?: GetWorkUnitsTrendSecurity  ,
+  request?: GetWorkUnitsTrendRequest | undefined,
+  security?: GetWorkUnitsTrendSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchWorkUnitsTrend(
 
 export function buildWorkUnitsTrendQuery(
   client$: GramCore,
-  request?: GetWorkUnitsTrendRequest  ,
-  security?: GetWorkUnitsTrendSecurity  ,
+  request?: GetWorkUnitsTrendRequest | undefined,
+  security?: GetWorkUnitsTrendSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

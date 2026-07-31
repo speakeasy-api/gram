@@ -62,8 +62,8 @@ export type RiskListResultsByChatQueryError =
  * List risk results grouped by chat session for the current project.
  */
 export function useRiskListResultsByChat(
-  request?: ListRiskResultsByChatRequest  ,
-  security?: ListRiskResultsByChatSecurity  ,
+  request?: ListRiskResultsByChatRequest | undefined,
+  security?: ListRiskResultsByChatSecurity | undefined,
   options?: QueryHookOptions<
     RiskListResultsByChatQueryData,
     RiskListResultsByChatQueryError
@@ -91,8 +91,8 @@ export function useRiskListResultsByChat(
  * List risk results grouped by chat session for the current project.
  */
 export function useRiskListResultsByChatSuspense(
-  request?: ListRiskResultsByChatRequest  ,
-  security?: ListRiskResultsByChatSecurity  ,
+  request?: ListRiskResultsByChatRequest | undefined,
+  security?: ListRiskResultsByChatSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskListResultsByChatQueryData,
     RiskListResultsByChatQueryError

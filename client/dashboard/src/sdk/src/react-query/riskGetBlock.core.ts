@@ -23,7 +23,7 @@ export function prefetchRiskGetBlock(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetRiskBlockRequest,
-  security?: GetRiskBlockSecurity  ,
+  security?: GetRiskBlockSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchRiskGetBlock(
 export function buildRiskGetBlockQuery(
   client$: GramCore,
   request: GetRiskBlockRequest,
-  security?: GetRiskBlockSecurity  ,
+  security?: GetRiskBlockSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function keysRevokeById(
   client: GramCore,
   request: RevokeAPIKeyRequest,
-  security?: RevokeAPIKeySecurity  ,
+  security?: RevokeAPIKeySecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function keysRevokeById(
 async function $do(
   client: GramCore,
   request: RevokeAPIKeyRequest,
-  security?: RevokeAPIKeySecurity  ,
+  security?: RevokeAPIKeySecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

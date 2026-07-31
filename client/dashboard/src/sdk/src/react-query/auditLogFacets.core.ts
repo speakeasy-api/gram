@@ -22,8 +22,8 @@ export type AuditLogFacetsQueryData = ListAuditLogFacetsResult;
 export function prefetchAuditLogFacets(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListAuditLogFacetsRequest  ,
-  security?: ListAuditLogFacetsSecurity  ,
+  request?: ListAuditLogFacetsRequest | undefined,
+  security?: ListAuditLogFacetsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchAuditLogFacets(
 
 export function buildAuditLogFacetsQuery(
   client$: GramCore,
-  request?: ListAuditLogFacetsRequest  ,
-  security?: ListAuditLogFacetsSecurity  ,
+  request?: ListAuditLogFacetsRequest | undefined,
+  security?: ListAuditLogFacetsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

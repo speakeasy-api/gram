@@ -80,8 +80,8 @@ export type SkillSuggestionsQueryError =
  * List open skill edit suggestions in the project, newest first. The implementation requires the skills product feature and skill read scope.
  */
 export function useSkillSuggestions(
-  request?: ListSkillSuggestionsRequest  ,
-  security?: ListSkillSuggestionsSecurity  ,
+  request?: ListSkillSuggestionsRequest | undefined,
+  security?: ListSkillSuggestionsSecurity | undefined,
   options?: QueryHookOptions<
     SkillSuggestionsQueryData,
     SkillSuggestionsQueryError
@@ -106,8 +106,8 @@ export function useSkillSuggestions(
  * List open skill edit suggestions in the project, newest first. The implementation requires the skills product feature and skill read scope.
  */
 export function useSkillSuggestionsSuspense(
-  request?: ListSkillSuggestionsRequest  ,
-  security?: ListSkillSuggestionsSecurity  ,
+  request?: ListSkillSuggestionsRequest | undefined,
+  security?: ListSkillSuggestionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     SkillSuggestionsQueryData,
     SkillSuggestionsQueryError
@@ -135,8 +135,8 @@ export function useSkillSuggestionsSuspense(
  * List open skill edit suggestions in the project, newest first. The implementation requires the skills product feature and skill read scope.
  */
 export function useSkillSuggestionsInfinite(
-  request?: ListSkillSuggestionsRequest  ,
-  security?: ListSkillSuggestionsSecurity  ,
+  request?: ListSkillSuggestionsRequest | undefined,
+  security?: ListSkillSuggestionsSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     SkillSuggestionsInfiniteQueryData,
     SkillSuggestionsQueryError
@@ -172,8 +172,8 @@ export function useSkillSuggestionsInfinite(
  * List open skill edit suggestions in the project, newest first. The implementation requires the skills product feature and skill read scope.
  */
 export function useSkillSuggestionsInfiniteSuspense(
-  request?: ListSkillSuggestionsRequest  ,
-  security?: ListSkillSuggestionsSecurity  ,
+  request?: ListSkillSuggestionsRequest | undefined,
+  security?: ListSkillSuggestionsSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     SkillSuggestionsInfiniteQueryData,
     SkillSuggestionsQueryError

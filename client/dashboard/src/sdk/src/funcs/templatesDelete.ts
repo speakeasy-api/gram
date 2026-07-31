@@ -42,8 +42,8 @@ import { Result } from "../types/fp.js";
  */
 export function templatesDelete(
   client: GramCore,
-  request?: DeleteTemplateRequest  ,
-  security?: DeleteTemplateSecurity  ,
+  request?: DeleteTemplateRequest | undefined,
+  security?: DeleteTemplateSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -69,8 +69,8 @@ export function templatesDelete(
 
 async function $do(
   client: GramCore,
-  request?: DeleteTemplateRequest  ,
-  security?: DeleteTemplateSecurity  ,
+  request?: DeleteTemplateRequest | undefined,
+  security?: DeleteTemplateSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

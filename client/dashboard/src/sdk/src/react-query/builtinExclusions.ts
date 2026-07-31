@@ -62,8 +62,8 @@ export type BuiltinExclusionsQueryError =
  * List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.
  */
 export function useBuiltinExclusions(
-  request?: ListBuiltinExclusionsRequest  ,
-  security?: ListBuiltinExclusionsSecurity  ,
+  request?: ListBuiltinExclusionsRequest | undefined,
+  security?: ListBuiltinExclusionsSecurity | undefined,
   options?: QueryHookOptions<
     BuiltinExclusionsQueryData,
     BuiltinExclusionsQueryError
@@ -88,8 +88,8 @@ export function useBuiltinExclusions(
  * List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.
  */
 export function useBuiltinExclusionsSuspense(
-  request?: ListBuiltinExclusionsRequest  ,
-  security?: ListBuiltinExclusionsSecurity  ,
+  request?: ListBuiltinExclusionsRequest | undefined,
+  security?: ListBuiltinExclusionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     BuiltinExclusionsQueryData,
     BuiltinExclusionsQueryError

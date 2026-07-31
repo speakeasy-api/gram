@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function domainsRegisterDomain(
   client: GramCore,
   request: RegisterDomainRequest,
-  security?: RegisterDomainSecurity  ,
+  security?: RegisterDomainSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function domainsRegisterDomain(
 async function $do(
   client: GramCore,
   request: RegisterDomainRequest,
-  security?: RegisterDomainSecurity  ,
+  security?: RegisterDomainSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

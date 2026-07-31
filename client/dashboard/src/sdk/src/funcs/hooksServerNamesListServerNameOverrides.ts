@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function hooksServerNamesListServerNameOverrides(
   client: GramCore,
-  request?: ListServerNameOverridesRequest  ,
-  security?: ListServerNameOverridesSecurity  ,
+  request?: ListServerNameOverridesRequest | undefined,
+  security?: ListServerNameOverridesSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function hooksServerNamesListServerNameOverrides(
 
 async function $do(
   client: GramCore,
-  request?: ListServerNameOverridesRequest  ,
-  security?: ListServerNameOverridesSecurity  ,
+  request?: ListServerNameOverridesRequest | undefined,
+  security?: ListServerNameOverridesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

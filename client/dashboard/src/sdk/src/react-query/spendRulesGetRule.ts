@@ -63,7 +63,7 @@ export type SpendRulesGetRuleQueryError =
  */
 export function useSpendRulesGetRule(
   request: GetSpendRuleRequest,
-  security?: GetSpendRuleSecurity  ,
+  security?: GetSpendRuleSecurity | undefined,
   options?: QueryHookOptions<
     SpendRulesGetRuleQueryData,
     SpendRulesGetRuleQueryError
@@ -89,7 +89,7 @@ export function useSpendRulesGetRule(
  */
 export function useSpendRulesGetRuleSuspense(
   request: GetSpendRuleRequest,
-  security?: GetSpendRuleSecurity  ,
+  security?: GetSpendRuleSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     SpendRulesGetRuleQueryData,
     SpendRulesGetRuleQueryError

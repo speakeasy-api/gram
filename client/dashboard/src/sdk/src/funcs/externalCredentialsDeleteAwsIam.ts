@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function externalCredentialsDeleteAwsIam(
   client: GramCore,
   request: DeleteAwsIamCredentialRequest,
-  security?: DeleteAwsIamCredentialSecurity  ,
+  security?: DeleteAwsIamCredentialSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function externalCredentialsDeleteAwsIam(
 async function $do(
   client: GramCore,
   request: DeleteAwsIamCredentialRequest,
-  security?: DeleteAwsIamCredentialSecurity  ,
+  security?: DeleteAwsIamCredentialSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

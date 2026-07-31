@@ -57,7 +57,7 @@ export class Assistants extends ClientSDK {
    */
   async create(
     request: CreateAssistantRequest,
-    security?: CreateAssistantSecurity  ,
+    security?: CreateAssistantSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Assistant> {
     return unwrapAsync(assistantsCreate(
@@ -76,7 +76,7 @@ export class Assistants extends ClientSDK {
    */
   async delete(
     request: DeleteAssistantRequest,
-    security?: DeleteAssistantSecurity  ,
+    security?: DeleteAssistantSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(assistantsDelete(
@@ -94,8 +94,8 @@ export class Assistants extends ClientSDK {
    * Get the project's built-in Project Assistant, provisioning it on first access. Idempotent — safe to call on every sidebar open.
    */
   async ensureManaged(
-    request?: EnsureManagedAssistantRequest  ,
-    security?: EnsureManagedAssistantSecurity  ,
+    request?: EnsureManagedAssistantRequest | undefined,
+    security?: EnsureManagedAssistantSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Assistant> {
     return unwrapAsync(assistantsEnsureManaged(
@@ -114,7 +114,7 @@ export class Assistants extends ClientSDK {
    */
   async get(
     request: GetAssistantRequest,
-    security?: GetAssistantSecurity  ,
+    security?: GetAssistantSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Assistant> {
     return unwrapAsync(assistantsGet(
@@ -132,8 +132,8 @@ export class Assistants extends ClientSDK {
    * Get the project's built-in Project Assistant if it exists. Returns 404 when no managed assistant has been provisioned yet — call ensureManagedAssistant to create one.
    */
   async getManaged(
-    request?: GetManagedAssistantRequest  ,
-    security?: GetManagedAssistantSecurity  ,
+    request?: GetManagedAssistantRequest | undefined,
+    security?: GetManagedAssistantSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Assistant> {
     return unwrapAsync(assistantsGetManaged(
@@ -151,8 +151,8 @@ export class Assistants extends ClientSDK {
    * List assistants for the current project.
    */
   async list(
-    request?: ListAssistantsRequest  ,
-    security?: ListAssistantsSecurity  ,
+    request?: ListAssistantsRequest | undefined,
+    security?: ListAssistantsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListAssistantsResult> {
     return unwrapAsync(assistantsList(
@@ -171,7 +171,7 @@ export class Assistants extends ClientSDK {
    */
   async sendMessage(
     request: SendAssistantMessageRequest,
-    security?: SendAssistantMessageSecurity  ,
+    security?: SendAssistantMessageSecurity | undefined,
     options?: RequestOptions,
   ): Promise<SendMessageResult> {
     return unwrapAsync(assistantsSendMessage(
@@ -190,7 +190,7 @@ export class Assistants extends ClientSDK {
    */
   async update(
     request: UpdateAssistantRequest,
-    security?: UpdateAssistantSecurity  ,
+    security?: UpdateAssistantSecurity | undefined,
     options?: RequestOptions,
   ): Promise<Assistant> {
     return unwrapAsync(assistantsUpdate(

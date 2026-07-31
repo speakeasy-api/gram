@@ -63,7 +63,7 @@ export type ListFilterOptionsQueryError =
  */
 export function useListFilterOptions(
   request: ListFilterOptionsRequest,
-  security?: ListFilterOptionsSecurity  ,
+  security?: ListFilterOptionsSecurity | undefined,
   options?: QueryHookOptions<
     ListFilterOptionsQueryData,
     ListFilterOptionsQueryError
@@ -89,7 +89,7 @@ export function useListFilterOptions(
  */
 export function useListFilterOptionsSuspense(
   request: ListFilterOptionsRequest,
-  security?: ListFilterOptionsSecurity  ,
+  security?: ListFilterOptionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListFilterOptionsQueryData,
     ListFilterOptionsQueryError

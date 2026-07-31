@@ -63,7 +63,7 @@ export type InstanceQueryError =
  */
 export function useInstance(
   request: GetInstanceRequest,
-  security?: GetInstanceSecurity  ,
+  security?: GetInstanceSecurity | undefined,
   options?: QueryHookOptions<InstanceQueryData, InstanceQueryError>,
 ): UseQueryResult<InstanceQueryData, InstanceQueryError> {
   const client = useGramContext();
@@ -86,7 +86,7 @@ export function useInstance(
  */
 export function useInstanceSuspense(
   request: GetInstanceRequest,
-  security?: GetInstanceSecurity  ,
+  security?: GetInstanceSecurity | undefined,
   options?: SuspenseQueryHookOptions<InstanceQueryData, InstanceQueryError>,
 ): UseSuspenseQueryResult<InstanceQueryData, InstanceQueryError> {
   const client = useGramContext();

@@ -62,8 +62,8 @@ export type ListCollectionsQueryError =
  * List MCP collections in the organization
  */
 export function useListCollections(
-  request?: ListCollectionsRequest  ,
-  security?: ListCollectionsSecurity  ,
+  request?: ListCollectionsRequest | undefined,
+  security?: ListCollectionsSecurity | undefined,
   options?: QueryHookOptions<
     ListCollectionsQueryData,
     ListCollectionsQueryError
@@ -88,8 +88,8 @@ export function useListCollections(
  * List MCP collections in the organization
  */
 export function useListCollectionsSuspense(
-  request?: ListCollectionsRequest  ,
-  security?: ListCollectionsSecurity  ,
+  request?: ListCollectionsRequest | undefined,
+  security?: ListCollectionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListCollectionsQueryData,
     ListCollectionsQueryError

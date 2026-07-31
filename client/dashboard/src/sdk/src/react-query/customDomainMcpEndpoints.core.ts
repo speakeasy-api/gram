@@ -23,8 +23,8 @@ export type CustomDomainMcpEndpointsQueryData =
 export function prefetchCustomDomainMcpEndpoints(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListCustomDomainMcpEndpointsRequest  ,
-  security?: ListCustomDomainMcpEndpointsSecurity  ,
+  request?: ListCustomDomainMcpEndpointsRequest | undefined,
+  security?: ListCustomDomainMcpEndpointsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,8 +39,8 @@ export function prefetchCustomDomainMcpEndpoints(
 
 export function buildCustomDomainMcpEndpointsQuery(
   client$: GramCore,
-  request?: ListCustomDomainMcpEndpointsRequest  ,
-  security?: ListCustomDomainMcpEndpointsSecurity  ,
+  request?: ListCustomDomainMcpEndpointsRequest | undefined,
+  security?: ListCustomDomainMcpEndpointsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

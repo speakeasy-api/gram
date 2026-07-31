@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function deploymentsCreate(
   client: GramCore,
   request: CreateDeploymentRequest,
-  security?: CreateDeploymentSecurity  ,
+  security?: CreateDeploymentSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function deploymentsCreate(
 async function $do(
   client: GramCore,
   request: CreateDeploymentRequest,
-  security?: CreateDeploymentSecurity  ,
+  security?: CreateDeploymentSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

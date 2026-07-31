@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function aiIntegrationsUpsertConfig(
   client: GramCore,
   request: UpsertAIIntegrationConfigRequest,
-  security?: UpsertAIIntegrationConfigSecurity  ,
+  security?: UpsertAIIntegrationConfigSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function aiIntegrationsUpsertConfig(
 async function $do(
   client: GramCore,
   request: UpsertAIIntegrationConfigRequest,
-  security?: UpsertAIIntegrationConfigSecurity  ,
+  security?: UpsertAIIntegrationConfigSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

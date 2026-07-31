@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function chatSessionsRevoke(
   client: GramCore,
   request: RevokeChatSessionRequest,
-  security?: RevokeChatSessionSecurity  ,
+  security?: RevokeChatSessionSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function chatSessionsRevoke(
 async function $do(
   client: GramCore,
   request: RevokeChatSessionRequest,
-  security?: RevokeChatSessionSecurity  ,
+  security?: RevokeChatSessionSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function accessListShadowMCPInventoryUsers(
   client: GramCore,
   request: ListShadowMCPInventoryUsersRequest,
-  security?: ListShadowMCPInventoryUsersSecurity  ,
+  security?: ListShadowMCPInventoryUsersSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function accessListShadowMCPInventoryUsers(
 async function $do(
   client: GramCore,
   request: ListShadowMCPInventoryUsersRequest,
-  security?: ListShadowMCPInventoryUsersSecurity  ,
+  security?: ListShadowMCPInventoryUsersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

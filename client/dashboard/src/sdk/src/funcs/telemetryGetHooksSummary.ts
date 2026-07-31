@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function telemetryGetHooksSummary(
   client: GramCore,
   request: GetHooksSummaryRequest,
-  security?: GetHooksSummarySecurity  ,
+  security?: GetHooksSummarySecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function telemetryGetHooksSummary(
 async function $do(
   client: GramCore,
   request: GetHooksSummaryRequest,
-  security?: GetHooksSummarySecurity  ,
+  security?: GetHooksSummarySecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

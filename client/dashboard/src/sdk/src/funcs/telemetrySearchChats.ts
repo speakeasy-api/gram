@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function telemetrySearchChats(
   client: GramCore,
   request: SearchChatsRequest,
-  security?: SearchChatsSecurity  ,
+  security?: SearchChatsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function telemetrySearchChats(
 async function $do(
   client: GramCore,
   request: SearchChatsRequest,
-  security?: SearchChatsSecurity  ,
+  security?: SearchChatsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -63,7 +63,7 @@ export type CheckMcpEndpointSlugAvailabilityQueryError =
  */
 export function useCheckMcpEndpointSlugAvailability(
   request: CheckMcpEndpointSlugAvailabilityRequest,
-  security?: CheckMcpEndpointSlugAvailabilitySecurity  ,
+  security?: CheckMcpEndpointSlugAvailabilitySecurity | undefined,
   options?: QueryHookOptions<
     CheckMcpEndpointSlugAvailabilityQueryData,
     CheckMcpEndpointSlugAvailabilityQueryError
@@ -92,7 +92,7 @@ export function useCheckMcpEndpointSlugAvailability(
  */
 export function useCheckMcpEndpointSlugAvailabilitySuspense(
   request: CheckMcpEndpointSlugAvailabilityRequest,
-  security?: CheckMcpEndpointSlugAvailabilitySecurity  ,
+  security?: CheckMcpEndpointSlugAvailabilitySecurity | undefined,
   options?: SuspenseQueryHookOptions<
     CheckMcpEndpointSlugAvailabilityQueryData,
     CheckMcpEndpointSlugAvailabilityQueryError

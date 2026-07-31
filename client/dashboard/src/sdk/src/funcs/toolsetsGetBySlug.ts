@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function toolsetsGetBySlug(
   client: GramCore,
   request: GetToolsetRequest,
-  security?: GetToolsetSecurity  ,
+  security?: GetToolsetSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function toolsetsGetBySlug(
 async function $do(
   client: GramCore,
   request: GetToolsetRequest,
-  security?: GetToolsetSecurity  ,
+  security?: GetToolsetSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

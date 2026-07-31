@@ -62,8 +62,8 @@ export type ListGcpIamCredentialsQueryError =
  * List the organization's GCP IAM external credentials. Requires org:read.
  */
 export function useListGcpIamCredentials(
-  request?: ListGcpIamCredentialsRequest  ,
-  security?: ListGcpIamCredentialsSecurity  ,
+  request?: ListGcpIamCredentialsRequest | undefined,
+  security?: ListGcpIamCredentialsSecurity | undefined,
   options?: QueryHookOptions<
     ListGcpIamCredentialsQueryData,
     ListGcpIamCredentialsQueryError
@@ -91,8 +91,8 @@ export function useListGcpIamCredentials(
  * List the organization's GCP IAM external credentials. Requires org:read.
  */
 export function useListGcpIamCredentialsSuspense(
-  request?: ListGcpIamCredentialsRequest  ,
-  security?: ListGcpIamCredentialsSecurity  ,
+  request?: ListGcpIamCredentialsRequest | undefined,
+  security?: ListGcpIamCredentialsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListGcpIamCredentialsQueryData,
     ListGcpIamCredentialsQueryError

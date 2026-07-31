@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function pluginsGetPublishStatus(
   client: GramCore,
-  request?: GetPublishStatusRequest  ,
-  security?: GetPublishStatusSecurity  ,
+  request?: GetPublishStatusRequest | undefined,
+  security?: GetPublishStatusSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function pluginsGetPublishStatus(
 
 async function $do(
   client: GramCore,
-  request?: GetPublishStatusRequest  ,
-  security?: GetPublishStatusSecurity  ,
+  request?: GetPublishStatusRequest | undefined,
+  security?: GetPublishStatusSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

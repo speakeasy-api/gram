@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function collectionsList(
   client: GramCore,
-  request?: ListCollectionsRequest  ,
-  security?: ListCollectionsSecurity  ,
+  request?: ListCollectionsRequest | undefined,
+  security?: ListCollectionsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function collectionsList(
 
 async function $do(
   client: GramCore,
-  request?: ListCollectionsRequest  ,
-  security?: ListCollectionsSecurity  ,
+  request?: ListCollectionsRequest | undefined,
+  security?: ListCollectionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -62,8 +62,8 @@ export type SpendRulesOverviewQueryError =
  * Get budgets overview metrics: aggregate card numbers plus current-window usage per rule.
  */
 export function useSpendRulesOverview(
-  request?: GetSpendRulesOverviewRequest  ,
-  security?: GetSpendRulesOverviewSecurity  ,
+  request?: GetSpendRulesOverviewRequest | undefined,
+  security?: GetSpendRulesOverviewSecurity | undefined,
   options?: QueryHookOptions<
     SpendRulesOverviewQueryData,
     SpendRulesOverviewQueryError
@@ -88,8 +88,8 @@ export function useSpendRulesOverview(
  * Get budgets overview metrics: aggregate card numbers plus current-window usage per rule.
  */
 export function useSpendRulesOverviewSuspense(
-  request?: GetSpendRulesOverviewRequest  ,
-  security?: GetSpendRulesOverviewSecurity  ,
+  request?: GetSpendRulesOverviewRequest | undefined,
+  security?: GetSpendRulesOverviewSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     SpendRulesOverviewQueryData,
     SpendRulesOverviewQueryError

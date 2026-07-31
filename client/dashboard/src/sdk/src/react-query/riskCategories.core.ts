@@ -22,8 +22,8 @@ export type RiskCategoriesQueryData = RiskCategoriesResult;
 export function prefetchRiskCategories(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListRiskCategoriesRequest  ,
-  security?: ListRiskCategoriesSecurity  ,
+  request?: ListRiskCategoriesRequest | undefined,
+  security?: ListRiskCategoriesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchRiskCategories(
 
 export function buildRiskCategoriesQuery(
   client$: GramCore,
-  request?: ListRiskCategoriesRequest  ,
-  security?: ListRiskCategoriesSecurity  ,
+  request?: ListRiskCategoriesRequest | undefined,
+  security?: ListRiskCategoriesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

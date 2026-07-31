@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function accessListChallenges(
   client: GramCore,
-  request?: ListChallengesRequest  ,
-  security?: ListChallengesSecurity  ,
+  request?: ListChallengesRequest | undefined,
+  security?: ListChallengesSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function accessListChallenges(
 
 async function $do(
   client: GramCore,
-  request?: ListChallengesRequest  ,
-  security?: ListChallengesSecurity  ,
+  request?: ListChallengesRequest | undefined,
+  security?: ListChallengesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

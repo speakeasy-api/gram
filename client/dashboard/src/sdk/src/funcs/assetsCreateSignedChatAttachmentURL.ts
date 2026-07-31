@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function assetsCreateSignedChatAttachmentURL(
   client: GramCore,
   request: CreateSignedChatAttachmentURLRequest,
-  security?: CreateSignedChatAttachmentURLSecurity  ,
+  security?: CreateSignedChatAttachmentURLSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function assetsCreateSignedChatAttachmentURL(
 async function $do(
   client: GramCore,
   request: CreateSignedChatAttachmentURLRequest,
-  security?: CreateSignedChatAttachmentURLSecurity  ,
+  security?: CreateSignedChatAttachmentURLSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

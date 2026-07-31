@@ -54,7 +54,7 @@ export class RemoteSessionIssuers extends ClientSDK {
    */
   async create(
     request: CreateRemoteSessionIssuerRequest,
-    security?: CreateRemoteSessionIssuerSecurity  ,
+    security?: CreateRemoteSessionIssuerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuer> {
     return unwrapAsync(remoteSessionIssuersCreate(
@@ -73,7 +73,7 @@ export class RemoteSessionIssuers extends ClientSDK {
    */
   async delete(
     request: DeleteRemoteSessionIssuerRequest,
-    security?: DeleteRemoteSessionIssuerSecurity  ,
+    security?: DeleteRemoteSessionIssuerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(remoteSessionIssuersDelete(
@@ -92,7 +92,7 @@ export class RemoteSessionIssuers extends ClientSDK {
    */
   async fetchMetadata(
     request: FetchRemoteSessionIssuerMetadataRequest,
-    security?: FetchRemoteSessionIssuerMetadataSecurity  ,
+    security?: FetchRemoteSessionIssuerMetadataSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuerDraft> {
     return unwrapAsync(remoteSessionIssuersFetchMetadata(
@@ -114,8 +114,8 @@ export class RemoteSessionIssuers extends ClientSDK {
    * The issuer URL is canonicalized before matching: scheme and host are lowercased, the scheme's default port is dropped, and trailing slashes are stripped. http and https are deliberately NOT equated, path case is significant, and a URL carrying a query or fragment is rejected (RFC 8414 forbids both on issuer identifiers). Canonicalization applies to the supplied URL only, never to stored values, so an issuer recorded with an unusual spelling may not be found and a duplicate is created instead, which is the safe direction to fail.
    */
   async get(
-    request?: GetRemoteSessionIssuerRequest  ,
-    security?: GetRemoteSessionIssuerSecurity  ,
+    request?: GetRemoteSessionIssuerRequest | undefined,
+    security?: GetRemoteSessionIssuerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuer> {
     return unwrapAsync(remoteSessionIssuersGet(
@@ -133,8 +133,8 @@ export class RemoteSessionIssuers extends ClientSDK {
    * List remote_session_issuers in the caller's project.
    */
   async list(
-    request?: ListRemoteSessionIssuersRequest  ,
-    security?: ListRemoteSessionIssuersSecurity  ,
+    request?: ListRemoteSessionIssuersRequest | undefined,
+    security?: ListRemoteSessionIssuersSecurity | undefined,
     options?: RequestOptions,
   ): Promise<
     PageIterator<ListRemoteSessionIssuersResponse, { cursor: string }>
@@ -155,7 +155,7 @@ export class RemoteSessionIssuers extends ClientSDK {
    */
   async refreshMetadata(
     request: RefreshRemoteSessionIssuerMetadataRequest,
-    security?: RefreshRemoteSessionIssuerMetadataSecurity  ,
+    security?: RefreshRemoteSessionIssuerMetadataSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuerRefresh> {
     return unwrapAsync(remoteSessionIssuersRefreshMetadata(
@@ -174,7 +174,7 @@ export class RemoteSessionIssuers extends ClientSDK {
    */
   async update(
     request: UpdateRemoteSessionIssuerRequest,
-    security?: UpdateRemoteSessionIssuerSecurity  ,
+    security?: UpdateRemoteSessionIssuerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuer> {
     return unwrapAsync(remoteSessionIssuersUpdate(

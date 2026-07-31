@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function assistantsList(
   client: GramCore,
-  request?: ListAssistantsRequest  ,
-  security?: ListAssistantsSecurity  ,
+  request?: ListAssistantsRequest | undefined,
+  security?: ListAssistantsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function assistantsList(
 
 async function $do(
   client: GramCore,
-  request?: ListAssistantsRequest  ,
-  security?: ListAssistantsSecurity  ,
+  request?: ListAssistantsRequest | undefined,
+  security?: ListAssistantsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

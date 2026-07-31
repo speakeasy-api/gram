@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function externalKeysList(
   client: GramCore,
-  request?: ListExternalKeysRequest  ,
-  security?: ListExternalKeysSecurity  ,
+  request?: ListExternalKeysRequest | undefined,
+  security?: ListExternalKeysSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function externalKeysList(
 
 async function $do(
   client: GramCore,
-  request?: ListExternalKeysRequest  ,
-  security?: ListExternalKeysSecurity  ,
+  request?: ListExternalKeysRequest | undefined,
+  security?: ListExternalKeysSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

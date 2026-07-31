@@ -62,8 +62,8 @@ export type RiskCategoriesQueryError =
  * Return the canonical risk category definitions: metadata (label/description/icon) plus the classification (source / rule_id list / rule_id prefix) used to bucket findings. Dashboards and CLIs should call this instead of maintaining their own copy of the mapping.
  */
 export function useRiskCategories(
-  request?: ListRiskCategoriesRequest  ,
-  security?: ListRiskCategoriesSecurity  ,
+  request?: ListRiskCategoriesRequest | undefined,
+  security?: ListRiskCategoriesSecurity | undefined,
   options?: QueryHookOptions<RiskCategoriesQueryData, RiskCategoriesQueryError>,
 ): UseQueryResult<RiskCategoriesQueryData, RiskCategoriesQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useRiskCategories(
  * Return the canonical risk category definitions: metadata (label/description/icon) plus the classification (source / rule_id list / rule_id prefix) used to bucket findings. Dashboards and CLIs should call this instead of maintaining their own copy of the mapping.
  */
 export function useRiskCategoriesSuspense(
-  request?: ListRiskCategoriesRequest  ,
-  security?: ListRiskCategoriesSecurity  ,
+  request?: ListRiskCategoriesRequest | undefined,
+  security?: ListRiskCategoriesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskCategoriesQueryData,
     RiskCategoriesQueryError

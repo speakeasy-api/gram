@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function telemetryGetToolUsageUsersByTarget(
   client: GramCore,
   request: GetToolUsageUsersByTargetRequest,
-  security?: GetToolUsageUsersByTargetSecurity  ,
+  security?: GetToolUsageUsersByTargetSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function telemetryGetToolUsageUsersByTarget(
 async function $do(
   client: GramCore,
   request: GetToolUsageUsersByTargetRequest,
-  security?: GetToolUsageUsersByTargetSecurity  ,
+  security?: GetToolUsageUsersByTargetSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -22,8 +22,8 @@ export type ListMcpServerToolFiltersQueryData = ListToolFiltersResult;
 export function prefetchListMcpServerToolFilters(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListMcpServerToolFiltersRequest  ,
-  security?: ListMcpServerToolFiltersSecurity  ,
+  request?: ListMcpServerToolFiltersRequest | undefined,
+  security?: ListMcpServerToolFiltersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListMcpServerToolFilters(
 
 export function buildListMcpServerToolFiltersQuery(
   client$: GramCore,
-  request?: ListMcpServerToolFiltersRequest  ,
-  security?: ListMcpServerToolFiltersSecurity  ,
+  request?: ListMcpServerToolFiltersRequest | undefined,
+  security?: ListMcpServerToolFiltersSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

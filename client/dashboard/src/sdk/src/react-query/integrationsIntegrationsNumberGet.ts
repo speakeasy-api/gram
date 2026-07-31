@@ -62,8 +62,8 @@ export type IntegrationsIntegrationsNumberGetQueryError =
  * Get a third-party integration by ID or name.
  */
 export function useIntegrationsIntegrationsNumberGet(
-  request?: IntegrationsNumberGetRequest  ,
-  security?: IntegrationsNumberGetSecurity  ,
+  request?: IntegrationsNumberGetRequest | undefined,
+  security?: IntegrationsNumberGetSecurity | undefined,
   options?: QueryHookOptions<
     IntegrationsIntegrationsNumberGetQueryData,
     IntegrationsIntegrationsNumberGetQueryError
@@ -91,8 +91,8 @@ export function useIntegrationsIntegrationsNumberGet(
  * Get a third-party integration by ID or name.
  */
 export function useIntegrationsIntegrationsNumberGetSuspense(
-  request?: IntegrationsNumberGetRequest  ,
-  security?: IntegrationsNumberGetSecurity  ,
+  request?: IntegrationsNumberGetRequest | undefined,
+  security?: IntegrationsNumberGetSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     IntegrationsIntegrationsNumberGetQueryData,
     IntegrationsIntegrationsNumberGetQueryError

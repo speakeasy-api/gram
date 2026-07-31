@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function tunneledMcpCreateServer(
   client: GramCore,
   request: CreateTunneledMcpServerRequest,
-  security?: CreateTunneledMcpServerSecurity  ,
+  security?: CreateTunneledMcpServerSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function tunneledMcpCreateServer(
 async function $do(
   client: GramCore,
   request: CreateTunneledMcpServerRequest,
-  security?: CreateTunneledMcpServerSecurity  ,
+  security?: CreateTunneledMcpServerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

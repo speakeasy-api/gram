@@ -23,7 +23,7 @@ export function prefetchListSessions(
   queryClient: QueryClient,
   client$: GramCore,
   request: ListSessionsRequest,
-  security?: ListSessionsSecurity  ,
+  security?: ListSessionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchListSessions(
 export function buildListSessionsQuery(
   client$: GramCore,
   request: ListSessionsRequest,
-  security?: ListSessionsSecurity  ,
+  security?: ListSessionsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

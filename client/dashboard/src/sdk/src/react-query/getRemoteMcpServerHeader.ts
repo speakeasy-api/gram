@@ -63,7 +63,7 @@ export type GetRemoteMcpServerHeaderQueryError =
  */
 export function useGetRemoteMcpServerHeader(
   request: GetRemoteMcpServerHeaderRequest,
-  security?: GetRemoteMcpServerHeaderSecurity  ,
+  security?: GetRemoteMcpServerHeaderSecurity | undefined,
   options?: QueryHookOptions<
     GetRemoteMcpServerHeaderQueryData,
     GetRemoteMcpServerHeaderQueryError
@@ -92,7 +92,7 @@ export function useGetRemoteMcpServerHeader(
  */
 export function useGetRemoteMcpServerHeaderSuspense(
   request: GetRemoteMcpServerHeaderRequest,
-  security?: GetRemoteMcpServerHeaderSecurity  ,
+  security?: GetRemoteMcpServerHeaderSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetRemoteMcpServerHeaderQueryData,
     GetRemoteMcpServerHeaderQueryError

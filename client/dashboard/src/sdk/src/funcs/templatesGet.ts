@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function templatesGet(
   client: GramCore,
-  request?: GetTemplateRequest  ,
-  security?: GetTemplateSecurity  ,
+  request?: GetTemplateRequest | undefined,
+  security?: GetTemplateSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function templatesGet(
 
 async function $do(
   client: GramCore,
-  request?: GetTemplateRequest  ,
-  security?: GetTemplateSecurity  ,
+  request?: GetTemplateRequest | undefined,
+  security?: GetTemplateSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function triggersGet(
   client: GramCore,
   request: GetTriggerInstanceRequest,
-  security?: GetTriggerInstanceSecurity  ,
+  security?: GetTriggerInstanceSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function triggersGet(
 async function $do(
   client: GramCore,
   request: GetTriggerInstanceRequest,
-  security?: GetTriggerInstanceSecurity  ,
+  security?: GetTriggerInstanceSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

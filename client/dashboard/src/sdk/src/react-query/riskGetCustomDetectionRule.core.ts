@@ -23,7 +23,7 @@ export function prefetchRiskGetCustomDetectionRule(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetCustomDetectionRuleRequest,
-  security?: GetCustomDetectionRuleSecurity  ,
+  security?: GetCustomDetectionRuleSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchRiskGetCustomDetectionRule(
 export function buildRiskGetCustomDetectionRuleQuery(
   client$: GramCore,
   request: GetCustomDetectionRuleRequest,
-  security?: GetCustomDetectionRuleSecurity  ,
+  security?: GetCustomDetectionRuleSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

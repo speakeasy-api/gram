@@ -63,7 +63,7 @@ export type ListMcpServerToolMetadataQueryError =
  */
 export function useListMcpServerToolMetadata(
   request: ListMcpServerToolMetadataRequest,
-  security?: ListMcpServerToolMetadataSecurity  ,
+  security?: ListMcpServerToolMetadataSecurity | undefined,
   options?: QueryHookOptions<
     ListMcpServerToolMetadataQueryData,
     ListMcpServerToolMetadataQueryError
@@ -92,7 +92,7 @@ export function useListMcpServerToolMetadata(
  */
 export function useListMcpServerToolMetadataSuspense(
   request: ListMcpServerToolMetadataRequest,
-  security?: ListMcpServerToolMetadataSecurity  ,
+  security?: ListMcpServerToolMetadataSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListMcpServerToolMetadataQueryData,
     ListMcpServerToolMetadataQueryError

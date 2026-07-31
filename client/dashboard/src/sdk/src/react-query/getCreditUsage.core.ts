@@ -22,8 +22,8 @@ export type GetCreditUsageQueryData = CreditUsageResponseBody;
 export function prefetchGetCreditUsage(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: CreditUsageRequest  ,
-  security?: CreditUsageSecurity  ,
+  request?: CreditUsageRequest | undefined,
+  security?: CreditUsageSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchGetCreditUsage(
 
 export function buildGetCreditUsageQuery(
   client$: GramCore,
-  request?: CreditUsageRequest  ,
-  security?: CreditUsageSecurity  ,
+  request?: CreditUsageRequest | undefined,
+  security?: CreditUsageSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

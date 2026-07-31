@@ -22,8 +22,8 @@ export type RbacStatusQueryData = RBACStatus;
 export function prefetchRbacStatus(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetRBACStatusRequest  ,
-  security?: GetRBACStatusSecurity  ,
+  request?: GetRBACStatusRequest | undefined,
+  security?: GetRBACStatusSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchRbacStatus(
 
 export function buildRbacStatusQuery(
   client$: GramCore,
-  request?: GetRBACStatusRequest  ,
-  security?: GetRBACStatusSecurity  ,
+  request?: GetRBACStatusRequest | undefined,
+  security?: GetRBACStatusSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

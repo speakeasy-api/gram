@@ -23,7 +23,7 @@ export function prefetchRenderTemplateByID(
   queryClient: QueryClient,
   client$: GramCore,
   request: RenderTemplateByIDRequest,
-  security?: RenderTemplateByIDSecurity  ,
+  security?: RenderTemplateByIDSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchRenderTemplateByID(
 export function buildRenderTemplateByIDQuery(
   client$: GramCore,
   request: RenderTemplateByIDRequest,
-  security?: RenderTemplateByIDSecurity  ,
+  security?: RenderTemplateByIDSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

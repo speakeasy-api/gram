@@ -22,8 +22,8 @@ export type ListMCPCatalogQueryData = ListCatalogResponseBody;
 export function prefetchListMCPCatalog(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListMCPCatalogRequest  ,
-  security?: ListMCPCatalogSecurity  ,
+  request?: ListMCPCatalogRequest | undefined,
+  security?: ListMCPCatalogSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListMCPCatalog(
 
 export function buildListMCPCatalogQuery(
   client$: GramCore,
-  request?: ListMCPCatalogRequest  ,
-  security?: ListMCPCatalogSecurity  ,
+  request?: ListMCPCatalogRequest | undefined,
+  security?: ListMCPCatalogSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

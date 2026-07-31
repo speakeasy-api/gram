@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function telemetryGetEmployeeDataFlowGraph(
   client: GramCore,
   request: GetEmployeeDataFlowGraphRequest,
-  security?: GetEmployeeDataFlowGraphSecurity  ,
+  security?: GetEmployeeDataFlowGraphSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function telemetryGetEmployeeDataFlowGraph(
 async function $do(
   client: GramCore,
   request: GetEmployeeDataFlowGraphRequest,
-  security?: GetEmployeeDataFlowGraphSecurity  ,
+  security?: GetEmployeeDataFlowGraphSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

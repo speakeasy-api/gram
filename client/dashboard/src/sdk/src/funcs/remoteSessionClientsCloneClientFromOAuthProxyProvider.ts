@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function remoteSessionClientsCloneClientFromOAuthProxyProvider(
   client: GramCore,
   request: CloneClientFromOAuthProxyProviderRequest,
-  security?: CloneClientFromOAuthProxyProviderSecurity  ,
+  security?: CloneClientFromOAuthProxyProviderSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function remoteSessionClientsCloneClientFromOAuthProxyProvider(
 async function $do(
   client: GramCore,
   request: CloneClientFromOAuthProxyProviderRequest,
-  security?: CloneClientFromOAuthProxyProviderSecurity  ,
+  security?: CloneClientFromOAuthProxyProviderSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

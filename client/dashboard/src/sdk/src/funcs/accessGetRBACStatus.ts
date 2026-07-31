@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function accessGetRBACStatus(
   client: GramCore,
-  request?: GetRBACStatusRequest  ,
-  security?: GetRBACStatusSecurity  ,
+  request?: GetRBACStatusRequest | undefined,
+  security?: GetRBACStatusSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function accessGetRBACStatus(
 
 async function $do(
   client: GramCore,
-  request?: GetRBACStatusRequest  ,
-  security?: GetRBACStatusSecurity  ,
+  request?: GetRBACStatusRequest | undefined,
+  security?: GetRBACStatusSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

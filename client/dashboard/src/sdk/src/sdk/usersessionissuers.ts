@@ -48,7 +48,7 @@ export class UserSessionIssuers extends ClientSDK {
    */
   async create(
     request: CreateUserSessionIssuerRequest,
-    security?: CreateUserSessionIssuerSecurity  ,
+    security?: CreateUserSessionIssuerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<UserSessionIssuer> {
     return unwrapAsync(userSessionIssuersCreate(
@@ -67,7 +67,7 @@ export class UserSessionIssuers extends ClientSDK {
    */
   async delete(
     request: DeleteUserSessionIssuerRequest,
-    security?: DeleteUserSessionIssuerSecurity  ,
+    security?: DeleteUserSessionIssuerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(userSessionIssuersDelete(
@@ -85,8 +85,8 @@ export class UserSessionIssuers extends ClientSDK {
    * Get a user_session_issuer by id or by slug. Provide exactly one.
    */
   async get(
-    request?: GetUserSessionIssuerRequest  ,
-    security?: GetUserSessionIssuerSecurity  ,
+    request?: GetUserSessionIssuerRequest | undefined,
+    security?: GetUserSessionIssuerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<UserSessionIssuer> {
     return unwrapAsync(userSessionIssuersGet(
@@ -104,8 +104,8 @@ export class UserSessionIssuers extends ClientSDK {
    * List user_session_issuers in the caller's project.
    */
   async list(
-    request?: ListUserSessionIssuersRequest  ,
-    security?: ListUserSessionIssuersSecurity  ,
+    request?: ListUserSessionIssuersRequest | undefined,
+    security?: ListUserSessionIssuersSecurity | undefined,
     options?: RequestOptions,
   ): Promise<PageIterator<ListUserSessionIssuersResponse, { cursor: string }>> {
     return unwrapResultIterator(userSessionIssuersList(
@@ -124,7 +124,7 @@ export class UserSessionIssuers extends ClientSDK {
    */
   async migrateLegacyGramRegistrations(
     request: MigrateLegacyGramRegistrationsRequest,
-    security?: MigrateLegacyGramRegistrationsSecurity  ,
+    security?: MigrateLegacyGramRegistrationsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<MigrateLegacyGramRegistrationsResult> {
     return unwrapAsync(userSessionIssuersMigrateLegacyGramRegistrations(
@@ -143,7 +143,7 @@ export class UserSessionIssuers extends ClientSDK {
    */
   async update(
     request: UpdateUserSessionIssuerRequest,
-    security?: UpdateUserSessionIssuerSecurity  ,
+    security?: UpdateUserSessionIssuerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<UserSessionIssuer> {
     return unwrapAsync(userSessionIssuersUpdate(

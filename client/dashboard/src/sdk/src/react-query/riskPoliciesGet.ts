@@ -63,7 +63,7 @@ export type RiskPoliciesGetQueryError =
  */
 export function useRiskPoliciesGet(
   request: GetRiskPolicyRequest,
-  security?: GetRiskPolicySecurity  ,
+  security?: GetRiskPolicySecurity | undefined,
   options?: QueryHookOptions<
     RiskPoliciesGetQueryData,
     RiskPoliciesGetQueryError
@@ -89,7 +89,7 @@ export function useRiskPoliciesGet(
  */
 export function useRiskPoliciesGetSuspense(
   request: GetRiskPolicyRequest,
-  security?: GetRiskPolicySecurity  ,
+  security?: GetRiskPolicySecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskPoliciesGetQueryData,
     RiskPoliciesGetQueryError

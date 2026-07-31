@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function domainsListDomains(
   client: GramCore,
-  request?: ListDomainsRequest  ,
-  security?: ListDomainsSecurity  ,
+  request?: ListDomainsRequest | undefined,
+  security?: ListDomainsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function domainsListDomains(
 
 async function $do(
   client: GramCore,
-  request?: ListDomainsRequest  ,
-  security?: ListDomainsSecurity  ,
+  request?: ListDomainsRequest | undefined,
+  security?: ListDomainsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

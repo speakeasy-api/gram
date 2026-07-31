@@ -22,8 +22,8 @@ export type ListPackagesQueryData = ListPackagesResult;
 export function prefetchListPackages(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListPackagesRequest  ,
-  security?: ListPackagesSecurity  ,
+  request?: ListPackagesRequest | undefined,
+  security?: ListPackagesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListPackages(
 
 export function buildListPackagesQuery(
   client$: GramCore,
-  request?: ListPackagesRequest  ,
-  security?: ListPackagesSecurity  ,
+  request?: ListPackagesRequest | undefined,
+  security?: ListPackagesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

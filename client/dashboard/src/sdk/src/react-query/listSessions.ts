@@ -63,7 +63,7 @@ export type ListSessionsQueryError =
  */
 export function useListSessions(
   request: ListSessionsRequest,
-  security?: ListSessionsSecurity  ,
+  security?: ListSessionsSecurity | undefined,
   options?: QueryHookOptions<ListSessionsQueryData, ListSessionsQueryError>,
 ): UseQueryResult<ListSessionsQueryData, ListSessionsQueryError> {
   const client = useGramContext();
@@ -86,7 +86,7 @@ export function useListSessions(
  */
 export function useListSessionsSuspense(
   request: ListSessionsRequest,
-  security?: ListSessionsSecurity  ,
+  security?: ListSessionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListSessionsQueryData,
     ListSessionsQueryError

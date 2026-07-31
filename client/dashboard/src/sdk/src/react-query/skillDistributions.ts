@@ -80,8 +80,8 @@ export type SkillDistributionsQueryError =
  * List active plugin skill distributions for the current project.
  */
 export function useSkillDistributions(
-  request?: ListSkillDistributionsRequest  ,
-  security?: ListSkillDistributionsSecurity  ,
+  request?: ListSkillDistributionsRequest | undefined,
+  security?: ListSkillDistributionsSecurity | undefined,
   options?: QueryHookOptions<
     SkillDistributionsQueryData,
     SkillDistributionsQueryError
@@ -106,8 +106,8 @@ export function useSkillDistributions(
  * List active plugin skill distributions for the current project.
  */
 export function useSkillDistributionsSuspense(
-  request?: ListSkillDistributionsRequest  ,
-  security?: ListSkillDistributionsSecurity  ,
+  request?: ListSkillDistributionsRequest | undefined,
+  security?: ListSkillDistributionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     SkillDistributionsQueryData,
     SkillDistributionsQueryError
@@ -135,8 +135,8 @@ export function useSkillDistributionsSuspense(
  * List active plugin skill distributions for the current project.
  */
 export function useSkillDistributionsInfinite(
-  request?: ListSkillDistributionsRequest  ,
-  security?: ListSkillDistributionsSecurity  ,
+  request?: ListSkillDistributionsRequest | undefined,
+  security?: ListSkillDistributionsSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     SkillDistributionsInfiniteQueryData,
     SkillDistributionsQueryError
@@ -178,8 +178,8 @@ export function useSkillDistributionsInfinite(
  * List active plugin skill distributions for the current project.
  */
 export function useSkillDistributionsInfiniteSuspense(
-  request?: ListSkillDistributionsRequest  ,
-  security?: ListSkillDistributionsSecurity  ,
+  request?: ListSkillDistributionsRequest | undefined,
+  security?: ListSkillDistributionsSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     SkillDistributionsInfiniteQueryData,
     SkillDistributionsQueryError

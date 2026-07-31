@@ -23,7 +23,7 @@ export function prefetchListFilterOptions(
   queryClient: QueryClient,
   client$: GramCore,
   request: ListFilterOptionsRequest,
-  security?: ListFilterOptionsSecurity  ,
+  security?: ListFilterOptionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchListFilterOptions(
 export function buildListFilterOptionsQuery(
   client$: GramCore,
   request: ListFilterOptionsRequest,
-  security?: ListFilterOptionsSecurity  ,
+  security?: ListFilterOptionsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

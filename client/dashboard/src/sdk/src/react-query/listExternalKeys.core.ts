@@ -23,8 +23,8 @@ export type ListExternalKeysQueryData = ListExternalKeysResult;
 export function prefetchListExternalKeys(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListExternalKeysRequest  ,
-  security?: ListExternalKeysSecurity  ,
+  request?: ListExternalKeysRequest | undefined,
+  security?: ListExternalKeysSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,8 +39,8 @@ export function prefetchListExternalKeys(
 
 export function buildListExternalKeysQuery(
   client$: GramCore,
-  request?: ListExternalKeysRequest  ,
-  security?: ListExternalKeysSecurity  ,
+  request?: ListExternalKeysRequest | undefined,
+  security?: ListExternalKeysSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

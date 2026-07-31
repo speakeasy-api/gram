@@ -31,8 +31,8 @@ export class SkillEfficacy extends ClientSDK {
    * Get effective organization-wide skill efficacy sampling settings.
    */
   async getSettings(
-    request?: GetSkillEfficacySettingsRequest  ,
-    security?: GetSkillEfficacySettingsSecurity  ,
+    request?: GetSkillEfficacySettingsRequest | undefined,
+    security?: GetSkillEfficacySettingsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<SkillEfficacySettings> {
     return unwrapAsync(skillEfficacyGetSettings(
@@ -50,8 +50,8 @@ export class SkillEfficacy extends ClientSDK {
    * Query activation-time skill efficacy, estimated savings, attributed session cost, and optional scored-session detail for the current project. Scores are sampled and costs fan out to every activated version.
    */
   async queryInsights(
-    request?: QuerySkillEfficacyInsightsRequest  ,
-    security?: QuerySkillEfficacyInsightsSecurity  ,
+    request?: QuerySkillEfficacyInsightsRequest | undefined,
+    security?: QuerySkillEfficacyInsightsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<
     PageIterator<QuerySkillEfficacyInsightsResponse, { cursor: string }>
@@ -72,7 +72,7 @@ export class SkillEfficacy extends ClientSDK {
    */
   async upsertSettings(
     request: UpsertSkillEfficacySettingsRequest,
-    security?: UpsertSkillEfficacySettingsSecurity  ,
+    security?: UpsertSkillEfficacySettingsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<SkillEfficacySettings> {
     return unwrapAsync(skillEfficacyUpsertSettings(

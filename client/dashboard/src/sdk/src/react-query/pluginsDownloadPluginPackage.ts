@@ -64,7 +64,7 @@ export type PluginsDownloadPluginPackageQueryError =
  */
 export function usePluginsDownloadPluginPackage(
   request: DownloadPluginPackageRequest,
-  security?: DownloadPluginPackageSecurity  ,
+  security?: DownloadPluginPackageSecurity | undefined,
   options?: QueryHookOptions<
     PluginsDownloadPluginPackageQueryData,
     PluginsDownloadPluginPackageQueryError
@@ -93,7 +93,7 @@ export function usePluginsDownloadPluginPackage(
  */
 export function usePluginsDownloadPluginPackageSuspense(
   request: DownloadPluginPackageRequest,
-  security?: DownloadPluginPackageSecurity  ,
+  security?: DownloadPluginPackageSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     PluginsDownloadPluginPackageQueryData,
     PluginsDownloadPluginPackageQueryError

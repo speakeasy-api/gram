@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function assistantMemoriesGet(
   client: GramCore,
   request: GetAssistantMemoryRequest,
-  security?: GetAssistantMemorySecurity  ,
+  security?: GetAssistantMemorySecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function assistantMemoriesGet(
 async function $do(
   client: GramCore,
   request: GetAssistantMemoryRequest,
-  security?: GetAssistantMemorySecurity  ,
+  security?: GetAssistantMemorySecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

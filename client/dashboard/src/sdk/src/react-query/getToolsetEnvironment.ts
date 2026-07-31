@@ -63,7 +63,7 @@ export type GetToolsetEnvironmentQueryError =
  */
 export function useGetToolsetEnvironment(
   request: GetToolsetEnvironmentRequest,
-  security?: GetToolsetEnvironmentSecurity  ,
+  security?: GetToolsetEnvironmentSecurity | undefined,
   options?: QueryHookOptions<
     GetToolsetEnvironmentQueryData,
     GetToolsetEnvironmentQueryError
@@ -92,7 +92,7 @@ export function useGetToolsetEnvironment(
  */
 export function useGetToolsetEnvironmentSuspense(
   request: GetToolsetEnvironmentRequest,
-  security?: GetToolsetEnvironmentSecurity  ,
+  security?: GetToolsetEnvironmentSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetToolsetEnvironmentQueryData,
     GetToolsetEnvironmentQueryError

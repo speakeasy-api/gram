@@ -25,7 +25,7 @@ export class ChatSessions extends ClientSDK {
    */
   async create(
     request: CreateChatSessionRequest,
-    security?: CreateChatSessionSecurity  ,
+    security?: CreateChatSessionSecurity | undefined,
     options?: RequestOptions,
   ): Promise<CreateResponseBody> {
     return unwrapAsync(chatSessionsCreate(
@@ -44,7 +44,7 @@ export class ChatSessions extends ClientSDK {
    */
   async revoke(
     request: RevokeChatSessionRequest,
-    security?: RevokeChatSessionSecurity  ,
+    security?: RevokeChatSessionSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(chatSessionsRevoke(

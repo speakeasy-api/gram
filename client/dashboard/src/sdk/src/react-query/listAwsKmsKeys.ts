@@ -62,8 +62,8 @@ export type ListAwsKmsKeysQueryError =
  * List the organization's AWS KMS external keys. Requires org:read.
  */
 export function useListAwsKmsKeys(
-  request?: ListAwsKmsKeysRequest  ,
-  security?: ListAwsKmsKeysSecurity  ,
+  request?: ListAwsKmsKeysRequest | undefined,
+  security?: ListAwsKmsKeysSecurity | undefined,
   options?: QueryHookOptions<ListAwsKmsKeysQueryData, ListAwsKmsKeysQueryError>,
 ): UseQueryResult<ListAwsKmsKeysQueryData, ListAwsKmsKeysQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useListAwsKmsKeys(
  * List the organization's AWS KMS external keys. Requires org:read.
  */
 export function useListAwsKmsKeysSuspense(
-  request?: ListAwsKmsKeysRequest  ,
-  security?: ListAwsKmsKeysSecurity  ,
+  request?: ListAwsKmsKeysRequest | undefined,
+  security?: ListAwsKmsKeysSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListAwsKmsKeysQueryData,
     ListAwsKmsKeysQueryError

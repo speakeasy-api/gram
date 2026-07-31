@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function riskCustomRulesDelete(
   client: GramCore,
   request: DeleteCustomDetectionRuleRequest,
-  security?: DeleteCustomDetectionRuleSecurity  ,
+  security?: DeleteCustomDetectionRuleSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function riskCustomRulesDelete(
 async function $do(
   client: GramCore,
   request: DeleteCustomDetectionRuleRequest,
-  security?: DeleteCustomDetectionRuleSecurity  ,
+  security?: DeleteCustomDetectionRuleSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -62,8 +62,8 @@ export type ListChatSourcesQueryError =
  * List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.
  */
 export function useListChatSources(
-  request?: ListChatSourcesRequest  ,
-  security?: ListChatSourcesSecurity  ,
+  request?: ListChatSourcesRequest | undefined,
+  security?: ListChatSourcesSecurity | undefined,
   options?: QueryHookOptions<
     ListChatSourcesQueryData,
     ListChatSourcesQueryError
@@ -88,8 +88,8 @@ export function useListChatSources(
  * List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.
  */
 export function useListChatSourcesSuspense(
-  request?: ListChatSourcesRequest  ,
-  security?: ListChatSourcesSecurity  ,
+  request?: ListChatSourcesRequest | undefined,
+  security?: ListChatSourcesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListChatSourcesQueryData,
     ListChatSourcesQueryError

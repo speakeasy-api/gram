@@ -22,8 +22,8 @@ export type ListMcpServersForOrgQueryData = ListMcpServersResult;
 export function prefetchListMcpServersForOrg(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListMcpServersForOrgRequest  ,
-  security?: ListMcpServersForOrgSecurity  ,
+  request?: ListMcpServersForOrgRequest | undefined,
+  security?: ListMcpServersForOrgSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListMcpServersForOrg(
 
 export function buildListMcpServersForOrgQuery(
   client$: GramCore,
-  request?: ListMcpServersForOrgRequest  ,
-  security?: ListMcpServersForOrgSecurity  ,
+  request?: ListMcpServersForOrgRequest | undefined,
+  security?: ListMcpServersForOrgSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

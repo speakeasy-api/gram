@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function hooksSkillFeedback(
   client: GramCore,
   request: SkillFeedbackRequest,
-  security?: SkillFeedbackSecurity  ,
+  security?: SkillFeedbackSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function hooksSkillFeedback(
 async function $do(
   client: GramCore,
   request: SkillFeedbackRequest,
-  security?: SkillFeedbackSecurity  ,
+  security?: SkillFeedbackSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -22,8 +22,8 @@ export type LatestDeploymentQueryData = GetLatestDeploymentResult;
 export function prefetchLatestDeployment(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetLatestDeploymentRequest  ,
-  security?: GetLatestDeploymentSecurity  ,
+  request?: GetLatestDeploymentRequest | undefined,
+  security?: GetLatestDeploymentSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchLatestDeployment(
 
 export function buildLatestDeploymentQuery(
   client$: GramCore,
-  request?: GetLatestDeploymentRequest  ,
-  security?: GetLatestDeploymentSecurity  ,
+  request?: GetLatestDeploymentRequest | undefined,
+  security?: GetLatestDeploymentSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

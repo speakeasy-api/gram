@@ -23,7 +23,7 @@ export function prefetchToolset(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetToolsetRequest,
-  security?: GetToolsetSecurity  ,
+  security?: GetToolsetSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchToolset(
 export function buildToolsetQuery(
   client$: GramCore,
   request: GetToolsetRequest,
-  security?: GetToolsetSecurity  ,
+  security?: GetToolsetSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

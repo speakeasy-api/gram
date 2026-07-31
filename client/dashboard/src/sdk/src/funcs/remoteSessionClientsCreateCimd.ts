@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function remoteSessionClientsCreateCimd(
   client: GramCore,
   request: CreateCimdRemoteSessionClientRequest,
-  security?: CreateCimdRemoteSessionClientSecurity  ,
+  security?: CreateCimdRemoteSessionClientSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function remoteSessionClientsCreateCimd(
 async function $do(
   client: GramCore,
   request: CreateCimdRemoteSessionClientRequest,
-  security?: CreateCimdRemoteSessionClientSecurity  ,
+  security?: CreateCimdRemoteSessionClientSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

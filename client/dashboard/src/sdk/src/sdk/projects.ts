@@ -60,7 +60,7 @@ export class Projects extends ClientSDK {
    */
   async create(
     request: CreateProjectRequest,
-    security?: CreateProjectSecurity  ,
+    security?: CreateProjectSecurity | undefined,
     options?: RequestOptions,
   ): Promise<CreateProjectResult> {
     return unwrapAsync(projectsCreate(
@@ -79,7 +79,7 @@ export class Projects extends ClientSDK {
    */
   async deleteById(
     request: DeleteProjectRequest,
-    security?: DeleteProjectSecurity  ,
+    security?: DeleteProjectSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(projectsDeleteById(
@@ -98,7 +98,7 @@ export class Projects extends ClientSDK {
    */
   async read(
     request: GetProjectRequest,
-    security?: GetProjectSecurity  ,
+    security?: GetProjectSecurity | undefined,
     options?: RequestOptions,
   ): Promise<GetProjectResult> {
     return unwrapAsync(projectsRead(
@@ -117,7 +117,7 @@ export class Projects extends ClientSDK {
    */
   async list(
     request: ListProjectsRequest,
-    security?: ListProjectsSecurity  ,
+    security?: ListProjectsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListProjectsResult> {
     return unwrapAsync(projectsList(
@@ -135,8 +135,8 @@ export class Projects extends ClientSDK {
    * List allowed origins for a project.
    */
   async listAllowedOrigins(
-    request?: ListAllowedOriginsRequest  ,
-    security?: ListAllowedOriginsSecurity  ,
+    request?: ListAllowedOriginsRequest | undefined,
+    security?: ListAllowedOriginsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListAllowedOriginsResult> {
     return unwrapAsync(projectsListAllowedOrigins(
@@ -155,7 +155,7 @@ export class Projects extends ClientSDK {
    */
   async setLogo(
     request: SetProjectLogoRequest,
-    security?: SetProjectLogoSecurity  ,
+    security?: SetProjectLogoSecurity | undefined,
     options?: RequestOptions,
   ): Promise<SetProjectLogoResult> {
     return unwrapAsync(projectsSetLogo(
@@ -174,7 +174,7 @@ export class Projects extends ClientSDK {
    */
   async setOrganizationWhitelist(
     request: SetOrganizationWhitelistRequest,
-    security?: SetOrganizationWhitelistSecurity  ,
+    security?: SetOrganizationWhitelistSecurity | undefined,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(projectsSetOrganizationWhitelist(
@@ -193,7 +193,7 @@ export class Projects extends ClientSDK {
    */
   async upsertAllowedOrigin(
     request: UpsertAllowedOriginRequest,
-    security?: UpsertAllowedOriginSecurity  ,
+    security?: UpsertAllowedOriginSecurity | undefined,
     options?: RequestOptions,
   ): Promise<UpsertAllowedOriginResult> {
     return unwrapAsync(projectsUpsertAllowedOrigin(

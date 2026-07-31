@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function riskExclusionsDelete(
   client: GramCore,
   request: DeleteRiskExclusionRequest,
-  security?: DeleteRiskExclusionSecurity  ,
+  security?: DeleteRiskExclusionSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function riskExclusionsDelete(
 async function $do(
   client: GramCore,
   request: DeleteRiskExclusionRequest,
-  security?: DeleteRiskExclusionSecurity  ,
+  security?: DeleteRiskExclusionSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

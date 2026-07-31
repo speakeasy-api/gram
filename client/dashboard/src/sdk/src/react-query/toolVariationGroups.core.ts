@@ -22,8 +22,8 @@ export type ToolVariationGroupsQueryData = ListToolVariationGroupsResult;
 export function prefetchToolVariationGroups(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListToolVariationGroupsRequest  ,
-  security?: ListToolVariationGroupsSecurity  ,
+  request?: ListToolVariationGroupsRequest | undefined,
+  security?: ListToolVariationGroupsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchToolVariationGroups(
 
 export function buildToolVariationGroupsQuery(
   client$: GramCore,
-  request?: ListToolVariationGroupsRequest  ,
-  security?: ListToolVariationGroupsSecurity  ,
+  request?: ListToolVariationGroupsRequest | undefined,
+  security?: ListToolVariationGroupsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

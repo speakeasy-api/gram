@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function telemetryListHooksTraces(
   client: GramCore,
   request: ListHooksTracesRequest,
-  security?: ListHooksTracesSecurity  ,
+  security?: ListHooksTracesSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function telemetryListHooksTraces(
 async function $do(
   client: GramCore,
   request: ListHooksTracesRequest,
-  security?: ListHooksTracesSecurity  ,
+  security?: ListHooksTracesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

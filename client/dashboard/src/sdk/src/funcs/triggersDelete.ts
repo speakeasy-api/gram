@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function triggersDelete(
   client: GramCore,
   request: DeleteTriggerInstanceRequest,
-  security?: DeleteTriggerInstanceSecurity  ,
+  security?: DeleteTriggerInstanceSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function triggersDelete(
 async function $do(
   client: GramCore,
   request: DeleteTriggerInstanceRequest,
-  security?: DeleteTriggerInstanceSecurity  ,
+  security?: DeleteTriggerInstanceSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

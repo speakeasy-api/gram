@@ -80,8 +80,8 @@ export type UserSessionConsentsQueryError =
  * List consent records for the caller's project.
  */
 export function useUserSessionConsents(
-  request?: ListUserSessionConsentsRequest  ,
-  security?: ListUserSessionConsentsSecurity  ,
+  request?: ListUserSessionConsentsRequest | undefined,
+  security?: ListUserSessionConsentsSecurity | undefined,
   options?: QueryHookOptions<
     UserSessionConsentsQueryData,
     UserSessionConsentsQueryError
@@ -106,8 +106,8 @@ export function useUserSessionConsents(
  * List consent records for the caller's project.
  */
 export function useUserSessionConsentsSuspense(
-  request?: ListUserSessionConsentsRequest  ,
-  security?: ListUserSessionConsentsSecurity  ,
+  request?: ListUserSessionConsentsRequest | undefined,
+  security?: ListUserSessionConsentsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     UserSessionConsentsQueryData,
     UserSessionConsentsQueryError
@@ -135,8 +135,8 @@ export function useUserSessionConsentsSuspense(
  * List consent records for the caller's project.
  */
 export function useUserSessionConsentsInfinite(
-  request?: ListUserSessionConsentsRequest  ,
-  security?: ListUserSessionConsentsSecurity  ,
+  request?: ListUserSessionConsentsRequest | undefined,
+  security?: ListUserSessionConsentsSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     UserSessionConsentsInfiniteQueryData,
     UserSessionConsentsQueryError
@@ -178,8 +178,8 @@ export function useUserSessionConsentsInfinite(
  * List consent records for the caller's project.
  */
 export function useUserSessionConsentsInfiniteSuspense(
-  request?: ListUserSessionConsentsRequest  ,
-  security?: ListUserSessionConsentsSecurity  ,
+  request?: ListUserSessionConsentsRequest | undefined,
+  security?: ListUserSessionConsentsSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     UserSessionConsentsInfiniteQueryData,
     UserSessionConsentsQueryError

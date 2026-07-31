@@ -62,8 +62,8 @@ export type TriggerDefinitionsQueryError =
  * List static trigger definitions available to a project.
  */
 export function useTriggerDefinitions(
-  request?: ListTriggerDefinitionsRequest  ,
-  security?: ListTriggerDefinitionsSecurity  ,
+  request?: ListTriggerDefinitionsRequest | undefined,
+  security?: ListTriggerDefinitionsSecurity | undefined,
   options?: QueryHookOptions<
     TriggerDefinitionsQueryData,
     TriggerDefinitionsQueryError
@@ -88,8 +88,8 @@ export function useTriggerDefinitions(
  * List static trigger definitions available to a project.
  */
 export function useTriggerDefinitionsSuspense(
-  request?: ListTriggerDefinitionsRequest  ,
-  security?: ListTriggerDefinitionsSecurity  ,
+  request?: ListTriggerDefinitionsRequest | undefined,
+  security?: ListTriggerDefinitionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     TriggerDefinitionsQueryData,
     TriggerDefinitionsQueryError

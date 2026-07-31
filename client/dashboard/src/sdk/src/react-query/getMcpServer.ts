@@ -62,8 +62,8 @@ export type GetMcpServerQueryError =
  * Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
  */
 export function useGetMcpServer(
-  request?: GetMcpServerRequest  ,
-  security?: GetMcpServerSecurity  ,
+  request?: GetMcpServerRequest | undefined,
+  security?: GetMcpServerSecurity | undefined,
   options?: QueryHookOptions<GetMcpServerQueryData, GetMcpServerQueryError>,
 ): UseQueryResult<GetMcpServerQueryData, GetMcpServerQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useGetMcpServer(
  * Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
  */
 export function useGetMcpServerSuspense(
-  request?: GetMcpServerRequest  ,
-  security?: GetMcpServerSecurity  ,
+  request?: GetMcpServerRequest | undefined,
+  security?: GetMcpServerSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetMcpServerQueryData,
     GetMcpServerQueryError

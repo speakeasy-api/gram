@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function collectionsAttachServer(
   client: GramCore,
   request: AttachServerToCollectionRequest,
-  security?: AttachServerToCollectionSecurity  ,
+  security?: AttachServerToCollectionSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function collectionsAttachServer(
 async function $do(
   client: GramCore,
   request: AttachServerToCollectionRequest,
-  security?: AttachServerToCollectionSecurity  ,
+  security?: AttachServerToCollectionSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

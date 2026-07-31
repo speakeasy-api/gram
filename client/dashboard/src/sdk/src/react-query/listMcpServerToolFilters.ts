@@ -62,8 +62,8 @@ export type ListMcpServerToolFiltersQueryError =
  * List the tool filter scopes (tags) available on an MCP server and the tools under each, including tools excluded from all filters. Exactly one of id or slug must be provided. Read-only; reflects the explicit tool variations group resolved from the chain (mcp_servers then toolsets), deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.
  */
 export function useListMcpServerToolFilters(
-  request?: ListMcpServerToolFiltersRequest  ,
-  security?: ListMcpServerToolFiltersSecurity  ,
+  request?: ListMcpServerToolFiltersRequest | undefined,
+  security?: ListMcpServerToolFiltersSecurity | undefined,
   options?: QueryHookOptions<
     ListMcpServerToolFiltersQueryData,
     ListMcpServerToolFiltersQueryError
@@ -91,8 +91,8 @@ export function useListMcpServerToolFilters(
  * List the tool filter scopes (tags) available on an MCP server and the tools under each, including tools excluded from all filters. Exactly one of id or slug must be provided. Read-only; reflects the explicit tool variations group resolved from the chain (mcp_servers then toolsets), deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.
  */
 export function useListMcpServerToolFiltersSuspense(
-  request?: ListMcpServerToolFiltersRequest  ,
-  security?: ListMcpServerToolFiltersSecurity  ,
+  request?: ListMcpServerToolFiltersRequest | undefined,
+  security?: ListMcpServerToolFiltersSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListMcpServerToolFiltersQueryData,
     ListMcpServerToolFiltersQueryError

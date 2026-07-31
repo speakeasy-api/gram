@@ -23,7 +23,7 @@ export function prefetchListToolUsageTraces(
   queryClient: QueryClient,
   client$: GramCore,
   request: ListToolUsageTracesRequest,
-  security?: ListToolUsageTracesSecurity  ,
+  security?: ListToolUsageTracesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchListToolUsageTraces(
 export function buildListToolUsageTracesQuery(
   client$: GramCore,
   request: ListToolUsageTracesRequest,
-  security?: ListToolUsageTracesSecurity  ,
+  security?: ListToolUsageTracesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -42,8 +42,8 @@ import { Result } from "../types/fp.js";
  */
 export function organizationsEnableWebhooks(
   client: GramCore,
-  request?: EnableWebhooksRequest  ,
-  security?: EnableWebhooksSecurity  ,
+  request?: EnableWebhooksRequest | undefined,
+  security?: EnableWebhooksSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -69,8 +69,8 @@ export function organizationsEnableWebhooks(
 
 async function $do(
   client: GramCore,
-  request?: EnableWebhooksRequest  ,
-  security?: EnableWebhooksSecurity  ,
+  request?: EnableWebhooksRequest | undefined,
+  security?: EnableWebhooksSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

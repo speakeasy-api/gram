@@ -62,8 +62,8 @@ export type ListAwsIamCredentialsQueryError =
  * List the organization's AWS IAM external credentials. Requires org:read.
  */
 export function useListAwsIamCredentials(
-  request?: ListAwsIamCredentialsRequest  ,
-  security?: ListAwsIamCredentialsSecurity  ,
+  request?: ListAwsIamCredentialsRequest | undefined,
+  security?: ListAwsIamCredentialsSecurity | undefined,
   options?: QueryHookOptions<
     ListAwsIamCredentialsQueryData,
     ListAwsIamCredentialsQueryError
@@ -91,8 +91,8 @@ export function useListAwsIamCredentials(
  * List the organization's AWS IAM external credentials. Requires org:read.
  */
 export function useListAwsIamCredentialsSuspense(
-  request?: ListAwsIamCredentialsRequest  ,
-  security?: ListAwsIamCredentialsSecurity  ,
+  request?: ListAwsIamCredentialsRequest | undefined,
+  security?: ListAwsIamCredentialsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListAwsIamCredentialsQueryData,
     ListAwsIamCredentialsQueryError

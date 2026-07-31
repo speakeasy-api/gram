@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function remoteMcpUpdateServer(
   client: GramCore,
   request: UpdateRemoteMcpServerRequest,
-  security?: UpdateRemoteMcpServerSecurity  ,
+  security?: UpdateRemoteMcpServerSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function remoteMcpUpdateServer(
 async function $do(
   client: GramCore,
   request: UpdateRemoteMcpServerRequest,
-  security?: UpdateRemoteMcpServerSecurity  ,
+  security?: UpdateRemoteMcpServerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

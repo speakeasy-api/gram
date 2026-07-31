@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function organizationRemoteSessionIssuersUpdate(
   client: GramCore,
   request: UpdateOrganizationRemoteSessionIssuerRequest,
-  security?: UpdateOrganizationRemoteSessionIssuerSecurity  ,
+  security?: UpdateOrganizationRemoteSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function organizationRemoteSessionIssuersUpdate(
 async function $do(
   client: GramCore,
   request: UpdateOrganizationRemoteSessionIssuerRequest,
-  security?: UpdateOrganizationRemoteSessionIssuerSecurity  ,
+  security?: UpdateOrganizationRemoteSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

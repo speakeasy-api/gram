@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function authRegister(
   client: GramCore,
   request: RegisterRequest,
-  security?: RegisterSecurity  ,
+  security?: RegisterSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function authRegister(
 async function $do(
   client: GramCore,
   request: RegisterRequest,
-  security?: RegisterSecurity  ,
+  security?: RegisterSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

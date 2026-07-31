@@ -32,7 +32,7 @@ export class McpMetadata extends ClientSDK {
    */
   async export(
     request: ExportMcpMetadataRequest,
-    security?: ExportMcpMetadataSecurity  ,
+    security?: ExportMcpMetadataSecurity | undefined,
     options?: RequestOptions,
   ): Promise<McpExport> {
     return unwrapAsync(mcpMetadataExport(
@@ -50,8 +50,8 @@ export class McpMetadata extends ClientSDK {
    * Fetch the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.
    */
   async get(
-    request?: GetMcpMetadataRequest  ,
-    security?: GetMcpMetadataSecurity  ,
+    request?: GetMcpMetadataRequest | undefined,
+    security?: GetMcpMetadataSecurity | undefined,
     options?: RequestOptions,
   ): Promise<GetMcpMetadataResponseBody> {
     return unwrapAsync(mcpMetadataGet(
@@ -70,7 +70,7 @@ export class McpMetadata extends ClientSDK {
    */
   async set(
     request: SetMcpMetadataRequest,
-    security?: SetMcpMetadataSecurity  ,
+    security?: SetMcpMetadataSecurity | undefined,
     options?: RequestOptions,
   ): Promise<McpMetadata$Model> {
     return unwrapAsync(mcpMetadataSet(

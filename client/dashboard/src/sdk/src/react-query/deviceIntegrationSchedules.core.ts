@@ -24,7 +24,7 @@ export function prefetchDeviceIntegrationSchedules(
   queryClient: QueryClient,
   client$: GramCore,
   request: ListDeviceIntegrationSchedulesRequest,
-  security?: ListDeviceIntegrationSchedulesSecurity  ,
+  security?: ListDeviceIntegrationSchedulesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -40,7 +40,7 @@ export function prefetchDeviceIntegrationSchedules(
 export function buildDeviceIntegrationSchedulesQuery(
   client$: GramCore,
   request: ListDeviceIntegrationSchedulesRequest,
-  security?: ListDeviceIntegrationSchedulesSecurity  ,
+  security?: ListDeviceIntegrationSchedulesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

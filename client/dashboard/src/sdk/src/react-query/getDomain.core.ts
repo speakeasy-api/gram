@@ -22,8 +22,8 @@ export type GetDomainQueryData = CustomDomain;
 export function prefetchGetDomain(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetDomainRequest  ,
-  security?: GetDomainSecurity  ,
+  request?: GetDomainRequest | undefined,
+  security?: GetDomainSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchGetDomain(
 
 export function buildGetDomainQuery(
   client$: GramCore,
-  request?: GetDomainRequest  ,
-  security?: GetDomainSecurity  ,
+  request?: GetDomainRequest | undefined,
+  security?: GetDomainSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

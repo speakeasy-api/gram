@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function organizationsRemoveUser(
   client: GramCore,
   request: RemoveOrganizationUserRequest,
-  security?: RemoveOrganizationUserSecurity  ,
+  security?: RemoveOrganizationUserSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function organizationsRemoveUser(
 async function $do(
   client: GramCore,
   request: RemoveOrganizationUserRequest,
-  security?: RemoveOrganizationUserSecurity  ,
+  security?: RemoveOrganizationUserSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

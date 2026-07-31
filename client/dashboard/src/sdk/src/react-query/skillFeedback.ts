@@ -81,7 +81,7 @@ export type SkillFeedbackQueryError =
  */
 export function useSkillFeedback(
   request: ListSkillFeedbackRequest,
-  security?: ListSkillFeedbackSecurity  ,
+  security?: ListSkillFeedbackSecurity | undefined,
   options?: QueryHookOptions<SkillFeedbackQueryData, SkillFeedbackQueryError>,
 ): UseQueryResult<SkillFeedbackQueryData, SkillFeedbackQueryError> {
   const client = useGramContext();
@@ -104,7 +104,7 @@ export function useSkillFeedback(
  */
 export function useSkillFeedbackSuspense(
   request: ListSkillFeedbackRequest,
-  security?: ListSkillFeedbackSecurity  ,
+  security?: ListSkillFeedbackSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     SkillFeedbackQueryData,
     SkillFeedbackQueryError
@@ -130,7 +130,7 @@ export function useSkillFeedbackSuspense(
  */
 export function useSkillFeedbackInfinite(
   request: ListSkillFeedbackRequest,
-  security?: ListSkillFeedbackSecurity  ,
+  security?: ListSkillFeedbackSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     SkillFeedbackInfiniteQueryData,
     SkillFeedbackQueryError
@@ -167,7 +167,7 @@ export function useSkillFeedbackInfinite(
  */
 export function useSkillFeedbackInfiniteSuspense(
   request: ListSkillFeedbackRequest,
-  security?: ListSkillFeedbackSecurity  ,
+  security?: ListSkillFeedbackSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     SkillFeedbackInfiniteQueryData,
     SkillFeedbackQueryError

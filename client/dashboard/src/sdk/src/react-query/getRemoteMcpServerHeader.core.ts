@@ -23,7 +23,7 @@ export function prefetchGetRemoteMcpServerHeader(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetRemoteMcpServerHeaderRequest,
-  security?: GetRemoteMcpServerHeaderSecurity  ,
+  security?: GetRemoteMcpServerHeaderSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchGetRemoteMcpServerHeader(
 export function buildGetRemoteMcpServerHeaderQuery(
   client$: GramCore,
   request: GetRemoteMcpServerHeaderRequest,
-  security?: GetRemoteMcpServerHeaderSecurity  ,
+  security?: GetRemoteMcpServerHeaderSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function environmentsGetBySource(
   client: GramCore,
   request: GetSourceEnvironmentRequest,
-  security?: GetSourceEnvironmentSecurity  ,
+  security?: GetSourceEnvironmentSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function environmentsGetBySource(
 async function $do(
   client: GramCore,
   request: GetSourceEnvironmentRequest,
-  security?: GetSourceEnvironmentSecurity  ,
+  security?: GetSourceEnvironmentSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

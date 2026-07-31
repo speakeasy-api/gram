@@ -63,7 +63,7 @@ export type GetGcpIamCredentialQueryError =
  */
 export function useGetGcpIamCredential(
   request: GetGcpIamCredentialRequest,
-  security?: GetGcpIamCredentialSecurity  ,
+  security?: GetGcpIamCredentialSecurity | undefined,
   options?: QueryHookOptions<
     GetGcpIamCredentialQueryData,
     GetGcpIamCredentialQueryError
@@ -89,7 +89,7 @@ export function useGetGcpIamCredential(
  */
 export function useGetGcpIamCredentialSuspense(
   request: GetGcpIamCredentialRequest,
-  security?: GetGcpIamCredentialSecurity  ,
+  security?: GetGcpIamCredentialSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetGcpIamCredentialQueryData,
     GetGcpIamCredentialQueryError

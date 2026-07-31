@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function organizationsGenerateWorkOSAdminPortalLink(
   client: GramCore,
   request: GenerateWorkOSAdminPortalLinkRequest,
-  security?: GenerateWorkOSAdminPortalLinkSecurity  ,
+  security?: GenerateWorkOSAdminPortalLinkSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function organizationsGenerateWorkOSAdminPortalLink(
 async function $do(
   client: GramCore,
   request: GenerateWorkOSAdminPortalLinkRequest,
-  security?: GenerateWorkOSAdminPortalLinkSecurity  ,
+  security?: GenerateWorkOSAdminPortalLinkSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

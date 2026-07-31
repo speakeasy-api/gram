@@ -22,8 +22,8 @@ export type ListCollectionsQueryData = ListResponseBody;
 export function prefetchListCollections(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListCollectionsRequest  ,
-  security?: ListCollectionsSecurity  ,
+  request?: ListCollectionsRequest | undefined,
+  security?: ListCollectionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListCollections(
 
 export function buildListCollectionsQuery(
   client$: GramCore,
-  request?: ListCollectionsRequest  ,
-  security?: ListCollectionsSecurity  ,
+  request?: ListCollectionsRequest | undefined,
+  security?: ListCollectionsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

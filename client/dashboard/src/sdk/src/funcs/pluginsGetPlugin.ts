@@ -44,7 +44,7 @@ import { Result } from "../types/fp.js";
 export function pluginsGetPlugin(
   client: GramCore,
   request: GetPluginRequest,
-  security?: GetPluginSecurity  ,
+  security?: GetPluginSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -71,7 +71,7 @@ export function pluginsGetPlugin(
 async function $do(
   client: GramCore,
   request: GetPluginRequest,
-  security?: GetPluginSecurity  ,
+  security?: GetPluginSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

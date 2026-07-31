@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function accessUpdateShadowMCPInventoryServerName(
   client: GramCore,
   request: UpdateShadowMCPInventoryServerNameRequest,
-  security?: UpdateShadowMCPInventoryServerNameSecurity  ,
+  security?: UpdateShadowMCPInventoryServerNameSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function accessUpdateShadowMCPInventoryServerName(
 async function $do(
   client: GramCore,
   request: UpdateShadowMCPInventoryServerNameRequest,
-  security?: UpdateShadowMCPInventoryServerNameSecurity  ,
+  security?: UpdateShadowMCPInventoryServerNameSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

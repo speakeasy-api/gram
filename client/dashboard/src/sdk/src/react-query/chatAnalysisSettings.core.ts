@@ -22,8 +22,8 @@ export type ChatAnalysisSettingsQueryData = ChatAnalysisSettings;
 export function prefetchChatAnalysisSettings(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetChatAnalysisSettingsRequest  ,
-  security?: GetChatAnalysisSettingsSecurity  ,
+  request?: GetChatAnalysisSettingsRequest | undefined,
+  security?: GetChatAnalysisSettingsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchChatAnalysisSettings(
 
 export function buildChatAnalysisSettingsQuery(
   client$: GramCore,
-  request?: GetChatAnalysisSettingsRequest  ,
-  security?: GetChatAnalysisSettingsSecurity  ,
+  request?: GetChatAnalysisSettingsRequest | undefined,
+  security?: GetChatAnalysisSettingsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

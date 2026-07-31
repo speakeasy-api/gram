@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function remoteMcpVerifyURL(
   client: GramCore,
   request: VerifyRemoteMcpURLRequest,
-  security?: VerifyRemoteMcpURLSecurity  ,
+  security?: VerifyRemoteMcpURLSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function remoteMcpVerifyURL(
 async function $do(
   client: GramCore,
   request: VerifyRemoteMcpURLRequest,
-  security?: VerifyRemoteMcpURLSecurity  ,
+  security?: VerifyRemoteMcpURLSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

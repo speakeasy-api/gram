@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function toolsetsListToolFilters(
   client: GramCore,
   request: ListToolsetToolFiltersRequest,
-  security?: ListToolsetToolFiltersSecurity  ,
+  security?: ListToolsetToolFiltersSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function toolsetsListToolFilters(
 async function $do(
   client: GramCore,
   request: ListToolsetToolFiltersRequest,
-  security?: ListToolsetToolFiltersSecurity  ,
+  security?: ListToolsetToolFiltersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function organizationsGet(
   client: GramCore,
-  request?: GetOrganizationRequest  ,
-  security?: GetOrganizationSecurity  ,
+  request?: GetOrganizationRequest | undefined,
+  security?: GetOrganizationSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function organizationsGet(
 
 async function $do(
   client: GramCore,
-  request?: GetOrganizationRequest  ,
-  security?: GetOrganizationSecurity  ,
+  request?: GetOrganizationRequest | undefined,
+  security?: GetOrganizationSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

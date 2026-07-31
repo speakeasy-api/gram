@@ -62,8 +62,8 @@ export type GlobalVariationsQueryError =
  * List globally defined tool variations.
  */
 export function useGlobalVariations(
-  request?: ListGlobalVariationsRequest  ,
-  security?: ListGlobalVariationsSecurity  ,
+  request?: ListGlobalVariationsRequest | undefined,
+  security?: ListGlobalVariationsSecurity | undefined,
   options?: QueryHookOptions<
     GlobalVariationsQueryData,
     GlobalVariationsQueryError
@@ -88,8 +88,8 @@ export function useGlobalVariations(
  * List globally defined tool variations.
  */
 export function useGlobalVariationsSuspense(
-  request?: ListGlobalVariationsRequest  ,
-  security?: ListGlobalVariationsSecurity  ,
+  request?: ListGlobalVariationsRequest | undefined,
+  security?: ListGlobalVariationsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GlobalVariationsQueryData,
     GlobalVariationsQueryError

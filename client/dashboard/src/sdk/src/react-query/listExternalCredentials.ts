@@ -63,8 +63,8 @@ export type ListExternalCredentialsQueryError =
  * List the organization's external credentials (provider-independent summary). Optionally filter by provider. Requires org:read.
  */
 export function useListExternalCredentials(
-  request?: ListExternalCredentialsRequest  ,
-  security?: ListExternalCredentialsSecurity  ,
+  request?: ListExternalCredentialsRequest | undefined,
+  security?: ListExternalCredentialsSecurity | undefined,
   options?: QueryHookOptions<
     ListExternalCredentialsQueryData,
     ListExternalCredentialsQueryError
@@ -92,8 +92,8 @@ export function useListExternalCredentials(
  * List the organization's external credentials (provider-independent summary). Optionally filter by provider. Requires org:read.
  */
 export function useListExternalCredentialsSuspense(
-  request?: ListExternalCredentialsRequest  ,
-  security?: ListExternalCredentialsSecurity  ,
+  request?: ListExternalCredentialsRequest | undefined,
+  security?: ListExternalCredentialsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListExternalCredentialsQueryData,
     ListExternalCredentialsQueryError

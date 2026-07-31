@@ -50,8 +50,8 @@ import {
  */
 export function userSessionIssuersList(
   client: GramCore,
-  request?: ListUserSessionIssuersRequest  ,
-  security?: ListUserSessionIssuersSecurity  ,
+  request?: ListUserSessionIssuersRequest | undefined,
+  security?: ListUserSessionIssuersSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   PageIterator<
@@ -80,8 +80,8 @@ export function userSessionIssuersList(
 
 async function $do(
   client: GramCore,
-  request?: ListUserSessionIssuersRequest  ,
-  security?: ListUserSessionIssuersSecurity  ,
+  request?: ListUserSessionIssuersRequest | undefined,
+  security?: ListUserSessionIssuersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

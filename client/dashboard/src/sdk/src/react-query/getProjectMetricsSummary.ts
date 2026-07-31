@@ -63,7 +63,7 @@ export type GetProjectMetricsSummaryQueryError =
  */
 export function useGetProjectMetricsSummary(
   request: GetProjectMetricsSummaryRequest,
-  security?: GetProjectMetricsSummarySecurity  ,
+  security?: GetProjectMetricsSummarySecurity | undefined,
   options?: QueryHookOptions<
     GetProjectMetricsSummaryQueryData,
     GetProjectMetricsSummaryQueryError
@@ -92,7 +92,7 @@ export function useGetProjectMetricsSummary(
  */
 export function useGetProjectMetricsSummarySuspense(
   request: GetProjectMetricsSummaryRequest,
-  security?: GetProjectMetricsSummarySecurity  ,
+  security?: GetProjectMetricsSummarySecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetProjectMetricsSummaryQueryData,
     GetProjectMetricsSummaryQueryError

@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function externalCredentialsUpdateAwsIam(
   client: GramCore,
   request: UpdateAwsIamCredentialRequest,
-  security?: UpdateAwsIamCredentialSecurity  ,
+  security?: UpdateAwsIamCredentialSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function externalCredentialsUpdateAwsIam(
 async function $do(
   client: GramCore,
   request: UpdateAwsIamCredentialRequest,
-  security?: UpdateAwsIamCredentialSecurity  ,
+  security?: UpdateAwsIamCredentialSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

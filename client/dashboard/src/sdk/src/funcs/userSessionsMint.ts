@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function userSessionsMint(
   client: GramCore,
   request: MintUserSessionRequest,
-  security?: MintUserSessionSecurity  ,
+  security?: MintUserSessionSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function userSessionsMint(
 async function $do(
   client: GramCore,
   request: MintUserSessionRequest,
-  security?: MintUserSessionSecurity  ,
+  security?: MintUserSessionSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

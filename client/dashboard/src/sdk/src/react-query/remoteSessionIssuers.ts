@@ -80,8 +80,8 @@ export type RemoteSessionIssuersQueryError =
  * List remote_session_issuers in the caller's project.
  */
 export function useRemoteSessionIssuers(
-  request?: ListRemoteSessionIssuersRequest  ,
-  security?: ListRemoteSessionIssuersSecurity  ,
+  request?: ListRemoteSessionIssuersRequest | undefined,
+  security?: ListRemoteSessionIssuersSecurity | undefined,
   options?: QueryHookOptions<
     RemoteSessionIssuersQueryData,
     RemoteSessionIssuersQueryError
@@ -109,8 +109,8 @@ export function useRemoteSessionIssuers(
  * List remote_session_issuers in the caller's project.
  */
 export function useRemoteSessionIssuersSuspense(
-  request?: ListRemoteSessionIssuersRequest  ,
-  security?: ListRemoteSessionIssuersSecurity  ,
+  request?: ListRemoteSessionIssuersRequest | undefined,
+  security?: ListRemoteSessionIssuersSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RemoteSessionIssuersQueryData,
     RemoteSessionIssuersQueryError
@@ -138,8 +138,8 @@ export function useRemoteSessionIssuersSuspense(
  * List remote_session_issuers in the caller's project.
  */
 export function useRemoteSessionIssuersInfinite(
-  request?: ListRemoteSessionIssuersRequest  ,
-  security?: ListRemoteSessionIssuersSecurity  ,
+  request?: ListRemoteSessionIssuersRequest | undefined,
+  security?: ListRemoteSessionIssuersSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     RemoteSessionIssuersInfiniteQueryData,
     RemoteSessionIssuersQueryError
@@ -181,8 +181,8 @@ export function useRemoteSessionIssuersInfinite(
  * List remote_session_issuers in the caller's project.
  */
 export function useRemoteSessionIssuersInfiniteSuspense(
-  request?: ListRemoteSessionIssuersRequest  ,
-  security?: ListRemoteSessionIssuersSecurity  ,
+  request?: ListRemoteSessionIssuersRequest | undefined,
+  security?: ListRemoteSessionIssuersSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     RemoteSessionIssuersInfiniteQueryData,
     RemoteSessionIssuersQueryError

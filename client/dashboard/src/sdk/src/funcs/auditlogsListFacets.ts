@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function auditlogsListFacets(
   client: GramCore,
-  request?: ListAuditLogFacetsRequest  ,
-  security?: ListAuditLogFacetsSecurity  ,
+  request?: ListAuditLogFacetsRequest | undefined,
+  security?: ListAuditLogFacetsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function auditlogsListFacets(
 
 async function $do(
   client: GramCore,
-  request?: ListAuditLogFacetsRequest  ,
-  security?: ListAuditLogFacetsSecurity  ,
+  request?: ListAuditLogFacetsRequest | undefined,
+  security?: ListAuditLogFacetsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -22,8 +22,8 @@ export type ListGcpIamCredentialsQueryData = ListExternalCredentialsResult;
 export function prefetchListGcpIamCredentials(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListGcpIamCredentialsRequest  ,
-  security?: ListGcpIamCredentialsSecurity  ,
+  request?: ListGcpIamCredentialsRequest | undefined,
+  security?: ListGcpIamCredentialsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListGcpIamCredentials(
 
 export function buildListGcpIamCredentialsQuery(
   client$: GramCore,
-  request?: ListGcpIamCredentialsRequest  ,
-  security?: ListGcpIamCredentialsSecurity  ,
+  request?: ListGcpIamCredentialsRequest | undefined,
+  security?: ListGcpIamCredentialsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

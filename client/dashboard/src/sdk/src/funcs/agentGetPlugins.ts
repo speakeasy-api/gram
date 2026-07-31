@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function agentGetPlugins(
   client: GramCore,
   request: GetAgentPluginsRequest,
-  security?: GetAgentPluginsSecurity  ,
+  security?: GetAgentPluginsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function agentGetPlugins(
 async function $do(
   client: GramCore,
   request: GetAgentPluginsRequest,
-  security?: GetAgentPluginsSecurity  ,
+  security?: GetAgentPluginsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function toolsetsSetToolVariationsGroup(
   client: GramCore,
   request: SetToolsetToolVariationsGroupRequest,
-  security?: SetToolsetToolVariationsGroupSecurity  ,
+  security?: SetToolsetToolVariationsGroupSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function toolsetsSetToolVariationsGroup(
 async function $do(
   client: GramCore,
   request: SetToolsetToolVariationsGroupRequest,
-  security?: SetToolsetToolVariationsGroupSecurity  ,
+  security?: SetToolsetToolVariationsGroupSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

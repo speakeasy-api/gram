@@ -22,8 +22,8 @@ export type ListAllowedOriginsQueryData = ListAllowedOriginsResult;
 export function prefetchListAllowedOrigins(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListAllowedOriginsRequest  ,
-  security?: ListAllowedOriginsSecurity  ,
+  request?: ListAllowedOriginsRequest | undefined,
+  security?: ListAllowedOriginsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListAllowedOrigins(
 
 export function buildListAllowedOriginsQuery(
   client$: GramCore,
-  request?: ListAllowedOriginsRequest  ,
-  security?: ListAllowedOriginsSecurity  ,
+  request?: ListAllowedOriginsRequest | undefined,
+  security?: ListAllowedOriginsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function pluginsUpdateMarketplaceSettings(
   client: GramCore,
   request: UpdateMarketplaceSettingsRequest,
-  security?: UpdateMarketplaceSettingsSecurity  ,
+  security?: UpdateMarketplaceSettingsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function pluginsUpdateMarketplaceSettings(
 async function $do(
   client: GramCore,
   request: UpdateMarketplaceSettingsRequest,
-  security?: UpdateMarketplaceSettingsSecurity  ,
+  security?: UpdateMarketplaceSettingsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

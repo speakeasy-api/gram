@@ -30,8 +30,8 @@ export class AdminChatAnalysis extends ClientSDK {
    * Get the active organization's chat analysis settings. Requires platform admin.
    */
   async getSettings(
-    request?: GetChatAnalysisSettingsRequest  ,
-    security?: GetChatAnalysisSettingsSecurity  ,
+    request?: GetChatAnalysisSettingsRequest | undefined,
+    security?: GetChatAnalysisSettingsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ChatAnalysisSettings> {
     return unwrapAsync(adminChatAnalysisGetSettings(
@@ -49,8 +49,8 @@ export class AdminChatAnalysis extends ClientSDK {
    * Wake the chat analysis coordinator for every project in the active organization, instead of waiting for the periodic sweep. Requires platform admin.
    */
   async triggerAnalysis(
-    request?: TriggerChatAnalysisRequest  ,
-    security?: TriggerChatAnalysisSecurity  ,
+    request?: TriggerChatAnalysisRequest | undefined,
+    security?: TriggerChatAnalysisSecurity | undefined,
     options?: RequestOptions,
   ): Promise<TriggerAnalysisResponseBody> {
     return unwrapAsync(adminChatAnalysisTriggerAnalysis(
@@ -69,7 +69,7 @@ export class AdminChatAnalysis extends ClientSDK {
    */
   async upsertWorkUnitsSettings(
     request: UpsertChatAnalysisSettingsRequest,
-    security?: UpsertChatAnalysisSettingsSecurity  ,
+    security?: UpsertChatAnalysisSettingsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ChatAnalysisSettings> {
     return unwrapAsync(adminChatAnalysisUpsertWorkUnitsSettings(

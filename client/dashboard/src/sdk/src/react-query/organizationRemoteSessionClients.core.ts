@@ -36,7 +36,7 @@ export function prefetchOrganizationRemoteSessionClients(
   queryClient: QueryClient,
   client$: GramCore,
   request: ListOrganizationRemoteSessionClientsRequest,
-  security?: ListOrganizationRemoteSessionClientsSecurity  ,
+  security?: ListOrganizationRemoteSessionClientsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -53,7 +53,7 @@ export function prefetchOrganizationRemoteSessionClientsInfinite(
   queryClient: QueryClient,
   client$: GramCore,
   request: ListOrganizationRemoteSessionClientsRequest,
-  security?: ListOrganizationRemoteSessionClientsSecurity  ,
+  security?: ListOrganizationRemoteSessionClientsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -73,7 +73,7 @@ export function prefetchOrganizationRemoteSessionClientsInfinite(
 export function buildOrganizationRemoteSessionClientsQuery(
   client$: GramCore,
   request: ListOrganizationRemoteSessionClientsRequest,
-  security?: ListOrganizationRemoteSessionClientsSecurity  ,
+  security?: ListOrganizationRemoteSessionClientsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -116,7 +116,7 @@ export function buildOrganizationRemoteSessionClientsQuery(
 export function buildOrganizationRemoteSessionClientsInfiniteQuery(
   client$: GramCore,
   request: ListOrganizationRemoteSessionClientsRequest,
-  security?: ListOrganizationRemoteSessionClientsSecurity  ,
+  security?: ListOrganizationRemoteSessionClientsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

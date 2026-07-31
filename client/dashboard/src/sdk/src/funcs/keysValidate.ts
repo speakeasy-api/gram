@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function keysValidate(
   client: GramCore,
-  request?: ValidateAPIKeyRequest  ,
-  security?: ValidateAPIKeySecurity  ,
+  request?: ValidateAPIKeyRequest | undefined,
+  security?: ValidateAPIKeySecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function keysValidate(
 
 async function $do(
   client: GramCore,
-  request?: ValidateAPIKeyRequest  ,
-  security?: ValidateAPIKeySecurity  ,
+  request?: ValidateAPIKeyRequest | undefined,
+  security?: ValidateAPIKeySecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -60,7 +60,7 @@ export type TelemetryQueryQueryError =
  */
 export function useTelemetryQuery(
   request: QueryRequest,
-  security?: QuerySecurity  ,
+  security?: QuerySecurity | undefined,
   options?: QueryHookOptions<TelemetryQueryQueryData, TelemetryQueryQueryError>,
 ): UseQueryResult<TelemetryQueryQueryData, TelemetryQueryQueryError> {
   const client = useGramContext();
@@ -83,7 +83,7 @@ export function useTelemetryQuery(
  */
 export function useTelemetryQuerySuspense(
   request: QueryRequest,
-  security?: QuerySecurity  ,
+  security?: QuerySecurity | undefined,
   options?: SuspenseQueryHookOptions<
     TelemetryQueryQueryData,
     TelemetryQueryQueryError

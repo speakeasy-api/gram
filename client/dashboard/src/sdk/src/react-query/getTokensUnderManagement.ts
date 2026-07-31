@@ -62,8 +62,8 @@ export type GetTokensUnderManagementQueryError =
  * Get tokens under management for the active billing cycle alongside the contracted terms
  */
 export function useGetTokensUnderManagement(
-  request?: GetTokensUnderManagementRequest  ,
-  security?: GetTokensUnderManagementSecurity  ,
+  request?: GetTokensUnderManagementRequest | undefined,
+  security?: GetTokensUnderManagementSecurity | undefined,
   options?: QueryHookOptions<
     GetTokensUnderManagementQueryData,
     GetTokensUnderManagementQueryError
@@ -91,8 +91,8 @@ export function useGetTokensUnderManagement(
  * Get tokens under management for the active billing cycle alongside the contracted terms
  */
 export function useGetTokensUnderManagementSuspense(
-  request?: GetTokensUnderManagementRequest  ,
-  security?: GetTokensUnderManagementSecurity  ,
+  request?: GetTokensUnderManagementRequest | undefined,
+  security?: GetTokensUnderManagementSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetTokensUnderManagementQueryData,
     GetTokensUnderManagementQueryError

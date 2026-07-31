@@ -23,7 +23,7 @@ export function prefetchPlugin(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetPluginRequest,
-  security?: GetPluginSecurity  ,
+  security?: GetPluginSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchPlugin(
 export function buildPluginQuery(
   client$: GramCore,
   request: GetPluginRequest,
-  security?: GetPluginSecurity  ,
+  security?: GetPluginSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

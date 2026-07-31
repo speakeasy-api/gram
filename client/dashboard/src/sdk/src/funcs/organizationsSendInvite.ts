@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function organizationsSendInvite(
   client: GramCore,
   request: SendInviteRequest,
-  security?: SendInviteSecurity  ,
+  security?: SendInviteSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function organizationsSendInvite(
 async function $do(
   client: GramCore,
   request: SendInviteRequest,
-  security?: SendInviteSecurity  ,
+  security?: SendInviteSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

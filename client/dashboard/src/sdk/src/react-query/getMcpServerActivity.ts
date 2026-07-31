@@ -63,7 +63,7 @@ export type GetMcpServerActivityQueryError =
  */
 export function useGetMcpServerActivity(
   request: GetMcpServerActivityRequest,
-  security?: GetMcpServerActivitySecurity  ,
+  security?: GetMcpServerActivitySecurity | undefined,
   options?: QueryHookOptions<
     GetMcpServerActivityQueryData,
     GetMcpServerActivityQueryError
@@ -92,7 +92,7 @@ export function useGetMcpServerActivity(
  */
 export function useGetMcpServerActivitySuspense(
   request: GetMcpServerActivityRequest,
-  security?: GetMcpServerActivitySecurity  ,
+  security?: GetMcpServerActivitySecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetMcpServerActivityQueryData,
     GetMcpServerActivityQueryError

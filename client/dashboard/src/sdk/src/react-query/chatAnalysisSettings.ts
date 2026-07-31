@@ -62,8 +62,8 @@ export type ChatAnalysisSettingsQueryError =
  * Get the active organization's chat analysis settings. Requires platform admin.
  */
 export function useChatAnalysisSettings(
-  request?: GetChatAnalysisSettingsRequest  ,
-  security?: GetChatAnalysisSettingsSecurity  ,
+  request?: GetChatAnalysisSettingsRequest | undefined,
+  security?: GetChatAnalysisSettingsSecurity | undefined,
   options?: QueryHookOptions<
     ChatAnalysisSettingsQueryData,
     ChatAnalysisSettingsQueryError
@@ -91,8 +91,8 @@ export function useChatAnalysisSettings(
  * Get the active organization's chat analysis settings. Requires platform admin.
  */
 export function useChatAnalysisSettingsSuspense(
-  request?: GetChatAnalysisSettingsRequest  ,
-  security?: GetChatAnalysisSettingsSecurity  ,
+  request?: GetChatAnalysisSettingsRequest | undefined,
+  security?: GetChatAnalysisSettingsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ChatAnalysisSettingsQueryData,
     ChatAnalysisSettingsQueryError

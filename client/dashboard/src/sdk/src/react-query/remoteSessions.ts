@@ -80,8 +80,8 @@ export type RemoteSessionsQueryError =
  * List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
  */
 export function useRemoteSessions(
-  request?: ListRemoteSessionsRequest  ,
-  security?: ListRemoteSessionsSecurity  ,
+  request?: ListRemoteSessionsRequest | undefined,
+  security?: ListRemoteSessionsSecurity | undefined,
   options?: QueryHookOptions<RemoteSessionsQueryData, RemoteSessionsQueryError>,
 ): UseQueryResult<RemoteSessionsQueryData, RemoteSessionsQueryError> {
   const client = useGramContext();
@@ -103,8 +103,8 @@ export function useRemoteSessions(
  * List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
  */
 export function useRemoteSessionsSuspense(
-  request?: ListRemoteSessionsRequest  ,
-  security?: ListRemoteSessionsSecurity  ,
+  request?: ListRemoteSessionsRequest | undefined,
+  security?: ListRemoteSessionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RemoteSessionsQueryData,
     RemoteSessionsQueryError
@@ -129,8 +129,8 @@ export function useRemoteSessionsSuspense(
  * List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
  */
 export function useRemoteSessionsInfinite(
-  request?: ListRemoteSessionsRequest  ,
-  security?: ListRemoteSessionsSecurity  ,
+  request?: ListRemoteSessionsRequest | undefined,
+  security?: ListRemoteSessionsSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     RemoteSessionsInfiniteQueryData,
     RemoteSessionsQueryError
@@ -166,8 +166,8 @@ export function useRemoteSessionsInfinite(
  * List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
  */
 export function useRemoteSessionsInfiniteSuspense(
-  request?: ListRemoteSessionsRequest  ,
-  security?: ListRemoteSessionsSecurity  ,
+  request?: ListRemoteSessionsRequest | undefined,
+  security?: ListRemoteSessionsSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     RemoteSessionsInfiniteQueryData,
     RemoteSessionsQueryError

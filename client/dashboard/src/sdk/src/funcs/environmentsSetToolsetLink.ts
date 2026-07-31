@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function environmentsSetToolsetLink(
   client: GramCore,
   request: SetToolsetEnvironmentLinkRequest,
-  security?: SetToolsetEnvironmentLinkSecurity  ,
+  security?: SetToolsetEnvironmentLinkSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function environmentsSetToolsetLink(
 async function $do(
   client: GramCore,
   request: SetToolsetEnvironmentLinkRequest,
-  security?: SetToolsetEnvironmentLinkSecurity  ,
+  security?: SetToolsetEnvironmentLinkSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

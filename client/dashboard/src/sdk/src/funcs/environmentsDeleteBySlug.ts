@@ -43,7 +43,7 @@ import { Result } from "../types/fp.js";
 export function environmentsDeleteBySlug(
   client: GramCore,
   request: DeleteEnvironmentRequest,
-  security?: DeleteEnvironmentSecurity  ,
+  security?: DeleteEnvironmentSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -70,7 +70,7 @@ export function environmentsDeleteBySlug(
 async function $do(
   client: GramCore,
   request: DeleteEnvironmentRequest,
-  security?: DeleteEnvironmentSecurity  ,
+  security?: DeleteEnvironmentSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

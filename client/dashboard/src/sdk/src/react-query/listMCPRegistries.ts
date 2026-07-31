@@ -62,8 +62,8 @@ export type ListMCPRegistriesQueryError =
  * List all MCP registries (admin only)
  */
 export function useListMCPRegistries(
-  request?: ListMCPRegistriesRequest  ,
-  security?: ListMCPRegistriesSecurity  ,
+  request?: ListMCPRegistriesRequest | undefined,
+  security?: ListMCPRegistriesSecurity | undefined,
   options?: QueryHookOptions<
     ListMCPRegistriesQueryData,
     ListMCPRegistriesQueryError
@@ -88,8 +88,8 @@ export function useListMCPRegistries(
  * List all MCP registries (admin only)
  */
 export function useListMCPRegistriesSuspense(
-  request?: ListMCPRegistriesRequest  ,
-  security?: ListMCPRegistriesSecurity  ,
+  request?: ListMCPRegistriesRequest | undefined,
+  security?: ListMCPRegistriesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListMCPRegistriesQueryData,
     ListMCPRegistriesQueryError

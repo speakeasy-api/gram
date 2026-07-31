@@ -49,7 +49,7 @@ export function organizationRemoteSessionIssuersGetMigratePreflight(
   request: GetOrganizationRemoteSessionIssuerMigratePreflightRequest,
   security?:
     | GetOrganizationRemoteSessionIssuerMigratePreflightSecurity
-     ,
+    | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -78,7 +78,7 @@ async function $do(
   request: GetOrganizationRemoteSessionIssuerMigratePreflightRequest,
   security?:
     | GetOrganizationRemoteSessionIssuerMigratePreflightSecurity
-     ,
+    | undefined,
   options?: RequestOptions,
 ): Promise<
   [

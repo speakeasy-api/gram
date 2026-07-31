@@ -63,7 +63,7 @@ export type GetTunneledMcpServerQueryError =
  */
 export function useGetTunneledMcpServer(
   request: GetTunneledMcpServerRequest,
-  security?: GetTunneledMcpServerSecurity  ,
+  security?: GetTunneledMcpServerSecurity | undefined,
   options?: QueryHookOptions<
     GetTunneledMcpServerQueryData,
     GetTunneledMcpServerQueryError
@@ -92,7 +92,7 @@ export function useGetTunneledMcpServer(
  */
 export function useGetTunneledMcpServerSuspense(
   request: GetTunneledMcpServerRequest,
-  security?: GetTunneledMcpServerSecurity  ,
+  security?: GetTunneledMcpServerSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetTunneledMcpServerQueryData,
     GetTunneledMcpServerQueryError

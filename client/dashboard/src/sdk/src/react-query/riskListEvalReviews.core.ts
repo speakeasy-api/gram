@@ -23,7 +23,7 @@ export function prefetchRiskListEvalReviews(
   queryClient: QueryClient,
   client$: GramCore,
   request: ListRiskEvalReviewsRequest,
-  security?: ListRiskEvalReviewsSecurity  ,
+  security?: ListRiskEvalReviewsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchRiskListEvalReviews(
 export function buildRiskListEvalReviewsQuery(
   client$: GramCore,
   request: ListRiskEvalReviewsRequest,
-  security?: ListRiskEvalReviewsSecurity  ,
+  security?: ListRiskEvalReviewsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

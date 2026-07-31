@@ -62,8 +62,8 @@ export type TunneledMcpServersQueryError =
  * List all tunneled MCP server sources for a project
  */
 export function useTunneledMcpServers(
-  request?: ListTunneledMcpServersRequest  ,
-  security?: ListTunneledMcpServersSecurity  ,
+  request?: ListTunneledMcpServersRequest | undefined,
+  security?: ListTunneledMcpServersSecurity | undefined,
   options?: QueryHookOptions<
     TunneledMcpServersQueryData,
     TunneledMcpServersQueryError
@@ -88,8 +88,8 @@ export function useTunneledMcpServers(
  * List all tunneled MCP server sources for a project
  */
 export function useTunneledMcpServersSuspense(
-  request?: ListTunneledMcpServersRequest  ,
-  security?: ListTunneledMcpServersSecurity  ,
+  request?: ListTunneledMcpServersRequest | undefined,
+  security?: ListTunneledMcpServersSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     TunneledMcpServersQueryData,
     TunneledMcpServersQueryError

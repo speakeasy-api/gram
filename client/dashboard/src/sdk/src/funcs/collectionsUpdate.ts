@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function collectionsUpdate(
   client: GramCore,
   request: UpdateCollectionRequest,
-  security?: UpdateCollectionSecurity  ,
+  security?: UpdateCollectionSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function collectionsUpdate(
 async function $do(
   client: GramCore,
   request: UpdateCollectionRequest,
-  security?: UpdateCollectionSecurity  ,
+  security?: UpdateCollectionSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

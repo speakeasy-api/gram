@@ -23,7 +23,7 @@ export function prefetchGetEmployeeDataFlowGraph(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetEmployeeDataFlowGraphRequest,
-  security?: GetEmployeeDataFlowGraphSecurity  ,
+  security?: GetEmployeeDataFlowGraphSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchGetEmployeeDataFlowGraph(
 export function buildGetEmployeeDataFlowGraphQuery(
   client$: GramCore,
   request: GetEmployeeDataFlowGraphRequest,
-  security?: GetEmployeeDataFlowGraphSecurity  ,
+  security?: GetEmployeeDataFlowGraphSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

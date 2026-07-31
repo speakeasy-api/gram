@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function externalCredentialsGetAwsIam(
   client: GramCore,
   request: GetAwsIamCredentialRequest,
-  security?: GetAwsIamCredentialSecurity  ,
+  security?: GetAwsIamCredentialSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function externalCredentialsGetAwsIam(
 async function $do(
   client: GramCore,
   request: GetAwsIamCredentialRequest,
-  security?: GetAwsIamCredentialSecurity  ,
+  security?: GetAwsIamCredentialSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

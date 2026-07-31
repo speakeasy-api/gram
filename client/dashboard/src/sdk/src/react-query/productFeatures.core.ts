@@ -22,8 +22,8 @@ export type ProductFeaturesQueryData = GetProductFeaturesResponseBody;
 export function prefetchProductFeatures(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetProductFeaturesRequest  ,
-  security?: GetProductFeaturesSecurity  ,
+  request?: GetProductFeaturesRequest | undefined,
+  security?: GetProductFeaturesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchProductFeatures(
 
 export function buildProductFeaturesQuery(
   client$: GramCore,
-  request?: GetProductFeaturesRequest  ,
-  security?: GetProductFeaturesSecurity  ,
+  request?: GetProductFeaturesRequest | undefined,
+  security?: GetProductFeaturesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

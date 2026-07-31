@@ -81,7 +81,7 @@ export type OrganizationRemoteSessionClientSessionsQueryError =
  */
 export function useOrganizationRemoteSessionClientSessions(
   request: ListOrganizationRemoteSessionClientSessionsRequest,
-  security?: ListOrganizationRemoteSessionClientSessionsSecurity  ,
+  security?: ListOrganizationRemoteSessionClientSessionsSecurity | undefined,
   options?: QueryHookOptions<
     OrganizationRemoteSessionClientSessionsQueryData,
     OrganizationRemoteSessionClientSessionsQueryError
@@ -110,7 +110,7 @@ export function useOrganizationRemoteSessionClientSessions(
  */
 export function useOrganizationRemoteSessionClientSessionsSuspense(
   request: ListOrganizationRemoteSessionClientSessionsRequest,
-  security?: ListOrganizationRemoteSessionClientSessionsSecurity  ,
+  security?: ListOrganizationRemoteSessionClientSessionsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     OrganizationRemoteSessionClientSessionsQueryData,
     OrganizationRemoteSessionClientSessionsQueryError
@@ -139,7 +139,7 @@ export function useOrganizationRemoteSessionClientSessionsSuspense(
  */
 export function useOrganizationRemoteSessionClientSessionsInfinite(
   request: ListOrganizationRemoteSessionClientSessionsRequest,
-  security?: ListOrganizationRemoteSessionClientSessionsSecurity  ,
+  security?: ListOrganizationRemoteSessionClientSessionsSecurity | undefined,
   options?: InfiniteQueryHookOptions<
     OrganizationRemoteSessionClientSessionsInfiniteQueryData,
     OrganizationRemoteSessionClientSessionsQueryError
@@ -182,7 +182,7 @@ export function useOrganizationRemoteSessionClientSessionsInfinite(
  */
 export function useOrganizationRemoteSessionClientSessionsInfiniteSuspense(
   request: ListOrganizationRemoteSessionClientSessionsRequest,
-  security?: ListOrganizationRemoteSessionClientSessionsSecurity  ,
+  security?: ListOrganizationRemoteSessionClientSessionsSecurity | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     OrganizationRemoteSessionClientSessionsInfiniteQueryData,
     OrganizationRemoteSessionClientSessionsQueryError

@@ -62,8 +62,8 @@ export type TemplatesQueryError =
  * List available prompt template.
  */
 export function useTemplates(
-  request?: ListTemplatesRequest  ,
-  security?: ListTemplatesSecurity  ,
+  request?: ListTemplatesRequest | undefined,
+  security?: ListTemplatesSecurity | undefined,
   options?: QueryHookOptions<TemplatesQueryData, TemplatesQueryError>,
 ): UseQueryResult<TemplatesQueryData, TemplatesQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useTemplates(
  * List available prompt template.
  */
 export function useTemplatesSuspense(
-  request?: ListTemplatesRequest  ,
-  security?: ListTemplatesSecurity  ,
+  request?: ListTemplatesRequest | undefined,
+  security?: ListTemplatesSecurity | undefined,
   options?: SuspenseQueryHookOptions<TemplatesQueryData, TemplatesQueryError>,
 ): UseSuspenseQueryResult<TemplatesQueryData, TemplatesQueryError> {
   const client = useGramContext();

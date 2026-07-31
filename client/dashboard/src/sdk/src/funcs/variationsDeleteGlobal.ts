@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function variationsDeleteGlobal(
   client: GramCore,
   request: DeleteGlobalVariationRequest,
-  security?: DeleteGlobalVariationSecurity  ,
+  security?: DeleteGlobalVariationSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function variationsDeleteGlobal(
 async function $do(
   client: GramCore,
   request: DeleteGlobalVariationRequest,
-  security?: DeleteGlobalVariationSecurity  ,
+  security?: DeleteGlobalVariationSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

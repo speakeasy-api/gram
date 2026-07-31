@@ -62,8 +62,8 @@ export type SessionInfoQueryError =
  * Provides information about the current authentication status.
  */
 export function useSessionInfo(
-  request?: SessionInfoRequest  ,
-  security?: SessionInfoSecurity  ,
+  request?: SessionInfoRequest | undefined,
+  security?: SessionInfoSecurity | undefined,
   options?: QueryHookOptions<SessionInfoQueryData, SessionInfoQueryError>,
 ): UseQueryResult<SessionInfoQueryData, SessionInfoQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useSessionInfo(
  * Provides information about the current authentication status.
  */
 export function useSessionInfoSuspense(
-  request?: SessionInfoRequest  ,
-  security?: SessionInfoSecurity  ,
+  request?: SessionInfoRequest | undefined,
+  security?: SessionInfoSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     SessionInfoQueryData,
     SessionInfoQueryError

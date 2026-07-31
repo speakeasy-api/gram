@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function assistantsUpdate(
   client: GramCore,
   request: UpdateAssistantRequest,
-  security?: UpdateAssistantSecurity  ,
+  security?: UpdateAssistantSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function assistantsUpdate(
 async function $do(
   client: GramCore,
   request: UpdateAssistantRequest,
-  security?: UpdateAssistantSecurity  ,
+  security?: UpdateAssistantSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

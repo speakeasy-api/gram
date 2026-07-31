@@ -22,8 +22,8 @@ export type GlobalVariationsQueryData = ListVariationsResult;
 export function prefetchGlobalVariations(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListGlobalVariationsRequest  ,
-  security?: ListGlobalVariationsSecurity  ,
+  request?: ListGlobalVariationsRequest | undefined,
+  security?: ListGlobalVariationsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchGlobalVariations(
 
 export function buildGlobalVariationsQuery(
   client$: GramCore,
-  request?: ListGlobalVariationsRequest  ,
-  security?: ListGlobalVariationsSecurity  ,
+  request?: ListGlobalVariationsRequest | undefined,
+  security?: ListGlobalVariationsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

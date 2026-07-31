@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function environmentsList(
   client: GramCore,
-  request?: ListEnvironmentsRequest  ,
-  security?: ListEnvironmentsSecurity  ,
+  request?: ListEnvironmentsRequest | undefined,
+  security?: ListEnvironmentsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function environmentsList(
 
 async function $do(
   client: GramCore,
-  request?: ListEnvironmentsRequest  ,
-  security?: ListEnvironmentsSecurity  ,
+  request?: ListEnvironmentsRequest | undefined,
+  security?: ListEnvironmentsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

@@ -62,8 +62,8 @@ export type ListResourcesQueryError =
  * List all resources for a project
  */
 export function useListResources(
-  request?: ListResourcesRequest  ,
-  security?: ListResourcesSecurity  ,
+  request?: ListResourcesRequest | undefined,
+  security?: ListResourcesSecurity | undefined,
   options?: QueryHookOptions<ListResourcesQueryData, ListResourcesQueryError>,
 ): UseQueryResult<ListResourcesQueryData, ListResourcesQueryError> {
   const client = useGramContext();
@@ -85,8 +85,8 @@ export function useListResources(
  * List all resources for a project
  */
 export function useListResourcesSuspense(
-  request?: ListResourcesRequest  ,
-  security?: ListResourcesSecurity  ,
+  request?: ListResourcesRequest | undefined,
+  security?: ListResourcesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListResourcesQueryData,
     ListResourcesQueryError

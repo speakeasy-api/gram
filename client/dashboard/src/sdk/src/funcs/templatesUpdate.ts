@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function templatesUpdate(
   client: GramCore,
   request: UpdateTemplateRequest,
-  security?: UpdateTemplateSecurity  ,
+  security?: UpdateTemplateSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function templatesUpdate(
 async function $do(
   client: GramCore,
   request: UpdateTemplateRequest,
-  security?: UpdateTemplateSecurity  ,
+  security?: UpdateTemplateSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

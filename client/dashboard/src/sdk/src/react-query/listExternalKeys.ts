@@ -63,8 +63,8 @@ export type ListExternalKeysQueryError =
  * List the organization's external keys (provider-independent summary). Optionally filter by provider. Requires org:read.
  */
 export function useListExternalKeys(
-  request?: ListExternalKeysRequest  ,
-  security?: ListExternalKeysSecurity  ,
+  request?: ListExternalKeysRequest | undefined,
+  security?: ListExternalKeysSecurity | undefined,
   options?: QueryHookOptions<
     ListExternalKeysQueryData,
     ListExternalKeysQueryError
@@ -89,8 +89,8 @@ export function useListExternalKeys(
  * List the organization's external keys (provider-independent summary). Optionally filter by provider. Requires org:read.
  */
 export function useListExternalKeysSuspense(
-  request?: ListExternalKeysRequest  ,
-  security?: ListExternalKeysSecurity  ,
+  request?: ListExternalKeysRequest | undefined,
+  security?: ListExternalKeysSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ListExternalKeysQueryData,
     ListExternalKeysQueryError

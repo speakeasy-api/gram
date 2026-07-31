@@ -23,7 +23,7 @@ export function prefetchGetGcpKmsKey(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetGcpKmsKeyRequest,
-  security?: GetGcpKmsKeySecurity  ,
+  security?: GetGcpKmsKeySecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchGetGcpKmsKey(
 export function buildGetGcpKmsKeyQuery(
   client$: GramCore,
   request: GetGcpKmsKeyRequest,
-  security?: GetGcpKmsKeySecurity  ,
+  security?: GetGcpKmsKeySecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

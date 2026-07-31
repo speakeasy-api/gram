@@ -22,8 +22,8 @@ export type ListAwsKmsKeysQueryData = ListExternalKeysResult;
 export function prefetchListAwsKmsKeys(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListAwsKmsKeysRequest  ,
-  security?: ListAwsKmsKeysSecurity  ,
+  request?: ListAwsKmsKeysRequest | undefined,
+  security?: ListAwsKmsKeysSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListAwsKmsKeys(
 
 export function buildListAwsKmsKeysQuery(
   client$: GramCore,
-  request?: ListAwsKmsKeysRequest  ,
-  security?: ListAwsKmsKeysSecurity  ,
+  request?: ListAwsKmsKeysRequest | undefined,
+  security?: ListAwsKmsKeysSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

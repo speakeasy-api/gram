@@ -22,8 +22,8 @@ export type ListInvitesQueryData = ListInvitesResult;
 export function prefetchListInvites(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListInvitesRequest  ,
-  security?: ListInvitesSecurity  ,
+  request?: ListInvitesRequest | undefined,
+  security?: ListInvitesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -38,8 +38,8 @@ export function prefetchListInvites(
 
 export function buildListInvitesQuery(
   client$: GramCore,
-  request?: ListInvitesRequest  ,
-  security?: ListInvitesSecurity  ,
+  request?: ListInvitesRequest | undefined,
+  security?: ListInvitesSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

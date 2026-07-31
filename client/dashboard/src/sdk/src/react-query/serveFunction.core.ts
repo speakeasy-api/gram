@@ -23,7 +23,7 @@ export function prefetchServeFunction(
   queryClient: QueryClient,
   client$: GramCore,
   request: ServeFunctionRequest,
-  security?: ServeFunctionSecurity  ,
+  security?: ServeFunctionSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchServeFunction(
 export function buildServeFunctionQuery(
   client$: GramCore,
   request: ServeFunctionRequest,
-  security?: ServeFunctionSecurity  ,
+  security?: ServeFunctionSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

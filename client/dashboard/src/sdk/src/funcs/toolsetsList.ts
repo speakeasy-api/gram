@@ -46,8 +46,8 @@ import { Result } from "../types/fp.js";
  */
 export function toolsetsList(
   client: GramCore,
-  request?: ListToolsetsRequest  ,
-  security?: ListToolsetsSecurity  ,
+  request?: ListToolsetsRequest | undefined,
+  security?: ListToolsetsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function toolsetsList(
 
 async function $do(
   client: GramCore,
-  request?: ListToolsetsRequest  ,
-  security?: ListToolsetsSecurity  ,
+  request?: ListToolsetsRequest | undefined,
+  security?: ListToolsetsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

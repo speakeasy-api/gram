@@ -62,8 +62,8 @@ export type SkillEfficacySettingsQueryError =
  * Get effective organization-wide skill efficacy sampling settings.
  */
 export function useSkillEfficacySettings(
-  request?: GetSkillEfficacySettingsRequest  ,
-  security?: GetSkillEfficacySettingsSecurity  ,
+  request?: GetSkillEfficacySettingsRequest | undefined,
+  security?: GetSkillEfficacySettingsSecurity | undefined,
   options?: QueryHookOptions<
     SkillEfficacySettingsQueryData,
     SkillEfficacySettingsQueryError
@@ -91,8 +91,8 @@ export function useSkillEfficacySettings(
  * Get effective organization-wide skill efficacy sampling settings.
  */
 export function useSkillEfficacySettingsSuspense(
-  request?: GetSkillEfficacySettingsRequest  ,
-  security?: GetSkillEfficacySettingsSecurity  ,
+  request?: GetSkillEfficacySettingsRequest | undefined,
+  security?: GetSkillEfficacySettingsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     SkillEfficacySettingsQueryData,
     SkillEfficacySettingsQueryError

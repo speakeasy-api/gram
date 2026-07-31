@@ -24,7 +24,7 @@ export function prefetchListTunneledMcpServerConnections(
   queryClient: QueryClient,
   client$: GramCore,
   request: ListTunneledMcpServerConnectionsRequest,
-  security?: ListTunneledMcpServerConnectionsSecurity  ,
+  security?: ListTunneledMcpServerConnectionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -40,7 +40,7 @@ export function prefetchListTunneledMcpServerConnections(
 export function buildListTunneledMcpServerConnectionsQuery(
   client$: GramCore,
   request: ListTunneledMcpServerConnectionsRequest,
-  security?: ListTunneledMcpServerConnectionsSecurity  ,
+  security?: ListTunneledMcpServerConnectionsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

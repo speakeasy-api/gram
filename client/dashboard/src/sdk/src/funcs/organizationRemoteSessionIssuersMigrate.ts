@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function organizationRemoteSessionIssuersMigrate(
   client: GramCore,
   request: MigrateOrganizationRemoteSessionIssuerRequest,
-  security?: MigrateOrganizationRemoteSessionIssuerSecurity  ,
+  security?: MigrateOrganizationRemoteSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function organizationRemoteSessionIssuersMigrate(
 async function $do(
   client: GramCore,
   request: MigrateOrganizationRemoteSessionIssuerRequest,
-  security?: MigrateOrganizationRemoteSessionIssuerSecurity  ,
+  security?: MigrateOrganizationRemoteSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

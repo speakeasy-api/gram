@@ -35,7 +35,7 @@ export function prefetchSkillVersions(
   queryClient: QueryClient,
   client$: GramCore,
   request: ListSkillVersionsRequest,
-  security?: ListSkillVersionsSecurity  ,
+  security?: ListSkillVersionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -52,7 +52,7 @@ export function prefetchSkillVersionsInfinite(
   queryClient: QueryClient,
   client$: GramCore,
   request: ListSkillVersionsRequest,
-  security?: ListSkillVersionsSecurity  ,
+  security?: ListSkillVersionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -71,7 +71,7 @@ export function prefetchSkillVersionsInfinite(
 export function buildSkillVersionsQuery(
   client$: GramCore,
   request: ListSkillVersionsRequest,
-  security?: ListSkillVersionsSecurity  ,
+  security?: ListSkillVersionsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -113,7 +113,7 @@ export function buildSkillVersionsQuery(
 export function buildSkillVersionsInfiniteQuery(
   client$: GramCore,
   request: ListSkillVersionsRequest,
-  security?: ListSkillVersionsSecurity  ,
+  security?: ListSkillVersionsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

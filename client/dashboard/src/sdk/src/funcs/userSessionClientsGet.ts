@@ -47,7 +47,7 @@ import { Result } from "../types/fp.js";
 export function userSessionClientsGet(
   client: GramCore,
   request: GetUserSessionClientRequest,
-  security?: GetUserSessionClientSecurity  ,
+  security?: GetUserSessionClientSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -74,7 +74,7 @@ export function userSessionClientsGet(
 async function $do(
   client: GramCore,
   request: GetUserSessionClientRequest,
-  security?: GetUserSessionClientSecurity  ,
+  security?: GetUserSessionClientSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [

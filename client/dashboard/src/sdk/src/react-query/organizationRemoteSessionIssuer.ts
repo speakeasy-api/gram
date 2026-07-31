@@ -63,7 +63,7 @@ export type OrganizationRemoteSessionIssuerQueryError =
  */
 export function useOrganizationRemoteSessionIssuer(
   request: GetOrganizationRemoteSessionIssuerRequest,
-  security?: GetOrganizationRemoteSessionIssuerSecurity  ,
+  security?: GetOrganizationRemoteSessionIssuerSecurity | undefined,
   options?: QueryHookOptions<
     OrganizationRemoteSessionIssuerQueryData,
     OrganizationRemoteSessionIssuerQueryError
@@ -92,7 +92,7 @@ export function useOrganizationRemoteSessionIssuer(
  */
 export function useOrganizationRemoteSessionIssuerSuspense(
   request: GetOrganizationRemoteSessionIssuerRequest,
-  security?: GetOrganizationRemoteSessionIssuerSecurity  ,
+  security?: GetOrganizationRemoteSessionIssuerSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     OrganizationRemoteSessionIssuerQueryData,
     OrganizationRemoteSessionIssuerQueryError

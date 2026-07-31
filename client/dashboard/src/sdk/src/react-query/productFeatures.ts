@@ -62,8 +62,8 @@ export type ProductFeaturesQueryError =
  * Get the current state of all product feature flags.
  */
 export function useProductFeatures(
-  request?: GetProductFeaturesRequest  ,
-  security?: GetProductFeaturesSecurity  ,
+  request?: GetProductFeaturesRequest | undefined,
+  security?: GetProductFeaturesSecurity | undefined,
   options?: QueryHookOptions<
     ProductFeaturesQueryData,
     ProductFeaturesQueryError
@@ -88,8 +88,8 @@ export function useProductFeatures(
  * Get the current state of all product feature flags.
  */
 export function useProductFeaturesSuspense(
-  request?: GetProductFeaturesRequest  ,
-  security?: GetProductFeaturesSecurity  ,
+  request?: GetProductFeaturesRequest | undefined,
+  security?: GetProductFeaturesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ProductFeaturesQueryData,
     ProductFeaturesQueryError

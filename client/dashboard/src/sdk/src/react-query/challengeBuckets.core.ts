@@ -23,8 +23,8 @@ export type ChallengeBucketsQueryData = ListChallengeBucketsResult;
 export function prefetchChallengeBuckets(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListChallengeBucketsRequest  ,
-  security?: ListChallengeBucketsSecurity  ,
+  request?: ListChallengeBucketsRequest | undefined,
+  security?: ListChallengeBucketsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,8 +39,8 @@ export function prefetchChallengeBuckets(
 
 export function buildChallengeBucketsQuery(
   client$: GramCore,
-  request?: ListChallengeBucketsRequest  ,
-  security?: ListChallengeBucketsSecurity  ,
+  request?: ListChallengeBucketsRequest | undefined,
+  security?: ListChallengeBucketsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

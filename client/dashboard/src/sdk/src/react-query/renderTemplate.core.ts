@@ -23,7 +23,7 @@ export function prefetchRenderTemplate(
   queryClient: QueryClient,
   client$: GramCore,
   request: RenderTemplateRequest,
-  security?: RenderTemplateSecurity  ,
+  security?: RenderTemplateSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchRenderTemplate(
 export function buildRenderTemplateQuery(
   client$: GramCore,
   request: RenderTemplateRequest,
-  security?: RenderTemplateSecurity  ,
+  security?: RenderTemplateSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

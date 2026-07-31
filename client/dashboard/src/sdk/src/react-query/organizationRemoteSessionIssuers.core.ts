@@ -35,8 +35,8 @@ export type OrganizationRemoteSessionIssuersPageParams = PageIterator<
 export function prefetchOrganizationRemoteSessionIssuers(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListOrganizationRemoteSessionIssuersRequest  ,
-  security?: ListOrganizationRemoteSessionIssuersSecurity  ,
+  request?: ListOrganizationRemoteSessionIssuersRequest | undefined,
+  security?: ListOrganizationRemoteSessionIssuersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -52,8 +52,8 @@ export function prefetchOrganizationRemoteSessionIssuers(
 export function prefetchOrganizationRemoteSessionIssuersInfinite(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListOrganizationRemoteSessionIssuersRequest  ,
-  security?: ListOrganizationRemoteSessionIssuersSecurity  ,
+  request?: ListOrganizationRemoteSessionIssuersRequest | undefined,
+  security?: ListOrganizationRemoteSessionIssuersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -72,8 +72,8 @@ export function prefetchOrganizationRemoteSessionIssuersInfinite(
 
 export function buildOrganizationRemoteSessionIssuersQuery(
   client$: GramCore,
-  request?: ListOrganizationRemoteSessionIssuersRequest  ,
-  security?: ListOrganizationRemoteSessionIssuersSecurity  ,
+  request?: ListOrganizationRemoteSessionIssuersRequest | undefined,
+  security?: ListOrganizationRemoteSessionIssuersSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -114,8 +114,8 @@ export function buildOrganizationRemoteSessionIssuersQuery(
 
 export function buildOrganizationRemoteSessionIssuersInfiniteQuery(
   client$: GramCore,
-  request?: ListOrganizationRemoteSessionIssuersRequest  ,
-  security?: ListOrganizationRemoteSessionIssuersSecurity  ,
+  request?: ListOrganizationRemoteSessionIssuersRequest | undefined,
+  security?: ListOrganizationRemoteSessionIssuersSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

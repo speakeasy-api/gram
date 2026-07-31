@@ -23,7 +23,7 @@ export function prefetchAgentPlugins(
   queryClient: QueryClient,
   client$: GramCore,
   request: GetAgentPluginsRequest,
-  security?: GetAgentPluginsSecurity  ,
+  security?: GetAgentPluginsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -39,7 +39,7 @@ export function prefetchAgentPlugins(
 export function buildAgentPluginsQuery(
   client$: GramCore,
   request: GetAgentPluginsRequest,
-  security?: GetAgentPluginsSecurity  ,
+  security?: GetAgentPluginsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
