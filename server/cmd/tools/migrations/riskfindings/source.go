@@ -41,28 +41,42 @@ type SourceRow struct {
 	ProjectID         uuid.UUID
 	RiskPolicyID      uuid.UUID
 	RiskPolicyVersion int64
-	ChatMessageID     uuid.UUID
-	Source            string
-	Found             bool
-	RuleID            *string
-	Description       *string
-	Match             *string
-	StartPos          *int32
-	EndPos            *int32
-	Confidence        *float64
-	Tags              []string
-	DeadLetterReason  *string
-	ExcludedAt        *time.Time
-	ExclusionID       *uuid.UUID
-	FalsePositiveAt   *time.Time
+	// Exactly one of ChatMessageID / ContentPartID is set (the table enforces
+	// it): findings anchor to a chat message or to a chat content part.
+	ChatMessageID    uuid.NullUUID
+	ContentPartID    uuid.NullUUID
+	Source           string
+	Found            bool
+	RuleID           *string
+	Description      *string
+	Match            *string
+	StartPos         *int32
+	EndPos           *int32
+	Confidence       *float64
+	Tags             []string
+	Spans            []byte // raw risk_results.spans JSONB: array of {match,field,path,start_pos,end_pos}; nil for legacy/empty rows
+	DeadLetterReason *string
+	ExcludedAt       *time.Time
+	ExclusionID      *uuid.UUID
+	FalsePositiveAt  *time.Time
 
 	// Denormalized attribution resolved by the source's LEFT JOINs, mirroring
 	// the live writer's GetChatMessageAttribution lookup: message-level user
 	// ids win over chat-level ones. All empty when the chat message no longer
-	// resolves (deleted chat, missing message).
+	// resolves (deleted chat, missing message) — including content-part-anchored
+	// rows, which have no chat_messages join at all.
 	ChatID         string
 	UserID         string
 	ExternalUserID string
+
+	// MessageCreatedAt is the scanned chat message's event time
+	// (chat_messages.created_at), falling back to the finding's own created_at
+	// when the row has no chat message (content-part anchors) — the same value
+	// the ClickHouse column DEFAULT computes.
+	MessageCreatedAt time.Time
+	// AssistantID is the chat's most recent live assistant_threads link, empty
+	// when the chat backs no live thread (or the row has no chat message).
+	AssistantID string
 }
 
 // selectPage walks risk_results in id order (uuidv7). The id is used ONLY as a
@@ -90,22 +104,34 @@ type SourceRow struct {
 //
 // The LEFT JOINs denormalize attribution the same way the live writer's
 // GetChatMessageAttribution query does (risk/queries.sql): chat id plus
-// resolved user ids, message-level values winning over chat-level ones,
-// everything collapsing to ” when the message or chat is gone.
+// resolved user ids, message-level values winning over chat-level ones, the
+// message event time, and the chat's most recent live assistant_threads link —
+// everything collapsing to ” (and message_created_at to the finding's own
+// created_at, matching the ClickHouse column DEFAULT) when the message or chat
+// is gone. Content-part-anchored rows have no cm, so their attribution stays
+// empty and their event time falls back the same way.
 const selectPage = `
 SELECT r.id, r.created_at, r.organization_id, r.project_id, r.risk_policy_id,
-       r.risk_policy_version, r.chat_message_id, r.source, r.found, r.rule_id, r.description,
-       r.match, r.start_pos, r.end_pos, r.confidence, r.tags, r.dead_letter_reason,
+       r.risk_policy_version, r.chat_message_id, r.chat_content_part_id, r.source, r.found,
+       r.rule_id, r.description,
+       r.match, r.start_pos, r.end_pos, r.confidence, r.tags, r.spans, r.dead_letter_reason,
        r.excluded_at, r.excluded_exclusion_id, r.false_positive_at,
        COALESCE(cm.chat_id::text, '') AS chat_id,
        COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id,
-       COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
+       COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id,
+       COALESCE(cm.created_at, r.created_at) AS message_created_at,
+       COALESCE(thread.assistant_id::text, '') AS assistant_id
 FROM risk_results r
 LEFT JOIN chat_messages cm
   ON cm.id = r.chat_message_id
 LEFT JOIN chats c
   ON c.id = cm.chat_id
   AND c.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT at.assistant_id FROM assistant_threads at
+  WHERE at.chat_id = cm.chat_id AND at.deleted IS FALSE
+  ORDER BY at.created_at DESC LIMIT 1
+) thread ON TRUE
 WHERE ($1::text IS NULL OR r.organization_id = $1)
   AND ($2::uuid IS NULL OR r.project_id = $2)
   AND ($3::uuid IS NULL OR r.risk_policy_id = $3)
@@ -195,10 +221,12 @@ func (s *Source) Read(ctx context.Context, criteria pipeline.Criteria, out chan<
 			var r SourceRow
 			if err := rows.Scan(
 				&r.ID, &r.CreatedAt, &r.OrganizationID, &r.ProjectID, &r.RiskPolicyID,
-				&r.RiskPolicyVersion, &r.ChatMessageID, &r.Source, &r.Found, &r.RuleID, &r.Description,
-				&r.Match, &r.StartPos, &r.EndPos, &r.Confidence, &r.Tags, &r.DeadLetterReason,
+				&r.RiskPolicyVersion, &r.ChatMessageID, &r.ContentPartID, &r.Source, &r.Found,
+				&r.RuleID, &r.Description,
+				&r.Match, &r.StartPos, &r.EndPos, &r.Confidence, &r.Tags, &r.Spans, &r.DeadLetterReason,
 				&r.ExcludedAt, &r.ExclusionID, &r.FalsePositiveAt,
 				&r.ChatID, &r.UserID, &r.ExternalUserID,
+				&r.MessageCreatedAt, &r.AssistantID,
 			); err != nil {
 				rows.Close()
 				return fmt.Errorf("scan row after %s: %w", cursor, err)
