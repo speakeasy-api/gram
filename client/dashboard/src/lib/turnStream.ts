@@ -205,6 +205,18 @@ export async function streamTurn(args: {
               // and a step holding tool calls with no outputs makes it re-send
               // a turn the server is still running — which is exactly what
               // produced a second sendMessage mid-turn.
+              // Close the text part before the step that owns it closes:
+              // assistant-ui drops a step's parts when the step ends, so a
+              // text-end emitted afterwards addresses a part that no longer
+              // exists ("Received text-end for missing text part").
+              if (sawTextThisMessage) {
+                writer.write({
+                  type: "text-end",
+                  id: `turn-${chatId}-${messageIndex}`,
+                });
+                messageIndex++;
+                sawTextThisMessage = false;
+              }
               if (stepHasMessage) closeStep();
               openStep();
               stepHasMessage = true;
@@ -218,14 +230,6 @@ export async function streamTurn(args: {
                   input: call.input,
                 });
               }
-              if (sawTextThisMessage) {
-                writer.write({
-                  type: "text-end",
-                  id: `turn-${chatId}-${messageIndex}`,
-                });
-                messageIndex++;
-              }
-              sawTextThisMessage = false;
               break;
             }
             case "tool_output": {
