@@ -68,10 +68,11 @@ func (s *Service) effectiveMcpPublic(ctx context.Context, projectID, toolsetID u
 }
 
 // createWrapperForNewToolset provisions the canonical wrapper mcp_servers
-// row and platform mcp_endpoints row for a newly created toolset. New
-// toolsets carry no publishing columns — publishing state is born on the
-// wrapper — so this is a direct creation rather than a column mirror.
-func (s *Service) createWrapperForNewToolset(ctx context.Context, dbtx pgx.Tx, toolset repo.Toolset, endpointSlug, visibility string) error {
+// row and platform mcp_endpoints row for a newly created toolset, returning
+// the wrapper's id. New toolsets carry no publishing columns — publishing
+// state is born on the wrapper — so this is a direct creation rather than a
+// column mirror.
+func (s *Service) createWrapperForNewToolset(ctx context.Context, dbtx pgx.Tx, toolset repo.Toolset, endpointSlug, visibility string) (uuid.UUID, error) {
 	var environmentID uuid.NullUUID
 	if slug := conv.FromPGText[string](toolset.DefaultEnvironmentSlug); slug != nil && *slug != "" {
 		env, err := environmentsRepo.New(dbtx).GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
@@ -81,7 +82,7 @@ func (s *Service) createWrapperForNewToolset(ctx context.Context, dbtx pgx.Tx, t
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 		case err != nil:
-			return fmt.Errorf("resolve toolset default environment: %w", err)
+			return uuid.Nil, fmt.Errorf("resolve toolset default environment: %w", err)
 		default:
 			environmentID = uuid.NullUUID{UUID: env.ID, Valid: true}
 		}
@@ -89,7 +90,7 @@ func (s *Service) createWrapperForNewToolset(ctx context.Context, dbtx pgx.Tx, t
 
 	serverID, err := uuid.NewV7()
 	if err != nil {
-		return fmt.Errorf("generate wrapper mcp server id: %w", err)
+		return uuid.Nil, fmt.Errorf("generate wrapper mcp server id: %w", err)
 	}
 	wrapper, err := mcpserversRepo.New(dbtx).CreateMCPServer(ctx, mcpserversRepo.CreateMCPServerParams{
 		ID:                    serverID,
@@ -105,7 +106,7 @@ func (s *Service) createWrapperForNewToolset(ctx context.Context, dbtx pgx.Tx, t
 		Visibility:            visibility,
 	})
 	if err != nil {
-		return fmt.Errorf("create wrapper mcp server: %w", err)
+		return uuid.Nil, fmt.Errorf("create wrapper mcp server: %w", err)
 	}
 	if _, err := mcpendpointsRepo.New(dbtx).CreateMCPEndpoint(ctx, mcpendpointsRepo.CreateMCPEndpointParams{
 		ProjectID:      toolset.ProjectID,
@@ -113,9 +114,9 @@ func (s *Service) createWrapperForNewToolset(ctx context.Context, dbtx pgx.Tx, t
 		McpServerID:    wrapper.ID,
 		Slug:           endpointSlug,
 	}); err != nil {
-		return fmt.Errorf("create wrapper mcp endpoint: %w", err)
+		return uuid.Nil, fmt.Errorf("create wrapper mcp endpoint: %w", err)
 	}
-	return nil
+	return wrapper.ID, nil
 }
 
 // mirrorPublishingState reconciles the canonical mcp_servers/mcp_endpoints
