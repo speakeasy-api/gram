@@ -1,4 +1,5 @@
 import { formatCost } from "@/lib/money";
+import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/Badge";
 import {
   Select,
@@ -277,8 +278,9 @@ export type EntityProfileProps = {
   // The summary widgets row (trend chart, mix, KPIs), rendered above the table.
   widgets: ReactNode;
   // The stacked cost-over-time chart, rendered inside the breakdown section
-  // between the section heading and the table — it stacks by the same axis
-  // the top control bar selects, so it reads as part of the breakdown.
+  // between the axis/search controls and the table — it stacks by the same
+  // axis the section's control bar selects, so it reads as part of the
+  // breakdown.
   chart?: ReactNode;
   isLoading: boolean;
   isError: boolean;
@@ -609,12 +611,13 @@ export function EntityProfile({
         </div>
       </div>
 
-      {/* The unified control bar sits under the headline numbers: search, the
-          axis track, table actions, and the page-scope dataset + range
-          controls. The axis re-cuts every visualization below it, and the
-          dataset/range scope every number on the page — so once scrolled past,
-          the bar pins to the top of the scrollport (the sentinel above drives
-          the pinned styling: a full-width blur band with a hairline). */}
+      {/* Page-scope controls sit under the headline numbers: dataset + range
+          shape every number on the page, and export/reset act on the current
+          view. Once scrolled past, the bar pins to the top of the scrollport
+          (the sentinel above drives the pinned styling: a full-width blur
+          band with a hairline). The breakdown axis track and row search live
+          with the chart/table below — not here — so they stay next to the
+          content they reshape. */}
       <div ref={pinSentinelRef} aria-hidden="true" className="h-px w-full" />
       <div
         className={cn(
@@ -624,14 +627,12 @@ export function EntityProfile({
         )}
       >
         <div className="mx-auto w-full max-w-7xl px-8 py-2">
-          <BreakdownBar
-            axisValue={axisValue}
-            axisOptions={axisOptions}
-            onAxisChange={onAxisChange}
-            searchValue={searchValue}
-            onSearchChange={onSearchChange}
-            searchPlaceholder={searchPlaceholder}
-            actions={
+          <Page.Toolbar>
+            <Page.Toolbar.Leading>
+              {datasetControl}
+              {rangePicker}
+            </Page.Toolbar.Leading>
+            <Page.Toolbar.Actions>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -651,14 +652,8 @@ export function EntityProfile({
                   Reset
                 </button>
               </div>
-            }
-            scopeControls={
-              <>
-                {datasetControl}
-                {rangePicker}
-              </>
-            }
-          />
+            </Page.Toolbar.Actions>
+          </Page.Toolbar>
         </div>
       </div>
 
@@ -667,8 +662,9 @@ export function EntityProfile({
         {/* The breakdown is its own section under the summary widgets, so it
             opens on a rule rather than floating off the last widget. The
             heading states the current cut ("Cost by Model") — echoing the lit
-            segment in the top control bar — with the caption saying what the
-            cut is doing in the user's own numbers. */}
+            segment in the control bar below — with the caption saying what
+            the cut is doing in the user's own numbers. Axis track + search
+            sit here, immediately above the chart/table they affect. */}
         <div className="border-border flex flex-col gap-3 border-t pt-6">
           <div className="flex flex-col gap-0.5">
             <h2 className="flex items-center gap-1.5 text-sm font-semibold">
@@ -694,6 +690,14 @@ export function EntityProfile({
             </h2>
             <p className="text-muted-foreground text-xs">{caption}</p>
           </div>
+          <BreakdownBar
+            axisValue={axisValue}
+            axisOptions={axisOptions}
+            onAxisChange={onAxisChange}
+            searchValue={searchValue}
+            onSearchChange={onSearchChange}
+            searchPlaceholder={searchPlaceholder}
+          />
           {chart}
           {tableOverride ?? dimensionTable}
         </div>
