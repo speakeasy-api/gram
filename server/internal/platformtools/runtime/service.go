@@ -21,6 +21,7 @@ import (
 	platformchangelog "github.com/speakeasy-api/gram/server/internal/platformtools/changelog"
 	platformchats "github.com/speakeasy-api/gram/server/internal/platformtools/chats"
 	platformdeployments "github.com/speakeasy-api/gram/server/internal/platformtools/deployments"
+	platformdocs "github.com/speakeasy-api/gram/server/internal/platformtools/docs"
 	platformlogs "github.com/speakeasy-api/gram/server/internal/platformtools/logs"
 	platformmemory "github.com/speakeasy-api/gram/server/internal/platformtools/memory"
 	platformrisk "github.com/speakeasy-api/gram/server/internal/platformtools/risk"
@@ -198,6 +199,20 @@ func ManagedAssistantDeploymentsTools(deploymentsSvc platformdeployments.Deploym
 func ManagedAssistantChangelogTools(httpClient *guardian.HTTPClient) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
 		{Executor: platformchangelog.NewGetChangelogTool(httpClient), RequiredFeature: ""},
+	}
+}
+
+// ManagedAssistantDocsTools returns the public product-documentation tools for
+// the project's managed assistant so it can answer product questions from
+// speakeasy.com/docs/ai-control-plane instead of its own priors. The HTTP
+// client must come from a guardian policy so the outbound fetch stays within
+// the egress rules. Both tools share one client so the page index is fetched
+// and cached once rather than per tool.
+func ManagedAssistantDocsTools(httpClient *guardian.HTTPClient) []platformtools.ExternalTool {
+	client := platformdocs.NewClient(httpClient, platformdocs.DefaultSiteURL)
+	return []platformtools.ExternalTool{
+		{Executor: platformdocs.NewListDocsTool(client), RequiredFeature: ""},
+		{Executor: platformdocs.NewGetDocTool(client), RequiredFeature: ""},
 	}
 }
 
