@@ -210,6 +210,78 @@ VALUES (
   , @created_at
 );
 
+-- name: CreateChatContentPart :copyfrom
+INSERT INTO chat_content_parts (
+    chat_id
+  , project_id
+  , kind
+  , content_asset_url
+  , external_id
+  , parent_chat_message_id
+  , version
+  , source
+  , metadata
+  , risk_analyzed_at
+  , created_at
+)
+VALUES (
+    @chat_id
+  , @project_id::uuid
+  , @kind
+  , @content_asset_url
+  , @external_id
+  , @parent_chat_message_id
+  , @version
+  , @source
+  , @metadata
+  , @risk_analyzed_at
+  , @created_at
+);
+
+-- name: ListChatContentPartsByChatID :many
+SELECT
+    ccp.id
+  , ccp.chat_id
+  , ccp.project_id
+  , ccp.kind
+  , ccp.content_asset_url
+  , ccp.external_id
+  , ccp.parent_chat_message_id
+  , ccp.version
+  , ccp.source
+  , ccp.metadata
+  , ccp.risk_analyzed_at
+  , ccp.created_at
+  , ccp.updated_at
+  , ccp.deleted_at
+  , ccp.deleted
+  , EXISTS (
+      SELECT 1
+      FROM risk_results rr
+      JOIN risk_policies rp
+        ON rp.id = rr.risk_policy_id
+       AND rp.enabled IS TRUE
+       AND rp.deleted IS FALSE
+      WHERE rr.project_id = @project_id::uuid
+        AND rr.chat_content_part_id = ccp.id
+        AND rr.found IS TRUE
+        AND rr.excluded_at IS NULL
+        AND rr.false_positive_at IS NULL
+    ) AS is_risk
+FROM chat_content_parts ccp
+WHERE ccp.chat_id = @chat_id
+  AND (ccp.project_id IS NULL OR ccp.project_id = @project_id::uuid)
+  AND ccp.deleted IS FALSE
+  -- Only the parts the requested page can actually render: one anchored to a
+  -- message on this page, or an unparented one the client places by time
+  -- proximity. Without this a page request reads every attachment body in the
+  -- chat from asset storage, then discards the ones it cannot anchor.
+  AND (
+    ccp.parent_chat_message_id IS NULL
+    OR ccp.parent_chat_message_id = ANY(@parent_chat_message_ids::uuid[])
+  )
+ORDER BY created_at ASC, id ASC;
+
 -- name: CreateExternalChatMessage :execrows
 INSERT INTO chat_messages (
     chat_id
@@ -689,6 +761,15 @@ ORDER BY 1;
 SELECT * FROM chat_messages
 WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid)
 ORDER BY created_at ASC, seq ASC;
+
+-- name: ListClaudeUserMessagesForPromptAttachmentParent :many
+SELECT cm.id, cm.content
+FROM chat_messages cm
+WHERE cm.chat_id = @chat_id
+  AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+  AND cm.role = 'user'
+  AND cm.content != ''
+ORDER BY cm.seq DESC, cm.created_at DESC;
 
 -- name: ListChatTranscriptMessagesPage :many
 -- Keyset page of one chat's messages, newest first, carrying only the columns

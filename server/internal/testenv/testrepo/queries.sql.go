@@ -127,6 +127,21 @@ func (q *Queries) CreateOrganizationUserRelationshipFixture(ctx context.Context,
 	return err
 }
 
+const deferDeviceIntegrationSyncsFixture = `-- name: DeferDeviceIntegrationSyncsFixture :exec
+UPDATE device_integration_syncs s
+SET next_poll_after = clock_timestamp() + interval '1 hour'
+FROM device_integration_schedules sch
+WHERE s.device_integration_schedule_id = sch.id
+  AND sch.device_integration_config_id = $1
+`
+
+// Pushes every sync's next poll an hour out, simulating a config whose
+// schedules already ran this interval.
+func (q *Queries) DeferDeviceIntegrationSyncsFixture(ctx context.Context, deviceIntegrationConfigID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deferDeviceIntegrationSyncsFixture, deviceIntegrationConfigID)
+	return err
+}
+
 const disableDeviceIntegrationSchedulesFixture = `-- name: DisableDeviceIntegrationSchedulesFixture :exec
 UPDATE device_integration_schedules
 SET disabled_at = clock_timestamp()
@@ -313,6 +328,33 @@ func (q *Queries) GetOutboxRelayState(ctx context.Context, outboxID int64) (GetO
 	return i, err
 }
 
+const insertChatContentPartFixture = `-- name: InsertChatContentPartFixture :one
+INSERT INTO chat_content_parts (chat_id, project_id, kind, content_asset_url)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type InsertChatContentPartFixtureParams struct {
+	ChatID          uuid.UUID
+	ProjectID       uuid.NullUUID
+	Kind            string
+	ContentAssetUrl string
+}
+
+// Test-only fixture: seeds a minimal chat content part so tests can anchor a
+// risk_results row to it.
+func (q *Queries) InsertChatContentPartFixture(ctx context.Context, arg InsertChatContentPartFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertChatContentPartFixture,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Kind,
+		arg.ContentAssetUrl,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const insertChatMessage = `-- name: InsertChatMessage :one
 INSERT INTO chat_messages (chat_id, project_id, role, content)
 VALUES ($1, $2, $3, $4)
@@ -338,6 +380,75 @@ func (q *Queries) InsertChatMessage(ctx context.Context, arg InsertChatMessagePa
 	return id, err
 }
 
+const insertContentPartRiskResultFixture = `-- name: InsertContentPartRiskResultFixture :exec
+INSERT INTO risk_results (
+  id, project_id, organization_id, risk_policy_id, risk_policy_version,
+  chat_content_part_id, source, found, rule_id, description, match, tags
+) VALUES (
+  $1, $2, $3, $4, $5,
+  $6, $7, TRUE, $8, $9, $10, $11
+)
+`
+
+type InsertContentPartRiskResultFixtureParams struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	ChatContentPartID uuid.NullUUID
+	Source            string
+	RuleID            pgtype.Text
+	Description       pgtype.Text
+	Match             pgtype.Text
+	Tags              []string
+}
+
+// Test-only fixture: seeds a risk_results row anchored to a chat content part
+// (chat_message_id IS NULL), a shape the production InsertRiskResults copyfrom
+// cannot produce, so backfill tooling can exercise the fallback path its
+// chat_messages join takes when a finding has no chat message.
+func (q *Queries) InsertContentPartRiskResultFixture(ctx context.Context, arg InsertContentPartRiskResultFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertContentPartRiskResultFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.RiskPolicyID,
+		arg.RiskPolicyVersion,
+		arg.ChatContentPartID,
+		arg.Source,
+		arg.RuleID,
+		arg.Description,
+		arg.Match,
+		arg.Tags,
+	)
+	return err
+}
+
+const insertDeviceAgentDeviceSyncFixture = `-- name: InsertDeviceAgentDeviceSyncFixture :exec
+INSERT INTO device_agent_device_syncs (organization_id, serial_number, email, hostname, first_seen_at, last_seen_at)
+VALUES ($1, $2, $3, NULLIF($4::text, ''), $5, $5)
+`
+
+type InsertDeviceAgentDeviceSyncFixtureParams struct {
+	OrganizationID string
+	SerialNumber   string
+	Email          string
+	Hostname       string
+	SeenAt         pgtype.Timestamptz
+}
+
+func (q *Queries) InsertDeviceAgentDeviceSyncFixture(ctx context.Context, arg InsertDeviceAgentDeviceSyncFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertDeviceAgentDeviceSyncFixture,
+		arg.OrganizationID,
+		arg.SerialNumber,
+		arg.Email,
+		arg.Hostname,
+		arg.SeenAt,
+	)
+	return err
+}
+
 const insertDeviceAgentSyncFixture = `-- name: InsertDeviceAgentSyncFixture :exec
 INSERT INTO device_agent_syncs (organization_id, email, first_seen_at, last_seen_at)
 VALUES ($1, $2, $3, $3)
@@ -355,8 +466,8 @@ func (q *Queries) InsertDeviceAgentSyncFixture(ctx context.Context, arg InsertDe
 }
 
 const insertMdmDeviceFixture = `-- name: InsertMdmDeviceFixture :exec
-INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, missing_since)
-VALUES ($1, $2, $3, NULLIF($4::text, ''), $5::text, $6::timestamptz)
+INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, serial_number, missing_since)
+VALUES ($1, $2, $3, NULLIF($4::text, ''), $5::text, NULLIF($6::text, ''), $7::timestamptz)
 `
 
 type InsertMdmDeviceFixtureParams struct {
@@ -365,6 +476,7 @@ type InsertMdmDeviceFixtureParams struct {
 	ExternalID                string
 	UserEmail                 string
 	UserID                    pgtype.Text
+	SerialNumber              string
 	MissingSince              pgtype.Timestamptz
 }
 
@@ -375,6 +487,7 @@ func (q *Queries) InsertMdmDeviceFixture(ctx context.Context, arg InsertMdmDevic
 		arg.ExternalID,
 		arg.UserEmail,
 		arg.UserID,
+		arg.SerialNumber,
 		arg.MissingSince,
 	)
 	return err
@@ -562,6 +675,51 @@ func (q *Queries) ListDeploymentHTTPTools(ctx context.Context, deploymentID uuid
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDeviceAgentDeviceSyncsFixture = `-- name: ListDeviceAgentDeviceSyncsFixture :many
+SELECT organization_id, serial_number, email, hostname, first_seen_at, last_seen_at
+FROM device_agent_device_syncs
+WHERE organization_id = $1
+ORDER BY serial_number ASC
+`
+
+type ListDeviceAgentDeviceSyncsFixtureRow struct {
+	OrganizationID string
+	SerialNumber   string
+	Email          string
+	Hostname       pgtype.Text
+	FirstSeenAt    pgtype.Timestamptz
+	LastSeenAt     pgtype.Timestamptz
+}
+
+// Reads back per-device agent heartbeats so tests can assert the write path;
+// there is no production reader until the coverage join lands.
+func (q *Queries) ListDeviceAgentDeviceSyncsFixture(ctx context.Context, organizationID string) ([]ListDeviceAgentDeviceSyncsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listDeviceAgentDeviceSyncsFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDeviceAgentDeviceSyncsFixtureRow
+	for rows.Next() {
+		var i ListDeviceAgentDeviceSyncsFixtureRow
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.SerialNumber,
+			&i.Email,
+			&i.Hostname,
+			&i.FirstSeenAt,
+			&i.LastSeenAt,
 		); err != nil {
 			return nil, err
 		}

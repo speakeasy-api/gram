@@ -79,6 +79,25 @@ func TestHandle_PublishesGitleaksFinding(t *testing.T) {
 	require.NotNil(t, awsFinding, "expected an aws secret access key finding")
 }
 
+func TestHandle_PublishesGitleaksFindingForContentPart(t *testing.T) {
+	t.Parallel()
+
+	pub, published := capturingPub(t)
+	h := gitleaks.NewHandler(testenv.NewLogger(t), pub)
+
+	content := `AccessKeyId: ` + fakeAccessKeyID + `, SecretAccessKey: ` + fakeSecret
+	req := newRequest(content)
+	req.ClearChatMessageId()
+	req.SetContentPartId("part-1")
+	require.NoError(t, h.Handle(t.Context(), req, gcp.MessageMetadata{}))
+
+	require.NotEmpty(t, *published, "expected at least one finding published")
+	for _, f := range *published {
+		require.Empty(t, f.GetChatMessageId())
+		require.Equal(t, "part-1", f.GetContentPartId())
+	}
+}
+
 func TestHandle_CleanContentPublishesNothing(t *testing.T) {
 	t.Parallel()
 

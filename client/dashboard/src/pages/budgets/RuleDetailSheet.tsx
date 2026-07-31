@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import {
   Sheet,
   SheetContent,
@@ -6,8 +6,8 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Text } from "@/components/ui/Text";
 import { Loader2, Pencil, Search, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type JSX } from "react";
 import { EventTypeBadge, RuleActionBadge, UsageBar } from "./budget-shared";
@@ -150,9 +150,9 @@ function RuleDetail({
         {/* Budget state */}
         <section className="space-y-2">
           <div className="flex items-baseline justify-between">
-            <Type variant="small" className="font-medium">
+            <Text variant="small" className="font-medium">
               Budget
-            </Type>
+            </Text>
             <span className="text-muted-foreground text-xs">
               {WINDOW_LABELS[rule.windowKind]} window · resets in{" "}
               {timeUntilWindowReset(rule.windowKind)} · warns at{" "}
@@ -192,9 +192,9 @@ function RuleDetail({
 
         {/* Lifecycle events */}
         <section className="space-y-2">
-          <Type variant="small" className="font-medium">
+          <Text variant="small" className="font-medium">
             Events
-          </Type>
+          </Text>
           {events.length === 0 ? (
             <p className="text-muted-foreground text-xs">
               No budget events recorded for this rule yet.
@@ -293,9 +293,9 @@ function PeopleSection({
     <section className="space-y-2">
       <div className="flex items-center gap-2">
         <Users className="size-3.5" />
-        <Type variant="small" className="font-medium">
+        <Text variant="small" className="font-medium">
           People {matchedCount > 0 ? `(${matchedCount})` : ""}
-        </Type>
+        </Text>
         {loading && (
           <Loader2 className="text-muted-foreground size-3.5 animate-spin" />
         )}
@@ -373,7 +373,7 @@ function PeopleSectionBody({
         <p className="text-destructive text-xs">
           Couldn't load matched people. The preview is temporarily unavailable.
         </p>
-        <Button variant="outline" size="sm" onClick={onRetry}>
+        <Button variant="secondary" size="sm" onClick={onRetry}>
           Retry
         </Button>
       </div>

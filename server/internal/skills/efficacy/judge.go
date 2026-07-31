@@ -205,6 +205,7 @@ func (j *Judge) call(ctx context.Context, in JudgeInput) (JudgeResult, error) {
 		UserEmail:      "",
 		HTTPMetadata:   nil,
 		JSONSchema:     &jsonSchema,
+		Reasoning:      nil,
 	})
 	switch {
 	case err != nil && errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil:

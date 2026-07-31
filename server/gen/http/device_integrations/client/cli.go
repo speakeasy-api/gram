@@ -286,8 +286,8 @@ func BuildListManagedDevicesPayload(deviceIntegrationsListManagedDevicesProvider
 	{
 		if deviceIntegrationsListManagedDevicesCoverageBucket != "" {
 			coverageBucket = &deviceIntegrationsListManagedDevicesCoverageBucket
-			if !(*coverageBucket == "agent_active" || *coverageBucket == "agent_stale" || *coverageBucket == "no_agent" || *coverageBucket == "no_email" || *coverageBucket == "unresolved_email" || *coverageBucket == "missing") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("coverage_bucket", *coverageBucket, []any{"agent_active", "agent_stale", "no_agent", "no_email", "unresolved_email", "missing"}))
+			if !(*coverageBucket == "agent_active" || *coverageBucket == "agent_stale" || *coverageBucket == "agent_other_device" || *coverageBucket == "no_agent" || *coverageBucket == "no_email" || *coverageBucket == "unresolved_email" || *coverageBucket == "missing") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("coverage_bucket", *coverageBucket, []any{"agent_active", "agent_stale", "agent_other_device", "no_agent", "no_email", "unresolved_email", "missing"}))
 			}
 			if err != nil {
 				return nil, err

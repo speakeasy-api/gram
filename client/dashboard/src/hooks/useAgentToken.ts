@@ -47,8 +47,7 @@ export function useAgentToken(opts: {
   const queryClient = useQueryClient();
   const client = useGramContext();
 
-  // Gate on the org:admin *scope* (RBAC), matching the API Keys page. When RBAC
-  // isn't enabled (local dev / non-enterprise) hasAnyScope returns true.
+  // Gate on the org:admin scope, matching the API Keys page.
   const { hasAnyScope } = useRBAC();
   const canGenerate = hasAnyScope(["org:admin"]);
 

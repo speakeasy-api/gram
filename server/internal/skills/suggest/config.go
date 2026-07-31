@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-const Model = "anthropic/claude-sonnet-5"
+const Model = "openai/gpt-5.6-terra"
 
 // Config is the complete suggestion policy. DefaultConfig is the production
 // policy; fields remain configurable so the policy can be tested without time

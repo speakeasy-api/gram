@@ -122,6 +122,13 @@ type ObjectCompletionRequest struct {
 	// KeySlot selects the customer key slot the call resolves against; the
 	// zero value falls back to UsageSource.
 	KeySlot billing.ModelUsageSource
+	// Reasoning overrides the reasoning configuration for this call. Nil
+	// disables reasoning, which is what a structured-output judge wants: the
+	// answer is a schema-shaped verdict, not an argument, and reasoning tokens
+	// are billed. Some routes reject a disabled setting outright ("Reasoning is
+	// mandatory for this endpoint"), so a caller that needs such a model must
+	// set an effort here rather than silently taking a 400.
+	Reasoning *Reasoning
 }
 
 // CompletionResponse encapsulates the result of a completion call.

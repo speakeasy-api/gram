@@ -15,17 +15,17 @@ import {
   SecondaryRouteAction,
 } from "@/components/route-not-found-state";
 import { ToolList } from "@/components/tool-list";
-import { Dialog } from "@/components/ui/dialog";
-import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { MultiSelect } from "@/components/ui/multi-select";
+import { Dialog } from "@/components/ui/Dialog";
+import { Heading } from "@/components/ui/Heading";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { MultiSelect } from "@/components/ui/MultiSelect";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { RequireScope } from "@/components/require-scope";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -68,16 +68,16 @@ import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets
 import { useRemoveOAuthServerMutation } from "@gram/client/react-query/removeOAuthServer.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-  Stack,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -242,8 +242,10 @@ function renderMcpDetailTabContent(
       );
     case "team-access":
       return (
-        <RequireScope scope="mcp:read" level="page">
-          <MCPTeamAccessTab resourceId={toolset.id} tools={toolset.tools} />
+        <RequireScope scope="org:read" level="page">
+          <RequireScope scope="mcp:read" resourceId={toolset.id} level="page">
+            <MCPTeamAccessTab resourceId={toolset.id} tools={toolset.tools} />
+          </RequireScope>
         </RequireScope>
       );
     case "settings":
@@ -263,14 +265,12 @@ function MCPDetailPageContent({
   toolsetSlug: string;
 }) {
   const routes = useRoutes();
-  const telemetry = useTelemetry();
   const location = useLocation();
-  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
 
   const activeTab = activeTabFromPath(location.pathname, toolsetSlug);
 
   if (!activeTab) {
-    const initialTab = initialTabFromHash(window.location.hash, isRbacEnabled);
+    const initialTab = initialTabFromHash(window.location.hash);
     return (
       <Navigate
         to={mcpDetailTabHref(routes, toolsetSlug, initialTab)}
@@ -278,15 +278,6 @@ function MCPDetailPageContent({
       />
     );
   }
-  if (activeTab === "team-access" && !isRbacEnabled) {
-    return (
-      <Navigate
-        to={mcpDetailTabHref(routes, toolsetSlug, "overview")}
-        replace
-      />
-    );
-  }
-
   return (
     <Page>
       <Page.Header>
@@ -1115,10 +1106,10 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
             <Heading variant="h3" className="mb-2">
               Tool Source Deleted
             </Heading>
-            <Type muted>
+            <Text muted>
               This MCP server has tool references, but the underlying source has
               been deleted. Re-adding the source will reinstate the tools.
-            </Type>
+            </Text>
           </div>
         </Stack>
       ) : toolsToDisplay.length > 0 ? (
@@ -1513,7 +1504,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         <Block label="Slug" error={mcpSlugError} className="p-0">
           <BlockInner>
             <Stack direction="horizontal" align="center">
-              <Type
+              <Text
                 muted
                 mono
                 variant="small"
@@ -1522,7 +1513,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
                 {toolset.mcpSlug && customServerURL
                   ? `${customServerURL}/mcp/`
                   : `${getServerURL()}/mcp/`}
-              </Type>
+              </Text>
               {!toolset.customDomainId ? (
                 <Input
                   className="w-full rounded border px-2 py-1"
@@ -1564,14 +1555,14 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         <Block label="Domain" className="p-0">
           <BlockInner>
             <Stack direction="horizontal" align="center">
-              <Type mono small>
+              <Text mono small>
                 {toolset.mcpSlug && customServerURL
                   ? `${customServerURL}/mcp/`
                   : `http://mcp.your-company.com/`}
-              </Type>
-              <Type muted mono small>
+              </Text>
+              <Text muted mono small>
                 {mcpSlug}
-              </Type>
+              </Text>
               {!toolset.customDomainId && (
                 <div className="ml-auto">{customDomain}</div>
               )}
@@ -1621,12 +1612,12 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
 
       {/* Danger Zone */}
       <div className="border-destructive/30 mt-8 rounded-lg border p-6">
-        <Type variant="subheading" className="text-destructive mb-1">
+        <Text variant="subheading" className="text-destructive mb-1">
           Danger Zone
-        </Type>
-        <Type muted small className="mb-4">
+        </Text>
+        <Text muted small className="mb-4">
           Permanently delete this MCP server. This action cannot be undone.
-        </Type>
+        </Text>
         <RequireScope scope="mcp:write" level="component">
           <Button
             variant="destructive-primary"
@@ -1653,14 +1644,14 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
             <Dialog.Title>Delete MCP Server</Dialog.Title>
           </Dialog.Header>
           <div className="space-y-4 py-4">
-            <Type variant="body">
+            <Text variant="body">
               <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
                 {toolset.name}
               </code>{" "}
               and all its configuration will be permanently deleted. Connected
               clients will immediately lose access. This action cannot be
               undone.
-            </Type>
+            </Text>
             <div className="flex justify-end space-x-2">
               <Button
                 variant="secondary"
@@ -1744,9 +1735,9 @@ export function PageSection({
         </Heading>
         {action}
       </div>
-      <Type muted small className="max-w-2xl">
+      <Text muted small className="max-w-2xl">
         {description}
-      </Type>
+      </Text>
       {children}
     </Stack>
   );
@@ -1793,19 +1784,19 @@ export function OAuthDetailsModal({
             {toolset.oauthProxyServer && isGramOAuth && (
               <>
                 <div>
-                  <Type className="font-medium">Platform OAuth is Active</Type>
+                  <Text className="font-medium">Platform OAuth is Active</Text>
                 </div>
                 <Stack gap={2} className="">
-                  <Type className="mb-2">
+                  <Text className="mb-2">
                     Platform users with access to your organization can use this
                     MCP server.
-                  </Type>
+                  </Text>
                   {toolset.oauthProxyServer.oauthProxyProviders?.[0]
                     ?.environmentSlug && (
                     <div>
-                      <Type small className="text-muted-foreground font-medium">
+                      <Text small className="text-muted-foreground font-medium">
                         Environment:
-                      </Type>
+                      </Text>
                       <CodeBlock className="mt-1">
                         {
                           toolset.oauthProxyServer.oauthProxyProviders[0]
@@ -1820,7 +1811,7 @@ export function OAuthDetailsModal({
             {toolset.oauthProxyServer && !isGramOAuth && (
               <>
                 <div className="flex items-center justify-between">
-                  <Type className="font-medium">OAuth Proxy Server</Type>
+                  <Text className="font-medium">OAuth Proxy Server</Text>
                   <div className="flex items-center gap-2">
                     <Button
                       variant="tertiary"
@@ -1856,18 +1847,18 @@ export function OAuthDetailsModal({
                 </div>
                 <Stack gap={2} className="pl-4">
                   <div>
-                    <Type small className="text-muted-foreground font-medium">
+                    <Text small className="text-muted-foreground font-medium">
                       Server Slug:
-                    </Type>
+                    </Text>
                     <CodeBlock className="mt-1">
                       {toolset.oauthProxyServer.slug}
                     </CodeBlock>
                   </div>
                   {toolset.oauthProxyServer.audience && (
                     <div>
-                      <Type small className="text-muted-foreground font-medium">
+                      <Text small className="text-muted-foreground font-medium">
                         Audience:
-                      </Type>
+                      </Text>
                       <CodeBlock className="mt-1">
                         {toolset.oauthProxyServer.audience}
                       </CodeBlock>
@@ -1882,23 +1873,23 @@ export function OAuthDetailsModal({
                   <Stack key={provider.id} gap={2}>
                     <Stack gap={2} className="pl-4">
                       <div>
-                        <Type
+                        <Text
                           small
                           className="text-muted-foreground font-medium"
                         >
                           Authorization Endpoint:
-                        </Type>
+                        </Text>
                         <CodeBlock className="mt-1">
                           {provider.authorizationEndpoint}
                         </CodeBlock>
                       </div>
                       <div>
-                        <Type
+                        <Text
                           small
                           className="text-muted-foreground font-medium"
                         >
                           Token Endpoint:
-                        </Type>
+                        </Text>
                         <CodeBlock className="mt-1">
                           {provider.tokenEndpoint}
                         </CodeBlock>
@@ -1907,12 +1898,12 @@ export function OAuthDetailsModal({
                         provider.tokenEndpointAuthMethodsSupported.length >
                           0 && (
                           <div>
-                            <Type
+                            <Text
                               small
                               className="text-muted-foreground font-medium"
                             >
                               Token Auth Method:
-                            </Type>
+                            </Text>
                             <CodeBlock className="mt-1">
                               {provider.tokenEndpointAuthMethodsSupported.join(
                                 ", ",
@@ -1923,12 +1914,12 @@ export function OAuthDetailsModal({
                       {provider.scopesSupported &&
                         provider.scopesSupported.length > 0 && (
                           <div>
-                            <Type
+                            <Text
                               small
                               className="text-muted-foreground font-medium"
                             >
                               Supported Scopes:
-                            </Type>
+                            </Text>
                             <CodeBlock className="mt-1">
                               {provider.scopesSupported.join(", ")}
                             </CodeBlock>
@@ -1936,12 +1927,12 @@ export function OAuthDetailsModal({
                         )}
                       {provider.environmentSlug && (
                         <div>
-                          <Type
+                          <Text
                             small
                             className="text-muted-foreground font-medium"
                           >
                             Environment:
-                          </Type>
+                          </Text>
                           <CodeBlock className="mt-1">
                             {provider.environmentSlug}
                           </CodeBlock>
@@ -1954,7 +1945,7 @@ export function OAuthDetailsModal({
             {toolset.externalOauthServer && (
               <Stack gap={2}>
                 <div className="flex items-center justify-between">
-                  <Type className="font-medium">External OAuth Server</Type>
+                  <Text className="font-medium">External OAuth Server</Text>
                   <Button
                     variant="tertiary"
                     size="sm"
@@ -1973,17 +1964,17 @@ export function OAuthDetailsModal({
                 </div>
                 <Stack gap={2} className="pl-4">
                   <div>
-                    <Type small className="text-muted-foreground font-medium">
+                    <Text small className="text-muted-foreground font-medium">
                       External OAuth Server Slug:
-                    </Type>
+                    </Text>
                     <CodeBlock className="mt-1">
                       {toolset.externalOauthServer.slug}
                     </CodeBlock>
                   </div>
                   <div>
-                    <Type small className="text-muted-foreground font-medium">
+                    <Text small className="text-muted-foreground font-medium">
                       OAuth Authorization Server Discovery URL:
-                    </Type>
+                    </Text>
                     <CodeBlock className="mt-1">
                       {mcpUrl
                         ? `${new URL(mcpUrl).origin}/.well-known/oauth-authorization-server/mcp/${
@@ -1993,9 +1984,9 @@ export function OAuthDetailsModal({
                     </CodeBlock>
                   </div>
                   <div>
-                    <Type small className="text-muted-foreground font-medium">
+                    <Text small className="text-muted-foreground font-medium">
                       OAuth Authorization Server Metadata:
-                    </Type>
+                    </Text>
                     <CodeBlock className="mt-1">
                       {JSON.stringify(
                         toolset.externalOauthServer.metadata,
@@ -2089,14 +2080,14 @@ export function GramOAuthProxyModal({
 
         <div className="max-h-[60vh] space-y-4 overflow-auto">
           <div>
-            <Type className="mb-2 font-medium">
+            <Text className="mb-2 font-medium">
               Platform OAuth Configuration
-            </Type>
-            <Type small className="mb-4">
+            </Text>
+            <Text small className="mb-4">
               Configure Platform OAuth to let users with access to your
               organization use this MCP server. Users will authenticate using
               their platform credentials.
-            </Type>
+            </Text>
           </div>
         </div>
 

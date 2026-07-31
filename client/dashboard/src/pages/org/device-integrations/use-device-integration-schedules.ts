@@ -8,6 +8,7 @@ import { useSetDeviceIntegrationScheduleEnabledMutation } from "@gram/client/rea
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { type ProviderRole, ROLE_COPY } from "./provider-role";
 
 export type ScheduleRuntime = ScheduleBadgeRuntime;
 
@@ -34,6 +35,8 @@ export type UseScheduleRuntimes = {
 // retry actions, independent of the credentials Save flow.
 export function useDeviceScheduleRuntimes(
   provider: string,
+  // Controls the direction-specific "sync"/"push" vocabulary in result toasts.
+  role: ProviderRole = "source",
 ): UseScheduleRuntimes {
   const queryClient = useQueryClient();
   const { data, isLoading } = useDeviceIntegrationSchedules({ provider });
@@ -55,7 +58,7 @@ export function useDeviceScheduleRuntimes(
   const { mutate: mutateRetry } = useRetryDeviceIntegrationScheduleMutation({
     onSuccess: () => {
       refresh();
-      toast.success("Retry scheduled. The next sync runs within minutes.");
+      toast.success(ROLE_COPY[role].retryStartedToast);
     },
     onError: (err) => {
       refresh();

@@ -1022,6 +1022,12 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "customRulesAnalysis", pub: customRulesAnalysis})
 
+	riskFindings, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.Finding{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for risk findings: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "riskFindings", pub: riskFindings})
+
 	// The telemetry shadow dual-write is best-effort and must stay bounded
 	// during a Pub/Sub outage: cap how long a publish may take and fail fast
 	// at enqueue once the buffer fills, instead of buffering unboundedly.
@@ -1055,6 +1061,7 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		PromptInjectionAnalysis: promptInjectionAnalysis,
 		PromptPolicyAnalysis:    promptPolicyAnalysis,
 		CustomRulesAnalysis:     customRulesAnalysis,
+		RiskFindings:            riskFindings,
 		TelemetryLogs:           telemetryLogs,
 	}, shutdown, nil
 }

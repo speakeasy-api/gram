@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { PlatformInstrumentationSheet } from "../platform-instrumentation-sheet";
 import { PLATFORM_LOGOS, INVERT_LOGO_IN_DARK } from "../platform-logos";
 import { platformStatusBadge } from "../platform-status-badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { DeviceAgentSetup } from "@/pages/device-agent/device-agent-setup";
 

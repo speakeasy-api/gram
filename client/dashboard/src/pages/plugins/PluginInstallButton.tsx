@@ -1,4 +1,5 @@
-import { Button, Icon, type ButtonProps } from "@speakeasy-api/moonshine";
+import { Button, type ButtonProps } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { forwardRef } from "react";
 
 type PluginInstallButtonProps = Omit<ButtonProps, "children" | "variant">;

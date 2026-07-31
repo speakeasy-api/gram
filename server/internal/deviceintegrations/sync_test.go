@@ -20,7 +20,7 @@ import (
 func newSyncTestEnv(t *testing.T) (context.Context, *pgxpool.Pool, *Store, *Syncer, string) {
 	t.Helper()
 	ctx, conn, store, orgID := newStoreTestDB(t)
-	syncer := NewSyncer(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)))
+	syncer := NewSyncer(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), nil)
 	return ctx, conn, store, syncer, orgID
 }
 
@@ -45,6 +45,7 @@ func findSyncID(t *testing.T, ctx context.Context, store *Store, orgID string, p
 
 func listDevicesParams(orgID string) repo.ListManagedDevicesParams {
 	return repo.ListManagedDevicesParams{
+		DeviceLevel:    false,
 		ActiveCutoff:   conv.ToPGTimestamptz(time.Now().UTC().Add(-activeWindow)),
 		OrganizationID: orgID,
 		Provider:       conv.PtrToPGTextEmpty(nil),
@@ -413,4 +414,52 @@ func TestFreshConfigSyncIsImmediatelyDue(t *testing.T) {
 	// uses; a fresh config's sync must already be due.
 	syncID := findSyncID(t, ctx, store, orgID, testProviderID)
 	require.NotEqual(t, uuid.Nil, syncID)
+}
+
+// TestCoverageSnapshotAttestationIsPerDevice pins the reason attestation is a
+// field rather than a mode: one push can legitimately carry both strengths,
+// because a machine whose agent cannot report a serial stays user-attested
+// even for an org on device-level matching.
+func TestCoverageSnapshotAttestationIsPerDevice(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, syncer, orgID := newSyncTestEnv(t)
+	cfg := mustUpsert(t, ctx, conn, store, orgID, validCreds(), validSettings(), true)
+	now := time.Now().UTC()
+
+	const email = "dev@example.test"
+	userID := seedUser(t, ctx, conn, email)
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "reports-serial", email, &userID, "SERIAL-NEW", false)
+	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "legacy-agent", email, &userID, "SERIAL-OLD", false)
+
+	seedAgentSync(t, ctx, conn, orgID, email, now)
+	// Only the first machine's agent reports hardware identity.
+	seedDeviceAgentSync(t, ctx, conn, orgID, "SERIAL-NEW", email, now)
+
+	snapshot, err := syncer.buildCoverageSnapshotWithMode(ctx, orgID, now, true)
+	require.NoError(t, err)
+	require.Len(t, snapshot.Devices, 2)
+
+	byID := map[string]providers.CoverageDevice{}
+	for _, d := range snapshot.Devices {
+		byID[d.ExternalID] = d
+	}
+	require.Equal(t, providers.AttestationDevice, byID["reports-serial"].AgentAttestation)
+	require.True(t, byID["reports-serial"].AgentActive)
+	require.Equal(t, providers.AttestationUser, byID["legacy-agent"].AgentAttestation,
+		"no serial heartbeat means the weaker claim, in the same push as the stronger one")
+	require.True(t, byID["legacy-agent"].AgentActive)
+
+	// The digest must distinguish the two, or a device moving from user- to
+	// device-attested would be short-circuited as "no change".
+	userOnly, err := syncer.buildCoverageSnapshotWithMode(ctx, orgID, now, false)
+	require.NoError(t, err)
+	require.Len(t, userOnly.Devices, 2,
+		"both snapshots must carry the same devices, so the digests can only differ on attestation")
+	for _, d := range userOnly.Devices {
+		require.Equal(t, providers.AttestationUser, d.AgentAttestation)
+		require.True(t, d.AgentActive, "user-level matching still covers both devices")
+	}
+	require.NotEqual(t, coverageSnapshotDigest(snapshot), coverageSnapshotDigest(userOnly),
+		"attestation is push-relevant content and must be digested")
 }

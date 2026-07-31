@@ -6,15 +6,15 @@ import {
   KeyRound,
   Loader2,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
+} from "@/components/ui/Sheet";
 import { cn } from "@/lib/utils";
 import {
   AI_INTEGRATION_PROVIDERS,
@@ -22,7 +22,8 @@ import {
 } from "@/pages/org/ai-integration-providers";
 import { useAIIntegrationConfigForm } from "@/pages/org/use-ai-integration-config-form";
 import { useAiIntegrationConfig } from "@gram/client/react-query/aiIntegrationConfig";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { StepContainer } from "../step-container";
 
 interface AdditionalAgentConfigStepProps {

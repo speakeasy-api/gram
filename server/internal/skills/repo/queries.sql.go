@@ -592,6 +592,48 @@ func (q *Queries) CountSkillFeedbackOutcomes(ctx context.Context, arg CountSkill
 	return i, err
 }
 
+const countSkills = `-- name: CountSkills :one
+SELECT COUNT(*)
+FROM skills
+WHERE project_id = $1
+  AND archived_at IS NULL
+  AND (
+    $2::text IS NULL
+    OR name ILIKE '%' || $2::text || '%'
+    OR display_name ILIKE '%' || $2::text || '%'
+    OR COALESCE(summary, '') ILIKE '%' || $2::text || '%'
+  )
+  AND (
+    COALESCE(cardinality($3::text[]), 0) = 0
+    OR source_kind = ANY($3::text[])
+  )
+  AND (
+    COALESCE(cardinality($4::text[]), 0) = 0
+    OR classification = ANY($4::text[])
+  )
+`
+
+type CountSkillsParams struct {
+	ProjectID       uuid.UUID
+	Search          pgtype.Text
+	SourceKinds     []string
+	Classifications []string
+}
+
+// CountSkills handles empty cursor pages. Keep its filters in sync with ListSkills
+// so normal pages avoid a second query.
+func (q *Queries) CountSkills(ctx context.Context, arg CountSkillsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSkills,
+		arg.ProjectID,
+		arg.Search,
+		arg.SourceKinds,
+		arg.Classifications,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUnreviewedSkillFeedback = `-- name: CountUnreviewedSkillFeedback :one
 SELECT COUNT(*)
 FROM skill_feedback
@@ -1292,6 +1334,22 @@ type DeleteSkillEditSuggestionChangesParams struct {
 
 func (q *Queries) DeleteSkillEditSuggestionChanges(ctx context.Context, arg DeleteSkillEditSuggestionChangesParams) error {
 	_, err := q.db.Exec(ctx, deleteSkillEditSuggestionChanges, arg.ProjectID, arg.SuggestionID)
+	return err
+}
+
+const deleteSkillEditSuggestionChangesByIDs = `-- name: DeleteSkillEditSuggestionChangesByIDs :exec
+DELETE FROM skill_edit_suggestion_changes
+WHERE project_id = $1
+  AND id = ANY ($2::uuid[])
+`
+
+type DeleteSkillEditSuggestionChangesByIDsParams struct {
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
+
+func (q *Queries) DeleteSkillEditSuggestionChangesByIDs(ctx context.Context, arg DeleteSkillEditSuggestionChangesByIDsParams) error {
+	_, err := q.db.Exec(ctx, deleteSkillEditSuggestionChangesByIDs, arg.ProjectID, arg.Ids)
 	return err
 }
 
@@ -2421,6 +2479,97 @@ func (q *Queries) GetSkillEfficacySettingsForProject(ctx context.Context, projec
 		&i.PerSkillDailyCap,
 		&i.OrgDailyCap,
 		&i.NewVersionBurst,
+	)
+	return i, err
+}
+
+const getSkillFeedbackMetrics = `-- name: GetSkillFeedbackMetrics :one
+SELECT
+  COUNT(*) FILTER (
+    WHERE feedback.created_at >= $1
+      AND feedback.created_at < $2
+  )::bigint AS feedback_in_window,
+  COUNT(*) FILTER (WHERE feedback.reviewed_at IS NULL)::bigint AS unreviewed,
+  (
+    SELECT COUNT(*)::bigint
+    FROM skill_observations observation
+    WHERE observation.project_id = $3
+      AND observation.skill_id = $4
+      AND observation.reconciled_at IS NOT NULL
+      AND observation.reconcile_error_code IS NULL
+      AND observation.seen_at >= $1
+      AND observation.seen_at < $2
+  ) AS activations_in_window,
+  (
+    SELECT COUNT(*)::bigint
+    FROM skill_observations observation
+    WHERE observation.project_id = $3
+      AND observation.skill_id = $4
+      AND observation.reconciled_at IS NOT NULL
+      AND observation.reconcile_error_code IS NULL
+      AND observation.session_id IS NOT NULL
+      AND observation.seen_at >= $1
+      AND observation.seen_at < $2
+      AND EXISTS (
+        SELECT 1
+        FROM skill_feedback paired
+        WHERE paired.project_id = observation.project_id
+          AND paired.skill_id = observation.skill_id
+          AND paired.session_id = observation.session_id
+          AND paired.created_at >= $1
+          AND paired.created_at < $2
+      )
+  ) AS feedback_activations_in_window,
+  (
+    SELECT COUNT(DISTINCT converted.id)::bigint
+    FROM skill_feedback converted
+    JOIN skill_edit_suggestion_feedback link
+      ON link.project_id = converted.project_id
+      AND link.feedback_id = converted.id
+    JOIN skill_edit_suggestion_changes change
+      ON change.project_id = link.project_id
+      AND change.id = link.change_id
+    JOIN skill_edit_suggestions suggestion
+      ON suggestion.project_id = change.project_id
+      AND suggestion.id = change.suggestion_id
+    WHERE converted.project_id = $3
+      AND converted.skill_id = $4
+      AND suggestion.skill_id = $4
+  ) AS converted
+FROM skill_feedback feedback
+WHERE feedback.project_id = $3
+  AND feedback.skill_id = $4
+`
+
+type GetSkillFeedbackMetricsParams struct {
+	WindowStart pgtype.Timestamptz
+	WindowEnd   pgtype.Timestamptz
+	ProjectID   uuid.UUID
+	SkillID     uuid.NullUUID
+}
+
+type GetSkillFeedbackMetricsRow struct {
+	FeedbackInWindow            int64
+	Unreviewed                  int64
+	ActivationsInWindow         int64
+	FeedbackActivationsInWindow int64
+	Converted                   int64
+}
+
+func (q *Queries) GetSkillFeedbackMetrics(ctx context.Context, arg GetSkillFeedbackMetricsParams) (GetSkillFeedbackMetricsRow, error) {
+	row := q.db.QueryRow(ctx, getSkillFeedbackMetrics,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.ProjectID,
+		arg.SkillID,
+	)
+	var i GetSkillFeedbackMetricsRow
+	err := row.Scan(
+		&i.FeedbackInWindow,
+		&i.Unreviewed,
+		&i.ActivationsInWindow,
+		&i.FeedbackActivationsInWindow,
+		&i.Converted,
 	)
 	return i, err
 }
@@ -4275,9 +4424,70 @@ func (q *Queries) ListSkillFeedbackByID(ctx context.Context, arg ListSkillFeedba
 	return items, nil
 }
 
+const listSkillFeedbackTimeline = `-- name: ListSkillFeedbackTimeline :many
+WITH buckets AS (
+  SELECT generate_series(
+    date_trunc('day', $3::timestamptz, 'UTC'),
+    date_trunc('day', $4::timestamptz, 'UTC'),
+    interval '1 day'
+  )::timestamptz AS bucket_start
+)
+SELECT
+  buckets.bucket_start,
+  COUNT(feedback.id)::bigint AS feedback_count
+FROM buckets
+LEFT JOIN skill_feedback feedback
+  ON feedback.project_id = $1
+  AND feedback.skill_id = $2
+  AND feedback.created_at >= buckets.bucket_start
+  AND feedback.created_at < buckets.bucket_start + interval '1 day'
+  AND feedback.created_at >= $3
+  AND feedback.created_at < $4
+GROUP BY buckets.bucket_start
+ORDER BY buckets.bucket_start
+`
+
+type ListSkillFeedbackTimelineParams struct {
+	ProjectID   uuid.UUID
+	SkillID     uuid.NullUUID
+	WindowStart pgtype.Timestamptz
+	WindowEnd   pgtype.Timestamptz
+}
+
+type ListSkillFeedbackTimelineRow struct {
+	BucketStart   pgtype.Timestamptz
+	FeedbackCount int64
+}
+
+func (q *Queries) ListSkillFeedbackTimeline(ctx context.Context, arg ListSkillFeedbackTimelineParams) ([]ListSkillFeedbackTimelineRow, error) {
+	rows, err := q.db.Query(ctx, listSkillFeedbackTimeline,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.WindowStart,
+		arg.WindowEnd,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSkillFeedbackTimelineRow
+	for rows.Next() {
+		var i ListSkillFeedbackTimelineRow
+		if err := rows.Scan(&i.BucketStart, &i.FeedbackCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSkillSightingTimeline = `-- name: ListSkillSightingTimeline :many
 SELECT
   (date_trunc('day', so.seen_at AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')::timestamptz AS bucket_start,
+  so.skill_version_id,
   COUNT(*)::bigint AS activation_count
 FROM skill_observations so
 WHERE so.project_id = $1
@@ -4286,8 +4496,8 @@ WHERE so.project_id = $1
   AND so.reconcile_error_code IS NULL
   AND so.seen_at >= $3
   AND so.seen_at < $4
-GROUP BY bucket_start
-ORDER BY bucket_start ASC
+GROUP BY bucket_start, so.skill_version_id
+ORDER BY bucket_start ASC, so.skill_version_id ASC NULLS LAST
 `
 
 type ListSkillSightingTimelineParams struct {
@@ -4299,6 +4509,7 @@ type ListSkillSightingTimelineParams struct {
 
 type ListSkillSightingTimelineRow struct {
 	BucketStart     pgtype.Timestamptz
+	SkillVersionID  uuid.NullUUID
 	ActivationCount int64
 }
 
@@ -4316,7 +4527,7 @@ func (q *Queries) ListSkillSightingTimeline(ctx context.Context, arg ListSkillSi
 	var items []ListSkillSightingTimelineRow
 	for rows.Next() {
 		var i ListSkillSightingTimelineRow
-		if err := rows.Scan(&i.BucketStart, &i.ActivationCount); err != nil {
+		if err := rows.Scan(&i.BucketStart, &i.SkillVersionID, &i.ActivationCount); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -4481,7 +4692,27 @@ SELECT
   EXISTS (
     SELECT 1 FROM skill_versions sv
     WHERE sv.skill_id = s.id AND sv.spec_valid IS TRUE
-  )::boolean AS has_valid_version
+  )::boolean AS has_valid_version,
+  (
+    SELECT COUNT(*)
+    FROM skills counted
+    WHERE counted.project_id = $1
+      AND counted.archived_at IS NULL
+      AND (
+        $2::text IS NULL
+        OR counted.name ILIKE '%' || $2::text || '%'
+        OR counted.display_name ILIKE '%' || $2::text || '%'
+        OR COALESCE(counted.summary, '') ILIKE '%' || $2::text || '%'
+      )
+      AND (
+        COALESCE(cardinality($3::text[]), 0) = 0
+        OR counted.source_kind = ANY($3::text[])
+      )
+      AND (
+        COALESCE(cardinality($4::text[]), 0) = 0
+        OR counted.classification = ANY($4::text[])
+      )
+  )::bigint AS total_count
 FROM skills s
 LEFT JOIN LATERAL (
   SELECT
@@ -4499,16 +4730,54 @@ WHERE s.project_id = $1
   AND s.archived_at IS NULL
   AND (
     $2::text IS NULL
-    OR s.name > $2::text
+    OR s.name ILIKE '%' || $2::text || '%'
+    OR s.display_name ILIKE '%' || $2::text || '%'
+    OR COALESCE(s.summary, '') ILIKE '%' || $2::text || '%'
   )
-ORDER BY s.name ASC
-LIMIT $3
+  AND (
+    COALESCE(cardinality($3::text[]), 0) = 0
+    OR s.source_kind = ANY($3::text[])
+  )
+  AND (
+    COALESCE(cardinality($4::text[]), 0) = 0
+    OR s.classification = ANY($4::text[])
+  )
+  AND (
+    (
+      COALESCE(NULLIF($5::text, ''), 'name') = 'name'
+      AND (
+        $6::text IS NULL
+        OR s.name > $6::text
+      )
+    )
+    OR (
+      COALESCE(NULLIF($5::text, ''), 'name') = 'updated'
+      AND (
+        $7::timestamptz IS NULL
+        OR (s.updated_at, s.id) < (
+          $7::timestamptz,
+          $8::uuid
+        )
+      )
+    )
+  )
+ORDER BY
+  CASE WHEN COALESCE(NULLIF($5::text, ''), 'name') = 'name' THEN s.name END ASC,
+  CASE WHEN COALESCE(NULLIF($5::text, ''), 'name') = 'updated' THEN s.updated_at END DESC,
+  CASE WHEN COALESCE(NULLIF($5::text, ''), 'name') = 'updated' THEN s.id END DESC
+LIMIT $9
 `
 
 type ListSkillsParams struct {
-	ProjectID  uuid.UUID
-	CursorName pgtype.Text
-	PageLimit  int32
+	ProjectID       uuid.UUID
+	Search          pgtype.Text
+	SourceKinds     []string
+	Classifications []string
+	SortOrder       string
+	CursorName      pgtype.Text
+	CursorUpdatedAt pgtype.Timestamptz
+	CursorID        uuid.NullUUID
+	PageLimit       int32
 }
 
 type ListSkillsRow struct {
@@ -4517,10 +4786,21 @@ type ListSkillsRow struct {
 	LatestVersionID uuid.UUID
 	VersionCount    int64
 	HasValidVersion bool
+	TotalCount      int64
 }
 
 func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListSkillsRow, error) {
-	rows, err := q.db.Query(ctx, listSkills, arg.ProjectID, arg.CursorName, arg.PageLimit)
+	rows, err := q.db.Query(ctx, listSkills,
+		arg.ProjectID,
+		arg.Search,
+		arg.SourceKinds,
+		arg.Classifications,
+		arg.SortOrder,
+		arg.CursorName,
+		arg.CursorUpdatedAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -4546,6 +4826,7 @@ func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListS
 			&i.LatestVersionID,
 			&i.VersionCount,
 			&i.HasValidVersion,
+			&i.TotalCount,
 		); err != nil {
 			return nil, err
 		}

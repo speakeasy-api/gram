@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import { ThreadPrimitive } from "@assistant-ui/react";
 import { useGramElements } from "@/elements";
 import type { FC } from "react";
@@ -14,12 +14,12 @@ export const GramThreadWelcome: FC = () => {
   return (
     <div className="flex size-full flex-col items-center justify-center gap-3 p-8 text-center">
       <div className="space-y-1">
-        <Type variant="subheading" className="font-medium">
+        <Text variant="subheading" className="font-medium">
           {title}
-        </Type>
-        <Type variant="small" muted>
+        </Text>
+        <Text variant="small" muted>
           {subtitle}
-        </Type>
+        </Text>
       </div>
       {suggestions && suggestions.length > 0 && (
         <div className="mt-4 flex flex-wrap justify-center gap-2">

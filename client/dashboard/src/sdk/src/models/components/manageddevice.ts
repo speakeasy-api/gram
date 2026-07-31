@@ -10,31 +10,32 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * Coverage classification for the device.
+ * Coverage classification for the device. What agent_active attests depends on the org's matching mode and on whether this device matched by serial or by assigned-user email.
  */
 export const CoverageBucket = {
   AgentActive: "agent_active",
   AgentStale: "agent_stale",
+  AgentOtherDevice: "agent_other_device",
   NoAgent: "no_agent",
   NoEmail: "no_email",
   UnresolvedEmail: "unresolved_email",
   Missing: "missing",
 } as const;
 /**
- * Coverage classification for the device.
+ * Coverage classification for the device. What agent_active attests depends on the org's matching mode and on whether this device matched by serial or by assigned-user email.
  */
 export type CoverageBucket = ClosedEnum<typeof CoverageBucket>;
 
 /**
- * One device from a connected MDM's inventory, annotated with its agent-coverage bucket. Agent presence is attested per assigned user (the agent heartbeat is keyed by user email), not per device.
+ * One device from a connected MDM's inventory, annotated with its agent-coverage bucket. What that bucket attests depends on the organization's matching mode: under device-level matching a device may be classified by its own hardware serial (this machine ran the agent) or, when no serial heartbeat exists for it, by its assigned-user email (only that user ran the agent somewhere). Under user-level matching only the latter applies.
  */
 export type ManagedDevice = {
   /**
-   * The assigned user's latest device-agent heartbeat. Omitted when the user has never synced an agent.
+   * The device-agent heartbeat that classified this device: the machine's own under device-level matching, otherwise its assigned user's. Omitted when no agent has ever synced.
    */
   agentLastSeenAt?: Date | undefined;
   /**
-   * Coverage classification for the device.
+   * Coverage classification for the device. What agent_active attests depends on the org's matching mode and on whether this device matched by serial or by assigned-user email.
    */
   coverageBucket: CoverageBucket;
   /**

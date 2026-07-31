@@ -1,14 +1,14 @@
 import { DetailHero } from "@/components/detail-hero";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
+import { Heading } from "@/components/ui/Heading";
 import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
   TabsList,
-} from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tabs";
+import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
 import { useOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
 import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
@@ -91,9 +91,9 @@ export default function RemoteSessionClientDetail(): JSX.Element {
       <Page.Body fullWidth noPadding className="gap-0">
         <DetailHero>
           <div className="flex items-center gap-3">
-            <Type small muted>
+            <Text small muted>
               Remote Session Client
-            </Type>
+            </Text>
             {client && (
               <ScopeBadge
                 projectId={client.projectId}

@@ -19,7 +19,7 @@ Close the window.
 func TestResolveChanges_KeepsEachEditInItsOwnDiff(t *testing.T) {
 	t.Parallel()
 
-	content, resolved, err := resolveChanges(runbook, []GeneratedChange{
+	content, resolved, err := ResolveChanges(runbook, []GeneratedChange{
 		{Find: "Check the error budget.", Replace: "Check the error budget and page the on-call.", Rationale: "budget", Evidence: []int{1}},
 		{Find: "Close the window.", Replace: "Close the window and record the duration.", Rationale: "duration", Evidence: []int{2}},
 	})
@@ -41,12 +41,12 @@ func TestResolveChanges_KeepsEachEditInItsOwnDiff(t *testing.T) {
 func TestResolveChanges_RejectsTextItCannotLocateExactlyOnce(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := resolveChanges(runbook, []GeneratedChange{
+	_, _, err := ResolveChanges(runbook, []GeneratedChange{
 		{Find: "Page the on-call.", Replace: "x", Rationale: "r", Evidence: nil},
 	})
 	require.ErrorContains(t, err, "does not appear in the skill")
 
-	_, _, err = resolveChanges(runbook, []GeneratedChange{
+	_, _, err = ResolveChanges(runbook, []GeneratedChange{
 		{Find: "the", Replace: "x", Rationale: "r", Evidence: nil},
 	})
 	require.ErrorContains(t, err, "appears more than once")
@@ -55,7 +55,7 @@ func TestResolveChanges_RejectsTextItCannotLocateExactlyOnce(t *testing.T) {
 func TestResolveChanges_SkipsAnEditThatChangesNothing(t *testing.T) {
 	t.Parallel()
 
-	content, resolved, err := resolveChanges(runbook, []GeneratedChange{
+	content, resolved, err := ResolveChanges(runbook, []GeneratedChange{
 		{Find: "Watch the canary.", Replace: "Watch the canary.", Rationale: "r", Evidence: nil},
 	})
 	require.NoError(t, err)

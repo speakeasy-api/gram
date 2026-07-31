@@ -785,6 +785,57 @@ CREATE TABLE IF NOT EXISTS device_agent_syncs (
 CREATE INDEX IF NOT EXISTS device_agent_syncs_organization_id_lower_email_idx
 ON device_agent_syncs (organization_id, LOWER(email));
 
+-- Per-DEVICE agent heartbeats, the sibling of device_agent_syncs. Both are
+-- written by the same agent.getPlugins poll: that table answers "does this
+-- user run the agent somewhere", this one answers "does THIS machine run
+-- it". They are separate tables rather than one widened table because
+-- (organization_id, email) remains a correct and independently useful key —
+-- the product-feature probe and the synced-users list both read it, and the
+-- coverage join still falls back to it for devices whose agent predates
+-- hardware reporting or cannot read a serial.
+--
+-- Keyed on the hardware serial because that is the one identifier both sides
+-- of the coverage join can supply without a human maintaining it: every MDM
+-- reads it off the hardware, whereas an assigned-user email is frequently
+-- absent or disagrees between systems. email here is descriptive (the user
+-- whose agent last checked in from this machine), not part of the key.
+CREATE TABLE IF NOT EXISTS device_agent_device_syncs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id TEXT NOT NULL,
+  serial_number TEXT NOT NULL,
+
+  email TEXT NOT NULL,
+  hostname TEXT,
+
+  first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT device_agent_device_syncs_pkey PRIMARY KEY (id),
+  CONSTRAINT device_agent_device_syncs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+-- The dedup key, and deliberately an EXPRESSION index rather than a
+-- UNIQUE (organization_id, serial_number) table constraint: vendors and agent
+-- read-paths disagree on serial casing (macOS ioreg vs Windows WMI, and any
+-- change between agent builds), and every consumer matches on
+-- LOWER(serial_number). A raw-column key would let 'abc123' and 'ABC123'
+-- coexist for one machine, and because the coverage joins are case-insensitive
+-- BOTH rows would match the same device and fan it out — inflating counts and
+-- breaking evidence pushes that reject duplicate device ids. Keying on the
+-- same expression the readers use is what makes that state unrepresentable.
+--
+-- It also lets Postgres prove the join yields at most one row, so the planner
+-- can drop it entirely for organizations not on device-level matching.
+--
+-- Postgres cannot express an expression key as a table constraint, hence the
+-- standalone CREATE UNIQUE INDEX. The upsert infers this index via
+-- ON CONFLICT (organization_id, LOWER(serial_number)).
+CREATE UNIQUE INDEX IF NOT EXISTS device_agent_device_syncs_org_lower_serial_key
+ON device_agent_device_syncs (organization_id, LOWER(serial_number));
+
 CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   deployment_id uuid NOT NULL,
@@ -1124,6 +1175,15 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   provisioner_kind TEXT NOT NULL DEFAULT 'ingress',
   -- IP addresses or CIDR ranges allowed to access this domain. Empty array = unrestricted.
   ip_allowlist TEXT[] NOT NULL DEFAULT '{}',
+  openai_apps_challenge_token TEXT CONSTRAINT custom_domains_openai_apps_challenge_token_check CHECK (
+    openai_apps_challenge_token IS NULL
+    OR (
+      openai_apps_challenge_token <> ''
+      AND char_length(openai_apps_challenge_token) <= 256
+      AND position(chr(10) IN openai_apps_challenge_token) = 0
+      AND position(chr(13) IN openai_apps_challenge_token) = 0
+    )
+  ),
   health_status TEXT,
   health_issue TEXT,
   health_checked_at timestamptz,
@@ -1239,6 +1299,9 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
   session_duration INTERVAL NOT NULL,
   classification TEXT NOT NULL DEFAULT 'custom' CHECK (classification IN ('custom', 'project_default_idp')), -- 'project_default_idp' is the auto-provisioned implicit Gram issuer for private servers; 'custom' is user-configured
 
+  -- Chooses which CIMD clients this issuer permits.
+  client_id_metadata_admission_mode TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -1272,6 +1335,21 @@ CREATE TABLE IF NOT EXISTS user_session_clients (
   client_id_issued_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   client_secret_expires_at timestamptz,
 
+  -- CIMD: when non-null, this row was resolved from an OAuth Client ID
+  -- Metadata Document at the given HTTPS URL rather than via RFC 7591 DCR.
+  -- Per draft-ietf-oauth-client-id-metadata-document the client_id MUST equal
+  -- this URL, so storing it as a discriminator avoids parsing client_id at
+  -- runtime to tell CIMD rows from DCR rows.
+  client_id_metadata_uri TEXT,
+  -- Last successful fetch of the metadata document (observability and ops).
+  client_id_metadata_fetched_at timestamptz,
+  -- Cache TTL hint derived from upstream Cache-Control / Expires headers,
+  -- bounded by application-side min/max. NULL means no cached fetch yet.
+  client_id_metadata_cache_expires_at timestamptz,
+  -- ETag from the last successful fetch, used for If-None-Match conditional
+  -- refresh. Optional, since not all metadata hosts emit one.
+  client_id_metadata_etag TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -1279,12 +1357,70 @@ CREATE TABLE IF NOT EXISTS user_session_clients (
 
   CONSTRAINT user_session_clients_pkey PRIMARY KEY (id),
   CONSTRAINT user_session_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT user_session_clients_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
+  CONSTRAINT user_session_clients_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
+  -- CIMD forbids symmetric client secrets (no client_secret_basic,
+  -- client_secret_post, or client_secret_jwt), so a CIMD-resolved row must
+  -- never carry a stored secret hash.
+  CONSTRAINT user_session_clients_client_id_metadata_uri_secret_check CHECK (
+    client_id_metadata_uri IS NULL OR client_secret_hash IS NULL
+  ),
+  -- CIMD requires the client_id value in the metadata document to equal the
+  -- document URL. We persist them as separate columns so a CIMD row is
+  -- recognisable without parsing client_id, but the two must stay in sync,
+  -- and an empty URL is not a valid document location.
+  CONSTRAINT user_session_clients_client_id_metadata_uri_match_check CHECK (
+    client_id_metadata_uri IS NULL
+    OR (
+      client_id_metadata_uri <> ''
+      AND client_id = client_id_metadata_uri
+    )
+  )
 );
 
+-- Serves lookups for both DCR and CIMD rows. For CIMD the metadata document
+-- URL is what lands in client_id, so no separate index is needed. Note the
+-- btree entry limit of roughly 2704 bytes caps CIMD URL length in practice;
+-- the ~2 KB cap is enforced in app code by the CIMD validator.
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_clients_issuer_client_id_key
 ON user_session_clients (user_session_issuer_id, client_id)
 WHERE deleted IS FALSE;
+
+-- Issuer-specific allowed CIMD document URLs, additive to the issuer's
+-- admission mode.
+CREATE TABLE IF NOT EXISTS user_session_issuer_cimd_clients (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  user_session_issuer_id uuid NOT NULL,
+
+  client_id_metadata_uri TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT user_session_issuer_cimd_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT user_session_issuer_cimd_clients_project_id_fkey
+    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_issuer_cimd_clients_user_session_issuer_id_fkey
+    FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
+);
+
+-- Also serves the issuer-scoped admission lookup (leading column, equality).
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuer_cimd_clients_issuer_uri_key
+ON user_session_issuer_cimd_clients (user_session_issuer_id, client_id_metadata_uri)
+WHERE deleted IS FALSE;
+
+-- Non-partial indexes backing the ON DELETE CASCADE foreign keys. The RI
+-- cascade trigger scans child rows with no `deleted IS FALSE` predicate, so it
+-- cannot use the partial unique index above; without these a parent delete
+-- (project or issuer) degrades to a sequential scan as soft-deleted rows
+-- accumulate.
+CREATE INDEX IF NOT EXISTS user_session_issuer_cimd_clients_project_id_idx
+ON user_session_issuer_cimd_clients (project_id);
+
+CREATE INDEX IF NOT EXISTS user_session_issuer_cimd_clients_user_session_issuer_id_idx
+ON user_session_issuer_cimd_clients (user_session_issuer_id);
 
 -- User Session Consents track records of consent between Clients and Issuers
 -- Consents are scoped to given sets of underlying credentials so they can be reused between login events
@@ -3009,6 +3145,60 @@ CREATE INDEX IF NOT EXISTS assistant_memories_tags_gin
   ON assistant_memories USING gin (tags)
   WHERE deleted IS FALSE;
 
+-- Organization knowledge extracted asynchronously from completed chat
+-- sessions. This first version is project-pinned for tenant isolation while
+-- retaining explicit structural/content scope fields for later retrieval.
+CREATE TABLE IF NOT EXISTS business_memories (
+  id                     uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id             uuid,
+  organization_id        TEXT NOT NULL,
+  body                   TEXT NOT NULL,
+  memory_type            TEXT NOT NULL,
+  structural_scope       TEXT NOT NULL,
+  content_scope          JSONB NOT NULL DEFAULT '[]'::jsonb,
+  embedding              halfvec(1024) NOT NULL,
+  embedding_model        TEXT NOT NULL,
+  extraction_model       TEXT NOT NULL,
+  source_evaluation_id   uuid,
+  source_candidate_index integer NOT NULL,
+  source_chat_id         uuid,
+  source_turn            integer,
+  source_author_id       TEXT,
+  extracted_at           timestamptz NOT NULL DEFAULT clock_timestamp(),
+  lifecycle_state        TEXT NOT NULL DEFAULT 'active',
+  created_at             timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at             timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at             timestamptz,
+  deleted                boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT business_memories_pkey PRIMARY KEY (id),
+  CONSTRAINT business_memories_project_id_fkey
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+  CONSTRAINT business_memories_source_evaluation_id_fkey
+    FOREIGN KEY (source_evaluation_id) REFERENCES chat_analysis_evaluations(id) ON DELETE SET NULL,
+  CONSTRAINT business_memories_source_chat_id_fkey
+    FOREIGN KEY (source_chat_id) REFERENCES chats(id) ON DELETE SET NULL,
+  CONSTRAINT business_memories_body_size_check CHECK (octet_length(body) <= 8192)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS business_memories_source_candidate_key
+  ON business_memories (source_evaluation_id, source_candidate_index);
+
+CREATE INDEX IF NOT EXISTS business_memories_project_id_idx
+  ON business_memories (project_id);
+
+CREATE INDEX IF NOT EXISTS business_memories_project_created_at_idx
+  ON business_memories (project_id, created_at DESC, id DESC)
+  WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS business_memories_content_scope_gin_idx
+  ON business_memories USING gin (content_scope)
+  WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS business_memories_embedding_hnsw_idx
+  ON business_memories USING hnsw (embedding halfvec_cosine_ops)
+  WHERE deleted IS FALSE AND lifecycle_state = 'active';
+
 -- Agent executions table
 CREATE TABLE IF NOT EXISTS agent_executions (
   id TEXT NOT NULL,
@@ -3821,6 +4011,7 @@ CREATE TABLE IF NOT EXISTS mcp_endpoints (
   custom_domain_id uuid,
   mcp_server_id uuid NOT NULL,
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 128),
+  is_domain_root BOOLEAN,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3830,7 +4021,8 @@ CREATE TABLE IF NOT EXISTS mcp_endpoints (
   CONSTRAINT mcp_endpoints_pkey PRIMARY KEY (id),
   CONSTRAINT mcp_endpoints_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT mcp_endpoints_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE CASCADE,
-  CONSTRAINT mcp_endpoints_custom_domain_id_fkey FOREIGN KEY (custom_domain_id) REFERENCES custom_domains (id) ON DELETE SET NULL
+  CONSTRAINT mcp_endpoints_custom_domain_id_fkey FOREIGN KEY (custom_domain_id) REFERENCES custom_domains (id) ON DELETE SET NULL,
+  CONSTRAINT mcp_endpoints_domain_root_requires_custom_domain_check CHECK (is_domain_root IS NOT TRUE OR custom_domain_id IS NOT NULL)
 );
 
 CREATE INDEX IF NOT EXISTS mcp_endpoints_project_id_idx
@@ -3852,6 +4044,10 @@ WHERE custom_domain_id IS NOT NULL AND deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_endpoints_slug_null_custom_domain_id_key
 ON mcp_endpoints (slug)
 WHERE custom_domain_id IS NULL AND deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_endpoints_custom_domain_id_root_key
+ON mcp_endpoints (custom_domain_id)
+WHERE is_domain_root IS TRUE AND deleted IS FALSE;
 
 -- MCP servers attached directly to an assistant. The legacy toolset
 -- attachment path lives in assistant_toolsets; this table covers
@@ -5236,6 +5432,15 @@ ON mdm_devices (organization_id, user_id);
 -- device_agent_syncs_organization_id_lower_email_idx on the agent side.
 CREATE INDEX IF NOT EXISTS mdm_devices_organization_id_lower_user_email_idx
 ON mdm_devices (organization_id, LOWER(user_email))
+WHERE missing_since IS NULL;
+
+-- Serves the coverage join's primary serial match against present devices,
+-- pairing with device_agent_device_syncs_organization_id_lower_serial_idx on
+-- the agent side. Deliberately NOT unique: one physical machine enrolled in
+-- two MDMs (a Jamf-to-Intune migration, say) legitimately yields two rows
+-- carrying the same serial, so uniqueness here would reject real inventory.
+CREATE INDEX IF NOT EXISTS mdm_devices_organization_id_lower_serial_number_idx
+ON mdm_devices (organization_id, LOWER(serial_number))
 WHERE missing_since IS NULL;
 
 -- Backs the user FK's ON DELETE SET NULL, which must match every row for

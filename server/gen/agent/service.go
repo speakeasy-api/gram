@@ -82,6 +82,12 @@ type GetPluginsPayload struct {
 	// an org-scoped agent install key (the MDM zero-touch path); ignored for a
 	// per-user key, whose owner is the enrolled user.
 	Email string
+	// Hardware serial number of the machine the agent runs on, when it can be
+	// read. Lets device coverage attest this specific machine rather than its
+	// assigned user.
+	SerialNumber *string
+	// Hostname of the machine the agent runs on, when it can be read.
+	Hostname *string
 }
 
 // GetPluginsResult is the result type of the agent service getPlugins method.

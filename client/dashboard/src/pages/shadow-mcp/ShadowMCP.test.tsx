@@ -81,7 +81,7 @@ vi.mock("@gram/client/react-query/roles.js", () => ({
   useRoles: mocks.useRoles,
 }));
 
-vi.mock("@/components/ui/skeleton", () => ({
+vi.mock("@/components/ui/Skeleton", () => ({
   SkeletonTable: () => <div>Loading table</div>,
 }));
 

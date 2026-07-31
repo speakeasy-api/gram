@@ -1,5 +1,5 @@
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/Sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { cn } from "@/lib/utils";
 import { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import { Operator } from "@gram/client/models/components/logfilter";
@@ -9,8 +9,8 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
 import { ChevronDown, Copy } from "lucide-react";
 import { useId, useState } from "react";
 import { formatNanoTimestamp, getSeverityColorClass } from "./utils";

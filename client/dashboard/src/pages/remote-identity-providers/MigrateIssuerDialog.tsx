@@ -1,18 +1,20 @@
-import { Dialog } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+import { Dialog } from "@/components/ui/Dialog";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Text } from "@/components/ui/Text";
 import type { OrganizationRemoteSessionIssuer } from "@gram/client/models/components/organizationremotesessionissuer.js";
 import { useMigrateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/migrateOrganizationRemoteSessionIssuer.js";
 import { useOrganizationRemoteSessionIssuerMigratePreflight } from "@gram/client/react-query/organizationRemoteSessionIssuerMigratePreflight.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -102,10 +104,10 @@ export function MigrateIssuerDialog({
             Consolidate into
           </Label>
           {candidates.length === 0 ? (
-            <Type small muted>
+            <Text small muted>
               No other provider in this organization can absorb this one. A
               target must be organizational, or belong to the same project.
-            </Type>
+            </Text>
           ) : (
             <Select value={targetId} onValueChange={setTargetId}>
               <SelectTrigger>
@@ -183,9 +185,9 @@ function MigrateImpact({
 }): JSX.Element {
   if (isLoading) {
     return (
-      <Type small muted>
+      <Text small muted>
         Checking impact…
-      </Type>
+      </Text>
     );
   }
 
@@ -203,13 +205,13 @@ function MigrateImpact({
 
   return (
     <Stack gap={2}>
-      <Type small muted>
+      <Text small muted>
         {count} {count === 1 ? "client moves" : "clients move"} to the target
         provider.
         {mcpServerNames && mcpServerNames.length > 0
           ? ` Affected MCP servers: ${mcpServerNames.join(", ")}.`
           : ""}
-      </Type>
+      </Text>
 
       {endpointMismatches && endpointMismatches.length > 0 && (
         <Alert variant="error" dismissible={false}>

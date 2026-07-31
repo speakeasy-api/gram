@@ -1,4 +1,4 @@
-import { Heading } from "@/components/ui/heading";
+import { Heading } from "@/components/ui/Heading";
 import { ToolList } from "@/components/tool-list";
 import { useListTools } from "@/hooks/toolTypes";
 import { useMemo } from "react";

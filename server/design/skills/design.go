@@ -141,6 +141,13 @@ var _ = Service("skills", func() {
 				Minimum(1)
 				Maximum(200)
 			})
+			Attribute("search", String, "Search skill names, display names, and summaries.", func() { MaxLength(256) })
+			Attribute("source_kinds", ArrayOf(String, func() { Enum("manual", "captured") }), "Only return skills from these sources.")
+			Attribute("classifications", ArrayOf(String, func() { Enum("custom", "built_in") }), "Only return skills with these classifications.")
+			Attribute("sort", String, "How to order skills.", func() {
+				Enum("name", "updated")
+				Default("name")
+			})
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
@@ -152,6 +159,10 @@ var _ = Service("skills", func() {
 			GET("/rpc/skills.list")
 			Param("cursor")
 			Param("limit")
+			Param("search")
+			Param("source_kinds")
+			Param("classifications")
+			Param("sort")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
@@ -200,7 +211,7 @@ var _ = Service("skills", func() {
 	})
 
 	Method("listFeedback", func() {
-		Description("List all-time outcome counts and recent resolved feedback for a skill. Name-only feedback is excluded.")
+		Description("List outcome counts, collection metrics, volume, and recent resolved feedback for a skill. Name-only feedback is excluded.")
 
 		Payload(func() {
 			Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
@@ -235,13 +246,40 @@ var _ = Service("skills", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SkillFeedback"}`)
 	})
 
+	Method("triggerSuggestion", func() {
+		Description("Manually run suggestion analysis for a skill, bypassing automatic feedback and efficacy thresholds while preserving the one-open-suggestion invariant.")
+
+		Payload(func() {
+			Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(Empty)
+
+		HTTP(func() {
+			POST("/rpc/skills.triggerSuggestion")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Body(TriggerSkillSuggestionRequestBody)
+			Response(StatusAccepted)
+		})
+
+		Meta("openapi:operationId", "triggerSkillSuggestion")
+		Meta("openapi:extension:x-speakeasy-name-override", "triggerSuggestion")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TriggerSkillSuggestion", "type": "mutation"}`)
+	})
+
 	Method("approveSuggestion", func() {
-		Description("Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only one of its proposed changes. Stale suggestions are superseded instead.")
+		Description("Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only a subset of its proposed changes. Stale suggestions are superseded instead.")
 
 		Payload(func() {
 			Attribute("id", String, "The suggestion ID.", func() { Format(FormatUUID) })
 			Attribute("content", String, "Optional edited complete SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
-			Attribute("change_id", String, "Optional ID of the single proposed change to take. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.", func() { Format(FormatUUID) })
+			Attribute("change_ids", ArrayOf(String, func() { Format(FormatUUID) }), "Optional IDs of the proposed changes to take together as one new version. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.")
 			Required("id")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -688,7 +726,7 @@ var ApproveSkillSuggestionRequestBody = Type("ApproveSkillSuggestionRequestBody"
 
 	Attribute("id", String, "The suggestion ID.", func() { Format(FormatUUID) })
 	Attribute("content", String, "Optional edited complete SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
-	Attribute("change_id", String, "Optional ID of the single proposed change to take. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.", func() { Format(FormatUUID) })
+	Attribute("change_ids", ArrayOf(String, func() { Format(FormatUUID) }), "Optional IDs of the proposed changes to take together as one new version. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.")
 	Required("id")
 })
 
@@ -696,6 +734,13 @@ var DismissSkillSuggestionRequestBody = Type("DismissSkillSuggestionRequestBody"
 	Meta("openapi:typename", "DismissSkillSuggestionRequestBody")
 
 	Attribute("id", String, "The suggestion ID.", func() { Format(FormatUUID) })
+	Required("id")
+})
+
+var TriggerSkillSuggestionRequestBody = Type("TriggerSkillSuggestionRequestBody", func() {
+	Meta("openapi:typename", "TriggerSkillSuggestionRequestBody")
+
+	Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
 	Required("id")
 })
 
@@ -941,12 +986,33 @@ var SkillFeedbackCounts = Type("SkillFeedbackCounts", func() {
 	Required("total", "helped", "partially_helped", "did_not_help", "misleading", "harmful")
 })
 
+var SkillFeedbackMetrics = Type("SkillFeedbackMetrics", func() {
+	Description("Feedback collection and suggestion conversion metrics for a skill.")
+	Attribute("window_start", String, "The start of the rolling collection window.", func() { Format(FormatDateTime) })
+	Attribute("window_end", String, "The end of the rolling collection window.", func() { Format(FormatDateTime) })
+	Attribute("feedback_in_window", Int64, "Feedback recorded during the collection window.")
+	Attribute("activations_in_window", Int64, "Resolved skill activations during the collection window.")
+	Attribute("feedback_activations_in_window", Int64, "Resolved activations paired to feedback during the collection window.")
+	Attribute("unreviewed", Int64, "Feedback not yet reviewed by suggestion analysis.")
+	Attribute("converted", Int64, "All-time feedback linked to a generated suggestion.")
+	Required("window_start", "window_end", "feedback_in_window", "activations_in_window", "feedback_activations_in_window", "unreviewed", "converted")
+})
+
+var SkillFeedbackTimelinePoint = Type("SkillFeedbackTimelinePoint", func() {
+	Description("Feedback volume for one UTC day.")
+	Attribute("bucket_start", String, "The start of the UTC day.", func() { Format(FormatDateTime) })
+	Attribute("feedback_count", Int64)
+	Required("bucket_start", "feedback_count")
+})
+
 var ListSkillFeedbackResult = Type("ListSkillFeedbackResult", func() {
-	Description("All-time outcome counts and a newest-first page of feedback for a skill.")
+	Description("Outcome counts, collection metrics, a 30-day timeline, and a newest-first page of feedback for a skill.")
 	Attribute("counts", SkillFeedbackCounts)
+	Attribute("metrics", SkillFeedbackMetrics)
+	Attribute("timeline", ArrayOf(SkillFeedbackTimelinePoint))
 	Attribute("feedback", ArrayOf(SkillFeedback))
 	Attribute("next_cursor", String, "Cursor for the next page; absent when exhausted.")
-	Required("counts", "feedback")
+	Required("counts", "metrics", "timeline", "feedback")
 })
 
 var ListSkillSuggestionFeedbackResult = Type("ListSkillSuggestionFeedbackResult", func() {
@@ -999,8 +1065,9 @@ var SkillAdoption = Type("SkillAdoption", func() {
 })
 
 var SkillSightingTimelinePoint = Type("SkillSightingTimelinePoint", func() {
-	Description("A UTC-day activation bucket for a skill.")
+	Description("A UTC-day activation bucket for one attributed skill version.")
 	Attribute("bucket_start", String, "Start of the UTC day.", func() { Format(FormatDateTime) })
+	Attribute("skill_version_id", String, "The attributed skill version, absent when the observation could not be resolved to a version.", func() { Format(FormatUUID) })
 	Attribute("activation_count", Int64, "Activations observed during the day.")
 	Required("bucket_start", "activation_count")
 })
@@ -1102,7 +1169,7 @@ var GetSkillResult = Type("GetSkillResult", func() {
 	Attribute("skill", Skill, "The skill.")
 	Attribute("latest_version", SkillVersion, "The current immutable version by effective promotion time.")
 	Attribute("adoption", SkillAdoption, "Activation adoption metrics.")
-	Attribute("sighting_timeline", ArrayOf(SkillSightingTimelinePoint), "Daily activations in the adoption window.")
+	Attribute("sighting_timeline", ArrayOf(SkillSightingTimelinePoint), "Daily activations by attributed version in the adoption window.")
 	Attribute("drift", SkillDrift, "Active-machine version convergence.")
 	Attribute("assistant_count", Int64, "The number of active, non-deleted assistants using the skill.")
 	Required("skill", "adoption", "sighting_timeline", "drift", "assistant_count")
@@ -1112,8 +1179,9 @@ var ListSkillsResult = Type("ListSkillsResult", func() {
 	Description("A page of active project skills.")
 
 	Attribute("skills", ArrayOf(Skill), "The active skills in this page.")
+	Attribute("total_count", Int64, "The total number of active skills matching the filters.")
 	Attribute("next_cursor", String, "Cursor for the next page; absent when exhausted.")
-	Required("skills")
+	Required("skills", "total_count")
 })
 
 var ListSkillVersionsResult = Type("ListSkillVersionsResult", func() {

@@ -259,7 +259,7 @@ func TestBuildPromptBoundsNotesDropsOldestEvidenceAndOmitsSessionIDs(t *testing.
 	for i := range feedback {
 		feedback[i] = repo.SkillFeedback{
 			Outcome: fmt.Sprintf("outcome-%d", i), Source: "test",
-			Note:      pgtype.Text{String: strings.Repeat("\x00", 2000), Valid: true},
+			Note:      pgtype.Text{String: strings.Repeat("\x00", skills.MaxFeedbackNoteRunes+1000), Valid: true},
 			CreatedAt: pgtype.Timestamptz{Time: policyNow.Add(time.Duration(i) * time.Second), Valid: true},
 		}
 	}
@@ -269,7 +269,7 @@ func TestBuildPromptBoundsNotesDropsOldestEvidenceAndOmitsSessionIDs(t *testing.
 			Transcript: efficacy.Transcript{Omitted: "", Messages: []efficacy.TranscriptMessage{{Index: 1, Role: "user", Content: strings.Repeat("x", 100000)}}},
 		}
 	}
-	prompt, err := buildPrompt(DefaultConfig(), GenerateInput{
+	prompt, err := BuildPrompt(DefaultConfig(), GenerateInput{
 		OrganizationID: "unused", ProjectID: uuid.New(), SkillName: "bounded",
 		Base: repo.ResolveSkillSuggestionBaseRow{BaseContent: "base"}, Feedback: feedback, Trend: trend{},
 		Transcripts: []EvidenceTranscript{transcript("newest"), transcript("middle"), transcript("oldest")}, ValidationError: "",
@@ -284,7 +284,7 @@ func TestBuildPromptBoundsNotesDropsOldestEvidenceAndOmitsSessionIDs(t *testing.
 	require.Less(t, len(payload.Feedback), len(feedback))
 	require.Equal(t, "outcome-49", payload.Feedback[len(payload.Feedback)-1].Outcome)
 	for _, item := range payload.Feedback {
-		require.LessOrEqual(t, utf8.RuneCountInString(item.Note), maxFeedbackNoteRunes)
+		require.LessOrEqual(t, utf8.RuneCountInString(item.Note), skills.MaxFeedbackNoteRunes)
 	}
 	for _, item := range payload.Transcripts {
 		require.NotEqual(t, "oldest", item.Surface)
@@ -294,7 +294,7 @@ func TestBuildPromptBoundsNotesDropsOldestEvidenceAndOmitsSessionIDs(t *testing.
 func TestBuildPromptRejectsOversizedBaseWithoutCallingModel(t *testing.T) {
 	t.Parallel()
 
-	_, err := buildPrompt(DefaultConfig(), GenerateInput{
+	_, err := BuildPrompt(DefaultConfig(), GenerateInput{
 		OrganizationID: "unused", ProjectID: uuid.New(), SkillName: "oversized",
 		Base:     repo.ResolveSkillSuggestionBaseRow{BaseContent: strings.Repeat("\x00", 50000)},
 		Feedback: nil, Trend: trend{}, Transcripts: nil, ValidationError: "",
@@ -306,7 +306,7 @@ func TestValidateGenerationRejectsEmptyRationale(t *testing.T) {
 	t.Parallel()
 
 	generation := Generation{Decision: DecisionDecline, Changes: nil, Rationale: "  "}
-	err := validateGeneration(&generation, 0)
+	err := ValidateGeneration(&generation, 0)
 	require.ErrorIs(t, err, ErrModelFailure)
 	require.ErrorContains(t, err, "rationale is empty")
 }
@@ -319,7 +319,7 @@ func TestValidateGenerationClearsDeclinedProposal(t *testing.T) {
 		Changes:   []GeneratedChange{{Find: "a", Replace: "b", Rationale: "ignored", Evidence: nil}},
 		Rationale: "The skill already covers this.",
 	}
-	require.NoError(t, validateGeneration(&generation, 1))
+	require.NoError(t, ValidateGeneration(&generation, 1))
 	require.Empty(t, generation.Changes)
 }
 
@@ -333,7 +333,7 @@ func TestValidateGenerationDropsEvidenceOutsideTheSuppliedFeedback(t *testing.T)
 		}},
 		Rationale: "why",
 	}
-	require.NoError(t, validateGeneration(&generation, 2))
+	require.NoError(t, ValidateGeneration(&generation, 2))
 	require.Equal(t, []int{2, 1}, generation.Changes[0].Evidence)
 }
 

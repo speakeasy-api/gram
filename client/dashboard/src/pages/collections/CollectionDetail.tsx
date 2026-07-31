@@ -1,11 +1,12 @@
 import { Page } from "@/components/page-layout";
 import { ProjectAvatar } from "@/components/project-menu";
 import { RequireScope } from "@/components/require-scope";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog } from "@/components/ui/dialog";
-import { Combobox } from "@/components/ui/combobox";
-import { Type } from "@/components/ui/type";
+import { Badge } from "@/components/ui/Badge";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Dialog } from "@/components/ui/Dialog";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Combobox } from "@/components/ui/Combobox";
+import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import {
   AlertTriangle,
@@ -20,7 +21,8 @@ import {
   Server,
   Server as ServerIcon,
 } from "lucide-react";
-import { Button, Input } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/moon/textarea";
 import { useMemo, useState } from "react";
 import { useParams } from "react-router";
@@ -44,6 +46,7 @@ import { toolStats } from "@/pages/catalog/hooks/serverMetadata";
 import { buildCollectionMcpJson, formatMcpJson } from "@/lib/mcp-json";
 import { toast } from "sonner";
 import { CollectionInstallDialog } from "./CollectionInstallDialog";
+import { collectionInstallDisabledReason } from "./install-availability";
 
 // A selectable server in the edit-servers picker, sourced from either a
 // toolset (Hosted) or an mcp_server (Remote MCP-backed). Selection and
@@ -323,6 +326,41 @@ function CollectionDetailInner() {
     );
   }
 
+  const installDisabledReason = collectionInstallDisabledReason({
+    isLoading,
+    installableServerCount: installableServersWithEndpoint.length,
+    projectCount: projects.length,
+  });
+  let bulkInstallButton = (
+    <Button
+      size="sm"
+      className={cn(
+        "w-full sm:w-auto",
+        installDisabledReason && "pointer-events-none",
+      )}
+      disabled={installDisabledReason !== null}
+      onClick={openBulkInstallDialog}
+    >
+      <Button.LeftIcon>
+        <Download />
+      </Button.LeftIcon>
+      <Button.Text>Install</Button.Text>
+    </Button>
+  );
+  if (installDisabledReason) {
+    bulkInstallButton = (
+      <SimpleTooltip tooltip={installDisabledReason}>
+        <span
+          aria-label={`Install unavailable: ${installDisabledReason}`}
+          className="focus-visible:ring-ring inline-flex w-full rounded-xs focus-visible:ring-2 focus-visible:outline-none sm:w-auto"
+          tabIndex={0}
+        >
+          {bulkInstallButton}
+        </span>
+      </SimpleTooltip>
+    );
+  }
+
   return (
     <Page>
       <Page.Header>
@@ -347,7 +385,7 @@ function CollectionDetailInner() {
                         <h1 className="truncate text-2xl font-semibold">
                           {collection.name}
                         </h1>
-                        <Badge variant="outline" className="text-xs">
+                        <Badge variant="neutral" className="text-xs">
                           {collection.visibility === "private" ? (
                             <>
                               <Lock className="mr-1 h-3 w-3" />
@@ -384,21 +422,7 @@ function CollectionDetailInner() {
                 </div>
                 <div className="flex flex-wrap gap-2 2xl:shrink-0 2xl:justify-end">
                   <RequireScope scope="project:write" level="component">
-                    <Button
-                      size="sm"
-                      className="w-full sm:w-auto"
-                      disabled={
-                        isLoading ||
-                        installableServersWithEndpoint.length === 0 ||
-                        projects.length === 0
-                      }
-                      onClick={openBulkInstallDialog}
-                    >
-                      <Button.LeftIcon>
-                        <Download />
-                      </Button.LeftIcon>
-                      <Button.Text>Install</Button.Text>
-                    </Button>
+                    {bulkInstallButton}
                   </RequireScope>
                   <Button
                     size="sm"
@@ -440,12 +464,12 @@ function CollectionDetailInner() {
               <div className="border-warning-default bg-warning-softest mb-4 flex items-start gap-3 rounded-md border p-3">
                 <AlertTriangle className="text-warning-foreground mt-0.5 h-4 w-4 shrink-0" />
                 <div>
-                  <Type variant="body" className="font-medium">
+                  <Text variant="body" className="font-medium">
                     Some servers were excluded
-                  </Type>
-                  <Type small className="text-warning-foreground">
+                  </Text>
+                  <Text small className="text-warning-foreground">
                     {excludedServersNotice}
-                  </Type>
+                  </Text>
                 </div>
               </div>
             )}
@@ -461,12 +485,7 @@ function CollectionDetailInner() {
                     <label className="mb-1 block text-sm font-medium">
                       Name
                     </label>
-                    <Input
-                      value={editName}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                        setEditName(e.target.value)
-                      }
-                    />
+                    <Input value={editName} onChange={setEditName} />
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium">
@@ -579,7 +598,7 @@ function CollectionDetailInner() {
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary" className="shrink-0">
+                  <Badge variant="neutral" className="shrink-0">
                     <Server className="mr-1 h-3 w-3" />
                     {servers.length}
                   </Badge>
@@ -631,11 +650,11 @@ function CollectionDetailInner() {
                         ) : filteredServers.length === 0 ? (
                           <div className="flex flex-col items-center justify-center p-4 text-center">
                             <ServerIcon className="text-muted-foreground mb-1 h-6 w-6" />
-                            <Type small muted>
+                            <Text small muted>
                               {serverSearch
                                 ? "No servers match your search."
                                 : "No MCP servers available."}
-                            </Type>
+                            </Text>
                           </div>
                         ) : (
                           filteredServers.map((server) => {
@@ -658,14 +677,14 @@ function CollectionDetailInner() {
                                     </span>
                                     {server.kind === "mcpServer" && (
                                       <Badge
-                                        variant="secondary"
+                                        variant="neutral"
                                         className="shrink-0 text-xs"
                                       >
                                         Remote MCP
                                       </Badge>
                                     )}
                                     <Badge
-                                      variant="secondary"
+                                      variant="neutral"
                                       className="shrink-0 text-xs"
                                     >
                                       {server.projectName}

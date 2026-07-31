@@ -174,15 +174,6 @@ exporter = { otlp-http = { endpoint = "https://app.getgram.ai/rpc/hooks.otel/v1/
     ],
   },
   {
-    id: "opencode",
-    name: "OpenCode",
-    description: "Open-source terminal coding agent",
-    icon: "opencode",
-    connected: false,
-    available: false,
-    setupSteps: [],
-  },
-  {
     id: "cursor",
     name: "Cursor",
     description: "AI-powered code editor",
@@ -212,6 +203,31 @@ exporter = { otlp-http = { endpoint = "https://app.getgram.ai/rpc/hooks.otel/v1/
           "In Cursor's team marketplace settings, mark the observability plugin (slug below) as required so tool events flow to Speakeasy for every team member without per-user setup.",
         code: `{{GRAM_CURSOR_PLUGIN_NAME}}`,
         language: "text",
+      },
+    ],
+  },
+  {
+    id: "opencode",
+    name: "opencode",
+    description: "Open-source terminal coding agent",
+    icon: "opencode",
+    connected: false,
+    setupSteps: [
+      {
+        title: "Install the speakeasy-hooks binary",
+        description:
+          "opencode has no plugin marketplace, so the observability plugin is rendered straight into your repo by the speakeasy-hooks CLI. Install the binary first.",
+        code: `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`,
+        language: "bash",
+      },
+      {
+        title: "Render the plugin into your repo",
+        description:
+          "Run this from the repo you use opencode in. It writes .opencode/plugin/agenthooks.ts and speakeasy.json, which map opencode's events to Speakeasy's dashboard.",
+        code: `GRAM_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
+speakeasy-hooks install --provider=opencode --dir=. --project=<your-project-slug>`,
+        language: "bash",
+        requiresApiKey: true,
       },
     ],
   },

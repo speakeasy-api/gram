@@ -1,12 +1,13 @@
+import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { Page } from "@/components/page-layout";
 import {
   defineFilters,
   type FilterValue,
   useFilterState,
 } from "@/components/filters";
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { formatRelativeTime } from "@/lib/dates";
@@ -15,17 +16,15 @@ import type {
   CoverageBucket,
   ManagedDevice,
 } from "@gram/client/models/components/manageddevice.js";
-import {
-  Badge,
-  Button,
-  type Column,
-  Stack,
-  Table,
-} from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
+import { type Column, Table } from "@/components/ui/Table";
 import {
   CheckCircle2,
   CircleSlash,
   HelpCircle,
+  Laptop,
   MailX,
   MonitorX,
   TriangleAlert,
@@ -34,10 +33,17 @@ import {
 import { memo, useDeferredValue, useMemo, useState } from "react";
 import { Link } from "react-router";
 
-// Coverage joins the MDM-reported fleet against device agent heartbeats.
-// Attestation is per assigned USER, not per device: an active heartbeat
-// proves "this device's assigned user runs the agent somewhere", never
-// "this device is monitored". Copy below must not overclaim.
+// Coverage joins the MDM-reported fleet against device agent heartbeats, in
+// one of two modes the server selects per org. Under device-level matching
+// (hardware serial) an active heartbeat proves THIS machine ran the agent.
+// Under user-level matching it proves only "this device's assigned user runs
+// the agent somewhere" — never "this device is monitored".
+//
+// Copy below must hold under BOTH modes, because the client is not told which
+// one produced the counts. That is why the agent_active detail speaks of "the
+// device agent" without asserting whose machine it ran on, while
+// agent_other_device — which only device-level matching can produce — is free
+// to be specific.
 type BucketDisplay = {
   label: string;
   variant: "destructive" | "neutral" | "success" | "warning";
@@ -57,15 +63,21 @@ const BUCKETS: Record<CoverageBucket, BucketDisplay> = {
     label: "Agent active",
     variant: "success",
     icon: CheckCircle2,
-    detail:
-      "The assigned user's device agent reported a heartbeat within the active window.",
+    detail: "The device agent reported a heartbeat within the active window.",
   },
   agent_stale: {
     label: "Agent stale",
     variant: "warning",
     icon: TriangleAlert,
     detail:
-      "The assigned user's agent has gone quiet while the MDM still sees the device checking in — the drift case. The agent may be disabled or removed.",
+      "The agent has gone quiet while the MDM still sees the device checking in — the drift case. The agent may be disabled or removed.",
+  },
+  agent_other_device: {
+    label: "Agent on another device",
+    variant: "warning",
+    icon: Laptop,
+    detail:
+      "The assigned user runs the device agent, but not on this machine. Install it here — unlike No agent, the user is already onboarded.",
   },
   no_agent: {
     label: "No agent",
@@ -138,6 +150,18 @@ export function CoverageSummaryTiles({
       display: BUCKETS.agent_stale,
       count: coverage.agentStale,
     },
+    // Only rendered when non-zero: user-level matching cannot produce this
+    // bucket, so an always-present "0" tile would be dead weight for every
+    // org that has not moved to device-level matching yet.
+    ...(coverage.agentOtherDevice > 0
+      ? [
+          {
+            key: "agent_other_device",
+            display: BUCKETS.agent_other_device,
+            count: coverage.agentOtherDevice,
+          },
+        ]
+      : []),
     { key: "no_agent", display: BUCKETS.no_agent, count: coverage.noAgent },
     { key: "no_email", display: BUCKETS.no_email, count: coverage.noEmail },
     {
@@ -156,7 +180,13 @@ export function CoverageSummaryTiles({
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+    <div
+      className={
+        tiles.length > 7
+          ? "grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8"
+          : "grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7"
+      }
+    >
       {tiles.map(({ key, display, count }) => (
         <CoverageStatTile key={key} display={display} count={count} />
       ))}
@@ -182,12 +212,12 @@ function CoverageStatTile({
   return (
     <SimpleTooltip tooltip={display.detail}>
       <div className="border-border bg-card flex flex-col gap-1 rounded-lg border p-3">
-        <Type variant="body" className="text-2xl font-semibold tabular-nums">
+        <Text variant="body" className="text-2xl font-semibold tabular-nums">
           {count}
-        </Type>
-        <Type muted small className="truncate">
+        </Text>
+        <Text muted small className="truncate">
           {display.label}
-        </Type>
+        </Text>
       </div>
     </SimpleTooltip>
   );
@@ -248,7 +278,7 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
   if (isError) {
     return (
       <Stack gap={2} align="start">
-        <Type muted>Could not load the device inventory.</Type>
+        <Text muted>Could not load the device inventory.</Text>
         {onRetry ? (
           <Button variant="secondary" size="sm" onClick={onRetry}>
             <Button.Text>Retry</Button.Text>
@@ -285,7 +315,7 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
         columns={columns}
         data={filteredDevices}
         rowKey={(row) => row.id}
-        noResultsMessage={<Type muted>No matching devices</Type>}
+        noResultsMessage={<WidgetEmptyState message="No matching devices" />}
       />
       {hasMore ? (
         <Stack direction="horizontal" align="center" gap={3}>
@@ -299,10 +329,10 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
               {isLoadingMore ? "Loading…" : "Load more devices"}
             </Button.Text>
           </Button>
-          <Type muted small>
+          <Text muted small>
             Showing {devices.length} synced devices so far — search covers only
             loaded devices.
-          </Type>
+          </Text>
         </Stack>
       ) : null}
     </Stack>
@@ -345,12 +375,12 @@ function deviceColumns(
       header: "Device",
       render: (device) => (
         <Stack gap={0.5} className="min-w-0">
-          <Type variant="body" className="truncate font-medium">
+          <Text variant="body" className="truncate font-medium">
             {device.hostname ?? device.externalId}
-          </Type>
-          <Type muted small className="truncate font-mono text-xs">
+          </Text>
+          <Text muted small className="truncate font-mono text-xs">
             {deviceSubtitle(device)}
-          </Type>
+          </Text>
         </Stack>
       ),
     },
@@ -374,16 +404,16 @@ function AssignedUserCell({
 }) {
   if (!device.userEmail) {
     return (
-      <Type muted small className="truncate">
+      <Text muted small className="truncate">
         —
-      </Type>
+      </Text>
     );
   }
   if (!href) {
     return (
-      <Type muted small className="truncate">
+      <Text muted small className="truncate">
         {device.userEmail}
-      </Type>
+      </Text>
     );
   }
   return (
@@ -402,9 +432,9 @@ const trailingDeviceColumns: Column<ManagedDevice>[] = [
     header: "Agent last seen",
     width: "130px",
     render: (device) => (
-      <Type muted small className="whitespace-nowrap">
+      <Text muted small className="whitespace-nowrap">
         {formatRelativeTime(device.agentLastSeenAt ?? null) ?? "—"}
-      </Type>
+      </Text>
     ),
   },
   {
@@ -412,9 +442,9 @@ const trailingDeviceColumns: Column<ManagedDevice>[] = [
     header: "MDM check-in",
     width: "130px",
     render: (device) => (
-      <Type muted small className="whitespace-nowrap">
+      <Text muted small className="whitespace-nowrap">
         {formatRelativeTime(device.mdmLastCheckInAt ?? null) ?? "—"}
-      </Type>
+      </Text>
     ),
   },
   {

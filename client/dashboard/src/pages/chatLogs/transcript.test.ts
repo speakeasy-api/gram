@@ -43,6 +43,7 @@ function messageRow(id: string, seq: number, generation = 1): TranscriptRow {
       content: "hello",
       createdAt: new Date(0),
     } as never,
+    attachments: [],
     generation,
   };
 }

@@ -1,6 +1,6 @@
 import { formatCost } from "@/lib/money";
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import type { SessionSummary } from "@gram/client/models/components/sessionsummary.js";
 import { formatDistanceToNow } from "date-fns";
@@ -316,7 +316,7 @@ export function SessionTable({
   if (isLoading) return <SkeletonTable />;
   if (isError) {
     return (
-      <Type className="text-muted-foreground">Failed to load sessions.</Type>
+      <Text className="text-muted-foreground">Failed to load sessions.</Text>
     );
   }
 
@@ -363,9 +363,9 @@ export function SessionTable({
           className="px-5 py-10 text-center"
           style={{ gridColumn: "1 / -1" }}
         >
-          <Type className="text-muted-foreground">
+          <Text className="text-muted-foreground">
             {emptyMessage ?? "No sessions in this slice."}
-          </Type>
+          </Text>
         </div>
       ) : (
         pageItems.map((s, i) => (
@@ -390,9 +390,9 @@ export function SessionTable({
 
       {sliceTruncated && (
         <div className="px-5 py-3" style={{ gridColumn: "1 / -1" }}>
-          <Type small className="text-muted-foreground">
+          <Text small className="text-muted-foreground">
             {truncationNote}
-          </Type>
+          </Text>
         </div>
       )}
 

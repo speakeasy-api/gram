@@ -2,12 +2,14 @@ package externalcredentials_test
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2"
 
 	adminecgen "github.com/speakeasy-api/gram/server/gen/admin_external_credentials"
 	gen "github.com/speakeasy-api/gram/server/gen/external_credentials"
@@ -57,13 +59,21 @@ type fakeGcpResolver struct {
 	fn func(ctx context.Context, cred gcpauth.Credential) (gcpauth.Principal, error)
 }
 
+var _ gcpauth.Resolver = (*fakeGcpResolver)(nil)
+
 func (f *fakeGcpResolver) ResolvePrincipal(ctx context.Context, cred gcpauth.Credential) (gcpauth.Principal, error) {
 	return f.fn(ctx, cred)
 }
 
+// TokenSource is unused by the credentials service, which only ever describes an
+// identity rather than calling Google APIs as it.
+func (f *fakeGcpResolver) TokenSource(context.Context, gcpauth.Credential) (oauth2.TokenSource, error) {
+	return nil, errors.New("fakeGcpResolver: TokenSource not supported")
+}
+
 // withAdmin returns ctx with the auth context's IsAdmin flag flipped to true.
 // Admin-only endpoints opt in explicitly so non-admin paths exercise the
-// realistic default produced by testenv.InitAuthContext.
+// realistic default produced by authztest.InitAuthContext.
 func withAdmin(t *testing.T, ctx context.Context) context.Context {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -90,7 +100,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)

@@ -232,6 +232,39 @@ func TestClaude_UserPromptSubmit_Warn_PassesThrough(t *testing.T) {
 	assert.Nil(t, result.Decision, "warn must not block the prompt")
 }
 
+// canonicalToolRequest builds a plain (non-MCP, non-permission) tool.requested
+// payload that routes through scanToolRequestForEnforcement, for the given adapter.
+func canonicalToolRequest(adapter, sessionID string) *gen.IngestPayload {
+	toolName := "bash"
+	toolCallID := "call-" + sessionID
+	payload := canonicalIngestPayload(adapter, "tool.requested", sessionID)
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &toolCallID,
+			Name:  &toolName,
+			Input: map[string]any{"command": "rm -rf /tmp/warn"},
+		},
+	}
+	return payload
+}
+
+// A block on the canonical path hard-denies for every adapter (unchanged).
+func TestIngest_Opencode_Block_Denies(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
+		Action:      "block",
+		PolicyID:    uuid.NewString(),
+		PolicyName:  "secret policy",
+		Description: "leaked credential",
+	}}
+
+	result, err := ti.service.Ingest(ctx, canonicalToolRequest("opencode", "canonical-opencode-block"))
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "deny", result.Decision)
+}
+
 // A block at prompt submit still hard-blocks with the reason.
 func TestClaude_UserPromptSubmit_Block_Blocks(t *testing.T) {
 	t.Parallel()

@@ -1,11 +1,11 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/Badge";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+} from "@/components/ui/Collapsible";
 import { cn } from "@/lib/utils";
 import type { ToolUIPart } from "ai";
 import {
@@ -67,7 +67,7 @@ const getStatusBadge = (status: ToolUIPart["state"]) => {
   };
 
   return (
-    <Badge className="gap-1.5 rounded-full text-xs" variant="secondary">
+    <Badge className="gap-1.5 rounded-full text-xs" variant="neutral">
       {icons[status]}
       {labels[status]}
     </Badge>
@@ -96,7 +96,7 @@ export const ToolHeader = ({
       </span>
       {getStatusBadge(state)}
       {annotations?.readOnlyHint && (
-        <Badge className="gap-1 rounded-full text-xs" variant="outline">
+        <Badge className="gap-1 rounded-full text-xs" variant="neutral">
           Read-only
         </Badge>
       )}
@@ -106,7 +106,7 @@ export const ToolHeader = ({
         </Badge>
       )}
       {annotations?.idempotentHint && !annotations?.readOnlyHint && (
-        <Badge className="gap-1 rounded-full text-xs" variant="outline">
+        <Badge className="gap-1 rounded-full text-xs" variant="neutral">
           Idempotent
         </Badge>
       )}

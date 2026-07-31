@@ -1,5 +1,6 @@
-import { Icon, type IconName } from "@speakeasy-api/moonshine";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Icon } from "@/components/ui/Icon";
+import { type IconName } from "@/components/ui/Icon/names";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { formatCompact } from "@/lib/format";
 import { getValueColor, ThresholdConfig } from "./chartUtils";
 import { Loader2 } from "lucide-react";

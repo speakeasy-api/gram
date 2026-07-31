@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -103,6 +104,7 @@ type Syncer struct {
 	repo     *repo.Queries
 	store    *Store
 	guardian *guardian.Policy
+	features feature.Provider
 }
 
 func NewSyncer(
@@ -110,6 +112,7 @@ func NewSyncer(
 	db *pgxpool.Pool,
 	enc *encryption.Client,
 	guardianPolicy *guardian.Policy,
+	features feature.Provider,
 ) *Syncer {
 	return &Syncer{
 		logger:   logger.With(attr.SlogComponent("deviceintegrations.syncer")),
@@ -117,7 +120,12 @@ func NewSyncer(
 		repo:     repo.New(db),
 		store:    NewStore(logger, db, enc),
 		guardian: guardianPolicy,
+		features: features,
 	}
+}
+
+func (s *Syncer) deviceLevelCoverage(ctx context.Context, orgID string) bool {
+	return deviceLevelCoverage(ctx, s.logger, s.db, s.features, orgID)
 }
 
 // ListCandidates returns due, runnable syncs. Due-ness is evaluated on the
@@ -409,11 +417,22 @@ func (s *Syncer) runEvidencePush(ctx context.Context, target repo.GetSyncTargetR
 	return nil
 }
 
-// buildCoverageSnapshot assembles the evidence set for one org. Field
-// semantics are deliberate: the agent heartbeat attests the assigned USER
-// runs the agent somewhere, never that this device is monitored.
+// buildCoverageSnapshot assembles the evidence set for one org. Each device
+// carries its own attestation strength: a serial match proves that machine
+// ran the agent, an email match proves only that its assigned user did
+// somewhere, and the two can coexist in one snapshot.
 func (s *Syncer) buildCoverageSnapshot(ctx context.Context, orgID string, generatedAt time.Time) (providers.CoverageSnapshot, error) {
-	rows, err := s.repo.ListCoverageSnapshotDevices(ctx, orgID)
+	return s.buildCoverageSnapshotWithMode(ctx, orgID, generatedAt, s.deviceLevelCoverage(ctx, orgID))
+}
+
+// buildCoverageSnapshotWithMode takes the matching mode as an argument so the
+// flag resolution stays a single call in buildCoverageSnapshot and tests can
+// exercise both modes without a feature provider.
+func (s *Syncer) buildCoverageSnapshotWithMode(ctx context.Context, orgID string, generatedAt time.Time, deviceLevel bool) (providers.CoverageSnapshot, error) {
+	rows, err := s.repo.ListCoverageSnapshotDevices(ctx, repo.ListCoverageSnapshotDevicesParams{
+		DeviceLevel:    deviceLevel,
+		OrganizationID: orgID,
+	})
 	if err != nil {
 		return providers.CoverageSnapshot{}, oops.E(oops.CodeUnexpected, err, "list coverage snapshot devices")
 	}
@@ -424,6 +443,13 @@ func (s *Syncer) buildCoverageSnapshot(ctx context.Context, orgID string, genera
 		if row.AgentLastSeenAt.Valid {
 			lastSeen = row.AgentLastSeenAt.Time.UTC()
 		}
+		attestation := providers.AttestationUser
+		// pgtype.Bool: the expression cannot actually be NULL (an AND with a
+		// non-null boolean parameter), but an invalid value must read as the
+		// weaker claim, never the stronger one.
+		if row.DeviceAttested.Valid && row.DeviceAttested.Bool {
+			attestation = providers.AttestationDevice
+		}
 		devices = append(devices, providers.CoverageDevice{
 			ExternalID:   row.ExternalID,
 			SerialNumber: row.SerialNumber.String,
@@ -431,8 +457,9 @@ func (s *Syncer) buildCoverageSnapshot(ctx context.Context, orgID string, genera
 			UserEmail:    row.UserEmail.String,
 			// Inclusive at the cutoff so pushed evidence agrees with the
 			// dashboard coverage query (last_seen_at >= cutoff).
-			AssignedUserAgentActive:     row.AgentLastSeenAt.Valid && !row.AgentLastSeenAt.Time.Before(cutoff),
-			AssignedUserAgentLastSeenAt: lastSeen,
+			AgentActive:      row.AgentLastSeenAt.Valid && !row.AgentLastSeenAt.Time.Before(cutoff),
+			AgentAttestation: attestation,
+			AgentLastSeenAt:  lastSeen,
 		})
 	}
 	return providers.CoverageSnapshot{
@@ -453,6 +480,10 @@ func coverageSnapshotDigest(snapshot providers.CoverageSnapshot) string {
 		Hostname     string `json:"hostname"`
 		UserEmail    string `json:"user_email"`
 		Active       bool   `json:"active"`
+		// Attestation is digested: a device moving from user- to
+		// device-attested changes the meaning of the evidence even when
+		// Active did not, so the push must not be short-circuited.
+		Attestation string `json:"attestation"`
 	}
 	devices := make([]digestDevice, 0, len(snapshot.Devices))
 	for _, d := range snapshot.Devices {
@@ -461,7 +492,8 @@ func coverageSnapshotDigest(snapshot providers.CoverageSnapshot) string {
 			SerialNumber: d.SerialNumber,
 			Hostname:     d.Hostname,
 			UserEmail:    d.UserEmail,
-			Active:       d.AssignedUserAgentActive,
+			Active:       d.AgentActive,
+			Attestation:  string(d.AgentAttestation),
 		})
 	}
 	doc, err := json.Marshal(devices)

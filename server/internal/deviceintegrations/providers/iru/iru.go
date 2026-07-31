@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -83,20 +82,6 @@ type source struct {
 
 var _ providers.InventorySource = (*source)(nil)
 
-// readBoundedBody reads at most maxResponseBytes and fails loudly when the
-// cap is hit, so an oversized page surfaces as a size error instead of a
-// baffling JSON decode failure on the silently truncated body.
-func readBoundedBody(r io.Reader) ([]byte, error) {
-	body, err := io.ReadAll(io.LimitReader(r, maxResponseBytes+1))
-	if err != nil {
-		return nil, fmt.Errorf("read response body: %w", err)
-	}
-	if len(body) > maxResponseBytes {
-		return nil, fmt.Errorf("response body exceeded the %d-byte limit", maxResponseBytes)
-	}
-	return body, nil
-}
-
 // instanceBaseURL validates and normalizes the customer-supplied API URL —
 // the value the Iru console shows under Settings → Access, e.g.
 // https://yourtenant.api.iru.com (legacy *.api.kandji.io and EU-region
@@ -117,7 +102,36 @@ func instanceBaseURL(settings providers.Settings) (string, error) {
 	if parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
 		return "", fmt.Errorf("instance_url must be the tenant API root, e.g. https://yourtenant.api.iru.com")
 	}
+	// The single most common paste mistake is the web-console URL
+	// (yourtenant.iru.com) instead of the API root (yourtenant.api.iru.com);
+	// dropping the tenant label (api.iru.com) is the runner-up. On the
+	// vendor's own domains, require the <tenant>.api.<...> shape and say
+	// exactly what to paste — the console host never serves the API, and a
+	// generic request failure at test time diagnoses neither mistake.
+	host := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
+	if vendorHost(host) && !vendorAPIHost(host) {
+		return "", fmt.Errorf("instance_url must be the tenant API root shown in the console under Settings → Access, e.g. https://yourtenant.api.iru.com — not the console URL")
+	}
 	return "https://" + parsed.Host, nil
+}
+
+// vendorHost reports whether the host belongs to the vendor's domains
+// (including their apexes), where the tenant-API-root shape is enforceable.
+func vendorHost(host string) bool {
+	for _, domain := range []string{"iru.com", "kandji.io"} {
+		if host == domain || strings.HasSuffix(host, "."+domain) {
+			return true
+		}
+	}
+	return false
+}
+
+// vendorAPIHost reports the <tenant>.api.<...> shape: at least one tenant
+// label followed by the literal "api" label (covers regional forms like
+// tenant.api.eu.kandji.io).
+func vendorAPIHost(host string) bool {
+	labels := strings.Split(host, ".")
+	return len(labels) >= 4 && labels[1] == "api"
 }
 
 // deviceRecord mirrors the fields we map from GET /api/v1/devices.
@@ -197,7 +211,7 @@ func (s *source) fetchDevicesPage(ctx context.Context, creds providers.Credentia
 		return nil, fmt.Errorf("devices request failed with status %d", resp.StatusCode)
 	}
 
-	body, err := readBoundedBody(resp.Body)
+	body, err := providers.ReadBoundedBody(resp.Body, maxResponseBytes)
 	if err != nil {
 		return nil, fmt.Errorf("read devices response: %w", err)
 	}

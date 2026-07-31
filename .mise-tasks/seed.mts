@@ -25,6 +25,7 @@ import { keysValidate } from "#gram/client/funcs/keysValidate.js";
 import { projectsCreate } from "#gram/client/funcs/projectsCreate.js";
 import { projectsRead } from "#gram/client/funcs/projectsRead.js";
 import { resourcesList } from "#gram/client/funcs/resourcesList.js";
+import { skillsCreate } from "#gram/client/funcs/skillsCreate.js";
 import { toolsList } from "#gram/client/funcs/toolsList.js";
 import { toolsetsCreate } from "#gram/client/funcs/toolsetsCreate.js";
 import { toolsetsUpdateBySlug } from "#gram/client/funcs/toolsetsUpdateBySlug.js";
@@ -630,7 +631,7 @@ async function deployAssets(init: {
   projectSlug: string;
   projectName: string;
   assets: Asset[];
-}): Promise<string> {
+}): Promise<string | null> {
   const { sessionId, projectSlug, projectName, assets } = init;
 
   const oapi: Array<{ assetId: string; name: string; slug: string }> = [];
@@ -762,8 +763,17 @@ async function deployAssets(init: {
     `evolve deployment for '${projectSlug}'`,
   );
 
+  // Best-effort: evolve is the first seed step that needs Temporal, so it is
+  // the one that fails when the worker or Temporal itself is briefly
+  // unavailable. Aborting here discarded every later seed step — org members,
+  // telemetry, chats — for one flaky workflow start, leaving a dashboard with
+  // nothing in it. Skipping the project instead withholds the completion
+  // marker (see seedStepFailures), so the next `mise run seed` retries it.
   if (!evolveRes.ok) {
-    abort(`Failed to evolve project \`${projectName}\``, evolveRes.error);
+    log.stepFailed(
+      `Failed to evolve project \`${projectName}\`: ${evolveRes.error}`,
+    );
+    return null;
   }
 
   const deploymentId = evolveRes.value.deployment?.id;
@@ -1806,11 +1816,12 @@ const RISK_FINDING_CATALOG: [string, string, string, string, number][] = [
   ],
   // Prompt injection — match carries the full flagged event (the shape
   // judgemessage.Render produces), so the Risk Events "View event" dialog has a
-  // real payload to reveal instead of an opaque fingerprint.
+  // real payload to reveal instead of an opaque fingerprint. The description is
+  // the judge's rationale, which is what the Evidence column renders inline.
   [
     "prompt_injection",
     "prompt_injection",
-    "Prompt injection attempt",
+    "The user message overrides its prior instructions and directs the agent to disclose its system prompt and exfiltrate customer data to an external address.",
     JSON.stringify({
       produced_by: "end_user",
       body_kind: "content",
@@ -1823,7 +1834,7 @@ const RISK_FINDING_CATALOG: [string, string, string, string, number][] = [
   [
     "llm_judge",
     "llm_judge",
-    "Message matched the prompt-based policy (destructive tool call).",
+    "The tool call creates an issue instructing operators to run `rm -rf /var/data` fleet-wide, which the policy prohibits for irreversible infrastructure actions.",
     JSON.stringify({
       produced_by: "ai_assistant_tool_call",
       body_kind: "tool_calls",
@@ -1842,7 +1853,7 @@ const RISK_FINDING_CATALOG: [string, string, string, string, number][] = [
   [
     "llm_judge",
     "llm_judge",
-    "Message matched the prompt-based policy (financial policy violation).",
+    "The user asks the agent to move corporate funds to an external account and to omit the transfer from the books, which the policy treats as a financial-controls violation.",
     JSON.stringify({
       produced_by: "end_user",
       body_kind: "content",
@@ -2291,14 +2302,11 @@ async function seedNonCorporateAccountFindings(init: {
   }
 }
 
-// enableRBACForDevUser turns on RBAC for the org and grants the local dev user
-// the admin scope set plus chat:read. The Agent Sessions page only shows every
-// member's sessions to a caller holding an unrestricted chat:read grant under
-// RBAC enforcement; without it the list is scoped to the caller's own sessions.
-// We grant the full admin scope set too so existing admin actions keep working
-// once enforcement is on (locally the dev user has no WorkOS-synced role
-// assignment to inherit those from). Idempotent: enableRBAC no-ops if already
-// enabled and the grant insert is ON CONFLICT DO NOTHING.
+// enableRBACForDevUser turns on RBAC, reconciles the built-in system-role grants,
+// and gives the local dev user unrestricted chat:read. The Admin role assigned
+// during early seed setup supplies the normal admin scopes; chat:read is a direct
+// grant because it is intentionally not part of any system role. Idempotent:
+// enableRBAC no-ops if already enabled and the grant insert uses ON CONFLICT.
 async function enableRBACForDevUser(init: {
   sessionId: string;
   organizationId: string;
@@ -2332,22 +2340,10 @@ async function enableRBACForDevUser(init: {
     abort("Failed to enable RBAC", res.error);
   }
 
-  // The admin system role intentionally omits chat:read, and the dev user has
-  // no role assignment locally anyway, so grant the scopes directly to the user
-  // principal. Selectors mirror authz.NewSelector: one
-  // {resource_kind, resource_id:"*"} object per scope, effect NULL = allow.
+  // The Admin system role intentionally omits chat:read, so grant it directly to
+  // the user principal. The selector mirrors authz.NewSelector and effect NULL
+  // means allow.
   const SCOPES: { scope: string; kind: string }[] = [
-    { scope: "org:read", kind: "org" },
-    { scope: "org:admin", kind: "org" },
-    { scope: "project:read", kind: "project" },
-    { scope: "project:write", kind: "project" },
-    { scope: "mcp:read", kind: "mcp" },
-    { scope: "mcp:write", kind: "mcp" },
-    { scope: "mcp:connect", kind: "mcp" },
-    { scope: "environment:read", kind: "environment" },
-    { scope: "environment:write", kind: "environment" },
-    { scope: "skill:read", kind: "skill" },
-    { scope: "skill:write", kind: "skill" },
     { scope: "chat:read", kind: "chat" },
   ];
   const sqlStr = (v: string) => `'${v.replace(/'/g, "''")}'`;
@@ -2376,7 +2372,7 @@ async function enableRBACForDevUser(init: {
       await fs.unlink(tmpFile).catch(() => {});
     }
     log.info(
-      `Enabled RBAC and granted dev user ${SCOPES.length} scopes (admin + chat:read); Agent Sessions now shows all org sessions.`,
+      "Enabled RBAC and granted the dev user chat:read; Agent Sessions now shows all org sessions.",
     );
   } catch (e: unknown) {
     const err = e as { stderr?: string; stdout?: string; message?: string };
@@ -4737,6 +4733,166 @@ function abort(message: string, ...values: unknown[]): never {
   process.exit(1);
 }
 
+// The suggest engine only produces edit suggestions from real agent feedback,
+// so local seeding writes an open suggestion directly. Each change's diff is
+// incremental (diffed against what the changes before it produce), matching
+// what the engine stores — regenerate them with skilldiff.Unified if the base
+// content changes.
+const SEED_SKILL_CONTENT = `---
+name: support-refunds
+description: Handle customer refund requests end to end.
+---
+
+Verify the order exists before promising anything.
+Match the request to the original payment method.
+Check the payment status in the billing dashboard.
+Confirm the item was returned or the claim is valid.
+Apply the refund policy for the product category.
+Issue the refund through the payments console.
+Record the refund reason in the order notes.
+Watch for duplicate refund attempts on the order.
+Notify the customer with the expected settlement window.
+Escalate disputed chargebacks to the billing team.
+Attach the conversation transcript to the ticket.
+Close the support ticket with a summary.
+`;
+
+// Diff lines are stored as arrays because unified-diff context lines carry a
+// leading space — a blank context line is a single space that whitespace
+// trimming would otherwise destroy inside a template literal.
+const SEED_SKILL_SUGGESTION_CHANGES = [
+  {
+    rationale:
+      "Refunds were promised for orders still in transit, which support then had to walk back.",
+    diff: [
+      "--- a/SKILL.md",
+      "+++ b/SKILL.md",
+      "@@ -3,7 +3,7 @@",
+      " description: Handle customer refund requests end to end.",
+      " ---",
+      " ",
+      "-Verify the order exists before promising anything.",
+      "+Verify the order exists and its fulfillment state before promising anything.",
+      " Match the request to the original payment method.",
+      " Check the payment status in the billing dashboard.",
+      " Confirm the item was returned or the claim is valid.",
+      "",
+    ].join("\n"),
+  },
+  {
+    rationale:
+      "Refunds issued to a different payment method fail compliance review and get reversed.",
+    diff: [
+      "--- a/SKILL.md",
+      "+++ b/SKILL.md",
+      "@@ -8,7 +8,7 @@",
+      " Check the payment status in the billing dashboard.",
+      " Confirm the item was returned or the claim is valid.",
+      " Apply the refund policy for the product category.",
+      "-Issue the refund through the payments console.",
+      "+Issue the refund through the payments console using the original payment method.",
+      " Record the refund reason in the order notes.",
+      " Watch for duplicate refund attempts on the order.",
+      " Notify the customer with the expected settlement window.",
+      "",
+    ].join("\n"),
+  },
+  {
+    rationale:
+      "Follow-up conversations could not locate the refund without its id in the ticket.",
+    diff: [
+      "--- a/SKILL.md",
+      "+++ b/SKILL.md",
+      "@@ -14,4 +14,4 @@",
+      " Notify the customer with the expected settlement window.",
+      " Escalate disputed chargebacks to the billing team.",
+      " Attach the conversation transcript to the ticket.",
+      "-Close the support ticket with a summary.",
+      "+Close the support ticket with a summary and the refund id.",
+      "",
+    ].join("\n"),
+  },
+];
+
+async function seedSkillEditSuggestion(init: {
+  gram: GramCore;
+  sessionId: string;
+  projectSlug: string;
+}): Promise<void> {
+  const { gram, sessionId, projectSlug } = init;
+
+  const created = await skillsCreate(
+    gram,
+    { createSkillRequestBody: { content: SEED_SKILL_CONTENT } },
+    {
+      option1: {
+        projectSlugHeaderGramProject: projectSlug,
+        sessionHeaderGramSession: sessionId,
+      },
+    },
+  );
+  if (!created.ok) {
+    log.stepFailed(`Failed to create seed skill: ${created.error}`);
+    return;
+  }
+  const skillId = created.value.skill.id;
+  const baseVersionId = created.value.version.id;
+
+  const changeValues = SEED_SKILL_SUGGESTION_CHANGES.map(
+    (change, position) =>
+      `(${position}, $seedskill$${change.diff}$seedskill$, $seedskill$${change.rationale}$seedskill$)`,
+  ).join(",\n    ");
+  // The change diffs are anchored to the seeded content, so a suggestion is
+  // only inserted while that version is still the one approvals resolve as
+  // the base (mirroring ResolveSkillSuggestionBase). Once the skill advances
+  // — e.g. edits were applied while demoing — re-seeding leaves it alone
+  // instead of planting a stale suggestion.
+  const sql = `
+INSERT INTO skill_edit_suggestions (project_id, skill_id, base_version_id, rationale, scored_session_count)
+SELECT s.project_id, s.id, '${baseVersionId}', 'Recurring friction in refund sessions points at the same missing steps.', 7
+FROM skills s
+WHERE s.id = '${skillId}'
+  AND '${baseVersionId}' = (
+    SELECT sv.id
+    FROM skill_versions sv
+    LEFT JOIN skill_version_origins svo
+      ON svo.project_id = s.project_id
+      AND svo.skill_id = sv.skill_id
+      AND svo.skill_version_id = sv.id
+    WHERE sv.skill_id = s.id AND sv.spec_valid IS TRUE
+    ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
+    LIMIT 1
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM skill_edit_suggestions e
+    WHERE e.skill_id = s.id AND e.status = 'open'
+  );
+
+INSERT INTO skill_edit_suggestion_changes (project_id, suggestion_id, proposed_diff, rationale, position)
+SELECT e.project_id, e.id, x.diff, x.rationale, x.position
+FROM skill_edit_suggestions e
+CROSS JOIN (
+  VALUES
+    ${changeValues}
+) AS x(position, diff, rationale)
+WHERE e.skill_id = '${skillId}'
+  AND e.status = 'open'
+  AND e.base_version_id = '${baseVersionId}'
+  AND NOT EXISTS (
+    SELECT 1 FROM skill_edit_suggestion_changes c WHERE c.suggestion_id = e.id
+  );
+`;
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+  await $({
+    input: sql,
+  })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -tA -f -`.quiet();
+
+  log.info(
+    `Seeded skill 'support-refunds' in '${projectSlug}' (an open edit suggestion with ${SEED_SKILL_SUGGESTION_CHANGES.length} changes is added while the skill is at its seeded base version)`,
+  );
+}
+
 async function seed() {
   let success = false;
   intro("Seeding local development environment...");
@@ -4882,15 +5038,33 @@ async function seed() {
     const redisPassword = process.env.GRAM_REDIS_CACHE_PASSWORD || "xi9XILbY";
     // session_capture gates Claude hook chat persistence; without it,
     // hooks.ingest accepts events but silently skips writing chat_messages.
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO organization_features (organization_id, feature_name) VALUES ('${activeOrgID}', 'logs'), ('${activeOrgID}', 'tool_io_logs'), ('${activeOrgID}', 'session_capture') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
-    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL feature:${activeOrgID}:logs: feature:${activeOrgID}:tool_io_logs: feature:${activeOrgID}:session_capture:`.quiet();
-    log.info("Enabled local logs, tool_io_logs, and session_capture features");
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO organization_features (organization_id, feature_name) VALUES ('${activeOrgID}', 'logs'), ('${activeOrgID}', 'tool_io_logs'), ('${activeOrgID}', 'session_capture'), ('${activeOrgID}', 'skills') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
+    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL feature:${activeOrgID}:logs: feature:${activeOrgID}:tool_io_logs: feature:${activeOrgID}:session_capture: feature:${activeOrgID}:skills:`.quiet();
+    log.info(
+      "Enabled local logs, tool_io_logs, session_capture, and skills features",
+    );
   } catch (e: unknown) {
     const err = e as { stderr?: string; message?: string };
     log.stepFailed(
       `Failed to enable local log features: ${err.message || err.stderr || JSON.stringify(e)}`,
     );
   }
+
+  // RBAC may already be enabled from an earlier seed. Establish the user's
+  // organization-level authorization before the first protected API call:
+  // platform super-admin status does not bypass ordinary org RBAC. Assigning
+  // Admin first lets enableRBAC reconcile system grants safely, and both steps
+  // are idempotent for clean and previously seeded databases.
+  await seedCurrentUserAdminRole({
+    organizationId: activeOrgID,
+    userId: activeUserID,
+  });
+  await enableRBACForDevUser({
+    sessionId,
+    organizationId: activeOrgID,
+    userId: activeUserID,
+    gram,
+  });
 
   // oxlint-disable-next-line no-unused-vars
   const key = await initAPIKey({
@@ -4933,6 +5107,11 @@ async function seed() {
       projectName: name,
       assets: seedAssets,
     });
+    if (deploymentId === null) {
+      // Toolsets below are keyed off the deployment, so this project has
+      // nothing more to seed. Later projects and seed sections still run.
+      continue;
+    }
     log.info(
       `Deployed assets into '${projectSlug}' (deployment_id = ${deploymentId})`,
     );
@@ -4992,6 +5171,12 @@ async function seed() {
       `${env.created ? "Created" : "Found existing"} environment '${env.slug}' for project '${projectSlug}'`,
     );
   }
+  await seedSkillEditSuggestion({
+    gram,
+    sessionId,
+    projectSlug: SEED_PROJECTS[0].slug,
+  });
+
   await seedTunnel();
 
   // Seed observability data for the E-Commerce project.
@@ -5031,21 +5216,9 @@ async function seed() {
     await seedRiskFindingsClickHouse({ projectId: firstProject.id });
   }
 
-  // Give the local dev user the "see all org sessions" admin view that the
-  // Agent Sessions page promises. That view is gated behind RBAC enforcement
-  // plus a chat:read grant, so enable RBAC and grant the dev user the admin
-  // scope set (chat:read is intentionally not part of any system role). Runs
-  // after asset/toolset seeding so those admin API calls aren't gated, and
-  // before the enterprise-account-type flip below (enforcement only activates
-  // once the org is enterprise).
-  await enableRBACForDevUser({
-    sessionId,
-    organizationId: activeOrgID,
-    userId: sessionInfo.result.userId,
-    gram,
-  });
-
-  // Set enterprise account type last so RBAC enforcement doesn't block seeding.
+  // Keep the fully seeded local organization on the enterprise tier so local
+  // development can exercise other enterprise capabilities. Billing tier no
+  // longer controls RBAC enforcement.
   try {
     const dbUser = process.env.DB_USER || "gram";
     const dbName = process.env.DB_NAME || "gram";
@@ -5057,19 +5230,6 @@ async function seed() {
       `Failed to set enterprise account type: ${err.message || err.stderr || JSON.stringify(e)}`,
     );
   }
-
-  const enableRBACRes = await accessEnableRBAC(gram, undefined, {
-    sessionHeaderGramSession: sessionId,
-  });
-  if (!enableRBACRes.ok) {
-    abort("Failed to enable RBAC and seed system roles", enableRBACRes.error);
-  }
-  log.info("Enabled RBAC and seeded system roles");
-
-  await seedCurrentUserAdminRole({
-    organizationId: activeOrgID,
-    userId: activeUserID,
-  });
 
   if (seedStepFailures.length > 0) {
     log.warn(

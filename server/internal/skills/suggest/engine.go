@@ -108,6 +108,15 @@ type suggestionSnapshot struct {
 }
 
 func (e *Engine) Run(ctx context.Context, in RunInput) (Result, error) {
+	return e.run(ctx, in, false)
+}
+
+// RunForced bypasses automatic activity, feedback, and efficacy thresholds.
+func (e *Engine) RunForced(ctx context.Context, in RunInput) (Result, error) {
+	return e.run(ctx, in, true)
+}
+
+func (e *Engine) run(ctx context.Context, in RunInput, force bool) (Result, error) {
 	now := in.Now.UTC()
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -120,7 +129,7 @@ func (e *Engine) Run(ctx context.Context, in RunInput) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("get suggestion skill: %w", err)
 	}
-	if !skill.LastSeenAt.Valid || skill.LastSeenAt.Time.Before(now.Add(-e.config.ActivityWindow)) {
+	if !force && (!skill.LastSeenAt.Valid || skill.LastSeenAt.Time.Before(now.Add(-e.config.ActivityWindow))) {
 		return Result{Kind: ResultSkipped, Reenqueue: false, FeedbackConsumed: 0, SuggestionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}, nil
 	}
 
@@ -199,7 +208,7 @@ func (e *Engine) Run(ctx context.Context, in RunInput) (Result, error) {
 		baseVersionID: base.BaseVersionID, latest: latest, unreviewedCount: unreviewedCount,
 		newScoredSessions: newScoredSessions, trend: computedTrend,
 	})
-	if !wake {
+	if !force && !wake {
 		return Result{Kind: ResultSkipped, Reenqueue: false, FeedbackConsumed: 0, SuggestionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}, nil
 	}
 
@@ -253,7 +262,7 @@ func (e *Engine) Run(ctx context.Context, in RunInput) (Result, error) {
 		return Result{}, err
 	}
 
-	var resolved []resolvedChange
+	var resolved []ResolvedChange
 	if generation.Decision == DecisionPropose {
 		var failure error
 		_, resolved, failure = resolveGeneration(base, skill.Name, generation)
@@ -397,7 +406,7 @@ func suggestionSnapshotMatches(expected *suggestionSnapshot, actual *repo.SkillE
 	return expected.id == actual.ID && expected.status == actual.Status && expected.baseVersionID == actual.BaseVersionID && expected.updatedAt.Equal(actual.UpdatedAt.Time)
 }
 
-func (e *Engine) persist(ctx context.Context, in RunInput, expectedBase uuid.UUID, expectedLatest *suggestionSnapshot, skillName string, generation Generation, resolved []resolvedChange, rationale string, scoredCount uint64, totalUnreviewed int64, feedback []repo.SkillFeedback) (Result, error) {
+func (e *Engine) persist(ctx context.Context, in RunInput, expectedBase uuid.UUID, expectedLatest *suggestionSnapshot, skillName string, generation Generation, resolved []ResolvedChange, rationale string, scoredCount uint64, totalUnreviewed int64, feedback []repo.SkillFeedback) (Result, error) {
 	tx, err := e.db.Begin(ctx)
 	if err != nil {
 		return Result{}, fmt.Errorf("begin suggestion transaction: %w", err)
@@ -529,7 +538,7 @@ func writeChanges(
 	queries *repo.Queries,
 	projectID uuid.UUID,
 	suggestionID uuid.UUID,
-	changes []resolvedChange,
+	changes []ResolvedChange,
 	feedback []repo.SkillFeedback,
 ) error {
 	if err := queries.DeleteSkillEditSuggestionChanges(ctx, repo.DeleteSkillEditSuggestionChangesParams{
@@ -590,8 +599,8 @@ func clampUint64ToInt64(value uint64) int64 {
 // resolveGeneration turns a proposal into the manifest it produces and the
 // per-change edits behind it, rejecting anything that does not survive the
 // normal manifest validation.
-func resolveGeneration(base repo.ResolveSkillSuggestionBaseRow, skillName string, generation Generation) (string, []resolvedChange, error) {
-	content, resolved, err := resolveChanges(base.BaseContent, generation.Changes)
+func resolveGeneration(base repo.ResolveSkillSuggestionBaseRow, skillName string, generation Generation) (string, []ResolvedChange, error) {
+	content, resolved, err := ResolveChanges(base.BaseContent, generation.Changes)
 	if err != nil {
 		return "", nil, err
 	}

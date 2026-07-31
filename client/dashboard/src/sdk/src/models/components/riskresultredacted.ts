@@ -14,13 +14,17 @@ import {
 
 export type RiskResultRedacted = {
   /**
+   * The chat content part that was scanned, when the finding is anchored to a content part.
+   */
+  chatContentPartId?: string | undefined;
+  /**
    * The chat session containing the message.
    */
   chatId?: string | undefined;
   /**
-   * The chat message that was scanned.
+   * The chat message that was scanned, when the finding is anchored to a message.
    */
-  chatMessageId: string;
+  chatMessageId?: string | undefined;
   /**
    * Title of the chat session.
    */
@@ -85,8 +89,9 @@ export const RiskResultRedacted$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    chat_content_part_id: z.optional(z.string()),
     chat_id: z.optional(z.string()),
-    chat_message_id: z.string(),
+    chat_message_id: z.optional(z.string()),
     chat_title: z.optional(z.string()),
     confidence: z.optional(z.number()),
     created_at: z.pipe(
@@ -107,6 +112,7 @@ export const RiskResultRedacted$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "chat_content_part_id": "chatContentPartId",
       "chat_id": "chatId",
       "chat_message_id": "chatMessageId",
       "chat_title": "chatTitle",

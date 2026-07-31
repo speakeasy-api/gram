@@ -1,6 +1,6 @@
-import { Dialog } from "@/components/ui/dialog";
-import { Type } from "@/components/ui/type";
-import { Button } from "@speakeasy-api/moonshine";
+import { Dialog } from "@/components/ui/Dialog";
+import { Text } from "@/components/ui/Text";
+import { Button } from "@/components/ui/Button";
 
 // ConfirmDialog is a small reusable confirmation surface for the org-admin
 // Remote Identity Providers UI. It optionally renders an authoritative impact
@@ -40,23 +40,23 @@ export function ConfirmDialog({
         {impact && (
           <div>
             {impact.isLoading ? (
-              <Type small muted>
+              <Text small muted>
                 Checking impact…
-              </Type>
+              </Text>
             ) : (
               <>
-                <Type>{impact.summary}</Type>
+                <Text>{impact.summary}</Text>
                 {impact.mcpServerNames && impact.mcpServerNames.length > 0 && (
                   <div className="mt-2">
-                    <Type small as="div">
+                    <Text small as="div">
                       Affected MCP Servers:
-                    </Type>
+                    </Text>
                     <ul className="mt-1 list-disc pl-5">
                       {impact.mcpServerNames.map((name) => (
                         <li key={name}>
-                          <Type small muted as="span">
+                          <Text small muted as="span">
                             {name}
-                          </Type>
+                          </Text>
                         </li>
                       ))}
                     </ul>
