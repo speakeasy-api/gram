@@ -25,6 +25,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { orgRoutePaths } from "@/routes";
+import { UNAUTHENTICATED_PATHS } from "@/lib/session-expired";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
@@ -45,17 +46,6 @@ import {
 import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
 
 const PREFERRED_PROJECT_KEY = "preferredProject";
-
-const UNAUTHENTICATED_PATHS = [
-  "/login",
-  "/register",
-  "/invite",
-  "/book-demo",
-  "/shadow-mcp/request",
-  "/risk-policy-bypass/request",
-  "/blocks",
-  "/shared",
-];
 
 const SLUG_EXEMPT_PATHS = [
   "/switch-org",

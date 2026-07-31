@@ -24,6 +24,10 @@ export function isNotFoundError(error: unknown): boolean {
   return getHttpStatusCode(error) === 404;
 }
 
+export function isUnauthorizedError(error: unknown): boolean {
+  return getHttpStatusCode(error) === 401;
+}
+
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

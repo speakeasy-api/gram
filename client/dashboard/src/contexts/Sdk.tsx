@@ -1,7 +1,9 @@
 import { handleError } from "@/lib/errors";
+import { isUnauthorizedError } from "@/lib/route-errors";
+import { redirectToLoginOnUnauthorized } from "@/lib/session-expired";
 import { Gram } from "@gram/client";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
-import { QueryClient } from "@tanstack/react-query";
+import { QueryCache, QueryClient } from "@tanstack/react-query";
 import { createContext, useContext } from "react";
 import { useLocation, useParams } from "react-router";
 
@@ -27,13 +29,28 @@ export const useSdkClient = (): Gram => {
 // Preserve QueryClient across HMR to prevent cache loss
 const createQueryClient = () =>
   new QueryClient({
+    // A 401 means the session is dead (expired, revoked, or — in local dev —
+    // overwritten by another worktree's stack, since the cookie is scoped to
+    // `localhost` and cookies ignore ports). Send the user to /login instead
+    // of letting it throw to the error boundary.
+    queryCache: new QueryCache({
+      onError: (error) => {
+        if (isUnauthorizedError(error)) {
+          redirectToLoginOnUnauthorized();
+        }
+      },
+    }),
     defaultOptions: {
       queries: {
         // Suppress 403s so RBAC-restricted queries degrade gracefully
-        // instead of crashing the page. All other errors still throw to
+        // instead of crashing the page, and 401s because the cache handler
+        // above is already navigating away. All other errors still throw to
         // the nearest error boundary.
         throwOnError: (error) =>
-          !(error instanceof GramError && error.statusCode === 403),
+          !(
+            error instanceof GramError &&
+            (error.statusCode === 403 || error.statusCode === 401)
+          ),
         retry: (failureCount, error: Error) => {
           // Don't retry on 4xx errors
           if (error && typeof error === "object") {
