@@ -1,4 +1,9 @@
 import { RequireScope } from "@/components/require-scope";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -11,17 +16,20 @@ import {
 } from "@/components/ui/sheet";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
+import { cn } from "@/lib/utils";
 import type { DeviceIntegrationProvider } from "@gram/client/models/components/deviceintegrationprovider.js";
 import type { DeviceIntegrationProviderField } from "@gram/client/models/components/deviceintegrationproviderfield.js";
 import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
 import {
   CheckCircle2,
+  ChevronRight,
   Loader2,
   PauseCircle,
   PlugZap,
   Trash2,
   XCircle,
 } from "lucide-react";
+import { useState } from "react";
 import { providerUI } from "./provider-ui";
 import type { DeviceIntegrationConfigForm } from "./use-device-integration-config";
 
@@ -115,14 +123,22 @@ export function DeviceIntegrationConfigureSheet({
 
         <Stack gap={4} className="px-4">
           <SetupSteps steps={providerUI(provider).setupSteps} />
-          {provider.fields.map((field) => (
-            <FieldInput
-              key={field.key}
-              provider={provider.id}
-              field={field}
-              form={form}
-            />
-          ))}
+          {provider.fields
+            .filter((field) => field.required)
+            .map((field) => (
+              <FieldInput
+                key={field.key}
+                provider={provider.id}
+                field={field}
+                form={form}
+              />
+            ))}
+
+          <AdvancedFields
+            provider={provider.id}
+            fields={provider.fields.filter((field) => !field.required)}
+            form={form}
+          />
 
           {form.isConfigured ? (
             <TestConnectionRow form={form} />
@@ -206,6 +222,62 @@ function FieldInput({
         disabled={form.isLoading || form.isMutating}
       />
     </Stack>
+  );
+}
+
+// Optional settings live behind an "Advanced" disclosure so the default view is
+// just the required fields (e.g. Region + API Key for Drata — the connection id
+// is created automatically, so most customers never touch it). Rendered from
+// the descriptor's `required` flag, so every provider's optional fields tuck
+// away with zero per-provider frontend work. The section auto-expands when an
+// optional field already holds a value, so editing a config that uses one never
+// hides it.
+function AdvancedFields({
+  provider,
+  fields,
+  form,
+}: {
+  provider: string;
+  fields: DeviceIntegrationProviderField[];
+  form: DeviceIntegrationConfigForm;
+}) {
+  const hasValue = fields.some(
+    (field) => (form.settings[field.key] ?? "") !== "",
+  );
+  // null = follow the data (open iff a value exists); a boolean is the user's
+  // explicit choice, which then wins. Derived during render — no effect, so no
+  // stale-collapsed flash when the config loads.
+  const [override, setOverride] = useState<boolean | null>(null);
+  const open = override ?? hasValue;
+
+  if (fields.length === 0) return null;
+
+  return (
+    <Collapsible open={open} onOpenChange={setOverride}>
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-medium"
+        >
+          <ChevronRight
+            className={cn("size-3.5 transition-transform", open && "rotate-90")}
+          />
+          Advanced
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <Stack gap={4} className="pt-4">
+          {fields.map((field) => (
+            <FieldInput
+              key={field.key}
+              provider={provider}
+              field={field}
+              form={form}
+            />
+          ))}
+        </Stack>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
