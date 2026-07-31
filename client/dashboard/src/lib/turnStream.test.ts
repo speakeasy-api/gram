@@ -261,30 +261,42 @@ describe("streamTurn", () => {
       ]),
     ]);
 
+    // Recorded at the writer rather than by consuming the stream: breaking out
+    // of the consumer early abandons a controller that `execute` is still
+    // writing to, which surfaces as an unhandled "Controller is already
+    // closed" and fails the run even though every assertion passed.
     const events: string[] = [];
     const stream = createUIMessageStream<UIMessage>({
       originalMessages: [{ id: "u1", role: "user", parts: [] }],
       execute: async ({ writer }) => {
-        writer.write({ type: "start" });
+        const recording: typeof writer = {
+          ...writer,
+          write: (chunk) => {
+            if (chunk.type === "text-delta") events.push("text");
+            return writer.write(chunk);
+          },
+        };
+        recording.write({ type: "start" });
         await streamTurn({
           chatId: CHAT_ID,
-          writer,
+          writer: recording,
           sessionToken: "session",
           projectSlug: "proj",
-          onSubscribed: () => events.push("subscribed"),
+          onSubscribed: () => {
+            events.push("subscribed");
+          },
           replayFromStart: true,
         });
-        writer.write({ type: "finish" });
+        recording.write({ type: "finish" });
       },
     });
-    for await (const message of readUIMessageStream({ stream })) {
-      if (message.parts.some((p) => p.type === "text")) {
-        events.push("text");
-        break;
-      }
+    for await (const _ of readUIMessageStream({ stream })) {
+      // Drain: the assertions read `events`, but the stream still has to be
+      // consumed to completion so `execute` finishes.
     }
 
     expect(events[0]).toBe("subscribed");
+    expect(events).toContain("text");
     // A chat created by this turn has no earlier turn to replay, so starting
     // from the beginning is exact — and it cannot miss frames published before
     // the connection was made.
