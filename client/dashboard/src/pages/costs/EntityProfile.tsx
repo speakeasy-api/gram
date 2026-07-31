@@ -16,7 +16,13 @@ import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { type QueryRow } from "@gram/client/models/components/queryrow.js";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { ChevronLeft, Download, Home, Info, RotateCcw } from "lucide-react";
 import { CostMeasureLabel } from "@/components/estimated-cost";
 import { BreakdownBar } from "./BreakdownBar";
@@ -387,8 +393,9 @@ export function EntityProfile({
   // the browser never resets scroll on its own. Jump back to the top of the
   // scrollport whenever the drill path changes — otherwise a mid-table click
   // lands the new profile still scrolled down, and it looks like nothing moved.
+  // useLayoutEffect so the reset lands before paint (no flash of mid-page).
   const pathKey = path.map((c) => `${c.dim}:${c.value}`).join("/");
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = findVerticalScrollParent(pinSentinelRef.current);
     if (root) root.scrollTop = 0;
     else window.scrollTo(0, 0);
