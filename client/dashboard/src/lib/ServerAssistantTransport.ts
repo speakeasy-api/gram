@@ -2,6 +2,7 @@ import { assistantsSendMessage } from "@gram/client/funcs/assistantsSendMessage"
 import { chatLoad } from "@gram/client/funcs/chatLoad";
 import type { GramCore } from "@gram/client/core";
 import { sleep, type ElementsTransportContext } from "@/elements";
+import { streamTurn } from "@/lib/turnStream";
 import {
   type ChatTransport,
   createUIMessageStream,
@@ -171,13 +172,22 @@ export function createServerAssistantTransport(
             adopt(chatId);
           }
 
-          await pollForReplies({
-            deps,
-            chatId,
-            snapshot,
-            writer,
-            abortSignal: pollSignal,
-          });
+          // Frames drive the turn. The poll is kept only as a resync: if the
+          // stream cannot deliver (disabled server-side, or a connection that
+          // will not come back), fall back to discovering the reply the old
+          // way rather than losing it.
+          try {
+            await streamTurn({ chatId, writer, abortSignal: pollSignal });
+          } catch (err) {
+            if (pollSignal.aborted) throw err;
+            await pollForReplies({
+              deps,
+              chatId,
+              snapshot,
+              writer,
+              abortSignal: pollSignal,
+            });
+          }
 
           writer.write({ type: "finish" });
         },
