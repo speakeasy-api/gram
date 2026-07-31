@@ -82,10 +82,9 @@ func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Log
 			return nil, errCIMDDisabled
 		}
 
-		doc, err := cimd.Resolve(ctx, cimd.NewFetchClient(s.guardianPolicy), clientID)
+		doc, err := s.cimdResolver.Resolve(ctx, clientID)
 		if err != nil {
-			var oauthErr *usersessions.OAuthError
-			if errors.As(err, &oauthErr) {
+			if _, ok := errors.AsType[*usersessions.OAuthError](err); ok {
 				return nil, fmt.Errorf("resolve cimd client: %w", err)
 			}
 			return nil, fmt.Errorf("%w: %w", errCIMDFetchFailed, err)

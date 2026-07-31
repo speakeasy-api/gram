@@ -77,6 +77,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
@@ -113,8 +114,11 @@ type Service struct {
 	// to the last known state instead of failing closed on the
 	// unauthenticated OAuth surface. Guarded by cimdOrgFlagMu; holds one bool
 	// per organization that touches the surface.
-	cimdOrgFlagMu          sync.RWMutex
-	cimdOrgFlagLastKnown   map[string]bool
+	cimdOrgFlagMu        sync.RWMutex
+	cimdOrgFlagLastKnown map[string]bool
+	// cimdResolver fetches + validates Client ID Metadata Documents for
+	// URL-shaped client_ids and owns the cimd.* telemetry.
+	cimdResolver           *cimd.Resolver
 	toolProxy              *gateway.ToolProxy
 	oauthService           OAuthService
 	oauthRepo              *oauth_repo.Queries
@@ -325,6 +329,7 @@ func NewService(
 		features:             features,
 		cimdOrgFlagMu:        sync.RWMutex{},
 		cimdOrgFlagLastKnown: map[string]bool{},
+		cimdResolver:         cimd.NewResolver(guardianPolicy, meterProvider, logger),
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			tracerProvider,

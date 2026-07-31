@@ -4,13 +4,17 @@
 // fetching the document it names, parsing it, and validating it against the
 // spec's rules plus Gram's own origin-binding policy.
 //
-// The package is deliberately stateless: no caching, no persistence, no
-// logging. Callers own the upsert of the resolved client and
-// the mapping of returned errors onto their wire format. Spec-defined
-// rejections are returned as *usersessions.OAuthError with a client-safe
-// description; transport-level fetch failures are returned as plain wrapped
-// errors whose text may reference internal details and MUST NOT be echoed to
-// the OAuth client verbatim.
+// The Resolver owns the fetch lifecycle and its telemetry (metrics + logs) but
+// deliberately nothing else: no caching (until AIS-216) and no persistence.
+// Callers own the upsert of the resolved client and the mapping of returned
+// errors onto their wire format. Spec-defined rejections are returned as
+// *usersessions.OAuthError with a client-safe description; transport-level
+// fetch failures are returned as plain wrapped errors whose text may reference
+// internal details and MUST NOT be echoed to the OAuth client verbatim. The
+// same opacity rule applies to the internal result taxonomy: parse failures
+// are distinguished from fetch failures only in metrics and logs, never in the
+// returned error shape, so unauthenticated callers cannot use the wire
+// response as an oracle for probing external hosts through Gram.
 package cimd
 
 import (
@@ -19,9 +23,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
+	"go.opentelemetry.io/otel/metric"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -132,14 +140,35 @@ func IsClientIDURL(clientID string) bool {
 	return len(clientID) > len("https://") && clientID[:len("https://")] == "https://"
 }
 
-// NewFetchClient builds the production document-fetch client from a
-// guardian policy: the SSRF dialer's post-DNS IP check satisfies -02 §8.6's
-// ban on fetching RFC 6890 special-use addresses and is immune to DNS
-// rebinding. Tests that host documents on httptest servers should pass
+// Resolver fetches, parses, and validates Client ID Metadata Documents and
+// records the telemetry for each attempt. It is safe for concurrent use; one
+// instance should live for the process lifetime so instruments are created
+// once.
+type Resolver struct {
+	client  *guardian.HTTPClient
+	logger  *slog.Logger
+	metrics *metrics
+}
+
+// NewResolver builds the production resolver from a guardian policy: the SSRF
+// dialer's post-DNS IP check satisfies -02 §8.6's ban on fetching RFC 6890
+// special-use addresses and is immune to DNS rebinding. Tests that host
+// documents on httptest servers should use newResolver with
 // newFetchClientFrom(server.Client()) — or build the policy with
 // guardian.WithTLSRootCAs — since httptest certificates are self-signed.
-func NewFetchClient(policy *guardian.Policy) *guardian.HTTPClient {
-	return newFetchClientFrom(policy.Client())
+func NewResolver(policy *guardian.Policy, meterProvider metric.MeterProvider, logger *slog.Logger) *Resolver {
+	return newResolver(newFetchClientFrom(policy.Client()), meterProvider, logger)
+}
+
+// newResolver is the injection seam for tests that need a fetch client built
+// from an httptest server instead of a guardian policy.
+func newResolver(client *guardian.HTTPClient, meterProvider metric.MeterProvider, logger *slog.Logger) *Resolver {
+	logger = logger.With(attr.SlogComponent("cimd"))
+	return &Resolver{
+		client:  client,
+		logger:  logger,
+		metrics: newMetrics(meterProvider, logger),
+	}
 }
 
 // newFetchClientFrom applies the CIMD fetch rules to a copy of the base
@@ -156,20 +185,47 @@ func newFetchClientFrom(base *guardian.HTTPClient) *guardian.HTTPClient {
 }
 
 // Resolve fetches, parses, and validates the Client ID Metadata Document
-// named by clientID. client should come from NewFetchClient. The returned
-// Document has passed every check this AS imposes: -02 §3 URL syntax, §4
-// triple client_id equality (the fetch never follows redirects, so the
-// fetched URL is the presented URL by construction), required client_name +
-// redirect_uris, public-client-only auth method, secret/private-key bans,
-// and Gram's same-origin redirect-URI binding.
-func Resolve(ctx context.Context, client *guardian.HTTPClient, clientID string) (*Document, error) {
+// named by clientID. The returned Document has passed every check this AS
+// imposes: -02 §3 URL syntax, §4 triple client_id equality (the fetch never
+// follows redirects, so the fetched URL is the presented URL by
+// construction), required client_name + redirect_uris, public-client-only
+// auth method, secret/private-key bans, and Gram's same-origin redirect-URI
+// binding.
+func (r *Resolver) Resolve(ctx context.Context, clientID string) (*Document, error) {
 	clientIDURL, err := validateClientIDURL(clientID)
 	if err != nil {
+		// Pre-fetch rejection: no origin has been established (the URL did
+		// not parse or failed syntax rules), so the origin attribute and the
+		// duration histogram are both deliberately omitted.
+		r.observe(ctx, resolveObservation{
+			clientID:      clientID,
+			origin:        "",
+			result:        fetchResultValidationError,
+			reason:        validationReasonOf(err),
+			status:        0,
+			duration:      0,
+			fetched:       false,
+			responseBytes: 0,
+			err:           err,
+		})
 		return nil, err
 	}
+	origin := clientIDURL.Host
 
-	body, err := fetchDocument(ctx, client, clientID)
+	start := time.Now()
+	body, status, err := r.fetchDocument(ctx, origin, clientID)
 	if err != nil {
+		r.observe(ctx, resolveObservation{
+			clientID:      clientID,
+			origin:        origin,
+			result:        fetchResultFetchError,
+			reason:        "",
+			status:        status,
+			duration:      time.Since(start),
+			fetched:       true,
+			responseBytes: 0,
+			err:           err,
+		})
 		return nil, fmt.Errorf("fetch client metadata document: %w", err)
 	}
 
@@ -177,50 +233,152 @@ func Resolve(ctx context.Context, client *guardian.HTTPClient, clientID string) 
 	// wrapped error, generic wire response) rather than as a distinct OAuth
 	// error: a distinguishable "reachable but not JSON" response would give
 	// unauthenticated callers an oracle for probing external hosts through
-	// Gram.
+	// Gram. The parse_error result exists only in telemetry.
 	var doc Document
 	if err := json.Unmarshal(body, &doc); err != nil {
+		r.observe(ctx, resolveObservation{
+			clientID:      clientID,
+			origin:        origin,
+			result:        fetchResultParseError,
+			reason:        "",
+			status:        status,
+			duration:      time.Since(start),
+			fetched:       true,
+			responseBytes: len(body),
+			err:           err,
+		})
 		return nil, fmt.Errorf("parse client metadata document: %w", err)
 	}
 
 	if err := validateDocument(&doc, clientID, clientIDURL); err != nil {
+		r.observe(ctx, resolveObservation{
+			clientID:      clientID,
+			origin:        origin,
+			result:        fetchResultValidationError,
+			reason:        validationReasonOf(err),
+			status:        status,
+			duration:      time.Since(start),
+			fetched:       true,
+			responseBytes: len(body),
+			err:           err,
+		})
 		return nil, err
 	}
 
+	r.observe(ctx, resolveObservation{
+		clientID:      clientID,
+		origin:        origin,
+		result:        fetchResultSuccess,
+		reason:        "",
+		status:        status,
+		duration:      time.Since(start),
+		fetched:       true,
+		responseBytes: len(body),
+		err:           nil,
+	})
 	return &doc, nil
+}
+
+// resolveObservation carries everything one Resolve attempt learned to the
+// single metrics + log emission point.
+type resolveObservation struct {
+	clientID string
+	origin   string // empty until the client_id URL has parsed
+	result   fetchResult
+	reason   validationReason // non-empty only for validation_error
+	status   int              // HTTP status, 0 when no response was received
+	duration time.Duration
+	fetched  bool // whether an upstream fetch actually ran
+	// responseBytes is the completed body read length, 0 when no body was
+	// read; log-only (the cimd.fetch.response_size histogram is recorded
+	// inside fetchDocument, where the cap-hit case is also visible).
+	responseBytes int
+	err           error
+}
+
+func (r *Resolver) observe(ctx context.Context, o resolveObservation) {
+	r.metrics.RecordAttempt(ctx, o.origin, o.result)
+	if o.fetched {
+		r.metrics.RecordFetchDuration(ctx, o.origin, o.result, o.duration)
+	}
+	if o.result == fetchResultValidationError {
+		r.metrics.RecordValidationFailure(ctx, o.reason)
+	}
+
+	// The client_id is attacker-chosen on an unauthenticated surface and, on
+	// the client_id_too_long rejection specifically, has not yet been bounded
+	// by the length cap — truncate so a request-sized URL cannot inflate
+	// every warn line.
+	clientID := o.clientID
+	if len(clientID) > maxClientIDLength {
+		clientID = clientID[:maxClientIDLength] + "…(truncated)"
+	}
+	logAttrs := []any{
+		attr.SlogOAuthClientID(clientID),
+		attr.SlogOutcome(string(o.result)),
+	}
+	if o.origin != "" {
+		logAttrs = append(logAttrs, attr.SlogCIMDOrigin(o.origin))
+	}
+	if o.status != 0 {
+		logAttrs = append(logAttrs, attr.SlogHTTPResponseStatusCode(o.status))
+	}
+	if o.fetched {
+		logAttrs = append(logAttrs, attr.SlogHTTPClientRequestDuration(float64(o.duration)/float64(time.Millisecond)))
+	}
+	if o.responseBytes > 0 {
+		logAttrs = append(logAttrs, attr.SlogHTTPResponseBodyBytes(o.responseBytes))
+	}
+	if o.reason != "" {
+		logAttrs = append(logAttrs, attr.SlogCIMDValidationReason(o.reason))
+	}
+	if o.err != nil {
+		logAttrs = append(logAttrs, attr.SlogError(o.err))
+		r.logger.WarnContext(ctx, "cimd document resolution failed", logAttrs...)
+		return
+	}
+	r.logger.InfoContext(ctx, "cimd document resolved", logAttrs...)
 }
 
 // fetchDocument retrieves the metadata document. Only HTTP 200 is accepted
 // (-02 §5 MUST; other statuses — including the unfollowed redirects — are
 // fetch failures and are never cached per §5.2), and the body read is capped
-// at maxDocumentBytes.
-func fetchDocument(ctx context.Context, client *guardian.HTTPClient, clientID string) ([]byte, error) {
+// at maxDocumentBytes. The returned status is 0 when no response was
+// received. Response size is recorded here because the byte count only
+// exists inside the read: the full body length on success, or the cap itself
+// when the read tripped it.
+func (r *Resolver) fetchDocument(ctx context.Context, origin string, clientID string) ([]byte, int, error) {
 	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
 
+	// A build failure here is practically unreachable — clientID already
+	// passed validateClientIDURL — so the fetch_error result it produces is
+	// accepted despite no request having been sent.
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, clientID, nil)
 	if err != nil {
-		return nil, fmt.Errorf("build document request: %w", err)
+		return nil, 0, fmt.Errorf("build document request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := client.Do(req)
+	resp, err := r.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request document: %w", err)
+		return nil, 0, fmt.Errorf("request document: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("document endpoint returned status %d", resp.StatusCode)
+		return nil, resp.StatusCode, fmt.Errorf("document endpoint returned status %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(http.MaxBytesReader(nil, resp.Body, maxDocumentBytes))
 	if err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-			return nil, fmt.Errorf("document exceeds %d byte limit", maxDocumentBytes)
+			r.metrics.RecordResponseSize(ctx, origin, maxDocumentBytes)
+			return nil, resp.StatusCode, fmt.Errorf("document exceeds %d byte limit", maxDocumentBytes)
 		}
-		return nil, fmt.Errorf("read document body: %w", err)
+		return nil, resp.StatusCode, fmt.Errorf("read document body: %w", err)
 	}
+	r.metrics.RecordResponseSize(ctx, origin, int64(len(body)))
 
-	return body, nil
+	return body, resp.StatusCode, nil
 }
