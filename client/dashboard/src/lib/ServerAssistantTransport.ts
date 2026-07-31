@@ -46,6 +46,12 @@ export interface ServerAssistantTransportDeps {
   assistantId: string;
   /** Project slug for the Gram-Project header on sendMessage. */
   projectSlug: string;
+  /**
+   * `Gram-Session` token for the turn stream. The /chat/* routes authenticate
+   * from request headers rather than cookies, so without this the stream 401s
+   * and every turn silently falls back to polling.
+   */
+  sessionToken?: string;
   /** Optional poll tuning. */
   pollIntervalMs?: number;
   pollTimeoutMs?: number;
