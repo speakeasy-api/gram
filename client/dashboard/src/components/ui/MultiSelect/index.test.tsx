@@ -112,3 +112,72 @@ describe("MultiSelect search filtering (AIS-84)", () => {
     expect(screen.getByText("No results found.")).toBeTruthy();
   });
 });
+
+describe("MultiSelect option descriptions", () => {
+  it("renders secondary descriptions under option labels", () => {
+    render(
+      <MultiSelect
+        options={[
+          {
+            value: "manual",
+            label: "Manual",
+            description: "Added in Speakeasy by someone on your team.",
+          },
+          {
+            value: "captured",
+            label: "Captured",
+            description:
+              "Automatically recorded when an agent in your organization used the skill.",
+          },
+        ]}
+        onValueChange={() => undefined}
+        placeholder="Filter by source"
+        hideSelectAll
+        singleLine
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Filter by source"));
+
+    expect(
+      screen.getByText("Added in Speakeasy by someone on your team."),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Automatically recorded when an agent in your organization used the skill.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("matches options by description text while searching", () => {
+    render(
+      <MultiSelect
+        options={[
+          {
+            value: "manual",
+            label: "Manual",
+            description: "Added in Speakeasy by someone on your team.",
+          },
+          {
+            value: "captured",
+            label: "Captured",
+            description:
+              "Automatically recorded when an agent in your organization used the skill.",
+          },
+        ]}
+        onValueChange={() => undefined}
+        placeholder="Filter by source"
+        hideSelectAll
+        singleLine
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Filter by source"));
+    const input = screen.getByPlaceholderText("Search options...");
+    type(input, "automatically recorded");
+
+    const labels = visibleOptionLabels();
+    expect(labels.some((label) => label.includes("Captured"))).toBe(true);
+    expect(labels.some((label) => label.includes("Manual"))).toBe(false);
+  });
+});

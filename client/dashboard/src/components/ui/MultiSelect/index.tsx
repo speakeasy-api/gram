@@ -82,6 +82,11 @@ interface MultiSelectOption {
   value: string;
   /** Optional icon component to display alongside the option. */
   icon?: React.ComponentType<{ className?: string }>;
+  /**
+   * Optional secondary explanation shown under the label. Use for non-obvious
+   * values (e.g. Manual vs Captured) so the meaning is visible while choosing.
+   */
+  description?: string;
   /** Whether this option is disabled */
   disabled?: boolean;
   /** Custom styling for the option */
@@ -311,6 +316,61 @@ export interface MultiSelectRef {
    * Focus the component
    */
   focus: () => void;
+}
+
+function MultiSelectOptionItem({
+  option,
+  isSelected,
+  onToggle,
+}: {
+  option: MultiSelectOption;
+  isSelected: boolean;
+  onToggle: () => void;
+}): React.JSX.Element {
+  return (
+    <CommandItem
+      onSelect={onToggle}
+      role="option"
+      aria-selected={isSelected}
+      aria-disabled={option.disabled}
+      aria-label={`${option.label}${
+        isSelected ? ", selected" : ", not selected"
+      }${option.disabled ? ", disabled" : ""}${
+        option.description ? `. ${option.description}` : ""
+      }`}
+      className={cn(
+        "cursor-pointer",
+        option.disabled && "cursor-not-allowed opacity-50",
+      )}
+      disabled={option.disabled}
+    >
+      <div
+        className={cn(
+          "border-primary mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border",
+          isSelected
+            ? "bg-primary text-primary-foreground"
+            : "opacity-50 [&_svg]:invisible",
+        )}
+        aria-hidden="true"
+      >
+        <CheckIcon className="h-4 w-4 text-current" />
+      </div>
+      {option.icon && (
+        <option.icon
+          className="text-muted-foreground mr-2 h-4 w-4 shrink-0"
+          aria-hidden="true"
+        />
+      )}
+      <div className="flex min-w-0 flex-col">
+        <span>{option.label}</span>
+        {option.description && (
+          <span className="text-muted-foreground text-xs leading-tight">
+            {option.description}
+          </span>
+        )}
+      </div>
+    </CommandItem>
+  );
 }
 
 export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
@@ -610,6 +670,18 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       [getAllOptions, creatable],
     );
 
+    const optionMatchesSearch = React.useCallback(
+      (option: MultiSelectOption, needle: string) => {
+        const q = needle.toLowerCase();
+        return (
+          option.label.toLowerCase().includes(q) ||
+          option.value.toLowerCase().includes(q) ||
+          (option.description?.toLowerCase().includes(q) ?? false)
+        );
+      },
+      [],
+    );
+
     const filteredOptions = React.useMemo(() => {
       if (!searchable || !searchValue) return options;
       if (options.length === 0) return [];
@@ -617,22 +689,22 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
         return options
           .map((group) => ({
             ...group,
-            options: group.options.filter(
-              (option) =>
-                option.label
-                  .toLowerCase()
-                  .includes(searchValue.toLowerCase()) ||
-                option.value.toLowerCase().includes(searchValue.toLowerCase()),
+            options: group.options.filter((option) =>
+              optionMatchesSearch(option, searchValue),
             ),
           }))
           .filter((group) => group.options.length > 0);
       }
-      return options.filter(
-        (option) =>
-          option.label.toLowerCase().includes(searchValue.toLowerCase()) ||
-          option.value.toLowerCase().includes(searchValue.toLowerCase()),
+      return options.filter((option) =>
+        optionMatchesSearch(option, searchValue),
       );
-    }, [options, searchValue, searchable, isGroupedOptions]);
+    }, [
+      options,
+      searchValue,
+      searchable,
+      isGroupedOptions,
+      optionMatchesSearch,
+    ]);
 
     // We filter `options` into `filteredOptions` ourselves, so cmdk's built-in
     // filtering is disabled (see <Command shouldFilter={false}> below). Leaving
@@ -1191,91 +1263,26 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                 {isGroupedOptions(filteredOptions) ? (
                   filteredOptions.map((group) => (
                     <CommandGroup key={group.heading} heading={group.heading}>
-                      {group.options.map((option) => {
-                        const isSelected = selectedValues.includes(
-                          option.value,
-                        );
-                        return (
-                          <CommandItem
-                            key={option.value}
-                            onSelect={() => toggleOption(option.value)}
-                            role="option"
-                            aria-selected={isSelected}
-                            aria-disabled={option.disabled}
-                            aria-label={`${option.label}${
-                              isSelected ? ", selected" : ", not selected"
-                            }${option.disabled ? ", disabled" : ""}`}
-                            className={cn(
-                              "cursor-pointer",
-                              option.disabled &&
-                                "cursor-not-allowed opacity-50",
-                            )}
-                            disabled={option.disabled}
-                          >
-                            <div
-                              className={cn(
-                                "border-primary mr-2 flex h-4 w-4 items-center justify-center rounded-sm border",
-                                isSelected
-                                  ? "bg-primary text-primary-foreground"
-                                  : "opacity-50 [&_svg]:invisible",
-                              )}
-                              aria-hidden="true"
-                            >
-                              <CheckIcon className="h-4 w-4 text-current" />
-                            </div>
-                            {option.icon && (
-                              <option.icon
-                                className="text-muted-foreground mr-2 h-4 w-4"
-                                aria-hidden="true"
-                              />
-                            )}
-                            <span>{option.label}</span>
-                          </CommandItem>
-                        );
-                      })}
+                      {group.options.map((option) => (
+                        <MultiSelectOptionItem
+                          key={option.value}
+                          option={option}
+                          isSelected={selectedValues.includes(option.value)}
+                          onToggle={() => toggleOption(option.value)}
+                        />
+                      ))}
                     </CommandGroup>
                   ))
                 ) : (
                   <CommandGroup>
-                    {filteredOptions.map((option) => {
-                      const isSelected = selectedValues.includes(option.value);
-                      return (
-                        <CommandItem
-                          key={option.value}
-                          onSelect={() => toggleOption(option.value)}
-                          role="option"
-                          aria-selected={isSelected}
-                          aria-disabled={option.disabled}
-                          aria-label={`${option.label}${
-                            isSelected ? ", selected" : ", not selected"
-                          }${option.disabled ? ", disabled" : ""}`}
-                          className={cn(
-                            "cursor-pointer",
-                            option.disabled && "cursor-not-allowed opacity-50",
-                          )}
-                          disabled={option.disabled}
-                        >
-                          <div
-                            className={cn(
-                              "border-primary mr-2 flex h-4 w-4 items-center justify-center rounded-sm border",
-                              isSelected
-                                ? "bg-primary text-primary-foreground"
-                                : "opacity-50 [&_svg]:invisible",
-                            )}
-                            aria-hidden="true"
-                          >
-                            <CheckIcon className="h-4 w-4 text-current" />
-                          </div>
-                          {option.icon && (
-                            <option.icon
-                              className="text-muted-foreground mr-2 h-4 w-4"
-                              aria-hidden="true"
-                            />
-                          )}
-                          <span>{option.label}</span>
-                        </CommandItem>
-                      );
-                    })}
+                    {filteredOptions.map((option) => (
+                      <MultiSelectOptionItem
+                        key={option.value}
+                        option={option}
+                        isSelected={selectedValues.includes(option.value)}
+                        onToggle={() => toggleOption(option.value)}
+                      />
+                    ))}
                   </CommandGroup>
                 )}
                 <CommandSeparator />
