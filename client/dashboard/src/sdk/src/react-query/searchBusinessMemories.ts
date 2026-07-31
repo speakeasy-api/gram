@@ -3,13 +3,15 @@
  */
 
 import {
-  InvalidateQueryFilters,
-  QueryClient,
-  useQuery,
-  UseQueryResult,
-  useSuspenseQuery,
-  UseSuspenseQueryResult,
+  MutationKey,
+  useMutation,
+  UseMutationResult,
 } from "@tanstack/react-query";
+import { GramCore } from "../core.js";
+import { businessMemoriesSearch } from "../funcs/businessMemoriesSearch.js";
+import { combineSignals } from "../lib/primitives.js";
+import { RequestOptions } from "../lib/sdks.js";
+import { SearchBusinessMemoriesResponseBody } from "../models/components/searchbusinessmemoriesresponsebody.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -25,26 +27,20 @@ import {
   SearchBusinessMemoriesRequest,
   SearchBusinessMemoriesSecurity,
 } from "../models/operations/searchbusinessmemories.js";
+import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
-import {
-  buildSearchBusinessMemoriesQuery,
-  prefetchSearchBusinessMemories,
-  queryKeySearchBusinessMemories,
-  SearchBusinessMemoriesQueryData,
-} from "./searchBusinessMemories.core.js";
-export {
-  buildSearchBusinessMemoriesQuery,
-  prefetchSearchBusinessMemories,
-  queryKeySearchBusinessMemories,
-  type SearchBusinessMemoriesQueryData,
+import { MutationHookOptions } from "./_types.js";
+
+export type SearchBusinessMemoriesMutationVariables = {
+  request: SearchBusinessMemoriesRequest;
+  security?: SearchBusinessMemoriesSecurity | undefined;
+  options?: RequestOptions;
 };
 
-export type SearchBusinessMemoriesQueryError =
+export type SearchBusinessMemoriesMutationData =
+  SearchBusinessMemoriesResponseBody;
+
+export type SearchBusinessMemoriesMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -61,103 +57,62 @@ export type SearchBusinessMemoriesQueryError =
  * @remarks
  * Run semantic search over active memories in the active project. Requires organization admin.
  */
-export function useSearchBusinessMemories(
-  request: SearchBusinessMemoriesRequest,
-  security?: SearchBusinessMemoriesSecurity | undefined,
-  options?: QueryHookOptions<
-    SearchBusinessMemoriesQueryData,
-    SearchBusinessMemoriesQueryError
+export function useSearchBusinessMemoriesMutation(
+  options?: MutationHookOptions<
+    SearchBusinessMemoriesMutationData,
+    SearchBusinessMemoriesMutationError,
+    SearchBusinessMemoriesMutationVariables
   >,
-): UseQueryResult<
-  SearchBusinessMemoriesQueryData,
-  SearchBusinessMemoriesQueryError
+): UseMutationResult<
+  SearchBusinessMemoriesMutationData,
+  SearchBusinessMemoriesMutationError,
+  SearchBusinessMemoriesMutationVariables
 > {
   const client = useGramContext();
-  return useQuery({
-    ...buildSearchBusinessMemoriesQuery(
-      client,
-      request,
-      security,
-      options,
-    ),
+  return useMutation({
+    ...buildSearchBusinessMemoriesMutation(client, options),
     ...options,
   });
 }
 
-/**
- * searchBusinessMemories businessMemories
- *
- * @remarks
- * Run semantic search over active memories in the active project. Requires organization admin.
- */
-export function useSearchBusinessMemoriesSuspense(
-  request: SearchBusinessMemoriesRequest,
-  security?: SearchBusinessMemoriesSecurity | undefined,
-  options?: SuspenseQueryHookOptions<
-    SearchBusinessMemoriesQueryData,
-    SearchBusinessMemoriesQueryError
-  >,
-): UseSuspenseQueryResult<
-  SearchBusinessMemoriesQueryData,
-  SearchBusinessMemoriesQueryError
-> {
-  const client = useGramContext();
-  return useSuspenseQuery({
-    ...buildSearchBusinessMemoriesQuery(
-      client,
+export function mutationKeySearchBusinessMemories(): MutationKey {
+  return ["@gram/client", "businessMemories", "search"];
+}
+
+export function buildSearchBusinessMemoriesMutation(
+  client$: GramCore,
+  hookOptions?: RequestOptions,
+): {
+  mutationKey: MutationKey;
+  mutationFn: (
+    variables: SearchBusinessMemoriesMutationVariables,
+  ) => Promise<SearchBusinessMemoriesMutationData>;
+} {
+  return {
+    mutationKey: mutationKeySearchBusinessMemories(),
+    mutationFn: function searchBusinessMemoriesMutationFn({
       request,
       security,
       options,
-    ),
-    ...options,
-  });
-}
-
-export function setSearchBusinessMemoriesData(
-  client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      query: string;
-      contentScope?: string | undefined;
-      contentScopeNamespace?: string | undefined;
-      limit?: number | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
+    }): Promise<SearchBusinessMemoriesMutationData> {
+      const mergedOptions = {
+        ...hookOptions,
+        ...options,
+        fetchOptions: {
+          ...hookOptions?.fetchOptions,
+          ...options?.fetchOptions,
+          signal: combineSignals(
+            hookOptions?.fetchOptions?.signal,
+            options?.fetchOptions?.signal,
+          ),
+        },
+      };
+      return unwrapAsync(businessMemoriesSearch(
+        client$,
+        request,
+        security,
+        mergedOptions,
+      ));
     },
-  ],
-  data: SearchBusinessMemoriesQueryData,
-): SearchBusinessMemoriesQueryData | undefined {
-  const key = queryKeySearchBusinessMemories(...queryKeyBase);
-
-  return client.setQueryData<SearchBusinessMemoriesQueryData>(key, data);
-}
-
-export function invalidateSearchBusinessMemories(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      query: string;
-      contentScope?: string | undefined;
-      contentScopeNamespace?: string | undefined;
-      limit?: number | undefined;
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "businessMemories", "search", ...queryKeyBase],
-  });
-}
-
-export function invalidateAllSearchBusinessMemories(
-  client: QueryClient,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/client", "businessMemories", "search"],
-  });
+  };
 }

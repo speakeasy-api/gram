@@ -46,7 +46,7 @@ WHERE project_id = $1
 `
 
 type CountBusinessMemoriesParams struct {
-	ProjectID      uuid.UUID
+	ProjectID      uuid.NullUUID
 	OrganizationID string
 }
 
@@ -64,11 +64,12 @@ SELECT
 FROM business_memories
 WHERE project_id = $2
   AND organization_id = $3
+  AND embedding_model = $4
   AND deleted IS FALSE
   AND lifecycle_state = 'active'
   AND (
-    source_evaluation_id IS DISTINCT FROM $4
-    OR source_candidate_index <> $5
+    source_evaluation_id IS DISTINCT FROM $5
+    OR source_candidate_index <> $6
   )
 ORDER BY embedding <=> $1
 LIMIT 1
@@ -76,8 +77,9 @@ LIMIT 1
 
 type GetNearestActiveBusinessMemoryParams struct {
 	QueryEmbedding       pgvector_go.HalfVector
-	ProjectID            uuid.UUID
+	ProjectID            uuid.NullUUID
 	OrganizationID       string
+	EmbeddingModel       string
 	SourceEvaluationID   uuid.NullUUID
 	SourceCandidateIndex int32
 }
@@ -92,6 +94,7 @@ func (q *Queries) GetNearestActiveBusinessMemory(ctx context.Context, arg GetNea
 		arg.QueryEmbedding,
 		arg.ProjectID,
 		arg.OrganizationID,
+		arg.EmbeddingModel,
 		arg.SourceEvaluationID,
 		arg.SourceCandidateIndex,
 	)
@@ -136,7 +139,7 @@ ON CONFLICT (source_evaluation_id, source_candidate_index) DO NOTHING
 `
 
 type InsertBusinessMemoryParams struct {
-	ProjectID            uuid.UUID
+	ProjectID            uuid.NullUUID
 	OrganizationID       string
 	Body                 string
 	MemoryType           string
@@ -196,17 +199,12 @@ WHERE project_id = $1
   AND deleted IS FALSE
   AND lifecycle_state = 'active'
   AND (
-    (
-      $3::text IS NULL
-      AND $4::text IS NULL
-    )
-    OR (
-      $3::text IS NOT NULL
-      AND content_scope ? $3::text
-    )
-    OR (
-      $4::text IS NOT NULL
-      AND EXISTS (
+    $3::text IS NULL
+    OR content_scope ? $3::text
+  )
+  AND (
+    $4::text IS NULL
+    OR EXISTS (
         SELECT 1
         FROM jsonb_array_elements_text(content_scope) AS scope(value)
         WHERE (
@@ -217,7 +215,6 @@ WHERE project_id = $1
           )
         )
       )
-    )
   )
   AND (
     $5::timestamptz IS NULL
@@ -231,7 +228,7 @@ LIMIT $7
 `
 
 type ListBusinessMemoriesParams struct {
-	ProjectID             uuid.UUID
+	ProjectID             uuid.NullUUID
 	OrganizationID        string
 	ContentScope          pgtype.Text
 	ContentScopeNamespace pgtype.Text
@@ -242,7 +239,7 @@ type ListBusinessMemoriesParams struct {
 
 type ListBusinessMemoriesRow struct {
 	ID              uuid.UUID
-	ProjectID       uuid.UUID
+	ProjectID       uuid.NullUUID
 	OrganizationID  string
 	Body            string
 	MemoryType      string
@@ -337,7 +334,7 @@ ORDER BY parent_scope NULLS FIRST, scope
 `
 
 type ListBusinessMemoryContentScopesParams struct {
-	ProjectID      uuid.UUID
+	ProjectID      uuid.NullUUID
 	OrganizationID string
 }
 
@@ -398,40 +395,36 @@ SELECT
 FROM business_memories
 WHERE project_id = $2
   AND organization_id = $3
+  AND embedding_model = $4
   AND deleted IS FALSE
   AND lifecycle_state = 'active'
   AND (
-    (
-      $4::text IS NULL
-      AND $5::text IS NULL
-    )
-    OR (
-      $4::text IS NOT NULL
-      AND content_scope ? $4::text
-    )
-    OR (
-      $5::text IS NOT NULL
-      AND EXISTS (
+    $5::text IS NULL
+    OR content_scope ? $5::text
+  )
+  AND (
+    $6::text IS NULL
+    OR EXISTS (
         SELECT 1
         FROM jsonb_array_elements_text(content_scope) AS scope(value)
         WHERE (
-          scope.value = $5::text
+          scope.value = $6::text
           OR starts_with(
             scope.value,
-            $5::text || ':'
+            $6::text || ':'
           )
         )
       )
-    )
   )
 ORDER BY embedding <=> $1
-LIMIT $6
+LIMIT $7
 `
 
 type SearchBusinessMemoriesParams struct {
 	QueryEmbedding        pgvector_go.HalfVector
-	ProjectID             uuid.UUID
+	ProjectID             uuid.NullUUID
 	OrganizationID        string
+	EmbeddingModel        string
 	ContentScope          pgtype.Text
 	ContentScopeNamespace pgtype.Text
 	ResultLimit           int32
@@ -439,7 +432,7 @@ type SearchBusinessMemoriesParams struct {
 
 type SearchBusinessMemoriesRow struct {
 	ID              uuid.UUID
-	ProjectID       uuid.UUID
+	ProjectID       uuid.NullUUID
 	OrganizationID  string
 	Body            string
 	MemoryType      string
@@ -462,6 +455,7 @@ func (q *Queries) SearchBusinessMemories(ctx context.Context, arg SearchBusiness
 		arg.QueryEmbedding,
 		arg.ProjectID,
 		arg.OrganizationID,
+		arg.EmbeddingModel,
 		arg.ContentScope,
 		arg.ContentScopeNamespace,
 		arg.ResultLimit,

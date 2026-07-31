@@ -138,11 +138,7 @@ var _ = Service("businessMemories", func() {
 			Attribute("memories", ArrayOf(Memory))
 		})
 		HTTP(func() {
-			GET("/rpc/businessMemories.search")
-			Param("query")
-			Param("content_scope")
-			Param("content_scope_namespace")
-			Param("limit")
+			POST("/rpc/businessMemories.search")
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)

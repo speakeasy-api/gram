@@ -508,7 +508,7 @@ func DecodeListBusinessMemoryContentScopesResponse(decoder func(*http.Response) 
 // "searchBusinessMemories" endpoint
 func (c *Client) BuildSearchBusinessMemoriesRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SearchBusinessMemoriesBusinessMemoriesPath()}
-	req, err := http.NewRequest("GET", u.String(), nil)
+	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("businessMemories", "searchBusinessMemories", u.String(), err)
 	}
@@ -535,16 +535,10 @@ func EncodeSearchBusinessMemoriesRequest(encoder func(*http.Request) goahttp.Enc
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
-		values := req.URL.Query()
-		values.Add("query", p.Query)
-		if p.ContentScope != nil {
-			values.Add("content_scope", *p.ContentScope)
+		body := NewSearchBusinessMemoriesRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("businessMemories", "searchBusinessMemories", err)
 		}
-		if p.ContentScopeNamespace != nil {
-			values.Add("content_scope_namespace", *p.ContentScopeNamespace)
-		}
-		values.Add("limit", fmt.Sprintf("%v", p.Limit))
-		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }

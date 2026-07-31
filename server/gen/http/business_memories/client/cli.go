@@ -8,6 +8,7 @@
 package client
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"unicode/utf8"
@@ -113,59 +114,34 @@ func BuildListBusinessMemoryContentScopesPayload(businessMemoriesListBusinessMem
 
 // BuildSearchBusinessMemoriesPayload builds the payload for the
 // businessMemories searchBusinessMemories endpoint from CLI flags.
-func BuildSearchBusinessMemoriesPayload(businessMemoriesSearchBusinessMemoriesQuery string, businessMemoriesSearchBusinessMemoriesContentScope string, businessMemoriesSearchBusinessMemoriesContentScopeNamespace string, businessMemoriesSearchBusinessMemoriesLimit string, businessMemoriesSearchBusinessMemoriesSessionToken string, businessMemoriesSearchBusinessMemoriesProjectSlugInput string) (*businessmemories.SearchBusinessMemoriesPayload, error) {
+func BuildSearchBusinessMemoriesPayload(businessMemoriesSearchBusinessMemoriesBody string, businessMemoriesSearchBusinessMemoriesSessionToken string, businessMemoriesSearchBusinessMemoriesProjectSlugInput string) (*businessmemories.SearchBusinessMemoriesPayload, error) {
 	var err error
-	var query string
+	var body SearchBusinessMemoriesRequestBody
 	{
-		query = businessMemoriesSearchBusinessMemoriesQuery
-		if utf8.RuneCountInString(query) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("query", query, utf8.RuneCountInString(query), 1, true))
+		err = json.Unmarshal([]byte(businessMemoriesSearchBusinessMemoriesBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content_scope\": \"1\",\n      \"content_scope_namespace\": \"1\",\n      \"limit\": 2,\n      \"query\": \"aa\"\n   }'")
 		}
-		if utf8.RuneCountInString(query) > 2000 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("query", query, utf8.RuneCountInString(query), 2000, false))
+		if utf8.RuneCountInString(body.Query) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.query", body.Query, utf8.RuneCountInString(body.Query), 1, true))
+		}
+		if utf8.RuneCountInString(body.Query) > 2000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.query", body.Query, utf8.RuneCountInString(body.Query), 2000, false))
+		}
+		if body.ContentScope != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.content_scope", *body.ContentScope, "^[a-z0-9][a-z0-9:_-]{0,127}$"))
+		}
+		if body.ContentScopeNamespace != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.content_scope_namespace", *body.ContentScopeNamespace, "^[a-z0-9][a-z0-9_-]{0,127}$"))
+		}
+		if body.Limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 1, true))
+		}
+		if body.Limit > 100 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 100, false))
 		}
 		if err != nil {
 			return nil, err
-		}
-	}
-	var contentScope *string
-	{
-		if businessMemoriesSearchBusinessMemoriesContentScope != "" {
-			contentScope = &businessMemoriesSearchBusinessMemoriesContentScope
-			err = goa.MergeErrors(err, goa.ValidatePattern("content_scope", *contentScope, "^[a-z0-9][a-z0-9:_-]{0,127}$"))
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	var contentScopeNamespace *string
-	{
-		if businessMemoriesSearchBusinessMemoriesContentScopeNamespace != "" {
-			contentScopeNamespace = &businessMemoriesSearchBusinessMemoriesContentScopeNamespace
-			err = goa.MergeErrors(err, goa.ValidatePattern("content_scope_namespace", *contentScopeNamespace, "^[a-z0-9][a-z0-9_-]{0,127}$"))
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	var limit int
-	{
-		if businessMemoriesSearchBusinessMemoriesLimit != "" {
-			var v int64
-			v, err = strconv.ParseInt(businessMemoriesSearchBusinessMemoriesLimit, 10, strconv.IntSize)
-			limit = int(v)
-			if err != nil {
-				return nil, fmt.Errorf("invalid value for limit, must be INT")
-			}
-			if limit < 1 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
-			}
-			if limit > 100 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
-			}
-			if err != nil {
-				return nil, err
-			}
 		}
 	}
 	var sessionToken *string
@@ -180,11 +156,18 @@ func BuildSearchBusinessMemoriesPayload(businessMemoriesSearchBusinessMemoriesQu
 			projectSlugInput = &businessMemoriesSearchBusinessMemoriesProjectSlugInput
 		}
 	}
-	v := &businessmemories.SearchBusinessMemoriesPayload{}
-	v.Query = query
-	v.ContentScope = contentScope
-	v.ContentScopeNamespace = contentScopeNamespace
-	v.Limit = limit
+	v := &businessmemories.SearchBusinessMemoriesPayload{
+		Query:                 body.Query,
+		ContentScope:          body.ContentScope,
+		ContentScopeNamespace: body.ContentScopeNamespace,
+		Limit:                 body.Limit,
+	}
+	{
+		var zero int
+		if v.Limit == zero {
+			v.Limit = 20
+		}
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

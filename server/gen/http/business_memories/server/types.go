@@ -8,9 +8,24 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	businessmemories "github.com/speakeasy-api/gram/server/gen/business_memories"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// SearchBusinessMemoriesRequestBody is the type of the "businessMemories"
+// service "searchBusinessMemories" endpoint HTTP request body.
+type SearchBusinessMemoriesRequestBody struct {
+	// Natural-language semantic search query.
+	Query *string `form:"query,omitempty" json:"query,omitempty" xml:"query,omitempty"`
+	// Exact content-scope tag to match.
+	ContentScope *string `form:"content_scope,omitempty" json:"content_scope,omitempty" xml:"content_scope,omitempty"`
+	// Content-scope namespace to match.
+	ContentScopeNamespace *string `form:"content_scope_namespace,omitempty" json:"content_scope_namespace,omitempty" xml:"content_scope_namespace,omitempty"`
+	// Maximum search results.
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
+}
 
 // ListBusinessMemoriesResponseBody is the type of the "businessMemories"
 // service "listBusinessMemories" endpoint HTTP response body.
@@ -1187,14 +1202,55 @@ func NewListBusinessMemoryContentScopesPayload(sessionToken *string, projectSlug
 
 // NewSearchBusinessMemoriesPayload builds a businessMemories service
 // searchBusinessMemories endpoint payload.
-func NewSearchBusinessMemoriesPayload(query string, contentScope *string, contentScopeNamespace *string, limit int, sessionToken *string, projectSlugInput *string) *businessmemories.SearchBusinessMemoriesPayload {
-	v := &businessmemories.SearchBusinessMemoriesPayload{}
-	v.Query = query
-	v.ContentScope = contentScope
-	v.ContentScopeNamespace = contentScopeNamespace
-	v.Limit = limit
+func NewSearchBusinessMemoriesPayload(body *SearchBusinessMemoriesRequestBody, sessionToken *string, projectSlugInput *string) *businessmemories.SearchBusinessMemoriesPayload {
+	v := &businessmemories.SearchBusinessMemoriesPayload{
+		Query:                 *body.Query,
+		ContentScope:          body.ContentScope,
+		ContentScopeNamespace: body.ContentScopeNamespace,
+	}
+	if body.Limit != nil {
+		v.Limit = *body.Limit
+	}
+	if body.Limit == nil {
+		v.Limit = 20
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
+}
+
+// ValidateSearchBusinessMemoriesRequestBody runs the validations defined on
+// SearchBusinessMemoriesRequestBody
+func ValidateSearchBusinessMemoriesRequestBody(body *SearchBusinessMemoriesRequestBody) (err error) {
+	if body.Query == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("query", "body"))
+	}
+	if body.Query != nil {
+		if utf8.RuneCountInString(*body.Query) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.query", *body.Query, utf8.RuneCountInString(*body.Query), 1, true))
+		}
+	}
+	if body.Query != nil {
+		if utf8.RuneCountInString(*body.Query) > 2000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.query", *body.Query, utf8.RuneCountInString(*body.Query), 2000, false))
+		}
+	}
+	if body.ContentScope != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.content_scope", *body.ContentScope, "^[a-z0-9][a-z0-9:_-]{0,127}$"))
+	}
+	if body.ContentScopeNamespace != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.content_scope_namespace", *body.ContentScopeNamespace, "^[a-z0-9][a-z0-9_-]{0,127}$"))
+	}
+	if body.Limit != nil {
+		if *body.Limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1, true))
+		}
+	}
+	if body.Limit != nil {
+		if *body.Limit > 100 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 100, false))
+		}
+	}
+	return
 }

@@ -51,6 +51,7 @@ SELECT
 FROM business_memories
 WHERE project_id = @project_id
   AND organization_id = @organization_id
+  AND embedding_model = @embedding_model
   AND deleted IS FALSE
   AND lifecycle_state = 'active'
   AND (
@@ -84,17 +85,12 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
   AND lifecycle_state = 'active'
   AND (
-    (
-      sqlc.narg(content_scope)::text IS NULL
-      AND sqlc.narg(content_scope_namespace)::text IS NULL
-    )
-    OR (
-      sqlc.narg(content_scope)::text IS NOT NULL
-      AND content_scope ? sqlc.narg(content_scope)::text
-    )
-    OR (
-      sqlc.narg(content_scope_namespace)::text IS NOT NULL
-      AND EXISTS (
+    sqlc.narg(content_scope)::text IS NULL
+    OR content_scope ? sqlc.narg(content_scope)::text
+  )
+  AND (
+    sqlc.narg(content_scope_namespace)::text IS NULL
+    OR EXISTS (
         SELECT 1
         FROM jsonb_array_elements_text(content_scope) AS scope(value)
         WHERE (
@@ -105,7 +101,6 @@ WHERE project_id = @project_id
           )
         )
       )
-    )
   )
   AND (
     sqlc.narg(cursor_created_at)::timestamptz IS NULL
@@ -178,20 +173,16 @@ SELECT
 FROM business_memories
 WHERE project_id = @project_id
   AND organization_id = @organization_id
+  AND embedding_model = @embedding_model
   AND deleted IS FALSE
   AND lifecycle_state = 'active'
   AND (
-    (
-      sqlc.narg(content_scope)::text IS NULL
-      AND sqlc.narg(content_scope_namespace)::text IS NULL
-    )
-    OR (
-      sqlc.narg(content_scope)::text IS NOT NULL
-      AND content_scope ? sqlc.narg(content_scope)::text
-    )
-    OR (
-      sqlc.narg(content_scope_namespace)::text IS NOT NULL
-      AND EXISTS (
+    sqlc.narg(content_scope)::text IS NULL
+    OR content_scope ? sqlc.narg(content_scope)::text
+  )
+  AND (
+    sqlc.narg(content_scope_namespace)::text IS NULL
+    OR EXISTS (
         SELECT 1
         FROM jsonb_array_elements_text(content_scope) AS scope(value)
         WHERE (
@@ -202,7 +193,6 @@ WHERE project_id = @project_id
           )
         )
       )
-    )
   )
 ORDER BY embedding <=> @query_embedding
 LIMIT @result_limit;

@@ -103,16 +103,21 @@ func (s *Service) ListBusinessMemories(ctx context.Context, payload *gen.ListBus
 	}
 
 	rows, err := repo.New(s.db).ListBusinessMemories(ctx, repo.ListBusinessMemoriesParams{
-		ProjectID:             *authCtx.ProjectID,
+		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		CursorCreatedAt:       conv.PtrToPGTimestamptz(cursorCreatedAt),
 		CursorID:              uuid.NullUUID{UUID: conv.PtrValOr(cursorID, uuid.Nil), Valid: cursorID != nil},
 		ContentScope:          conv.PtrToPGText(payload.ContentScope),
 		ContentScopeNamespace: conv.PtrToPGText(payload.ContentScopeNamespace),
-		PageLimit:             conv.SafeInt32(payload.Limit),
+		PageLimit:             conv.SafeInt32(payload.Limit + 1),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list business memories").LogError(ctx, s.logger)
+	}
+
+	hasNextPage := len(rows) > payload.Limit
+	if hasNextPage {
+		rows = rows[:payload.Limit]
 	}
 
 	memories := make([]*gen.BusinessMemory, 0, len(rows))
@@ -139,7 +144,7 @@ func (s *Service) ListBusinessMemories(ctx context.Context, payload *gen.ListBus
 	}
 
 	var nextCursor *string
-	if len(rows) == payload.Limit && len(rows) > 0 {
+	if hasNextPage {
 		last := rows[len(rows)-1]
 		if last.CreatedAt.Valid {
 			encoded := encodeCursor(last.CreatedAt.Time, last.ID)
@@ -158,7 +163,7 @@ func (s *Service) ListBusinessMemoryContentScopes(ctx context.Context, _ *gen.Li
 
 	queries := repo.New(s.db)
 	params := repo.ListBusinessMemoryContentScopesParams{
-		ProjectID:      *authCtx.ProjectID,
+		ProjectID:      conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID: authCtx.ActiveOrganizationID,
 	}
 	rows, err := queries.ListBusinessMemoryContentScopes(ctx, params)
@@ -206,6 +211,7 @@ func (s *Service) SearchBusinessMemories(ctx context.Context, payload *gen.Searc
 		embeddingModel,
 		[]string{query},
 		openrouter.WithEmbeddingDimensions(embeddingDimensions),
+		openrouter.WithEmbeddingKeyType(openrouter.KeyTypeInternal),
 	)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create business memory search embedding").LogError(ctx, s.logger)
@@ -225,7 +231,8 @@ func (s *Service) SearchBusinessMemories(ctx context.Context, payload *gen.Searc
 
 	rows, err := repo.New(dbtx).SearchBusinessMemories(ctx, repo.SearchBusinessMemoriesParams{
 		QueryEmbedding:        pgvector_go.NewHalfVector(vectors[0]),
-		ProjectID:             *authCtx.ProjectID,
+		EmbeddingModel:        embeddingModel,
+		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		ContentScope:          conv.PtrToPGText(payload.ContentScope),
 		ContentScopeNamespace: conv.PtrToPGText(payload.ContentScopeNamespace),

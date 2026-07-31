@@ -2,7 +2,7 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+} from "@/components/ui/Collapsible";
 import { cn } from "@/lib/utils";
 import { ChevronRight, Folder, Tag } from "lucide-react";
 import type { ScopeSelection, ScopeTreeNode } from "./businessMemoryScopes";

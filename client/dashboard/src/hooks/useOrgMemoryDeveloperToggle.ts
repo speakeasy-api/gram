@@ -6,11 +6,10 @@ let memoryFallback = false;
 
 function readEnabled(): boolean {
   try {
-    memoryFallback = window.sessionStorage.getItem(STORAGE_KEY) === "1";
+    return window.sessionStorage.getItem(STORAGE_KEY) === "1";
   } catch {
-    // Use the session-local in-memory value when browser storage is unavailable.
+    return memoryFallback;
   }
-  return memoryFallback;
 }
 
 function subscribe(onStoreChange: () => void): () => void {

@@ -42,19 +42,19 @@ func TestContentScopeFiltersApplyBeforeLimits(t *testing.T) {
 	require.NoError(t, err)
 	queries := repo.New(conn)
 
-	insertMemory := func(body string, scopes []string, embedding []float32, candidateIndex int32) {
+	insertMemory := func(body string, scopes []string, embedding []float32, model string, candidateIndex int32) {
 		t.Helper()
 		contentScope, err := json.Marshal(scopes)
 		require.NoError(t, err)
 		require.NoError(t, queries.InsertBusinessMemory(ctx, repo.InsertBusinessMemoryParams{
-			ProjectID:            project.ID,
+			ProjectID:            conv.ToNullUUID(project.ID),
 			OrganizationID:       organizationID,
 			Body:                 body,
 			MemoryType:           "result",
 			StructuralScope:      "company.test.project.test",
 			ContentScope:         contentScope,
 			Embedding:            pgvector_go.NewHalfVector(embedding),
-			EmbeddingModel:       embeddingModel,
+			EmbeddingModel:       model,
 			ExtractionModel:      extractionModel,
 			SourceEvaluationID:   uuid.NullUUID{},
 			SourceCandidateIndex: candidateIndex,
@@ -72,11 +72,12 @@ func TestContentScopeFiltersApplyBeforeLimits(t *testing.T) {
 	matchingEmbedding[0] = 0.8
 	matchingEmbedding[1] = 0.2
 
-	insertMemory("matching", []string{"product:github", "topic:tool-usage"}, matchingEmbedding, 0)
-	insertMemory("unmatched and newer", []string{"product:gitlab"}, nearestEmbedding, 1)
+	insertMemory("matching", []string{"product:github", "topic:tool-usage"}, matchingEmbedding, embeddingModel, 0)
+	insertMemory("unmatched and newer", []string{"product:gitlab"}, nearestEmbedding, embeddingModel, 1)
+	insertMemory("stale embedding model", []string{"product:github"}, nearestEmbedding, "stale/model", 2)
 
 	exactRows, err := queries.ListBusinessMemories(ctx, repo.ListBusinessMemoriesParams{
-		ProjectID:             project.ID,
+		ProjectID:             conv.ToNullUUID(project.ID),
 		OrganizationID:        organizationID,
 		ContentScope:          conv.ToPGText("topic:tool-usage"),
 		ContentScopeNamespace: pgtype.Text{},
@@ -90,7 +91,8 @@ func TestContentScopeFiltersApplyBeforeLimits(t *testing.T) {
 
 	namespaceRows, err := queries.SearchBusinessMemories(ctx, repo.SearchBusinessMemoriesParams{
 		QueryEmbedding:        pgvector_go.NewHalfVector(queryEmbedding),
-		ProjectID:             project.ID,
+		EmbeddingModel:        embeddingModel,
+		ProjectID:             conv.ToNullUUID(project.ID),
 		OrganizationID:        organizationID,
 		ContentScope:          pgtype.Text{},
 		ContentScopeNamespace: conv.ToPGText("product"),
@@ -102,7 +104,8 @@ func TestContentScopeFiltersApplyBeforeLimits(t *testing.T) {
 
 	exactSearchRows, err := queries.SearchBusinessMemories(ctx, repo.SearchBusinessMemoriesParams{
 		QueryEmbedding:        pgvector_go.NewHalfVector(queryEmbedding),
-		ProjectID:             project.ID,
+		EmbeddingModel:        embeddingModel,
+		ProjectID:             conv.ToNullUUID(project.ID),
 		OrganizationID:        organizationID,
 		ContentScope:          conv.ToPGText("product:github"),
 		ContentScopeNamespace: pgtype.Text{},
@@ -111,4 +114,28 @@ func TestContentScopeFiltersApplyBeforeLimits(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, exactSearchRows, 1)
 	require.Equal(t, "matching", exactSearchRows[0].Body)
+
+	combinedSearchRows, err := queries.SearchBusinessMemories(ctx, repo.SearchBusinessMemoriesParams{
+		QueryEmbedding:        pgvector_go.NewHalfVector(queryEmbedding),
+		EmbeddingModel:        embeddingModel,
+		ProjectID:             conv.ToNullUUID(project.ID),
+		OrganizationID:        organizationID,
+		ContentScope:          conv.ToPGText("topic:tool-usage"),
+		ContentScopeNamespace: conv.ToPGText("product"),
+		ResultLimit:           10,
+	})
+	require.NoError(t, err)
+	require.Len(t, combinedSearchRows, 1)
+	require.Equal(t, "matching", combinedSearchRows[0].Body)
+
+	nearest, err := queries.GetNearestActiveBusinessMemory(ctx, repo.GetNearestActiveBusinessMemoryParams{
+		QueryEmbedding:       pgvector_go.NewHalfVector(queryEmbedding),
+		EmbeddingModel:       embeddingModel,
+		ProjectID:            conv.ToNullUUID(project.ID),
+		OrganizationID:       organizationID,
+		SourceEvaluationID:   uuid.NullUUID{},
+		SourceCandidateIndex: 1,
+	})
+	require.NoError(t, err)
+	require.Less(t, nearest.Similarity, 0.999)
 }

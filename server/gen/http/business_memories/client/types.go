@@ -12,6 +12,19 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// SearchBusinessMemoriesRequestBody is the type of the "businessMemories"
+// service "searchBusinessMemories" endpoint HTTP request body.
+type SearchBusinessMemoriesRequestBody struct {
+	// Natural-language semantic search query.
+	Query string `form:"query" json:"query" xml:"query"`
+	// Exact content-scope tag to match.
+	ContentScope *string `form:"content_scope,omitempty" json:"content_scope,omitempty" xml:"content_scope,omitempty"`
+	// Content-scope namespace to match.
+	ContentScopeNamespace *string `form:"content_scope_namespace,omitempty" json:"content_scope_namespace,omitempty" xml:"content_scope_namespace,omitempty"`
+	// Maximum search results.
+	Limit int `form:"limit" json:"limit" xml:"limit"`
+}
+
 // ListBusinessMemoriesResponseBody is the type of the "businessMemories"
 // service "listBusinessMemories" endpoint HTTP response body.
 type ListBusinessMemoriesResponseBody struct {
@@ -645,6 +658,25 @@ type BusinessMemoryContentScopeNodeResponseBody struct {
 	ParentScope *string `form:"parent_scope,omitempty" json:"parent_scope,omitempty" xml:"parent_scope,omitempty"`
 	// Number of distinct memories assigned to this scope.
 	MemoryCount *int64 `form:"memory_count,omitempty" json:"memory_count,omitempty" xml:"memory_count,omitempty"`
+}
+
+// NewSearchBusinessMemoriesRequestBody builds the HTTP request body from the
+// payload of the "searchBusinessMemories" endpoint of the "businessMemories"
+// service.
+func NewSearchBusinessMemoriesRequestBody(p *businessmemories.SearchBusinessMemoriesPayload) *SearchBusinessMemoriesRequestBody {
+	body := &SearchBusinessMemoriesRequestBody{
+		Query:                 p.Query,
+		ContentScope:          p.ContentScope,
+		ContentScopeNamespace: p.ContentScopeNamespace,
+		Limit:                 p.Limit,
+	}
+	{
+		var zero int
+		if body.Limit == zero {
+			body.Limit = 20
+		}
+	}
+	return body
 }
 
 // NewListBusinessMemoriesResultOK builds a "businessMemories" service

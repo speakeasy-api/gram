@@ -4,6 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import {
+  SearchBusinessMemoriesRequestBody,
+  SearchBusinessMemoriesRequestBody$Outbound,
+  SearchBusinessMemoriesRequestBody$outboundSchema,
+} from "../components/searchbusinessmemoriesrequestbody.js";
 
 export type SearchBusinessMemoriesSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -12,22 +17,6 @@ export type SearchBusinessMemoriesSecurity = {
 
 export type SearchBusinessMemoriesRequest = {
   /**
-   * Natural-language semantic search query.
-   */
-  query: string;
-  /**
-   * Exact content-scope tag to match.
-   */
-  contentScope?: string | undefined;
-  /**
-   * Content-scope namespace to match.
-   */
-  contentScopeNamespace?: string | undefined;
-  /**
-   * Maximum search results.
-   */
-  limit?: number | undefined;
-  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -35,6 +24,7 @@ export type SearchBusinessMemoriesRequest = {
    * project header
    */
   gramProject?: string | undefined;
+  searchBusinessMemoriesRequestBody: SearchBusinessMemoriesRequestBody;
 };
 
 /** @internal */
@@ -72,12 +62,9 @@ export function searchBusinessMemoriesSecurityToJSON(
 
 /** @internal */
 export type SearchBusinessMemoriesRequest$Outbound = {
-  query: string;
-  content_scope?: string | undefined;
-  content_scope_namespace?: string | undefined;
-  limit: number;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
+  SearchBusinessMemoriesRequestBody: SearchBusinessMemoriesRequestBody$Outbound;
 };
 
 /** @internal */
@@ -86,19 +73,16 @@ export const SearchBusinessMemoriesRequest$outboundSchema: z.ZodMiniType<
   SearchBusinessMemoriesRequest
 > = z.pipe(
   z.object({
-    query: z.string(),
-    contentScope: z.optional(z.string()),
-    contentScopeNamespace: z.optional(z.string()),
-    limit: z._default(z.int(), 20),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
+    searchBusinessMemoriesRequestBody:
+      SearchBusinessMemoriesRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
-      contentScope: "content_scope",
-      contentScopeNamespace: "content_scope_namespace",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
+      searchBusinessMemoriesRequestBody: "SearchBusinessMemoriesRequestBody",
     });
   }),
 );

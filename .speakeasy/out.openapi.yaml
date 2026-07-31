@@ -8338,47 +8338,10 @@ paths:
       x-speakeasy-react-hook:
         name: ListBusinessMemories
   /rpc/businessMemories.search:
-    get:
+    post:
       description: Run semantic search over active memories in the active project. Requires organization admin.
       operationId: searchBusinessMemories
       parameters:
-        - allowEmptyValue: true
-          description: Natural-language semantic search query.
-          in: query
-          name: query
-          required: true
-          schema:
-            description: Natural-language semantic search query.
-            maxLength: 2000
-            minLength: 1
-            type: string
-        - allowEmptyValue: true
-          description: Exact content-scope tag to match.
-          in: query
-          name: content_scope
-          schema:
-            description: Exact content-scope tag to match.
-            pattern: ^[a-z0-9][a-z0-9:_-]{0,127}$
-            type: string
-        - allowEmptyValue: true
-          description: Content-scope namespace to match.
-          in: query
-          name: content_scope_namespace
-          schema:
-            description: Content-scope namespace to match.
-            pattern: ^[a-z0-9][a-z0-9_-]{0,127}$
-            type: string
-        - allowEmptyValue: true
-          description: Maximum search results.
-          in: query
-          name: limit
-          schema:
-            default: 20
-            description: Maximum search results.
-            format: int64
-            maximum: 100
-            minimum: 1
-            type: integer
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -8393,6 +8356,12 @@ paths:
           schema:
             description: project header
             type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchBusinessMemoriesRequestBody'
+        required: true
       responses:
         "200":
           content:
@@ -64097,6 +64066,31 @@ components:
         - description
         - resource_type
         - visibility
+    SearchBusinessMemoriesRequestBody:
+      type: object
+      properties:
+        content_scope:
+          type: string
+          description: Exact content-scope tag to match.
+          pattern: ^[a-z0-9][a-z0-9:_-]{0,127}$
+        content_scope_namespace:
+          type: string
+          description: Content-scope namespace to match.
+          pattern: ^[a-z0-9][a-z0-9_-]{0,127}$
+        limit:
+          type: integer
+          description: Maximum search results.
+          default: 20
+          format: int64
+          minimum: 1
+          maximum: 100
+        query:
+          type: string
+          description: Natural-language semantic search query.
+          minLength: 1
+          maxLength: 2000
+      required:
+        - query
     SearchBusinessMemoriesResponseBody:
       type: object
       properties:

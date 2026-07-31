@@ -1388,6 +1388,7 @@ export function ChatTranscript({
                 key={virtualRow.key}
                 data-index={virtualRow.index}
                 data-focused-message={focused ? "true" : undefined}
+                aria-current={focused ? "location" : undefined}
                 ref={virtualizer.measureElement}
                 className={cn(
                   "absolute top-0 left-0 w-full rounded-lg transition-colors",

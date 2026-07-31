@@ -1,15 +1,19 @@
 import { Page } from "@/components/page-layout";
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { type Column, Table } from "@/components/ui/Table";
+import { Text } from "@/components/ui/Text";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
+import { businessMemoriesSearch } from "@gram/client/funcs/businessMemoriesSearch.js";
 import type { BusinessMemory } from "@gram/client/models/components/businessmemory.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useChatDeleteMutation } from "@gram/client/react-query/chatDelete.js";
 import { useListBusinessMemoryContentScopes } from "@gram/client/react-query/listBusinessMemoryContentScopes.js";
 import { useListBusinessMemoriesInfinite } from "@gram/client/react-query/listBusinessMemories.js";
 import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
-import { useSearchBusinessMemories } from "@gram/client/react-query/searchBusinessMemories.js";
-import { Badge, Button, Column, Table } from "@speakeasy-api/moonshine";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { unwrapAsync } from "@gram/client/types/fp.js";
 import { useMemo, useState } from "react";
 import { BusinessMemoryScopeTree } from "./BusinessMemoryScopeTree";
 import {
@@ -39,12 +43,21 @@ function formatSimilarity(similarity: number | undefined): string {
   return `${Math.round(similarity * 100)}%`;
 }
 
+function noResultsMessage(
+  scopeSelected: boolean,
+  semanticSearchActive: boolean,
+): string {
+  if (scopeSelected) return "No memories match this content scope.";
+  if (semanticSearchActive) return "No semantically similar memories found.";
+  return "No memories extracted yet.";
+}
+
 const columns: Column<BusinessMemory>[] = [
   {
     key: "body",
     header: "Memory",
     width: "2fr",
-    render: (memory) => <Type>{memory.body}</Type>,
+    render: (memory) => <Text>{memory.body}</Text>,
   },
   {
     key: "type",
@@ -63,9 +76,9 @@ const columns: Column<BusinessMemory>[] = [
     render: (memory) => (
       <div className="flex flex-wrap gap-1">
         {memory.contentScope.length === 0 ? (
-          <Type small muted>
+          <Text small muted>
             Unlabeled
-          </Type>
+          </Text>
         ) : (
           memory.contentScope.map((label) => (
             <Badge key={label} variant="neutral">
@@ -82,8 +95,8 @@ const columns: Column<BusinessMemory>[] = [
     width: "1fr",
     render: (memory) => (
       <div className="flex flex-col gap-1">
-        <Type small>{memory.sourceAuthorId ?? "Unknown author"}</Type>
-        <Type small muted>
+        <Text small>{memory.sourceAuthorId ?? "Unknown author"}</Text>
+        <Text small muted>
           Chat{" "}
           {memory.sourceChatId === "unavailable"
             ? memory.sourceChatId
@@ -91,7 +104,7 @@ const columns: Column<BusinessMemory>[] = [
           {memory.sourceTurn === undefined
             ? ""
             : ` · turn ${memory.sourceTurn}`}
-        </Type>
+        </Text>
       </div>
     ),
   },
@@ -100,7 +113,7 @@ const columns: Column<BusinessMemory>[] = [
     header: "Extracted",
     width: "170px",
     render: (memory) => (
-      <Type small>{memory.extractedAt.toLocaleString()}</Type>
+      <Text small>{memory.extractedAt.toLocaleString()}</Text>
     ),
   },
   {
@@ -108,7 +121,7 @@ const columns: Column<BusinessMemory>[] = [
     header: "Similarity",
     width: "100px",
     render: (memory) => (
-      <Type small>{formatSimilarity(memory.similarity)}</Type>
+      <Text small>{formatSimilarity(memory.similarity)}</Text>
     ),
   },
 ];
@@ -122,6 +135,7 @@ export function BusinessMemoryCorpus(): JSX.Element {
     null,
   );
   const queryClient = useQueryClient();
+  const client = useGramContext();
   const deleteChat = useChatDeleteMutation();
   const normalizedSearch = search.trim();
   const scopeFilter = scopeSelectionToFilter(scopeSelection);
@@ -136,14 +150,28 @@ export function BusinessMemoryCorpus(): JSX.Element {
   const scopeQuery = useListBusinessMemoryContentScopes(undefined, undefined, {
     throwOnError: false,
   });
-  const searchQuery = useSearchBusinessMemories(
-    { query: normalizedSearch, limit: SEARCH_LIMIT, ...scopeFilter },
-    undefined,
-    {
-      enabled: normalizedSearch.length > 0,
-      throwOnError: false,
-    },
-  );
+  const searchQuery = useQuery({
+    queryKey: [
+      "business-memories",
+      "search",
+      normalizedSearch,
+      scopeFilter.contentScope,
+      scopeFilter.contentScopeNamespace,
+      SEARCH_LIMIT,
+    ],
+    queryFn: () =>
+      unwrapAsync(
+        businessMemoriesSearch(client, {
+          searchBusinessMemoriesRequestBody: {
+            query: normalizedSearch,
+            limit: SEARCH_LIMIT,
+            ...scopeFilter,
+          },
+        }),
+      ),
+    enabled: normalizedSearch.length > 0,
+    throwOnError: false,
+  });
 
   const listedMemories = useMemo(
     () => listQuery.data?.pages.flatMap((page) => page.result.memories) ?? [],
@@ -163,6 +191,8 @@ export function BusinessMemoryCorpus(): JSX.Element {
     normalizedSearch.length > 0 ? searchQuery.isLoading : listQuery.isLoading;
   const error =
     normalizedSearch.length > 0 ? searchQuery.error : listQuery.error;
+  const memoryCountSuffix =
+    normalizedSearch.length === 0 && listQuery.hasNextPage ? "+" : "";
 
   return (
     <div className="flex flex-col gap-4">
@@ -195,7 +225,8 @@ export function BusinessMemoryCorpus(): JSX.Element {
             />
             {!loading && (
               <Page.Toolbar.Count>
-                {memories.length}{" "}
+                {memories.length}
+                {memoryCountSuffix}{" "}
                 {memories.length === 1 ? "memory" : "memories"}
               </Page.Toolbar.Count>
             )}
@@ -220,9 +251,9 @@ export function BusinessMemoryCorpus(): JSX.Element {
             <SkeletonTable />
           ) : error ? (
             <div className="border-border rounded-md border p-6">
-              <Type className="text-destructive">
+              <Text className="text-destructive">
                 {error.message || "Failed to load business memories."}
-              </Type>
+              </Text>
             </div>
           ) : (
             <>
@@ -240,13 +271,12 @@ export function BusinessMemoryCorpus(): JSX.Element {
                   setSelectedMemory(memory);
                 }}
                 noResultsMessage={
-                  <Type>
-                    {scopeSelection
-                      ? "No memories match this content scope."
-                      : normalizedSearch.length > 0
-                        ? "No semantically similar memories found."
-                        : "No memories extracted yet."}
-                  </Type>
+                  <Text>
+                    {noResultsMessage(
+                      scopeSelection !== null,
+                      normalizedSearch.length > 0,
+                    )}
+                  </Text>
                 }
               />
               {normalizedSearch.length === 0 && listQuery.hasNextPage && (

@@ -53,7 +53,7 @@ func New(
 		Mounts: []*MountPoint{
 			{"ListBusinessMemories", "GET", "/rpc/businessMemories.list"},
 			{"ListBusinessMemoryContentScopes", "GET", "/rpc/businessMemories.contentScopes"},
-			{"SearchBusinessMemories", "GET", "/rpc/businessMemories.search"},
+			{"SearchBusinessMemories", "POST", "/rpc/businessMemories.search"},
 		},
 		ListBusinessMemories:            NewListBusinessMemoriesHandler(e.ListBusinessMemories, mux, decoder, encoder, errhandler, formatter),
 		ListBusinessMemoryContentScopes: NewListBusinessMemoryContentScopesHandler(e.ListBusinessMemoryContentScopes, mux, decoder, encoder, errhandler, formatter),
@@ -203,7 +203,7 @@ func MountSearchBusinessMemoriesHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/businessMemories.search", f)
+	mux.Handle("POST", "/rpc/businessMemories.search", f)
 }
 
 // NewSearchBusinessMemoriesHandler creates a HTTP handler which loads the HTTP

@@ -1036,6 +1036,7 @@ trackedFiles:
   src/models/components/rotatetunneledmcpserverkeyresult.ts: {}
   src/models/components/saveriskevalreviewrequestbody.ts: {}
   src/models/components/scopedefinition.ts: {}
+  src/models/components/searchbusinessmemoriesrequestbody.ts: {}
   src/models/components/searchbusinessmemoriesresponsebody.ts: {}
   src/models/components/searchchatsfilter.ts: {}
   src/models/components/searchchatspayload.ts: {}
@@ -2292,7 +2293,6 @@ trackedFiles:
   src/react-query/roles.core.ts: {}
   src/react-query/roles.ts: {}
   src/react-query/rotateTunneledMcpServerKey.ts: {}
-  src/react-query/searchBusinessMemories.core.ts: {}
   src/react-query/searchBusinessMemories.ts: {}
   src/react-query/searchChats.core.ts: {}
   src/react-query/searchChats.ts: {}
@@ -6816,6 +6816,8 @@ examples:
         query:
           query: "<value>"
           limit: 20
+      requestBody:
+        application/json: {"limit": 20, "query": "<value>"}
       responses:
         "200":
           application/json: {"memories": [{"body": "<value>", "content_scope": ["<value 1>", "<value 2>"], "embedding_model": "<value>", "extracted_at": "2024-08-28T06:56:17.768Z", "extraction_model": "<value>", "id": "c50bc33d-f44e-43a6-8224-5b10b2f0f12f", "lifecycle_state": "<value>", "memory_type": "result", "source_chat_id": "e344e3e3-5304-4c42-b114-83a7e6e6a154", "structural_scope": "<value>"}]}
