@@ -107,6 +107,7 @@ var RegisteredTemplates = []Template{
 		TotalTokens:         "",
 		PreviousTotalTokens: "",
 		TotalChangePercent:  "",
+		UsageTableHTML:      "",
 		ViewUsageURL:        "",
 	},
 }
