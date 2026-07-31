@@ -230,11 +230,13 @@ export async function streamTurn(args: {
                 sawTextThisMessage = false;
               }
               const calls = parseFrameToolCalls(frame.tool_calls);
-              // A terminal row carries no tool calls and its text is already
-              // rendered, so it needs no step of its own. Opening one left an
-              // empty step hanging at the end of the turn, which reads as
-              // "still working" — the spinner that outlived the reply.
-              if (calls.length === 0) break;
+              // Every row gets its own step, including the final text-only
+              // one. That is what keeps the turn's last step free of tool
+              // calls: assistant-ui's resume check inspects only the last
+              // step, and if it finds tool calls there it re-sends a turn the
+              // server already finished. Skipping the step for a row with no
+              // tool calls left the tool-calling step last and restarted that
+              // loop.
               if (stepHasMessage) closeStep();
               openStep();
               stepHasMessage = true;
