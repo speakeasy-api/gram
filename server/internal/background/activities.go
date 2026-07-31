@@ -71,14 +71,9 @@ type Publishers struct {
 	PromptInjectionAnalysis gcp.Publisher[*riskv1.PromptInjectionAnalysis]
 	PromptPolicyAnalysis    gcp.Publisher[*riskv1.PromptPolicyAnalysis]
 	CustomRulesAnalysis     gcp.Publisher[*riskv1.CustomRulesAnalysis]
-	// RiskFindings is the shared findings topic the ClickHouse risk_findings
-	// writer consumes. The batch path publishes only sources with no stream
-	// publisher on it (see risk_analysis.batchOnlyFindingSources).
-	RiskFindings  gcp.Publisher[*riskv1.Finding]
-	TelemetryLogs gcp.Publisher[*telemetryv1.LogRecord]
-	// AuthzChallenges is the topic the streams ChallengeCHWriter consumes to
-	// insert authz_challenges rows into ClickHouse.
-	AuthzChallenges gcp.Publisher[*authzv1.ChallengeRow]
+	RiskFindings            gcp.Publisher[*riskv1.Finding]
+	TelemetryLogs           gcp.Publisher[*telemetryv1.LogRecord]
+	AuthzChallenges         gcp.Publisher[*authzv1.ChallengeRow]
 }
 
 type Activities struct {
