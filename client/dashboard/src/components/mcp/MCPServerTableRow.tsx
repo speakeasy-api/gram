@@ -34,7 +34,7 @@ export function MCPServerTableRow({
 
   const mcpEnabled = server.visibility !== "disabled";
   const mcpIsPublic = server.visibility === "public";
-  const isPassthrough = !!server.passthroughMcpServerId;
+  const isUnproxied = !!server.unproxiedMcpServerId;
 
   return (
     <DotRow
@@ -75,7 +75,7 @@ export function MCPServerTableRow({
       {/* URL column slot — endpoint count for mcp_servers-backed rows */}
       <td className="px-3 py-3">
         <Text small muted>
-          {isPassthrough
+          {isUnproxied
             ? "Not proxied"
             : `${endpointCount} ${endpointCount === 1 ? "endpoint" : "endpoints"}`}
         </Text>

@@ -10,7 +10,7 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { useCatalogIconMap } from "./sources-hooks";
 import {
   attachmentToURNPrefix,
-  passthroughMcpRouteParam,
+  unproxiedMcpRouteParam,
   remoteMcpRouteParam,
   tunneledMcpRouteParam,
 } from "@/lib/sources";
@@ -21,7 +21,7 @@ import { useListAssets } from "@gram/client/react-query/listAssets.js";
 import { useListTools } from "@gram/client/react-query/listTools.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
-import { usePassthroughMcpServers } from "@gram/client/react-query/passthroughMcpServers.js";
+import { useUnproxiedMcpServers } from "@gram/client/react-query/unproxiedMcpServers.js";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { useTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
 import {
@@ -126,18 +126,16 @@ export default function Sources(): JSX.Element {
     useTunneledMcpServers(undefined, undefined, {
       enabled: isTunneledMcpEnabled,
     });
-  const {
-    data: passthroughMcpServersResult,
-    isLoading: isLoadingPassthroughMcp,
-  } = usePassthroughMcpServers();
+  const { data: unproxiedMcpServersResult, isLoading: isLoadingUnproxiedMcp } =
+    useUnproxiedMcpServers();
   const catalogIconMap = useCatalogIconMap();
   const deployment = deploymentResult?.deployment;
-  // Remote/tunneled/pass-through sources bypass deployments, so page loading
+  // Remote/tunneled/unproxied sources bypass deployments, so page loading
   // waits on their own queries.
   const isLoading =
     isLoadingDeployment ||
     isLoadingRemoteMcp ||
-    isLoadingPassthroughMcp ||
+    isLoadingUnproxiedMcp ||
     (isTunneledMcpEnabled && isLoadingTunneledMcp);
 
   const [viewMode, setViewMode] = useViewMode();
@@ -242,15 +240,15 @@ export default function Sources(): JSX.Element {
         }))
       : [];
 
-    const passthroughMcpSources: NamedAsset[] = (
-      passthroughMcpServersResult?.passthroughMcpServers ?? []
+    const unproxiedMcpSources: NamedAsset[] = (
+      unproxiedMcpServersResult?.unproxiedMcpServers ?? []
     ).map((server) => ({
       id: server.id,
       deploymentAssetId: server.id,
-      slug: passthroughMcpRouteParam(server),
+      slug: unproxiedMcpRouteParam(server),
       name: server.name,
       url: server.url,
-      type: "passthroughmcp" as const,
+      type: "unproxiedmcp" as const,
     }));
 
     return [
@@ -259,7 +257,7 @@ export default function Sources(): JSX.Element {
       ...externalMcpSources,
       ...remoteMcpSources,
       ...tunneledMcpSources,
-      ...passthroughMcpSources,
+      ...unproxiedMcpSources,
     ];
   }, [
     deployment,
@@ -267,7 +265,7 @@ export default function Sources(): JSX.Element {
     catalogIconMap,
     remoteMcpServersResult,
     tunneledMcpServersResult,
-    passthroughMcpServersResult,
+    unproxiedMcpServersResult,
     isTunneledMcpEnabled,
   ]);
 
@@ -364,7 +362,7 @@ export default function Sources(): JSX.Element {
             {dialogState.type === "remove-source" &&
               dialogState.asset.type !== "remotemcp" &&
               dialogState.asset.type !== "tunneledmcp" &&
-              dialogState.asset.type !== "passthroughmcp" && (
+              dialogState.asset.type !== "unproxiedmcp" && (
                 <RemoveSourceDialogContent
                   asset={dialogState.asset}
                   onConfirmRemoval={removeSource}
@@ -490,7 +488,7 @@ export default function Sources(): JSX.Element {
                     )}
                     {isSpeakeasyStaff && (
                       <DropdownMenuItem
-                        onSelect={() => routes.sources.addPassthroughMcp.goTo()}
+                        onSelect={() => routes.sources.addUnproxiedMcp.goTo()}
                         className="flex cursor-pointer items-start gap-3 rounded-md p-2"
                       >
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 dark:bg-amber-500/20">
@@ -498,7 +496,7 @@ export default function Sources(): JSX.Element {
                         </div>
                         <div className="flex flex-col gap-0.5">
                           <span className="font-medium">
-                            Pass-through MCP Server
+                            Unproxied MCP Server
                           </span>
                           <span className="text-muted-foreground text-xs">
                             List a vendor server without proxying it (Speakeasy
@@ -608,7 +606,7 @@ export default function Sources(): JSX.Element {
               {dialogState.type === "remove-source" &&
                 dialogState.asset.type !== "remotemcp" &&
                 dialogState.asset.type !== "tunneledmcp" &&
-                dialogState.asset.type !== "passthroughmcp" && (
+                dialogState.asset.type !== "unproxiedmcp" && (
                   <RemoveSourceDialogContent
                     asset={dialogState.asset}
                     onConfirmRemoval={removeSource}
@@ -625,7 +623,7 @@ export default function Sources(): JSX.Element {
               {dialogState.type === "view-asset" &&
                 dialogState.asset.type !== "remotemcp" &&
                 dialogState.asset.type !== "tunneledmcp" &&
-                dialogState.asset.type !== "passthroughmcp" && (
+                dialogState.asset.type !== "unproxiedmcp" && (
                   <ViewAssetDialogContent asset={dialogState.asset} />
                 )}
             </Dialog.Content>
@@ -639,10 +637,10 @@ export default function Sources(): JSX.Element {
 interface McpUsage {
   /** Every tool URN exposed by any toolset (Hosted MCP server). */
   toolsetToolUrns: string[];
-  /** IDs of remote/tunneled/pass-through MCP servers that have an mcp_server row. */
+  /** IDs of remote/tunneled/unproxied MCP servers that have an mcp_server row. */
   remoteMcpServerIds: Set<string>;
   tunneledMcpServerIds: Set<string>;
-  passthroughMcpServerIds: Set<string>;
+  unproxiedMcpServerIds: Set<string>;
 }
 
 /**
@@ -650,7 +648,7 @@ interface McpUsage {
  * the two kinds of MCP server are backed differently. Deployment-bound sources
  * (OpenAPI / functions / catalog) contribute tools, so they're used when some
  * toolset references a tool URN under their prefix. Remote, tunneled, and
- * pass-through sources contribute no tools; they're used when an mcp_server
+ * unproxied sources contribute no tools; they're used when an mcp_server
  * row points back at them.
  */
 function useMcpUsage(): McpUsage {
@@ -666,7 +664,7 @@ function useMcpUsage(): McpUsage {
     );
     const remoteMcpServerIds = new Set<string>();
     const tunneledMcpServerIds = new Set<string>();
-    const passthroughMcpServerIds = new Set<string>();
+    const unproxiedMcpServerIds = new Set<string>();
     for (const server of mcpServersResult?.mcpServers ?? []) {
       if (server.remoteMcpServerId) {
         remoteMcpServerIds.add(server.remoteMcpServerId);
@@ -674,15 +672,15 @@ function useMcpUsage(): McpUsage {
       if (server.tunneledMcpServerId) {
         tunneledMcpServerIds.add(server.tunneledMcpServerId);
       }
-      if (server.passthroughMcpServerId) {
-        passthroughMcpServerIds.add(server.passthroughMcpServerId);
+      if (server.unproxiedMcpServerId) {
+        unproxiedMcpServerIds.add(server.unproxiedMcpServerId);
       }
     }
     return {
       toolsetToolUrns,
       remoteMcpServerIds,
       tunneledMcpServerIds,
-      passthroughMcpServerIds,
+      unproxiedMcpServerIds,
     };
   }, [toolsetsData, mcpServersResult]);
 }
@@ -694,8 +692,8 @@ function sourceUsedInMcp(asset: NamedAsset, usage: McpUsage): boolean {
   if (asset.type === "tunneledmcp") {
     return usage.tunneledMcpServerIds.has(asset.id);
   }
-  if (asset.type === "passthroughmcp") {
-    return usage.passthroughMcpServerIds.has(asset.id);
+  if (asset.type === "unproxiedmcp") {
+    return usage.unproxiedMcpServerIds.has(asset.id);
   }
   const prefix = attachmentToURNPrefix(asset.type, asset.slug);
   return usage.toolsetToolUrns.some((urn) => urn.startsWith(prefix));

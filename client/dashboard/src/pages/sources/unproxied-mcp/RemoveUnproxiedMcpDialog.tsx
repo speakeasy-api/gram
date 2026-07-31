@@ -1,34 +1,34 @@
 import { RemoveMcpSourceDialogContent } from "@/components/sources/RemoveMcpSourceDialogContent";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { useDeletePassthroughMcpSource } from "./hooks";
+import { useDeleteUnproxiedMcpSource } from "./hooks";
 
-interface RemovePassthroughMcpDialogContentProps {
-  passthroughMcpServerId: string;
+interface RemoveUnproxiedMcpDialogContentProps {
+  unproxiedMcpServerId: string;
   url: string;
   linkedMcpServers: McpServer[];
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export function RemovePassthroughMcpDialogContent({
-  passthroughMcpServerId,
+export function RemoveUnproxiedMcpDialogContent({
+  unproxiedMcpServerId,
   url,
   linkedMcpServers,
   onClose,
   onSuccess,
-}: RemovePassthroughMcpDialogContentProps): JSX.Element {
-  const deleteSource = useDeletePassthroughMcpSource();
+}: RemoveUnproxiedMcpDialogContentProps): JSX.Element {
+  const deleteSource = useDeleteUnproxiedMcpSource();
 
   return (
     <RemoveMcpSourceDialogContent
-      title="Delete Pass-through MCP Server"
-      entityDescription="the pass-through MCP server"
-      // Confirmation is keyed on the URL since pass-through sources don't
+      title="Delete Unproxied MCP Server"
+      entityDescription="the unproxied MCP server"
+      // Confirmation is keyed on the URL since unproxied sources don't
       // have a slugified name.
       confirmLabel="the server URL"
       confirmValue={url}
-      successMessage="Pass-through MCP server deleted"
-      failureMessage="Failed to delete pass-through MCP server"
+      successMessage="Unproxied MCP server deleted"
+      failureMessage="Failed to delete unproxied MCP server"
       linkedMcpServers={linkedMcpServers}
       isPending={deleteSource.isPending}
       errorMessage={
@@ -38,7 +38,7 @@ export function RemovePassthroughMcpDialogContent({
       onSuccess={onSuccess}
       onConfirm={async () => {
         await deleteSource.mutateAsync({
-          passthroughMcpServerId,
+          unproxiedMcpServerId,
           mcpServerIds: linkedMcpServers.map((server) => server.id),
         });
       }}

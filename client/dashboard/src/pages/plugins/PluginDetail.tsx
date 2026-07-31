@@ -78,7 +78,7 @@ import { PublishDialog } from "./PublishDialog";
 import { SectionEmptyState } from "./SectionEmptyState";
 
 // A selectable server for a plugin, sourced from either a toolset (Hosted) or
-// a Remote- or pass-through-MCP-backed mcp_server. The kind determines
+// a Remote- or unproxied-MCP-backed mcp_server. The kind determines
 // whether it is submitted as a toolset_id or an mcp_server_id, mirroring the
 // collections picker.
 type ServerOptionKind = "toolset" | "mcpServer";
@@ -86,12 +86,12 @@ type ServerOption = {
   kind: ServerOptionKind;
   id: string;
   name: string;
-  isPassthrough?: boolean;
+  isUnproxied?: boolean;
 };
 
 function serverOptionSuffix(option: ServerOption): string {
   if (option.kind !== "mcpServer") return "";
-  return option.isPassthrough ? " (Pass-through MCP)" : " (Remote MCP)";
+  return option.isUnproxied ? " (Unproxied MCP)" : " (Remote MCP)";
 }
 
 function serverOptionKey(kind: ServerOptionKind, id: string): string {
@@ -146,7 +146,7 @@ export default function PluginDetail(): JSX.Element | null {
   const mcpServers = useMemo(
     () =>
       (mcpServersData?.mcpServers ?? []).filter(
-        (s) => !!s.remoteMcpServerId || !!s.passthroughMcpServerId,
+        (s) => !!s.remoteMcpServerId || !!s.unproxiedMcpServerId,
       ),
     [mcpServersData],
   );
@@ -154,13 +154,13 @@ export default function PluginDetail(): JSX.Element | null {
     const serverIdsWithEndpoint = new Set(
       (mcpEndpointsData?.mcpEndpoints ?? []).map((e) => e.mcpServerId),
     );
-    // Pass-through-backed servers are never proxied, so they never gain an
+    // Unproxied-backed servers are never proxied, so they never gain an
     // mcp_endpoints row — exempt them from the endpoint requirement, mirroring
     // the backend's AddPluginServer check (server/internal/plugins/impl.go).
     return mcpServers.filter(
       (s) =>
         s.visibility !== "disabled" &&
-        (serverIdsWithEndpoint.has(s.id) || !!s.passthroughMcpServerId),
+        (serverIdsWithEndpoint.has(s.id) || !!s.unproxiedMcpServerId),
     );
   }, [mcpServers, mcpEndpointsData]);
 
@@ -387,7 +387,7 @@ export default function PluginDetail(): JSX.Element | null {
         kind: "mcpServer",
         id: s.id,
         name: s.name ?? s.slug ?? "Untitled server",
-        isPassthrough: !!s.passthroughMcpServerId,
+        isUnproxied: !!s.unproxiedMcpServerId,
       });
     }
     return opts;
@@ -1179,11 +1179,11 @@ function PluginServerCard({
             </Badge>
           )}
           {isRemote ? (
-            // Remote/pass-through MCP servers have no Gram-side tool
+            // Remote/unproxied MCP servers have no Gram-side tool
             // catalog, so the tool-collection badge is omitted.
             <Badge variant="neutral" className="text-xs">
-              {mcpServer?.passthroughMcpServerId
-                ? "Pass-through MCP · Not proxied"
+              {mcpServer?.unproxiedMcpServerId
+                ? "Unproxied MCP · Not proxied"
                 : "Remote MCP"}
             </Badge>
           ) : toolset ? (

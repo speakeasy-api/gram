@@ -177,7 +177,7 @@ function MCPOverview() {
         (server) =>
           !!server.remoteMcpServerId ||
           !!server.tunneledMcpServerId ||
-          !!server.passthroughMcpServerId,
+          !!server.unproxiedMcpServerId,
       ),
     [mcpServersResult],
   );

@@ -35,7 +35,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useParams } from "react-router";
 import { SourceDeploymentsPanel } from "./SourceDeploymentsPanel";
 import ExternalMCPDetails from "./external-mcp/ExternalMCPDetails";
-import PassthroughMCPDetails from "./passthrough-mcp/PassthroughMCPDetails";
+import UnproxiedMCPDetails from "./unproxied-mcp/UnproxiedMCPDetails";
 import RemoteMCPDetails from "./remote-mcp/RemoteMCPDetails";
 import TunneledMCPDetails from "./tunneled-mcp/TunneledMCPDetails";
 import { SourceOverviewTab } from "./SourceOverviewTab";
@@ -244,8 +244,8 @@ export default function SourceDetails(): JSX.Element {
     return <TunneledMCPDetails />;
   }
 
-  if (sourceKind === "passthroughmcp") {
-    return <PassthroughMCPDetails />;
+  if (sourceKind === "unproxiedmcp") {
+    return <UnproxiedMCPDetails />;
   }
 
   if (!isLoadingDeployment && !source) {

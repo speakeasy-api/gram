@@ -11,20 +11,20 @@ import { Type } from "@/components/ui/type";
 import { dateTimeFormatters } from "@/lib/dates";
 import {
   formatRemoteMcpDisplay,
-  getPassthroughMcpServerArgs,
+  getUnproxiedMcpServerArgs,
 } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import type { PassthroughMcpServer } from "@gram/client/models/components/passthroughmcpserver.js";
-import { useGetPassthroughMcpServer } from "@gram/client/react-query/getPassthroughMcpServer.js";
+import type { UnproxiedMcpServer } from "@gram/client/models/components/unproxiedmcpserver.js";
+import { useGetUnproxiedMcpServer } from "@gram/client/react-query/getUnproxiedMcpServer.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { Server, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Navigate, useParams } from "react-router";
-import { RemovePassthroughMcpDialogContent } from "./RemovePassthroughMcpDialog";
+import { RemoveUnproxiedMcpDialogContent } from "./RemoveUnproxiedMcpDialog";
 
-export default function PassthroughMCPDetails(): JSX.Element {
+export default function UnproxiedMCPDetails(): JSX.Element {
   const { sourceSlug } = useParams<{ sourceSlug: string }>();
   const routes = useRoutes();
   const idOrSlug = sourceSlug ?? "";
@@ -33,21 +33,19 @@ export default function PassthroughMCPDetails(): JSX.Element {
     data: server,
     isLoading,
     isError,
-  } = useGetPassthroughMcpServer(
-    getPassthroughMcpServerArgs(idOrSlug),
-    undefined,
-    { enabled: idOrSlug !== "" },
-  );
+  } = useGetUnproxiedMcpServer(getUnproxiedMcpServerArgs(idOrSlug), undefined, {
+    enabled: idOrSlug !== "",
+  });
 
-  const passthroughMcpServerId = server?.id ?? "";
+  const unproxiedMcpServerId = server?.id ?? "";
   const { data: mcpServersResult } = useMcpServers(
-    { passthroughMcpServerId },
+    { unproxiedMcpServerId },
     undefined,
-    { enabled: passthroughMcpServerId !== "" },
+    { enabled: unproxiedMcpServerId !== "" },
   );
-  const linkedMcpServers = useMcpServersForPassthrough(
+  const linkedMcpServers = useMcpServersForUnproxied(
     mcpServersResult?.mcpServers,
-    passthroughMcpServerId,
+    unproxiedMcpServerId,
   );
 
   const [isRemoveOpen, setIsRemoveOpen] = useState(false);
@@ -63,7 +61,7 @@ export default function PassthroughMCPDetails(): JSX.Element {
           substitutions={{
             [idOrSlug]: server ? formatRemoteMcpDisplay(server) : undefined,
           }}
-          skipSegments={["passthroughmcp"]}
+          skipSegments={["unproxiedmcp"]}
         />
       </Page.Header>
 
@@ -74,7 +72,7 @@ export default function PassthroughMCPDetails(): JSX.Element {
         overflowHidden
         className="gap-0"
       >
-        <PassthroughMcpHero server={server} />
+        <UnproxiedMcpHero server={server} />
 
         <div className="mx-auto w-full max-w-[1270px] flex-1 overflow-y-auto px-8 py-6">
           <Stack gap={4} className="max-w-2xl">
@@ -127,8 +125,8 @@ export default function PassthroughMCPDetails(): JSX.Element {
       <Dialog open={isRemoveOpen} onOpenChange={setIsRemoveOpen}>
         <Dialog.Content className="max-w-2xl!">
           {server && (
-            <RemovePassthroughMcpDialogContent
-              passthroughMcpServerId={server.id}
+            <RemoveUnproxiedMcpDialogContent
+              unproxiedMcpServerId={server.id}
               url={server.url}
               linkedMcpServers={linkedMcpServers}
               onClose={() => setIsRemoveOpen(false)}
@@ -145,22 +143,22 @@ export default function PassthroughMCPDetails(): JSX.Element {
 // client-side is a defensive guard against a stale or unfiltered cache hit
 // invalidating the linkage assumption. Mirrors useMcpServersForRemote in
 // RemoteMCPDetails.tsx.
-function useMcpServersForPassthrough(
+function useMcpServersForUnproxied(
   servers: McpServer[] | undefined,
-  passthroughMcpServerId: string,
+  unproxiedMcpServerId: string,
 ) {
   return useMemo(() => {
-    if (!servers || !passthroughMcpServerId) return [];
+    if (!servers || !unproxiedMcpServerId) return [];
     return servers.filter(
-      (server) => server.passthroughMcpServerId === passthroughMcpServerId,
+      (server) => server.unproxiedMcpServerId === unproxiedMcpServerId,
     );
-  }, [servers, passthroughMcpServerId]);
+  }, [servers, unproxiedMcpServerId]);
 }
 
-function PassthroughMcpHero({
+function UnproxiedMcpHero({
   server,
 }: {
-  server: PassthroughMcpServer | undefined;
+  server: UnproxiedMcpServer | undefined;
 }) {
   return (
     <DetailHero>
@@ -170,12 +168,10 @@ function PassthroughMcpHero({
             <Server className="h-5 w-5 text-amber-600 dark:text-amber-400" />
           </div>
           <Heading variant="h1" className="break-all normal-case">
-            {server
-              ? formatRemoteMcpDisplay(server)
-              : "Pass-through MCP server"}
+            {server ? formatRemoteMcpDisplay(server) : "Unproxied MCP server"}
           </Heading>
           <Badge variant="neutral">
-            <Badge.Text>Pass-through MCP · Not proxied</Badge.Text>
+            <Badge.Text>Unproxied MCP · Not proxied</Badge.Text>
           </Badge>
           {server && (
             <CopyButton text={server.url} tooltip="Copy URL" size="icon-sm" />

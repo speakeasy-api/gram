@@ -1,37 +1,38 @@
 import { useSdkClient } from "@/contexts/Sdk";
+import { formatRemoteMcpDisplay } from "@/lib/sources";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import type { PassthroughMcpServer } from "@gram/client/models/components/passthroughmcpserver.js";
+import type { UnproxiedMcpServer } from "@gram/client/models/components/unproxiedmcpserver.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
-import { invalidateAllPassthroughMcpServers } from "@gram/client/react-query/passthroughMcpServers.js";
+import { invalidateAllUnproxiedMcpServers } from "@gram/client/react-query/unproxiedMcpServers.js";
 import {
   useMutation,
   useQueryClient,
   type UseMutationResult,
 } from "@tanstack/react-query";
 
-export type CreatePassthroughMcpSourceVariables = {
+export type CreateUnproxiedMcpSourceVariables = {
   name?: string | undefined;
   url: string;
   description?: string | undefined;
 };
 
-export type CreatePassthroughMcpSourceData = {
-  passthroughMcpServer: PassthroughMcpServer;
+export type CreateUnproxiedMcpSourceData = {
+  unproxiedMcpServer: UnproxiedMcpServer;
   mcpServer: McpServer;
 };
 
-export function useCreatePassthroughMcpSource(): UseMutationResult<
-  CreatePassthroughMcpSourceData,
+export function useCreateUnproxiedMcpSource(): UseMutationResult<
+  CreateUnproxiedMcpSourceData,
   Error,
-  CreatePassthroughMcpSourceVariables
+  CreateUnproxiedMcpSourceVariables
 > {
   const client = useSdkClient();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ name, url, description }) => {
-      const passthroughMcpServer = await client.passthroughMcp.createServer({
-        createPassthroughMcpServerForm: { name, url, description },
+      const unproxiedMcpServer = await client.unproxiedMcp.createServer({
+        createUnproxiedMcpServerForm: { name, url, description },
       });
 
       let mcpServer: McpServer;
@@ -41,9 +42,9 @@ export function useCreatePassthroughMcpSource(): UseMutationResult<
             // mcp_servers.name is required; reuse the display name the
             // server just computed so the wrapping row matches what the
             // dashboard shows for the source.
-            name: passthroughMcpServer.name || passthroughMcpServer.url,
-            passthroughMcpServerId: passthroughMcpServer.id,
-            // No further configuration step exists for a pass-through
+            name: formatRemoteMcpDisplay(unproxiedMcpServer),
+            unproxiedMcpServerId: unproxiedMcpServer.id,
+            // No further configuration step exists for an unproxied
             // server (no OAuth, no endpoint to stage), so it can go live
             // immediately rather than parking disabled.
             visibility: "private",
@@ -51,8 +52,8 @@ export function useCreatePassthroughMcpSource(): UseMutationResult<
         });
       } catch (linkError) {
         try {
-          await client.passthroughMcp.deleteServer({
-            id: passthroughMcpServer.id,
+          await client.unproxiedMcp.deleteServer({
+            id: unproxiedMcpServer.id,
           });
         } catch (rollbackError) {
           const linkMsg =
@@ -62,7 +63,7 @@ export function useCreatePassthroughMcpSource(): UseMutationResult<
               ? rollbackError.message
               : String(rollbackError);
           throw new Error(
-            `Created pass-through MCP server ${passthroughMcpServer.id} but failed to link an MCP server, and the rollback also failed. Delete it manually before retrying. Cause: ${linkMsg}. Rollback: ${rollbackMsg}.`,
+            `Created unproxied MCP server ${unproxiedMcpServer.id} but failed to link an MCP server, and the rollback also failed. Delete it manually before retrying. Cause: ${linkMsg}. Rollback: ${rollbackMsg}.`,
           );
         }
         throw linkError instanceof Error
@@ -70,14 +71,14 @@ export function useCreatePassthroughMcpSource(): UseMutationResult<
           : new Error(String(linkError));
       }
 
-      return { passthroughMcpServer, mcpServer };
+      return { unproxiedMcpServer, mcpServer };
     },
     onSuccess: async () => {
       // refetchType "all" forces the refetch even when there are no active
       // observers — Sources isn't mounted while the create form is, so
       // without this the listServers cache stays stale until the next mount.
       await Promise.all([
-        invalidateAllPassthroughMcpServers(queryClient, {
+        invalidateAllUnproxiedMcpServers(queryClient, {
           refetchType: "all",
         }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
@@ -86,24 +87,24 @@ export function useCreatePassthroughMcpSource(): UseMutationResult<
   });
 }
 
-export type DeletePassthroughMcpSourceVariables = {
-  passthroughMcpServerId: string;
-  // mcp_servers rows backed by this pass-through MCP server. Pre-fetched by
+export type DeleteUnproxiedMcpSourceVariables = {
+  unproxiedMcpServerId: string;
+  // mcp_servers rows backed by this unproxied MCP server. Pre-fetched by
   // the confirmation dialog so the same list the user just confirmed is
   // exactly what gets soft-deleted.
   mcpServerIds: string[];
 };
 
-export function useDeletePassthroughMcpSource(): UseMutationResult<
+export function useDeleteUnproxiedMcpSource(): UseMutationResult<
   void,
   Error,
-  DeletePassthroughMcpSourceVariables
+  DeleteUnproxiedMcpSourceVariables
 > {
   const client = useSdkClient();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ passthroughMcpServerId, mcpServerIds }) => {
+    mutationFn: async ({ unproxiedMcpServerId, mcpServerIds }) => {
       // Soft-delete each linked mcp_server first; the backend's FK is
       // ON DELETE RESTRICT, so the source delete below would fail while any
       // wrapper still references it.
@@ -120,11 +121,11 @@ export function useDeletePassthroughMcpSource(): UseMutationResult<
           : new Error(String(failed.reason));
       }
 
-      await client.passthroughMcp.deleteServer({ id: passthroughMcpServerId });
+      await client.unproxiedMcp.deleteServer({ id: unproxiedMcpServerId });
     },
     onSuccess: async () => {
       await Promise.all([
-        invalidateAllPassthroughMcpServers(queryClient, {
+        invalidateAllUnproxiedMcpServers(queryClient, {
           refetchType: "all",
         }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),

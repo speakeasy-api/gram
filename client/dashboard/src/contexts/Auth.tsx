@@ -176,10 +176,10 @@ export const useIsPlatformAdmin = (): boolean => {
 
 const SPEAKEASY_STAFF_KEY = "gram-dev-speakeasy-staff";
 
-// useIsSpeakeasyStaff gates the pass-through MCP server source on the
+// useIsSpeakeasyStaff gates the unproxied MCP server source on the
 // caller's email domain only, unlike useIsPlatformAdmin which also honors a
 // DB admin flag. Mirrors the domain-suffix check the backend enforces in
-// server/internal/passthroughmcp.
+// server/internal/unproxiedmcp.
 export const useIsSpeakeasyStaff = (): boolean => {
   const { email } = useUser();
   if (import.meta.env.DEV) {

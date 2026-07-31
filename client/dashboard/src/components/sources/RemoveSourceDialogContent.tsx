@@ -7,11 +7,11 @@ import { Loader2Icon } from "lucide-react";
 import { useState } from "react";
 import { NamedAsset } from "./SourceCard";
 
-// Remote/tunneled/pass-through MCP removal needs linked server/endpoint
+// Remote/tunneled/unproxied MCP removal needs linked server/endpoint
 // state, so Settings owns it.
 type RemovableAsset = Exclude<
   NamedAsset,
-  { type: "remotemcp" } | { type: "tunneledmcp" } | { type: "passthroughmcp" }
+  { type: "remotemcp" } | { type: "tunneledmcp" } | { type: "unproxiedmcp" }
 >;
 
 interface RemoveSourceDialogContentProps {

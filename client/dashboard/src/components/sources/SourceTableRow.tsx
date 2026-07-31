@@ -19,7 +19,7 @@ const sourceTypeConfig = {
   externalmcp: { label: "Catalog" },
   remotemcp: { label: "Remote MCP" },
   tunneledmcp: { label: "Tunneled MCP" },
-  passthroughmcp: { label: "Pass-through MCP" },
+  unproxiedmcp: { label: "Unproxied MCP" },
 };
 
 // sourceRowDisplayName mirrors [sourceCardNameAndSubtitle] in SourceCard.tsx:
@@ -28,7 +28,7 @@ const sourceTypeConfig = {
 function sourceRowDisplayName(asset: NamedAsset): string | undefined {
   switch (asset.type) {
     case "remotemcp":
-    case "passthroughmcp":
+    case "unproxiedmcp":
       return formatRemoteMcpDisplay(asset);
     case "tunneledmcp":
       return formatTunneledMcpDisplay(asset);
@@ -81,7 +81,7 @@ export function SourceTableRow({
   const actions =
     asset.type === "remotemcp" ||
     asset.type === "tunneledmcp" ||
-    asset.type === "passthroughmcp"
+    asset.type === "unproxiedmcp"
       ? []
       : [
           ...(asset.type === "openapi"
@@ -132,7 +132,7 @@ export function SourceTableRow({
       asset.type === "externalmcp" ||
       asset.type === "remotemcp" ||
       asset.type === "tunneledmcp" ||
-      asset.type === "passthroughmcp"
+      asset.type === "unproxiedmcp"
     ) {
       return <Network className="text-muted-foreground h-5 w-5" />;
     }

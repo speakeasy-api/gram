@@ -179,7 +179,7 @@ export function SourcesEmptyState({
                     )}
                     {isSpeakeasyStaff && (
                       <DropdownMenuItem
-                        onSelect={() => routes.sources.addPassthroughMcp.goTo()}
+                        onSelect={() => routes.sources.addUnproxiedMcp.goTo()}
                         className="flex cursor-pointer items-start gap-3 rounded-md p-2"
                       >
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 dark:bg-amber-500/20">
@@ -187,7 +187,7 @@ export function SourcesEmptyState({
                         </div>
                         <div className="flex flex-col gap-0.5">
                           <span className="font-medium">
-                            Pass-through MCP Server
+                            Unproxied MCP Server
                           </span>
                           <span className="text-muted-foreground text-xs">
                             List a vendor server without proxying it (Speakeasy

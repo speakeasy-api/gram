@@ -61,12 +61,12 @@ export type NamedAsset =
       slug: string;
       name?: string | null;
       url: string;
-      type: "passthroughmcp";
+      type: "unproxiedmcp";
     };
 
 // sourceCardNameAndSubtitle centralizes the "what to render" logic for
 // source types whose display name falls back to a URL when unnamed
-// (remotemcp, passthroughmcp), keeping the branching out of the component
+// (remotemcp, unproxiedmcp), keeping the branching out of the component
 // body as a flat switch instead of a nested ternary.
 function sourceCardNameAndSubtitle(asset: NamedAsset): {
   displayName: string | undefined;
@@ -81,7 +81,7 @@ function sourceCardNameAndSubtitle(asset: NamedAsset): {
         displaySubtitle: trimmedName ? urlDisplay : undefined,
       };
     }
-    case "passthroughmcp": {
+    case "unproxiedmcp": {
       const urlDisplay = formatRemoteMcpUrlForDisplay(asset.url);
       const trimmedName = asset.name?.trim();
       return {
@@ -117,8 +117,8 @@ const sourceTypeConfig = {
   tunneledmcp: {
     label: "Tunneled MCP",
   },
-  passthroughmcp: {
-    label: "Pass-through MCP",
+  unproxiedmcp: {
+    label: "Unproxied MCP",
   },
 };
 
@@ -148,12 +148,12 @@ export function SourceCard({
 
   const sourceKind = sourceTypeToUrnKind(asset.type);
 
-  // Remote/tunneled/pass-through MCP deletion lives in Settings because it
+  // Remote/tunneled/unproxied MCP deletion lives in Settings because it
   // touches linked server/endpoint state.
   const actions =
     asset.type === "remotemcp" ||
     asset.type === "tunneledmcp" ||
-    asset.type === "passthroughmcp"
+    asset.type === "unproxiedmcp"
       ? []
       : [
           ...(asset.type === "openapi"
@@ -206,7 +206,7 @@ export function SourceCard({
       asset.type === "externalmcp" ||
       asset.type === "remotemcp" ||
       asset.type === "tunneledmcp" ||
-      asset.type === "passthroughmcp"
+      asset.type === "unproxiedmcp"
     ) {
       return <Network className="text-muted-foreground h-8 w-8" />;
     }
