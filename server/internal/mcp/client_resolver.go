@@ -53,6 +53,14 @@ const (
 // rather than echoing it to the client.
 var errCIMDFetchFailed = errors.New("cimd document fetch failed")
 
+// errCIMDDisabled marks a URL-shaped client_id rejected because the issuer
+// organization's gram-user-session-cimd flag is off. Handlers must render it
+// exactly like an unknown client (invalid_client, "unknown client_id") so
+// the wire response does not leak per-organization flag state; the dedicated
+// sentinel exists so the kill-switch path is loggable and is not conflated
+// with pgx.ErrNoRows from a lookup that actually ran.
+var errCIMDDisabled = errors.New("cimd disabled for organization")
+
 // resolveUserSessionClient resolves the user_session_clients row behind a
 // presented client_id. Error contract, in the order callers should check:
 //
@@ -60,17 +68,18 @@ var errCIMDFetchFailed = errors.New("cimd document fetch failed")
 //     client-safe code + description (resolveClientCIMD only)
 //   - errCIMDFetchFailed: document fetch failure; log, render generic
 //     (resolveClientCIMD only)
-//   - pgx.ErrNoRows: unknown client — includes URL-shaped ids while the
-//     flag is off, which deliberately fail closed as unknown even when a
-//     previously-resolved row exists, so disabling the flag is a real kill
-//     switch for new authorize flows
+//   - errCIMDDisabled: URL-shaped client_id while the flag is off; render
+//     as unknown client (resolveClientCIMD only). Deliberately fails closed
+//     even when a previously-resolved row exists, so disabling the flag is
+//     a real kill switch for new authorize flows
+//   - pgx.ErrNoRows: unknown client
 //   - anything else: infrastructure failure
 func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, clientID string, mode clientIDResolveMode) (*usersessions_repo.UserSessionClient, error) {
 	queries := usersessions_repo.New(s.db)
 
 	if mode == resolveClientCIMD && cimd.IsClientIDURL(clientID) {
 		if !s.userSessionCIMDEnabled(ctx, logger, endpoint) {
-			return nil, pgx.ErrNoRows
+			return nil, errCIMDDisabled
 		}
 
 		doc, err := cimd.Resolve(ctx, cimd.NewFetchClient(s.guardianPolicy), clientID)

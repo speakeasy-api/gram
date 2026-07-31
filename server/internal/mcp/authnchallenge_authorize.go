@@ -91,6 +91,13 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			logger.InfoContext(ctx, "cimd document fetch failed", attr.SlogError(err))
 			return writeAuthorizeError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "failed to fetch client metadata document")
 		}
+		if errors.Is(err, errCIMDDisabled) {
+			// Same wire response as an unknown client so the rejection does
+			// not leak per-organization flag state; the log line is what
+			// distinguishes a kill-switch rejection during an incident.
+			logger.InfoContext(ctx, "rejecting url-shaped client_id while cimd flag is disabled")
+			return writeAuthorizeError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "unknown client_id")
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return writeAuthorizeError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "unknown client_id")
 		}
