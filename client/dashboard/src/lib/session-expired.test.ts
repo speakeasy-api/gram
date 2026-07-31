@@ -8,6 +8,25 @@ async function loadModule(pathname: string, search = "") {
   return { assign, ...mod };
 }
 
+describe("safeRedirectPath", () => {
+  it("keeps same-origin paths", async () => {
+    const { safeRedirectPath } = await loadModule("/");
+
+    expect(safeRedirectPath("/acme/toolsets?tab=tools")).toBe(
+      "/acme/toolsets?tab=tools",
+    );
+  });
+
+  it("rejects values that resolve to another origin", async () => {
+    const { safeRedirectPath } = await loadModule("/");
+
+    expect(safeRedirectPath("//evil.example/path")).toBeUndefined();
+    expect(safeRedirectPath("/\\evil.example/path")).toBeUndefined();
+    expect(safeRedirectPath("https://evil.example")).toBeUndefined();
+    expect(safeRedirectPath(null)).toBeUndefined();
+  });
+});
+
 describe("redirectToLoginOnUnauthorized", () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
@@ -35,6 +54,16 @@ describe("redirectToLoginOnUnauthorized", () => {
     redirectToLoginOnUnauthorized();
 
     expect(assign).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops a redirect that would leave the origin", async () => {
+    const { assign, redirectToLoginOnUnauthorized } = await loadModule(
+      "//evil.example/path",
+    );
+
+    redirectToLoginOnUnauthorized();
+
+    expect(assign).toHaveBeenCalledWith("/login");
   });
 
   it("stays put on paths that render without a session", async () => {

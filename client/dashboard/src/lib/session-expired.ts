@@ -16,6 +16,19 @@ export const UNAUTHENTICATED_PATHS = [
 let redirecting = false;
 
 /**
+ * Narrows a value taken from the URL to a same-origin path. `//evil.com` and
+ * `/\evil.com` are protocol-relative URLs that the browser (and react-router's
+ * `Navigate`) resolve to a foreign origin, so anything but a single leading
+ * slash is rejected and the caller falls back to the app root.
+ */
+export function safeRedirectPath(value: string | null): string | undefined {
+  if (!value) return undefined;
+  if (!value.startsWith("/")) return undefined;
+  if (value.startsWith("//") || value.startsWith("/\\")) return undefined;
+  return value;
+}
+
+/**
  * Bounce to /login after a query comes back 401. The session cookie is gone,
  * expired, or (in local dev, where the cookie is scoped to `localhost` and
  * ports are ignored) belongs to another worktree's stack. Without this, the
@@ -32,6 +45,10 @@ export function redirectToLoginOnUnauthorized(): void {
   if (UNAUTHENTICATED_PATHS.some((p) => pathname.startsWith(p))) return;
 
   redirecting = true;
-  const redirect = encodeURIComponent(pathname + search);
-  window.location.assign(`/login?redirect=${redirect}`);
+  const target = safeRedirectPath(pathname + search);
+  if (!target) {
+    window.location.assign("/login");
+    return;
+  }
+  window.location.assign(`/login?redirect=${encodeURIComponent(target)}`);
 }

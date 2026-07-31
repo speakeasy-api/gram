@@ -25,7 +25,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { orgRoutePaths } from "@/routes";
-import { UNAUTHENTICATED_PATHS } from "@/lib/session-expired";
+import { safeRedirectPath, UNAUTHENTICATED_PATHS } from "@/lib/session-expired";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
@@ -158,8 +158,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to={newPath + location.search + location.hash} replace />;
   }
 
-  // Handle initial navigation
-  const redirectParam = searchParams.get("redirect");
+  // Handle initial navigation. The param is attacker-controllable, so only
+  // same-origin paths are honored — a protocol-relative value would send the
+  // freshly authenticated user to a foreign origin.
+  const redirectParam = safeRedirectPath(searchParams.get("redirect"));
   if (redirectParam) {
     return <Navigate to={redirectParam} replace />;
   } else if (isSlugExempt) {

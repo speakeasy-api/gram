@@ -47,10 +47,8 @@ const createQueryClient = () =>
         // above is already navigating away. All other errors still throw to
         // the nearest error boundary.
         throwOnError: (error) =>
-          !(
-            error instanceof GramError &&
-            (error.statusCode === 403 || error.statusCode === 401)
-          ),
+          !isUnauthorizedError(error) &&
+          !(error instanceof GramError && error.statusCode === 403),
         retry: (failureCount, error: Error) => {
           // Don't retry on 4xx errors
           if (error && typeof error === "object") {
