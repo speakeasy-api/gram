@@ -23,10 +23,8 @@ import { Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
-import {
-  TumAdminSection,
-  TumUsageSection,
-} from "@/components/billing/tum-section";
+import { TumAdminSection } from "@/components/billing/tum-admin-section";
+import { TumUsageSection } from "@/components/billing/tum-section";
 
 export default function Billing(): JSX.Element {
   return (
