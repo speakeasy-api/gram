@@ -54,11 +54,12 @@ type Membership struct {
 }
 
 type OauthClient struct {
-	ClientID     string
-	Mode         string
-	ClientSecret string
-	RedirectUris string
-	CreatedAt    time.Time
+	ClientID            string
+	Mode                string
+	ClientSecret        string
+	RedirectUris        string
+	RotateRefreshTokens bool
+	CreatedAt           time.Time
 }
 
 type Organization struct {

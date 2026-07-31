@@ -375,10 +375,10 @@ DELETE FROM current_users WHERE mode = @mode;
 
 -- name: CreateOAuthClient :one
 INSERT INTO oauth_clients (
-  client_id, mode, client_secret, redirect_uris
+  client_id, mode, client_secret, redirect_uris, rotate_refresh_tokens
 )
 VALUES (
-  @client_id, @mode, @client_secret, @redirect_uris
+  @client_id, @mode, @client_secret, @redirect_uris, @rotate_refresh_tokens
 )
 RETURNING *;
 

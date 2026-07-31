@@ -62,11 +62,15 @@ CREATE TABLE IF NOT EXISTS current_users (
 
 -- Dynamically registered OAuth 2.1 clients. The dev-idp only needs enough
 -- state to reject /authorize redirect_uri values that were not registered.
+-- `rotate_refresh_tokens` defaults on (OAuth 2.1 recommends rotation). Clients
+-- register with it off to emulate upstreams that reuse refresh tokens, which
+-- Gram has to tolerate in the wild.
 CREATE TABLE IF NOT EXISTS oauth_clients (
   client_id TEXT NOT NULL PRIMARY KEY,
   mode TEXT NOT NULL,
   client_secret TEXT NOT NULL,
   redirect_uris TEXT NOT NULL DEFAULT '[]',
+  rotate_refresh_tokens INTEGER NOT NULL DEFAULT 1,
 
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

@@ -263,19 +263,20 @@ func (q *Queries) CreateMembership(ctx context.Context, arg CreateMembershipPara
 const createOAuthClient = `-- name: CreateOAuthClient :one
 
 INSERT INTO oauth_clients (
-  client_id, mode, client_secret, redirect_uris
+  client_id, mode, client_secret, redirect_uris, rotate_refresh_tokens
 )
 VALUES (
-  ?1, ?2, ?3, ?4
+  ?1, ?2, ?3, ?4, ?5
 )
-RETURNING client_id, mode, client_secret, redirect_uris, created_at
+RETURNING client_id, mode, client_secret, redirect_uris, rotate_refresh_tokens, created_at
 `
 
 type CreateOAuthClientParams struct {
-	ClientID     string
-	Mode         string
-	ClientSecret string
-	RedirectUris string
+	ClientID            string
+	Mode                string
+	ClientSecret        string
+	RedirectUris        string
+	RotateRefreshTokens bool
 }
 
 // =============================================================================
@@ -287,6 +288,7 @@ func (q *Queries) CreateOAuthClient(ctx context.Context, arg CreateOAuthClientPa
 		arg.Mode,
 		arg.ClientSecret,
 		arg.RedirectUris,
+		arg.RotateRefreshTokens,
 	)
 	var i OauthClient
 	err := row.Scan(
@@ -294,6 +296,7 @@ func (q *Queries) CreateOAuthClient(ctx context.Context, arg CreateOAuthClientPa
 		&i.Mode,
 		&i.ClientSecret,
 		&i.RedirectUris,
+		&i.RotateRefreshTokens,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -718,7 +721,7 @@ func (q *Queries) GetMembershipWithOrgName(ctx context.Context, id uuid.UUID) (G
 }
 
 const getOAuthClient = `-- name: GetOAuthClient :one
-SELECT client_id, mode, client_secret, redirect_uris, created_at FROM oauth_clients WHERE client_id = ?1 AND mode = ?2
+SELECT client_id, mode, client_secret, redirect_uris, rotate_refresh_tokens, created_at FROM oauth_clients WHERE client_id = ?1 AND mode = ?2
 `
 
 type GetOAuthClientParams struct {
@@ -734,6 +737,7 @@ func (q *Queries) GetOAuthClient(ctx context.Context, arg GetOAuthClientParams) 
 		&i.Mode,
 		&i.ClientSecret,
 		&i.RedirectUris,
+		&i.RotateRefreshTokens,
 		&i.CreatedAt,
 	)
 	return i, err
