@@ -88,6 +88,7 @@ func parseWrapToolsetsFlags(args []string) (wrapToolsetsConfig, error) {
 		limit           = fs.Int64("limit", 0, "maximum candidates to process this run; 0 processes all")
 		projectIDStr    = fs.String("project-id", "", "restrict the candidate set to one project (uuid, optional)")
 		clearDeadDomain = fs.Bool("clear-dead-domain", false, "null a candidate's custom_domain_id when its domain row is soft-deleted and wrap it as a platform candidate")
+		moveDependents  = fs.Bool("move-dependents", false, "move mcp_metadata and collection attachment ownership onto the wrapper; run only after the server-keyed read release is deployed")
 		reportPath      = fs.String("report", "", "path to write the JSON report (optional)")
 	)
 	if err := fs.Parse(args); err != nil {
@@ -108,6 +109,7 @@ func parseWrapToolsetsFlags(args []string) (wrapToolsetsConfig, error) {
 			Limit:           *limit,
 			ProjectID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			ClearDeadDomain: *clearDeadDomain,
+			MoveDependents:  *moveDependents,
 		},
 	}
 

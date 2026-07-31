@@ -29,14 +29,15 @@ GRAM_DATABASE_URL=postgres://USER:PASS@127.0.0.1:5432/gram \
 
 ## Flags
 
-| Flag                 | Default | Meaning                                                                                                                                                                     |
-| -------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-dry-run`           | `true`  | Run every read and guard but write nothing; rows that would be wrapped report `would_create`. Pass `-dry-run=false` to apply.                                               |
-| `-after`             | (none)  | Resume the keyset scan strictly after this toolset id (uuid).                                                                                                               |
-| `-limit`             | `0`     | Maximum candidates processed this run; `0` processes all.                                                                                                                   |
-| `-project-id`        | (none)  | Restrict the candidate set to one project (canary runs).                                                                                                                    |
-| `-clear-dead-domain` | `false` | When a candidate's `custom_domain_id` references a soft-deleted domain, null it and wrap the toolset as a platform candidate — preserving the only URL that still resolves. |
-| `-report`            | (none)  | Path to write the JSON report.                                                                                                                                              |
+| Flag                 | Default | Meaning                                                                                                                                                                                                               |
+| -------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-dry-run`           | `true`  | Run every read and guard but write nothing; rows that would be wrapped report `would_create`. Pass `-dry-run=false` to apply.                                                                                         |
+| `-after`             | (none)  | Resume the keyset scan strictly after this toolset id (uuid).                                                                                                                                                         |
+| `-limit`             | `0`     | Maximum candidates processed this run; `0` processes all.                                                                                                                                                             |
+| `-project-id`        | (none)  | Restrict the candidate set to one project (canary runs).                                                                                                                                                              |
+| `-clear-dead-domain` | `false` | When a candidate's `custom_domain_id` references a soft-deleted domain, null it and wrap the toolset as a platform candidate — preserving the only URL that still resolves.                                           |
+| `-move-dependents`   | `false` | Move `mcp_metadata` and collection attachment ownership onto the wrapper. Run only after the release whose collections/metadata APIs read server-keyed rows is deployed — moving earlier orphans toolset-keyed reads. |
+| `-report`            | (none)  | Path to write the JSON report.                                                                                                                                                                                        |
 
 ## Behavior
 
@@ -91,6 +92,10 @@ It contains ids and slugs only — never organization names or emails.
 4. **Rerun to verify**: `wraptoolsets -dry-run=false -report verify.json`
    must perform zero writes and report every wrapped row as
    `already_complete`.
+5. **After the server-keyed read release is deployed** (collections and
+   metadata APIs resolving wrapper-keyed rows), repeat the dry-run → apply →
+   verify sequence with `-move-dependents` to move `mcp_metadata` and
+   collection attachment ownership onto the wrappers.
 
 Caveats:
 

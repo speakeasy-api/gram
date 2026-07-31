@@ -226,6 +226,13 @@ func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
 	if e.CustomDomainID != ref.CustomDomainID {
 		return errToolsetEndpointMismatch
 	}
+	// A ref minted against an mcp_server-backed endpoint must resume against
+	// the same server: an endpoint re-pointed mid-flow at a different server
+	// sharing the issuer would otherwise mint a token for an audience the
+	// user never authorized.
+	if ref.McpServerID.Valid && e.McpServerID != ref.McpServerID {
+		return errToolsetEndpointMismatch
+	}
 	return nil
 }
 
@@ -355,6 +362,12 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		// surface: reject the cached-ref resumption (e.g. /mcp/idp_callback)
 		// so a visibility change closes in-flight flows.
 		if isTunneledPublic(&mcpServer) {
+			return nil, oops.E(oops.CodeNotFound, nil, "not found")
+		}
+		// A wrapper disabled mid-flow must close in-flight flows the same
+		// way the serving path 404s it — the cached ref must not bypass
+		// endpoint availability.
+		if mcpServer.Visibility == mcpservers.VisibilityDisabled {
 			return nil, oops.E(oops.CodeNotFound, nil, "not found")
 		}
 		// Guard against an mcp_endpoint that has been re-pointed mid-flow

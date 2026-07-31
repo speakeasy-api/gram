@@ -585,3 +585,37 @@ func TestRun_WrapperWithoutEndpointBlocksAmbiguous(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, endpoints)
 }
+
+// The default run (no -move-dependents) wraps the toolset but leaves
+// mcp_metadata and collection attachments toolset-keyed: their server-keyed
+// readers deploy in a later release, and moving ownership before then would
+// orphan toolset-keyed reads.
+func TestRun_DefaultRunLeavesDependentOwnershipInPlace(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	tn := seedTenant(t)
+
+	toolset := tn.newToolset(t, candidateSpec{
+		mcpSlug:        "wrap-nodep-" + uuid.NewString()[:8],
+		mcpEnabled:     true,
+		mcpIsPublic:    false,
+		defaultEnvSlug: "",
+		customDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	metadata := tn.attachMetadata(t, toolset.ID)
+
+	opts := applyOptions()
+	opts.MoveDependents = false
+	report := runWrap(t, tn, opts)
+
+	require.Len(t, report.Rows, 1)
+	require.Equal(t, OutcomeCreated, report.Rows[0].Outcome)
+	require.Zero(t, report.Rows[0].MetadataMoved)
+	require.Zero(t, report.Rows[0].AttachmentsMoved)
+
+	q := tn.queries()
+	rows, err := q.ListToolsetOwnedMetadata(ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, metadata.ID, rows[0].ID)
+}

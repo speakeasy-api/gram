@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -60,8 +59,10 @@ func mirrorWrapperSlug(toolset repo.Toolset) string {
 // need reconciliation via reconcileMirroredDomains AFTER the transaction
 // commits.
 //
-// A toolset with multiple live wrappers is ambiguous: mirroring is skipped
-// with a warning rather than guessing which wrapper owns the public address.
+// A toolset with multiple live wrappers, or a wrapper whose addressing has
+// diverged from the toolset columns, is ambiguous: the write fails with a
+// conflict rather than guessing or acknowledging a change the runtime will
+// not serve.
 func (s *Service) mirrorPublishingState(ctx context.Context, dbtx pgx.Tx, toolset repo.Toolset, authCtx *contextvalues.AuthContext) ([]uuid.UUID, error) {
 	if !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
 		return nil, nil
@@ -97,11 +98,12 @@ func (s *Service) mirrorPublishingState(ctx context.Context, dbtx pgx.Tx, toolse
 		return nil, fmt.Errorf("load wrapper mcp servers for toolset: %w", err)
 	}
 
+	// Ambiguous wrapper state must fail the write rather than report
+	// success while the canonical rows stay stale — an old SDK client
+	// would otherwise see its publishing change acknowledged with the
+	// runtime still serving the previous state.
 	if len(wrappers) > 1 {
-		s.logger.WarnContext(ctx, "toolset has multiple live wrapper mcp servers; skipping publishing mirror",
-			attr.SlogToolsetID(toolset.ID.String()),
-		)
-		return nil, nil
+		return nil, oops.E(oops.CodeConflict, nil, "toolset has multiple MCP servers; update publishing through the mcpServers API").LogError(ctx, s.logger)
 	}
 
 	var clearedDomainIDs []uuid.UUID
@@ -226,11 +228,9 @@ func (s *Service) mirrorPublishingState(ctx context.Context, dbtx pgx.Tx, toolse
 	default:
 		// Multiple endpoints and none carries the toolset's address:
 		// user-managed addressing has diverged from the toolset columns.
-		// Leave the endpoints alone rather than guessing which to move.
-		s.logger.WarnContext(ctx, "wrapper has multiple mcp endpoints; skipping endpoint address mirror",
-			attr.SlogToolsetID(toolset.ID.String()),
-			attr.SlogMcpServerID(wrapper.ID.String()),
-		)
+		// Fail the write rather than guessing which endpoint to move or
+		// acknowledging a change the runtime will not serve.
+		return nil, oops.E(oops.CodeConflict, nil, "toolset addressing has diverged; update publishing through the mcpEndpoints API").LogError(ctx, s.logger)
 	}
 
 	return clearedDomainIDs, nil

@@ -96,6 +96,11 @@ type Options struct {
 	// ClearDeadDomain nulls a candidate's custom_domain_id when the referenced
 	// domain row is soft-deleted, wrapping the toolset as a platform candidate.
 	ClearDeadDomain bool
+	// MoveDependents moves mcp_metadata and collection attachment ownership
+	// onto the wrapper. Run only after the release that reads server-keyed
+	// rows for those surfaces is deployed; moving earlier orphans
+	// toolset-keyed reads.
+	MoveDependents bool
 }
 
 type RowResult struct {
@@ -319,46 +324,56 @@ func processCandidate(ctx context.Context, pool *pgxpool.Pool, cand repo.ListCan
 	res.McpEndpointID = &endpointID
 	res.ClearedDeadDomain = clearDeadDomain
 
-	metadataRows, err := q.ListToolsetOwnedMetadata(ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true})
-	if err != nil {
-		return RowResult{}, fmt.Errorf("list toolset metadata: %w", err)
-	}
-	for _, md := range metadataRows {
-		if md.ProjectID != toolset.ProjectID {
-			return block(OutcomeBlockedDependentConflict, fmt.Sprintf("mcp_metadata row %s is owned by the toolset but belongs to a different project", md.ID))
+	// Metadata and collection attachment ownership only moves under
+	// -move-dependents, which must not run until the release that reads
+	// server-keyed rows for those surfaces is deployed — moving them earlier
+	// would 404 toolset-keyed metadata reads and strip toolset semantics
+	// from collection listings.
+	var metadataRows []repo.ListToolsetOwnedMetadataRow
+	if opts.MoveDependents {
+		metadataRows, err = q.ListToolsetOwnedMetadata(ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true})
+		if err != nil {
+			return RowResult{}, fmt.Errorf("list toolset metadata: %w", err)
 		}
-	}
-	if len(metadataRows) > 0 {
-		serverMetadata, err := q.ListServerOwnedMetadata(ctx, repo.ListServerOwnedMetadataParams{
+		for _, md := range metadataRows {
+			if md.ProjectID != toolset.ProjectID {
+				return block(OutcomeBlockedDependentConflict, fmt.Sprintf("mcp_metadata row %s is owned by the toolset but belongs to a different project", md.ID))
+			}
+		}
+		if len(metadataRows) > 0 {
+			serverMetadata, err := q.ListServerOwnedMetadata(ctx, repo.ListServerOwnedMetadataParams{
+				McpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
+				ProjectID:   toolset.ProjectID,
+			})
+			if err != nil {
+				return RowResult{}, fmt.Errorf("list wrapper metadata: %w", err)
+			}
+			if len(serverMetadata) > 0 {
+				return block(OutcomeBlockedDependentConflict, "both the toolset and its wrapper own an mcp_metadata row; refusing to merge")
+			}
+		}
+
+		conflictingAttachments, err := q.CountConflictingCollectionAttachments(ctx, repo.CountConflictingCollectionAttachmentsParams{
 			McpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
-			ProjectID:   toolset.ProjectID,
+			ToolsetID:   uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		})
 		if err != nil {
-			return RowResult{}, fmt.Errorf("list wrapper metadata: %w", err)
+			return RowResult{}, fmt.Errorf("count conflicting collection attachments: %w", err)
 		}
-		if len(serverMetadata) > 0 {
-			return block(OutcomeBlockedDependentConflict, "both the toolset and its wrapper own an mcp_metadata row; refusing to merge")
+		if conflictingAttachments > 0 {
+			return block(OutcomeBlockedDependentConflict, fmt.Sprintf("%d collection(s) hold live attachments to both the toolset and its wrapper; refusing to dedupe", conflictingAttachments))
 		}
-	}
-
-	conflictingAttachments, err := q.CountConflictingCollectionAttachments(ctx, repo.CountConflictingCollectionAttachmentsParams{
-		McpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
-		ToolsetID:   uuid.NullUUID{UUID: toolset.ID, Valid: true},
-	})
-	if err != nil {
-		return RowResult{}, fmt.Errorf("count conflicting collection attachments: %w", err)
-	}
-	if conflictingAttachments > 0 {
-		return block(OutcomeBlockedDependentConflict, fmt.Sprintf("%d collection(s) hold live attachments to both the toolset and its wrapper; refusing to dedupe", conflictingAttachments))
 	}
 
 	if opts.DryRun {
-		attachments, err := q.CountToolsetOwnedCollectionAttachments(ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true})
-		if err != nil {
-			return RowResult{}, fmt.Errorf("count toolset collection attachments: %w", err)
+		if opts.MoveDependents {
+			attachments, err := q.CountToolsetOwnedCollectionAttachments(ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true})
+			if err != nil {
+				return RowResult{}, fmt.Errorf("count toolset collection attachments: %w", err)
+			}
+			res.MetadataMoved = int64(len(metadataRows))
+			res.AttachmentsMoved = attachments
 		}
-		res.MetadataMoved = int64(len(metadataRows))
-		res.AttachmentsMoved = attachments
 		if creating {
 			res.Outcome = OutcomeWouldCreate
 		} else {
@@ -403,26 +418,28 @@ func processCandidate(ctx context.Context, pool *pgxpool.Pool, cand repo.ListCan
 		}
 	}
 
-	if len(metadataRows) > 0 {
-		moved, err := q.MoveMetadataOwnershipToServer(ctx, repo.MoveMetadataOwnershipToServerParams{
+	if opts.MoveDependents {
+		if len(metadataRows) > 0 {
+			moved, err := q.MoveMetadataOwnershipToServer(ctx, repo.MoveMetadataOwnershipToServerParams{
+				McpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
+				ToolsetID:   uuid.NullUUID{UUID: toolset.ID, Valid: true},
+				ProjectID:   toolset.ProjectID,
+			})
+			if err != nil {
+				return RowResult{}, fmt.Errorf("move metadata ownership: %w", err)
+			}
+			res.MetadataMoved = moved
+		}
+
+		movedAttachments, err := q.MoveCollectionAttachmentOwnershipToServer(ctx, repo.MoveCollectionAttachmentOwnershipToServerParams{
 			McpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
 			ToolsetID:   uuid.NullUUID{UUID: toolset.ID, Valid: true},
-			ProjectID:   toolset.ProjectID,
 		})
 		if err != nil {
-			return RowResult{}, fmt.Errorf("move metadata ownership: %w", err)
+			return RowResult{}, fmt.Errorf("move collection attachment ownership: %w", err)
 		}
-		res.MetadataMoved = moved
+		res.AttachmentsMoved = movedAttachments
 	}
-
-	movedAttachments, err := q.MoveCollectionAttachmentOwnershipToServer(ctx, repo.MoveCollectionAttachmentOwnershipToServerParams{
-		McpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
-		ToolsetID:   uuid.NullUUID{UUID: toolset.ID, Valid: true},
-	})
-	if err != nil {
-		return RowResult{}, fmt.Errorf("move collection attachment ownership: %w", err)
-	}
-	res.AttachmentsMoved = movedAttachments
 
 	if err := tx.Commit(ctx); err != nil {
 		return RowResult{}, fmt.Errorf("commit: %w", err)

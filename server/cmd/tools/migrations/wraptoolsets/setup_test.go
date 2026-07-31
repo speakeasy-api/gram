@@ -252,6 +252,7 @@ func applyOptions() Options {
 		Limit:           0,
 		ProjectID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ClearDeadDomain: false,
+		MoveDependents:  true,
 	}
 }
 
