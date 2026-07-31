@@ -1350,8 +1350,8 @@ function ChatDetailPanel({
     ],
   );
 
-  // "Create exclusion" swaps the transcript for the exclusion editor in-place
-  // (with a back button) rather than stacking a second sheet on top.
+  // "Setup exclusion rule" swaps the transcript for the exclusion editor
+  // in-place (with a back button) rather than stacking a second sheet on top.
   const openExclusion = useCallback((result: RiskResult) => {
     setExclusionState(findingToExclusionState(result));
     setPendingExclusionKey(findingKey(result));
@@ -1583,8 +1583,8 @@ function ChatDetailPanel({
             <SubViewBar
               title={
                 exclusionState.mode === "edit"
-                  ? "Edit exclusion"
-                  : "Create exclusion"
+                  ? "Edit exclusion rule"
+                  : "Set up exclusion rule"
               }
               onBack={closeExclusion}
             />

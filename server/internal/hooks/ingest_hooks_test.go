@@ -1233,7 +1233,7 @@ func TestIngest_PersistsPromptAttachmentsAsScannableToolRows(t *testing.T) {
 	findingID, err := uuid.NewV7()
 	require.NoError(t, err)
 	chInserter := &recordingRiskFindingInserter{rows: nil}
-	fingerprinter, err := risk.ParsePepperKeyRing([]byte(fmt.Sprintf(`{"current":"v1","keys":{"v1":%q}}`, base64.StdEncoding.EncodeToString([]byte("test-fingerprint-key-material")))))
+	fingerprinter, err := risk.ParsePepperKeyRing(fmt.Appendf(nil, `{"current":"v1","keys":{"v1":%q}}`, base64.StdEncoding.EncodeToString([]byte("test-fingerprint-key-material"))))
 	require.NoError(t, err)
 	chWriter := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), chInserter, fingerprinter)
 	startPos := int32(0)

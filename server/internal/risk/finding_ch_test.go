@@ -306,6 +306,31 @@ func TestFindingCHWriter_HandleBatch_InvalidTimestampSkipsFinding(t *testing.T) 
 	require.Equal(t, goodID, rows[0].ID, "the surviving row must be the valid finding, not the skipped one")
 }
 
+// TestFindingCHWriter_HandleBatch_InvalidFalsePositiveAtSkipsFinding guards
+// against a real regression: a false_positive_at that fails to parse used to
+// fall through with falsePositiveAt left nil, appending the row as if it
+// were an active (non-dismissed) finding — silently resurrecting a
+// previously-dismissed finding in ClickHouse's dedup instead of dropping the
+// malformed message, matching how an invalid created_at is already handled.
+func TestFindingCHWriter_HandleBatch_InvalidFalsePositiveAtSkipsFinding(t *testing.T) {
+	t.Parallel()
+
+	w, ins := newCHWriter(t)
+
+	bad := chFinding()
+	bad.SetFalsePositiveAt("not-a-timestamp")
+
+	good := finding()
+	goodID := uuid.Must(uuid.NewV7())
+	good.SetId(goodID.String())
+
+	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{bad, good}, nil))
+
+	rows := chRows(t, ins)
+	require.Len(t, rows, 1, "only the finding with a valid (or absent) false_positive_at is inserted")
+	require.Equal(t, goodID, rows[0].ID, "the surviving row must be the valid finding, not the skipped one")
+}
+
 func TestFindingCHWriter_HandleBatch_EmptyBatchSkipsInsert(t *testing.T) {
 	t.Parallel()
 

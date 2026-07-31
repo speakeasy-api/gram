@@ -34,7 +34,7 @@ import { Loader2, Sparkles } from "lucide-react";
 import type { JSX } from "react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { BUILTIN_RULES_BY_CATEGORY } from "./detection-rules-data";
+import { BUILTIN_RULE_ID_LIST } from "./detection-rules-data";
 import {
   type ExclusionFields,
   parseExclusionExpression,
@@ -42,13 +42,6 @@ import {
 } from "./exclusion-expression";
 
 export const GLOBAL_SCOPE = "__global__";
-
-// Rule ids the AI suggestion may reference in rule_id clauses. Built-ins only:
-// they cover the common asks ("email findings", "AWS keys") without an extra
-// fetch; custom rule ids can still be named in the prompt itself.
-const BUILTIN_RULE_ID_LIST = Object.values(BUILTIN_RULES_BY_CATEGORY)
-  .flat()
-  .map((rule) => rule.id);
 
 export type ExclusionSheetState =
   | { mode: "create"; initialExpression?: string; initialScope?: string }
@@ -179,7 +172,7 @@ export function ExclusionSheet({
       <SheetContent className="flex flex-col overflow-y-auto sm:max-w-lg">
         <SheetHeader className="px-6 pt-6">
           <SheetTitle>
-            {editing ? "Edit exclusion" : "Create exclusion"}
+            {editing ? "Edit exclusion rule" : "Set up exclusion rule"}
           </SheetTitle>
           <SheetDescription>
             {editing

@@ -1,7 +1,7 @@
 import { createContext } from "react";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 
-// Provides the "Create exclusion" action to findings deep in the transcript.
+// Provides the "Setup exclusion rule" action to findings deep in the transcript.
 // Null when the viewer lacks org:admin, which hides the action.
 export const CreateExclusionContext = createContext<
   ((result: RiskResult) => void) | null

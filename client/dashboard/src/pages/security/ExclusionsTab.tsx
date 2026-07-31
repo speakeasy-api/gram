@@ -239,7 +239,7 @@ function ExclusionsEmptyState({ onCreate }: { onCreate: () => void }) {
         <Button.LeftIcon>
           <Plus className="h-4 w-4" />
         </Button.LeftIcon>
-        <Button.Text>Create exclusion</Button.Text>
+        <Button.Text>Set up exclusion rule</Button.Text>
       </Button>
     </div>
   );
