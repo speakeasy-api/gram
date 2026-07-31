@@ -196,7 +196,13 @@ export function createServerAssistantTransport(
           // will not come back), fall back to discovering the reply the old
           // way rather than losing it.
           try {
-            await streamTurn({ chatId, writer, abortSignal: pollSignal });
+            await streamTurn({
+              chatId,
+              writer,
+              abortSignal: pollSignal,
+              sessionToken: deps.getSessionToken?.(),
+              projectSlug: deps.projectSlug,
+            });
           } catch (err) {
             if (pollSignal.aborted) throw err;
             await pollForReplies({

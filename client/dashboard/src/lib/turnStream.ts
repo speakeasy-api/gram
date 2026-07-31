@@ -72,8 +72,18 @@ export async function streamTurn(args: {
   chatId: string;
   writer: UIMessageStreamWriter<UIMessage>;
   abortSignal?: AbortSignal;
+  /**
+   * The caller's `Gram-Session` token. These routes authenticate from request
+   * headers, not cookies, so without it every subscription 401s.
+   */
+  sessionToken?: string;
+  /**
+   * Project slug. The routes resolve the caller's project from `Gram-Project`
+   * and reject with "empty project slug" before the session is considered.
+   */
+  projectSlug: string;
 }): Promise<void> {
-  const { chatId, writer, abortSignal } = args;
+  const { chatId, writer, abortSignal, sessionToken, projectSlug } = args;
 
   let cursor = "";
   let reconnects = 0;
@@ -115,7 +125,11 @@ export async function streamTurn(args: {
         response = await fetch(url, {
           credentials: "include",
           signal: abortSignal,
-          headers: { accept: "text/event-stream" },
+          headers: {
+            accept: "text/event-stream",
+            "Gram-Project": projectSlug,
+            ...(sessionToken ? { "Gram-Session": sessionToken } : {}),
+          },
         });
       } catch (err) {
         if (abortSignal?.aborted) throw err;
