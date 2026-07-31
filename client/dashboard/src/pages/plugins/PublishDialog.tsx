@@ -265,8 +265,8 @@ export const PublishDialog = memo(function PublishDialog({
               </Dialog.Description>
               <Dialog.Description>
                 At least one user in your organization will need to be given
-                access to connect the generated repository with Claude, Cursor,
-                or Codex.
+                access to connect the generated repository with their coding
+                agents.
               </Dialog.Description>
             </>
           )}

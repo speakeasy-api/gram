@@ -239,9 +239,8 @@ function OrgLogsInner() {
                 variant="body"
                 className="text-muted-foreground ml-6 text-sm"
               >
-                Capture user prompts and assistant responses from agents like
-                Cursor, Claude Code, Codex, and more. Sessions appear in the
-                Agent Sessions tab.
+                Capture user prompts and assistant responses from supported
+                coding agents. Sessions appear in the Agent Sessions tab.
               </Text>
             </Stack>
             {featuresData && (

@@ -1288,7 +1288,7 @@ function NextSteps({
               </div>
               <div className="flex-1">
                 <Text className="text-sm font-medium no-underline">
-                  Connect via Claude, Cursor, Codex
+                  Connect via coding agents
                 </Text>
               </div>
               <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />

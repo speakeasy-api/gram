@@ -710,7 +710,7 @@ export function ProjectDashboard(): JSX.Element {
 
                     <DashboardCard
                       title="Most Used Agents"
-                      tooltip="Agents (e.g. Claude, Cursor, Codex) ranked by token volume in the selected period, identified from client metadata sent with each call."
+                      tooltip="Coding agents ranked by token volume in the selected period, identified from client metadata sent with each call."
                       action={
                         <CardActions>
                           <ExploreWithAIButton

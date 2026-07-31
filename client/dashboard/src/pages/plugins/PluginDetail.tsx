@@ -725,8 +725,8 @@ export default function PluginDetail(): JSX.Element | null {
               <div className="mb-3 flex items-center justify-between gap-4">
                 <Text small muted className="max-w-md">
                   Controls delivery to devices running the Speakeasy agent.
-                  Marketplace installs (Claude, Cursor, Codex) receive every
-                  published plugin regardless.
+                  Marketplace installs receive every published plugin
+                  regardless.
                 </Text>
                 <Button
                   variant="secondary"
