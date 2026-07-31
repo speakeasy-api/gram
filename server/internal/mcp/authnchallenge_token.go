@@ -342,7 +342,13 @@ func (s *Service) mintSessionAndRespond(
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, logger)
 	}
-	access, jti, err := s.userSessionSigner.Mint(subject, endpoint.AudienceURN, issuerURL, accessTokenLifetime)
+	access, jti, err := s.userSessionSigner.Mint(usersessions.MintParams{
+		Subject:  subject,
+		Audience: endpoint.AudienceURN,
+		Issuer:   issuerURL,
+		Lifetime: accessTokenLifetime,
+		ClientID: clientRow.ClientID,
+	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "mint session jwt").LogError(ctx, logger)
 	}

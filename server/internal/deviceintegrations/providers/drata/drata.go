@@ -57,9 +57,12 @@ package drata
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -96,8 +99,35 @@ const (
 	sessionStatusInProgress = "IN_PROGRESS"
 
 	fieldRegion       = "region"
+	fieldWorkspaceID  = "workspace_id"
 	fieldConnectionID = "connection_id"
 	fieldAPIKey       = "api_key"
+
+	// provisionConnectionName is the display-name stem of the connection Gram
+	// creates and reuses on the customer's behalf. The effective name appends a
+	// per-Gram-org suffix (see connectionNameForOrg): find-or-create keys on the
+	// full name, so a re-save reuses the same connection, and two Gram orgs that
+	// happen to share one Drata tenant each own a distinct connection instead of
+	// racing to create — or later clobbering — a single shared one.
+	provisionConnectionName = "Speakeasy Device Agent Coverage"
+
+	// defaultWorkspaceID is the workspace a connection is created in when the
+	// customer leaves the field blank. Drata requires workspaceIds on create,
+	// and single-workspace accounts — the common case — are workspace 1.
+	defaultWorkspaceID = 1
+
+	// displayNameKey names the record field Drata shows as each row's label.
+	displayNameKey = "hostname"
+
+	// connectionListLimit is the page size for the find-existing lookup.
+	connectionListLimit = 200
+
+	// maxConnectionListPages bounds how far find-existing pages before it fails
+	// the provision (reaching the cap is treated as unproven-absence, not
+	// not-found, so it never silently creates a duplicate). 50 × the page size
+	// is far more connections than any tenant realistically has; the bound only
+	// exists so a cursor that never clears cannot loop forever.
+	maxConnectionListPages = 50
 )
 
 // defaultRegions allowlists the customer-selectable Drata regions. Deriving
@@ -118,7 +148,10 @@ func init() {
 		Capabilities: []providers.Capability{providers.CapabilityEvidenceSink},
 		Fields: []providers.CredentialField{
 			{Key: fieldRegion, Label: "Region (us, eu, or apac)", Kind: providers.FieldKindText, Secret: false, Required: true},
-			{Key: fieldConnectionID, Label: "Custom Connection ID", Kind: providers.FieldKindText, Secret: false, Required: true},
+			{Key: fieldWorkspaceID, Label: "Workspace ID (usually 1)", Kind: providers.FieldKindText, Secret: false, Required: false},
+			// Optional: Gram creates and fills this in on connect. A customer
+			// may still supply an existing connection to reuse instead.
+			{Key: fieldConnectionID, Label: "Custom Connection ID (optional — created automatically)", Kind: providers.FieldKindText, Secret: false, Required: false},
 			{Key: fieldAPIKey, Label: "API Key", Kind: providers.FieldKindText, Secret: true, Required: true},
 		},
 		Schedules: []providers.ScheduleSpec{
@@ -140,7 +173,11 @@ type sink struct {
 	regions map[string]string
 }
 
-var _ providers.EvidenceSink = (*sink)(nil)
+var (
+	_ providers.EvidenceSink = (*sink)(nil)
+	// The sink also provisions its own Custom Connection during connect.
+	_ providers.Provisioner = (*sink)(nil)
+)
 
 // target is the resolved, validated push destination: the base URL and the
 // connection's path root, derived exactly once per operation so the
@@ -150,15 +187,26 @@ type target struct {
 	connPath string
 }
 
-// resolveTarget validates the configured region and connection id.
-func (s *sink) resolveTarget(settings providers.Settings) (target, error) {
+// regionBaseURL resolves the configured region to its API base URL. Split out
+// from resolveTarget because provisioning needs the base before a connection
+// id exists.
+func (s *sink) regionBaseURL(settings providers.Settings) (string, error) {
 	region := strings.ToLower(strings.TrimSpace(settings[fieldRegion]))
 	if region == "" {
-		return target{}, fmt.Errorf("region is not configured")
+		return "", fmt.Errorf("region is not configured")
 	}
 	base, ok := s.regions[region]
 	if !ok {
-		return target{}, fmt.Errorf("region must be one of us, eu, or apac")
+		return "", fmt.Errorf("region must be one of us, eu, or apac")
+	}
+	return base, nil
+}
+
+// resolveTarget validates the configured region and connection id.
+func (s *sink) resolveTarget(settings providers.Settings) (target, error) {
+	base, err := s.regionBaseURL(settings)
+	if err != nil {
+		return target{}, err
 	}
 	id := strings.TrimSpace(settings[fieldConnectionID])
 	if id == "" {
@@ -356,6 +404,199 @@ func (s *sink) cancelStrandedSessions(ctx context.Context, creds providers.Crede
 		}
 	}
 	return nil
+}
+
+// Provision creates (or reuses) the dedicated Custom Connection this config
+// pushes into, so the customer never has to hand-craft it against the Drata
+// API — the setup that is otherwise a raw curl with an exact record schema and
+// the easily-missed `required` list. Idempotent: a no-op when a connection id
+// is already configured, and a fresh provision first looks for an existing
+// Gram-created connection by name before creating one, so a re-save never
+// spawns a duplicate.
+func (s *sink) Provision(ctx context.Context, orgID string, creds providers.Credentials, settings providers.Settings) (providers.Settings, error) {
+	if strings.TrimSpace(settings[fieldConnectionID]) != "" {
+		return settings, nil
+	}
+	base, err := s.regionBaseURL(settings)
+	if err != nil {
+		return nil, fmt.Errorf("drata provisioning: %w", err)
+	}
+	workspaceID, err := parseWorkspaceID(settings)
+	if err != nil {
+		return nil, fmt.Errorf("drata provisioning: %w", err)
+	}
+
+	name := connectionNameForOrg(orgID)
+	connID, err := s.findConnectionByName(ctx, creds, base, name)
+	if err != nil {
+		return nil, fmt.Errorf("drata provisioning: find existing connection: %w", err)
+	}
+	if connID == "" {
+		connID, err = s.createConnection(ctx, creds, base, name, workspaceID)
+		if err != nil {
+			return nil, fmt.Errorf("drata provisioning: create connection: %w", err)
+		}
+	}
+
+	out := make(providers.Settings, len(settings)+1)
+	maps.Copy(out, settings)
+	out[fieldConnectionID] = connID
+	return out, nil
+}
+
+// connectionNameForOrg is the deterministic connection name for one Gram org.
+// Encoding the org into the find-or-create key is what makes provisioning
+// correct when two Gram orgs share a single Drata tenant: each owns a distinct
+// connection, so they neither race to create a duplicate nor later resolve to —
+// and overwrite — each other's evidence. A short hash keeps the customer-facing
+// name tidy while staying stable and collision-resistant across orgs.
+func connectionNameForOrg(orgID string) string {
+	sum := sha256.Sum256([]byte(orgID))
+	return fmt.Sprintf("%s (%s)", provisionConnectionName, hex.EncodeToString(sum[:4]))
+}
+
+// parseWorkspaceID reads the customer-supplied workspace, defaulting to the
+// single-workspace common case when blank. Drata requires workspaceIds on
+// create; a bad value fails loudly here rather than as an opaque 400.
+func parseWorkspaceID(settings providers.Settings) (int, error) {
+	raw := strings.TrimSpace(settings[fieldWorkspaceID])
+	if raw == "" {
+		return defaultWorkspaceID, nil
+	}
+	id, err := strconv.Atoi(raw)
+	if err != nil || id <= 0 {
+		return 0, fmt.Errorf("workspace_id must be a positive integer")
+	}
+	return id, nil
+}
+
+// findConnectionByName returns the id of an existing custom connection whose
+// display name matches, or "" when the scan reaches the genuine last page
+// without one. Reusing a prior Gram-created connection is what keeps
+// provisioning idempotent across re-saves — so the lookup follows the
+// pagination cursor: a customer with more connections than one page could carry
+// the Gram one onto a later page, and missing it there would create a duplicate
+// on every save.
+//
+// Only an explicit null cursor (the true end of the list) counts as "not
+// found"; a scan that hits the page cap, a cursor that won't advance, or a
+// response that omits the cursor altogether leaves the connection's existence
+// unproven, so it returns an error rather than "" — reporting "not found" there
+// would create a duplicate on every connect, the exact bug the pagination is
+// here to prevent.
+func (s *sink) findConnectionByName(ctx context.Context, creds providers.Credentials, base, name string) (string, error) {
+	cursor := ""
+	for range maxConnectionListPages {
+		requestURL := base + "/public/v2/custom-connections?limit=" + strconv.Itoa(connectionListLimit)
+		if cursor != "" {
+			requestURL += "&cursor=" + url.QueryEscape(cursor)
+		}
+		body, err := s.doJSON(ctx, creds, http.MethodGet, requestURL, nil)
+		if err != nil {
+			return "", err
+		}
+		var list struct {
+			Data []struct {
+				ID flexID `json:"id"`
+				// Drata echoes the create-time "name" back as "clientAlias";
+				// match either so the lookup is robust to which the list
+				// endpoint returns.
+				ClientAlias string `json:"clientAlias"`
+				Name        string `json:"name"`
+			} `json:"data"`
+			// RawMessage, not *string, so field presence survives decoding: an
+			// omitted cursor and an explicit null both decode a *string to nil,
+			// but only the explicit null is Drata's end-of-list signal.
+			Pagination struct {
+				Cursor json.RawMessage `json:"cursor"`
+			} `json:"pagination"`
+		}
+		if err := json.Unmarshal(body, &list); err != nil {
+			return "", fmt.Errorf("decode connection list: %w", err)
+		}
+		for _, c := range list.Data {
+			if c.ClientAlias == name || c.Name == name {
+				return string(c.ID), nil
+			}
+		}
+		raw := bytes.TrimSpace(list.Pagination.Cursor)
+		if len(raw) == 0 {
+			// The cursor field is absent entirely (missing, or no pagination
+			// object): an incomplete response, not a proof of the end. Fail
+			// rather than mistake it for end-of-list and create a duplicate.
+			return "", fmt.Errorf("connection list response missing pagination cursor")
+		}
+		if string(raw) == "null" {
+			// An explicit null is Drata's only end-of-list signal: no match
+			// through the true end means the connection does not exist and the
+			// caller creates it.
+			return "", nil
+		}
+		var next string
+		if err := json.Unmarshal(raw, &next); err != nil {
+			return "", fmt.Errorf("decode pagination cursor: %w", err)
+		}
+		if next == "" || next == cursor {
+			// A cursor that is empty or unchanged can't advance the scan and
+			// isn't proof of absence; fail rather than risk a duplicate.
+			return "", fmt.Errorf("connection list cursor did not advance")
+		}
+		cursor = next
+	}
+	// Ran out of pages before reaching the end: a match could still be beyond
+	// the cap, so this is unproven-absence, not not-found. Fail loudly.
+	return "", fmt.Errorf("connection list exceeded %d pages", maxConnectionListPages)
+}
+
+// createConnection creates the dedicated Custom Connection with the exact
+// record schema the push path expects.
+func (s *sink) createConnection(ctx context.Context, creds providers.Credentials, base, name string, workspaceID int) (string, error) {
+	payload := map[string]any{
+		"name":           name,
+		"providerTypes":  []string{"CUSTOM"},
+		"workspaceIds":   []int{workspaceID},
+		"displayNameKey": displayNameKey,
+		"schema":         connectionRecordSchema(),
+	}
+	body, err := s.doJSON(ctx, creds, http.MethodPost, base+"/public/v2/custom-connections", payload)
+	if err != nil {
+		return "", err
+	}
+	var created struct {
+		ID flexID `json:"id"`
+	}
+	if err := json.Unmarshal(body, &created); err != nil {
+		return "", fmt.Errorf("decode created connection: %w", err)
+	}
+	if string(created.ID) == "" {
+		return "", fmt.Errorf("created connection carried no id")
+	}
+	return string(created.ID), nil
+}
+
+// connectionRecordSchema is the JTD the pushed records must match. The
+// `required` list deliberately OMITS agentLastSeenAt: Drata marks every
+// property required when the list is absent, which would reject the
+// never-seen-agent records the sink emits without that field — the single
+// most error-prone step of manual setup, encoded correctly here once.
+func connectionRecordSchema() map[string]any {
+	str := map[string]string{"type": "string"}
+	return map[string]any{
+		"type": "object",
+		"required": []string{
+			"id", "serialNumber", "hostname",
+			"assignedUserEmail", "agentActive", "agentAttestation",
+		},
+		"properties": map[string]any{
+			"id":                str,
+			"serialNumber":      str,
+			"hostname":          str,
+			"assignedUserEmail": str,
+			"agentActive":       map[string]string{"type": "boolean"},
+			"agentAttestation":  str,
+			"agentLastSeenAt":   str,
+		},
+	}
 }
 
 // TestConnection proves the stored credentials with the same read the push

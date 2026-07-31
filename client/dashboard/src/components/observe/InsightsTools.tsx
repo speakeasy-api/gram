@@ -1,10 +1,10 @@
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { InsightsConfig } from "@/components/insights-dock";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Button } from "@/components/ui/Button";
+import { Spinner } from "@/components/ui/Spinner";
 import {
   FilterChip,
   ObserveFilterBar,
@@ -48,7 +48,8 @@ import type { ToolUsageUserSummary } from "@gram/client/models/components/toolus
 import type { ToolUsageUserTimeSeriesPoint } from "@gram/client/models/components/toolusageusertimeseriespoint.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Badge, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
@@ -78,7 +79,7 @@ import { Link } from "react-router";
 import { useObserveFilters } from "@/components/observe/useObserveFilters";
 import { HooksEmptyState } from "@/pages/hooks/HooksEmptyState";
 import { HooksSetupButton } from "@/pages/hooks/HooksSetupDialog";
-import type { MultiSelectGroup } from "@/components/ui/multi-select";
+import type { MultiSelectGroup } from "@/components/ui/MultiSelect";
 import {
   bucketStartNsToMs,
   buildToolUsageTimeSeries,
@@ -748,7 +749,7 @@ function HooksInnerContent({
           </div>
           <div className="flex items-center gap-2">
             <HooksSetupButton />
-            <Button variant="outline" size="sm" asChild>
+            <Button variant="secondary" size="sm" asChild>
               <Link to={orgRoutes.logs.href()}>
                 <Settings className="h-4 w-4" />
                 Configure settings
@@ -1000,7 +1001,7 @@ function StackedBarChart({
       {hiddenCount > 0 && onShowAll && (
         <div className="mt-2 flex w-full">
           <Button
-            variant="ghost"
+            variant="tertiary"
             size="sm"
             icon="chevron-down"
             iconAfter={true}

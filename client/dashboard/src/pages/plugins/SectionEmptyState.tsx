@@ -1,5 +1,5 @@
-import { Type } from "@/components/ui/type";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Text } from "@/components/ui/Text";
+import { Stack } from "@/components/ui/Stack";
 
 /**
  * Bordered empty-state card shared by the plugin detail page sections
@@ -20,13 +20,13 @@ export function SectionEmptyState({
       align="center"
       justify="center"
     >
-      <Type variant="body" muted>
+      <Text variant="body" muted>
         {title}
-      </Type>
+      </Text>
       {subtitle && (
-        <Type small muted>
+        <Text small muted>
           {subtitle}
-        </Type>
+        </Text>
       )}
     </Stack>
   );

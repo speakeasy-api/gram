@@ -1,19 +1,19 @@
-import { Label } from "@/components/ui/label";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import {
   Sheet,
   SheetContent,
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -22,7 +22,9 @@ import type { RemoteSessionIssuer } from "@gram/client/models/components/remotes
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { invalidateAllOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -56,12 +58,12 @@ function DocumentationLinks({ issuer }: { issuer: RemoteSessionIssuer }) {
 
   return (
     <Stack gap={2}>
-      <Type muted small>
+      <Text muted small>
         Documentation links to assist with creating this client.
-      </Type>
+      </Text>
       <Stack direction="horizontal" gap={4}>
         {links.map(({ label, url }) => (
-          <Type key={label} muted small>
+          <Text key={label} muted small>
             <a
               href={url}
               target="_blank"
@@ -70,7 +72,7 @@ function DocumentationLinks({ issuer }: { issuer: RemoteSessionIssuer }) {
             >
               {label}
             </a>
-          </Type>
+          </Text>
         ))}
       </Stack>
     </Stack>
@@ -317,10 +319,10 @@ export function CreateRemoteSessionClientSheet({
                       <SelectItem value="project">Specific project</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Type muted small>
+                  <Text muted small>
                     An organization-level client has no project and can be
                     attached by every project in the organization.
-                  </Type>
+                  </Text>
                 </Stack>
 
                 {scope === "project" && (
@@ -340,17 +342,17 @@ export function CreateRemoteSessionClientSheet({
                         ))}
                       </SelectContent>
                     </Select>
-                    <Type muted small>
+                    <Text muted small>
                       The client will be scoped to this project in the
                       organization.
-                    </Type>
+                    </Text>
                   </Stack>
                 )}
               </Stack>
             ) : (
-              <Type muted small>
+              <Text muted small>
                 The client will be created in this provider's project.
-              </Type>
+              </Text>
             )}
 
             <ClientTypeFields

@@ -3,22 +3,23 @@ import { AssistantSessionsList } from "@/components/assistants/sessions-list";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
 import { EditInstructionsDialog } from "@/components/assistants/edit-instructions-dialog";
 import { RequireScope } from "@/components/require-scope";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
   TabsList,
-} from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tabs";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
 import { useAssistantsDeleteMutation } from "@gram/client/react-query/assistantsDelete.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useTriggers } from "@gram/client/react-query/triggers.js";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
@@ -70,19 +71,19 @@ export function AssistantDraftPanel(): JSX.Element {
     return (
       <div className="flex h-full flex-col">
         <div className="border-border border-b px-4 py-3">
-          <Type variant="body" className="font-medium">
+          <Text variant="body" className="font-medium">
             Draft assistant
-          </Type>
+          </Text>
         </div>
         <div className="flex flex-1 items-center justify-center px-4 py-8 text-center">
           <Stack gap={3} align="center" className="max-w-xs">
             <div className="bg-muted/40 flex h-10 w-10 items-center justify-center rounded-full">
               <Icon name="bot" className="text-muted-foreground h-5 w-5" />
             </div>
-            <Type small muted>
+            <Text small muted>
               Once you describe your assistant in the chat, the live spec will
               appear here as it's built.
-            </Type>
+            </Text>
           </Stack>
         </div>
       </div>
@@ -94,11 +95,11 @@ export function AssistantDraftPanel(): JSX.Element {
   return (
     <div className="flex h-full flex-col">
       <div className="border-border flex items-center justify-between gap-2 border-b px-4 py-3">
-        <Type variant="body" className="truncate font-medium">
+        <Text variant="body" className="truncate font-medium">
           {a?.name ?? "Loading…"}
-        </Type>
+        </Text>
         <Button
-          variant="ghost"
+          variant="tertiary"
           size="sm"
           className="shrink-0"
           aria-label="Delete assistant"
@@ -158,10 +159,10 @@ export function AssistantDraftPanel(): JSX.Element {
                   />
                 </Row>
                 <Row label="Concurrency">
-                  <Type small>{a.maxConcurrency}</Type>
+                  <Text small>{a.maxConcurrency}</Text>
                 </Row>
                 <Row label="Warm TTL">
-                  <Type small>{a.warmTtlSeconds}s</Type>
+                  <Text small>{a.warmTtlSeconds}s</Text>
                 </Row>
               </Section>
 
@@ -169,7 +170,7 @@ export function AssistantDraftPanel(): JSX.Element {
                 title="System instructions"
                 action={
                   <Button
-                    variant="ghost"
+                    variant="tertiary"
                     size="sm"
                     className="h-auto gap-1 px-1.5 py-0.5 text-xs"
                     onClick={() => setEditingInstructions(true)}
@@ -190,9 +191,9 @@ export function AssistantDraftPanel(): JSX.Element {
                     </pre>
                   </button>
                 ) : (
-                  <Type small muted>
+                  <Text small muted>
                     Not set yet.
-                  </Type>
+                  </Text>
                 )}
               </Section>
 
@@ -227,9 +228,9 @@ export function AssistantDraftPanel(): JSX.Element {
                           {t.toolsetSlug}
                         </code>
                         {t.environmentSlug && (
-                          <Type small muted className="text-[11px]">
+                          <Text small muted className="text-[11px]">
                             env: {t.environmentSlug}
-                          </Type>
+                          </Text>
                         )}
                       </Stack>
                       <Icon
@@ -249,9 +250,9 @@ export function AssistantDraftPanel(): JSX.Element {
                           {m.mcpServerSlug}
                         </code>
                         {m.environmentSlug && (
-                          <Type small muted className="text-[11px]">
+                          <Text small muted className="text-[11px]">
                             env: {m.environmentSlug}
-                          </Type>
+                          </Text>
                         )}
                       </Stack>
                       <Icon
@@ -277,9 +278,9 @@ export function AssistantDraftPanel(): JSX.Element {
             className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
           >
             {triggers.length === 0 ? (
-              <Type small muted>
+              <Text small muted>
                 No triggers wired up.
-              </Type>
+              </Text>
             ) : (
               <Stack gap={2}>
                 {triggers.map((t) => (
@@ -289,10 +290,10 @@ export function AssistantDraftPanel(): JSX.Element {
                   >
                     <Stack gap={1} className="min-w-0">
                       <Stack direction="horizontal" gap={2} align="center">
-                        <Type small className="font-medium">
+                        <Text small className="font-medium">
                           {t.name}
-                        </Type>
-                        <Badge variant="outline" className="text-[10px]">
+                        </Text>
+                        <Badge variant="neutral" className="text-[10px]">
                           {t.definitionSlug}
                         </Badge>
                       </Stack>
@@ -303,11 +304,11 @@ export function AssistantDraftPanel(): JSX.Element {
                       )}
                     </Stack>
                     {t.status === "active" ? (
-                      <Badge variant="default" className="text-[10px]">
+                      <Badge variant="neutral" className="text-[10px]">
                         Active
                       </Badge>
                     ) : (
-                      <Badge variant="secondary" className="text-[10px]">
+                      <Badge variant="neutral" className="text-[10px]">
                         Paused
                       </Badge>
                     )}
@@ -347,15 +348,15 @@ function Section({
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-2">
-        <Type variant="body" className="text-xs font-semibold uppercase">
+        <Text variant="body" className="text-xs font-semibold uppercase">
           {title}
-        </Type>
+        </Text>
         {action}
       </div>
       {isEmpty && empty ? (
-        <Type small muted>
+        <Text small muted>
           {empty}
-        </Type>
+        </Text>
       ) : (
         children
       )}
@@ -372,9 +373,9 @@ function Row({
 }) {
   return (
     <div className="flex items-center justify-between py-1">
-      <Type small muted>
+      <Text small muted>
         {label}
-      </Type>
+      </Text>
       <div>{children}</div>
     </div>
   );

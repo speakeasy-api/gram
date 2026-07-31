@@ -3,14 +3,14 @@ import {
   SEGMENT_BASE,
   SEGMENT_INACTIVE,
   SegmentedControl,
-} from "@/components/ui/segmented-control";
+} from "@/components/ui/SegmentedControl";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 

@@ -1,12 +1,12 @@
 import { RequireScope } from "@/components/require-scope";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button as UiButton } from "@/components/ui/button";
-import { DotCard } from "@/components/ui/dot-card";
-import { DotRow } from "@/components/ui/dot-row";
-import { DotTable } from "@/components/ui/dot-table";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
-import type { ViewMode } from "@/components/ui/use-view-mode";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button as UiButton } from "@/components/ui/Button";
+import { DotCard } from "@/components/ui/DotCard";
+import { DotRow } from "@/components/ui/DotRow";
+import { DotTable } from "@/components/ui/DotTable";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
+import type { ViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { useProject } from "@/contexts/Auth";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { useRoutes } from "@/routes";
@@ -16,7 +16,9 @@ import {
   useSkillDistributionsInfinite,
 } from "@gram/client/react-query/skillDistributions.js";
 import { useUndistributeSkillMutation } from "@gram/client/react-query/undistributeSkill.js";
-import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sparkles, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -188,13 +190,13 @@ export function PluginSkillsSection({
       <div className="mb-3 flex items-center gap-3">
         <div className="border-border flex-1 border-t" />
         <div className="flex shrink-0 items-center gap-2">
-          <Type
+          <Text
             small
             muted
             className="font-mono text-xs tracking-wide uppercase"
           >
             Skills
-          </Type>
+          </Text>
           {distributions.length > 0 && (
             <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
               {distributions.length}
@@ -204,10 +206,10 @@ export function PluginSkillsSection({
         <div className="border-border flex-1 border-t" />
       </div>
       <div className="mb-3 flex items-center justify-between gap-4">
-        <Type small muted className="max-w-md">
+        <Text small muted className="max-w-md">
           Skills distributed to this plugin ship inside the plugin package and
           reach everyone who installs it.
-        </Type>
+        </Text>
         <RequireScope
           scope="skill:write"
           resourceId={project.id}
@@ -265,7 +267,7 @@ function PluginSkillCard({
       icon={<Sparkles className="text-muted-foreground h-8 w-8" />}
     >
       <div className="mb-2 flex items-start justify-between gap-2">
-        <Type
+        <Text
           variant="subheading"
           as="div"
           className="text-md group-hover:text-primary flex-1 truncate transition-colors"
@@ -277,12 +279,12 @@ function PluginSkillCard({
           >
             {distribution.skillDisplayName}
           </Link>
-        </Type>
+        </Text>
         <SkillVersionBadge distribution={distribution} />
       </div>
-      <Type small muted className="truncate font-mono">
+      <Text small muted className="truncate font-mono">
         {distribution.skillName}
-      </Type>
+      </Text>
 
       <div className="mt-auto flex items-center justify-end gap-2 pt-2">
         <RequireScope
@@ -292,8 +294,8 @@ function PluginSkillCard({
         >
           <UiButton
             type="button"
-            variant="ghost"
-            size="icon-sm"
+            variant="tertiary"
+            size="sm"
             tooltip="Remove skill"
             aria-label="Remove skill"
             className="hover:text-destructive"
@@ -331,19 +333,19 @@ function PluginSkillTableRow({
       ariaLabel={`View skill ${distribution.skillDisplayName}`}
     >
       <td className="px-3 py-3">
-        <Type
+        <Text
           variant="subheading"
           as="div"
           className="group-hover:text-primary truncate text-sm transition-colors"
           title={distribution.skillDisplayName}
         >
           {distribution.skillDisplayName}
-        </Type>
+        </Text>
       </td>
       <td className="px-3 py-3">
-        <Type small muted className="truncate font-mono">
+        <Text small muted className="truncate font-mono">
           {distribution.skillName}
-        </Type>
+        </Text>
       </td>
       <td className="px-3 py-3">
         <SkillVersionBadge distribution={distribution} />
@@ -360,8 +362,8 @@ function PluginSkillTableRow({
           >
             <UiButton
               type="button"
-              variant="ghost"
-              size="icon-sm"
+              variant="tertiary"
+              size="sm"
               tooltip="Remove skill"
               aria-label={`Remove skill ${distribution.skillDisplayName}`}
               className="hover:text-destructive"

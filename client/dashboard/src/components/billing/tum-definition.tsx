@@ -1,5 +1,5 @@
 import { Info } from "lucide-react";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 
 // How the billing page explains tokens under management. The copy mirrors the

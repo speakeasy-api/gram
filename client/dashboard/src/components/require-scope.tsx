@@ -1,14 +1,14 @@
 import { useRBAC } from "@/hooks/useRBAC";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { cn } from "@/lib/utils";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
 import React from "react";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "./ui/collapsible";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+} from "@/components/ui/Collapsible";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/Tooltip";
 
 type RenderFn = (props: { disabled: boolean }) => React.ReactNode;
 

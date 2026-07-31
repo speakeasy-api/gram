@@ -13206,9 +13206,96 @@ paths:
             x-speakeasy-name-override: registerDomain
             x-speakeasy-react-hook:
                 name: registerDomain
+    /rpc/domain.setRootMcpEndpoint:
+        post:
+            description: Set or clear the MCP endpoint mapped to a custom domain's root
+            operationId: setRootMcpEndpoint
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetRootMcpEndpointRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CustomDomain'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: setRootMcpEndpoint domains
+            tags:
+                - domains
+            x-speakeasy-name-override: setRootMcpEndpoint
+            x-speakeasy-react-hook:
+                name: SetRootMcpEndpoint
     /rpc/domain.update:
         post:
-            description: Update the IP allowlist for the organization's custom domain
+            description: Update settings for the organization's custom domain
             operationId: updateDomain
             parameters:
                 - allowEmptyValue: true
@@ -53830,9 +53917,16 @@ components:
                 is_updating:
                     type: boolean
                     description: The custom domain is actively being registered
+                openai_apps_challenge_token:
+                    type: string
+                    description: The token served for OpenAI app-submission domain verification, if configured
                 organization_id:
                     type: string
                     description: The ID of the organization this domain belongs to
+                root_mcp_endpoint_id:
+                    type: string
+                    description: The MCP endpoint currently mapped to the domain root, if any
+                    format: uuid
                 unhealthy_since:
                     type: string
                     description: When the current unhealthy period began.
@@ -53861,6 +53955,9 @@ components:
                     type: string
                     description: The ID of the MCP endpoint
                     format: uuid
+                is_domain_root:
+                    type: boolean
+                    description: Whether this endpoint is mapped to the custom-domain root
                 mcp_server_id:
                     type: string
                     description: The ID of the parent MCP server
@@ -53892,6 +53989,7 @@ components:
                 - project_name
                 - project_slug
                 - mcp_server_id
+                - is_domain_root
         DeclineRiskPolicyChallengeResponseBody:
             type: object
             properties:
@@ -59133,6 +59231,9 @@ components:
                     type: string
                     description: The ID of the MCP endpoint
                     format: uuid
+                is_domain_root:
+                    type: boolean
+                    description: Whether this endpoint is mapped to its custom-domain root
                 mcp_server_id:
                     type: string
                     description: The ID of the MCP server this endpoint addresses
@@ -59156,6 +59257,7 @@ components:
                 - project_id
                 - mcp_server_id
                 - slug
+                - is_domain_root
                 - created_at
                 - updated_at
         McpEnvironmentConfig:
@@ -64675,6 +64777,19 @@ components:
                     $ref: '#/components/schemas/Project'
             required:
                 - project
+        SetRootMcpEndpointRequestBody:
+            type: object
+            properties:
+                custom_domain_id:
+                    type: string
+                    description: The custom domain whose root mapping to change
+                    format: uuid
+                mcp_endpoint_id:
+                    type: string
+                    description: The MCP endpoint to map to the domain root. Omit to clear the mapping.
+                    format: uuid
+            required:
+                - custom_domain_id
         SetScheduleEnabledRequestBody:
             type: object
             properties:
@@ -68814,8 +68929,9 @@ components:
                     items:
                         type: string
                     description: Replacement IP allowlist. Pass an empty list to remove all restrictions.
-            required:
-                - ip_allowlist
+                openai_apps_challenge_token:
+                    type: string
+                    description: Replacement OpenAI app-submission verification token. Pass an empty string to clear it.
         UpdateEnvironmentForm:
             type: object
             properties:

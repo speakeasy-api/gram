@@ -1,4 +1,4 @@
-import { MoreActions, type Action } from "@/components/ui/more-actions";
+import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import { useEffect, useRef, type JSX } from "react";
 import { cn } from "@/lib/utils";
 

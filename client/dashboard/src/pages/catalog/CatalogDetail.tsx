@@ -1,7 +1,7 @@
 import { Page } from "@/components/page-layout";
-import { Card } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { Card } from "@/components/ui/Card";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { ManualSetupBadge } from "@/pages/catalog/ManualSetupBadge";
 import { useSdkClient } from "@/contexts/Sdk";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
@@ -14,7 +14,9 @@ import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useMcpRegistriesGetServerDetails } from "@gram/client/react-query/mcpRegistriesGetServerDetails.js";
-import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useMutation } from "@tanstack/react-query";
 import {
   ChevronDown,
@@ -27,7 +29,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useMemo, useState } from "react";
+import { ReactNode, useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router";
 
 // Map of server specifiers to their website URLs
@@ -197,10 +199,10 @@ export default function CatalogDetail(): JSX.Element {
           <Card>
             <Card.Content className="py-12 text-center">
               <ServerIcon className="text-muted-foreground mx-auto mb-4 h-12 w-12" />
-              <Type variant="subheading">Server not found</Type>
-              <Type muted className="mt-2">
+              <Text variant="subheading">Server not found</Text>
+              <Text muted className="mt-2">
                 The requested MCP server could not be found in the catalog.
-              </Type>
+              </Text>
               <routes.catalog.Link className="mt-4 inline-block">
                 <Button variant="secondary" className="mt-4">
                   <Button.Text>Back to Catalog</Button.Text>
@@ -226,7 +228,7 @@ export default function CatalogDetail(): JSX.Element {
         />
       </Page.Header>
       <Page.Body>
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+        <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-3">
           {/* Left Column - Server Details */}
           <div className="space-y-6 lg:col-span-2">
             {/* Header */}
@@ -266,9 +268,9 @@ export default function CatalogDetail(): JSX.Element {
                     {SERVER_WEBSITE_MAP[server.registrySpecifier]}
                   </a>
                 ) : (
-                  <Type muted className="font-mono text-sm">
+                  <Text muted className="font-mono text-sm">
                     {server.registrySpecifier}
-                  </Type>
+                  </Text>
                 )}
                 <div className="mt-4">
                   {isInstalled ? (
@@ -323,9 +325,9 @@ export default function CatalogDetail(): JSX.Element {
                 <Card.Title>About</Card.Title>
               </Card.Header>
               <Card.Content>
-                <Type className="leading-relaxed whitespace-pre-wrap">
+                <Text className="leading-relaxed whitespace-pre-wrap">
                   {server.description || "No description available."}
-                </Type>
+                </Text>
               </Card.Content>
             </Card>
 
@@ -334,138 +336,92 @@ export default function CatalogDetail(): JSX.Element {
           </div>
 
           {/* Right Column - Info */}
-          <div className="space-y-4">
-            {/* Usage Stats */}
-            {(weeklyUsage || visitorsTotal || totalUsage) && (
-              <Card>
-                <Card.Header>
-                  <Card.Title>Usage</Card.Title>
-                </Card.Header>
-                <Card.Content>
-                  <div className="space-y-3">
-                    {weeklyUsage !== undefined && weeklyUsage > 0 && (
-                      <div className="flex justify-between gap-4">
-                        <Type small muted>
-                          This Week
-                        </Type>
-                        <Type className="font-medium">
-                          {weeklyUsage.toLocaleString()}
-                        </Type>
-                      </div>
-                    )}
-                    {visitorsTotal !== undefined && visitorsTotal > 0 && (
-                      <div className="flex justify-between gap-4">
-                        <Type small muted>
-                          Monthly
-                        </Type>
-                        <Type className="font-medium">
-                          {visitorsTotal.toLocaleString()}
-                        </Type>
-                      </div>
-                    )}
-                    {totalUsage !== undefined && totalUsage > 0 && (
-                      <div className="flex justify-between gap-4">
-                        <Type small muted>
-                          All Time
-                        </Type>
-                        <Type className="font-medium">
-                          {totalUsage.toLocaleString()}
-                        </Type>
-                      </div>
-                    )}
-                  </div>
-                </Card.Content>
-              </Card>
-            )}
-
-            {/* Version & Release Info */}
+          <div>
             <Card>
-              <Card.Header>
-                <Card.Title>Version & Release</Card.Title>
-              </Card.Header>
               <Card.Content>
-                <div className="space-y-3">
-                  <div className="flex justify-between gap-4">
-                    <Type small muted>
-                      Version
-                    </Type>
-                    <Type className="font-mono">{server.version}</Type>
-                  </div>
-                  {versionMeta?.status && (
-                    <div className="flex justify-between gap-4">
-                      <Type small muted>
-                        Status
-                      </Type>
-                      <Type className="capitalize">{versionMeta.status}</Type>
-                    </div>
+                <div className="divide-y">
+                  {(weeklyUsage || visitorsTotal || totalUsage) && (
+                    <DetailGroup label="Usage">
+                      {weeklyUsage !== undefined && weeklyUsage > 0 && (
+                        <DetailRow label="This Week">
+                          <Text className="font-medium">
+                            {weeklyUsage.toLocaleString()}
+                          </Text>
+                        </DetailRow>
+                      )}
+                      {visitorsTotal !== undefined && visitorsTotal > 0 && (
+                        <DetailRow label="Monthly">
+                          <Text className="font-medium">
+                            {visitorsTotal.toLocaleString()}
+                          </Text>
+                        </DetailRow>
+                      )}
+                      {totalUsage !== undefined && totalUsage > 0 && (
+                        <DetailRow label="All Time">
+                          <Text className="font-medium">
+                            {totalUsage.toLocaleString()}
+                          </Text>
+                        </DetailRow>
+                      )}
+                    </DetailGroup>
                   )}
-                  {versionMeta?.publishedAt && (
-                    <div className="flex justify-between gap-4">
-                      <Type small muted>
-                        Published
-                      </Type>
-                      <Type>
-                        {new Date(versionMeta.publishedAt).toLocaleDateString()}
-                      </Type>
-                    </div>
-                  )}
-                  {versionMeta?.updatedAt && (
-                    <div className="flex justify-between gap-4">
-                      <Type small muted>
-                        Last Updated
-                      </Type>
-                      <Type>
-                        {new Date(versionMeta.updatedAt).toLocaleDateString()}
-                      </Type>
-                    </div>
-                  )}
-                  {versionMeta?.source && (
-                    <div className="flex justify-between gap-4">
-                      <Type small muted>
-                        Source
-                      </Type>
-                      <a
-                        href={
-                          versionMeta.source.startsWith("http")
-                            ? versionMeta.source
-                            : `https://${versionMeta.source}`
-                        }
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary flex items-center gap-1 hover:underline"
-                      >
-                        <Type className="max-w-[150px] truncate text-right">
-                          {versionMeta.source}
-                        </Type>
-                        <ExternalLink className="h-3 w-3 shrink-0" />
-                      </a>
-                    </div>
-                  )}
-                </div>
-              </Card.Content>
-            </Card>
 
-            {/* Registry Info */}
-            <Card>
-              <Card.Header>
-                <Card.Title>Registry</Card.Title>
-              </Card.Header>
-              <Card.Content>
-                <div className="space-y-3">
-                  <div className="flex justify-between gap-4">
-                    <Type small muted>
-                      Registry
-                    </Type>
-                    <Type className="text-right">{server.registryId}</Type>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <Type small muted>
-                      Specifier
-                    </Type>
-                    <Type className="text-right font-mono text-xs break-all">
-                      {server.registrySpecifier}
-                    </Type>
-                  </div>
+                  <DetailGroup label="Version & Release">
+                    <DetailRow label="Version">
+                      <Text className="font-mono">{server.version}</Text>
+                    </DetailRow>
+                    {versionMeta?.status && (
+                      <DetailRow label="Status">
+                        <Text className="capitalize">{versionMeta.status}</Text>
+                      </DetailRow>
+                    )}
+                    {versionMeta?.publishedAt && (
+                      <DetailRow label="Published">
+                        <Text>
+                          {new Date(
+                            versionMeta.publishedAt,
+                          ).toLocaleDateString()}
+                        </Text>
+                      </DetailRow>
+                    )}
+                    {versionMeta?.updatedAt && (
+                      <DetailRow label="Last Updated">
+                        <Text>
+                          {new Date(versionMeta.updatedAt).toLocaleDateString()}
+                        </Text>
+                      </DetailRow>
+                    )}
+                    {versionMeta?.source && (
+                      <DetailRow label="Source">
+                        <a
+                          href={
+                            versionMeta.source.startsWith("http")
+                              ? versionMeta.source
+                              : `https://${versionMeta.source}`
+                          }
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary flex items-center gap-1 hover:underline"
+                        >
+                          <Text className="max-w-[150px] truncate text-right">
+                            {versionMeta.source}
+                          </Text>
+                          <ExternalLink className="h-3 w-3 shrink-0" />
+                        </a>
+                      </DetailRow>
+                    )}
+                  </DetailGroup>
+
+                  <DetailGroup label="Registry">
+                    <DetailRow label="Registry">
+                      <Text className="text-right">{server.registryId}</Text>
+                    </DetailRow>
+                    <DetailRow label="Specifier">
+                      <Text className="text-right font-mono text-xs break-all">
+                        {server.registrySpecifier}
+                      </Text>
+                    </DetailRow>
+                  </DetailGroup>
                 </div>
               </Card.Content>
             </Card>
@@ -481,6 +437,38 @@ export default function CatalogDetail(): JSX.Element {
         />
       </Page.Body>
     </Page>
+  );
+}
+
+function DetailGroup({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-3 py-4 first:pt-0 last:pb-0">
+      <Card.Title>{label}</Card.Title>
+      {children}
+    </div>
+  );
+}
+
+function DetailRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <Text small muted>
+        {label}
+      </Text>
+      {children}
+    </div>
   );
 }
 
@@ -538,9 +526,9 @@ function ToolCard({ tool }: { tool: Tool }) {
             align="center"
             className="flex-wrap"
           >
-            <Type className="font-mono text-sm font-medium">
+            <Text className="font-mono text-sm font-medium">
               {tool.annotations?.title || tool.name}
-            </Type>
+            </Text>
             {tool.annotations?.readOnlyHint && (
               <Badge variant="neutral" background className="text-xs">
                 Read-only
@@ -584,9 +572,9 @@ function ToolCard({ tool }: { tool: Tool }) {
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.2 }}
             >
-              <Type small muted>
+              <Text small muted>
                 {firstSentence}
-              </Type>
+              </Text>
             </motion.div>
           )}
         </AnimatePresence>
@@ -601,12 +589,12 @@ function ToolCard({ tool }: { tool: Tool }) {
             className="overflow-hidden"
           >
             <div className="mt-2 border-t pt-2">
-              <Type
+              <Text
                 small
                 className="prose prose-sm max-w-none whitespace-pre-wrap"
               >
                 {tool.description}
-              </Type>
+              </Text>
             </div>
           </motion.div>
         )}

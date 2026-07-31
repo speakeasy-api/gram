@@ -1,9 +1,9 @@
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 
-import { Button as LocalButton } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Button as LocalButton } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
 import {
   Sheet,
   SheetContent,
@@ -11,8 +11,8 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/contexts/Auth";
 import type { Role } from "@gram/client/models/components/role.js";
@@ -24,7 +24,8 @@ import {
 import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
 import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
-import { Alert, Button } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { useOrgRoutes } from "@/routes";
@@ -42,7 +43,7 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@/components/ui/Tooltip";
 import { useMemo, useState } from "react";
 import {
   getSelectableMembers,
@@ -666,12 +667,12 @@ export function CreateRoleDialog({
                       showPermissions && "rotate-90",
                     )}
                   />
-                  <Type variant="body" className="font-medium">
+                  <Text variant="body" className="font-medium">
                     Permissions
-                  </Type>
-                  <Type variant="body" className="text-muted-foreground ml-1">
+                  </Text>
+                  <Text variant="body" className="text-muted-foreground ml-1">
                     ({grantCount} selected)
-                  </Type>
+                  </Text>
                 </button>
 
                 {showPermissions && (
@@ -721,23 +722,23 @@ export function CreateRoleDialog({
                               />
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2">
-                                  <Type
+                                  <Text
                                     variant="body"
                                     className="text-sm font-medium"
                                   >
                                     {group.label}
-                                  </Type>
-                                  <Type
+                                  </Text>
+                                  <Text
                                     variant="body"
                                     className="text-muted-foreground text-sm"
                                   >
                                     ({selectedInGroup}/{group.scopes.length})
-                                  </Type>
+                                  </Text>
                                 </div>
                                 {!isExpanded && (
-                                  <Type muted small className="mt-0.5 text-xs">
+                                  <Text muted small className="mt-0.5 text-xs">
                                     {group.description}
-                                  </Type>
+                                  </Text>
                                 )}
                               </div>
                             </div>
@@ -773,18 +774,18 @@ export function CreateRoleDialog({
                                           className="bg-background mt-0.5"
                                         />
                                         <div className="min-w-0 flex-1">
-                                          <Type
+                                          <Text
                                             variant="body"
                                             className="font-mono text-sm font-medium"
                                           >
                                             {scopeDef.slug}
-                                          </Type>
-                                          <Type
+                                          </Text>
+                                          <Text
                                             variant="body"
                                             className="text-muted-foreground text-xs"
                                           >
                                             {scopeDef.description}
-                                          </Type>
+                                          </Text>
                                         </div>
                                       </label>
 
@@ -841,8 +842,8 @@ export function CreateRoleDialog({
                                           ).length > 0 && (
                                             <LocalButton
                                               type="button"
-                                              variant="ghost"
-                                              size="inline"
+                                              variant="tertiary"
+                                              size="xs"
                                               className="text-muted-foreground text-xs"
                                               onClick={() =>
                                                 openRuleEditor(
@@ -885,12 +886,12 @@ export function CreateRoleDialog({
                         showMembers && "rotate-90",
                       )}
                     />
-                    <Type variant="body" className="font-medium">
+                    <Text variant="body" className="font-medium">
                       Assign Members
-                    </Type>
-                    <Type variant="body" className="text-muted-foreground ml-1">
+                    </Text>
+                    <Text variant="body" className="text-muted-foreground ml-1">
                       (optional, {selectedMembers.size} selected)
-                    </Type>
+                    </Text>
                   </button>
 
                   {showMembers && (
@@ -924,12 +925,12 @@ export function CreateRoleDialog({
                               }
                               onCheckedChange={() => toggleAllMembers()}
                             />
-                            <Type
+                            <Text
                               variant="body"
                               className="text-muted-foreground text-sm font-medium"
                             >
                               Select all
-                            </Type>
+                            </Text>
                           </label>
                         );
                       })()}
@@ -975,18 +976,18 @@ export function CreateRoleDialog({
                               </AvatarFallback>
                             </Avatar>
                             <div className="min-w-0 flex-1 space-y-0.5">
-                              <Type
+                              <Text
                                 variant="body"
                                 className="text-sm font-medium"
                               >
                                 {member.name}
-                              </Type>
-                              <Type
+                              </Text>
+                              <Text
                                 variant="body"
                                 className="text-muted-foreground text-xs"
                               >
                                 {member.email}
-                              </Type>
+                              </Text>
                             </div>
                           </label>
                         );

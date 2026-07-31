@@ -1,14 +1,14 @@
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Heading } from "@/components/ui/Heading";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { SkeletonTable } from "@/components/ui/skeleton";
+} from "@/components/ui/Select";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import {
   Sheet,
   SheetContent,
@@ -16,8 +16,8 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
@@ -32,7 +32,10 @@ import { useRiskApprovePolicyBypassRequestMutation } from "@gram/client/react-qu
 import { useRiskDenyPolicyBypassRequestMutation } from "@gram/client/react-query/riskDenyPolicyBypassRequest.js";
 import { useRiskRevokePolicyBypassRequestMutation } from "@gram/client/react-query/riskRevokePolicyBypassRequest.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { Badge, Button, Column, Dialog, Table } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Column, Table } from "@/components/ui/Table";
 import { useQueryClient } from "@tanstack/react-query";
 import { Inbox, Loader2, ShieldCheck } from "lucide-react";
 import type React from "react";
@@ -233,12 +236,12 @@ function TableEmptyState({
 }) {
   return (
     <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-1 px-4 py-8 text-center">
-      <Type variant="body" className="font-medium">
+      <Text variant="body" className="font-medium">
         {title}
-      </Type>
-      <Type muted small className="max-w-md">
+      </Text>
+      <Text muted small className="max-w-md">
         {description}
-      </Type>
+      </Text>
     </div>
   );
 }
@@ -259,12 +262,12 @@ function ApprovalSectionEmptyState({
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Icon className="text-muted-foreground h-6 w-6" />
       </div>
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         {title}
-      </Type>
-      <Type small muted className="mb-4 max-w-md">
+      </Text>
+      <Text small muted className="mb-4 max-w-md">
         {description}
-      </Type>
+      </Text>
       {action}
     </div>
   );
@@ -279,16 +282,16 @@ function ServerCell({
 }) {
   return (
     <div className="min-w-0 space-y-1">
-      <Type variant="small" className="truncate font-medium">
+      <Text variant="small" className="truncate font-medium">
         {name}
-      </Type>
+      </Text>
       {detail && (
-        <Type
+        <Text
           variant="small"
           className="text-muted-foreground truncate text-xs"
         >
           {detail}
-        </Type>
+        </Text>
       )}
     </div>
   );
@@ -503,36 +506,36 @@ function ReviewRequestSheet({
             </div>
             <div className="mt-4 grid grid-cols-6 gap-4">
               <div className="col-span-3 min-w-0">
-                <Type muted small>
+                <Text muted small>
                   Requester
-                </Type>
-                <Type variant="body" className="mt-1 truncate text-sm">
+                </Text>
+                <Text variant="body" className="mt-1 truncate text-sm">
                   {getPolicyBypassRequesterLabel(request)}
-                </Type>
+                </Text>
                 {getPolicyBypassRequesterDetail(request) && (
-                  <Type
+                  <Text
                     variant="body"
                     className="text-muted-foreground truncate text-xs"
                   >
                     {getPolicyBypassRequesterDetail(request)}
-                  </Type>
+                  </Text>
                 )}
               </div>
               <div className="col-span-2">
-                <Type muted small>
+                <Text muted small>
                   Updated
-                </Type>
-                <Type variant="body" className="mt-1 text-sm">
+                </Text>
+                <Text variant="body" className="mt-1 text-sm">
                   {formatShortDate(request.updatedAt)}
-                </Type>
+                </Text>
               </div>
               <div className="col-span-1">
-                <Type muted small>
+                <Text muted small>
                   Created
-                </Type>
-                <Type variant="body" className="mt-1 text-sm">
+                </Text>
+                <Text variant="body" className="mt-1 text-sm">
                   {formatShortDate(request.createdAt)}
-                </Type>
+                </Text>
               </div>
             </div>
           </section>
@@ -557,9 +560,9 @@ function ReviewRequestSheet({
                   <Badge variant="success">
                     <Badge.Text>Approve</Badge.Text>
                   </Badge>
-                  <Type muted small>
+                  <Text muted small>
                     Allow matching access.
-                  </Type>
+                  </Text>
                 </span>
               </label>
               <label
@@ -573,9 +576,9 @@ function ReviewRequestSheet({
                   <Badge variant="destructive">
                     <Badge.Text>Deny</Badge.Text>
                   </Badge>
-                  <Type muted small>
+                  <Text muted small>
                     Reject the request.
-                  </Type>
+                  </Text>
                 </span>
               </label>
             </RadioGroup>
@@ -583,9 +586,9 @@ function ReviewRequestSheet({
 
           {(isEditingAccess || action === "approve") && (
             <section className="border-border space-y-3 rounded-md border p-3">
-              <Type variant="small" className="font-medium">
+              <Text variant="small" className="font-medium">
                 Applies to
-              </Type>
+              </Text>
               <RadioGroup
                 value={approvalAudience}
                 onValueChange={(value) =>
@@ -602,12 +605,12 @@ function ReviewRequestSheet({
                 >
                   <RadioGroupItem value="everyone" className="mt-1" />
                   <span>
-                    <Type variant="small" className="font-medium">
+                    <Text variant="small" className="font-medium">
                       Everyone
-                    </Type>
-                    <Type muted small>
+                    </Text>
+                    <Text muted small>
                       All users in this organization.
-                    </Type>
+                    </Text>
                   </span>
                 </label>
 
@@ -621,12 +624,12 @@ function ReviewRequestSheet({
                   <RadioGroupItem value="role" className="mt-1" />
                   <span className="min-w-0 flex-1 space-y-2">
                     <span>
-                      <Type variant="small" className="font-medium">
+                      <Text variant="small" className="font-medium">
                         Role
-                      </Type>
-                      <Type muted small>
+                      </Text>
+                      <Text muted small>
                         Users assigned to one role.
-                      </Type>
+                      </Text>
                     </span>
                     <Select
                       value={selectedRoleId}
@@ -667,12 +670,12 @@ function ReviewRequestSheet({
                   <RadioGroupItem value="user" className="mt-1" />
                   <span className="min-w-0 flex-1 space-y-2">
                     <span>
-                      <Type variant="small" className="font-medium">
+                      <Text variant="small" className="font-medium">
                         User
-                      </Type>
-                      <Type muted small>
+                      </Text>
+                      <Text muted small>
                         One organization member.
-                      </Type>
+                      </Text>
                     </span>
                     <Select
                       value={selectedUserPrincipalUrn}
@@ -701,9 +704,9 @@ function ReviewRequestSheet({
             </section>
           )}
 
-          <Type muted small>
+          <Text muted small>
             {sheetCopy.help}
-          </Type>
+          </Text>
         </div>
 
         <SheetFooter>
@@ -867,7 +870,7 @@ export function ApprovalRequestsContent({
       header: "Updated",
       width: "0.75fr",
       render: (request) => (
-        <Type variant="small">{formatShortDate(request.updatedAt)}</Type>
+        <Text variant="small">{formatShortDate(request.updatedAt)}</Text>
       ),
     },
   ];
@@ -914,9 +917,9 @@ export function ApprovalRequestsContent({
       header: "Applies to",
       width: "1.5fr",
       render: (rule) => (
-        <Type variant="small" className="truncate">
+        <Text variant="small" className="truncate">
           {principalSummary(rule.grantedPrincipalUrns, roles, members)}
-        </Type>
+        </Text>
       ),
     },
     {
@@ -930,7 +933,7 @@ export function ApprovalRequestsContent({
       header: "Updated",
       width: "0.75fr",
       render: (rule) => (
-        <Type variant="small">{formatShortDate(rule.updatedAt)}</Type>
+        <Text variant="small">{formatShortDate(rule.updatedAt)}</Text>
       ),
     },
     {
@@ -1008,9 +1011,9 @@ export function ApprovalRequestsContent({
           <div className="flex items-start justify-between gap-4">
             <div>
               <Heading variant="h5">Approval Requests</Heading>
-              <Type muted small className="mt-1">
+              <Text muted small className="mt-1">
                 Review access requests users created after a policy block.
-              </Type>
+              </Text>
             </div>
           </div>
 
@@ -1044,9 +1047,9 @@ export function ApprovalRequestsContent({
         <div className="flex items-start justify-between gap-4">
           <div>
             <Heading variant="h5">Access Rules</Heading>
-            <Type muted small className="mt-1">
+            <Text muted small className="mt-1">
               Manage approved policy bypass access.
-            </Type>
+            </Text>
           </div>
         </div>
 
@@ -1085,7 +1088,7 @@ export function ApprovalRequestsContent({
           <Dialog.Header>
             <Dialog.Title>Revoke access</Dialog.Title>
           </Dialog.Header>
-          <Type variant="small">
+          <Text variant="small">
             This removes the bypass grant for{" "}
             <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
               {rulePendingDelete
@@ -1093,7 +1096,7 @@ export function ApprovalRequestsContent({
                 : "this access rule"}
             </code>
             ?
-          </Type>
+          </Text>
           <Dialog.Footer>
             <Button
               variant="secondary"

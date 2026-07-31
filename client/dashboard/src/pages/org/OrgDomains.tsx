@@ -1,9 +1,10 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Page } from "@/components/page-layout";
-import { Badge } from "@/components/ui/badge";
-import { Dialog } from "@/components/ui/dialog";
-import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/Badge";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Dialog } from "@/components/ui/Dialog";
+import { Heading } from "@/components/ui/Heading";
+import { Input } from "@/components/ui/Input";
 import {
   Sheet,
   SheetContent,
@@ -11,24 +12,31 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useProductTier } from "@/hooks/useProductTier";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useRootMcpEndpointMutation } from "@/hooks/useRootMcpEndpoint";
 import {
   customDomainMcpEndpointUrl,
   useCustomDomain,
 } from "@/hooks/useToolsetUrl";
 import { HumanizeDateTime } from "@/lib/dates";
 import { cn, getCustomDomainCNAME } from "@/lib/utils";
+import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
+import type { CustomDomainMcpEndpoint } from "@gram/client/models/components/customdomainmcpendpoint.js";
 import { useCustomDomainMcpEndpoints } from "@gram/client/react-query/customDomainMcpEndpoints";
 import { useCheckDomainHealthMutation } from "@gram/client/react-query/checkDomainHealth";
 import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
+import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
 import { invalidateAllListDomains } from "@gram/client/react-query/listDomains";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
 import { useUpdateDomainMutation } from "@gram/client/react-query/updateDomain";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -41,9 +49,18 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
 import { toast } from "sonner";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 
 export default function OrgDomains(): JSX.Element {
   return (
@@ -256,9 +273,9 @@ function IPAllowlistEditor({
             </Button>
           </div>
           {row.error && (
-            <Type variant="body" className="text-destructive text-xs">
+            <Text variant="body" className="text-destructive text-xs">
               {row.error}
-            </Type>
+            </Text>
           )}
         </div>
       ))}
@@ -269,9 +286,307 @@ function IPAllowlistEditor({
   );
 }
 
+const NO_ROOT_MCP_ENDPOINT = "__none__";
+
+function mcpServerLabel(endpoint: CustomDomainMcpEndpoint): string {
+  return (
+    endpoint.mcpServerName ?? endpoint.mcpServerSlug ?? endpoint.mcpServerId
+  );
+}
+
+function DefaultMcpServerControl({
+  domain,
+  endpoints,
+  isLoading,
+  canManage,
+}: {
+  domain: CustomDomain;
+  endpoints: CustomDomainMcpEndpoint[];
+  isLoading: boolean;
+  canManage: boolean;
+}) {
+  const rootMutation = useRootMcpEndpointMutation();
+  const endpointGroups = useMemo(() => {
+    const groups = new Map<
+      string,
+      { projectName: string; endpoints: CustomDomainMcpEndpoint[] }
+    >();
+
+    for (const endpoint of endpoints) {
+      const group = groups.get(endpoint.projectId);
+      if (group) {
+        group.endpoints.push(endpoint);
+      } else {
+        groups.set(endpoint.projectId, {
+          projectName: endpoint.projectName,
+          endpoints: [endpoint],
+        });
+      }
+    }
+
+    return Array.from(groups.entries())
+      .map(([projectId, group]) => ({
+        projectId,
+        projectName: group.projectName,
+        endpoints: [...group.endpoints].sort((a, b) =>
+          mcpServerLabel(a).localeCompare(mcpServerLabel(b)),
+        ),
+      }))
+      .sort((a, b) => a.projectName.localeCompare(b.projectName));
+  }, [endpoints]);
+  const currentEndpoint = endpoints.find(
+    (endpoint) => endpoint.id === domain.rootMcpEndpointId,
+  );
+  const selectedValue = currentEndpoint?.id ?? NO_ROOT_MCP_ENDPOINT;
+
+  let content: React.ReactNode;
+  if (isLoading) {
+    content = (
+      <Text variant="body" className="text-muted-foreground text-sm">
+        Loading MCP servers…
+      </Text>
+    );
+  } else if (endpoints.length === 0) {
+    content = (
+      <div className="border-border rounded-md border border-dashed p-4">
+        <Text variant="body" className="font-medium">
+          No MCP endpoints on this domain
+        </Text>
+        <Text
+          variant="body"
+          className="text-muted-foreground mt-1 max-w-[65ch] text-sm"
+        >
+          Attach an MCP endpoint to this custom domain before choosing a default
+          MCP server.
+        </Text>
+      </div>
+    );
+  } else {
+    const selectedLabel = currentEndpoint
+      ? `${mcpServerLabel(currentEndpoint)} · /mcp/${currentEndpoint.slug}`
+      : "No root mapping";
+
+    content = (
+      <div className="space-y-3">
+        <Select
+          value={selectedValue}
+          disabled={!canManage || rootMutation.isPending}
+          onValueChange={(value) =>
+            rootMutation.setRootMcpEndpoint(
+              domain.id,
+              value === NO_ROOT_MCP_ENDPOINT ? undefined : value,
+            )
+          }
+        >
+          <SelectTrigger className="w-full max-w-xl">
+            <SelectValue>{selectedLabel}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem
+              value={NO_ROOT_MCP_ENDPOINT}
+              description="Do not route the custom-domain root to an MCP server."
+            >
+              No root mapping
+            </SelectItem>
+            {endpointGroups.map((group) => (
+              <SelectGroup key={group.projectId}>
+                <SelectLabel>{group.projectName}</SelectLabel>
+                {group.endpoints.map((endpoint) => (
+                  <SelectItem
+                    key={endpoint.id}
+                    value={endpoint.id}
+                    description={`/mcp/${endpoint.slug}`}
+                  >
+                    {mcpServerLabel(endpoint)}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            ))}
+          </SelectContent>
+        </Select>
+        {currentEndpoint ? (
+          <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
+            <code>{`https://${domain.domain}/`}</code>
+            <span aria-hidden="true">→</span>
+            <code>{`/mcp/${currentEndpoint.slug}`}</code>
+          </div>
+        ) : (
+          <Text variant="body" className="text-muted-foreground text-sm">
+            Requests to the custom-domain root are not mapped.
+          </Text>
+        )}
+        {!canManage && (
+          <Text variant="body" className="text-muted-foreground text-sm">
+            Organization admin permission is required to change this mapping.
+          </Text>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-border mt-4 border-t pt-4">
+      <Text variant="body" className="font-medium">
+        Default MCP server
+      </Text>
+      <Text
+        variant="body"
+        className="text-muted-foreground mt-1 mb-3 max-w-[65ch] text-sm"
+      >
+        Route requests to the custom-domain root to one MCP server.
+      </Text>
+      {content}
+    </div>
+  );
+}
+
+function ChatGPTAppVerificationControl({
+  domain,
+  canManage,
+}: {
+  domain: CustomDomain;
+  canManage: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const savedToken = domain.openaiAppsChallengeToken ?? "";
+  const [token, setToken] = useState(savedToken);
+  const [error, setError] = useState("");
+  const verificationURL = `https://${domain.domain}/.well-known/openai-apps-challenge`;
+
+  useEffect(() => {
+    setToken(savedToken);
+  }, [savedToken]);
+
+  const updateTokenMutation = useUpdateDomainMutation({
+    onSuccess: async (updatedDomain) => {
+      const updatedToken = updatedDomain.openaiAppsChallengeToken ?? "";
+      setToken(updatedToken);
+      setError("");
+      await Promise.all([
+        invalidateAllGetDomain(queryClient),
+        invalidateAllListDomains(queryClient),
+      ]);
+      toast.success(
+        updatedToken
+          ? "ChatGPT app verification token saved"
+          : "ChatGPT app verification token cleared",
+      );
+    },
+    onError: (mutationError) => {
+      setError(
+        mutationError.message || "Failed to save the verification token",
+      );
+    },
+  });
+
+  function updateToken(nextToken: string) {
+    updateTokenMutation.mutate({
+      security: { sessionHeaderGramSession: "" },
+      request: {
+        updateDomainRequestBody: {
+          openaiAppsChallengeToken: nextToken,
+        },
+      },
+    });
+  }
+
+  const hasChanges = token !== savedToken;
+
+  return (
+    <div className="border-border mt-4 border-t pt-4">
+      <Text variant="body" className="font-medium">
+        ChatGPT app verification
+      </Text>
+      <Text
+        variant="body"
+        className="text-muted-foreground mt-1 max-w-[65ch] text-sm"
+      >
+        OpenAI&apos;s app-submission flow fetches this token to verify ownership
+        of your custom domain.
+      </Text>
+      <div className="mt-3 max-w-xl space-y-3">
+        <div className="bg-muted flex items-center gap-2 rounded-md px-3 py-2">
+          <code className="min-w-0 flex-1 text-xs break-all">
+            {verificationURL}
+          </code>
+          <CopyButton
+            text={verificationURL}
+            size="xs"
+            tooltip="Copy verification URL"
+            className="shrink-0"
+          />
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="min-w-0 flex-1">
+            <Input
+              aria-label="ChatGPT app verification token"
+              placeholder="Paste verification token"
+              value={token}
+              onChange={(value) => {
+                setToken(value);
+                setError("");
+              }}
+              onEnter={() => {
+                if (canManage && hasChanges && !updateTokenMutation.isPending) {
+                  updateToken(token);
+                }
+              }}
+              maxLength={256}
+              disabled={!canManage || updateTokenMutation.isPending}
+              className="font-mono"
+            />
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button
+              size="sm"
+              onClick={() => updateToken(token)}
+              disabled={
+                !canManage || !hasChanges || updateTokenMutation.isPending
+              }
+            >
+              {updateTokenMutation.isPending ? "Saving..." : "Save"}
+            </Button>
+            {savedToken && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => updateToken("")}
+                disabled={!canManage || updateTokenMutation.isPending}
+              >
+                Clear
+              </Button>
+            )}
+          </div>
+        </div>
+        {error && (
+          <Text variant="body" className="text-destructive text-sm">
+            {error}
+          </Text>
+        )}
+        {domain.ipAllowlist.length > 0 && (
+          <div className="text-muted-foreground flex items-start gap-2 text-sm">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              Your IP allowlist also applies to this URL and may block
+              OpenAI&apos;s verifier.
+            </span>
+          </div>
+        )}
+        {!canManage && (
+          <Text variant="body" className="text-muted-foreground text-sm">
+            Organization admin permission is required to change this token.
+          </Text>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function OrgDomainsInner() {
   const organization = useOrganization();
   const productTier = useProductTier();
+  const { hasScope } = useRBAC();
+  const canManageDomains = hasScope("org:admin");
   const queryClient = useQueryClient();
   const [isAddDomainDialogOpen, setIsAddDomainDialogOpen] = useState(false);
   const [isCnameCopied, setIsCnameCopied] = useState(false);
@@ -381,12 +696,16 @@ function OrgDomainsInner() {
     },
   });
 
-  // Preview which MCP endpoints will be cascaded by the delete. Only fetched
-  // while the confirmation dialog is open and a domain is configured.
-  const impactQuery = useCustomDomainMcpEndpoints(undefined, undefined, {
-    enabled: isDeleteDomainDialogOpen && Boolean(domain?.domain),
-  });
-  const impactedEndpoints = impactQuery.data?.mcpEndpoints ?? [];
+  // The same domain-wide list backs both root selection and the delete impact
+  // preview, avoiding duplicate queries for identical organization state.
+  const domainEndpointsQuery = useCustomDomainMcpEndpoints(
+    undefined,
+    undefined,
+    {
+      enabled: Boolean(domain?.domain),
+    },
+  );
+  const impactedEndpoints = domainEndpointsQuery.data?.mcpEndpoints ?? [];
 
   const handleDomainInputChange = (value: string) => {
     setDomainInput(value);
@@ -435,19 +754,19 @@ function OrgDomainsInner() {
       <Heading variant="h4" className="mb-2">
         Custom Domain
       </Heading>
-      <Type muted small className="mb-6">
+      <Text muted small className="mb-6">
         Connect a custom domain to serve your MCP servers from your own branded
         URL instead of the default platform domain.
-      </Type>
+      </Text>
       {domain?.domain ? (
         <div className="border-border bg-card rounded-lg border p-4">
           <Stack direction="horizontal" justify="space-between" align="start">
             <Stack gap={1}>
               <Stack direction="horizontal" align="center" gap={2}>
                 <Globe className="text-muted-foreground h-4 w-4" />
-                <Type variant="body" className="font-mono font-medium">
+                <Text variant="body" className="font-mono font-medium">
                   {domain.domain}
-                </Type>
+                </Text>
                 {domain.isUpdating ? (
                   <SimpleTooltip tooltip="Your domain is being verified. This may take a few minutes.">
                     <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
@@ -470,26 +789,26 @@ function OrgDomainsInner() {
                   </SimpleTooltip>
                 )}
               </Stack>
-              <Type
+              <Text
                 variant="body"
                 className="text-muted-foreground ml-6 text-sm"
               >
                 Linked <HumanizeDateTime date={domain.createdAt} />
-              </Type>
+              </Text>
               <div className="mt-1 ml-6 flex flex-wrap items-center gap-2">
-                <Type variant="body" className="text-muted-foreground text-sm">
+                <Text variant="body" className="text-muted-foreground text-sm">
                   Allowed IPs:
-                </Type>
+                </Text>
                 {domain.ipAllowlist.length === 0 ? (
-                  <Type
+                  <Text
                     variant="body"
                     className="text-muted-foreground text-sm italic"
                   >
                     All (no restriction)
-                  </Type>
+                  </Text>
                 ) : (
                   domain.ipAllowlist.map((ip) => (
-                    <Badge key={ip} variant="secondary" className="font-mono">
+                    <Badge key={ip} variant="neutral" className="font-mono">
                       {ip}
                     </Badge>
                   ))
@@ -539,27 +858,27 @@ function OrgDomainsInner() {
             <Alert variant="error" dismissible={false} className="mt-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="space-y-1">
-                  <Type variant="body" className="font-medium">
+                  <Text variant="body" className="font-medium">
                     This custom domain was disabled
-                  </Type>
-                  <Type variant="body" className="text-sm">
+                  </Text>
+                  <Text variant="body" className="text-sm">
                     It failed health checks continuously for over a week, so its
                     routing and TLS certificate were removed.{" "}
                     <CustomDomainHealthMessage
                       issue={domain.healthIssue}
                       domainName={domain.domain}
                     />
-                  </Type>
+                  </Text>
                   {domain.unhealthySince && (
-                    <Type variant="body" className="text-sm opacity-80">
+                    <Text variant="body" className="text-sm opacity-80">
                       Unhealthy since{" "}
                       <HumanizeDateTime date={domain.unhealthySince} />
-                    </Type>
+                    </Text>
                   )}
-                  <Type variant="body" className="text-sm">
+                  <Text variant="body" className="text-sm">
                     Fix the issue above, then reverify the domain to provision
                     it again.
-                  </Type>
+                  </Text>
                 </div>
                 <RequireScope scope="org:admin" level="component">
                   <Button
@@ -577,20 +896,20 @@ function OrgDomainsInner() {
             <Alert variant="warning" dismissible={false} className="mt-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="space-y-1">
-                  <Type variant="body" className="font-medium">
+                  <Text variant="body" className="font-medium">
                     This custom domain may not be working
-                  </Type>
-                  <Type variant="body" className="text-sm">
+                  </Text>
+                  <Text variant="body" className="text-sm">
                     <CustomDomainHealthMessage
                       issue={domain.healthIssue}
                       domainName={domain.domain}
                     />
-                  </Type>
+                  </Text>
                   {domain.healthCheckedAt && (
-                    <Type variant="body" className="text-sm opacity-80">
+                    <Text variant="body" className="text-sm opacity-80">
                       Last checked{" "}
                       <HumanizeDateTime date={domain.healthCheckedAt} />
-                    </Type>
+                    </Text>
                   )}
                 </div>
                 <RequireScope scope="org:admin" level="component">
@@ -612,18 +931,28 @@ function OrgDomainsInner() {
               </div>
             </Alert>
           )}
+          <DefaultMcpServerControl
+            domain={domain}
+            endpoints={impactedEndpoints}
+            isLoading={domainEndpointsQuery.isLoading}
+            canManage={canManageDomains}
+          />
+          <ChatGPTAppVerificationControl
+            domain={domain}
+            canManage={canManageDomains}
+          />
         </div>
       ) : (
         !domainIsLoading && (
           <div className="border-border rounded-lg border border-dashed p-6">
             <Stack gap={2} align="center" justify="center">
-              <Type variant="body" className="text-muted-foreground">
+              <Text variant="body" className="text-muted-foreground">
                 No custom domain configured
-              </Type>
-              <Type variant="body" className="text-muted-foreground text-sm">
+              </Text>
+              <Text variant="body" className="text-muted-foreground text-sm">
                 You can connect one custom domain per organization for your MCP
                 servers.
-              </Type>
+              </Text>
               <RequireScope scope="org:admin" level="component">
                 <Button
                   size="sm"
@@ -657,26 +986,26 @@ function OrgDomainsInner() {
             <Dialog.Title>Remove Custom Domain</Dialog.Title>
           </Dialog.Header>
           <div className="space-y-4 py-4">
-            <Type variant="body">
+            <Text variant="body">
               Are you sure you want to remove{" "}
               <span className="font-bold italic">{domain?.domain}</span>? This
               will delete the associated ingress and TLS certificate.
-            </Type>
-            {impactQuery.isLoading ? (
-              <Type variant="small" muted>
+            </Text>
+            {domainEndpointsQuery.isLoading ? (
+              <Text variant="small" muted>
                 Checking for MCP endpoints under this domain&hellip;
-              </Type>
+              </Text>
             ) : impactedEndpoints.length > 0 ? (
               <div className="space-y-2">
-                <Type variant="body" className="font-semibold">
+                <Text variant="body" className="font-semibold">
                   {impactedEndpoints.length === 1
                     ? "1 MCP endpoint will be deactivated:"
                     : `${impactedEndpoints.length} MCP endpoints will be deactivated:`}
-                </Type>
+                </Text>
                 <ul className="border-border max-h-48 list-disc space-y-1 overflow-y-auto rounded-md border px-6 py-2">
                   {impactedEndpoints.map((endpoint) => (
                     <li key={endpoint.id}>
-                      <Type variant="small">
+                      <Text variant="small">
                         <span className="font-mono">
                           {domain?.domain
                             ? customDomainMcpEndpointUrl(
@@ -685,13 +1014,13 @@ function OrgDomainsInner() {
                               )
                             : endpoint.slug}
                         </span>{" "}
-                        <Type variant="small" as="span" muted>
+                        <Text variant="small" as="span" muted>
                           &middot; {endpoint.projectName} &middot;{" "}
                           {endpoint.mcpServerName ??
                             endpoint.mcpServerSlug ??
                             endpoint.mcpServerId}
-                        </Type>
-                      </Type>
+                        </Text>
+                      </Text>
                     </li>
                   ))}
                 </ul>
@@ -739,15 +1068,15 @@ function OrgDomainsInner() {
           </Dialog.Header>
           <div className="min-h-[420px] space-y-6 py-4">
             <div>
-              <Type
+              <Text
                 variant="body"
                 className="mb-2 block text-lg font-extrabold"
               >
                 Step 1
-              </Type>
-              <Type variant="body" className="text-muted-foreground mb-2">
+              </Text>
+              <Text variant="body" className="text-muted-foreground mb-2">
                 Enter your custom domain:
-              </Type>
+              </Text>
               <div className="space-y-2">
                 <Input
                   placeholder="Enter your domain (chat.yourdomain.com)"
@@ -761,24 +1090,24 @@ function OrgDomainsInner() {
                   readOnly={!!domain?.domain}
                 />
                 {domainError && (
-                  <Type variant="body" className="text-sm text-red-500">
+                  <Text variant="body" className="text-sm text-red-500">
                     {domainError}
-                  </Type>
+                  </Text>
                 )}
               </div>
             </div>
             <div>
-              <Type
+              <Text
                 variant="body"
                 className="mb-2 block text-lg font-extrabold"
               >
                 Step 2
-              </Type>
-              <Type variant="body" className="text-muted-foreground mb-2">
+              </Text>
+              <Text variant="body" className="text-muted-foreground mb-2">
                 Create a CNAME record for{" "}
                 <span className="font-mono break-all">{subdomain}</span>{" "}
                 pointing to the following:
-              </Type>
+              </Text>
               <div className="bg-muted mt-2 flex items-center space-x-2 rounded-md p-3">
                 <code className="flex-1 break-all">{CNAME_VALUE}</code>
                 <Button
@@ -801,17 +1130,17 @@ function OrgDomainsInner() {
               </div>
             </div>
             <div>
-              <Type
+              <Text
                 variant="body"
                 className="mb-2 block text-lg font-extrabold"
               >
                 Step 3
-              </Type>
-              <Type variant="body" className="text-muted-foreground mb-2">
+              </Text>
+              <Text variant="body" className="text-muted-foreground mb-2">
                 Create a TXT record at{" "}
                 <span className="font-mono break-all">{txtName}</span> with the
                 following value:
-              </Type>
+              </Text>
               <div className="bg-muted mt-2 flex items-center space-x-2 rounded-md p-3">
                 <code className="flex-1 break-all">{txtValue}</code>
                 <Button
@@ -849,13 +1178,13 @@ function OrgDomainsInner() {
               </button>
               {isAllowlistExpanded && (
                 <div className="mt-3 pl-5">
-                  <Type
+                  <Text
                     variant="body"
                     className="text-muted-foreground mb-3 text-sm"
                   >
                     Restrict access to specific IP addresses or CIDR ranges.
                     Leave empty to allow all traffic.
-                  </Type>
+                  </Text>
                   <IPAllowlistEditor
                     ips={pendingIPs}
                     onIpsChange={setPendingIPs}
@@ -904,9 +1233,9 @@ function OrgDomainsInner() {
               onValidityChange={setEditIPsValid}
             />
             {updateAllowlistError && (
-              <Type variant="body" className="text-destructive text-sm">
+              <Text variant="body" className="text-destructive text-sm">
                 {updateAllowlistError}
-              </Type>
+              </Text>
             )}
           </div>
           <SheetFooter className="flex-row justify-end gap-2">

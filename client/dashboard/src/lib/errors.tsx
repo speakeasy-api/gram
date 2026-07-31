@@ -1,5 +1,5 @@
-import { Type } from "@/components/ui/type";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Text } from "@/components/ui/Text";
+import { Stack } from "@/components/ui/Stack";
 import { toast } from "sonner";
 
 interface ErrorHandlerOptions {
@@ -56,12 +56,12 @@ export function handleError(
   if (!silent) {
     toast.error(
       <Stack gap={1}>
-        <Type variant="subheading" className="text-destructive!">
+        <Text variant="subheading" className="text-destructive!">
           {title}
-        </Type>
-        <Type small muted>
+        </Text>
+        <Text small muted>
           {errorMessage}
-        </Type>
+        </Text>
       </Stack>,
       {
         duration: persist ? Infinity : 5000,

@@ -28,16 +28,17 @@ import {
   invalidateAllPlugin,
   usePlugin,
 } from "@gram/client/react-query/plugin";
-import { Badge, Button } from "@speakeasy-api/moonshine";
-import { Input } from "@/components/ui/input";
-import { CopyButton } from "@/components/ui/copy-button";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { CopyButton } from "@/components/ui/CopyButton";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
+} from "@/components/ui/Sheet";
 import { InstallInstructionsButton } from "@/pages/plugins/InstallInstructionsDialog";
 import { cn } from "@/lib/utils";
 

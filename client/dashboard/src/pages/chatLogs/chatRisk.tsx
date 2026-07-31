@@ -8,14 +8,15 @@ import {
   useState,
 } from "react";
 import { Link } from "react-router";
-import { Badge, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { MoreActions, type Action } from "@/components/ui/more-actions";
+} from "@/components/ui/Popover";
+import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { useDismissFinding } from "@/pages/security/useDismissFinding";
 import { CreateExclusionContext } from "./exclusionContext";

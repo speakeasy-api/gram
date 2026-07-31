@@ -6,8 +6,8 @@ import {
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { BulkActionBar } from "@/components/ui/bulk-action-bar";
-import { Checkbox } from "@/components/ui/checkbox";
-import { MoreActions, type Action } from "@/components/ui/more-actions";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
 import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
@@ -17,7 +17,7 @@ import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { useRiskRuleBreakdown } from "@gram/client/react-query/riskRuleBreakdown.js";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
   useCallback,

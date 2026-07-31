@@ -1,9 +1,9 @@
-import { Badge } from "@/components/ui/badge";
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { TextArea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/Badge";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { Switch } from "@/components/ui/Switch";
+import { TextArea } from "@/components/ui/Textarea";
 import { TagsVariationEditor } from "@/components/tool-variation-tags-editor";
 import {
   Tool,
@@ -11,10 +11,10 @@ import {
   getToolTypeLabel,
   toolSupportsAnnotations,
 } from "@/lib/toolTypes";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { FileCode, PencilRuler, SquareFunction } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { McpIcon } from "@/components/ui/mcp-icon";
+import { McpIcon } from "@/components/ui/McpIcon";
 
 function getToolIcon(tool: Tool) {
   if (tool.type === "http") return FileCode;
@@ -246,7 +246,7 @@ export function EditToolDialog({
           <Dialog.Title className="flex items-center gap-2">
             <ToolIcon className="text-muted-foreground size-4" />
             <span>{source}</span>
-            <Badge variant="secondary" className="text-xs">
+            <Badge variant="neutral" className="text-xs">
               {typeLabel}
             </Badge>
           </Dialog.Title>

@@ -1,6 +1,7 @@
-import { Type } from "@/components/ui/type";
-import { MoreActions, type Action } from "@/components/ui/more-actions";
-import { Button, type Column, Table } from "@speakeasy-api/moonshine";
+import { Text } from "@/components/ui/Text";
+import { MoreActions, type Action } from "@/components/ui/MoreActions";
+import { Button } from "@/components/ui/Button";
+import { type Column, Table } from "@/components/ui/Table";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -78,9 +79,9 @@ export function DismissedFindingsTab(): JSX.Element {
       header: "Session",
       width: "1.2fr",
       render: (result) => (
-        <Type className="truncate" small>
+        <Text className="truncate" small>
           {result.chatTitle ?? "Untitled"}
-        </Type>
+        </Text>
       ),
     },
     {
@@ -88,11 +89,11 @@ export function DismissedFindingsTab(): JSX.Element {
       header: "Dismissed",
       width: "0.9fr",
       render: (result) => (
-        <Type className="text-muted-foreground" small>
+        <Text className="text-muted-foreground" small>
           {result.falsePositiveAt
             ? format(result.falsePositiveAt, "MMM d, yyyy h:mm a")
             : "-"}
-        </Type>
+        </Text>
       ),
     },
     {
@@ -125,7 +126,7 @@ export function DismissedFindingsTab(): JSX.Element {
 
   if (resultsQuery.isLoading) {
     return (
-      <Type className="text-muted-foreground">Loading dismissed findings…</Type>
+      <Text className="text-muted-foreground">Loading dismissed findings…</Text>
     );
   }
 
@@ -133,10 +134,10 @@ export function DismissedFindingsTab(): JSX.Element {
     return (
       <div className="bg-background flex h-[360px] w-full flex-col items-center justify-center gap-4 rounded-xl border">
         <div className="space-y-1 text-center">
-          <Type className="font-medium">Couldn't load dismissed findings</Type>
-          <Type small muted>
+          <Text className="font-medium">Couldn't load dismissed findings</Text>
+          <Text small muted>
             Something went wrong fetching this list.
-          </Type>
+          </Text>
         </div>
         <Button variant="secondary" onClick={() => void resultsQuery.refetch()}>
           Retry
@@ -170,11 +171,11 @@ function DismissedEmptyState() {
   return (
     <div className="bg-background flex h-[360px] w-full flex-col items-center justify-center gap-4 rounded-xl border">
       <div className="space-y-1 text-center">
-        <Type className="font-medium">No dismissed findings yet</Type>
-        <Type small muted>
+        <Text className="font-medium">No dismissed findings yet</Text>
+        <Text small muted>
           Findings marked as false positive from Risk Events, Risk Overview, or
           a chat session will show up here — undo any of them at any time.
-        </Type>
+        </Text>
       </div>
     </div>
   );

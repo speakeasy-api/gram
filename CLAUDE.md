@@ -142,6 +142,8 @@ Activate a skill when your task falls within its scope.
 | `mise-tasks`                      | Creating or editing mise task scripts in `.mise-tasks/`                         |
 | `jaeger`                          | Testing backend endpoints locally and inspecting traces via Jaeger API          |
 | `pitchfork`                       | Starting/stopping/restarting local dev services or querying their logs          |
+| `worktrunk`                       | `wt` worktrees: create/boot/remove stacks, hooks, config (via `./zero` opt-in)  |
+| `writing-skills`                  | Adding or editing an agent skill in `.agents/skills/` and validating it         |
 | `datadog`                         | Investigating errors, performance, incidents, or telemetry via Datadog          |
 | `datadog-insights`                | Running the full Gram production health digest and posting it to Slack          |
 | `spec`                            | Interviewing user in-depth to produce a detailed spec before building           |
