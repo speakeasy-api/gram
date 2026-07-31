@@ -628,6 +628,53 @@ func BuildGetProjectOverviewPayload(telemetryGetProjectOverviewBody string, tele
 	return v, nil
 }
 
+// BuildGetUnproxiedMcpServerUsagePayload builds the payload for the telemetry
+// getUnproxiedMcpServerUsage endpoint from CLI flags.
+func BuildGetUnproxiedMcpServerUsagePayload(telemetryGetUnproxiedMcpServerUsageBody string, telemetryGetUnproxiedMcpServerUsageApikeyToken string, telemetryGetUnproxiedMcpServerUsageSessionToken string, telemetryGetUnproxiedMcpServerUsageProjectSlugInput string) (*telemetry.GetUnproxiedMcpServerUsagePayload, error) {
+	var err error
+	var body GetUnproxiedMcpServerUsageRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetUnproxiedMcpServerUsageBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"to\": \"1970-01-01T00:00:01Z\",\n      \"url\": \"https://example.com/foo\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", body.URL, goa.FormatURI))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetUnproxiedMcpServerUsageApikeyToken != "" {
+			apikeyToken = &telemetryGetUnproxiedMcpServerUsageApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetUnproxiedMcpServerUsageSessionToken != "" {
+			sessionToken = &telemetryGetUnproxiedMcpServerUsageSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetUnproxiedMcpServerUsageProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetUnproxiedMcpServerUsageProjectSlugInput
+		}
+	}
+	v := &telemetry.GetUnproxiedMcpServerUsagePayload{
+		URL:  body.URL,
+		From: body.From,
+		To:   body.To,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildQueryPayload builds the payload for the telemetry query endpoint from
 // CLI flags.
 func BuildQueryPayload(telemetryQueryBody string, telemetryQuerySessionToken string) (*telemetry.QueryPayload, error) {

@@ -1215,6 +1215,75 @@ func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, projectI
 	return traceRows, nil
 }
 
+type GetUnproxiedMcpServerUsageTimeSeriesParams struct {
+	GramProjectID string
+	CanonicalURL  string
+	TimeStart     int64
+	TimeEnd       int64
+}
+
+type UnproxiedMcpServerUsageBucket struct {
+	BucketDate string
+	CallCount  uint64
+}
+
+// GetUnproxiedMcpServerUsageTimeSeries buckets Shadow MCP's per-trace
+// (server_url, called_at) rows by day for a single canonicalized URL. Reuses
+// the same per-trace collapse as listShadowMCPInventoryTraceUsage (one row
+// per trace_id, matched by prefix so a query string or fragment on the
+// observed URL doesn't break the match) but groups the result by day instead
+// of collapsing to a min/max/count summary.
+func (q *Queries) GetUnproxiedMcpServerUsageTimeSeries(ctx context.Context, arg GetUnproxiedMcpServerUsageTimeSeriesParams) ([]UnproxiedMcpServerUsageBucket, error) {
+	innerSb := sq.Select(
+		"trace_id",
+		"max(mcp_server_url) AS server_url",
+		"toDate(fromUnixTimestamp64Nano(max(start_time_unix_nano))) AS bucket_date",
+	).
+		From("trace_summaries").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		GroupBy("trace_id")
+	innerSb = withTraceWindowScanBounds(innerSb, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
+
+	sb := sq.Select(
+		"toString(bucket_date) AS bucket_date",
+		"count() AS call_count",
+	).
+		FromSelect(innerSb, "per_trace").
+		Where("server_url != ''").
+		Where(squirrel.Or{
+			squirrel.Expr("server_url = ?", arg.CanonicalURL),
+			squirrel.Expr("startsWith(server_url, ?)", arg.CanonicalURL+"?"),
+			squirrel.Expr("startsWith(server_url, ?)", arg.CanonicalURL+"#"),
+		}).
+		GroupBy("bucket_date").
+		OrderBy("bucket_date ASC")
+
+	query, queryArgs, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building unproxied mcp server usage time series query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("querying unproxied mcp server usage time series: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	buckets := make([]UnproxiedMcpServerUsageBucket, 0)
+	for rows.Next() {
+		var bucket UnproxiedMcpServerUsageBucket
+		if err := rows.ScanStruct(&bucket); err != nil {
+			return nil, fmt.Errorf("scanning unproxied mcp server usage bucket: %w", err)
+		}
+		buckets = append(buckets, bucket)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating unproxied mcp server usage buckets: %w", err)
+	}
+
+	return buckets, nil
+}
+
 func shadowMCPInventoryCanonicalURLSet(canonicalServerURLs []string) map[string]bool {
 	if len(canonicalServerURLs) == 0 {
 		return nil

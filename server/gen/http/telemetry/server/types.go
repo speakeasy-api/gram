@@ -196,6 +196,17 @@ type GetProjectOverviewRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 }
 
+// GetUnproxiedMcpServerUsageRequestBody is the type of the "telemetry" service
+// "getUnproxiedMcpServerUsage" endpoint HTTP request body.
+type GetUnproxiedMcpServerUsageRequestBody struct {
+	// The unproxied MCP server's vendor URL
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// Start time in ISO 8601 format
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+}
+
 // QueryRequestBody is the type of the "telemetry" service "query" endpoint
 // HTTP request body.
 type QueryRequestBody struct {
@@ -630,6 +641,12 @@ type GetProjectOverviewResponseBody struct {
 	Comparison *ProjectOverviewSummaryResponseBody `form:"comparison" json:"comparison" xml:"comparison"`
 	// Indicates whether metrics are session-based or tool-call-based
 	MetricsMode string `form:"metrics_mode" json:"metrics_mode" xml:"metrics_mode"`
+}
+
+// GetUnproxiedMcpServerUsageResponseBody is the type of the "telemetry"
+// service "getUnproxiedMcpServerUsage" endpoint HTTP response body.
+type GetUnproxiedMcpServerUsageResponseBody struct {
+	Buckets []*UnproxiedMcpServerUsageBucketResponseBody `form:"buckets" json:"buckets" xml:"buckets"`
 }
 
 // QueryResponseBody is the type of the "telemetry" service "query" endpoint
@@ -2660,6 +2677,196 @@ type GetProjectOverviewUnexpectedResponseBody struct {
 // service "getProjectOverview" endpoint HTTP response body for the
 // "gateway_error" error.
 type GetProjectOverviewGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUnproxiedMcpServerUsageUnauthorizedResponseBody is the type of the
+// "telemetry" service "getUnproxiedMcpServerUsage" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetUnproxiedMcpServerUsageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUnproxiedMcpServerUsageForbiddenResponseBody is the type of the
+// "telemetry" service "getUnproxiedMcpServerUsage" endpoint HTTP response body
+// for the "forbidden" error.
+type GetUnproxiedMcpServerUsageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUnproxiedMcpServerUsageBadRequestResponseBody is the type of the
+// "telemetry" service "getUnproxiedMcpServerUsage" endpoint HTTP response body
+// for the "bad_request" error.
+type GetUnproxiedMcpServerUsageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUnproxiedMcpServerUsageNotFoundResponseBody is the type of the
+// "telemetry" service "getUnproxiedMcpServerUsage" endpoint HTTP response body
+// for the "not_found" error.
+type GetUnproxiedMcpServerUsageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUnproxiedMcpServerUsageConflictResponseBody is the type of the
+// "telemetry" service "getUnproxiedMcpServerUsage" endpoint HTTP response body
+// for the "conflict" error.
+type GetUnproxiedMcpServerUsageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUnproxiedMcpServerUsageUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getUnproxiedMcpServerUsage" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetUnproxiedMcpServerUsageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUnproxiedMcpServerUsageInvalidResponseBody is the type of the "telemetry"
+// service "getUnproxiedMcpServerUsage" endpoint HTTP response body for the
+// "invalid" error.
+type GetUnproxiedMcpServerUsageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUnproxiedMcpServerUsageInvariantViolationResponseBody is the type of the
+// "telemetry" service "getUnproxiedMcpServerUsage" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetUnproxiedMcpServerUsageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUnproxiedMcpServerUsageUnexpectedResponseBody is the type of the
+// "telemetry" service "getUnproxiedMcpServerUsage" endpoint HTTP response body
+// for the "unexpected" error.
+type GetUnproxiedMcpServerUsageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUnproxiedMcpServerUsageGatewayErrorResponseBody is the type of the
+// "telemetry" service "getUnproxiedMcpServerUsage" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetUnproxiedMcpServerUsageGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -6474,6 +6681,15 @@ type LLMClientUsageResponseBody struct {
 	ActivityCount int64 `form:"activity_count" json:"activity_count" xml:"activity_count"`
 }
 
+// UnproxiedMcpServerUsageBucketResponseBody is used to define fields on
+// response body types.
+type UnproxiedMcpServerUsageBucketResponseBody struct {
+	// Bucket date (YYYY-MM-DD, UTC)
+	Date string `form:"date" json:"date" xml:"date"`
+	// Number of observed tool calls in this bucket
+	CallCount int `form:"call_count" json:"call_count" xml:"call_count"`
+}
+
 // QueryRowResponseBody is used to define fields on response body types.
 type QueryRowResponseBody struct {
 	// The dimension value for this row. Empty string when no group_by was
@@ -7353,6 +7569,26 @@ func NewGetProjectOverviewResponseBody(res *telemetry.GetProjectOverviewResult) 
 	}
 	if res.Comparison != nil {
 		body.Comparison = marshalTelemetryProjectOverviewSummaryToProjectOverviewSummaryResponseBody(res.Comparison)
+	}
+	return body
+}
+
+// NewGetUnproxiedMcpServerUsageResponseBody builds the HTTP response body from
+// the result of the "getUnproxiedMcpServerUsage" endpoint of the "telemetry"
+// service.
+func NewGetUnproxiedMcpServerUsageResponseBody(res *telemetry.GetUnproxiedMcpServerUsageResult) *GetUnproxiedMcpServerUsageResponseBody {
+	body := &GetUnproxiedMcpServerUsageResponseBody{}
+	if res.Buckets != nil {
+		body.Buckets = make([]*UnproxiedMcpServerUsageBucketResponseBody, len(res.Buckets))
+		for i, val := range res.Buckets {
+			if val == nil {
+				body.Buckets[i] = nil
+				continue
+			}
+			body.Buckets[i] = marshalTelemetryUnproxiedMcpServerUsageBucketToUnproxiedMcpServerUsageBucketResponseBody(val)
+		}
+	} else {
+		body.Buckets = []*UnproxiedMcpServerUsageBucketResponseBody{}
 	}
 	return body
 }
@@ -9332,6 +9568,156 @@ func NewGetProjectOverviewUnexpectedResponseBody(res *goa.ServiceError) *GetProj
 // service.
 func NewGetProjectOverviewGatewayErrorResponseBody(res *goa.ServiceError) *GetProjectOverviewGatewayErrorResponseBody {
 	body := &GetProjectOverviewGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUnproxiedMcpServerUsageUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getUnproxiedMcpServerUsage" endpoint
+// of the "telemetry" service.
+func NewGetUnproxiedMcpServerUsageUnauthorizedResponseBody(res *goa.ServiceError) *GetUnproxiedMcpServerUsageUnauthorizedResponseBody {
+	body := &GetUnproxiedMcpServerUsageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUnproxiedMcpServerUsageForbiddenResponseBody builds the HTTP response
+// body from the result of the "getUnproxiedMcpServerUsage" endpoint of the
+// "telemetry" service.
+func NewGetUnproxiedMcpServerUsageForbiddenResponseBody(res *goa.ServiceError) *GetUnproxiedMcpServerUsageForbiddenResponseBody {
+	body := &GetUnproxiedMcpServerUsageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUnproxiedMcpServerUsageBadRequestResponseBody builds the HTTP response
+// body from the result of the "getUnproxiedMcpServerUsage" endpoint of the
+// "telemetry" service.
+func NewGetUnproxiedMcpServerUsageBadRequestResponseBody(res *goa.ServiceError) *GetUnproxiedMcpServerUsageBadRequestResponseBody {
+	body := &GetUnproxiedMcpServerUsageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUnproxiedMcpServerUsageNotFoundResponseBody builds the HTTP response
+// body from the result of the "getUnproxiedMcpServerUsage" endpoint of the
+// "telemetry" service.
+func NewGetUnproxiedMcpServerUsageNotFoundResponseBody(res *goa.ServiceError) *GetUnproxiedMcpServerUsageNotFoundResponseBody {
+	body := &GetUnproxiedMcpServerUsageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUnproxiedMcpServerUsageConflictResponseBody builds the HTTP response
+// body from the result of the "getUnproxiedMcpServerUsage" endpoint of the
+// "telemetry" service.
+func NewGetUnproxiedMcpServerUsageConflictResponseBody(res *goa.ServiceError) *GetUnproxiedMcpServerUsageConflictResponseBody {
+	body := &GetUnproxiedMcpServerUsageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUnproxiedMcpServerUsageUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getUnproxiedMcpServerUsage" endpoint
+// of the "telemetry" service.
+func NewGetUnproxiedMcpServerUsageUnsupportedMediaResponseBody(res *goa.ServiceError) *GetUnproxiedMcpServerUsageUnsupportedMediaResponseBody {
+	body := &GetUnproxiedMcpServerUsageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUnproxiedMcpServerUsageInvalidResponseBody builds the HTTP response
+// body from the result of the "getUnproxiedMcpServerUsage" endpoint of the
+// "telemetry" service.
+func NewGetUnproxiedMcpServerUsageInvalidResponseBody(res *goa.ServiceError) *GetUnproxiedMcpServerUsageInvalidResponseBody {
+	body := &GetUnproxiedMcpServerUsageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUnproxiedMcpServerUsageInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getUnproxiedMcpServerUsage" endpoint
+// of the "telemetry" service.
+func NewGetUnproxiedMcpServerUsageInvariantViolationResponseBody(res *goa.ServiceError) *GetUnproxiedMcpServerUsageInvariantViolationResponseBody {
+	body := &GetUnproxiedMcpServerUsageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUnproxiedMcpServerUsageUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getUnproxiedMcpServerUsage" endpoint of the
+// "telemetry" service.
+func NewGetUnproxiedMcpServerUsageUnexpectedResponseBody(res *goa.ServiceError) *GetUnproxiedMcpServerUsageUnexpectedResponseBody {
+	body := &GetUnproxiedMcpServerUsageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUnproxiedMcpServerUsageGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getUnproxiedMcpServerUsage" endpoint
+// of the "telemetry" service.
+func NewGetUnproxiedMcpServerUsageGatewayErrorResponseBody(res *goa.ServiceError) *GetUnproxiedMcpServerUsageGatewayErrorResponseBody {
+	body := &GetUnproxiedMcpServerUsageGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -12236,6 +12622,21 @@ func NewGetProjectOverviewPayload(body *GetProjectOverviewRequestBody, apikeyTok
 	return v
 }
 
+// NewGetUnproxiedMcpServerUsagePayload builds a telemetry service
+// getUnproxiedMcpServerUsage endpoint payload.
+func NewGetUnproxiedMcpServerUsagePayload(body *GetUnproxiedMcpServerUsageRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetUnproxiedMcpServerUsagePayload {
+	v := &telemetry.GetUnproxiedMcpServerUsagePayload{
+		URL:  *body.URL,
+		From: *body.From,
+		To:   *body.To,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewQueryPayload builds a telemetry service query endpoint payload.
 func NewQueryPayload(body *QueryRequestBody, sessionToken *string) *telemetry.QueryPayload {
 	v := &telemetry.QueryPayload{
@@ -13178,6 +13579,30 @@ func ValidateGetProjectOverviewRequestBody(body *GetProjectOverviewRequestBody) 
 	}
 	if body.To == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateGetUnproxiedMcpServerUsageRequestBody runs the validations defined
+// on GetUnproxiedMcpServerUsageRequestBody
+func ValidateGetUnproxiedMcpServerUsageRequestBody(body *GetUnproxiedMcpServerUsageRequestBody) (err error) {
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
+	}
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.URL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", *body.URL, goa.FormatURI))
 	}
 	if body.From != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))

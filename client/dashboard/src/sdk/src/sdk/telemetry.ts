@@ -18,6 +18,7 @@ import { telemetryGetToolUsageTotals } from "../funcs/telemetryGetToolUsageTotal
 import { telemetryGetToolUsageUsers } from "../funcs/telemetryGetToolUsageUsers.js";
 import { telemetryGetToolUsageUsersByTarget } from "../funcs/telemetryGetToolUsageUsersByTarget.js";
 import { telemetryGetToolUsageUserTimeSeries } from "../funcs/telemetryGetToolUsageUserTimeSeries.js";
+import { telemetryGetUnproxiedMcpServerUsage } from "../funcs/telemetryGetUnproxiedMcpServerUsage.js";
 import { telemetryGetUserMetricsSummary } from "../funcs/telemetryGetUserMetricsSummary.js";
 import { telemetryListAttributeKeys } from "../funcs/telemetryListAttributeKeys.js";
 import { telemetryListFilterOptions } from "../funcs/telemetryListFilterOptions.js";
@@ -47,6 +48,7 @@ import { GetToolUsageTotalsResult } from "../models/components/gettoolusagetotal
 import { GetToolUsageUsersByTargetResult } from "../models/components/gettoolusageusersbytargetresult.js";
 import { GetToolUsageUsersResult } from "../models/components/gettoolusageusersresult.js";
 import { GetToolUsageUserTimeSeriesResult } from "../models/components/gettoolusageusertimeseriesresult.js";
+import { GetUnproxiedMcpServerUsageResult } from "../models/components/getunproxiedmcpserverusageresult.js";
 import { GetUserMetricsSummaryResult } from "../models/components/getusermetricssummaryresult.js";
 import { ListAttributeKeysResult } from "../models/components/listattributekeysresult.js";
 import { ListFilterOptionsResult } from "../models/components/listfilteroptionsresult.js";
@@ -123,6 +125,10 @@ import {
   GetToolUsageUserTimeSeriesRequest,
   GetToolUsageUserTimeSeriesSecurity,
 } from "../models/operations/gettoolusageusertimeseries.js";
+import {
+  GetUnproxiedMcpServerUsageRequest,
+  GetUnproxiedMcpServerUsageSecurity,
+} from "../models/operations/getunproxiedmcpserverusage.js";
 import {
   GetUserMetricsSummaryRequest,
   GetUserMetricsSummarySecurity,
@@ -468,6 +474,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GetToolUsageUsersByTargetResult> {
     return unwrapAsync(telemetryGetToolUsageUsersByTarget(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getUnproxiedMcpServerUsage telemetry
+   *
+   * @remarks
+   * Best-effort tool-call activity for an unproxied MCP server, sourced from Shadow MCP's hook-reported traces matched by canonicalized URL. Coverage is opportunistic: only calls made from hook-instrumented sessions in this project are visible, so a freshly added or rarely used server may show no data.
+   */
+  async getUnproxiedMcpServerUsage(
+    request: GetUnproxiedMcpServerUsageRequest,
+    security?: GetUnproxiedMcpServerUsageSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetUnproxiedMcpServerUsageResult> {
+    return unwrapAsync(telemetryGetUnproxiedMcpServerUsage(
       this,
       request,
       security,

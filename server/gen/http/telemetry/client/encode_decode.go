@@ -2447,6 +2447,249 @@ func DecodeGetProjectOverviewResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildGetUnproxiedMcpServerUsageRequest instantiates a HTTP request object
+// with method and path set to call the "telemetry" service
+// "getUnproxiedMcpServerUsage" endpoint
+func (c *Client) BuildGetUnproxiedMcpServerUsageRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetUnproxiedMcpServerUsageTelemetryPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("telemetry", "getUnproxiedMcpServerUsage", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetUnproxiedMcpServerUsageRequest returns an encoder for requests sent
+// to the telemetry getUnproxiedMcpServerUsage server.
+func EncodeGetUnproxiedMcpServerUsageRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*telemetry.GetUnproxiedMcpServerUsagePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("telemetry", "getUnproxiedMcpServerUsage", "*telemetry.GetUnproxiedMcpServerUsagePayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewGetUnproxiedMcpServerUsageRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("telemetry", "getUnproxiedMcpServerUsage", err)
+		}
+		return nil
+	}
+}
+
+// DecodeGetUnproxiedMcpServerUsageResponse returns a decoder for responses
+// returned by the telemetry getUnproxiedMcpServerUsage endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetUnproxiedMcpServerUsageResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetUnproxiedMcpServerUsageResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetUnproxiedMcpServerUsageResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getUnproxiedMcpServerUsage", err)
+			}
+			err = ValidateGetUnproxiedMcpServerUsageResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getUnproxiedMcpServerUsage", err)
+			}
+			res := NewGetUnproxiedMcpServerUsageResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetUnproxiedMcpServerUsageUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getUnproxiedMcpServerUsage", err)
+			}
+			err = ValidateGetUnproxiedMcpServerUsageUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getUnproxiedMcpServerUsage", err)
+			}
+			return nil, NewGetUnproxiedMcpServerUsageUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetUnproxiedMcpServerUsageForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getUnproxiedMcpServerUsage", err)
+			}
+			err = ValidateGetUnproxiedMcpServerUsageForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getUnproxiedMcpServerUsage", err)
+			}
+			return nil, NewGetUnproxiedMcpServerUsageForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetUnproxiedMcpServerUsageBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getUnproxiedMcpServerUsage", err)
+			}
+			err = ValidateGetUnproxiedMcpServerUsageBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getUnproxiedMcpServerUsage", err)
+			}
+			return nil, NewGetUnproxiedMcpServerUsageBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetUnproxiedMcpServerUsageNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getUnproxiedMcpServerUsage", err)
+			}
+			err = ValidateGetUnproxiedMcpServerUsageNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getUnproxiedMcpServerUsage", err)
+			}
+			return nil, NewGetUnproxiedMcpServerUsageNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetUnproxiedMcpServerUsageConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getUnproxiedMcpServerUsage", err)
+			}
+			err = ValidateGetUnproxiedMcpServerUsageConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getUnproxiedMcpServerUsage", err)
+			}
+			return nil, NewGetUnproxiedMcpServerUsageConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetUnproxiedMcpServerUsageUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getUnproxiedMcpServerUsage", err)
+			}
+			err = ValidateGetUnproxiedMcpServerUsageUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getUnproxiedMcpServerUsage", err)
+			}
+			return nil, NewGetUnproxiedMcpServerUsageUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetUnproxiedMcpServerUsageInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getUnproxiedMcpServerUsage", err)
+			}
+			err = ValidateGetUnproxiedMcpServerUsageInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getUnproxiedMcpServerUsage", err)
+			}
+			return nil, NewGetUnproxiedMcpServerUsageInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetUnproxiedMcpServerUsageInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getUnproxiedMcpServerUsage", err)
+				}
+				err = ValidateGetUnproxiedMcpServerUsageInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getUnproxiedMcpServerUsage", err)
+				}
+				return nil, NewGetUnproxiedMcpServerUsageInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetUnproxiedMcpServerUsageUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getUnproxiedMcpServerUsage", err)
+				}
+				err = ValidateGetUnproxiedMcpServerUsageUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getUnproxiedMcpServerUsage", err)
+				}
+				return nil, NewGetUnproxiedMcpServerUsageUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("telemetry", "getUnproxiedMcpServerUsage", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetUnproxiedMcpServerUsageGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getUnproxiedMcpServerUsage", err)
+			}
+			err = ValidateGetUnproxiedMcpServerUsageGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getUnproxiedMcpServerUsage", err)
+			}
+			return nil, NewGetUnproxiedMcpServerUsageGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("telemetry", "getUnproxiedMcpServerUsage", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildQueryRequest instantiates a HTTP request object with method and path
 // set to call the "telemetry" service "query" endpoint
 func (c *Client) BuildQueryRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -7454,6 +7697,18 @@ func unmarshalLLMClientUsageResponseBodyToTelemetryLLMClientUsage(v *LLMClientUs
 	res := &telemetry.LLMClientUsage{
 		ClientName:    *v.ClientName,
 		ActivityCount: *v.ActivityCount,
+	}
+
+	return res
+}
+
+// unmarshalUnproxiedMcpServerUsageBucketResponseBodyToTelemetryUnproxiedMcpServerUsageBucket
+// builds a value of type *telemetry.UnproxiedMcpServerUsageBucket from a value
+// of type *UnproxiedMcpServerUsageBucketResponseBody.
+func unmarshalUnproxiedMcpServerUsageBucketResponseBodyToTelemetryUnproxiedMcpServerUsageBucket(v *UnproxiedMcpServerUsageBucketResponseBody) *telemetry.UnproxiedMcpServerUsageBucket {
+	res := &telemetry.UnproxiedMcpServerUsageBucket{
+		Date:      *v.Date,
+		CallCount: *v.CallCount,
 	}
 
 	return res

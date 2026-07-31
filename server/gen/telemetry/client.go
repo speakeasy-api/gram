@@ -25,6 +25,7 @@ type Client struct {
 	GetEmployeeDataFlowGraphEndpoint        goa.Endpoint
 	GetObservabilityOverviewEndpoint        goa.Endpoint
 	GetProjectOverviewEndpoint              goa.Endpoint
+	GetUnproxiedMcpServerUsageEndpoint      goa.Endpoint
 	QueryEndpoint                           goa.Endpoint
 	QueryTumDetailsEndpoint                 goa.Endpoint
 	ListSessionsEndpoint                    goa.Endpoint
@@ -46,7 +47,7 @@ type Client struct {
 }
 
 // NewClient initializes a "telemetry" service client given the endpoints.
-func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getEmployeeDataFlowGraph, getObservabilityOverview, getProjectOverview, query, queryTumDetails, listSessions, listFilterOptions, listAttributeKeys, getHooksSummary, getToolUsageSummary, getToolUsageTotals, getToolUsageTargets, getToolUsageUsers, getToolUsageTargetTimeSeries, getToolUsageUserTimeSeries, getToolUsageUsersByTarget, getToolUsageTargetToolBreakdown, listToolUsageTraces, getToolUsageFilterOptions, getMcpServerActivity, listHooksTraces goa.Endpoint) *Client {
+func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getEmployeeDataFlowGraph, getObservabilityOverview, getProjectOverview, getUnproxiedMcpServerUsage, query, queryTumDetails, listSessions, listFilterOptions, listAttributeKeys, getHooksSummary, getToolUsageSummary, getToolUsageTotals, getToolUsageTargets, getToolUsageUsers, getToolUsageTargetTimeSeries, getToolUsageUserTimeSeries, getToolUsageUsersByTarget, getToolUsageTargetToolBreakdown, listToolUsageTraces, getToolUsageFilterOptions, getMcpServerActivity, listHooksTraces goa.Endpoint) *Client {
 	return &Client{
 		SearchLogsEndpoint:                      searchLogs,
 		SearchToolCallsEndpoint:                 searchToolCalls,
@@ -58,6 +59,7 @@ func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEve
 		GetEmployeeDataFlowGraphEndpoint:        getEmployeeDataFlowGraph,
 		GetObservabilityOverviewEndpoint:        getObservabilityOverview,
 		GetProjectOverviewEndpoint:              getProjectOverview,
+		GetUnproxiedMcpServerUsageEndpoint:      getUnproxiedMcpServerUsage,
 		QueryEndpoint:                           query,
 		QueryTumDetailsEndpoint:                 queryTumDetails,
 		ListSessionsEndpoint:                    listSessions,
@@ -303,6 +305,29 @@ func (c *Client) GetProjectOverview(ctx context.Context, p *GetProjectOverviewPa
 		return
 	}
 	return ires.(*GetProjectOverviewResult), nil
+}
+
+// GetUnproxiedMcpServerUsage calls the "getUnproxiedMcpServerUsage" endpoint
+// of the "telemetry" service.
+// GetUnproxiedMcpServerUsage may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetUnproxiedMcpServerUsage(ctx context.Context, p *GetUnproxiedMcpServerUsagePayload) (res *GetUnproxiedMcpServerUsageResult, err error) {
+	var ires any
+	ires, err = c.GetUnproxiedMcpServerUsageEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetUnproxiedMcpServerUsageResult), nil
 }
 
 // Query calls the "query" endpoint of the "telemetry" service.

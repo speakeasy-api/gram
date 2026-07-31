@@ -57,6 +57,10 @@ type Client struct {
 	// getProjectOverview endpoint.
 	GetProjectOverviewDoer goahttp.Doer
 
+	// GetUnproxiedMcpServerUsage Doer is the HTTP client used to make requests to
+	// the getUnproxiedMcpServerUsage endpoint.
+	GetUnproxiedMcpServerUsageDoer goahttp.Doer
+
 	// Query Doer is the HTTP client used to make requests to the query endpoint.
 	QueryDoer goahttp.Doer
 
@@ -158,6 +162,7 @@ func NewClient(
 		GetEmployeeDataFlowGraphDoer:        doer,
 		GetObservabilityOverviewDoer:        doer,
 		GetProjectOverviewDoer:              doer,
+		GetUnproxiedMcpServerUsageDoer:      doer,
 		QueryDoer:                           doer,
 		QueryTumDetailsDoer:                 doer,
 		ListSessionsDoer:                    doer,
@@ -419,6 +424,30 @@ func (c *Client) GetProjectOverview() goa.Endpoint {
 		resp, err := c.GetProjectOverviewDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "getProjectOverview", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetUnproxiedMcpServerUsage returns an endpoint that makes HTTP requests to
+// the telemetry service getUnproxiedMcpServerUsage server.
+func (c *Client) GetUnproxiedMcpServerUsage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetUnproxiedMcpServerUsageRequest(c.encoder)
+		decodeResponse = DecodeGetUnproxiedMcpServerUsageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetUnproxiedMcpServerUsageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetUnproxiedMcpServerUsageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getUnproxiedMcpServerUsage", err)
 		}
 		return decodeResponse(resp)
 	}

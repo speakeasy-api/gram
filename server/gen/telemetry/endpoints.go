@@ -26,6 +26,7 @@ type Endpoints struct {
 	GetEmployeeDataFlowGraph        goa.Endpoint
 	GetObservabilityOverview        goa.Endpoint
 	GetProjectOverview              goa.Endpoint
+	GetUnproxiedMcpServerUsage      goa.Endpoint
 	Query                           goa.Endpoint
 	QueryTumDetails                 goa.Endpoint
 	ListSessions                    goa.Endpoint
@@ -61,6 +62,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GetEmployeeDataFlowGraph:        NewGetEmployeeDataFlowGraphEndpoint(s, a.APIKeyAuth),
 		GetObservabilityOverview:        NewGetObservabilityOverviewEndpoint(s, a.APIKeyAuth),
 		GetProjectOverview:              NewGetProjectOverviewEndpoint(s, a.APIKeyAuth),
+		GetUnproxiedMcpServerUsage:      NewGetUnproxiedMcpServerUsageEndpoint(s, a.APIKeyAuth),
 		Query:                           NewQueryEndpoint(s, a.APIKeyAuth),
 		QueryTumDetails:                 NewQueryTumDetailsEndpoint(s, a.APIKeyAuth),
 		ListSessions:                    NewListSessionsEndpoint(s, a.APIKeyAuth),
@@ -94,6 +96,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetEmployeeDataFlowGraph = m(e.GetEmployeeDataFlowGraph)
 	e.GetObservabilityOverview = m(e.GetObservabilityOverview)
 	e.GetProjectOverview = m(e.GetProjectOverview)
+	e.GetUnproxiedMcpServerUsage = m(e.GetUnproxiedMcpServerUsage)
 	e.Query = m(e.Query)
 	e.QueryTumDetails = m(e.QueryTumDetails)
 	e.ListSessions = m(e.ListSessions)
@@ -713,6 +716,65 @@ func NewGetProjectOverviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return s.GetProjectOverview(ctx, p)
+	}
+}
+
+// NewGetUnproxiedMcpServerUsageEndpoint returns an endpoint function that
+// calls the method "getUnproxiedMcpServerUsage" of service "telemetry".
+func NewGetUnproxiedMcpServerUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetUnproxiedMcpServerUsagePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetUnproxiedMcpServerUsage(ctx, p)
 	}
 }
 

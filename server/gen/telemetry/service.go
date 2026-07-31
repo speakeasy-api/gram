@@ -39,6 +39,12 @@ type Service interface {
 	// Get project-level overview including total chats, tool calls, active
 	// servers/users, and top lists
 	GetProjectOverview(context.Context, *GetProjectOverviewPayload) (res *GetProjectOverviewResult, err error)
+	// Best-effort tool-call activity for an unproxied MCP server, sourced from
+	// Shadow MCP's hook-reported traces matched by canonicalized URL. Coverage is
+	// opportunistic: only calls made from hook-instrumented sessions in this
+	// project are visible, so a freshly added or rarely used server may show no
+	// data.
+	GetUnproxiedMcpServerUsage(context.Context, *GetUnproxiedMcpServerUsagePayload) (res *GetUnproxiedMcpServerUsageResult, err error)
 	// Generic, org-scoped analytics query over pre-aggregated usage metrics.
 	// Returns both a grouped table and a per-group hourly timeseries for the same
 	// slice of data, supporting arbitrary allowlisted group-by dimensions and
@@ -111,7 +117,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [28]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "listHooksTraces"}
+var MethodNames = [29]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "getUnproxiedMcpServerUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -686,6 +692,26 @@ type GetToolUsageUsersPayload struct {
 type GetToolUsageUsersResult struct {
 	// Top user identities for the selected filters and time range
 	Users []*ToolUsageUserSummary
+}
+
+// GetUnproxiedMcpServerUsagePayload is the payload type of the telemetry
+// service getUnproxiedMcpServerUsage method.
+type GetUnproxiedMcpServerUsagePayload struct {
+	// The unproxied MCP server's vendor URL
+	URL string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To               string
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// GetUnproxiedMcpServerUsageResult is the result type of the telemetry service
+// getUnproxiedMcpServerUsage method.
+type GetUnproxiedMcpServerUsageResult struct {
+	Buckets []*UnproxiedMcpServerUsageBucket
 }
 
 // GetUserMetricsSummaryPayload is the payload type of the telemetry service
@@ -2010,6 +2036,14 @@ type TumDetailsTotals struct {
 	CacheCreationTokens int64
 	// Tokens under management: input + output + cache writes
 	TotalTokens int64
+}
+
+// A single day's Shadow-MCP-observed call count for an unproxied MCP server
+type UnproxiedMcpServerUsageBucket struct {
+	// Bucket date (YYYY-MM-DD, UTC)
+	Date string
+	// Number of observed tool calls in this bucket
+	CallCount int
 }
 
 // A linked AI account for a user. The identity is (provider, email): the same

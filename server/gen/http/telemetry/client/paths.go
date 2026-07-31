@@ -57,6 +57,11 @@ func GetProjectOverviewTelemetryPath() string {
 	return "/rpc/telemetry.getProjectOverview"
 }
 
+// GetUnproxiedMcpServerUsageTelemetryPath returns the URL path to the telemetry service getUnproxiedMcpServerUsage HTTP endpoint.
+func GetUnproxiedMcpServerUsageTelemetryPath() string {
+	return "/rpc/telemetry.getUnproxiedMcpServerUsage"
+}
+
 // QueryTelemetryPath returns the URL path to the telemetry service query HTTP endpoint.
 func QueryTelemetryPath() string {
 	return "/rpc/telemetry.query"

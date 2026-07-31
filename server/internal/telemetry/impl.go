@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgsRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/telemetryerrs"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -1764,6 +1765,53 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TopToolsByFailureRate: toToolMetrics(toolsByFailure),
 		IntervalSeconds:       intervalSeconds,
 	}, nil
+}
+
+// GetUnproxiedMcpServerUsage returns a best-effort daily tool-call count for
+// an unproxied MCP server, sourced from Shadow MCP's hook-reported traces
+// (trace_summaries) matched by canonicalized URL. Unlike GetObservabilityOverview,
+// this data isn't written by Gram's own proxy — an unproxied server's traffic
+// never passes through Gram — so coverage depends entirely on whether any
+// hook-instrumented session in this project has called this exact URL.
+func (s *Service) GetUnproxiedMcpServerUsage(ctx context.Context, payload *telem_gen.GetUnproxiedMcpServerUsagePayload) (*telem_gen.GetUnproxiedMcpServerUsageResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	canonical, ok := shadowmcp.CanonicalizeInventoryURL(payload.URL)
+	if !ok || canonical.CanonicalURL == "" {
+		return &telem_gen.GetUnproxiedMcpServerUsageResult{Buckets: []*telem_gen.UnproxiedMcpServerUsageBucket{}}, nil
+	}
+
+	rows, err := s.chRepo.GetUnproxiedMcpServerUsageTimeSeries(ctx, repo.GetUnproxiedMcpServerUsageTimeSeriesParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		CanonicalURL:  canonical.CanonicalURL,
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get unproxied mcp server usage").LogError(ctx, s.logger)
+	}
+
+	buckets := make([]*telem_gen.UnproxiedMcpServerUsageBucket, 0, len(rows))
+	for _, row := range rows {
+		buckets = append(buckets, &telem_gen.UnproxiedMcpServerUsageBucket{
+			Date:      row.BucketDate,
+			CallCount: int(row.CallCount), //nolint:gosec // ClickHouse UInt64 count, never remotely close to overflowing int on 64-bit platforms.
+		})
+	}
+
+	return &telem_gen.GetUnproxiedMcpServerUsageResult{Buckets: buckets}, nil
 }
 
 // GetProjectOverview retrieves project-level overview metrics including total chats, tool calls,

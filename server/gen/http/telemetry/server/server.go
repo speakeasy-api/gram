@@ -29,6 +29,7 @@ type Server struct {
 	GetEmployeeDataFlowGraph        http.Handler
 	GetObservabilityOverview        http.Handler
 	GetProjectOverview              http.Handler
+	GetUnproxiedMcpServerUsage      http.Handler
 	Query                           http.Handler
 	QueryTumDetails                 http.Handler
 	ListSessions                    http.Handler
@@ -86,6 +87,7 @@ func New(
 			{"GetEmployeeDataFlowGraph", "POST", "/rpc/telemetry.getEmployeeDataFlowGraph"},
 			{"GetObservabilityOverview", "POST", "/rpc/telemetry.getObservabilityOverview"},
 			{"GetProjectOverview", "POST", "/rpc/telemetry.getProjectOverview"},
+			{"GetUnproxiedMcpServerUsage", "POST", "/rpc/telemetry.getUnproxiedMcpServerUsage"},
 			{"Query", "POST", "/rpc/telemetry.query"},
 			{"QueryTumDetails", "POST", "/rpc/telemetry.queryTumDetails"},
 			{"ListSessions", "POST", "/rpc/telemetry.listSessions"},
@@ -115,6 +117,7 @@ func New(
 		GetEmployeeDataFlowGraph:        NewGetEmployeeDataFlowGraphHandler(e.GetEmployeeDataFlowGraph, mux, decoder, encoder, errhandler, formatter),
 		GetObservabilityOverview:        NewGetObservabilityOverviewHandler(e.GetObservabilityOverview, mux, decoder, encoder, errhandler, formatter),
 		GetProjectOverview:              NewGetProjectOverviewHandler(e.GetProjectOverview, mux, decoder, encoder, errhandler, formatter),
+		GetUnproxiedMcpServerUsage:      NewGetUnproxiedMcpServerUsageHandler(e.GetUnproxiedMcpServerUsage, mux, decoder, encoder, errhandler, formatter),
 		Query:                           NewQueryHandler(e.Query, mux, decoder, encoder, errhandler, formatter),
 		QueryTumDetails:                 NewQueryTumDetailsHandler(e.QueryTumDetails, mux, decoder, encoder, errhandler, formatter),
 		ListSessions:                    NewListSessionsHandler(e.ListSessions, mux, decoder, encoder, errhandler, formatter),
@@ -151,6 +154,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetEmployeeDataFlowGraph = m(s.GetEmployeeDataFlowGraph)
 	s.GetObservabilityOverview = m(s.GetObservabilityOverview)
 	s.GetProjectOverview = m(s.GetProjectOverview)
+	s.GetUnproxiedMcpServerUsage = m(s.GetUnproxiedMcpServerUsage)
 	s.Query = m(s.Query)
 	s.QueryTumDetails = m(s.QueryTumDetails)
 	s.ListSessions = m(s.ListSessions)
@@ -186,6 +190,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetEmployeeDataFlowGraphHandler(mux, h.GetEmployeeDataFlowGraph)
 	MountGetObservabilityOverviewHandler(mux, h.GetObservabilityOverview)
 	MountGetProjectOverviewHandler(mux, h.GetProjectOverview)
+	MountGetUnproxiedMcpServerUsageHandler(mux, h.GetUnproxiedMcpServerUsage)
 	MountQueryHandler(mux, h.Query)
 	MountQueryTumDetailsHandler(mux, h.QueryTumDetails)
 	MountListSessionsHandler(mux, h.ListSessions)
@@ -721,6 +726,60 @@ func NewGetProjectOverviewHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getProjectOverview")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetUnproxiedMcpServerUsageHandler configures the mux to serve the
+// "telemetry" service "getUnproxiedMcpServerUsage" endpoint.
+func MountGetUnproxiedMcpServerUsageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/telemetry.getUnproxiedMcpServerUsage", f)
+}
+
+// NewGetUnproxiedMcpServerUsageHandler creates a HTTP handler which loads the
+// HTTP request and calls the "telemetry" service "getUnproxiedMcpServerUsage"
+// endpoint.
+func NewGetUnproxiedMcpServerUsageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetUnproxiedMcpServerUsageRequest(mux, decoder)
+		encodeResponse = EncodeGetUnproxiedMcpServerUsageResponse(encoder)
+		encodeError    = EncodeGetUnproxiedMcpServerUsageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getUnproxiedMcpServerUsage")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -307,6 +307,44 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetProjectOverview", "type": "query"}`)
 	})
 
+	Method("getUnproxiedMcpServerUsage", func() {
+		Description("Best-effort tool-call activity for an unproxied MCP server, sourced from Shadow MCP's hook-reported traces matched by canonicalized URL. Coverage is opportunistic: only calls made from hook-instrumented sessions in this project are visible, so a freshly added or rarely used server may show no data.")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Attribute("url", String, "The unproxied MCP server's vendor URL", func() {
+				Format(FormatURI)
+			})
+			Attribute("from", String, "Start time in ISO 8601 format", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "End time in ISO 8601 format", func() {
+				Format(FormatDateTime)
+			})
+			Required("url", "from", "to")
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetUnproxiedMcpServerUsageResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getUnproxiedMcpServerUsage")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getUnproxiedMcpServerUsage")
+		Meta("openapi:extension:x-speakeasy-name-override", "getUnproxiedMcpServerUsage")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetUnproxiedMcpServerUsage", "type": "query"}`)
+	})
+
 	Method("query", func() {
 		Description("Generic, org-scoped analytics query over pre-aggregated usage metrics. Returns both a grouped table and a per-group hourly timeseries for the same slice of data, supporting arbitrary allowlisted group-by dimensions and filters (e.g. group by department_name, then drill in by filtering department_name and grouping by role).")
 
@@ -1852,6 +1890,23 @@ var GetObservabilityOverviewPayload = Type("GetObservabilityOverviewPayload", fu
 	})
 
 	Required("from", "to")
+})
+
+var UnproxiedMcpServerUsageBucket = Type("UnproxiedMcpServerUsageBucket", func() {
+	Description("A single day's Shadow-MCP-observed call count for an unproxied MCP server")
+
+	Attribute("date", String, "Bucket date (YYYY-MM-DD, UTC)")
+	Attribute("call_count", Int, "Number of observed tool calls in this bucket")
+
+	Required("date", "call_count")
+})
+
+var GetUnproxiedMcpServerUsageResult = Type("GetUnproxiedMcpServerUsageResult", func() {
+	Description("Result of a Shadow-MCP-backed usage lookup for an unproxied MCP server")
+
+	Attribute("buckets", ArrayOf(UnproxiedMcpServerUsageBucket))
+
+	Required("buckets")
 })
 
 var GetObservabilityOverviewResult = Type("GetObservabilityOverviewResult", func() {

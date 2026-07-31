@@ -41,6 +41,7 @@ import { MCPOverviewTab } from "@/pages/mcp/overview/MCPOverviewTab";
 import { InspectTab } from "./tabs/InspectTab";
 import { MCP_AUTHENTICATION_SECTION_ID } from "./tabs/settings/sections/authentication/AuthenticationSection";
 import { SettingsTab } from "./tabs/settings/SettingsTab";
+import { UnproxiedMcpOverviewTab } from "./tabs/UnproxiedMcpOverviewTab";
 
 const MCP_X_TAB_URLS = ["overview", "inspect", "team-access", "settings"];
 
@@ -110,16 +111,22 @@ export default function MCPServerDetails(): JSX.Element {
       case "overview":
         return (
           mcpServer &&
-          mcpServer.slug && (
-            <MCPOverviewTab
-              server={{
-                kind: "mcp-server",
-                id: mcpServer.id,
-                slug: mcpServer.slug,
-                name: mcpServer.name ?? "MCP Server",
-              }}
+          (mcpServer.unproxiedMcpServerId ? (
+            <UnproxiedMcpOverviewTab
+              unproxiedMcpServerId={mcpServer.unproxiedMcpServerId}
             />
-          )
+          ) : (
+            mcpServer.slug && (
+              <MCPOverviewTab
+                server={{
+                  kind: "mcp-server",
+                  id: mcpServer.id,
+                  slug: mcpServer.slug,
+                  name: mcpServer.name ?? "MCP Server",
+                }}
+              />
+            )
+          ))
         );
       case "inspect":
         return (
