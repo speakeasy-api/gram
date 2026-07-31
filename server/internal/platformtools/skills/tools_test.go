@@ -132,7 +132,6 @@ func TestCreateToolDescriptorMarksMutationAsIdempotent(t *testing.T) {
 	require.True(t, *descriptor.Annotations.IdempotentHint)
 	require.False(t, *descriptor.Annotations.OpenWorldHint)
 	require.JSONEq(t, `{
-		"$schema": "https://json-schema.org/draft/2020-12/schema",
 		"additionalProperties": false,
 		"properties": {
 			"content": {
