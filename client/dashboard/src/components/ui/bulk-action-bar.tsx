@@ -45,6 +45,7 @@ export function BulkActionBar({
   actions,
   loading,
   leftOffsetPx,
+  heightPx,
 }: {
   selectedCount: number;
   /** One or two actions (e.g. "Mark as false positive" and "Setup exclusion
@@ -58,6 +59,12 @@ export function BulkActionBar({
    * the bar starts immediately after it, leaving that checkbox uncovered
    * and clickable. */
   leftOffsetPx: number;
+  /** The header row's own measured height in pixels (see
+   * `useMeasuredHeight`) — the bar matches it exactly instead of sizing off
+   * its own padding, so it reads as sitting *in* the header rather than
+   * floating at some unrelated size. Falls back to the bar's own padding
+   * when the header hasn't been measured yet (first paint). */
+  heightPx?: number;
 }): JSX.Element {
   const visible = selectedCount > 0;
   const containerRef = useRef<HTMLDivElement>(null);
@@ -80,9 +87,10 @@ export function BulkActionBar({
     <div
       ref={containerRef}
       aria-hidden={!visible}
-      style={{ left: leftOffsetPx + 16 }}
+      style={{ left: leftOffsetPx + 16, height: heightPx }}
       className={cn(
-        "bg-background absolute top-0 z-20 flex w-fit items-center gap-3 rounded-lg border px-3 py-2 text-sm shadow-md",
+        "bg-background absolute top-0 z-20 flex w-fit items-center gap-3 rounded-lg border px-3 text-sm shadow-md",
+        heightPx == null && "py-2",
         visible ? "visible" : "invisible",
       )}
     >

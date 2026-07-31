@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { MoreActions, type Action } from "@/components/ui/more-actions";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
+import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
 import { cn } from "@/lib/utils";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { getPresetRange } from "@/elements";
@@ -80,6 +81,7 @@ export default function RiskEvents(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedChatId = searchParams.get("chat_id");
   const containerRef = useRef<HTMLDivElement>(null);
+  const headerMeasure = useMeasuredHeight<HTMLDivElement>();
 
   const { values, setValue, clearValue, clearAll } =
     useFilterState(RISK_FILTERS);
@@ -349,8 +351,12 @@ export default function RiskEvents(): JSX.Element {
               ]}
               loading={exclusionRule.isSuggesting}
               leftOffsetPx={28}
+              heightPx={headerMeasure.height}
             />
-            <RiskEventsHeader selection={selection} />
+            <RiskEventsHeader
+              selection={selection}
+              headerRef={headerMeasure.ref}
+            />
           </div>
         }
         footer={
@@ -425,11 +431,14 @@ function InactivePolicyNotice({
 
 function RiskEventsHeader({
   selection,
+  headerRef,
 }: {
   selection: RowSelection<RiskResult>;
+  headerRef: (node: HTMLDivElement | null) => void;
 }) {
   return (
     <div
+      ref={headerRef}
       className={cn(
         RISK_EVENTS_GRID,
         "bg-muted/30 text-muted-foreground shrink-0 items-center border-b px-5 py-2.5 text-xs font-medium tracking-wide uppercase",

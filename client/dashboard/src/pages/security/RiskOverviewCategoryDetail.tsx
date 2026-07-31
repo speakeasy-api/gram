@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { MoreActions, type Action } from "@/components/ui/more-actions";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
+import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { type DateRangePreset } from "@/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
@@ -193,6 +194,7 @@ function RiskOverviewCategoryDetailContent() {
   }, [selection, exclusionRule]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const headerMeasure = useMeasuredHeight<HTMLTableRowElement>();
   const handleScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
       const container = e.currentTarget;
@@ -286,11 +288,13 @@ function RiskOverviewCategoryDetailContent() {
                 ]}
                 loading={exclusionRule.isSuggesting}
                 leftOffsetPx={32}
+                heightPx={headerMeasure.height}
               />
               <ResultsTable
                 results={visibleResults}
                 isLoading={resultsQuery.isLoading}
                 scrollRef={scrollRef}
+                headerRowRef={headerMeasure.ref}
                 onScroll={handleScroll}
                 onSelectChat={setSelectedChatId}
                 selection={selection}
@@ -316,6 +320,7 @@ function ResultsTable({
   results,
   isLoading,
   scrollRef,
+  headerRowRef,
   onScroll,
   onSelectChat,
   selection,
@@ -325,6 +330,7 @@ function ResultsTable({
   results: RiskResult[];
   isLoading: boolean;
   scrollRef: React.RefObject<HTMLDivElement | null>;
+  headerRowRef: (node: HTMLTableRowElement | null) => void;
   onScroll: (e: React.UIEvent<HTMLDivElement>) => void;
   onSelectChat: (chatId: string) => void;
   selection: RowSelection<RiskResult>;
@@ -370,7 +376,7 @@ function ResultsTable({
           <col className="w-[48px]" />
         </colgroup>
         <thead className="bg-muted text-muted-foreground sticky top-0 z-[1] text-xs font-medium tracking-wide uppercase shadow-[0_1px_0_0_var(--color-border)]">
-          <tr>
+          <tr ref={headerRowRef}>
             <th className="px-4 py-2">
               <Checkbox
                 checked={selection.allState}
