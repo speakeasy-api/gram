@@ -14,8 +14,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
@@ -122,6 +124,32 @@ func (s *Service) serveResolvedMCPEndpoint(
 		issuerGated = false
 	}
 
+	// Toolset-backed servers can carry auth on the backing toolset instead
+	// of the wrapper (the toolsets → mcp_servers swap leaves the wrapper
+	// issuer NULL deliberately). Load the toolset up front: a toolset
+	// issuer gates the request here with the endpoint's identity — so the
+	// challenge, cached ref, and WWW-Authenticate all name the address the
+	// client used — and the dispatch below reuses the loaded row.
+	var backendToolset *toolsetsrepo.Toolset
+	var toolsetIssuerEndpoint *ResolvedMcpEndpoint
+	if mcpServer.ToolsetID.Valid {
+		toolset, err := toolsetsrepo.New(s.db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{
+			ID:        mcpServer.ToolsetID.UUID,
+			ProjectID: mcpEndpoint.ProjectID,
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return oops.E(oops.CodeNotFound, err, "toolset not found")
+		case err != nil:
+			return oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, logger)
+		}
+		backendToolset = &toolset
+		if !issuerGated && toolset.UserSessionIssuerID.Valid {
+			toolsetIssuerEndpoint = newResolvedMcpEndpointFromToolsetBackedServer(mcpEndpoint, mcpServer, backendToolset, mcpRouteBase)
+			issuerGated = true
+		}
+	}
+
 	// Issuer-gated mcp_servers run the JWT-validation branch here, before
 	// backend dispatch. ServeToolsetResolved then skips its in-toolset
 	// gate (skipIssuerGate=true) so the same request isn't gated twice;
@@ -130,9 +158,15 @@ func (s *Service) serveResolvedMCPEndpoint(
 	var upstreamTokens map[uuid.UUID]string
 	var wwwAuthenticate string
 	if issuerGated {
-		resolvedEndpoint, err := s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
-		if err != nil {
-			return err
+		resolvedEndpoint := toolsetIssuerEndpoint
+		if resolvedEndpoint == nil {
+			built, err := s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
+			if err != nil {
+				return err
+			}
+			resolvedEndpoint = built
+		} else if err := s.RequireUserSessionIssuer(ctx, resolvedEndpoint); err != nil {
+			return fmt.Errorf("require user session issuer: %w", err)
 		}
 		newCtx, tokens, err := s.ApplyIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
 		if err != nil {
@@ -167,21 +201,33 @@ func (s *Service) serveResolvedMCPEndpoint(
 		}
 		return s.serveTunneledBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate)
 	case mcpServer.ToolsetID.Valid:
-		// AGE-1902: toolset-backed branch still reads runtime config from the
-		// toolsets row (visibility, OAuth, default environment). Once
-		// /mcp/{mcpSlug} is migrated to source these from the linked
-		// mcp_servers row instead, this branch should switch to passing the
-		// mcp_server config into ServeToolsetResolved (or its successor) and
-		// the toolset load below can be dropped.
-		toolset, err := toolsetsrepo.New(s.db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{
-			ID:        mcpServer.ToolsetID.UUID,
-			ProjectID: mcpEndpoint.ProjectID,
-		})
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			return oops.E(oops.CodeNotFound, err, "toolset not found")
-		case err != nil:
-			return oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, logger)
+		toolset := *backendToolset
+
+		// The mcp_servers row is the publishing config for this address:
+		// its visibility and environment govern serving, while auth (OAuth
+		// refs, user-session issuer) and tool definitions stay on the
+		// toolset. ServeToolsetResolved reads publishing config off the
+		// toolset row, so substitute the wrapper-governed fields into a
+		// copy. The toolsets columns mirror the wrapper only while the
+		// expand/contract swap is in flight and can drift; the wrapper
+		// wins at an endpoint address.
+		effective := toolset
+		effective.McpIsPublic = mcpServer.Visibility == mcpservers.VisibilityPublic
+		effective.McpEnabled = true
+		if mcpServer.EnvironmentID.Valid {
+			env, err := environmentsrepo.New(s.db).GetEnvironmentByID(ctx, environmentsrepo.GetEnvironmentByIDParams{
+				ID:        mcpServer.EnvironmentID.UUID,
+				ProjectID: mcpEndpoint.ProjectID,
+			})
+			switch {
+			case errors.Is(err, pgx.ErrNoRows):
+				// Dangling environment FK: fall through to the toolset's
+				// default environment rather than failing the request.
+			case err != nil:
+				return oops.E(oops.CodeUnexpected, err, "load mcp server environment").LogError(ctx, logger)
+			default:
+				effective.DefaultEnvironmentSlug = conv.ToPGText(env.Slug)
+			}
 		}
 
 		// The mcp_servers row's variation group, when set, overrides the
@@ -193,7 +239,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			mcpServerVariationsGroupID = &id
 		}
 
-		if err := s.ServeToolsetResolved(w, r, &toolset, slug, mcpRouteBase, issuerGated, upstreamTokens, mcpServerVariationsGroupID, &mcpServer.ID); err != nil {
+		if err := s.ServeToolsetResolved(w, r, &effective, slug, mcpRouteBase, issuerGated, upstreamTokens, mcpServerVariationsGroupID, &mcpServer.ID); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
 		}
 		return nil
@@ -233,9 +279,12 @@ func singleUpstreamToken(tokens map[uuid.UUID]string) (string, error) {
 // existence to unauthenticated callers. logger should already carry the
 // slug attribute.
 //
-// Returns CodeNotFound when no row matches. Callers that want to fall
-// back to a legacy lookup (e.g. /mcp's existing toolsets path) should
-// check for oops.CodeNotFound and proceed accordingly.
+// Callers that fall back to a legacy lookup (e.g. /mcp's existing toolsets
+// path) must gate the fallback on errors.Is(err,
+// mcpendpoints.ErrAddressMiss) — a true addressing miss. A plain
+// CodeNotFound means the address exists but is unavailable (disabled
+// visibility, dangling server) and is terminal: the endpoint is
+// authoritative for its slug.
 //
 // Thin wrapper around mcpendpoints.BySlugAndCustomDomain; kept as a method
 // for the existing /mcp and /x/mcp call sites.
@@ -262,19 +311,43 @@ func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.
 // URL building on both the primary and fallback paths.
 func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug, mcpRouteBase string) (*ResolvedMcpEndpoint, error) {
 	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, slug)
-	var shareErr *oops.ShareableError
 	switch {
 	case err == nil:
 		// Public tunneled servers serve anonymously and expose no OAuth
 		// surface: every issuer-gated handler resolving through here
 		// (authorize, token, register, revoke, consent) must 404 even
 		// though the issuer column is populated.
-		if !mcpServer.UserSessionIssuerID.Valid || isTunneledPublic(mcpServer) {
+		if isTunneledPublic(mcpServer) {
 			return nil, oops.E(oops.CodeNotFound, nil, "not found")
 		}
-		return s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
-	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
-		return s.loadResolvedMcpEndpointByToolsetSlug(ctx, slug, mcpRouteBase)
+		if mcpServer.UserSessionIssuerID.Valid {
+			return s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
+		}
+		// A toolset-backed server with a NULL wrapper issuer is still an
+		// OAuth endpoint when the backing toolset carries a user-session
+		// issuer: resolve through the toolset issuer with the endpoint's
+		// identity so the OAuth surface lives at the address the client
+		// used.
+		if mcpServer.ToolsetID.Valid {
+			toolset, err := s.loadToolsetForServer(ctx, logger, mcpServer.ToolsetID.UUID, mcpEndpoint.ProjectID)
+			if err != nil {
+				return nil, err
+			}
+			if toolset.UserSessionIssuerID.Valid {
+				endpoint := newResolvedMcpEndpointFromToolsetBackedServer(mcpEndpoint, mcpServer, toolset, mcpRouteBase)
+				if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
+					return nil, fmt.Errorf("require user session issuer: %w", err)
+				}
+				return endpoint, nil
+			}
+		}
+		return nil, oops.E(oops.CodeNotFound, nil, "not found")
+	case errors.Is(err, mcpendpoints.ErrAddressMiss):
+		resolved, err := s.loadResolvedMcpEndpointByToolsetSlug(ctx, slug, mcpRouteBase)
+		if err == nil {
+			s.metrics.RecordToolsetSlugFallback(ctx, toolsetFallbackSurfaceOAuth, slug)
+		}
+		return resolved, err
 	default:
 		return nil, err
 	}

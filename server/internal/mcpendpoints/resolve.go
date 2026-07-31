@@ -16,6 +16,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
+// ErrAddressMiss reports that no live mcp_endpoints row exists for the
+// requested (slug, custom domain) pair. It is wrapped inside the
+// oops.CodeNotFound error returned by BySlugAndCustomDomain so callers can
+// tell a true addressing miss apart from an address that exists but is
+// unavailable (disabled visibility or a dangling/deleted parent server).
+// Only a true miss may fall back to the legacy toolsets.mcp_slug lookup: an
+// existing endpoint is authoritative for its slug, and letting an
+// unavailable endpoint fall through would resurface a retired legacy
+// toolset that shares the slug.
+var ErrAddressMiss = errors.New("no mcp endpoint at address")
+
 // BySlugAndCustomDomain walks the public addressing chain shared by the /mcp
 // and /x/mcp slug handlers, the install-page handlers, and the .well-known
 // routes: it scopes the lookup to the request's customdomains.Context, loads
@@ -24,9 +35,10 @@ import (
 // avoid leaking existence to unauthenticated callers. logger should already
 // carry the slug attribute.
 //
-// Callers that want to fall back to a legacy lookup (e.g. /mcp's existing
-// toolsets.mcp_slug path) should check for oops.CodeNotFound and proceed
-// accordingly.
+// Callers that fall back to a legacy lookup (e.g. /mcp's existing
+// toolsets.mcp_slug path) must gate the fallback on
+// errors.Is(err, ErrAddressMiss). A plain oops.CodeNotFound without the
+// sentinel means the address exists but is unavailable and must stay a 404.
 func BySlugAndCustomDomain(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, slug string) (*repo.McpEndpoint, *mcpservers_repo.McpServer, error) {
 	var customDomainID uuid.NullUUID
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
@@ -39,7 +51,7 @@ func BySlugAndCustomDomain(ctx context.Context, db *pgxpool.Pool, logger *slog.L
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, nil, oops.E(oops.CodeNotFound, err, "mcp endpoint not found")
+		return nil, nil, oops.E(oops.CodeNotFound, errors.Join(err, ErrAddressMiss), "mcp endpoint not found")
 	case err != nil:
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "load mcp endpoint").LogError(ctx, logger)
 	}

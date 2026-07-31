@@ -344,6 +344,56 @@ func (q *Queries) GetMCPServerBySlug(ctx context.Context, arg GetMCPServerBySlug
 	return i, err
 }
 
+const getMCPServersByToolsetID = `-- name: GetMCPServersByToolsetID :many
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted FROM mcp_servers
+WHERE toolset_id = $1 AND project_id = $2 AND deleted IS FALSE
+ORDER BY created_at
+`
+
+type GetMCPServersByToolsetIDParams struct {
+	ToolsetID uuid.NullUUID
+	ProjectID uuid.UUID
+}
+
+// Live wrappers backed by a toolset. Used by the toolsets service to mirror
+// toolset publishing-column writes onto the canonical mcp_servers/
+// mcp_endpoints rows during the expand/contract data-model swap.
+func (q *Queries) GetMCPServersByToolsetID(ctx context.Context, arg GetMCPServersByToolsetIDParams) ([]McpServer, error) {
+	rows, err := q.db.Query(ctx, getMCPServersByToolsetID, arg.ToolsetID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpServer
+	for rows.Next() {
+		var i McpServer
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Slug,
+			&i.EnvironmentID,
+			&i.UserSessionIssuerID,
+			&i.RemoteMcpServerID,
+			&i.TunneledMcpServerID,
+			&i.ToolsetID,
+			&i.ToolVariationsGroupID,
+			&i.Visibility,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMCPServerToolMetadata = `-- name: ListMCPServerToolMetadata :many
 SELECT id, project_id, mcp_server_id, tool_name, title, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
 FROM mcp_server_tool_metadata

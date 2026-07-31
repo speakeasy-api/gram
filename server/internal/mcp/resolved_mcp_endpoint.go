@@ -280,6 +280,35 @@ func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, routeBase
 	}
 }
 
+// newResolvedMcpEndpointFromToolsetBackedServer materialises a
+// ResolvedMcpEndpoint for a toolset-backed mcp_server whose own issuer
+// column is NULL but whose backing toolset carries a user-session
+// issuer. Identity (slug, custom domain, project, route surface) binds
+// to the mcp_endpoint; auth (issuer, JWT audience) stays on the toolset
+// so sessions minted before the toolsets → mcp_servers data-model swap
+// keep validating; visibility comes from the wrapper. Caller is
+// responsible for first checking toolset.UserSessionIssuerID.Valid.
+func newResolvedMcpEndpointFromToolsetBackedServer(
+	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
+	mcpServer *mcpservers_repo.McpServer,
+	toolset *toolsets_repo.Toolset,
+	routeBase string,
+) *ResolvedMcpEndpoint {
+	return &ResolvedMcpEndpoint{
+		AudienceURN:         urn.NewToolset(toolset.ID).String(),
+		CustomDomainID:      mcpEndpoint.CustomDomainID,
+		IsPublic:            mcpServer.Visibility == mcpservers.VisibilityPublic,
+		McpServerID:         uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
+		OrganizationID:      toolset.OrganizationID,
+		ProjectID:           mcpEndpoint.ProjectID,
+		RouteBase:           routeBase,
+		Slug:                mcpEndpoint.Slug,
+		ToolsetID:           uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		UpstreamResource:    "",
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+	}
+}
+
 // loadResolvedMcpEndpointByRef resolves the cached EndpointRef stored
 // on an in-flight AuthnChallengeState back to a fresh
 // ResolvedMcpEndpoint and verifies its issuer FK is still live.
@@ -325,7 +354,7 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		// A tunnel flipped to public visibility mid-OAuth-flow has no OAuth
 		// surface: reject the cached-ref resumption (e.g. /mcp/idp_callback)
 		// so a visibility change closes in-flight flows.
-		if !mcpServer.UserSessionIssuerID.Valid || isTunneledPublic(&mcpServer) {
+		if isTunneledPublic(&mcpServer) {
 			return nil, oops.E(oops.CodeNotFound, nil, "not found")
 		}
 		// Guard against an mcp_endpoint that has been re-pointed mid-flow
@@ -333,6 +362,28 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		// original server, not the one the endpoint currently resolves to.
 		if mcpServer.ID != ref.McpServerID.UUID {
 			return nil, errToolsetEndpointMismatch
+		}
+		// A toolset-backed server with no issuer of its own resumes
+		// through the backing toolset's issuer with the endpoint's
+		// identity — the same adapter the mint-time handlers use.
+		if !mcpServer.UserSessionIssuerID.Valid {
+			if !mcpServer.ToolsetID.Valid {
+				return nil, oops.E(oops.CodeNotFound, nil, "not found")
+			}
+			toolset, err := toolsets_repo.New(s.db).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
+				ID:        mcpServer.ToolsetID.UUID,
+				ProjectID: mcpEndpoint.ProjectID,
+			})
+			switch {
+			case errors.Is(err, pgx.ErrNoRows):
+				return nil, oops.E(oops.CodeNotFound, err, "toolset not found")
+			case err != nil:
+				return nil, oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, s.logger)
+			}
+			if !toolset.UserSessionIssuerID.Valid {
+				return nil, oops.E(oops.CodeNotFound, nil, "not found")
+			}
+			return newResolvedMcpEndpointFromToolsetBackedServer(&mcpEndpoint, &mcpServer, &toolset, conv.Default(ref.RouteBase, "mcp")), nil
 		}
 		project, err := projects_repo.New(s.db).GetProjectByID(ctx, mcpEndpoint.ProjectID)
 		switch {
