@@ -317,15 +317,15 @@ func newWorkerCommand() *cli.Command {
 		},
 	}
 
-	flags = append(flags, redisFlags...)
-	flags = append(flags, clickHouseFlags...)
-	flags = append(flags, functionsFlags...)
-	flags = append(flags, pulseMCPFlags...)
-	flags = append(flags, assistantRuntimeFlags...)
-	flags = append(flags, svixFlags...)
-	flags = append(flags, pluginsFlags...)
-	flags = append(flags, posthogFlags...)
-	flags = append(flags, gcpFlags...)
+	flags = append(flags, redisFlags()...)
+	flags = append(flags, clickHouseFlags()...)
+	flags = append(flags, functionsFlags()...)
+	flags = append(flags, pulseMCPFlags()...)
+	flags = append(flags, assistantRuntimeFlags()...)
+	flags = append(flags, svixFlags()...)
+	flags = append(flags, pluginsFlags()...)
+	flags = append(flags, posthogFlags()...)
+	flags = append(flags, gcpFlags()...)
 
 	return &cli.Command{
 		Name:  "worker",
