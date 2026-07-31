@@ -146,11 +146,16 @@ type MCPClientIdentity struct {
 	Name          string
 	Version       string
 	OAuthClientID string
+	// Capabilities are the top-level capability keys the client advertised at
+	// initialize (roots, sampling, elicitation, ...), sorted. Only the
+	// handshake carries them, so a client that reports its identity per-call
+	// instead leaves them empty.
+	Capabilities []string
 }
 
 // IsZero reports whether nothing is known about the caller.
 func (m MCPClientIdentity) IsZero() bool {
-	return m.Name == "" && m.Version == "" && m.OAuthClientID == ""
+	return m.Name == "" && m.Version == "" && m.OAuthClientID == "" && len(m.Capabilities) == 0
 }
 
 // ToolCallEnv holds the environment configuration for a tool call.

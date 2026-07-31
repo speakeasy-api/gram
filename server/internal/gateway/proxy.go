@@ -186,6 +186,13 @@ func (tp *ToolProxy) Do(
 	// trace_summaries materialized view that powers the tool-usage dashboards.
 	attrs.RecordTraceContext(ctx)
 
+	// Every tool call funnels through here, so this is the one place the
+	// caller's identity is guaranteed to meet the row that gets written for the
+	// call. Recording it on the shared attributes rather than the span means it
+	// lands in ClickHouse alongside the tool, toolset, and MCP server the call
+	// went to, which is what makes "which clients use this server" answerable.
+	attrs.RecordMCPClient(env.MCPClient)
+
 	logger := tp.logger.With(
 		attr.SlogProjectID(plan.Descriptor.ProjectID),
 		attr.SlogDeploymentID(plan.Descriptor.DeploymentID),

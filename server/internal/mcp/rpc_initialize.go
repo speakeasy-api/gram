@@ -67,7 +67,7 @@ func handleInitialize(ctx context.Context, logger *slog.Logger, req *rawRequest,
 		logger.WarnContext(ctx, "failed to parse mcp initialize params", attr.SlogError(err))
 	}
 
-	storeSessionClientInfo(ctx, logger, clientInfoStore, payload, params.ClientInfo.Name, params.ClientInfo.Version)
+	storeSessionClientInfo(ctx, logger, clientInfoStore, payload, params.ClientInfo.Name, params.ClientInfo.Version, capabilities)
 
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		if err := productMetrics.CaptureEvent(ctx, "mcp_initialized", payload.sessionID, map[string]any{

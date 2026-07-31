@@ -20,6 +20,17 @@ import (
 // cap is applied to the PostHog properties recorded at initialize.
 const maxClientInfoFieldLength = 100
 
+// maxClientCapabilities and maxClientCapabilityLength bound the advertised
+// capability keys a record may carry. Initialize is unauthenticated on a public
+// MCP server, so without a bound a caller could pad every record it mints up to
+// the request size limit. The real set is a handful of short spec-defined keys
+// (roots, sampling, elicitation, experimental), so these caps only ever bite on
+// junk.
+const (
+	maxClientCapabilities     = 12
+	maxClientCapabilityLength = 64
+)
+
 // sessionClientInfoStore records and resolves the identity a client reported
 // during the initialize handshake. Narrow interface so resolution can be
 // exercised without Redis; the production implementation is
@@ -33,15 +44,16 @@ type sessionClientInfoStore interface {
 // A client that reports no name leaves no record, and a write failure is
 // logged rather than surfaced: losing the identity must never fail the
 // handshake.
-func storeSessionClientInfo(ctx context.Context, logger *slog.Logger, store sessionClientInfoStore, payload *mcpInputs, name, version string) {
+func storeSessionClientInfo(ctx context.Context, logger *slog.Logger, store sessionClientInfoStore, payload *mcpInputs, name, version string, capabilities []string) {
 	name = sanitizeClientInfoField(name)
 	if name == "" || payload.sessionID == "" {
 		return
 	}
 
 	err := store.Store(ctx, payload.projectID, payload.toolset, payload.sessionID, sessionclientinfo.Info{
-		Name:    name,
-		Version: sanitizeClientInfoField(version),
+		Name:         name,
+		Version:      sanitizeClientInfoField(version),
+		Capabilities: sanitizeClientCapabilities(capabilities),
 	}, time.Now().UnixMilli())
 	if err != nil {
 		logger.WarnContext(ctx, "failed to record mcp session client info", attr.SlogError(err))
@@ -58,10 +70,13 @@ func storeSessionClientInfo(ctx context.Context, logger *slog.Logger, store sess
 // matches the precedence `@gram-ai/functions` already applies when a function
 // serves MCP itself.
 //
+// Capabilities are the exception to that precedence: only the handshake
+// carries them, so a caller identified by a per-call hint reports none.
+//
 // The OAuth client id comes from the verified bearer token instead, so it is
 // unaffected by whatever the caller reports about itself.
 func resolveClientIdentity(ctx context.Context, logger *slog.Logger, store sessionClientInfoStore, payload *mcpInputs, hint *mcpClientInfoHint) toolconfig.MCPClientIdentity {
-	identity := toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""}
+	identity := toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: "", Capabilities: nil}
 	if clientID, ok := contextvalues.GetOAuthClientID(ctx); ok {
 		identity.OAuthClientID = clientID
 	}
@@ -91,8 +106,36 @@ func resolveClientIdentity(ctx context.Context, logger *slog.Logger, store sessi
 
 	identity.Name = info.Name
 	identity.Version = info.Version
+	identity.Capabilities = info.Capabilities
 
 	return identity
+}
+
+// sanitizeClientCapabilities bounds the advertised capability keys a record
+// carries: each key is cleaned like any other identity field and the list is
+// capped. The caller supplies them already sorted, so truncation is stable
+// rather than dependent on map iteration order.
+func sanitizeClientCapabilities(capabilities []string) []string {
+	if len(capabilities) == 0 {
+		return nil
+	}
+
+	cleaned := make([]string, 0, min(len(capabilities), maxClientCapabilities))
+	for _, capability := range capabilities {
+		if len(cleaned) == maxClientCapabilities {
+			break
+		}
+		name := conv.TruncateString(sanitizeClientInfoField(capability), maxClientCapabilityLength)
+		if name != "" {
+			cleaned = append(cleaned, name)
+		}
+	}
+
+	if len(cleaned) == 0 {
+		return nil
+	}
+
+	return cleaned
 }
 
 // sanitizeClientInfoField bounds one untrusted client identity field. Invalid

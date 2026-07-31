@@ -29,7 +29,8 @@ import (
 
 // DefaultLiveRecordCap bounds the identities tracked per MCP server. Matches
 // the anonymous session cap the tunneled path uses; at roughly 360 bytes a
-// record that is a few megabytes per server.
+// record — plus a capped capability list, which real clients keep to a handful
+// of short keys — that is a few megabytes per server.
 const DefaultLiveRecordCap = 10000
 
 // ErrNotFound is returned when a session has no recorded identity — never
@@ -42,6 +43,10 @@ var ErrNotFound = errors.New("session client info not found")
 type Info struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
+	// Capabilities are the top-level capability keys advertised at initialize.
+	// Omitted when empty so records written before the field existed, and
+	// clients that advertise nothing, stay the same size on the wire.
+	Capabilities []string `json:"capabilities,omitempty"`
 }
 
 // Store reads and writes session identities in Redis.

@@ -204,7 +204,7 @@ func handleResourcesRead(
 		// Resource reads reach functions through a separate payload that
 		// carries no caller identity, and the functions SDK exposes none on a
 		// resource handler.
-		MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
+		MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: "", Capabilities: nil},
 	}, plan, logAttrs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute resource call").LogError(ctx, logger)

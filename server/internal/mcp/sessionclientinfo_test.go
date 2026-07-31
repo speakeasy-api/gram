@@ -68,6 +68,48 @@ func TestServePublic_InitializeCachesClientInfo(t *testing.T) {
 	require.Equal(t, "1.0.0", info.Version)
 }
 
+// TestServePublic_InitializeCachesAdvertisedCapabilities pins the capability
+// half of the handshake record. Capabilities are only ever reported at
+// initialize, so if they do not survive to the cache they are unrecoverable by
+// the time a tool call is logged.
+func TestServePublic_InitializeCachesAdvertisedCapabilities(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "client-capabilities-capture")
+
+	body, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": "2025-03-26",
+			"capabilities": map[string]any{
+				"roots":       map[string]any{"listChanged": true},
+				"elicitation": map[string]any{},
+			},
+			"clientInfo": map[string]any{"name": "test-client", "version": "1.0.0"},
+		},
+	})
+	require.NoError(t, err)
+
+	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, body, "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, "initialize response: %s", w.Body.String())
+
+	sessionID := w.Header().Get("Mcp-Session-Id")
+	require.NotEmpty(t, sessionID)
+
+	info, err := newClientInfoStore(t).Load(ctx, *authCtx.ProjectID, toolset.Slug, sessionID, 0)
+	require.NoError(t, err)
+	require.Equal(t, []string{"elicitation", "roots"}, info.Capabilities, "capability keys are recorded sorted, not in map order")
+}
+
 // TestServePublic_InitializeBoundsCachedClientInfo covers the untrusted nature
 // of clientInfo: the values are self-reported by the caller and end up in a
 // function tool-call payload, so they must be stripped of control characters

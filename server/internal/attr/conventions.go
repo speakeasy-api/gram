@@ -213,13 +213,21 @@ const (
 	McpToolsFilteredKey                 = attribute.Key("gram.mcp.tools_filtered")
 	McpServerIDKey                      = attribute.Key("gram.mcp_server.id")
 	McpURLKey                           = attribute.Key("gram.mcp.url")
-	ToolVariationsGroupIDKey            = attribute.Key("gram.tool_variations_group.id")
-	MetricNameKey                       = attribute.Key("gram.metric.name")
-	MimeTypeKey                         = attribute.Key("mime.type")
-	OAuthAuthorizationEndpointKey       = attribute.Key("gram.oauth.authorization_endpoint")
-	OAuthClientIDKey                    = attribute.Key("gram.oauth.client_id")
-	OAuthClientNameKey                  = attribute.Key("gram.oauth.client_name")
-	OAuthClientSecretGeneratedKey       = attribute.Key("gram.oauth.client_secret_generated")
+	// McpClientNameKey / McpClientVersionKey / McpClientCapabilitiesKey
+	// describe the MCP client on the other end of a call. Self-reported by the
+	// client at initialize (or per-call under SEP-2575), so they are
+	// attribution signals, never authorization ones. Capabilities are the
+	// top-level keys the client advertised (roots, sampling, elicitation, ...).
+	McpClientNameKey              = attribute.Key("gram.mcp.client.name")
+	McpClientVersionKey           = attribute.Key("gram.mcp.client.version")
+	McpClientCapabilitiesKey      = attribute.Key("gram.mcp.client.capabilities")
+	ToolVariationsGroupIDKey      = attribute.Key("gram.tool_variations_group.id")
+	MetricNameKey                 = attribute.Key("gram.metric.name")
+	MimeTypeKey                   = attribute.Key("mime.type")
+	OAuthAuthorizationEndpointKey = attribute.Key("gram.oauth.authorization_endpoint")
+	OAuthClientIDKey              = attribute.Key("gram.oauth.client_id")
+	OAuthClientNameKey            = attribute.Key("gram.oauth.client_name")
+	OAuthClientSecretGeneratedKey = attribute.Key("gram.oauth.client_secret_generated")
 	// OAuthErrorKey / OAuthErrorDescriptionKey carry the `error` /
 	// `error_description` parameters from RFC 6749 / RFC 7591 error responses
 	// — used across DCR registration, /authorize, /token, and /revoke.

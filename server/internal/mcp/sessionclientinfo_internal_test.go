@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -70,13 +72,14 @@ func TestResolveClientIdentity_FallsBackToHandshake(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	store, payload := newClientIdentityFixture(t)
 
-	storeSessionClientInfo(ctx, logger, store, payload, "handshake-client", "1.2.3")
+	storeSessionClientInfo(ctx, logger, store, payload, "handshake-client", "1.2.3", []string{"elicitation", "roots"})
 
 	identity := resolveClientIdentity(ctx, logger, store, payload, nil)
 	require.Equal(t, toolconfig.MCPClientIdentity{
 		Name:          "handshake-client",
 		Version:       "1.2.3",
 		OAuthClientID: "",
+		Capabilities:  []string{"elicitation", "roots"},
 	}, identity)
 }
 
@@ -91,7 +94,7 @@ func TestResolveClientIdentity_PerCallHintWins(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	store, payload := newClientIdentityFixture(t)
 
-	storeSessionClientInfo(ctx, logger, store, payload, "handshake-client", "1.2.3")
+	storeSessionClientInfo(ctx, logger, store, payload, "handshake-client", "1.2.3", []string{"roots"})
 
 	identity := resolveClientIdentity(ctx, logger, store, payload, &mcpClientInfoHint{
 		Name:    "per-call-client",
@@ -99,6 +102,7 @@ func TestResolveClientIdentity_PerCallHintWins(t *testing.T) {
 	})
 	require.Equal(t, "per-call-client", identity.Name)
 	require.Equal(t, "9.9.9", identity.Version)
+	require.Empty(t, identity.Capabilities, "a per-call hint carries no capabilities, and must not inherit the handshake's")
 }
 
 // TestResolveClientIdentity_NamelessHintFallsBack keeps a malformed or empty
@@ -110,7 +114,7 @@ func TestResolveClientIdentity_NamelessHintFallsBack(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	store, payload := newClientIdentityFixture(t)
 
-	storeSessionClientInfo(ctx, logger, store, payload, "handshake-client", "1.2.3")
+	storeSessionClientInfo(ctx, logger, store, payload, "handshake-client", "1.2.3", nil)
 
 	identity := resolveClientIdentity(ctx, logger, store, payload, &mcpClientInfoHint{
 		Name:    "",
@@ -145,12 +149,52 @@ func TestStoreSessionClientInfo_BoundsRecordedFields(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	store, payload := newClientIdentityFixture(t)
 
-	storeSessionClientInfo(ctx, logger, store, payload, "ev\x00il\nclient", "1.\t0")
+	storeSessionClientInfo(ctx, logger, store, payload, "ev\x00il\nclient", "1.\t0", []string{"ro\x00ots"})
 
 	info, err := store.Load(ctx, payload.projectID, payload.toolset, payload.sessionID, 0)
 	require.NoError(t, err)
 	require.Equal(t, "evilclient", info.Name)
 	require.Equal(t, "1.0", info.Version)
+	require.Equal(t, []string{"roots"}, info.Capabilities)
+}
+
+// TestStoreSessionClientInfo_BoundsCapabilityCount pins the cap on advertised
+// capabilities: initialize is unauthenticated on a public MCP server, so a
+// caller must not be able to grow its Redis record by padding the list.
+func TestStoreSessionClientInfo_BoundsCapabilityCount(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	store, payload := newClientIdentityFixture(t)
+
+	advertised := make([]string, 0, maxClientCapabilities*2)
+	for i := range cap(advertised) {
+		advertised = append(advertised, fmt.Sprintf("capability-%02d", i))
+	}
+
+	storeSessionClientInfo(ctx, logger, store, payload, "chatty-client", "1.0", advertised)
+
+	info, err := store.Load(ctx, payload.projectID, payload.toolset, payload.sessionID, 0)
+	require.NoError(t, err)
+	require.Len(t, info.Capabilities, maxClientCapabilities)
+	require.Equal(t, advertised[:maxClientCapabilities], info.Capabilities, "the sorted prefix is kept, so truncation is stable")
+}
+
+// TestStoreSessionClientInfo_BoundsCapabilityLength keeps one oversized key
+// from carrying a payload in place of a capability name.
+func TestStoreSessionClientInfo_BoundsCapabilityLength(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	store, payload := newClientIdentityFixture(t)
+
+	storeSessionClientInfo(ctx, logger, store, payload, "chatty-client", "1.0", []string{strings.Repeat("a", 500)})
+
+	info, err := store.Load(ctx, payload.projectID, payload.toolset, payload.sessionID, 0)
+	require.NoError(t, err)
+	require.Equal(t, []string{strings.Repeat("a", maxClientCapabilityLength)}, info.Capabilities)
 }
 
 func TestStoreSessionClientInfo_NamelessClientRecordsNothing(t *testing.T) {
@@ -160,7 +204,7 @@ func TestStoreSessionClientInfo_NamelessClientRecordsNothing(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	store, payload := newClientIdentityFixture(t)
 
-	storeSessionClientInfo(ctx, logger, store, payload, "", "1.2.3")
+	storeSessionClientInfo(ctx, logger, store, payload, "", "1.2.3", nil)
 
 	_, err := store.Load(ctx, payload.projectID, payload.toolset, payload.sessionID, 0)
 	require.ErrorIs(t, err, sessionclientinfo.ErrNotFound)

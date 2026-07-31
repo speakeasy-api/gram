@@ -8,6 +8,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -96,6 +97,9 @@ type testInstance struct {
 	authzEngine         *authz.Engine
 	audit               *audit.Logger
 	tunnelRoutes        route.Store
+	// chConn is the same ClickHouse connection the service's telemetry logger
+	// writes through, so tests can read back the rows a request produced.
+	chConn clickhouse.Conn
 	// features is the injectable flag provider wired into the service; tests
 	// enable flag-gated behavior (e.g. inbound CIMD) with SetFlag.
 	features *feature.InMemory
@@ -262,6 +266,7 @@ func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.
 		audit:               auditLogger,
 		tunnelRoutes:        tunnelRoutes,
 		features:            features,
+		chConn:              chConn,
 	}
 }
 

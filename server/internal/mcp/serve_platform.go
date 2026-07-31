@@ -318,7 +318,7 @@ func (s *Service) callPlatformToolsetTool(
 		GramEmail:  gramEmail,
 		GramChatID: chatIDHeader,
 		// Platform toolsets serve Gram's own tools, never customer functions.
-		MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
+		MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: "", Capabilities: nil},
 	}
 
 	var mcpURL string

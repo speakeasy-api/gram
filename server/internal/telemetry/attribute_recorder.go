@@ -7,6 +7,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -136,6 +137,30 @@ func (h HTTPLogAttributes) RecordToolsetSlug(slug string) {
 func (h HTTPLogAttributes) RecordMCPURL(url string) {
 	if url != "" {
 		h[attr.McpURLKey] = url
+	}
+}
+
+// RecordMCPClient records who was on the other end of the call: the identity
+// the MCP client reported for itself and the OAuth client id its token was
+// issued to. Each part is independently optional — a caller may report a name
+// without authenticating, or the reverse — and an absent part is left off the
+// row rather than written as an empty string, so queries can tell "not
+// reported" from "reported as empty".
+//
+// Callers that are not MCP clients (direct instance invocations, platform
+// toolsets) pass a zero identity and record nothing.
+func (h HTTPLogAttributes) RecordMCPClient(client toolconfig.MCPClientIdentity) {
+	if client.Name != "" {
+		h[attr.McpClientNameKey] = client.Name
+	}
+	if client.Version != "" {
+		h[attr.McpClientVersionKey] = client.Version
+	}
+	if len(client.Capabilities) > 0 {
+		h[attr.McpClientCapabilitiesKey] = client.Capabilities
+	}
+	if client.OAuthClientID != "" {
+		h[attr.OAuthClientIDKey] = client.OAuthClientID
 	}
 }
 

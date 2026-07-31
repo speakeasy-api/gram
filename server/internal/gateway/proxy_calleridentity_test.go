@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -18,8 +19,9 @@ import (
 )
 
 // callFunctionToolWithClient runs one function tool call and returns the
-// `_meta` block the proxy handed to the runner.
-func callFunctionToolWithClient(t *testing.T, client toolconfig.MCPClientIdentity) *functions.ToolCallMeta {
+// `_meta` block the proxy handed to the runner along with the log attributes it
+// recorded for the call.
+func callFunctionToolWithClient(t *testing.T, client toolconfig.MCPClientIdentity) (*functions.ToolCallMeta, tm.HTTPLogAttributes) {
 	t.Helper()
 
 	var invocationID uuid.UUID
@@ -72,6 +74,7 @@ func callFunctionToolWithClient(t *testing.T, client toolconfig.MCPClientIdentit
 	})
 	require.NoError(t, err)
 
+	logAttrs := tm.HTTPLogAttributes{}
 	err = proxy.Do(t.Context(), httptest.NewRecorder(), bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
@@ -79,16 +82,16 @@ func callFunctionToolWithClient(t *testing.T, client toolconfig.MCPClientIdentit
 		GramEmail:  "",
 		GramChatID: "",
 		MCPClient:  client,
-	}, toolCallPlan, tm.HTTPLogAttributes{})
+	}, toolCallPlan, logAttrs)
 	require.NoError(t, err)
 
-	return captured
+	return captured, logAttrs
 }
 
 func TestToolProxy_Do_FunctionTool_ForwardsCallerIdentity(t *testing.T) {
 	t.Parallel()
 
-	meta := callFunctionToolWithClient(t, toolconfig.MCPClientIdentity{
+	meta, _ := callFunctionToolWithClient(t, toolconfig.MCPClientIdentity{
 		Name:          "claude-code",
 		Version:       "2.1",
 		OAuthClientID: "client-abc",
@@ -99,13 +102,50 @@ func TestToolProxy_Do_FunctionTool_ForwardsCallerIdentity(t *testing.T) {
 	require.Equal(t, "client-abc", meta.OAuthClientID)
 }
 
+// TestToolProxy_Do_RecordsCallerIdentityOnLogAttributes pins the telemetry half
+// of caller identity: every tool call funnels through the proxy, so the row
+// written for the call carries who made it.
+func TestToolProxy_Do_RecordsCallerIdentityOnLogAttributes(t *testing.T) {
+	t.Parallel()
+
+	_, logAttrs := callFunctionToolWithClient(t, toolconfig.MCPClientIdentity{
+		Name:          "claude-code",
+		Version:       "2.1",
+		OAuthClientID: "client-abc",
+		Capabilities:  []string{"elicitation", "roots"},
+	})
+
+	require.Equal(t, "claude-code", logAttrs[attr.McpClientNameKey])
+	require.Equal(t, "2.1", logAttrs[attr.McpClientVersionKey])
+	require.Equal(t, []string{"elicitation", "roots"}, logAttrs[attr.McpClientCapabilitiesKey])
+	require.Equal(t, "client-abc", logAttrs[attr.OAuthClientIDKey])
+}
+
+// TestToolProxy_Do_OmitsUnreportedCallerIdentity keeps the row free of empty
+// placeholders so a query can tell "not reported" from "reported as empty".
+func TestToolProxy_Do_OmitsUnreportedCallerIdentity(t *testing.T) {
+	t.Parallel()
+
+	_, logAttrs := callFunctionToolWithClient(t, toolconfig.MCPClientIdentity{
+		Name:          "",
+		Version:       "",
+		OAuthClientID: "client-abc",
+		Capabilities:  nil,
+	})
+
+	require.NotContains(t, logAttrs, attr.McpClientNameKey)
+	require.NotContains(t, logAttrs, attr.McpClientVersionKey)
+	require.NotContains(t, logAttrs, attr.McpClientCapabilitiesKey)
+	require.Equal(t, "client-abc", logAttrs[attr.OAuthClientIDKey])
+}
+
 // TestToolProxy_Do_FunctionTool_OAuthClientWithoutClientInfo covers a caller
 // that authenticated but never reported an identity: the verified half must
 // still reach the function.
 func TestToolProxy_Do_FunctionTool_OAuthClientWithoutClientInfo(t *testing.T) {
 	t.Parallel()
 
-	meta := callFunctionToolWithClient(t, toolconfig.MCPClientIdentity{
+	meta, _ := callFunctionToolWithClient(t, toolconfig.MCPClientIdentity{
 		Name:          "",
 		Version:       "",
 		OAuthClientID: "client-abc",
@@ -122,9 +162,11 @@ func TestToolProxy_Do_FunctionTool_OAuthClientWithoutClientInfo(t *testing.T) {
 func TestToolProxy_Do_FunctionTool_UnknownCallerSendsNoMeta(t *testing.T) {
 	t.Parallel()
 
-	require.Nil(t, callFunctionToolWithClient(t, toolconfig.MCPClientIdentity{
+	meta, _ := callFunctionToolWithClient(t, toolconfig.MCPClientIdentity{
 		Name:          "",
 		Version:       "",
 		OAuthClientID: "",
-	}))
+	})
+
+	require.Nil(t, meta)
 }
