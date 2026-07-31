@@ -64,6 +64,8 @@ export interface ServerInstallStatus {
   mcpServerParam?: string;
   /** Public URL of the pre-staged default MCP endpoint, when one was created. */
   mcpEndpointUrl?: string;
+  /** OAuth was discovered but requires customer-managed client credentials. */
+  authSetupRequired?: boolean;
   error?: string;
 }
 
@@ -404,6 +406,7 @@ export function useRemoteMcpInstallWorkflow({
       mcpServer: McpServer;
       mcpEndpointUrl?: string;
       authConfigured: boolean;
+      authSetupRequired: boolean;
     }> => {
       const remoteMcpServer = await client.remoteMcp.createServer(
         {
@@ -520,6 +523,8 @@ export function useRemoteMcpInstallWorkflow({
           ? `${getServerURL()}/mcp/${endpoint.slug}`
           : undefined,
         authConfigured: authAutoConfig.status === "configured",
+        authSetupRequired:
+          authAutoConfig.status === "skipped" && authAutoConfig.warn,
       };
     },
     [authedFetch, client, orgSlug],
@@ -580,6 +585,7 @@ export function useRemoteMcpInstallWorkflow({
           mcpServerId: result.mcpServer.id,
           mcpServerParam: mcpServerRouteParam(result.mcpServer),
           mcpEndpointUrl: result.mcpEndpointUrl,
+          authSetupRequired: result.authSetupRequired,
         });
       } catch (err) {
         setStatusAt(index, {

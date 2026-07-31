@@ -8,6 +8,8 @@ const mockDiscoverProtectedResourceMetadata = vi.fn();
 const mockMcpServersCreate = vi.fn();
 const mockMcpEndpointsCreate = vi.fn();
 const mockAuthedFetch = vi.fn();
+const mockDiscoverRemoteSessionIssuer = vi.fn();
+const mockListRemoteSessionIssuers = vi.fn();
 
 // Return a stable client reference to avoid re-render loops from useCallback deps
 const mockClient = {
@@ -22,6 +24,10 @@ const mockClient = {
   },
   mcpEndpoints: {
     create: mockMcpEndpointsCreate,
+  },
+  remoteSessionIssuers: {
+    discover: mockDiscoverRemoteSessionIssuer,
+    list: mockListRemoteSessionIssuers,
   },
 };
 
@@ -132,6 +138,11 @@ describe("useRemoteMcpInstallWorkflow", () => {
       id: "endpoint-1",
       slug: "test-org-abc123",
     });
+    mockListRemoteSessionIssuers.mockResolvedValue(
+      (async function* () {
+        yield { result: { items: [] } };
+      })(),
+    );
     mockDeleteServer.mockResolvedValue(undefined);
   });
 
@@ -334,6 +345,52 @@ describe("useRemoteMcpInstallWorkflow", () => {
       mcpServerParam: "mcp-server-slug",
     });
     expect(state.statuses[0]!.mcpEndpointUrl).toContain("/mcp/test-org-abc123");
+  });
+
+  it("marks customer-managed OAuth as a required next step", async () => {
+    mockMcpServersCreate.mockResolvedValue({
+      id: "mcp-server-1",
+      slug: "google-drive",
+      projectId: "proj-1",
+      userSessionIssuerId: "usi-1",
+    });
+    mockDiscoverProtectedResourceMetadata.mockResolvedValue({
+      available: true,
+      metadata: {
+        authorizationServers: ["https://accounts.google.com/"],
+        scopesSupported: [
+          "https://www.googleapis.com/auth/drive.readonly",
+          "https://www.googleapis.com/auth/drive.file",
+        ],
+      },
+    });
+    mockDiscoverRemoteSessionIssuer.mockResolvedValue({
+      issuer: "https://accounts.google.com",
+      authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
+      tokenEndpoint: "https://oauth2.googleapis.com/token",
+      registrationEndpoint: undefined,
+      scopesSupported: ["openid"],
+    });
+    const servers = [
+      makeServer({
+        title: "Google Drive",
+        registrySpecifier: "com.google.workspace/drive",
+        remotes: [remote("https://drivemcp.googleapis.com/mcp/v1")],
+      }),
+    ];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+
+    await startInstall(result);
+
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+    const state = result.current;
+    if (state.phase !== "complete") throw new Error("unexpected phase");
+    expect(state.statuses[0]).toMatchObject({
+      status: "completed",
+      authSetupRequired: true,
+    });
   });
 
   it("sends gram-project request options for cross-project installs", async () => {

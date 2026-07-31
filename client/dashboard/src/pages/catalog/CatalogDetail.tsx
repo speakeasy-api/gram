@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { ManualSetupBadge } from "@/pages/catalog/ManualSetupBadge";
+import { GoogleWorkspaceSetupGuide } from "@/pages/catalog/GoogleWorkspaceSetupGuide";
 import { useSdkClient } from "@/contexts/Sdk";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import {
@@ -38,6 +39,8 @@ const SERVER_WEBSITE_MAP: Record<string, string> = {
   "io.github.getsentry/sentry-mcp": "sentry.io",
   "io.github.github/github-mcp-server": "github.com",
   "com.notion/mcp": "notion.so",
+  "com.google.workspace/drive": "drive.google.com",
+  "com.google.workspace/docs": "docs.google.com",
 };
 
 export function CatalogDetailRoot(): JSX.Element {
@@ -328,6 +331,8 @@ export default function CatalogDetail(): JSX.Element {
                 </Type>
               </Card.Content>
             </Card>
+
+            <GoogleWorkspaceSetupGuide server={server} />
 
             {/* Available Tools */}
             {detailTools.length > 0 && <ToolsSection tools={detailTools} />}

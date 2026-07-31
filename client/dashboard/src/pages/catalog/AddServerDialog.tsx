@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router";
 import {
   type CompletePhase,
   type ConfigurePhase,
@@ -1254,6 +1255,10 @@ function NextSteps({
   releaseState: CompletePhase;
 }) {
   const routes = useTargetRoutes(releaseState);
+  const settingsHref = routes.mcp.x.settings.href(status.mcpServerParam!);
+  const configureHref = status.authSetupRequired
+    ? `${settingsHref}#authentication`
+    : settingsHref;
 
   return (
     <div>
@@ -1292,22 +1297,26 @@ function NextSteps({
             </div>
           </a>
         )}
-        <routes.mcp.x.Link
-          params={[status.mcpServerParam!]}
-          className="no-underline hover:no-underline"
-        >
+        <Link to={configureHref} className="no-underline hover:no-underline">
           <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 rounded-lg border p-3 transition-all [&_*]:no-underline">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-orange-500/10 dark:bg-orange-500/20">
               <Settings className="h-4 w-4 text-orange-600 dark:text-orange-400" />
             </div>
             <div className="flex-1">
               <Type className="text-sm font-medium no-underline">
-                Configure MCP settings
+                {status.authSetupRequired
+                  ? "Configure authentication"
+                  : "Configure MCP settings"}
               </Type>
+              {status.authSetupRequired && (
+                <Type small muted>
+                  Add your OAuth client credentials
+                </Type>
+              )}
             </div>
             <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
           </div>
-        </routes.mcp.x.Link>
+        </Link>
       </div>
     </div>
   );
