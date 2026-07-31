@@ -33,20 +33,27 @@ type HooksServerNameOverride struct {
 }
 
 type SkillObservation struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	IdempotencyKey pgtype.Text
-	Provider       string
-	UserID         pgtype.Text
-	UserEmail      pgtype.Text
-	Hostname       pgtype.Text
-	SessionID      pgtype.Text
-	SkillName      string
-	SourceLevel    pgtype.Text
-	SourcePath     pgtype.Text
-	RawSha256      pgtype.Text
-	SeenAt         pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	IdempotencyKey     pgtype.Text
+	Provider           string
+	UserID             pgtype.Text
+	UserEmail          pgtype.Text
+	Hostname           pgtype.Text
+	SessionID          pgtype.Text
+	SkillName          string
+	Source             pgtype.Text
+	SourceLevel        pgtype.Text
+	SourcePath         pgtype.Text
+	RawSha256          pgtype.Text
+	SeenAt             pgtype.Timestamptz
+	SkillID            uuid.NullUUID
+	SkillVersionID     uuid.NullUUID
+	ReconciledAt       pgtype.Timestamptz
+	MetricsSyncedAt    pgtype.Timestamptz
+	EfficacyEnqueuedAt pgtype.Timestamptz
+	ReconcileErrorCode pgtype.Text
+	CreatedAt          pgtype.Timestamptz
 }
 
 type UserAccount struct {

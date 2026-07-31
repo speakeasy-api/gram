@@ -15,7 +15,7 @@ RETURNING *;
 DELETE FROM hooks_server_name_overrides
 WHERE id = $1 AND project_id = $2;
 
--- name: InsertSkillObservation :exec
+-- name: InsertSkillObservation :execrows
 INSERT INTO skill_observations (
     project_id
   , idempotency_key
@@ -25,6 +25,7 @@ INSERT INTO skill_observations (
   , hostname
   , session_id
   , skill_name
+  , source
   , source_level
   , source_path
   , raw_sha256
@@ -38,6 +39,7 @@ INSERT INTO skill_observations (
   , sqlc.narg(hostname)
   , sqlc.narg(session_id)
   , @skill_name
+  , sqlc.narg(source)
   , sqlc.narg(source_level)
   , sqlc.narg(source_path)
   , sqlc.narg(raw_sha256)
@@ -47,26 +49,43 @@ ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL
 DO NOTHING;
 
 -- name: RememberKnownSkillRawHash :one
-WITH inserted AS (
-  INSERT INTO skill_raw_hashes (project_id, raw_sha256, canonical_sha256)
-  SELECT s.project_id, @raw_sha256, sv.canonical_sha256
+WITH existing_alias AS (
+  SELECT srh.canonical_sha256
+  FROM skill_raw_hashes srh
+  WHERE srh.project_id = @project_id
+    AND srh.raw_sha256 = @raw_sha256
+), known_version AS (
+  SELECT MIN(sv.canonical_sha256) AS canonical_sha256
   FROM skill_versions sv
   JOIN skills s ON s.id = sv.skill_id
   WHERE s.project_id = @project_id
+    AND s.archived_at IS NULL
     AND sv.raw_sha256 = @raw_sha256
-  ORDER BY sv.created_at DESC, sv.id DESC
-  LIMIT 1
+    AND NOT EXISTS (SELECT 1 FROM existing_alias)
+  HAVING COUNT(*) = 1
+), inserted AS (
+  INSERT INTO skill_raw_hashes (project_id, raw_sha256, canonical_sha256)
+  SELECT @project_id, @raw_sha256, canonical_sha256
+  FROM known_version
+  WHERE canonical_sha256 IS NOT NULL
   ON CONFLICT (project_id, raw_sha256) DO NOTHING
-  RETURNING 1
+  RETURNING canonical_sha256
+), canonical_hash AS (
+  SELECT canonical_sha256 FROM existing_alias
+  UNION ALL
+  SELECT canonical_sha256 FROM inserted
+), resolved AS (
+  SELECT sv.id
+  FROM canonical_hash hash
+  JOIN skills s ON s.project_id = @project_id
+  JOIN skill_versions sv
+    ON sv.skill_id = s.id
+    AND sv.canonical_sha256 = hash.canonical_sha256
+  WHERE s.archived_at IS NULL
+  LIMIT 2
 )
-SELECT (
-  EXISTS (
-    SELECT 1
-    FROM skill_raw_hashes srh
-    WHERE srh.project_id = @project_id
-      AND srh.raw_sha256 = @raw_sha256
-  ) OR EXISTS (SELECT 1 FROM inserted)
-)::boolean AS known;
+SELECT COUNT(*) = 1 AS known
+FROM resolved;
 
 -- name: HasSkillObservationRawHash :one
 SELECT EXISTS (
@@ -294,22 +313,6 @@ WHERE project_id = sqlc.arg(project_id)
   )
 ORDER BY created_at DESC
 LIMIT 1;
-
--- name: BackfillLatestClaudeUserMessagePromptID :execrows
-WITH latest_user_message AS (
-  SELECT chat_messages.id
-  FROM chat_messages
-  WHERE chat_messages.chat_id = sqlc.arg(chat_id)
-    AND (chat_messages.project_id IS NULL OR chat_messages.project_id = sqlc.arg(project_id)::uuid)
-    AND chat_messages.role = 'user'
-  ORDER BY chat_messages.created_at DESC, chat_messages.seq DESC
-  LIMIT 1
-)
-UPDATE chat_messages
-SET message_id = sqlc.arg(message_id)
-WHERE chat_messages.id = (SELECT latest_user_message.id FROM latest_user_message)
-  AND sqlc.arg(message_id)::text <> ''
-  AND (chat_messages.message_id IS NULL OR chat_messages.message_id = '' OR chat_messages.message_id != sqlc.arg(message_id)::text);
 
 -- name: InsertShadowMCPBlockResult :exec
 INSERT INTO risk_results (

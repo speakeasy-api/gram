@@ -37,12 +37,21 @@ INSERT INTO gcp_iam_credentials (
 )
 RETURNING *;
 
+-- Tenancy for the reads and writes below is a single nullable parameter:
+-- @organization_id is a customer organization for organization-scoped rows, or
+-- NULL for platform-scoped rows (Gram's own credentials, managed by the
+-- platform-admin surface). IS NOT DISTINCT FROM makes NULL match NULL, so both
+-- tiers share one query set; the platform-admin handlers pass a NULL
+-- organization_id, exactly as they already do for CreateExternalCredential.
+-- project_id is always NULL for these rows in both tiers.
+
 -- name: GetAwsIamCredential :one
 SELECT sqlc.embed(ec), sqlc.embed(aws)
 FROM external_credentials AS ec
 JOIN aws_iam_credentials AS aws ON aws.external_credential_id = ec.id
 WHERE ec.id = @id
-  AND ec.organization_id = @organization_id
+  AND ec.organization_id IS NOT DISTINCT FROM @organization_id
+  AND ec.project_id IS NULL
   AND ec.provider = 'aws_iam'
   AND ec.deleted IS FALSE;
 
@@ -51,14 +60,16 @@ SELECT sqlc.embed(ec), sqlc.embed(gcp)
 FROM external_credentials AS ec
 JOIN gcp_iam_credentials AS gcp ON gcp.external_credential_id = ec.id
 WHERE ec.id = @id
-  AND ec.organization_id = @organization_id
+  AND ec.organization_id IS NOT DISTINCT FROM @organization_id
+  AND ec.project_id IS NULL
   AND ec.provider = 'gcp_iam'
   AND ec.deleted IS FALSE;
 
 -- name: ListExternalCredentials :many
 SELECT *
 FROM external_credentials
-WHERE organization_id = @organization_id
+WHERE organization_id IS NOT DISTINCT FROM @organization_id
+  AND project_id IS NULL
   AND deleted IS FALSE
   AND (sqlc.narg('provider')::text IS NULL OR provider = sqlc.narg('provider')::text)
 ORDER BY id DESC;
@@ -68,7 +79,8 @@ UPDATE external_credentials
 SET name = @name,
     updated_at = clock_timestamp()
 WHERE id = @id
-  AND organization_id = @organization_id
+  AND organization_id IS NOT DISTINCT FROM @organization_id
+  AND project_id IS NULL
   AND deleted IS FALSE
 RETURNING *;
 
@@ -103,7 +115,8 @@ RETURNING *;
 UPDATE external_credentials
 SET deleted_at = clock_timestamp()
 WHERE id = @id
-  AND organization_id = @organization_id
+  AND organization_id IS NOT DISTINCT FROM @organization_id
+  AND project_id IS NULL
   AND provider = @provider
   AND deleted IS FALSE
 RETURNING *;

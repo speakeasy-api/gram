@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
@@ -45,6 +46,25 @@ func TestCaptureSkillContent_CreatesCapturedSkillVersionAndAlias(t *testing.T) {
 	alias, err := ti.repo.GetSkillRawHash(ctx, repo.GetSkillRawHashParams{ProjectID: ti.projectID, RawSha256: contentSHA256(content)})
 	require.NoError(t, err)
 	require.NotEmpty(t, alias.CanonicalSha256)
+}
+
+func TestCaptureSkillContent_BackfillsSummaryOnObservedSkill(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	observed, err := ti.repo.CreateObservedSkill(ctx, repo.CreateObservedSkillParams{
+		ProjectID: ti.projectID, Name: "observed-skill", DisplayName: "observed-skill",
+	})
+	require.NoError(t, err)
+	require.False(t, observed.Summary.Valid)
+
+	result, err := skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, capturedManifest("observed-skill", "Backfilled summary.", "body"))
+	require.NoError(t, err)
+	require.False(t, result.CreatedSkill)
+	require.True(t, result.CreatedVersion)
+	require.Equal(t, observed.ID, result.SkillID)
+	skill, err := ti.repo.GetSkill(ctx, repo.GetSkillParams{ProjectID: ti.projectID, ID: result.SkillID})
+	require.NoError(t, err)
+	require.Equal(t, "Backfilled summary.", skill.Summary.String)
 }
 
 func TestCaptureSkillContent_RawVariantsCollapseAndSameNameContentVersions(t *testing.T) {
@@ -92,7 +112,33 @@ func TestCaptureSkillContent_DedupesManualWithoutOriginAndPreservesPresentation(
 	skill, err := ti.repo.GetSkill(ctx, repo.GetSkillParams{ProjectID: ti.projectID, ID: result.SkillID})
 	require.NoError(t, err)
 	require.Equal(t, "manual-skill", skill.DisplayName)
-	require.Equal(t, "Manual summary.", skill.Summary.String)
+	// The newly captured version became current, so the summary follows it.
+	require.Equal(t, "Captured replacement.", skill.Summary.String)
+}
+
+func TestCaptureSkillContent_ReusesRenamedSkillByRawHash(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	content := capturedManifest("local-name", "Captured summary.", "body")
+	captured, err := skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, content)
+	require.NoError(t, err)
+
+	updated, err := ti.service.Update(ctx, &gen.UpdatePayload{
+		ID: captured.SkillID.String(), Name: "curated-name", DisplayName: "Curated name",
+		Summary: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	replayed, err := skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, content)
+	require.NoError(t, err)
+	require.Equal(t, captured.SkillID, replayed.SkillID)
+	require.Equal(t, captured.SkillVersionID, replayed.SkillVersionID)
+	require.False(t, replayed.CreatedSkill)
+	require.False(t, replayed.CreatedVersion)
+	stored, err := ti.repo.GetSkill(ctx, repo.GetSkillParams{ProjectID: ti.projectID, ID: captured.SkillID})
+	require.NoError(t, err)
+	require.Equal(t, updated.Name, stored.Name)
+	require.Equal(t, updated.DisplayName, stored.DisplayName)
 }
 
 func TestCaptureSkillContent_ManualReuseRemovesCapturedOrigin(t *testing.T) {
@@ -165,9 +211,21 @@ func TestCapturedVersionDoesNotOutrankManualDistribution(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	manual := createSkill(t, ctx, ti, "distribution-priority", "Manual version.")
+	open, err := seedSuggestion(t, ctx, ti, seedSuggestionParams{
+		ProposedDiff:       diffTo(t, manual.Version.Content, skillManifest("distribution-priority", "Suggested.", "suggested")),
+		Rationale:          "evidence",
+		ScoredSessionCount: 1,
+		BaseVersionID:      uuid.MustParse(manual.Version.ID),
+		ProjectID:          ti.projectID,
+		SkillID:            uuid.MustParse(manual.Skill.ID),
+	})
+	require.NoError(t, err)
 	captured, err := skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, capturedManifest("distribution-priority", "Captured version.", "newer"))
 	require.NoError(t, err)
 	require.NotEqual(t, manual.Version.ID, captured.SkillVersionID.String())
+	stillOpen, err := ti.repo.GetOpenSkillEditSuggestion(ctx, repo.GetOpenSkillEditSuggestionParams{ProjectID: ti.projectID, SkillID: uuid.MustParse(manual.Skill.ID)})
+	require.NoError(t, err)
+	require.Equal(t, open.ID, stillOpen.ID)
 	plugin := createPlugin(t, ctx, ti, ti.projectID, "capture-priority-plugin")
 
 	distribution, err := ti.service.Distribute(ctx, &gen.DistributePayload{

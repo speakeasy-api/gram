@@ -9,8 +9,8 @@ import (
 
 var ByKey = APIKeySecurity(constants.KeySecurityScheme, func() {
 	Description("key based auth.")
-	Scope("consumer", "consumer based tool access")
-	Scope("producer", "producer based tool access")
+	Scope("consumer", "read and operate project resources (toolsets, MCP servers, install metadata, roles); excludes end-user conversation content")
+	Scope("producer", "manage project resources (uploads, deployments, toolsets) and read sensitive data including chat transcripts, telemetry, and risk findings (superset of consumer and chat)")
 	Scope("chat", "chat based model usage access")
 	Scope("hooks", "hooks based access for Claude Code integrations")
 	Scope("agent", "device-agent org install credential: exchanges for per-user device-agent keys, and (as a superset of agent_user) reads the data endpoints")

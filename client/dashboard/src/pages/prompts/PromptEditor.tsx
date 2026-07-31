@@ -1,7 +1,7 @@
 import { InputField } from "@/components/moon/input-field";
 import { Textarea } from "@/components/moon/textarea";
-import { Button } from "@speakeasy-api/moonshine";
-import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/Button";
+import { Label } from "@/components/ui/Label";
 import { MUSTACHE_VAR_REGEX, PROMPT_NAME_PATTERN } from "@/lib/constants";
 import { assert, cn } from "@/lib/utils";
 import { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";

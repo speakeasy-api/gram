@@ -21,6 +21,7 @@ import {
   Ellipsis,
   GitBranch,
   Loader2,
+  Paperclip,
   ShieldOff,
   SlidersHorizontal,
 } from "lucide-react";
@@ -29,8 +30,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
 import {
   MessageContent,
   type SectionMatch,
@@ -45,9 +46,9 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
+} from "@/components/ui/Popover";
 import { cn } from "@/lib/utils";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
 import {
   type ClaudeUsageMatch,
   formatByteCount,
@@ -57,8 +58,10 @@ import {
 import {
   argsToString,
   type DisplayItem,
+  findQueryRanges,
   messageText,
   type MessageRow,
+  type PromptAttachment,
   type SearchFieldKey,
   type ToolRow,
   type TranscriptRow,
@@ -78,6 +81,7 @@ import {
 import { QueryHighlight } from "./QueryHighlight";
 import { getCategoryCodeForFinding } from "@/pages/security/risk-utils";
 import { CreateExclusionContext } from "./exclusionContext";
+import { toolSectionRiskMatches, type ToolRiskField } from "./toolRisk";
 
 type RowDecoration = {
   footer?: ReactNode;
@@ -441,21 +445,34 @@ function UserMessageRow({
   row,
   ctx,
   activeTextOccurrence,
+  activeAttachmentOccurrence,
 }: {
   row: MessageRow;
   ctx: ResolvedRowContext;
   /** Index of the active search occurrence within this message's text, or null
    * when this row doesn't hold the active occurrence. */
   activeTextOccurrence: number | null;
+  activeAttachmentOccurrence: number | null;
 }) {
   const { message } = row;
-  const results = ctx.riskResultsByMessage.get(message.id);
+  const messageResults = ctx.riskResultsByMessage.get(message.id);
+  const attachmentResults = row.attachments.flatMap(
+    (attachment) => ctx.riskResultsByMessage.get(attachment.id) ?? [],
+  );
+  let results = messageResults;
+  if (attachmentResults.length > 0) {
+    results = [...(messageResults ?? []), ...attachmentResults];
+  }
   const usage = ctx.claudeUsageByMessage.get(message.id);
   const text = messageText(message.content);
-  const flagged = !!results && results.length > 0;
-  const sensitive = flagged && resultsAreSensitive(results);
-  const { revealed, setRevealed } = useRowReveal(sensitive);
+  const flagged =
+    (!!results && results.length > 0) ||
+    row.attachments.some((attachment) => attachment.isRisk);
+  const messageSensitive =
+    !!messageResults && resultsAreSensitive(messageResults);
+  const { revealed, setRevealed } = useRowReveal(messageSensitive);
   const decoration = ctx.rowDecoration?.([message.id]) ?? null;
+  let attachmentOccurrenceOffset = 0;
 
   return (
     <div
@@ -469,11 +486,11 @@ function UserMessageRow({
           "bg-muted text-foreground mx-2 max-w-[80%] rounded-xl px-4 py-2 wrap-break-word",
         )}
       >
-        {flagged ? (
+        {messageResults && messageResults.length > 0 ? (
           <HighlightedMessageText
             text={text}
-            results={results}
-            revealed={sensitive ? revealed : undefined}
+            results={messageResults}
+            revealed={messageSensitive ? revealed : undefined}
           />
         ) : (
           <div className="whitespace-pre-wrap">
@@ -489,24 +506,147 @@ function UserMessageRow({
           </div>
         )}
       </div>
-      <RowDecorationFooter
-        decoration={decoration}
-        className="mx-2 max-w-[80%] pl-4"
-      />
-      {(usage || sensitive) && (
+      {(usage || messageSensitive) && (
         <div className="text-muted-foreground mx-2 flex items-center gap-2 pl-4 text-xs">
           {usage && <CostBadge usage={usage} />}
-          {usage && sensitive && <MetaSeparator />}
-          {sensitive && (
+          {usage && messageSensitive && <MetaSeparator />}
+          {messageSensitive && (
             <RevealSecretButton
-              results={results}
+              results={messageResults}
               revealed={revealed}
               onToggle={() => setRevealed(!revealed)}
             />
           )}
         </div>
       )}
+      {row.attachments.length > 0 && (
+        <div className="mx-2 flex max-w-[80%] flex-col items-start gap-1 pl-4">
+          {row.attachments.map((attachment) => {
+            let occurrenceCount = 0;
+            const attachmentFlagged =
+              attachment.isRisk ||
+              (ctx.riskResultsByMessage.get(attachment.id)?.length ?? 0) > 0;
+            if (ctx.searchQuery && !attachmentFlagged) {
+              occurrenceCount = findQueryRanges(
+                messageText(attachment.content),
+                ctx.searchQuery,
+              ).length;
+            }
+            let activeOccurrence: number | null = null;
+            const activeInAttachment =
+              activeAttachmentOccurrence != null &&
+              activeAttachmentOccurrence >= attachmentOccurrenceOffset &&
+              activeAttachmentOccurrence <
+                attachmentOccurrenceOffset + occurrenceCount;
+            if (activeInAttachment && activeAttachmentOccurrence != null) {
+              activeOccurrence =
+                activeAttachmentOccurrence - attachmentOccurrenceOffset;
+            }
+            if (!attachmentFlagged) {
+              attachmentOccurrenceOffset += occurrenceCount;
+            }
+            return (
+              <PromptAttachmentChip
+                key={attachment.id}
+                attachment={attachment}
+                ctx={ctx}
+                activeOccurrence={activeOccurrence}
+              />
+            );
+          })}
+        </div>
+      )}
+      <RowDecorationFooter
+        decoration={decoration}
+        className="mx-2 max-w-[80%] pl-4"
+      />
     </div>
+  );
+}
+
+function PromptAttachmentChip({
+  attachment,
+  ctx,
+  activeOccurrence,
+}: {
+  attachment: PromptAttachment;
+  ctx: ResolvedRowContext;
+  activeOccurrence: number | null;
+}) {
+  const results = ctx.riskResultsByMessage.get(attachment.id);
+  const text = messageText(attachment.content);
+  const hasDetailedResults = !!results && results.length > 0;
+  const flagged = hasDetailedResults || attachment.isRisk;
+  const sensitive = hasDetailedResults && resultsAreSensitive(results);
+  const { revealed, setRevealed } = useRowReveal(sensitive);
+  const [expanded, setExpanded] = useState(flagged || activeOccurrence != null);
+
+  useEffect(() => {
+    if (flagged || activeOccurrence != null) setExpanded(true);
+  }, [flagged, activeOccurrence]);
+
+  return (
+    <details
+      open={expanded}
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+      className="border-border bg-background overflow-hidden rounded-md border text-xs"
+    >
+      <summary className="hover:bg-muted/40 flex cursor-pointer list-none items-center gap-2 px-2.5 py-1.5 select-none">
+        <Paperclip className="text-muted-foreground size-3.5 shrink-0" />
+        <span className="text-foreground max-w-[240px] truncate font-medium">
+          {attachment.displayPath}
+        </span>
+        <span className="text-muted-foreground shrink-0 font-mono uppercase">
+          {attachment.kind}
+        </span>
+        <span className="ml-auto flex shrink-0 items-center gap-2">
+          {hasDetailedResults ? (
+            <RiskBadge results={results} />
+          ) : flagged ? (
+            <span className="bg-destructive text-destructive-foreground rounded px-1.5 py-0.5 text-[10px] font-medium">
+              Risk
+            </span>
+          ) : null}
+          {sensitive && (
+            <span
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+            >
+              <RevealSecretButton
+                results={results}
+                revealed={revealed}
+                onToggle={() => setRevealed(!revealed)}
+              />
+            </span>
+          )}
+        </span>
+      </summary>
+      <div className="border-border border-t px-3 py-2">
+        {hasDetailedResults ? (
+          <div className="max-h-64 overflow-auto">
+            <HighlightedMessageText
+              text={text}
+              results={results}
+              revealed={sensitive ? revealed : undefined}
+            />
+          </div>
+        ) : ctx.searchQuery && !flagged ? (
+          <div className="whitespace-pre-wrap">
+            <QueryHighlight
+              text={text}
+              query={ctx.searchQuery}
+              activeIndex={activeOccurrence}
+            />
+          </div>
+        ) : (
+          <pre className="text-foreground max-h-64 overflow-auto font-mono text-xs whitespace-pre-wrap">
+            {text}
+          </pre>
+        )}
+      </div>
+    </details>
   );
 }
 
@@ -608,10 +748,12 @@ function MessageRowView({
   row,
   ctx,
   activeTextOccurrence,
+  activeAttachmentOccurrence,
 }: {
   row: MessageRow;
   ctx: ResolvedRowContext;
   activeTextOccurrence: number | null;
+  activeAttachmentOccurrence: number | null;
 }) {
   switch (row.entryType) {
     case "user":
@@ -620,6 +762,7 @@ function MessageRowView({
           row={row}
           ctx={ctx}
           activeTextOccurrence={activeTextOccurrence}
+          activeAttachmentOccurrence={activeAttachmentOccurrence}
         />
       );
     case "assistant":
@@ -649,29 +792,36 @@ function toolResults(
   };
 }
 
-// Distinct findings (by matched value) for one tool section, each carrying its
-// rule label and a context-wired "create exclusion" action. The elements
-// ToolUI surfaces the active match's label + action as you step through them.
-function toSectionMatches(
+// Distinct findings that actually belong to and occur within one tool section,
+// each carrying its rule label and a context-wired exclusion action. A risk
+// result is attached to the whole message and can instead target tool.function;
+// filtering here prevents an Arguments badge from opening onto no matching text.
+function toSectionRisk(
   results: RiskResult[] | undefined,
+  content: string | undefined,
+  field: ToolRiskField,
   openExclusion: ((r: RiskResult) => void) | null,
-): SectionMatch[] | undefined {
-  if (!results?.length) return undefined;
-  const byValue = new Map<string, RiskResult>();
-  for (const r of results) {
-    if (r.match && !byValue.has(r.match)) byValue.set(r.match, r);
-  }
-  if (byValue.size === 0) return undefined;
-  return [...byValue.values()]
-    .sort((a, b) => (b.match?.length ?? 0) - (a.match?.length ?? 0))
-    .map((r) => ({
-      value: r.match!,
-      label: r.ruleId && r.ruleId !== "llm_judge" ? r.ruleId : r.source,
+): { matches: SectionMatch[]; results: RiskResult[] } | undefined {
+  const sectionMatches = toolSectionRiskMatches(results, content, field);
+  if (sectionMatches.length === 0) return undefined;
+
+  const matchingResults = new Map<string, RiskResult>();
+  const matches = sectionMatches.map(({ value, result }) => {
+    matchingResults.set(result.id, result);
+    return {
+      value,
+      label:
+        result.ruleId && result.ruleId !== "llm_judge"
+          ? result.ruleId
+          : result.source,
       onExclude:
-        openExclusion && r.ruleId !== "llm_judge"
-          ? () => openExclusion(r)
+        openExclusion && result.ruleId !== "llm_judge"
+          ? () => openExclusion(result)
           : undefined,
-    }));
+    };
+  });
+
+  return { matches, results: [...matchingResults.values()] };
 }
 
 function ToolRowView({
@@ -714,8 +864,18 @@ function ToolRowView({
   // Flag matches inside the tool's own Arguments/Output sections; the elements
   // ToolUI draws the risk badge in the section header, plus the match navigator
   // and active-match exclusion action.
-  const reqMatches = toSectionMatches(callResults, openExclusion);
-  const resMatches = toSectionMatches(resultResults, openExclusion);
+  const requestRisk = toSectionRisk(
+    callResults,
+    request,
+    "tool.args",
+    openExclusion,
+  );
+  const resultRisk = toSectionRisk(
+    resultResults,
+    result,
+    "tool_result",
+    openExclusion,
+  );
   // Search: which of this tool's sections contain the query (case-insensitive,
   // mirroring the server's ILIKE) — drives which section auto-opens + highlights.
   const queryLc = ctx.searchQuery?.trim().toLowerCase();
@@ -730,11 +890,11 @@ function ToolRowView({
   const searchSection: SectionMatch[] = ctx.searchQuery
     ? [{ value: ctx.searchQuery, label: "match" }]
     : [];
-  const requestHighlight = callResults?.length
+  const requestHighlight = requestRisk
     ? {
-        matches: reqMatches ?? [],
-        masked: resultsAreSensitive(callResults),
-        headerBadge: <RiskBadge results={callResults} />,
+        matches: requestRisk.matches,
+        masked: resultsAreSensitive(requestRisk.results),
+        headerBadge: <RiskBadge results={requestRisk.results} />,
       }
     : requestMatches
       ? {
@@ -744,11 +904,11 @@ function ToolRowView({
           activeOccurrence: activeArgsOccurrence,
         }
       : undefined;
-  const resultHighlight = resultResults?.length
+  const resultHighlight = resultRisk
     ? {
-        matches: resMatches ?? [],
-        masked: resultsAreSensitive(resultResults),
-        headerBadge: <RiskBadge results={resultResults} />,
+        matches: resultRisk.matches,
+        masked: resultsAreSensitive(resultRisk.results),
+        headerBadge: <RiskBadge results={resultRisk.results} />,
       }
     : resultMatches
       ? {
@@ -994,6 +1154,9 @@ const RowView = memo(function RowView({
         ctx={ctx}
         activeTextOccurrence={
           activeField?.key === "text" ? activeField.index : null
+        }
+        activeAttachmentOccurrence={
+          activeField?.key === "attachment" ? activeField.index : null
         }
       />
     );

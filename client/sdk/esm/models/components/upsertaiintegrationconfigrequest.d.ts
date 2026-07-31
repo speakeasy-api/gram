@@ -13,11 +13,11 @@ export type UpsertAIIntegrationConfigRequest = {
    */
   enabled: boolean;
   /**
-   * Provider organization identifier. Required for anthropic_compliance.
+   * Provider organization identifier. Required for anthropic_compliance and codex_compliance.
    */
   externalOrganizationId?: string | undefined;
   /**
-   * AI provider identifier. Supported values include cursor and anthropic_compliance.
+   * AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
    */
   provider: string;
 };

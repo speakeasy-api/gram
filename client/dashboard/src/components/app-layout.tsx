@@ -6,15 +6,18 @@ import {
 import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
-import { Icon, Modal, ModalProvider } from "@speakeasy-api/moonshine";
+import { ModalProvider } from "@/components/ui/context/ModalContext";
+import { Icon } from "@/components/ui/Icon";
+import { Modal } from "@/components/ui/Modal";
 import { ShieldAlert } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { AppSidebar } from "./app-sidebar.tsx";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
+import { ChatLaunchOverlay } from "./chat-launch-overlay.tsx";
 import { InsightsProvider } from "./insights-dock.tsx";
 import { OrgSidebar } from "./org-sidebar.tsx";
-import { SidebarInset, SidebarProvider } from "./ui/sidebar.tsx";
+import { SidebarInset, SidebarProvider } from "@/components/ui/Sidebar";
 
 // Layout to handle unauthenticated landing pages and the authenticated webapp experience
 export const LoginCheck = (): JSX.Element => {
@@ -115,6 +118,9 @@ const AppLayoutContent = ({
           </GlobalInsightsWrapper>
         </SidebarInset>
       </div>
+      {/* Above the outlet so the suggestion → chat bubble morph survives the
+          navigation into the chat route. */}
+      <ChatLaunchOverlay />
     </div>
   );
 };

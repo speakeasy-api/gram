@@ -1,6 +1,6 @@
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
-import { Checkbox } from "@/components/ui/checkbox";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import {
   Sheet,
   SheetContent,
@@ -8,23 +8,26 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import { shadowMCPInventoryActions } from "./shadowMCPInventoryActionItems";
+import {
+  ALLOW_RULE_POLICY_REQUIRED,
+  shadowMCPInventoryActions,
+} from "./shadowMCPInventoryActionItems";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
 import { useEffect, useState } from "react";
 
 export type ShadowMCPPolicy = Pick<
@@ -148,10 +151,12 @@ function initialPolicyIDsForAction(
 }
 
 export function ShadowMCPInventoryActionMenu({
+  canManageAllowRules,
   disabled,
   onOpenAction,
   server,
 }: {
+  canManageAllowRules: boolean;
   disabled: boolean;
   onOpenAction: (
     mode: InventoryActionMode,
@@ -159,7 +164,11 @@ export function ShadowMCPInventoryActionMenu({
   ) => void;
   server: ShadowMCPInventoryServer;
 }): JSX.Element {
-  const actions = shadowMCPInventoryActions(server, { disabled, onOpenAction });
+  const actions = shadowMCPInventoryActions(server, {
+    canManageAllowRules,
+    disabled,
+    onOpenAction,
+  });
 
   return (
     <DropdownMenu modal={false}>
@@ -182,13 +191,23 @@ export function ShadowMCPInventoryActionMenu({
       >
         {actions.map((action, index) => (
           <DropdownMenuItem
+            disabled={action.disabled}
             key={index}
             onSelect={(event) => {
               event.stopPropagation();
               action.onClick();
             }}
           >
-            {action.label}
+            {action.description ? (
+              <span className="flex min-w-0 flex-col">
+                <span>{action.label}</span>
+                <span className="text-muted-foreground text-xs">
+                  {action.description}
+                </span>
+              </span>
+            ) : (
+              action.label
+            )}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
@@ -198,6 +217,7 @@ export function ShadowMCPInventoryActionMenu({
 
 function PolicySelection({
   disabled,
+  emptyMessage,
   members,
   onSelectionChange,
   policies,
@@ -205,6 +225,7 @@ function PolicySelection({
   selectedPolicyIDs,
 }: {
   disabled: boolean;
+  emptyMessage: string;
   members: AccessMember[];
   onSelectionChange: (policyIDs: string[]) => void;
   policies: ShadowMCPPolicy[];
@@ -215,10 +236,15 @@ function PolicySelection({
 
   return (
     <section className="border-border space-y-3 rounded-md border p-3">
-      <Type variant="small" className="font-medium">
+      <Text variant="small" className="font-medium">
         Policies
-      </Type>
+      </Text>
       <div className="space-y-2">
+        {policies.length === 0 && (
+          <Text muted small>
+            {emptyMessage}
+          </Text>
+        )}
         {policies.map((policy) => {
           const checked = selectedPolicyIDSet.has(policy.id);
           return (
@@ -242,13 +268,13 @@ function PolicySelection({
                 }}
               />
               <span className="min-w-0 flex-1">
-                <Type variant="small" className="truncate font-medium">
+                <Text variant="small" className="truncate font-medium">
                   {policy.name}
-                </Type>
-                <Type muted small>
+                </Text>
+                <Text muted small>
                   Policy applies to{" "}
                   {policyAudienceLabel(policy, roles, members)}
-                </Type>
+                </Text>
               </span>
             </label>
           );
@@ -265,6 +291,7 @@ export function ShadowMCPInventoryActionSheet({
   onOpenChange,
   onSubmit,
   open,
+  policyUnavailableMessage = ALLOW_RULE_POLICY_REQUIRED,
   roles,
   shadowMCPPolicies,
 }: {
@@ -278,6 +305,7 @@ export function ShadowMCPInventoryActionSheet({
     policyIDs: string[];
   }) => Promise<void>;
   open: boolean;
+  policyUnavailableMessage?: string;
   roles: Role[];
   shadowMCPPolicies: ShadowMCPPolicy[];
 }): JSX.Element | null {
@@ -319,29 +347,29 @@ export function ShadowMCPInventoryActionSheet({
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4">
           <section className="border-border rounded-md border px-4 py-3">
-            <Type variant="small" className="font-medium">
+            <Text variant="small" className="font-medium">
               {server.serverName || server.urlHost}
-            </Type>
-            <Type muted small className="mt-1 break-all">
+            </Text>
+            <Text muted small className="mt-1 break-all">
               {server.canonicalServerUrl}
-            </Type>
+            </Text>
             {server.latestRequest && action.mode === "review" && (
               <div className="mt-4 grid grid-cols-2 gap-4">
                 <div className="min-w-0">
-                  <Type muted small>
+                  <Text muted small>
                     Requester
-                  </Type>
-                  <Type variant="body" className="mt-1 truncate text-sm">
+                  </Text>
+                  <Text variant="body" className="mt-1 truncate text-sm">
                     {server.latestRequest.requesterEmail}
-                  </Type>
+                  </Text>
                 </div>
                 <div>
-                  <Type muted small>
+                  <Text muted small>
                     Requested
-                  </Type>
-                  <Type variant="body" className="mt-1 text-sm">
+                  </Text>
+                  <Text variant="body" className="mt-1 text-sm">
                     {formatShortDate(server.latestRequest.requestedAt)}
-                  </Type>
+                  </Text>
                 </div>
               </div>
             )}
@@ -364,9 +392,9 @@ export function ShadowMCPInventoryActionSheet({
                   <Badge variant="success">
                     <Badge.Text>Approve</Badge.Text>
                   </Badge>
-                  <Type muted small>
+                  <Text muted small>
                     Add an allow decision.
-                  </Type>
+                  </Text>
                 </span>
               </label>
               <label
@@ -380,9 +408,9 @@ export function ShadowMCPInventoryActionSheet({
                   <Badge variant="destructive">
                     <Badge.Text>Deny</Badge.Text>
                   </Badge>
-                  <Type muted small>
+                  <Text muted small>
                     Resolve the request.
-                  </Type>
+                  </Text>
                 </span>
               </label>
             </RadioGroup>
@@ -391,6 +419,7 @@ export function ShadowMCPInventoryActionSheet({
           {needsPolicySelection && (
             <PolicySelection
               disabled={isSubmitting}
+              emptyMessage={policyUnavailableMessage}
               members={members}
               onSelectionChange={setSelectedPolicyIDs}
               policies={shadowMCPPolicies}
@@ -400,9 +429,9 @@ export function ShadowMCPInventoryActionSheet({
           )}
 
           {action.mode === "delete" && (
-            <Type muted small>
+            <Text muted small>
               This removes the current allow decision for the URL.
-            </Type>
+            </Text>
           )}
         </div>
 

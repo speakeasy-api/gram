@@ -16,13 +16,17 @@ import (
 
 // Endpoints wraps the "organizationRemoteSessionIssuers" service endpoints.
 type Endpoints struct {
-	CreateIssuer             goa.Endpoint
-	ListIssuers              goa.Endpoint
-	GetIssuer                goa.Endpoint
-	GetIssuerDeletePreflight goa.Endpoint
-	UpdateIssuer             goa.Endpoint
-	DeleteIssuer             goa.Endpoint
-	MoveIssuer               goa.Endpoint
+	CreateIssuer              goa.Endpoint
+	ListIssuers               goa.Endpoint
+	GetIssuer                 goa.Endpoint
+	GetIssuerDeletePreflight  goa.Endpoint
+	UpdateIssuer              goa.Endpoint
+	DeleteIssuer              goa.Endpoint
+	MoveIssuer                goa.Endpoint
+	GetIssuerMigratePreflight goa.Endpoint
+	MigrateIssuer             goa.Endpoint
+	FetchIssuerMetadata       goa.Endpoint
+	RefreshIssuerMetadata     goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "organizationRemoteSessionIssuers"
@@ -31,13 +35,17 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateIssuer:             NewCreateIssuerEndpoint(s, a.APIKeyAuth),
-		ListIssuers:              NewListIssuersEndpoint(s, a.APIKeyAuth),
-		GetIssuer:                NewGetIssuerEndpoint(s, a.APIKeyAuth),
-		GetIssuerDeletePreflight: NewGetIssuerDeletePreflightEndpoint(s, a.APIKeyAuth),
-		UpdateIssuer:             NewUpdateIssuerEndpoint(s, a.APIKeyAuth),
-		DeleteIssuer:             NewDeleteIssuerEndpoint(s, a.APIKeyAuth),
-		MoveIssuer:               NewMoveIssuerEndpoint(s, a.APIKeyAuth),
+		CreateIssuer:              NewCreateIssuerEndpoint(s, a.APIKeyAuth),
+		ListIssuers:               NewListIssuersEndpoint(s, a.APIKeyAuth),
+		GetIssuer:                 NewGetIssuerEndpoint(s, a.APIKeyAuth),
+		GetIssuerDeletePreflight:  NewGetIssuerDeletePreflightEndpoint(s, a.APIKeyAuth),
+		UpdateIssuer:              NewUpdateIssuerEndpoint(s, a.APIKeyAuth),
+		DeleteIssuer:              NewDeleteIssuerEndpoint(s, a.APIKeyAuth),
+		MoveIssuer:                NewMoveIssuerEndpoint(s, a.APIKeyAuth),
+		GetIssuerMigratePreflight: NewGetIssuerMigratePreflightEndpoint(s, a.APIKeyAuth),
+		MigrateIssuer:             NewMigrateIssuerEndpoint(s, a.APIKeyAuth),
+		FetchIssuerMetadata:       NewFetchIssuerMetadataEndpoint(s, a.APIKeyAuth),
+		RefreshIssuerMetadata:     NewRefreshIssuerMetadataEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -51,6 +59,10 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdateIssuer = m(e.UpdateIssuer)
 	e.DeleteIssuer = m(e.DeleteIssuer)
 	e.MoveIssuer = m(e.MoveIssuer)
+	e.GetIssuerMigratePreflight = m(e.GetIssuerMigratePreflight)
+	e.MigrateIssuer = m(e.MigrateIssuer)
+	e.FetchIssuerMetadata = m(e.FetchIssuerMetadata)
+	e.RefreshIssuerMetadata = m(e.RefreshIssuerMetadata)
 }
 
 // NewCreateIssuerEndpoint returns an endpoint function that calls the method
@@ -296,5 +308,146 @@ func NewMoveIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 			return nil, err
 		}
 		return s.MoveIssuer(ctx, p)
+	}
+}
+
+// NewGetIssuerMigratePreflightEndpoint returns an endpoint function that calls
+// the method "getIssuerMigratePreflight" of service
+// "organizationRemoteSessionIssuers".
+func NewGetIssuerMigratePreflightEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetIssuerMigratePreflightPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetIssuerMigratePreflight(ctx, p)
+	}
+}
+
+// NewMigrateIssuerEndpoint returns an endpoint function that calls the method
+// "migrateIssuer" of service "organizationRemoteSessionIssuers".
+func NewMigrateIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*MigrateIssuerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.MigrateIssuer(ctx, p)
+	}
+}
+
+// NewFetchIssuerMetadataEndpoint returns an endpoint function that calls the
+// method "fetchIssuerMetadata" of service "organizationRemoteSessionIssuers".
+func NewFetchIssuerMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*FetchIssuerMetadataPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.FetchIssuerMetadata(ctx, p)
+	}
+}
+
+// NewRefreshIssuerMetadataEndpoint returns an endpoint function that calls the
+// method "refreshIssuerMetadata" of service "organizationRemoteSessionIssuers".
+func NewRefreshIssuerMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RefreshIssuerMetadataPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.RefreshIssuerMetadata(ctx, p)
 	}
 }

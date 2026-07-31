@@ -11,9 +11,34 @@ const (
 	// create or update nl-type risk policies and have them enforced. The
 	// dashboard gates the matching UI behind the same key.
 	FlagPromptPolicies Flag = "gram-prompt-policies"
+	// FlagBudgets gates the Budgets (spend control) rollout end to end with
+	// one key: the dashboard hides the Budgets tab on the Costs page behind
+	// it, and the background spend-rule evaluator skips organizations
+	// without it — no warning/breach events are recorded and the hooks spend
+	// gate snapshot is cleared, so enforcement never blocks an org that
+	// cannot see the feature. Targeted by PostHog organization group (org
+	// slug), the same way the dashboard evaluates it.
+	FlagBudgets Flag = "gram-budgets"
+	// FlagRiskRecommendedScopes gates per-project composition of recommended
+	// per-category detection scopes. Default off during rollout.
+	FlagRiskRecommendedScopes Flag = "risk-recommended-scopes"
+
+	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
+	// device's assigned-user email against user-keyed heartbeats to matching
+	// its hardware serial against device-keyed ones, falling back to email
+	// when no serial match exists. Gated because the flip is visible: an org
+	// whose agents predate hardware reporting sees the same numbers, but one
+	// mid-upgrade sees devices move between buckets as serials arrive.
+	// Targeted by PostHog organization group (org slug), like FlagBudgets.
+	// Removed once device-level matching is GA.
+	FlagDeviceLevelCoverage Flag = "device-level-coverage"
 
 	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
 	FlagRiskAsyncScanShadow  Flag = "risk-async-scan-shadow"
+	// FlagRiskOverviewFromClickHouse serves the risk overview endpoint from
+	// ClickHouse risk_findings instead of Postgres risk_results. Per-org
+	// rollout gate; removed once the ClickHouse read path is GA.
+	FlagRiskOverviewFromClickHouse Flag = "risk-overview-from-clickhouse"
 
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)
 	// plugin generator versions. Unlike the other flags it is consulted via its

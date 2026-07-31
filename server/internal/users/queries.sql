@@ -67,9 +67,11 @@ WHERE u.email = @email
 LIMIT 1;
 
 -- name: GetConnectedUsersByEmails :many
+-- Callers must pass lowercased emails (conv.NormalizeEmail); stored emails are
+-- lowered here since WorkOS-synced rows can preserve the original casing.
 SELECT u.* FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
-WHERE u.email = ANY(@emails::text[])
+WHERE lower(u.email) = ANY(@emails::text[])
   AND our.organization_id = @organization_id
   AND our.deleted_at IS NULL;
 

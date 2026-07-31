@@ -33,7 +33,7 @@ vi.mock("@gram/client/react-query/riskCreatePolicyBypassRequest.js", () => ({
   }),
 }));
 
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/Button", () => ({
   Button: Object.assign(
     ({ children, onClick }: { children: ReactNode; onClick?: () => void }) => (
       <button onClick={onClick}>{children}</button>
@@ -45,7 +45,13 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
+}));
+
+vi.mock("@/components/ui/Icon", () => ({
   Icon: ({ name }: { name: string }) => <span data-icon={name} />,
+}));
+
+vi.mock("@/components/ui/Stack", () => ({
   Stack: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
@@ -159,7 +165,7 @@ describe("ShadowMCPRequestAccessContent", () => {
     await waitFor(() => {
       expect(mocks.createApprovalRequest).toHaveBeenCalledWith({
         request: {
-          createShadowMCPApprovalRequestForm: {
+          createRiskPolicyBypassRequestRequestBody: {
             requestToken: "rpbr1.stored-token",
           },
         },

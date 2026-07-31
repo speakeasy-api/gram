@@ -4,10 +4,11 @@ import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { LoggingPageHeader } from "@/components/observe/LoggingPageHeader";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Spinner } from "@/components/ui/Spinner";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
   FilterChip,
   ObserveFilterBar,
@@ -16,6 +17,7 @@ import {
 } from "@/components/observe/ObserveFilterBar";
 import {
   buildServerOptionGroups,
+  isDefaultToolUsageTypeSelection,
   parseTargetFilter,
   selectedHookSources,
   selectedTargetValues,
@@ -46,6 +48,7 @@ import {
 } from "@/pages/logs/log-filter-types";
 import { parseFilters, serializeFilters } from "@/pages/logs/log-filter-url";
 import { TraceLogsList } from "@/pages/logs/TraceLogsList";
+import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { type DateRangePreset } from "@/elements";
@@ -60,8 +63,9 @@ import type { ToolUsageUserFilter } from "@gram/client/models/components/toolusa
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useListAttributeKeys } from "@gram/client/react-query/listAttributeKeys.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Badge, Icon } from "@speakeasy-api/moonshine";
-import type { BadgeProps } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
+import { type BadgeProps } from "@/components/ui/Badge";
 import {
   useInfiniteQuery,
   useQuery,
@@ -485,13 +489,10 @@ export function LogsTools(): JSX.Element {
       />
       {isLogsDisabled ? (
         <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
-          <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="text-xl font-semibold">Tool Logs</h1>
-            <p className="text-muted-foreground text-sm">
-              Dive into tool traces across all tools, skills, and MCP servers
-              used by organization members in this project
-            </p>
-          </div>
+          <LoggingPageHeader
+            title="Tool Logs"
+            description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
+          />
           <div className="relative flex-1">
             <div
               className="pointer-events-none h-full select-none"
@@ -676,16 +677,13 @@ function LogsToolsContent({
       <div className="flex min-h-0 w-full flex-1 flex-col">
         <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8">
           <div className="flex shrink-0 items-start justify-between gap-4">
-            <div className="flex min-w-0 flex-col gap-1">
-              <h1 className="text-xl font-semibold">Tool Logs</h1>
-              <p className="text-muted-foreground text-sm">
-                Dive into tool traces across all tools, skills, and MCP servers
-                used by organization members in this project
-              </p>
-            </div>
+            <LoggingPageHeader
+              title="Tool Logs"
+              description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
+            />
             <div className="flex items-center gap-2">
               <HooksSetupButton />
-              <Button variant="outline" size="sm" asChild>
+              <Button variant="secondary" size="sm" asChild>
                 <Link to={orgRoutes.logs.href()}>
                   <Settings className="h-4 w-4" />
                   Configure settings
@@ -774,7 +772,7 @@ function LogsToolsContent({
                     traces={traces}
                     hasActiveFilters={
                       activeFilters.length > 0 ||
-                      selectedTypes.length > 0 ||
+                      !isDefaultToolUsageTypeSelection(selectedTypes) ||
                       selectedStatuses.length > 0 ||
                       selectedRoleIds.length > 0 ||
                       attributeFilters.length > 0 ||
@@ -1052,7 +1050,7 @@ function LogsToolsTraceRow({
                 className="size-4 shrink-0"
               />
               <span className="text-foreground truncate text-xs font-medium">
-                {trace.hookSource}
+                {formatPlatform(trace.hookSource)}
               </span>
             </>
           ) : (

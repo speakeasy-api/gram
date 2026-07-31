@@ -1,0 +1,2 @@
+-- Modify "custom_domains" table
+ALTER TABLE "custom_domains" ADD CONSTRAINT "custom_domains_consecutive_failures_check" CHECK (consecutive_failures >= 0), ADD COLUMN "health_status" text NULL, ADD COLUMN "health_issue" text NULL, ADD COLUMN "health_checked_at" timestamptz NULL, ADD COLUMN "unhealthy_since" timestamptz NULL, ADD COLUMN "certificate_expires_at" timestamptz NULL, ADD COLUMN "consecutive_failures" integer NULL;

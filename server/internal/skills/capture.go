@@ -47,45 +47,84 @@ func CaptureSkillContent(ctx context.Context, db *pgxpool.Pool, projectID uuid.U
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	queries := repo.New(tx)
-	if err := queries.LockSkillName(ctx, repo.LockSkillNameParams{ProjectID: projectID, Name: parsed.Name}); err != nil {
-		return nil, fmt.Errorf("lock captured skill name: %w", err)
+	if err := queries.LockSkillObservationReconciliation(ctx, projectID); err != nil {
+		return nil, fmt.Errorf("lock skill observation reconciliation: %w", err)
 	}
-
-	skill, err := queries.GetSkillByNameForUpdate(ctx, repo.GetSkillByNameForUpdateParams{ProjectID: projectID, Name: parsed.Name})
-	createdSkill := false
-	if errors.Is(err, pgx.ErrNoRows) {
-		skill, err = queries.CreateCapturedSkill(ctx, repo.CreateCapturedSkillParams{
-			ProjectID: projectID, Name: parsed.Name, DisplayName: parsed.DisplayName, Summary: conv.PtrToPGText(parsed.Description),
-		})
-		if errors.Is(err, pgx.ErrNoRows) {
-			skill, err = queries.GetSkillByNameForUpdate(ctx, repo.GetSkillByNameForUpdateParams{ProjectID: projectID, Name: parsed.Name})
-		} else if err == nil {
-			createdSkill = true
-		}
-	}
-	if err != nil {
-		return nil, fmt.Errorf("resolve captured skill: %w", err)
-	}
-
-	version, err := queries.CreateSkillVersion(ctx, repo.CreateSkillVersionParams{
-		Content: parsed.RawContent, CanonicalSha256: parsed.CanonicalSHA256, RawSha256: parsed.RawSHA256,
-		Description: conv.PtrToPGText(parsed.Description), Metadata: metadata, SpecValid: parsed.SpecValid,
-		ValidationErrors: validationErrors, CreatedByUserID: "system", ProjectID: projectID, SkillID: skill.ID,
+	resolved, err := queries.ResolveSkillObservationVersions(ctx, repo.ResolveSkillObservationVersionsParams{
+		ProjectID: projectID, RawSha256s: []string{parsed.RawSHA256},
 	})
-	createdVersion := err == nil
-	if errors.Is(err, pgx.ErrNoRows) {
-		version, err = queries.GetSkillVersionByHash(ctx, repo.GetSkillVersionByHashParams{
-			ProjectID: projectID, SkillID: skill.ID, CanonicalSha256: parsed.CanonicalSHA256,
-		})
-	}
 	if err != nil {
-		return nil, fmt.Errorf("create captured skill version: %w", err)
+		return nil, fmt.Errorf("resolve captured skill hash: %w", err)
+	}
+
+	var skill repo.Skill
+	var version repo.SkillVersion
+	createdSkill, createdVersion := false, false
+	switch len(resolved) {
+	case 0:
+		if err := queries.LockSkillName(ctx, repo.LockSkillNameParams{ProjectID: projectID, Name: parsed.Name}); err != nil {
+			return nil, fmt.Errorf("lock captured skill name: %w", err)
+		}
+		skill, err = queries.GetSkillByNameForUpdate(ctx, repo.GetSkillByNameForUpdateParams{ProjectID: projectID, Name: parsed.Name})
+		if errors.Is(err, pgx.ErrNoRows) {
+			skill, err = queries.CreateCapturedSkill(ctx, repo.CreateCapturedSkillParams{
+				ProjectID: projectID, Name: parsed.Name, DisplayName: parsed.DisplayName, Summary: conv.PtrToPGText(parsed.Description),
+			})
+			if errors.Is(err, pgx.ErrNoRows) {
+				skill, err = queries.GetSkillByNameForUpdate(ctx, repo.GetSkillByNameForUpdateParams{ProjectID: projectID, Name: parsed.Name})
+			} else if err == nil {
+				createdSkill = true
+			}
+		}
+		if err != nil {
+			return nil, fmt.Errorf("resolve captured skill: %w", err)
+		}
+		version, err = queries.CreateSkillVersion(ctx, repo.CreateSkillVersionParams{
+			Content: parsed.RawContent, CanonicalSha256: parsed.CanonicalSHA256, RawSha256: parsed.RawSHA256,
+			Description: conv.PtrToPGText(parsed.Description), Metadata: metadata, SpecValid: parsed.SpecValid,
+			ValidationErrors: validationErrors, CreatedByUserID: "system", ProjectID: projectID, SkillID: skill.ID,
+		})
+		createdVersion = err == nil
+		if errors.Is(err, pgx.ErrNoRows) {
+			version, err = queries.GetSkillVersionByHash(ctx, repo.GetSkillVersionByHashParams{
+				ProjectID: projectID, SkillID: skill.ID, CanonicalSha256: parsed.CanonicalSHA256,
+			})
+		}
+		if err != nil {
+			return nil, fmt.Errorf("create captured skill version: %w", err)
+		}
+	case 1:
+		skill, err = queries.GetSkillForUpdate(ctx, repo.GetSkillForUpdateParams{
+			ProjectID: projectID, ID: resolved[0].SkillID,
+		})
+		if err == nil {
+			version, err = queries.GetProjectSkillVersion(ctx, repo.GetProjectSkillVersionParams{
+				ProjectID: projectID, SkillVersionID: resolved[0].SkillVersionID,
+			})
+		}
+		if err != nil {
+			return nil, fmt.Errorf("load captured skill by hash: %w", err)
+		}
+	default:
+		return nil, ErrCaptureHashConflict
 	}
 	if createdVersion {
 		if err := queries.InsertCapturedSkillVersionOrigin(ctx, repo.InsertCapturedSkillVersionOriginParams{
 			ProjectID: projectID, SkillID: skill.ID, SkillVersionID: version.ID,
 		}); err != nil {
 			return nil, fmt.Errorf("record captured skill version origin: %w", err)
+		}
+		// The captured version becomes the skill's current version, so the
+		// registry summary follows its manifest description — same step as the
+		// manual record-version flow.
+		skill, err = queries.SyncSkillSummary(ctx, repo.SyncSkillSummaryParams{
+			ProjectID: projectID, ID: skill.ID, Summary: conv.PtrToPGText(parsed.Description),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("sync captured skill summary: %w", err)
+		}
+		if err := ReplayOpenSuggestionOntoBase(ctx, queries, projectID, skill.ID); err != nil {
+			return nil, err
 		}
 	}
 
@@ -98,6 +137,12 @@ func CaptureSkillContent(ctx context.Context, db *pgxpool.Pool, projectID uuid.U
 	}
 	if !matches {
 		return nil, ErrCaptureHashConflict
+	}
+	if _, err := queries.BackfillSkillObservationsForCapturedVersion(ctx, repo.BackfillSkillObservationsForCapturedVersionParams{
+		ProjectID: projectID, RawSha256: parsed.RawSHA256, CanonicalSha256: parsed.CanonicalSHA256,
+		SkillID: skill.ID, SkillVersionID: version.ID,
+	}); err != nil {
+		return nil, fmt.Errorf("backfill captured skill observations: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit captured skill transaction: %w", err)

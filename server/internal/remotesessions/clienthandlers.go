@@ -42,10 +42,15 @@ import (
 //
 // excludeClientID skips a row so an update of the same client passes; pass
 // uuid.Nil to exclude nothing (the create paths). Must run inside the attach
-// transaction. No database constraint enforces the per-pair uniqueness, so a
-// narrow window remains between concurrent attaches; the runtime resolver's
-// invariant (ResolveAccessTokens) is the backstop that surfaces any drift at
-// serve time.
+// transaction.
+//
+// No database constraint enforces the per-pair uniqueness — remote_session_issuer_id
+// lives on remote_session_clients, not on the join table, so no unique index over
+// the join table can express the pair. The guard instead takes a transaction-scoped
+// advisory lock on the remote issuer before reading, which serializes it against
+// both a concurrent attach and migrateIssuer's client re-point. The runtime
+// resolver's invariant (ResolveAccessTokens) remains the backstop that surfaces
+// any drift at serve time.
 //
 // organizationID lets the conflict scan see organization-level clients
 // (project_id NULL) already bound to the user_session_issuer, so an org-level
@@ -58,6 +63,12 @@ func (s *Service) guardSingleClientPerRemoteIssuer(
 	organizationID string,
 	projectID, userSessionIssuerID, remoteSessionIssuerID, excludeClientID uuid.UUID,
 ) error {
+	// Serialize against any other writer binding a client to this remote issuer,
+	// including migrateIssuer's re-point, before reading the current bindings.
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, remoteSessionIssuerID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock remote session issuer for client binding").LogError(ctx, logger)
+	}
+
 	// Two rows are enough to detect a conflict: at most one row can be
 	// excludeClientID, so a second row guarantees another client is already
 	// bound to the pair.
@@ -256,12 +267,28 @@ func (s *Service) validateNewClientIssuers(
 	issuerID uuid.UUID,
 	userIssuerIDs []uuid.UUID,
 ) (repo.RemoteSessionIssuer, error) {
-	// The lookup accepts both the project's own issuers and organization-level
-	// issuers, so a client can't be attached to another tenant's issuer.
+	// Serialize against migrateIssuer before reading the issuer, so the
+	// deleted-IS-FALSE check below reflects committed migration state. Without
+	// the lock a concurrent migration could soft-delete this issuer in the window
+	// between the read and the client insert, leaving a client bound to a
+	// tombstoned issuer that resolves nowhere. Under the lock the read either
+	// sees the migration already committed (and 404s) or blocks it until this
+	// client is inserted and the migration re-points it. The per-user-issuer
+	// guard below re-acquires the same lock, which is a harmless no-op.
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return repo.RemoteSessionIssuer{}, oops.E(oops.CodeUnexpected, err, "lock remote session issuer for client binding").LogError(ctx, logger)
+	}
+
+	// The lookup accepts the project's own issuers, organization-level issuers,
+	// and platform issuers from the shared catalog, so a client can't be attached
+	// to another tenant's issuer. The client row created against a platform
+	// issuer is still owned by this project; only the issuer is shared.
 	issuer, err := txRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
-		ID:             issuerID,
-		ProjectID:      conv.ToNullUUID(projectID),
-		OrganizationID: conv.ToPGTextEmpty(organizationID),
+		ID:                    issuerID,
+		ProjectID:             conv.ToNullUUID(projectID),
+		OrganizationID:        conv.ToPGTextEmpty(organizationID),
+		IncludeOrganizational: true,
+		IncludeGlobal:         true,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -412,16 +439,27 @@ func (s *Service) CloneClientFromOAuthProxyProvider(ctx context.Context, payload
 		return nil, oops.E(oops.CodeBadRequest, err, "oauth proxy provider client credentials unavailable for clone").LogError(ctx, logger)
 	}
 
+	// Serialize against migrateIssuer before the reachability read, so a
+	// concurrent migration cannot soft-delete this issuer between the read and
+	// the client insert and leave the clone bound to a tombstoned issuer. See the
+	// matching lock in validateNewClientIssuers for the full rationale.
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock remote session issuer for client binding").LogError(ctx, logger)
+	}
+
 	// Confirm the issuer the caller named is reachable from the caller's
-	// project — either an issuer the project owns or an organization-level
-	// issuer inherited from the project's org — so a clone cannot graft a
-	// client onto an unrelated tenant's issuer. The cloned client row is still
-	// owned by the caller's project regardless of the issuer's scope; this
-	// mirrors the reachability gate in CreateRemoteSessionClient.
+	// project — an issuer the project owns, an organization-level issuer
+	// inherited from the project's org, or a platform issuer from the shared
+	// catalog — so a clone cannot graft a client onto an unrelated tenant's
+	// issuer. The cloned client row is still owned by the caller's project
+	// regardless of the issuer's scope; this mirrors the reachability gate in
+	// validateNewClientIssuers, and the two must stay in step.
 	if _, err := txRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
-		ID:             issuerID,
-		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
-		OrganizationID: conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
+		ID:                    issuerID,
+		ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		OrganizationID:        conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
+		IncludeOrganizational: true,
+		IncludeGlobal:         true,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogError(ctx, logger)

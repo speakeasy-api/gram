@@ -1,7 +1,8 @@
 import { Input } from "@/components/moon/input";
 import { Label } from "@/components/moon/label";
-import { Dialog } from "@/components/ui/dialog";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { Dialog } from "@/components/ui/Dialog";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { Loader2 } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 

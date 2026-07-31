@@ -70,7 +70,7 @@ func (q *Queries) GetConnectedUserByEmail(ctx context.Context, arg GetConnectedU
 const getConnectedUsersByEmails = `-- name: GetConnectedUsersByEmails :many
 SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
-WHERE u.email = ANY($1::text[])
+WHERE lower(u.email) = ANY($1::text[])
   AND our.organization_id = $2
   AND our.deleted_at IS NULL
 `
@@ -80,6 +80,8 @@ type GetConnectedUsersByEmailsParams struct {
 	OrganizationID string
 }
 
+// Callers must pass lowercased emails (conv.NormalizeEmail); stored emails are
+// lowered here since WorkOS-synced rows can preserve the original casing.
 func (q *Queries) GetConnectedUsersByEmails(ctx context.Context, arg GetConnectedUsersByEmailsParams) ([]User, error) {
 	rows, err := q.db.Query(ctx, getConnectedUsersByEmails, arg.Emails, arg.OrganizationID)
 	if err != nil {

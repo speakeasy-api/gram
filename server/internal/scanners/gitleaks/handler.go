@@ -67,7 +67,8 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.GitleaksAnalysis, _ gcp.
 		finding := riskv1.Finding_builder{
 			Id:                new(id.String()),
 			RequestId:         new(m.GetRequestId()),
-			ChatMessageId:     new(m.GetChatMessageId()),
+			ChatMessageId:     conv.PtrEmpty(m.GetChatMessageId()),
+			ContentPartId:     conv.PtrEmpty(m.GetContentPartId()),
 			ProjectId:         new(m.GetProjectId()),
 			OrganizationId:    new(m.GetOrganizationId()),
 			RiskPolicyId:      new(m.GetRiskPolicyId()),

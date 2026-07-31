@@ -2,7 +2,9 @@ package relay
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -88,12 +90,23 @@ func TestDrainReplaysOldestFirstWithStoredKeys(t *testing.T) {
 	}
 }
 
-func TestDrainReplaysEnrichedSkillMetadataWithoutUploadingContent(t *testing.T) {
+func TestDrainReplaysEnrichedSkillMetadataAndUploadsContent(t *testing.T) {
 	drainEnv(t)
 	content := []byte("# Offline skill\n")
 	rawSHA256 := sha256Hex(content)
-	path := filepath.Join(t.TempDir(), ".claude", "skills", "offline", "SKILL.md")
-	capturedTasks := captureSkillUploadTasks(t)
+	root := filepath.Join(t.TempDir(), ".claude", "skills")
+	path := filepath.Join(root, "offline", "SKILL.md")
+	originalUpload := executeSkillUpload
+	t.Cleanup(func() { executeSkillUpload = originalUpload })
+	var capturedTasks []skillUploadTask
+	failUpload := true
+	executeSkillUpload = func(_ context.Context, task skillUploadTask) error {
+		capturedTasks = append(capturedTasks, task)
+		if failUpload {
+			return errors.New("upload unavailable")
+		}
+		return nil
+	}
 	fs := newFakeServer(t, nil)
 	fs.effects = requestedSkillCaptureEffects(true)
 	seedSpoolEntry(t, fs.URL, time.Hour, "sess-offline")
@@ -107,14 +120,28 @@ func TestDrainReplaysEnrichedSkillMetadataWithoutUploadingContent(t *testing.T) 
 	entry.Envelope.Data.Skill.SourceLevel = new("project")
 	entry.Envelope.Data.Skill.SourcePath = new(path)
 	entry.Envelope.Data.Skill.RawSha256 = new(rawSHA256)
+	entry.SkillSourceRoot = root
 	data, err = json.Marshal(entry)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(spoolPath, data, 0o600))
 
 	summary := Drain(t.Context())
+	require.Equal(t, DrainSummary{Replayed: 0, Dropped: 0, Expired: 0, Skipped: 1, Remaining: 1, Aborted: false}, summary)
+	require.Len(t, capturedTasks, 1, "the first drain must attempt the upload")
+	require.Len(t, spoolFiles(t), 1, "a failed upload must remain retryable")
+
+	failUpload = false
+	summary = Drain(t.Context())
 
 	require.Equal(t, 1, summary.Replayed)
-	require.Empty(t, capturedTasks())
+	require.Empty(t, spoolFiles(t), "a successful upload must remove the replayed entry")
+	require.Equal(t, []skillUploadTask{{
+		ServerURL: fs.URL, Project: "default", APIKey: "drain-key", RawSHA256: rawSHA256,
+		SourcePath: path, SourceRoot: root,
+	}, {
+		ServerURL: fs.URL, Project: "default", APIKey: "drain-key", RawSHA256: rawSHA256,
+		SourcePath: path, SourceRoot: root,
+	}}, capturedTasks)
 	replayed := fs.last().Data.Skill
 	require.Equal(t, "offline", replayed.Name)
 	require.Equal(t, "project", *replayed.SourceLevel)

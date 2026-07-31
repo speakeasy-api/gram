@@ -21,6 +21,10 @@ type Client struct {
 	// endpoint.
 	GetDomainDoer goahttp.Doer
 
+	// ListDomains Doer is the HTTP client used to make requests to the listDomains
+	// endpoint.
+	ListDomainsDoer goahttp.Doer
+
 	// CreateDomain Doer is the HTTP client used to make requests to the
 	// createDomain endpoint.
 	CreateDomainDoer goahttp.Doer
@@ -28,6 +32,10 @@ type Client struct {
 	// UpdateDomain Doer is the HTTP client used to make requests to the
 	// updateDomain endpoint.
 	UpdateDomainDoer goahttp.Doer
+
+	// CheckHealth Doer is the HTTP client used to make requests to the checkHealth
+	// endpoint.
+	CheckHealthDoer goahttp.Doer
 
 	// DeleteDomain Doer is the HTTP client used to make requests to the
 	// deleteDomain endpoint.
@@ -58,8 +66,10 @@ func NewClient(
 ) *Client {
 	return &Client{
 		GetDomainDoer:        doer,
+		ListDomainsDoer:      doer,
 		CreateDomainDoer:     doer,
 		UpdateDomainDoer:     doer,
+		CheckHealthDoer:      doer,
 		DeleteDomainDoer:     doer,
 		ListMcpEndpointsDoer: doer,
 		RestoreResponseBody:  restoreBody,
@@ -89,6 +99,30 @@ func (c *Client) GetDomain() goa.Endpoint {
 		resp, err := c.GetDomainDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("domains", "getDomain", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListDomains returns an endpoint that makes HTTP requests to the domains
+// service listDomains server.
+func (c *Client) ListDomains() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListDomainsRequest(c.encoder)
+		decodeResponse = DecodeListDomainsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListDomainsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListDomainsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("domains", "listDomains", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -137,6 +171,30 @@ func (c *Client) UpdateDomain() goa.Endpoint {
 		resp, err := c.UpdateDomainDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("domains", "updateDomain", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CheckHealth returns an endpoint that makes HTTP requests to the domains
+// service checkHealth server.
+func (c *Client) CheckHealth() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCheckHealthRequest(c.encoder)
+		decodeResponse = DecodeCheckHealthResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCheckHealthRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CheckHealthDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("domains", "checkHealth", err)
 		}
 		return decodeResponse(resp)
 	}

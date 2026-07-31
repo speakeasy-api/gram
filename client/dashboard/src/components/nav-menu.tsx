@@ -1,5 +1,5 @@
-import { SidebarMenuItem } from "@/components/ui/sidebar";
-import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import { SidebarMenuItem } from "@/components/ui/Sidebar";
+import { Collapsible, CollapsibleContent } from "@/components/ui/Collapsible";
 import { cn } from "@/lib/utils";
 import { AppRoute } from "@/routes";
 import { motion } from "motion/react";
@@ -7,8 +7,8 @@ import React from "react";
 import { Link } from "react-router";
 import { ProductTierBadge } from "./product-tier-badge";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
-import { Type } from "./ui/type";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 
 export const NAV_LOADING_DURATION_MS = 600;
 
@@ -401,7 +401,7 @@ export function NavButton({
           )}
         />
       )}
-      <Type
+      <Text
         variant="small"
         className={cn(
           "transition-[opacity,transform] duration-150 ease-out group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0",
@@ -410,7 +410,7 @@ export function NavButton({
         )}
       >
         {titleNode ?? title}
-      </Type>
+      </Text>
       {title === "Billing" && <ProductTierBadge />}
       {stage && (
         <ReleaseStageBadge

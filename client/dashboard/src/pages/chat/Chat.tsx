@@ -34,7 +34,8 @@ import {
 } from "@gram/client/react-query/listChats.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useSession } from "@/contexts/Auth";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { resolveChatOwner } from "@/lib/chat-owner";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import {
   useHideInsightsDock,
   useInsightsState,
@@ -47,6 +48,11 @@ import {
   SLASH_COMMANDS,
   type InsightsSuggestion,
 } from "@/lib/insights-suggestions";
+import { useChatLaunch } from "@/lib/chat-launch";
+import {
+  CHAT_LANDING_GRADIENT,
+  CHAT_LANDING_GRADIENT_CLASS,
+} from "@/lib/chat-gradient";
 import { cn } from "@/lib/utils";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { useRoutes } from "@/routes";
@@ -101,19 +107,11 @@ function ChatLandingBackdrop(): ReactElement {
       className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[460px] overflow-hidden [mask-image:linear-gradient(to_bottom,black_30%,transparent_92%)]"
     >
       <div
-        className="absolute top-[-160px] left-1/2 h-[560px] w-[920px] max-w-[140vw] -translate-x-1/2 opacity-60 blur-[72px] dark:opacity-40"
-        style={{
-          // Brand rainbow (matches INSIGHTS_AI_RAINBOW), each blob fading to its
-          // own zero-alpha so the overlaps read as soft powder, not muddy grey.
-          background: [
-            "radial-gradient(38% 48% at 30% 42%, #C83228 0%, rgba(200,50,40,0) 70%)",
-            "radial-gradient(36% 46% at 48% 28%, #FB873F 0%, rgba(251,135,63,0) 70%)",
-            "radial-gradient(42% 52% at 64% 40%, #D2DC91 0%, rgba(210,220,145,0) 72%)",
-            "radial-gradient(44% 54% at 70% 60%, #5A8250 0%, rgba(90,130,80,0) 72%)",
-            "radial-gradient(42% 52% at 42% 62%, #2873D7 0%, rgba(40,115,215,0) 72%)",
-            "radial-gradient(36% 46% at 26% 54%, #9BC3FF 0%, rgba(155,195,255,0) 72%)",
-          ].join(","),
-        }}
+        className={cn(
+          "absolute top-[-160px] left-1/2 -translate-x-1/2",
+          CHAT_LANDING_GRADIENT_CLASS,
+        )}
+        style={{ background: CHAT_LANDING_GRADIENT }}
       />
     </div>
   );
@@ -311,7 +309,7 @@ export function ChatLanding({
 
       <ChatHomePinned />
       <ChatHomeRecents />
-      <ChatHomeSuggestions onPick={startChat} />
+      <ChatHomeSuggestions />
     </div>
   );
 }
@@ -642,9 +640,10 @@ function RecentRowIcon({
   externalUserId?: string;
 }): ReactElement {
   const { data: membersData } = useMembers();
-  const member = membersData?.members.find(
-    (m) => m.id === userId || (!!externalUserId && m.email === externalUserId),
-  );
+  const member = resolveChatOwner(membersData?.members, {
+    userId,
+    externalUserId,
+  });
 
   if (member) {
     const display = member.name || member.email;
@@ -743,11 +742,13 @@ function PinButton({
   );
 }
 
-function ChatHomeSuggestions({
-  onPick,
-}: {
-  onPick: (prompt: string) => void;
-}): ReactElement {
+/**
+ * Starter prompt chips. Clicking one hands the chip element to `useChatLaunch`,
+ * which flies it to the centre of the screen and then morphs it into the user
+ * bubble of the conversation it just started.
+ */
+function ChatHomeSuggestions(): ReactElement {
+  const launchChat = useChatLaunch();
   return (
     <section className="flex flex-col gap-3">
       <h2 className="text-muted-foreground px-3 text-sm font-medium">
@@ -761,7 +762,7 @@ function ChatHomeSuggestions({
             <button
               key={suggestion.title}
               type="button"
-              onClick={() => onPick(suggestion.prompt)}
+              onClick={(event) => launchChat(suggestion, event.currentTarget)}
               className="border-border bg-card text-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
             >
               <SuggestionIcon className="size-4 shrink-0" />

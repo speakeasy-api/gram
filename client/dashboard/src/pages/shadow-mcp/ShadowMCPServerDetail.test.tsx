@@ -140,7 +140,7 @@ vi.mock("@gram/client/react-query/resolveShadowMCPInventoryRequest.js", () => ({
     mocks.useResolveShadowMCPInventoryRequestMutation,
 }));
 
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/Badge", () => ({
   Badge: Object.assign(
     ({ children }: { children: ReactNode }) => <span>{children}</span>,
     {
@@ -150,6 +150,9 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
+}));
+
+vi.mock("@/components/ui/Button", () => ({
   Button: Object.assign(
     ({
       children,
@@ -178,6 +181,9 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
+}));
+
+vi.mock("@/components/ui/Dropdown", () => ({
   DropdownMenu: ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
   ),
@@ -209,9 +215,15 @@ vi.mock("@speakeasy-api/moonshine", () => ({
 
     return <>{children}</>;
   },
+}));
+
+vi.mock("@/components/ui/Icon", () => ({
   Icon: ({ className }: { className?: string; name: string }) => (
     <span className={className} />
   ),
+}));
+
+vi.mock("@/components/ui/Table", () => ({
   Table: Object.assign(
     ({ children }: { children: ReactNode }) => <table>{children}</table>,
     {
@@ -265,7 +277,7 @@ vi.mock("@speakeasy-api/moonshine", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/checkbox", () => ({
+vi.mock("@/components/ui/Checkbox", () => ({
   Checkbox: ({
     checked,
     disabled,
@@ -284,7 +296,7 @@ vi.mock("@/components/ui/checkbox", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/radio-group", () => ({
+vi.mock("@/components/ui/RadioGroup", () => ({
   RadioGroup: ({
     children,
     onValueChange,
@@ -306,7 +318,7 @@ vi.mock("@/components/ui/radio-group", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/sheet", () => ({
+vi.mock("@/components/ui/Sheet", () => ({
   Sheet: ({
     children,
     onOpenChange,
@@ -333,7 +345,7 @@ vi.mock("@/components/ui/sheet", () => ({
   SheetTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
 }));
 
-vi.mock("@/components/ui/skeleton", () => ({
+vi.mock("@/components/ui/Skeleton", () => ({
   SkeletonTable: () => <div>Loading table</div>,
 }));
 
@@ -763,6 +775,50 @@ describe("ShadowMCPServerDetail", () => {
 
   it("adds an allow decision from the detail page action menu", async () => {
     const upsertPolicyBypass = vi.fn().mockResolvedValue({});
+    mocks.useRiskListPolicies.mockReturnValue({
+      data: {
+        policies: [
+          {
+            action: "block",
+            audiencePrincipalUrns: ["user:all"],
+            audienceType: "everyone",
+            enabled: true,
+            id: "policy-1",
+            name: "Blocking policy",
+            sources: ["shadow_mcp"],
+          },
+          {
+            action: "flag",
+            audiencePrincipalUrns: ["user:all"],
+            audienceType: "everyone",
+            enabled: true,
+            id: "flag-policy",
+            name: "Flag policy",
+            sources: ["shadow_mcp"],
+          },
+          {
+            action: "block",
+            audiencePrincipalUrns: ["user:all"],
+            audienceType: "everyone",
+            enabled: false,
+            id: "disabled-policy",
+            name: "Disabled policy",
+            sources: ["shadow_mcp"],
+          },
+          {
+            action: "block",
+            audiencePrincipalUrns: ["user:all"],
+            audienceType: "everyone",
+            enabled: true,
+            id: "other-source-policy",
+            name: "Other source policy",
+            sources: ["prompt_injection"],
+          },
+        ],
+      },
+      isError: false,
+      isLoading: false,
+    });
     mocks.useShadowMCPInventoryServer.mockReturnValue({
       data: inventoryServer({
         access: "none",
@@ -784,6 +840,10 @@ describe("ShadowMCPServerDetail", () => {
         screen.getByRole("heading", { name: "Add Allow Rule" }),
       ).toBeTruthy();
     });
+    expect(screen.getByText("Blocking policy")).toBeTruthy();
+    expect(screen.queryByText("Flag policy")).toBeNull();
+    expect(screen.queryByText("Disabled policy")).toBeNull();
+    expect(screen.queryByText("Other source policy")).toBeNull();
     fireEvent.click(
       within(screen.getByTestId("shadow-mcp-action-sheet")).getByRole(
         "button",
@@ -803,5 +863,191 @@ describe("ShadowMCPServerDetail", () => {
       });
     });
     expect(mocks.invalidateShadowMCPInventory).toHaveBeenCalled();
+  });
+
+  it("disables add when no allow-rule policy is eligible", () => {
+    mocks.useRiskListPolicies.mockReturnValue({
+      data: {
+        policies: [
+          {
+            action: "flag",
+            audiencePrincipalUrns: ["user:all"],
+            audienceType: "everyone",
+            enabled: true,
+            id: "flag-policy",
+            name: "Flag policy",
+            sources: ["shadow_mcp"],
+          },
+        ],
+      },
+      isError: false,
+      isLoading: false,
+    });
+    mocks.useShadowMCPInventoryServer.mockReturnValue({
+      data: inventoryServer({ access: "none", allowedPolicyIds: [] }),
+      error: null,
+      isLoading: false,
+    });
+
+    renderDetailPage();
+
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Add Allow Rule",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      screen.getByText("An enabled blocking Shadow MCP policy is required."),
+    ).toBeTruthy();
+  });
+
+  it("explains when allow-rule policy status is unavailable", () => {
+    mocks.useRiskListPolicies.mockReturnValue({
+      data: {
+        policies: [
+          {
+            action: "block",
+            audiencePrincipalUrns: ["user:all"],
+            audienceType: "everyone",
+            enabled: true,
+            id: "cached-policy",
+            name: "Cached blocking policy",
+            sources: ["shadow_mcp"],
+          },
+        ],
+      },
+      isError: true,
+      isLoading: false,
+    });
+
+    renderDetailPage();
+
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Edit Rule",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      screen.getByText(
+        "Policy status is unavailable. Refresh the page to try again.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("An enabled blocking Shadow MCP policy is required."),
+    ).toBeNull();
+  });
+
+  it("explains unavailable policy status while reviewing a pending request", () => {
+    mocks.useRiskListPolicies.mockReturnValue({
+      data: {
+        policies: [
+          {
+            action: "block",
+            audiencePrincipalUrns: ["user:all"],
+            audienceType: "everyone",
+            enabled: true,
+            id: "cached-policy",
+            name: "Cached blocking policy",
+            sources: ["shadow_mcp"],
+          },
+        ],
+      },
+      isError: true,
+      isLoading: false,
+    });
+    mocks.useShadowMCPInventoryServer.mockReturnValue({
+      data: inventoryServer({
+        access: "none",
+        allowedPolicyIds: [],
+        latestRequest: {
+          id: "request-1",
+          policyId: "cached-policy",
+          requestedAt: new Date("2026-01-04T11:30:00Z"),
+          requesterEmail: "requester@example.com",
+          requesterUserId: "user-1",
+        },
+        requestCount: 1,
+      }),
+      error: null,
+      isLoading: false,
+    });
+
+    renderDetailPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Review Request" }));
+    expect(
+      screen.getByText(
+        "Policy status is unavailable. Refresh the page to try again.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("An enabled blocking Shadow MCP policy is required."),
+    ).toBeNull();
+  });
+
+  it("explains why edit is disabled while review and delete remain available", () => {
+    mocks.useRiskListPolicies.mockReturnValue({
+      data: {
+        policies: [
+          {
+            action: "flag",
+            audiencePrincipalUrns: ["user:all"],
+            audienceType: "everyone",
+            enabled: true,
+            id: "flag-policy",
+            name: "Flag policy",
+            sources: ["shadow_mcp"],
+          },
+        ],
+      },
+      isError: false,
+      isLoading: false,
+    });
+    mocks.useShadowMCPInventoryServer.mockReturnValue({
+      data: inventoryServer({
+        access: "allowed",
+        latestRequest: {
+          id: "request-1",
+          policyId: "inactive-policy",
+          requestedAt: new Date("2026-01-04T11:30:00Z"),
+          requesterEmail: "requester@example.com",
+          requesterUserId: "user-1",
+        },
+        requestCount: 1,
+      }),
+      error: null,
+      isLoading: false,
+    });
+
+    renderDetailPage();
+
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Review Request",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Edit Rule",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Delete Rule",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
+    expect(
+      screen.getByText("An enabled blocking Shadow MCP policy is required."),
+    ).toBeTruthy();
   });
 });

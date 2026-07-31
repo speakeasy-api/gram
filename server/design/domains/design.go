@@ -23,6 +23,21 @@ var CustomDomain = Type("CustomDomain", func() {
 	})
 	Attribute("is_updating", Boolean, "The custom domain is actively being registered")
 	Attribute("ip_allowlist", ArrayOf(String), "IP addresses or CIDR ranges allowed to access this domain. Empty list means unrestricted.")
+	Attribute("health_status", String, "The latest observed domain health status. One of: unknown, healthy, unhealthy.")
+	Attribute("health_issue", String, "The reason the domain was last observed as unhealthy. One of: dns_not_found, dns_target_mismatch, resource_missing, certificate_missing, certificate_not_ready, certificate_expired, certificate_invalid, check_failed.")
+	Attribute("health_checked_at", String, func() {
+		Description("When the domain health was last checked.")
+		Format(FormatDateTime)
+	})
+	Attribute("unhealthy_since", String, func() {
+		Description("When the current unhealthy period began.")
+		Format(FormatDateTime)
+	})
+	Attribute("certificate_expires_at", String, func() {
+		Description("When the currently observed TLS certificate expires.")
+		Format(FormatDateTime)
+	})
+	Attribute("consecutive_failures", Int32, "The number of consecutive failed health checks")
 
 	Required("id", "organization_id", "domain", "verified", "activated", "created_at", "updated_at", "is_updating", "ip_allowlist")
 })
@@ -50,6 +65,26 @@ var _ = Service("domains", func() {
 		Meta("openapi:operationId", "getDomain")
 		Meta("openapi:extension:x-speakeasy-name-override", "getDomain")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getDomain"}`)
+	})
+
+	Method("listDomains", func() {
+		Description("List the custom domains for an organization. The result is empty when no custom domain has been configured.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(ListCustomDomainsResult)
+
+		HTTP(func() {
+			GET("/rpc/domain.list")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listDomains")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDomains")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "listDomains"}`)
 	})
 
 	Method("createDomain", func() {
@@ -93,6 +128,26 @@ var _ = Service("domains", func() {
 		Meta("openapi:operationId", "updateDomain")
 		Meta("openapi:extension:x-speakeasy-name-override", "updateDomain")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "updateDomain"}`)
+	})
+
+	Method("checkHealth", func() {
+		Description("Check the routing and certificate health of the organization's custom domain")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(CustomDomain)
+
+		HTTP(func() {
+			POST("/rpc/domain.checkHealth")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "checkDomainHealth")
+		Meta("openapi:extension:x-speakeasy-name-override", "checkHealth")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CheckDomainHealth"}`)
 	})
 
 	Method("deleteDomain", func() {
@@ -160,4 +215,11 @@ var ListCustomDomainMcpEndpointsResult = Type("ListCustomDomainMcpEndpointsResul
 
 	Attribute("mcp_endpoints", ArrayOf(CustomDomainMcpEndpoint))
 	Required("mcp_endpoints")
+})
+
+var ListCustomDomainsResult = Type("ListCustomDomainsResult", func() {
+	Description("Result of listing an organization's custom domains.")
+
+	Attribute("domains", ArrayOf(CustomDomain))
+	Required("domains")
 })

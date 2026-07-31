@@ -1006,7 +1006,19 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	// Honour the installation override URL on either backend.
 	if metadataRecord != nil {
 		if overrideURL := conv.FromPGText[string](metadataRecord.InstallationOverrideUrl); overrideURL != nil && *overrideURL != "" {
-			http.Redirect(w, r, *overrideURL, http.StatusFound)
+			redirectURL, err := url.Parse(*overrideURL)
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "parse installation override URL").LogError(ctx, s.logger)
+			}
+			if r.URL.RawQuery != "" {
+				if redirectURL.RawQuery != "" {
+					redirectURL.RawQuery += "&" + r.URL.RawQuery
+				} else {
+					redirectURL.RawQuery = r.URL.RawQuery
+				}
+			}
+
+			http.Redirect(w, r, redirectURL.String(), http.StatusFound)
 			return nil
 		}
 	}
@@ -1684,6 +1696,10 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 		return nil, fmt.Errorf("%w: %w", errToolsetNotFound, toolsetErr)
 	case toolsetErr != nil:
 		return nil, fmt.Errorf("lookup toolset: %w", toolsetErr)
+	}
+
+	if !toolset.McpEnabled {
+		return nil, fmt.Errorf("%w: mcp disabled", errToolsetNotFound)
 	}
 
 	return &toolset, nil

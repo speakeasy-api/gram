@@ -10083,6 +10083,22 @@ func EncodeDeleteRiskEvalReviewError(encoder func(context.Context, http.Response
 	}
 }
 
+// unmarshalRiskDetectionScopeRequestBodyToTypesRiskDetectionScope builds a
+// value of type *types.RiskDetectionScope from a value of type
+// *RiskDetectionScopeRequestBody.
+func unmarshalRiskDetectionScopeRequestBodyToTypesRiskDetectionScope(v *RiskDetectionScopeRequestBody) *types.RiskDetectionScope {
+	if v == nil {
+		return nil
+	}
+	res := &types.RiskDetectionScope{
+		Category:     *v.Category,
+		ScopeInclude: v.ScopeInclude,
+		ScopeExempt:  v.ScopeExempt,
+	}
+
+	return res
+}
+
 // unmarshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig builds
 // a value of type *types.RiskPolicyModelConfig from a value of type
 // *RiskPolicyModelConfigRequestBody.
@@ -10094,6 +10110,22 @@ func unmarshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig(v *Ri
 		Model:       v.Model,
 		Temperature: v.Temperature,
 		FailOpen:    v.FailOpen,
+	}
+
+	return res
+}
+
+// marshalTypesRiskDetectionScopeToRiskDetectionScopeResponseBody builds a
+// value of type *RiskDetectionScopeResponseBody from a value of type
+// *types.RiskDetectionScope.
+func marshalTypesRiskDetectionScopeToRiskDetectionScopeResponseBody(v *types.RiskDetectionScope) *RiskDetectionScopeResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &RiskDetectionScopeResponseBody{
+		Category:     v.Category,
+		ScopeInclude: v.ScopeInclude,
+		ScopeExempt:  v.ScopeExempt,
 	}
 
 	return res
@@ -10129,6 +10161,7 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 		Enabled:                v.Enabled,
 		Action:                 v.Action,
 		AudienceType:           v.AudienceType,
+		ShadowMcpDisposition:   v.ShadowMcpDisposition,
 		AutoName:               v.AutoName,
 		UserMessage:            v.UserMessage,
 		Prompt:                 v.Prompt,
@@ -10163,6 +10196,16 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 		res.ApprovedEmailDomains = make([]string, len(v.ApprovedEmailDomains))
 		for i, val := range v.ApprovedEmailDomains {
 			res.ApprovedEmailDomains[i] = val
+		}
+	}
+	if v.DetectionScopes != nil {
+		res.DetectionScopes = make([]*RiskDetectionScopeResponseBody, len(v.DetectionScopes))
+		for i, val := range v.DetectionScopes {
+			if val == nil {
+				res.DetectionScopes[i] = nil
+				continue
+			}
+			res.DetectionScopes[i] = marshalTypesRiskDetectionScopeToRiskDetectionScopeResponseBody(val)
 		}
 	}
 	if v.DisabledRules != nil {
@@ -10244,24 +10287,24 @@ func marshalRiskBuiltinExclusionEntryToBuiltinExclusionEntryResponseBody(v *risk
 // *RiskResultResponseBody from a value of type *types.RiskResult.
 func marshalTypesRiskResultToRiskResultResponseBody(v *types.RiskResult) *RiskResultResponseBody {
 	res := &RiskResultResponseBody{
-		ID:            v.ID,
-		PolicyID:      v.PolicyID,
-		PolicyVersion: v.PolicyVersion,
-		BlockID:       v.BlockID,
-		ChatMessageID: v.ChatMessageID,
-		ChatID:        v.ChatID,
-		ChatTitle:     v.ChatTitle,
-		UserID:        v.UserID,
-		Source:        v.Source,
-		RuleID:        v.RuleID,
-		Description:   v.Description,
-		Match:         v.Match,
-		StartPos:      v.StartPos,
-		EndPos:        v.EndPos,
-		Confidence:    v.Confidence,
-		MatchRedacted: v.MatchRedacted,
-		CreatedAt:     v.CreatedAt,
-		Replayed:      v.Replayed,
+		ID:                v.ID,
+		PolicyID:          v.PolicyID,
+		PolicyVersion:     v.PolicyVersion,
+		BlockID:           v.BlockID,
+		ChatMessageID:     v.ChatMessageID,
+		ChatContentPartID: v.ChatContentPartID,
+		ChatID:            v.ChatID,
+		ChatTitle:         v.ChatTitle,
+		UserID:            v.UserID,
+		Source:            v.Source,
+		RuleID:            v.RuleID,
+		Description:       v.Description,
+		Match:             v.Match,
+		StartPos:          v.StartPos,
+		EndPos:            v.EndPos,
+		Confidence:        v.Confidence,
+		MatchRedacted:     v.MatchRedacted,
+		CreatedAt:         v.CreatedAt,
 	}
 	if v.Tags != nil {
 		res.Tags = make([]string, len(v.Tags))
@@ -10305,20 +10348,21 @@ func marshalTypesRiskSpanToRiskSpanResponseBody(v *types.RiskSpan) *RiskSpanResp
 // *types.RiskResultRedacted.
 func marshalTypesRiskResultRedactedToRiskResultRedactedResponseBody(v *types.RiskResultRedacted) *RiskResultRedactedResponseBody {
 	res := &RiskResultRedactedResponseBody{
-		ID:            v.ID,
-		PolicyID:      v.PolicyID,
-		PolicyVersion: v.PolicyVersion,
-		ChatMessageID: v.ChatMessageID,
-		ChatID:        v.ChatID,
-		ChatTitle:     v.ChatTitle,
-		UserID:        v.UserID,
-		Source:        v.Source,
-		RuleID:        v.RuleID,
-		Description:   v.Description,
-		MatchRedacted: v.MatchRedacted,
-		PositionKnown: v.PositionKnown,
-		Confidence:    v.Confidence,
-		CreatedAt:     v.CreatedAt,
+		ID:                v.ID,
+		PolicyID:          v.PolicyID,
+		PolicyVersion:     v.PolicyVersion,
+		ChatMessageID:     v.ChatMessageID,
+		ChatContentPartID: v.ChatContentPartID,
+		ChatID:            v.ChatID,
+		ChatTitle:         v.ChatTitle,
+		UserID:            v.UserID,
+		Source:            v.Source,
+		RuleID:            v.RuleID,
+		Description:       v.Description,
+		MatchRedacted:     v.MatchRedacted,
+		PositionKnown:     v.PositionKnown,
+		Confidence:        v.Confidence,
+		CreatedAt:         v.CreatedAt,
 	}
 	if v.Tags != nil {
 		res.Tags = make([]string, len(v.Tags))
@@ -10428,12 +10472,16 @@ func marshalRiskRiskOverviewTimeSeriesFindingToRiskOverviewTimeSeriesFindingResp
 // *risk.RiskCategoryDefinition.
 func marshalRiskRiskCategoryDefinitionToRiskCategoryDefinitionResponseBody(v *risk.RiskCategoryDefinition) *RiskCategoryDefinitionResponseBody {
 	res := &RiskCategoryDefinitionResponseBody{
-		Key:          v.Key,
-		Label:        v.Label,
-		Description:  v.Description,
-		Icon:         v.Icon,
-		Source:       v.Source,
-		RuleIDPrefix: v.RuleIDPrefix,
+		Key:                        v.Key,
+		Label:                      v.Label,
+		Description:                v.Description,
+		Icon:                       v.Icon,
+		Source:                     v.Source,
+		RuleIDPrefix:               v.RuleIDPrefix,
+		RecommendedScopeInclude:    v.RecommendedScopeInclude,
+		RecommendedScopeExempt:     v.RecommendedScopeExempt,
+		RecommendedScopeRationale:  v.RecommendedScopeRationale,
+		RecommendedScopeApplicable: v.RecommendedScopeApplicable,
 	}
 	if v.RuleIds != nil {
 		res.RuleIds = make([]string, len(v.RuleIds))

@@ -33,14 +33,18 @@ func TestScan_NoSecrets(t *testing.T) {
 
 func TestScan_DetectsAWSKey(t *testing.T) {
 	t.Parallel()
-	// Use realistic-looking keys — "EXAMPLE" is globally allowlisted by gitleaks.
-	content := `Here is my AWS key: AKIAIOSFODNN7REALKEY and secret: wJalrXUtnFEMI/K7MDENG/bPxRfiCYREALKEYXX`
+	// The access key id anchors detection but is not reported on its own; the
+	// secret access key is the flagged finding. ("EXAMPLE" values are globally
+	// allowlisted by gitleaks, so the fixtures avoid them.)
+	content := `AccessKeyId: ` + fakeAccessKeyID + `, SecretAccessKey: ` + fakeSecret
 	findings, err := gitleaks.NewScanner().Scan(t.Context(), content)
 	require.NoError(t, err)
 	assert.NotEmpty(t, findings, "expected at least one finding for AWS credentials")
 	for _, f := range findings {
 		assert.NotEmpty(t, f.RuleID)
 		assert.NotEmpty(t, f.Description)
+		assert.NotEqual(t, gitleaks.AccessKeyIDRuleID, f.RuleID,
+			"the access key id must not be reported as a finding")
 	}
 }
 

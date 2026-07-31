@@ -1682,6 +1682,965 @@ func DecodeMoveIssuerResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
+// BuildGetIssuerMigratePreflightRequest instantiates a HTTP request object
+// with method and path set to call the "organizationRemoteSessionIssuers"
+// service "getIssuerMigratePreflight" endpoint
+func (c *Client) BuildGetIssuerMigratePreflightRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetIssuerMigratePreflightOrganizationRemoteSessionIssuersPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetIssuerMigratePreflightRequest returns an encoder for requests sent
+// to the organizationRemoteSessionIssuers getIssuerMigratePreflight server.
+func EncodeGetIssuerMigratePreflightRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizationremotesessionissuers.GetIssuerMigratePreflightPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", "*organizationremotesessionissuers.GetIssuerMigratePreflightPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		values := req.URL.Query()
+		values.Add("source_id", p.SourceID)
+		values.Add("target_id", p.TargetID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetIssuerMigratePreflightResponse returns a decoder for responses
+// returned by the organizationRemoteSessionIssuers getIssuerMigratePreflight
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeGetIssuerMigratePreflightResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetIssuerMigratePreflightResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetIssuerMigratePreflightResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+			}
+			err = ValidateGetIssuerMigratePreflightResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+			}
+			res := NewGetIssuerMigratePreflightOrganizationIssuerMigratePreflightOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetIssuerMigratePreflightUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+			}
+			err = ValidateGetIssuerMigratePreflightUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+			}
+			return nil, NewGetIssuerMigratePreflightUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetIssuerMigratePreflightForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+			}
+			err = ValidateGetIssuerMigratePreflightForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+			}
+			return nil, NewGetIssuerMigratePreflightForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetIssuerMigratePreflightBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+			}
+			err = ValidateGetIssuerMigratePreflightBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+			}
+			return nil, NewGetIssuerMigratePreflightBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetIssuerMigratePreflightNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+			}
+			err = ValidateGetIssuerMigratePreflightNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+			}
+			return nil, NewGetIssuerMigratePreflightNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetIssuerMigratePreflightConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+			}
+			err = ValidateGetIssuerMigratePreflightConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+			}
+			return nil, NewGetIssuerMigratePreflightConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetIssuerMigratePreflightUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+			}
+			err = ValidateGetIssuerMigratePreflightUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+			}
+			return nil, NewGetIssuerMigratePreflightUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetIssuerMigratePreflightInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+			}
+			err = ValidateGetIssuerMigratePreflightInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+			}
+			return nil, NewGetIssuerMigratePreflightInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetIssuerMigratePreflightInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+				}
+				err = ValidateGetIssuerMigratePreflightInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+				}
+				return nil, NewGetIssuerMigratePreflightInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetIssuerMigratePreflightUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+				}
+				err = ValidateGetIssuerMigratePreflightUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+				}
+				return nil, NewGetIssuerMigratePreflightUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetIssuerMigratePreflightGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+			}
+			err = ValidateGetIssuerMigratePreflightGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+			}
+			return nil, NewGetIssuerMigratePreflightGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildMigrateIssuerRequest instantiates a HTTP request object with method and
+// path set to call the "organizationRemoteSessionIssuers" service
+// "migrateIssuer" endpoint
+func (c *Client) BuildMigrateIssuerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: MigrateIssuerOrganizationRemoteSessionIssuersPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizationRemoteSessionIssuers", "migrateIssuer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeMigrateIssuerRequest returns an encoder for requests sent to the
+// organizationRemoteSessionIssuers migrateIssuer server.
+func EncodeMigrateIssuerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizationremotesessionissuers.MigrateIssuerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizationRemoteSessionIssuers", "migrateIssuer", "*organizationremotesessionissuers.MigrateIssuerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		body := NewMigrateIssuerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeMigrateIssuerResponse returns a decoder for responses returned by the
+// organizationRemoteSessionIssuers migrateIssuer endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeMigrateIssuerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeMigrateIssuerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body MigrateIssuerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+			}
+			err = ValidateMigrateIssuerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+			}
+			res := NewMigrateIssuerMigrateOrganizationRemoteSessionIssuerResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body MigrateIssuerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+			}
+			err = ValidateMigrateIssuerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+			}
+			return nil, NewMigrateIssuerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body MigrateIssuerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+			}
+			err = ValidateMigrateIssuerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+			}
+			return nil, NewMigrateIssuerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body MigrateIssuerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+			}
+			err = ValidateMigrateIssuerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+			}
+			return nil, NewMigrateIssuerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body MigrateIssuerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+			}
+			err = ValidateMigrateIssuerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+			}
+			return nil, NewMigrateIssuerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body MigrateIssuerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+			}
+			err = ValidateMigrateIssuerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+			}
+			return nil, NewMigrateIssuerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body MigrateIssuerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+			}
+			err = ValidateMigrateIssuerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+			}
+			return nil, NewMigrateIssuerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body MigrateIssuerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+			}
+			err = ValidateMigrateIssuerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+			}
+			return nil, NewMigrateIssuerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body MigrateIssuerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+				}
+				err = ValidateMigrateIssuerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+				}
+				return nil, NewMigrateIssuerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body MigrateIssuerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+				}
+				err = ValidateMigrateIssuerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+				}
+				return nil, NewMigrateIssuerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizationRemoteSessionIssuers", "migrateIssuer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body MigrateIssuerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+			}
+			err = ValidateMigrateIssuerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+			}
+			return nil, NewMigrateIssuerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizationRemoteSessionIssuers", "migrateIssuer", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildFetchIssuerMetadataRequest instantiates a HTTP request object with
+// method and path set to call the "organizationRemoteSessionIssuers" service
+// "fetchIssuerMetadata" endpoint
+func (c *Client) BuildFetchIssuerMetadataRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: FetchIssuerMetadataOrganizationRemoteSessionIssuersPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizationRemoteSessionIssuers", "fetchIssuerMetadata", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeFetchIssuerMetadataRequest returns an encoder for requests sent to the
+// organizationRemoteSessionIssuers fetchIssuerMetadata server.
+func EncodeFetchIssuerMetadataRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizationremotesessionissuers.FetchIssuerMetadataPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizationRemoteSessionIssuers", "fetchIssuerMetadata", "*organizationremotesessionissuers.FetchIssuerMetadataPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		body := NewFetchIssuerMetadataRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+		}
+		return nil
+	}
+}
+
+// DecodeFetchIssuerMetadataResponse returns a decoder for responses returned
+// by the organizationRemoteSessionIssuers fetchIssuerMetadata endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeFetchIssuerMetadataResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeFetchIssuerMetadataResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body FetchIssuerMetadataResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+			}
+			err = ValidateFetchIssuerMetadataResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+			}
+			res := NewFetchIssuerMetadataRemoteSessionIssuerDraftOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body FetchIssuerMetadataUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+			}
+			err = ValidateFetchIssuerMetadataUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+			}
+			return nil, NewFetchIssuerMetadataUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body FetchIssuerMetadataForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+			}
+			err = ValidateFetchIssuerMetadataForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+			}
+			return nil, NewFetchIssuerMetadataForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body FetchIssuerMetadataBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+			}
+			err = ValidateFetchIssuerMetadataBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+			}
+			return nil, NewFetchIssuerMetadataBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body FetchIssuerMetadataNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+			}
+			err = ValidateFetchIssuerMetadataNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+			}
+			return nil, NewFetchIssuerMetadataNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body FetchIssuerMetadataConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+			}
+			err = ValidateFetchIssuerMetadataConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+			}
+			return nil, NewFetchIssuerMetadataConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body FetchIssuerMetadataUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+			}
+			err = ValidateFetchIssuerMetadataUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+			}
+			return nil, NewFetchIssuerMetadataUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body FetchIssuerMetadataInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+			}
+			err = ValidateFetchIssuerMetadataInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+			}
+			return nil, NewFetchIssuerMetadataInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body FetchIssuerMetadataInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+				}
+				err = ValidateFetchIssuerMetadataInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+				}
+				return nil, NewFetchIssuerMetadataInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body FetchIssuerMetadataUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+				}
+				err = ValidateFetchIssuerMetadataUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+				}
+				return nil, NewFetchIssuerMetadataUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizationRemoteSessionIssuers", "fetchIssuerMetadata", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body FetchIssuerMetadataGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+			}
+			err = ValidateFetchIssuerMetadataGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+			}
+			return nil, NewFetchIssuerMetadataGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizationRemoteSessionIssuers", "fetchIssuerMetadata", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRefreshIssuerMetadataRequest instantiates a HTTP request object with
+// method and path set to call the "organizationRemoteSessionIssuers" service
+// "refreshIssuerMetadata" endpoint
+func (c *Client) BuildRefreshIssuerMetadataRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RefreshIssuerMetadataOrganizationRemoteSessionIssuersPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizationRemoteSessionIssuers", "refreshIssuerMetadata", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRefreshIssuerMetadataRequest returns an encoder for requests sent to
+// the organizationRemoteSessionIssuers refreshIssuerMetadata server.
+func EncodeRefreshIssuerMetadataRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizationremotesessionissuers.RefreshIssuerMetadataPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizationRemoteSessionIssuers", "refreshIssuerMetadata", "*organizationremotesessionissuers.RefreshIssuerMetadataPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		body := NewRefreshIssuerMetadataRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRefreshIssuerMetadataResponse returns a decoder for responses returned
+// by the organizationRemoteSessionIssuers refreshIssuerMetadata endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeRefreshIssuerMetadataResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRefreshIssuerMetadataResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RefreshIssuerMetadataResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+			}
+			err = ValidateRefreshIssuerMetadataResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+			}
+			res := NewRefreshIssuerMetadataRemoteSessionIssuerRefreshOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RefreshIssuerMetadataUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+			}
+			err = ValidateRefreshIssuerMetadataUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+			}
+			return nil, NewRefreshIssuerMetadataUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RefreshIssuerMetadataForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+			}
+			err = ValidateRefreshIssuerMetadataForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+			}
+			return nil, NewRefreshIssuerMetadataForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RefreshIssuerMetadataBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+			}
+			err = ValidateRefreshIssuerMetadataBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+			}
+			return nil, NewRefreshIssuerMetadataBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RefreshIssuerMetadataNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+			}
+			err = ValidateRefreshIssuerMetadataNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+			}
+			return nil, NewRefreshIssuerMetadataNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RefreshIssuerMetadataConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+			}
+			err = ValidateRefreshIssuerMetadataConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+			}
+			return nil, NewRefreshIssuerMetadataConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RefreshIssuerMetadataUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+			}
+			err = ValidateRefreshIssuerMetadataUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+			}
+			return nil, NewRefreshIssuerMetadataUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RefreshIssuerMetadataInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+			}
+			err = ValidateRefreshIssuerMetadataInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+			}
+			return nil, NewRefreshIssuerMetadataInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RefreshIssuerMetadataInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+				}
+				err = ValidateRefreshIssuerMetadataInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+				}
+				return nil, NewRefreshIssuerMetadataInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RefreshIssuerMetadataUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+				}
+				err = ValidateRefreshIssuerMetadataUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+				}
+				return nil, NewRefreshIssuerMetadataUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizationRemoteSessionIssuers", "refreshIssuerMetadata", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RefreshIssuerMetadataGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+			}
+			err = ValidateRefreshIssuerMetadataGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
+			}
+			return nil, NewRefreshIssuerMetadataGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizationRemoteSessionIssuers", "refreshIssuerMetadata", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalOrganizationRemoteSessionIssuerResponseBodyToOrganizationremotesessionissuersOrganizationRemoteSessionIssuer
 // builds a value of type
 // *organizationremotesessionissuers.OrganizationRemoteSessionIssuer from a

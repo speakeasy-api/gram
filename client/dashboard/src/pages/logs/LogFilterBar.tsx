@@ -1,24 +1,24 @@
 import { QuerySamplesPopover } from "@/components/QuerySamplesPopover";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import {
   CommandEmpty,
   CommandGroup,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
+} from "@/components/ui/Command";
 import {
   Popover,
   PopoverAnchor,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
+} from "@/components/ui/Popover";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import { cn } from "@/lib/utils";
 import { Operator as Op } from "@gram/client/models/components/logfilter";
 import { Command as CmdkRoot } from "cmdk";
@@ -643,7 +643,7 @@ function EditableFilterChip({
         <div className="flex items-center justify-between">
           <Button
             type="button"
-            variant="destructiveGhost"
+            variant="destructive-secondary"
             size="sm"
             onClick={() => {
               onRemove(filter.id);
@@ -655,7 +655,7 @@ function EditableFilterChip({
           <div className="flex gap-2">
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               size="sm"
               onClick={() => setOpen(false)}
             >

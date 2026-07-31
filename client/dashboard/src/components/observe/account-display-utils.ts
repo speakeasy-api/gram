@@ -18,9 +18,11 @@ export type DisplayAccount = {
 // Friendly labels for the AI providers an account can belong to. Falls back to a
 // capitalized provider slug so a newly-added provider still renders sensibly.
 const PROVIDER_LABELS: Record<string, string> = {
-  anthropic: "Claude",
-  openai: "Codex",
+  anthropic: "Anthropic",
+  openai: "OpenAI",
   cursor: "Cursor",
+  google: "Google",
+  aws: "AWS",
 };
 
 export function providerLabel(provider: string): string {

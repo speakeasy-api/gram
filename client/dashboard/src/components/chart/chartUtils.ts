@@ -78,11 +78,31 @@ export function unixNanoToDate(value: string): Date {
   return new Date(millis);
 }
 
+/**
+ * The same conversion as {@link unixNanoToDate}, as epoch milliseconds — for
+ * bucket math. Unlike the Date variant it swallows malformed input (returns
+ * 0) so a bad timestamp degrades a chart axis instead of crashing the page.
+ */
+export function unixNanoToMs(nano: string): number {
+  try {
+    return Number(BigInt(nano) / 1_000_000n);
+  } catch {
+    return 0;
+  }
+}
+
 export type ThresholdConfig = {
   red: number;
   amber: number;
   inverted?: boolean; // Set to true if lower is better (like latency)
 };
+
+// Design-system feedback colors, matching the weight of destructive/success
+// tokens elsewhere — not raw Tailwind palette classes.
+const VALUE_RED = "text-destructive";
+const VALUE_AMBER =
+  "text-[var(--color-feedback-orange-700)] dark:text-[var(--color-feedback-orange-500)]";
+const VALUE_GREEN = "text-success-foreground";
 
 export function getValueColor(
   value: number,
@@ -92,13 +112,13 @@ export function getValueColor(
 
   if (thresholds.inverted) {
     // Lower is better (e.g., latency)
-    if (value > thresholds.red) return "text-red-500";
-    if (value > thresholds.amber) return "text-amber-500";
-    return "text-emerald-600";
+    if (value > thresholds.red) return VALUE_RED;
+    if (value > thresholds.amber) return VALUE_AMBER;
+    return VALUE_GREEN;
   } else {
     // Higher is better (e.g., chats, resolution rate)
-    if (value < thresholds.red) return "text-red-500";
-    if (value < thresholds.amber) return "text-amber-500";
-    return "text-emerald-600";
+    if (value < thresholds.red) return VALUE_RED;
+    if (value < thresholds.amber) return VALUE_AMBER;
+    return VALUE_GREEN;
   }
 }

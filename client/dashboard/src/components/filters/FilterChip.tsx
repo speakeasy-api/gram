@@ -1,18 +1,18 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
+} from "@/components/ui/Popover";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import { Operator } from "@gram/client/models/components/logfilter";
 import { OP_LABELS, type ActiveLogFilter } from "@/pages/logs/log-filter-types";
 
@@ -178,7 +178,7 @@ export function CustomFilterChip({
         <div className="flex items-center justify-between">
           <Button
             type="button"
-            variant="destructiveGhost"
+            variant="destructive-secondary"
             size="sm"
             onClick={() => {
               onRemove(filter.id);
@@ -190,7 +190,7 @@ export function CustomFilterChip({
           <div className="flex gap-2">
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               size="sm"
               onClick={() => setOpen(false)}
             >

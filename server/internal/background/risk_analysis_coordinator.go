@@ -83,7 +83,7 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 		logger.Error("fetch unanalyzed messages failed", "error", err.Error())
 	}
 
-	if len(fetchResult.MessageIDs) > 0 && len(fetchResult.Policies) > 0 {
+	if (len(fetchResult.MessageIDs) > 0 || len(fetchResult.ContentPartIDs) > 0) && len(fetchResult.Policies) > 0 {
 		// Fan-out: one activity per (policy, batch).
 		var futures []workflow.Future
 		for _, policy := range fetchResult.Policies {
@@ -94,6 +94,7 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 					RiskPolicyID:     policy.ID,
 					PolicyVersion:    policy.Version,
 					MessageIDs:       batch,
+					ContentPartIDs:   nil,
 					Sources:          policy.Sources,
 					MessageTypes:     policy.MessageTypes,
 					PresidioEntities: policy.PresidioEntities,
@@ -106,6 +107,26 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 					// policy's AnalyzerConfig (defaults to true). The zero value here
 					// does NOT disable the library; it is required only by exhaustruct.
 					BuiltinPresetsEnabled: false,
+					DetectionScopes:       nil,
+				})
+				futures = append(futures, f)
+			}
+			for _, batch := range chunkUUIDs(fetchResult.ContentPartIDs, riskCoordinatorBatchSize) {
+				f := workflow.ExecuteActivity(analyzeBatchCtx, a.AnalyzeBatch, risk_analysis.AnalyzeBatchArgs{
+					ProjectID:              params.ProjectID,
+					OrganizationID:         policy.OrganizationID,
+					RiskPolicyID:           policy.ID,
+					PolicyVersion:          policy.Version,
+					MessageIDs:             nil,
+					ContentPartIDs:         batch,
+					Sources:                policy.Sources,
+					MessageTypes:           policy.MessageTypes,
+					PresidioEntities:       policy.PresidioEntities,
+					PresidioScoreThreshold: 0,
+					ApprovedEmailDomains:   nil,
+					CustomRuleIds:          policy.CustomRuleIds,
+					BuiltinPresetsEnabled:  false,
+					DetectionScopes:        nil,
 				})
 				futures = append(futures, f)
 			}
@@ -118,10 +139,13 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 			}
 		}
 
-		// Mark all fetched messages analyzed (best-effort).
+		// Mark all fetched units analyzed (best-effort), matching how chat
+		// messages have always been marked. Retry semantics are deliberately
+		// identical for both so one cannot silently diverge from the other.
 		if err := workflow.ExecuteActivity(ctx, a.MarkMessagesAnalyzed, risk_analysis.MarkMessagesAnalyzedArgs{
-			ProjectID:  params.ProjectID,
-			MessageIDs: fetchResult.MessageIDs,
+			ProjectID:      params.ProjectID,
+			MessageIDs:     fetchResult.MessageIDs,
+			ContentPartIDs: fetchResult.ContentPartIDs,
 		}).Get(ctx, nil); err != nil {
 			logger.Error("mark messages analyzed failed", "error", err.Error())
 		}
@@ -159,12 +183,9 @@ func drainSignals(ch workflow.ReceiveChannel) bool {
 
 // ── Signaler ────────────────────────────────────────────────────────────────
 
-// RiskAnalysisSignaler sends signals to the per-project coordinator workflow.
-type RiskAnalysisSignaler interface {
-	Signal(ctx context.Context, projectID uuid.UUID) error
-}
-
-// TemporalRiskAnalysisSignaler implements RiskAnalysisSignaler using Temporal.
+// TemporalRiskAnalysisSignaler signals the per-project risk analysis
+// coordinator workflow over Temporal. Consumers declare the narrow interface
+// they need — risk.RiskAnalysisSignaler, ProjectSignaler below.
 type TemporalRiskAnalysisSignaler struct {
 	TemporalEnv *tenv.Environment
 	Logger      *slog.Logger
@@ -199,18 +220,26 @@ func (s *TemporalRiskAnalysisSignaler) Signal(ctx context.Context, projectID uui
 
 // ── Throttled Signaler ───────────────────────────────────────────────────────
 
-// ThrottledSignaler wraps a RiskAnalysisSignaler with per-project throttling.
+// ProjectSignaler wakes a per-project coordinator workflow. Every coordinator
+// in this package is signalled the same way — a project id, no payload, one
+// live run per project — so one throttle serves all of them; the logger a
+// caller hands NewThrottledSignaler is what names which one in the logs.
+type ProjectSignaler interface {
+	Signal(ctx context.Context, projectID uuid.UUID) error
+}
+
+// ThrottledSignaler wraps a ProjectSignaler with per-project throttling.
 // The first signal fires immediately. Subsequent signals within the cooldown
 // are coalesced into a single trailing signal when the window expires.
 type ThrottledSignaler struct {
-	inner    RiskAnalysisSignaler
+	inner    ProjectSignaler
 	logger   *slog.Logger
 	throttle *throttle.Throttle[uuid.UUID, uuid.UUID]
 }
 
 // NewThrottledSignaler wraps inner with a per-project cooldown. A zero or
 // negative cooldown disables throttling.
-func NewThrottledSignaler(inner RiskAnalysisSignaler, cooldown time.Duration, logger *slog.Logger) *ThrottledSignaler {
+func NewThrottledSignaler(inner ProjectSignaler, cooldown time.Duration, logger *slog.Logger) *ThrottledSignaler {
 	ts := &ThrottledSignaler{
 		inner:    inner,
 		logger:   logger,
@@ -220,13 +249,13 @@ func NewThrottledSignaler(inner RiskAnalysisSignaler, cooldown time.Duration, lo
 		return projectID
 	}, func(projectID uuid.UUID) error {
 		if err := inner.Signal(context.Background(), projectID); err != nil {
-			logger.ErrorContext(context.Background(), "throttled trailing risk signal failed",
+			logger.ErrorContext(context.Background(), "throttled trailing coordinator signal failed",
 				attr.SlogError(err),
 				attr.SlogProjectID(projectID.String()),
 			)
 			return fmt.Errorf("throttled trailing signal: %w", err)
 		}
-		logger.DebugContext(context.Background(), "risk signal fired (trailing edge)",
+		logger.DebugContext(context.Background(), "coordinator signal fired (trailing edge)",
 			attr.SlogProjectID(projectID.String()),
 		)
 		return nil
@@ -242,14 +271,14 @@ func (t *ThrottledSignaler) Signal(ctx context.Context, projectID uuid.UUID) err
 		return nil
 	}
 	if t.throttle.Do(projectID) {
-		t.logger.DebugContext(ctx, "risk signal fired (leading edge)",
+		t.logger.DebugContext(ctx, "coordinator signal fired (leading edge)",
 			attr.SlogProjectID(projectID.String()),
 		)
 		if err := t.inner.Signal(ctx, projectID); err != nil {
 			return fmt.Errorf("signal: %w", err)
 		}
 	} else {
-		t.logger.DebugContext(ctx, "risk signal throttled (pending trailing)",
+		t.logger.DebugContext(ctx, "coordinator signal throttled (pending trailing)",
 			attr.SlogProjectID(projectID.String()),
 		)
 	}
@@ -258,7 +287,7 @@ func (t *ThrottledSignaler) Signal(ctx context.Context, projectID uuid.UUID) err
 
 // Shutdown flushes any pending throttled signals. Call during graceful shutdown.
 func (t *ThrottledSignaler) Shutdown(_ context.Context) error {
-	t.logger.InfoContext(context.Background(), "flushing pending risk analysis signals")
+	t.logger.InfoContext(context.Background(), "flushing pending coordinator signals")
 	t.throttle.Flush()
 	return nil
 }

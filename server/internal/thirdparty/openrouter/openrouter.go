@@ -82,6 +82,7 @@ func (k KeyType) Validate() error {
 // Just a general allowlist for models we allow to proxy through us for playground usage, chat, or agentic usecases
 // This list can stay sufficiently robust, we should just need to allow list a model before it goes through us
 var allowList = map[string]bool{
+	"anthropic/claude-opus-5":       true,
 	"anthropic/claude-fable-5":      true,
 	"anthropic/claude-sonnet-5":     true,
 	"anthropic/claude-opus-4.8":     true,
@@ -103,6 +104,7 @@ var allowList = map[string]bool{
 	"openai/gpt-5.1":                true,
 	"openai/gpt-5":                  true,
 	"google/gemini-3.5-flash":       true,
+	"google/gemini-3.5-flash-lite":  true,
 	"google/gemini-3.1-pro-preview": true,
 	"google/gemini-3.1-flash-lite":  true,
 	"deepseek/deepseek-v4-pro":      true,

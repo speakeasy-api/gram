@@ -75,7 +75,7 @@ export const INSIGHTS_SUGGESTION_ICONS = {
   zap: Zap,
 } satisfies Record<string, LucideIcon>;
 
-type InsightsSuggestionIcon = keyof typeof INSIGHTS_SUGGESTION_ICONS;
+export type InsightsSuggestionIcon = keyof typeof INSIGHTS_SUGGESTION_ICONS;
 
 export interface InsightsSuggestion {
   /** Chip text — a short question. */
@@ -924,7 +924,7 @@ export const INSIGHTS_SUGGESTIONS = {
       label: "what detectors are available",
       icon: "sparkles",
       prompt:
-        "Which detection backends are configured on this server (e.g. the prompt-injection ML classifier)?",
+        "Which detection backends are configured on this server (e.g. the prompt-injection LLM judge)?",
     },
   ],
 

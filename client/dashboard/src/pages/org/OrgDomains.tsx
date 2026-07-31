@@ -1,9 +1,9 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Page } from "@/components/page-layout";
-import { Badge } from "@/components/ui/badge";
-import { Dialog } from "@/components/ui/dialog";
-import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/Badge";
+import { Dialog } from "@/components/ui/Dialog";
+import { Heading } from "@/components/ui/Heading";
+import { Input } from "@/components/ui/Input";
 import {
   Sheet,
   SheetContent,
@@ -11,9 +11,9 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useProductTier } from "@/hooks/useProductTier";
 import {
@@ -23,11 +23,14 @@ import {
 import { HumanizeDateTime } from "@/lib/dates";
 import { cn, getCustomDomainCNAME } from "@/lib/utils";
 import { useCustomDomainMcpEndpoints } from "@gram/client/react-query/customDomainMcpEndpoints";
+import { useCheckDomainHealthMutation } from "@gram/client/react-query/checkDomainHealth";
 import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
-import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
+import { invalidateAllListDomains } from "@gram/client/react-query/listDomains";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
 import { useUpdateDomainMutation } from "@gram/client/react-query/updateDomain";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -35,12 +38,14 @@ import {
   ChevronRight,
   Copy,
   Globe,
+  AlertTriangle,
   Loader2,
   Trash2,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
+import { toast } from "sonner";
 
 export default function OrgDomains(): JSX.Element {
   return (
@@ -81,6 +86,90 @@ function validateIPEntry(entry: string): string {
 }
 
 type IPRow = { id: number; value: string; error: string | null };
+
+const healthIssueMessages: Record<string, string> = {
+  dns_not_found:
+    "We couldn't find DNS records for this domain. Set this record with your DNS provider:",
+  dns_target_mismatch:
+    "This domain's DNS does not resolve to the expected CNAME target. If the domain sits behind a proxy or CDN, traffic may still work; otherwise set this DNS record:",
+  resource_missing:
+    "The routing configuration for this domain is missing. Run the check again to confirm the problem persists.",
+  certificate_missing:
+    "The TLS certificate for this domain is missing. Run the check again to confirm the problem persists.",
+  certificate_not_ready:
+    "The TLS certificate for this domain is not ready. Check your DNS configuration, then run the check again.",
+  certificate_expired:
+    "The TLS certificate for this domain has expired. Check your DNS configuration, then run the check again.",
+  certificate_invalid:
+    "The TLS certificate does not match this domain or could not be read. Run the check again to confirm the problem persists.",
+  check_failed:
+    "We couldn't complete the latest health check. Run it again to confirm whether the domain is healthy.",
+};
+
+function customDomainHealthMessage(issue?: string): string {
+  return issue
+    ? (healthIssueMessages[issue] ??
+        "The latest health check found a problem with this domain.")
+    : "The latest health check found a problem with this domain.";
+}
+
+// DNS-shaped issues end in a colon and expect the exact record the customer
+// must create; the other messages stand alone.
+function CustomDomainHealthMessage({
+  issue,
+  domainName,
+}: {
+  issue?: string;
+  domainName: string;
+}) {
+  const showsExpectedRecord =
+    issue === "dns_not_found" || issue === "dns_target_mismatch";
+  return (
+    <>
+      {customDomainHealthMessage(issue)}
+      {showsExpectedRecord && (
+        <>
+          {" "}
+          <code className="break-all">
+            {domainName} CNAME {getCustomDomainCNAME()}
+          </code>
+        </>
+      )}
+    </>
+  );
+}
+
+// A single failed probe (check_failed) is usually a transient Gram-side issue,
+// not a customer-actionable problem; only surface it once it has persisted
+// across consecutive checks.
+function showCustomDomainUnhealthy(domain: {
+  verified: boolean;
+  healthStatus?: string;
+  healthIssue?: string;
+  consecutiveFailures?: number;
+}): boolean {
+  if (!domain.verified || domain.healthStatus !== "unhealthy") {
+    return false;
+  }
+  return (
+    domain.healthIssue !== "check_failed" ||
+    (domain.consecutiveFailures ?? 0) >= 2
+  );
+}
+
+// Unhealthy state on an unverified domain means the health sweep auto-disabled
+// it: routing was torn down and it must go back through the reverify flow.
+function showCustomDomainAutoDisabled(domain: {
+  verified: boolean;
+  healthStatus?: string;
+  unhealthySince?: unknown;
+}): boolean {
+  return (
+    !domain.verified &&
+    domain.healthStatus === "unhealthy" &&
+    Boolean(domain.unhealthySince)
+  );
+}
 
 // Inline editor: each allowlist entry is its own editable field. Entries are
 // validated on blur (and on save, by the parent via `onValidityChange`) rather
@@ -169,9 +258,9 @@ function IPAllowlistEditor({
             </Button>
           </div>
           {row.error && (
-            <Type variant="body" className="text-destructive text-xs">
+            <Text variant="body" className="text-destructive text-xs">
               {row.error}
-            </Type>
+            </Text>
           )}
         </div>
       ))}
@@ -270,17 +359,27 @@ function OrgDomainsInner() {
     onSuccess: async () => {
       setIsDeleteDomainDialogOpen(false);
       setDomainInput("");
-      await invalidateAllGetDomain(queryClient);
+      await invalidateAllListDomains(queryClient);
     },
   });
 
   const updateDomainMutation = useUpdateDomainMutation({
     onSuccess: async () => {
       setIsEditAllowlistOpen(false);
-      await invalidateAllGetDomain(queryClient);
+      await invalidateAllListDomains(queryClient);
     },
     onError: (error) => {
       setUpdateAllowlistError(error.message || "Failed to save allowlist");
+    },
+  });
+
+  const checkDomainHealthMutation = useCheckDomainHealthMutation({
+    onSuccess: async () => {
+      await invalidateAllListDomains(queryClient);
+      toast.success("Custom domain health check completed");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to check custom domain health");
     },
   });
 
@@ -338,22 +437,30 @@ function OrgDomainsInner() {
       <Heading variant="h4" className="mb-2">
         Custom Domain
       </Heading>
-      <Type muted small className="mb-6">
+      <Text muted small className="mb-6">
         Connect a custom domain to serve your MCP servers from your own branded
         URL instead of the default platform domain.
-      </Type>
+      </Text>
       {domain?.domain ? (
         <div className="border-border bg-card rounded-lg border p-4">
           <Stack direction="horizontal" justify="space-between" align="start">
             <Stack gap={1}>
               <Stack direction="horizontal" align="center" gap={2}>
                 <Globe className="text-muted-foreground h-4 w-4" />
-                <Type variant="body" className="font-mono font-medium">
+                <Text variant="body" className="font-mono font-medium">
                   {domain.domain}
-                </Type>
+                </Text>
                 {domain.isUpdating ? (
                   <SimpleTooltip tooltip="Your domain is being verified. This may take a few minutes.">
                     <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                  </SimpleTooltip>
+                ) : showCustomDomainAutoDisabled(domain) ? (
+                  <SimpleTooltip tooltip="This domain was disabled after failing health checks for over a week">
+                    <X className="h-4 w-4 stroke-3 text-red-500" />
+                  </SimpleTooltip>
+                ) : showCustomDomainUnhealthy(domain) ? (
+                  <SimpleTooltip tooltip="The latest health check found a problem">
+                    <AlertTriangle className="h-4 w-4 text-amber-500" />
                   </SimpleTooltip>
                 ) : domain.verified ? (
                   <SimpleTooltip tooltip="Domain verified and active">
@@ -365,26 +472,26 @@ function OrgDomainsInner() {
                   </SimpleTooltip>
                 )}
               </Stack>
-              <Type
+              <Text
                 variant="body"
                 className="text-muted-foreground ml-6 text-sm"
               >
                 Linked <HumanizeDateTime date={domain.createdAt} />
-              </Type>
+              </Text>
               <div className="mt-1 ml-6 flex flex-wrap items-center gap-2">
-                <Type variant="body" className="text-muted-foreground text-sm">
+                <Text variant="body" className="text-muted-foreground text-sm">
                   Allowed IPs:
-                </Type>
+                </Text>
                 {domain.ipAllowlist.length === 0 ? (
-                  <Type
+                  <Text
                     variant="body"
                     className="text-muted-foreground text-sm italic"
                   >
                     All (no restriction)
-                  </Type>
+                  </Text>
                 ) : (
                   domain.ipAllowlist.map((ip) => (
-                    <Badge key={ip} variant="secondary" className="font-mono">
+                    <Badge key={ip} variant="neutral" className="font-mono">
                       {ip}
                     </Badge>
                   ))
@@ -430,18 +537,95 @@ function OrgDomainsInner() {
               </Stack>
             </RequireScope>
           </Stack>
+          {showCustomDomainAutoDisabled(domain) && (
+            <Alert variant="error" dismissible={false} className="mt-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <Text variant="body" className="font-medium">
+                    This custom domain was disabled
+                  </Text>
+                  <Text variant="body" className="text-sm">
+                    It failed health checks continuously for over a week, so its
+                    routing and TLS certificate were removed.{" "}
+                    <CustomDomainHealthMessage
+                      issue={domain.healthIssue}
+                      domainName={domain.domain}
+                    />
+                  </Text>
+                  {domain.unhealthySince && (
+                    <Text variant="body" className="text-sm opacity-80">
+                      Unhealthy since{" "}
+                      <HumanizeDateTime date={domain.unhealthySince} />
+                    </Text>
+                  )}
+                  <Text variant="body" className="text-sm">
+                    Fix the issue above, then reverify the domain to provision
+                    it again.
+                  </Text>
+                </div>
+                <RequireScope scope="org:admin" level="component">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIsAddDomainDialogOpen(true)}
+                  >
+                    Reverify domain
+                  </Button>
+                </RequireScope>
+              </div>
+            </Alert>
+          )}
+          {showCustomDomainUnhealthy(domain) && (
+            <Alert variant="warning" dismissible={false} className="mt-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <Text variant="body" className="font-medium">
+                    This custom domain may not be working
+                  </Text>
+                  <Text variant="body" className="text-sm">
+                    <CustomDomainHealthMessage
+                      issue={domain.healthIssue}
+                      domainName={domain.domain}
+                    />
+                  </Text>
+                  {domain.healthCheckedAt && (
+                    <Text variant="body" className="text-sm opacity-80">
+                      Last checked{" "}
+                      <HumanizeDateTime date={domain.healthCheckedAt} />
+                    </Text>
+                  )}
+                </div>
+                <RequireScope scope="org:admin" level="component">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={checkDomainHealthMutation.isPending}
+                    onClick={() =>
+                      checkDomainHealthMutation.mutate({
+                        security: { sessionHeaderGramSession: "" },
+                      })
+                    }
+                  >
+                    {checkDomainHealthMutation.isPending
+                      ? "Checking..."
+                      : "Check again"}
+                  </Button>
+                </RequireScope>
+              </div>
+            </Alert>
+          )}
         </div>
       ) : (
         !domainIsLoading && (
           <div className="border-border rounded-lg border border-dashed p-6">
             <Stack gap={2} align="center" justify="center">
-              <Type variant="body" className="text-muted-foreground">
+              <Text variant="body" className="text-muted-foreground">
                 No custom domain configured
-              </Type>
-              <Type variant="body" className="text-muted-foreground text-sm">
+              </Text>
+              <Text variant="body" className="text-muted-foreground text-sm">
                 You can connect one custom domain per organization for your MCP
                 servers.
-              </Type>
+              </Text>
               <RequireScope scope="org:admin" level="component">
                 <Button
                   size="sm"
@@ -475,26 +659,26 @@ function OrgDomainsInner() {
             <Dialog.Title>Remove Custom Domain</Dialog.Title>
           </Dialog.Header>
           <div className="space-y-4 py-4">
-            <Type variant="body">
+            <Text variant="body">
               Are you sure you want to remove{" "}
               <span className="font-bold italic">{domain?.domain}</span>? This
               will delete the associated ingress and TLS certificate.
-            </Type>
+            </Text>
             {impactQuery.isLoading ? (
-              <Type variant="small" muted>
+              <Text variant="small" muted>
                 Checking for MCP endpoints under this domain&hellip;
-              </Type>
+              </Text>
             ) : impactedEndpoints.length > 0 ? (
               <div className="space-y-2">
-                <Type variant="body" className="font-semibold">
+                <Text variant="body" className="font-semibold">
                   {impactedEndpoints.length === 1
                     ? "1 MCP endpoint will be deactivated:"
                     : `${impactedEndpoints.length} MCP endpoints will be deactivated:`}
-                </Type>
+                </Text>
                 <ul className="border-border max-h-48 list-disc space-y-1 overflow-y-auto rounded-md border px-6 py-2">
                   {impactedEndpoints.map((endpoint) => (
                     <li key={endpoint.id}>
-                      <Type variant="small">
+                      <Text variant="small">
                         <span className="font-mono">
                           {domain?.domain
                             ? customDomainMcpEndpointUrl(
@@ -503,13 +687,13 @@ function OrgDomainsInner() {
                               )
                             : endpoint.slug}
                         </span>{" "}
-                        <Type variant="small" as="span" muted>
+                        <Text variant="small" as="span" muted>
                           &middot; {endpoint.projectName} &middot;{" "}
                           {endpoint.mcpServerName ??
                             endpoint.mcpServerSlug ??
                             endpoint.mcpServerId}
-                        </Type>
-                      </Type>
+                        </Text>
+                      </Text>
                     </li>
                   ))}
                 </ul>
@@ -557,15 +741,15 @@ function OrgDomainsInner() {
           </Dialog.Header>
           <div className="min-h-[420px] space-y-6 py-4">
             <div>
-              <Type
+              <Text
                 variant="body"
                 className="mb-2 block text-lg font-extrabold"
               >
                 Step 1
-              </Type>
-              <Type variant="body" className="text-muted-foreground mb-2">
+              </Text>
+              <Text variant="body" className="text-muted-foreground mb-2">
                 Enter your custom domain:
-              </Type>
+              </Text>
               <div className="space-y-2">
                 <Input
                   placeholder="Enter your domain (chat.yourdomain.com)"
@@ -579,24 +763,24 @@ function OrgDomainsInner() {
                   readOnly={!!domain?.domain}
                 />
                 {domainError && (
-                  <Type variant="body" className="text-sm text-red-500">
+                  <Text variant="body" className="text-sm text-red-500">
                     {domainError}
-                  </Type>
+                  </Text>
                 )}
               </div>
             </div>
             <div>
-              <Type
+              <Text
                 variant="body"
                 className="mb-2 block text-lg font-extrabold"
               >
                 Step 2
-              </Type>
-              <Type variant="body" className="text-muted-foreground mb-2">
+              </Text>
+              <Text variant="body" className="text-muted-foreground mb-2">
                 Create a CNAME record for{" "}
                 <span className="font-mono break-all">{subdomain}</span>{" "}
                 pointing to the following:
-              </Type>
+              </Text>
               <div className="bg-muted mt-2 flex items-center space-x-2 rounded-md p-3">
                 <code className="flex-1 break-all">{CNAME_VALUE}</code>
                 <Button
@@ -619,17 +803,17 @@ function OrgDomainsInner() {
               </div>
             </div>
             <div>
-              <Type
+              <Text
                 variant="body"
                 className="mb-2 block text-lg font-extrabold"
               >
                 Step 3
-              </Type>
-              <Type variant="body" className="text-muted-foreground mb-2">
+              </Text>
+              <Text variant="body" className="text-muted-foreground mb-2">
                 Create a TXT record at{" "}
                 <span className="font-mono break-all">{txtName}</span> with the
                 following value:
-              </Type>
+              </Text>
               <div className="bg-muted mt-2 flex items-center space-x-2 rounded-md p-3">
                 <code className="flex-1 break-all">{txtValue}</code>
                 <Button
@@ -667,13 +851,13 @@ function OrgDomainsInner() {
               </button>
               {isAllowlistExpanded && (
                 <div className="mt-3 pl-5">
-                  <Type
+                  <Text
                     variant="body"
                     className="text-muted-foreground mb-3 text-sm"
                   >
                     Restrict access to specific IP addresses or CIDR ranges.
                     Leave empty to allow all traffic.
-                  </Type>
+                  </Text>
                   <IPAllowlistEditor
                     ips={pendingIPs}
                     onIpsChange={setPendingIPs}
@@ -722,9 +906,9 @@ function OrgDomainsInner() {
               onValidityChange={setEditIPsValid}
             />
             {updateAllowlistError && (
-              <Type variant="body" className="text-destructive text-sm">
+              <Text variant="body" className="text-destructive text-sm">
                 {updateAllowlistError}
-              </Type>
+              </Text>
             )}
           </div>
           <SheetFooter className="flex-row justify-end gap-2">

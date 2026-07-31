@@ -1,6 +1,6 @@
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
-import type { BadgeProps } from "@speakeasy-api/moonshine";
+import { type BadgeProps } from "@/components/ui/Badge";
 
 export type ShadowMCPPolicyState =
   | "blocking"
@@ -14,6 +14,19 @@ export type ShadowMCPInventoryStatus =
   | "observed"
   | "pending"
   | "unavailable";
+
+export function eligibleShadowMCPAllowRulePolicies(
+  policies: RiskPolicy[] | undefined,
+): RiskPolicy[] {
+  return (
+    policies?.filter(
+      (policy) =>
+        policy.enabled &&
+        policy.action === "block" &&
+        policy.sources.includes("shadow_mcp"),
+    ) ?? []
+  );
+}
 
 export function shadowMCPPolicyState(
   policies: RiskPolicy[] | undefined,

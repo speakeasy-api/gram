@@ -6,6 +6,7 @@ import {
   ChevronUp,
   Info,
   Loader2,
+  Pin,
   Search,
   Sparkles,
   SlidersHorizontal,
@@ -20,47 +21,54 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useSearchLogsMutation } from "@gram/client/react-query/searchLogs.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
+import { useChatSetPinnedMutation } from "@gram/client/react-query/chatSetPinned.js";
+import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
+import { useSummarizeChatMutation } from "@gram/client/react-query/summarizeChat.js";
 import { QueryErrorResetBoundary, useQueryClient } from "@tanstack/react-query";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
+import { toast } from "sonner";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetTitle,
-} from "@/components/ui/sheet";
+} from "@/components/ui/Sheet";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { Dialog } from "@/components/ui/dialog";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Switch } from "@/components/ui/switch";
+} from "@/components/ui/Popover";
+import { Dialog } from "@/components/ui/Dialog";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Switch } from "@/components/ui/Switch";
 import { AccountTypeBadge } from "@/components/account-type-badge";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { ChatOwnerLabel } from "@/components/chat-owner-label";
 import { chatOwnerLabel } from "@/lib/chat-owner";
 import { handleError, toError } from "@/lib/errors";
+import { formatPlatform } from "@/lib/formatPlatform";
 import {
   ExclusionEditor,
   type ExclusionSheetState,
@@ -68,7 +76,7 @@ import {
 import { useChatTranscript } from "./useChatTranscript";
 import { useWindowedTranscript } from "./useWindowedTranscript";
 import { CreateExclusionContext } from "./exclusionContext";
-import { findingToExclusionState } from "./chatHelpers";
+import { findingToExclusionState, riskResultAnchorId } from "./chatHelpers";
 import {
   ChatTranscript,
   type RowContext,
@@ -94,6 +102,8 @@ import {
   formatUsageCost,
 } from "./claudeUsage";
 import { filterPanelTelemetryLogs, filterToolLogs } from "./chatLogFilters";
+import { WorkUnitsHeaderMetrics } from "./WorkUnitsMetrics";
+import { formatWorkUnits, workUnitsEfficiency } from "./workUnits";
 import { ToolCallsView } from "./chatLogViews";
 import { exportTraceDataAsJson } from "./chatExport";
 
@@ -259,14 +269,20 @@ function SessionSummary({
     totalTokens?: number;
     lastMessageTimestamp?: Date;
     updatedAt: Date;
+    workUnits?: number;
+    workUnitsReport?: string;
   };
-  userLabel: string;
+  userLabel: ReactNode;
   messageCount: number;
   toolCount: number;
   compact?: boolean;
 }) {
   const tokens = totalTokensFor(chat);
   const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
+  const {
+    costPerUnit: workUnitsCostPerUnit,
+    tokensPerUnit: workUnitsTokensPerUnit,
+  } = workUnitsEfficiency(chat);
   const accountEmail = personalAccountEmail(chat);
   const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
   const duration = Math.round(
@@ -328,7 +344,7 @@ function SessionSummary({
               <MetaRow label="Source">
                 <span className="inline-flex items-center gap-1.5">
                   <HookSourceIcon source={chat.source} className="size-3.5" />
-                  {chat.source}
+                  {formatPlatform(chat.source)}
                 </span>
               </MetaRow>
             )}
@@ -350,6 +366,21 @@ function SessionSummary({
             )}
             {tokens > 0 && (
               <MetaRow label="Total tokens">{tokens.toLocaleString()}</MetaRow>
+            )}
+            {chat.workUnits !== undefined && (
+              <MetaRow label="Work delivered">
+                {formatWorkUnits(chat.workUnits)}
+              </MetaRow>
+            )}
+            {workUnitsCostPerUnit !== null && (
+              <MetaRow label="Cost efficiency">
+                {formatUsageCost(workUnitsCostPerUnit)}
+              </MetaRow>
+            )}
+            {workUnitsTokensPerUnit !== null && (
+              <MetaRow label="Token efficiency">
+                {formatTokenCount(workUnitsTokensPerUnit)}
+              </MetaRow>
             )}
           </div>
         </div>
@@ -396,7 +427,7 @@ function ChatDetailMetadataBadges({
           <Badge.Text>
             <span className="inline-flex items-center gap-1.5">
               <HookSourceIcon source={chat.source} className="size-3" />
-              {chat.source}
+              {formatPlatform(chat.source)}
             </span>
           </Badge.Text>
         </Badge>
@@ -630,6 +661,9 @@ function ChatDetailHeader({
   onRiskyOnlyChange,
   showRiskyOnly,
   searchBar,
+  pinned,
+  onTogglePinned,
+  pinPending,
   onExport,
   onDelete,
   onSetView,
@@ -637,7 +671,7 @@ function ChatDetailHeader({
 }: {
   chatId: string;
   chat: Parameters<typeof SessionSummary>[0]["chat"] & { title?: string };
-  userLabel: string;
+  userLabel: ReactNode;
   messageCount: number;
   toolCount: number;
   canManageChat: boolean;
@@ -650,6 +684,9 @@ function ChatDetailHeader({
   showRiskyOnly: boolean;
   /** Optional find-in-conversation bar (normal view only). */
   searchBar?: ReactNode;
+  pinned: boolean;
+  onTogglePinned: () => void;
+  pinPending: boolean;
   onExport: () => void;
   onDelete: () => void;
   onSetView: (view: ViewMode) => void;
@@ -682,6 +719,7 @@ function ChatDetailHeader({
               ) : (
                 <HeaderMetadataBadge>{getTraceId(chatId)}</HeaderMetadataBadge>
               )}
+              <WorkUnitsHeaderMetrics chat={chat} />
             </div>
           </SheetDescription>
         </div>
@@ -710,6 +748,17 @@ function ChatDetailHeader({
                 onSelect={() => onSetView("tools")}
               >
                 Tool calls{toolCount > 0 ? ` (${toolCount})` : ""}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer gap-2"
+                disabled={pinPending}
+                onSelect={onTogglePinned}
+              >
+                <Pin
+                  className={cn("size-3.5", pinned && "fill-current")}
+                  aria-hidden
+                />
+                {pinned ? "Unpin session" : "Pin session"}
               </DropdownMenuItem>
               {canManageChat && (
                 <>
@@ -773,6 +822,127 @@ function SubViewBar({ title, onBack }: { title: string; onBack: () => void }) {
   );
 }
 
+function SessionSummarySection({
+  chatId,
+  summary,
+  summaryGeneratedAt,
+  onSummaryChange,
+}: {
+  chatId: string;
+  summary?: string;
+  summaryGeneratedAt?: Date;
+  onSummaryChange: (
+    summary: string,
+    generatedAt: Date,
+    forChatId: string,
+  ) => void;
+}) {
+  const queryClient = useQueryClient();
+  const summarize = useSummarizeChatMutation();
+  const [expanded, setExpanded] = useState(true);
+  const hasSummary = Boolean(summary?.trim());
+  // Track the active session so a late summarize response cannot apply to a
+  // different chat after the panel navigates away.
+  const activeChatIdRef = useRef(chatId);
+  activeChatIdRef.current = chatId;
+
+  const runSummarize = (regenerate: boolean) => {
+    const requestedChatId = chatId;
+    summarize.mutate(
+      {
+        request: {
+          summarizeRequestBody: { id: requestedChatId, regenerate },
+        },
+      },
+      {
+        onSuccess: (result) => {
+          if (activeChatIdRef.current !== requestedChatId) {
+            return;
+          }
+          onSummaryChange(
+            result.summary,
+            result.summaryGeneratedAt,
+            requestedChatId,
+          );
+          void queryClient.invalidateQueries({
+            queryKey: ["chat", requestedChatId, "transcript"],
+          });
+          void invalidateAllListChats(queryClient);
+        },
+        onError: (error) => {
+          if (activeChatIdRef.current !== requestedChatId) {
+            return;
+          }
+          toast.error(error.message || "Failed to summarize session");
+        },
+      },
+    );
+  };
+
+  return (
+    <div className="border-b px-4 py-3">
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => setExpanded((prev) => !prev)}
+          className="text-foreground inline-flex items-center gap-1.5 text-sm font-medium"
+        >
+          <Sparkles className="size-3.5" aria-hidden />
+          Summary
+          {expanded ? (
+            <ChevronUp className="text-muted-foreground size-3.5" />
+          ) : (
+            <ChevronDown className="text-muted-foreground size-3.5" />
+          )}
+        </button>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={summarize.isPending}
+          onClick={() => runSummarize(hasSummary)}
+        >
+          <Button.LeftIcon>
+            {summarize.isPending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="size-3.5" />
+            )}
+          </Button.LeftIcon>
+          <Button.Text>
+            {summarize.isPending
+              ? "Summarizing…"
+              : hasSummary
+                ? "Regenerate"
+                : "Summarize"}
+          </Button.Text>
+        </Button>
+      </div>
+      {expanded && (
+        <div className="mt-2">
+          {hasSummary ? (
+            <>
+              <p className="text-foreground/90 text-sm leading-relaxed whitespace-pre-wrap">
+                {summary}
+              </p>
+              {summaryGeneratedAt && (
+                <p className="text-muted-foreground mt-2 text-xs">
+                  Generated{" "}
+                  {formatDistanceToNow(summaryGeneratedAt, { addSuffix: true })}
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              No summary yet. Generate one to get a concise overview of this
+              session.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ChatDetailPanel({
   chatId,
   onClose,
@@ -816,10 +986,20 @@ function ChatDetailPanel({
     null,
   );
   const [scrollNonce, setScrollNonce] = useState(0);
+  const [localSummary, setLocalSummary] = useState<string | undefined>();
+  const [localSummaryGeneratedAt, setLocalSummaryGeneratedAt] = useState<
+    Date | undefined
+  >();
+  const queryClient = useQueryClient();
+  const setPinnedMutation = useChatSetPinnedMutation();
   useEffect(() => {
     const handle = setTimeout(() => setSearchQuery(searchInput.trim()), 250);
     return () => clearTimeout(handle);
   }, [searchInput]);
+  useEffect(() => {
+    setLocalSummary(undefined);
+    setLocalSummaryGeneratedAt(undefined);
+  }, [chatId]);
 
   // Risk-review contexts — explicit risk focus, or opened from the has-risk
   // filter — load the server-windowed risk transcript so findings load no matter
@@ -869,6 +1049,18 @@ function ChatDetailPanel({
         personalAccountEmail(chat),
       )
     : "anonymous";
+  // Same label as a node: unresolved owners get an explanatory tooltip in the
+  // header's session details, while transcript rows keep the plain string.
+  const userLabelNode = chat ? (
+    <ChatOwnerLabel
+      members={membersData?.members}
+      chat={chat}
+      currentUser={user}
+      accountEmail={personalAccountEmail(chat)}
+    />
+  ) : (
+    "anonymous"
+  );
   // Only the primary (or risk) initial load blanks the whole panel; a search
   // re-fetch updates the transcript in place — its loading shows in the search
   // bar and as a "Searching…" empty state instead.
@@ -916,7 +1108,6 @@ function ChatDetailPanel({
   );
   const toolLogs = useMemo(() => filterToolLogs(logs), [logs]);
 
-  const queryClient = useQueryClient();
   const { data: riskData } = useRiskListResults({ chatId });
   const riskResults = useMemo(() => {
     const all = riskData?.results ?? [];
@@ -926,9 +1117,12 @@ function ChatDetailPanel({
   const riskResultsByMessage = useMemo(() => {
     const map = new Map<string, RiskResult[]>();
     for (const r of riskResults) {
-      const existing = map.get(r.chatMessageId);
+      const anchorId = riskResultAnchorId(r);
+      if (!anchorId) continue;
+
+      const existing = map.get(anchorId);
       if (existing) existing.push(r);
-      else map.set(r.chatMessageId, [r]);
+      else map.set(anchorId, [r]);
     }
     return map;
   }, [riskResults]);
@@ -956,8 +1150,8 @@ function ChatDetailPanel({
   }, [chat?.agentUsage]);
 
   const transcriptRows = useMemo(
-    () => buildTranscript(chatMessages),
-    [chatMessages],
+    () => buildTranscript(chatMessages, chat?.contentParts ?? []),
+    [chatMessages, chat?.contentParts],
   );
   // Apply the header filters at the row level so generation dividers and risk
   // gaps recompute against exactly what's shown (no orphaned dividers).
@@ -1234,13 +1428,16 @@ function ChatDetailPanel({
   }
 
   const error = logsError as Error | null;
+  const pinned = Boolean(chat.pinned);
+  const summary = localSummary ?? chat.summary;
+  const summaryGeneratedAt = localSummaryGeneratedAt ?? chat.summaryGeneratedAt;
 
   return (
     <div className="bg-background flex h-full flex-col">
       <ChatDetailHeader
         chatId={chatId}
         chat={chat}
-        userLabel={userLabel}
+        userLabel={userLabelNode}
         messageCount={chat.numMessages}
         toolCount={toolLogs.length}
         canManageChat={canManageChat}
@@ -1264,6 +1461,28 @@ function ChatDetailPanel({
             />
           )
         }
+        pinned={pinned}
+        pinPending={setPinnedMutation.isPending}
+        onTogglePinned={() => {
+          setPinnedMutation.mutate(
+            {
+              request: {
+                setPinnedRequestBody: { id: chatId, pinned: !pinned },
+              },
+            },
+            {
+              onSettled: () => {
+                void invalidateAllListChats(queryClient);
+                void queryClient.invalidateQueries({
+                  queryKey: ["chat", chatId, "transcript"],
+                });
+              },
+              onError: (err) => {
+                toast.error(err.message || "Failed to update pin");
+              },
+            },
+          );
+        }}
         onExport={() => {
           // Fetches the complete transcript server-side — the export must not
           // depend on which messages the panel happens to have loaded.
@@ -1279,6 +1498,20 @@ function ChatDetailPanel({
         onDelete={() => setShowDeleteConfirm(true)}
         onSetView={setView}
         onClose={onClose}
+      />
+
+      <SessionSummarySection
+        key={chatId}
+        chatId={chatId}
+        summary={summary}
+        summaryGeneratedAt={summaryGeneratedAt}
+        onSummaryChange={(nextSummary, generatedAt, forChatId) => {
+          if (forChatId !== chatId) {
+            return;
+          }
+          setLocalSummary(nextSummary);
+          setLocalSummaryGeneratedAt(generatedAt);
+        }}
       />
 
       {chatLoadHasErrors && (

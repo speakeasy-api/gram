@@ -170,7 +170,7 @@ func TestRunSkillUploadRetriesTransientServerError(t *testing.T) {
 
 func TestRunSkillUploadRetriesDroppedConnection(t *testing.T) {
 	var requests atomic.Int32
-	var successfulKey, successfulProject string
+	var successfulKey, successfulProject atomic.Value
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if requests.Add(1) == 1 {
 			hijacker, ok := w.(http.Hijacker)
@@ -180,16 +180,16 @@ func TestRunSkillUploadRetriesDroppedConnection(t *testing.T) {
 			require.NoError(t, conn.Close())
 			return
 		}
-		successfulKey = req.Header.Get("Gram-Key")
-		successfulProject = req.Header.Get("Gram-Project")
+		successfulKey.Store(req.Header.Get("Gram-Key"))
+		successfulProject.Store(req.Header.Get("Gram-Project"))
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	t.Cleanup(server.Close)
 
 	require.Zero(t, runSkillUploadTask(t, skillUploadTaskForTest(t, server.URL, "project", "key", "retry-safe content")))
 	require.Equal(t, int32(2), requests.Load())
-	require.Equal(t, "key", successfulKey)
-	require.Equal(t, "project", successfulProject)
+	require.Equal(t, "key", successfulKey.Load())
+	require.Equal(t, "project", successfulProject.Load())
 }
 
 func TestRunSkillUploadDoesNotRetryDefinitiveClientError(t *testing.T) {

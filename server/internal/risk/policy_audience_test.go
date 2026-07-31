@@ -79,7 +79,7 @@ func TestRiskPolicyAudience_InvalidTargetedPrincipalRejected(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestRiskPolicyAudience_UpdatePreservesNonAudienceGrants(t *testing.T) {
+func TestRiskPolicyAudience_UpdatePreservesScopedGrantsAndRefreshesURLBypassAudience(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
@@ -154,7 +154,8 @@ func TestRiskPolicyAudience_UpdatePreservesNonAudienceGrants(t *testing.T) {
 		ResourceID:     created.ID,
 	})
 	require.NoError(t, err)
-	require.Contains(t, grantKeys(bypassGrants), grantKey(authz.PolicyEffectAllow, bypassPrincipal.String()))
+	require.Contains(t, grantKeys(bypassGrants), grantKey(authz.PolicyEffectAllow, "user:"+authCtx.UserID))
+	require.NotContains(t, grantKeys(bypassGrants), grantKey(authz.PolicyEffectAllow, bypassPrincipal.String()))
 }
 
 func TestScanner_ScanForEnforcement_RespectsTargetedAudience(t *testing.T) {

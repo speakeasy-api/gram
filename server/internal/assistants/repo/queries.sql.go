@@ -972,6 +972,60 @@ func (q *Queries) GetAssistantRuntimeV2(ctx context.Context, arg GetAssistantRun
 	return i, err
 }
 
+const getAssistantSkillFeedbackObservation = `-- name: GetAssistantSkillFeedbackObservation :one
+SELECT
+  so.skill_id::uuid AS skill_id,
+  so.skill_version_id::uuid AS skill_version_id,
+  so.skill_name,
+  t.chat_id
+FROM assistant_threads t
+JOIN skill_observations so
+  ON so.project_id = t.project_id
+  AND so.provider = 'assistant'
+  AND so.session_id = t.chat_id::text
+WHERE t.project_id = $1
+  AND t.assistant_id = $2
+  AND t.id = $3
+  AND t.deleted IS FALSE
+  AND so.idempotency_key LIKE 'assistant:' || $2::text || ':' || t.chat_id::text || ':%'
+  AND so.skill_name = $4
+  AND so.reconciled_at IS NOT NULL
+  AND so.reconcile_error_code IS NULL
+ORDER BY so.seen_at DESC, so.id DESC
+LIMIT 1
+`
+
+type GetAssistantSkillFeedbackObservationParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+	ThreadID    uuid.UUID
+	SkillName   string
+}
+
+type GetAssistantSkillFeedbackObservationRow struct {
+	SkillID        uuid.UUID
+	SkillVersionID uuid.UUID
+	SkillName      string
+	ChatID         uuid.UUID
+}
+
+func (q *Queries) GetAssistantSkillFeedbackObservation(ctx context.Context, arg GetAssistantSkillFeedbackObservationParams) (GetAssistantSkillFeedbackObservationRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantSkillFeedbackObservation,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.ThreadID,
+		arg.SkillName,
+	)
+	var i GetAssistantSkillFeedbackObservationRow
+	err := row.Scan(
+		&i.SkillID,
+		&i.SkillVersionID,
+		&i.SkillName,
+		&i.ChatID,
+	)
+	return i, err
+}
+
 const getAssistantThreadIDByCorrelation = `-- name: GetAssistantThreadIDByCorrelation :one
 SELECT id
 FROM assistant_threads
@@ -1879,10 +1933,14 @@ JOIN skills s
 JOIN LATERAL (
   SELECT sv.id, sv.description
   FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = sd.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
     AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE sd.assistant_id = ANY($1::uuid[])
@@ -1908,8 +1966,10 @@ type LoadAssistantSkillsRow struct {
 	Description       pgtype.Text
 }
 
-// The active/resolvable predicates in LoadAssistantSkills and
-// LoadAttachedAssistantSkill must stay identical.
+// The active/resolvable distribution predicates in LoadAssistantSkills and
+// LoadAttachedAssistantSkill must stay identical. ResolveAssistantTurnSkills
+// intentionally omits distribution and pinning because turn-selected skills
+// resolve directly from the project registry.
 func (q *Queries) LoadAssistantSkills(ctx context.Context, arg LoadAssistantSkillsParams) ([]LoadAssistantSkillsRow, error) {
 	rows, err := q.db.Query(ctx, loadAssistantSkills, arg.AssistantIds, arg.ProjectID)
 	if err != nil {
@@ -2081,7 +2141,13 @@ func (q *Queries) LoadAssistantToolsets(ctx context.Context, arg LoadAssistantTo
 }
 
 const loadAttachedAssistantSkill = `-- name: LoadAttachedAssistantSkill :one
-SELECT resolved.content
+SELECT
+  s.id AS skill_id,
+  s.name,
+  resolved.id AS skill_version_id,
+  resolved.content,
+  resolved.canonical_sha256,
+  resolved.raw_sha256
 FROM skill_distributions sd
 JOIN assistants a
   ON a.id = sd.assistant_id
@@ -2092,12 +2158,16 @@ JOIN skills s
   AND s.project_id = sd.project_id
   AND s.archived_at IS NULL
 JOIN LATERAL (
-  SELECT sv.id, sv.content
+  SELECT sv.id, sv.content, sv.canonical_sha256, sv.raw_sha256
   FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = sd.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
     AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE sd.assistant_id = $1
@@ -2115,11 +2185,27 @@ type LoadAttachedAssistantSkillParams struct {
 	Name        string
 }
 
-func (q *Queries) LoadAttachedAssistantSkill(ctx context.Context, arg LoadAttachedAssistantSkillParams) (string, error) {
+type LoadAttachedAssistantSkillRow struct {
+	SkillID         uuid.UUID
+	Name            string
+	SkillVersionID  uuid.UUID
+	Content         string
+	CanonicalSha256 string
+	RawSha256       string
+}
+
+func (q *Queries) LoadAttachedAssistantSkill(ctx context.Context, arg LoadAttachedAssistantSkillParams) (LoadAttachedAssistantSkillRow, error) {
 	row := q.db.QueryRow(ctx, loadAttachedAssistantSkill, arg.AssistantID, arg.ProjectID, arg.Name)
-	var content string
-	err := row.Scan(&content)
-	return content, err
+	var i LoadAttachedAssistantSkillRow
+	err := row.Scan(
+		&i.SkillID,
+		&i.Name,
+		&i.SkillVersionID,
+		&i.Content,
+		&i.CanonicalSha256,
+		&i.RawSha256,
+	)
+	return i, err
 }
 
 const loadThreadContext = `-- name: LoadThreadContext :one
@@ -2532,6 +2618,66 @@ func (q *Queries) ReapStuckAssistantRuntimes(ctx context.Context, arg ReapStuckA
 	return items, nil
 }
 
+const recordAssistantSkillObservation = `-- name: RecordAssistantSkillObservation :execrows
+WITH observed AS (
+  SELECT clock_timestamp() AS seen_at
+)
+INSERT INTO skill_observations (
+    project_id
+  , idempotency_key
+  , provider
+  , session_id
+  , skill_name
+  , raw_sha256
+  , seen_at
+  , skill_id
+  , skill_version_id
+  , reconciled_at
+)
+SELECT
+    s.project_id
+  , 'assistant:' || $1::uuid || ':' || $2::text || ':' || sv.id::text
+  , 'assistant'
+  , $2::text
+  , s.name
+  , sv.raw_sha256
+  , observed.seen_at
+  , s.id
+  , sv.id
+  , observed.seen_at
+FROM skills s
+JOIN skill_versions sv
+  ON sv.skill_id = s.id
+  AND sv.id = $3
+CROSS JOIN observed
+WHERE s.project_id = $4
+  AND s.id = $5
+ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL
+DO UPDATE SET seen_at = EXCLUDED.seen_at
+`
+
+type RecordAssistantSkillObservationParams struct {
+	AssistantID    uuid.UUID
+	SessionID      string
+	SkillVersionID uuid.UUID
+	ProjectID      uuid.UUID
+	SkillID        uuid.UUID
+}
+
+func (q *Queries) RecordAssistantSkillObservation(ctx context.Context, arg RecordAssistantSkillObservationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordAssistantSkillObservation,
+		arg.AssistantID,
+		arg.SessionID,
+		arg.SkillVersionID,
+		arg.ProjectID,
+		arg.SkillID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const requeueStaleAssistantEvents = `-- name: RequeueStaleAssistantEvents :many
 UPDATE assistant_thread_events
 SET
@@ -2700,6 +2846,71 @@ func (q *Queries) ResetAssistantThreadEventToPending(ctx context.Context, arg Re
 		arg.ProjectID,
 	)
 	return err
+}
+
+const resolveAssistantTurnSkills = `-- name: ResolveAssistantTurnSkills :many
+SELECT
+  s.id AS skill_id,
+  s.name,
+  resolved.id AS resolved_version_id,
+  resolved.description,
+  resolved.content
+FROM skills s
+JOIN LATERAL (
+  SELECT sv.id, sv.description, sv.content
+  FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = s.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
+  WHERE sv.skill_id = s.id
+    AND sv.spec_valid IS TRUE
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE s.project_id = $1
+  AND s.id = ANY($2::uuid[])
+  AND s.archived_at IS NULL
+ORDER BY s.name ASC, s.id ASC
+`
+
+type ResolveAssistantTurnSkillsParams struct {
+	ProjectID uuid.UUID
+	SkillIds  []uuid.UUID
+}
+
+type ResolveAssistantTurnSkillsRow struct {
+	SkillID           uuid.UUID
+	Name              string
+	ResolvedVersionID uuid.UUID
+	Description       pgtype.Text
+	Content           string
+}
+
+func (q *Queries) ResolveAssistantTurnSkills(ctx context.Context, arg ResolveAssistantTurnSkillsParams) ([]ResolveAssistantTurnSkillsRow, error) {
+	rows, err := q.db.Query(ctx, resolveAssistantTurnSkills, arg.ProjectID, arg.SkillIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ResolveAssistantTurnSkillsRow
+	for rows.Next() {
+		var i ResolveAssistantTurnSkillsRow
+		if err := rows.Scan(
+			&i.SkillID,
+			&i.Name,
+			&i.ResolvedVersionID,
+			&i.Description,
+			&i.Content,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const resolveEnvironmentsForWrite = `-- name: ResolveEnvironmentsForWrite :many
@@ -2928,10 +3139,14 @@ JOIN assistants a ON a.id = prev.assistant_id AND a.project_id = prev.project_id
 JOIN LATERAL (
   SELECT sv.id
   FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = prev.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
   WHERE sv.skill_id = prev.skill_id
     AND sv.spec_valid IS TRUE
     AND (prev.pinned_version_id IS NULL OR sv.id = prev.pinned_version_id)
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE prev.id = sd.id

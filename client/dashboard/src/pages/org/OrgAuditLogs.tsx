@@ -5,11 +5,11 @@ import { RequireScope } from "@/components/require-scope";
 import { InsightsConfig, InsightsProvider } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
-import { Heading } from "@/components/ui/heading";
-import { Button } from "@/components/ui/button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
-import { Switch } from "@/components/ui/switch";
+import { Heading } from "@/components/ui/Heading";
+import { Button } from "@/components/ui/Button";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
+import { Switch } from "@/components/ui/Switch";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -21,7 +21,8 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useAuditLogFacets } from "@gram/client/react-query/auditLogFacets.js";
 import { useAuditLogsInfinite } from "@gram/client/react-query/auditLogs.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
-import { Icon, Input } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
+import { Input } from "@/components/ui/Input";
 import React, {
   useCallback,
   useDeferredValue,
@@ -206,6 +207,9 @@ function hasDiff(log: AuditLog): boolean {
   return log.beforeSnapshot != null || log.afterSnapshot != null;
 }
 
+/** Marks the row targeted by j/k keyboard navigation. */
+const HIGHLIGHTED_ROW_CLASS = "ring-foreground/40 ring-1 ring-inset";
+
 function AuditLogRow({
   log,
   orgSlug,
@@ -271,10 +275,7 @@ function AuditLogRow({
 
   if (showDiff && diffExpanded) {
     return (
-      <div
-        ref={rowRef}
-        className={cn(isHighlighted && "border-l-foreground border-l-4")}
-      >
+      <div ref={rowRef} className={cn(isHighlighted && HIGHLIGHTED_ROW_CLASS)}>
         <div
           className={cn(
             "rounded-t-lg border border-b-0",
@@ -296,7 +297,7 @@ function AuditLogRow({
       className={cn(
         "rounded-none transition-colors",
         isOdd ? "bg-muted/30" : "bg-background",
-        isHighlighted && "border-l-foreground border-l-4",
+        isHighlighted && HIGHLIGHTED_ROW_CLASS,
       )}
     >
       {rowContent}
@@ -784,10 +785,10 @@ function OrgAuditLogsInner() {
         <Heading variant="h4" className="mb-2">
           Recent activity across your organization
         </Heading>
-        <Type muted small className="mt-1">
+        <Text muted small className="mt-1">
           Review organization-wide and project-level actions in chronological
           order. Search by project, actions, or actor.
-        </Type>
+        </Text>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
@@ -825,11 +826,11 @@ function OrgAuditLogsInner() {
           options={actorOptions}
         />
         <div className="flex flex-col gap-1.5">
-          <Type small muted>
+          <Text small muted>
             Filters
-          </Type>
+          </Text>
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             disabled={!hasActiveFilters}
             onClick={() => {
@@ -844,18 +845,18 @@ function OrgAuditLogsInner() {
           </Button>
         </div>
         <div className="flex flex-col gap-1.5">
-          <Type small muted>
+          <Text small muted>
             Timestamp
-          </Type>
+          </Text>
           <div className="bg-background flex h-8 items-center gap-2 rounded-md border px-3">
-            <Type
+            <Text
               small
               className={
                 tsMode === "utc" ? "text-foreground" : "text-muted-foreground"
               }
             >
               UTC
-            </Type>
+            </Text>
             <Switch
               checked={tsMode === "local"}
               onCheckedChange={(checked) => {
@@ -863,14 +864,14 @@ function OrgAuditLogsInner() {
               }}
               aria-label="Toggle timestamp timezone"
             />
-            <Type
+            <Text
               small
               className={
                 tsMode === "local" ? "text-foreground" : "text-muted-foreground"
               }
             >
               Local
-            </Type>
+            </Text>
           </div>
         </div>
       </div>
@@ -936,7 +937,7 @@ function OrgAuditLogsInner() {
                 type="text"
                 placeholder="Search audit logs"
                 value={searchQuery}
-                onChange={(e) => handleSearchChange(e.target.value)}
+                onChange={handleSearchChange}
                 onFocus={() => setSearchInputFocused(true)}
                 onBlur={() => setSearchInputFocused(false)}
                 className="w-56 rounded-sm py-1 pr-16 pl-7 text-xs"
@@ -996,21 +997,21 @@ function OrgAuditLogsInner() {
             </div>
           ) : error ? (
             <div className="flex flex-col items-center gap-2 py-12 text-center">
-              <Type className="font-medium">Error loading audit logs</Type>
-              <Type muted small>
+              <Text className="font-medium">Error loading audit logs</Text>
+              <Text muted small>
                 {error.message}
-              </Type>
+              </Text>
             </div>
           ) : logs.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-12 text-center">
-              <Type className="font-medium">No audit logs found</Type>
-              <Type muted small>
+              <Text className="font-medium">No audit logs found</Text>
+              <Text muted small>
                 {selectedProjectSlug === "all" &&
                 selectedAction === "all" &&
                 selectedActor === "all"
                   ? "Activity will appear here as changes are made across your organization."
                   : "No audit logs match the selected filters."}
-              </Type>
+              </Text>
             </div>
           ) : (
             <div>

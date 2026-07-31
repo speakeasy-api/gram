@@ -1,7 +1,7 @@
 import { Page } from "@/components/page-layout";
-import { Card } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { Card } from "@/components/ui/Card";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { ManualSetupBadge } from "@/pages/catalog/ManualSetupBadge";
 import { useSdkClient } from "@/contexts/Sdk";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
@@ -14,7 +14,9 @@ import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useMcpRegistriesGetServerDetails } from "@gram/client/react-query/mcpRegistriesGetServerDetails.js";
-import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useMutation } from "@tanstack/react-query";
 import {
   ChevronDown,
@@ -197,10 +199,10 @@ export default function CatalogDetail(): JSX.Element {
           <Card>
             <Card.Content className="py-12 text-center">
               <ServerIcon className="text-muted-foreground mx-auto mb-4 h-12 w-12" />
-              <Type variant="subheading">Server not found</Type>
-              <Type muted className="mt-2">
+              <Text variant="subheading">Server not found</Text>
+              <Text muted className="mt-2">
                 The requested MCP server could not be found in the catalog.
-              </Type>
+              </Text>
               <routes.catalog.Link className="mt-4 inline-block">
                 <Button variant="secondary" className="mt-4">
                   <Button.Text>Back to Catalog</Button.Text>
@@ -266,9 +268,9 @@ export default function CatalogDetail(): JSX.Element {
                     {SERVER_WEBSITE_MAP[server.registrySpecifier]}
                   </a>
                 ) : (
-                  <Type muted className="font-mono text-sm">
+                  <Text muted className="font-mono text-sm">
                     {server.registrySpecifier}
-                  </Type>
+                  </Text>
                 )}
                 <div className="mt-4">
                   {isInstalled ? (
@@ -323,9 +325,9 @@ export default function CatalogDetail(): JSX.Element {
                 <Card.Title>About</Card.Title>
               </Card.Header>
               <Card.Content>
-                <Type className="leading-relaxed whitespace-pre-wrap">
+                <Text className="leading-relaxed whitespace-pre-wrap">
                   {server.description || "No description available."}
-                </Type>
+                </Text>
               </Card.Content>
             </Card>
 
@@ -345,32 +347,32 @@ export default function CatalogDetail(): JSX.Element {
                   <div className="space-y-3">
                     {weeklyUsage !== undefined && weeklyUsage > 0 && (
                       <div className="flex justify-between gap-4">
-                        <Type small muted>
+                        <Text small muted>
                           This Week
-                        </Type>
-                        <Type className="font-medium">
+                        </Text>
+                        <Text className="font-medium">
                           {weeklyUsage.toLocaleString()}
-                        </Type>
+                        </Text>
                       </div>
                     )}
                     {visitorsTotal !== undefined && visitorsTotal > 0 && (
                       <div className="flex justify-between gap-4">
-                        <Type small muted>
+                        <Text small muted>
                           Monthly
-                        </Type>
-                        <Type className="font-medium">
+                        </Text>
+                        <Text className="font-medium">
                           {visitorsTotal.toLocaleString()}
-                        </Type>
+                        </Text>
                       </div>
                     )}
                     {totalUsage !== undefined && totalUsage > 0 && (
                       <div className="flex justify-between gap-4">
-                        <Type small muted>
+                        <Text small muted>
                           All Time
-                        </Type>
-                        <Type className="font-medium">
+                        </Text>
+                        <Text className="font-medium">
                           {totalUsage.toLocaleString()}
-                        </Type>
+                        </Text>
                       </div>
                     )}
                   </div>
@@ -386,44 +388,44 @@ export default function CatalogDetail(): JSX.Element {
               <Card.Content>
                 <div className="space-y-3">
                   <div className="flex justify-between gap-4">
-                    <Type small muted>
+                    <Text small muted>
                       Version
-                    </Type>
-                    <Type className="font-mono">{server.version}</Type>
+                    </Text>
+                    <Text className="font-mono">{server.version}</Text>
                   </div>
                   {versionMeta?.status && (
                     <div className="flex justify-between gap-4">
-                      <Type small muted>
+                      <Text small muted>
                         Status
-                      </Type>
-                      <Type className="capitalize">{versionMeta.status}</Type>
+                      </Text>
+                      <Text className="capitalize">{versionMeta.status}</Text>
                     </div>
                   )}
                   {versionMeta?.publishedAt && (
                     <div className="flex justify-between gap-4">
-                      <Type small muted>
+                      <Text small muted>
                         Published
-                      </Type>
-                      <Type>
+                      </Text>
+                      <Text>
                         {new Date(versionMeta.publishedAt).toLocaleDateString()}
-                      </Type>
+                      </Text>
                     </div>
                   )}
                   {versionMeta?.updatedAt && (
                     <div className="flex justify-between gap-4">
-                      <Type small muted>
+                      <Text small muted>
                         Last Updated
-                      </Type>
-                      <Type>
+                      </Text>
+                      <Text>
                         {new Date(versionMeta.updatedAt).toLocaleDateString()}
-                      </Type>
+                      </Text>
                     </div>
                   )}
                   {versionMeta?.source && (
                     <div className="flex justify-between gap-4">
-                      <Type small muted>
+                      <Text small muted>
                         Source
-                      </Type>
+                      </Text>
                       <a
                         href={
                           versionMeta.source.startsWith("http")
@@ -434,9 +436,9 @@ export default function CatalogDetail(): JSX.Element {
                         rel="noopener noreferrer"
                         className="text-primary flex items-center gap-1 hover:underline"
                       >
-                        <Type className="max-w-[150px] truncate text-right">
+                        <Text className="max-w-[150px] truncate text-right">
                           {versionMeta.source}
-                        </Type>
+                        </Text>
                         <ExternalLink className="h-3 w-3 shrink-0" />
                       </a>
                     </div>
@@ -453,18 +455,18 @@ export default function CatalogDetail(): JSX.Element {
               <Card.Content>
                 <div className="space-y-3">
                   <div className="flex justify-between gap-4">
-                    <Type small muted>
+                    <Text small muted>
                       Registry
-                    </Type>
-                    <Type className="text-right">{server.registryId}</Type>
+                    </Text>
+                    <Text className="text-right">{server.registryId}</Text>
                   </div>
                   <div className="flex items-center justify-between gap-4">
-                    <Type small muted>
+                    <Text small muted>
                       Specifier
-                    </Type>
-                    <Type className="text-right font-mono text-xs break-all">
+                    </Text>
+                    <Text className="text-right font-mono text-xs break-all">
                       {server.registrySpecifier}
-                    </Type>
+                    </Text>
                   </div>
                 </div>
               </Card.Content>
@@ -538,9 +540,9 @@ function ToolCard({ tool }: { tool: Tool }) {
             align="center"
             className="flex-wrap"
           >
-            <Type className="font-mono text-sm font-medium">
+            <Text className="font-mono text-sm font-medium">
               {tool.annotations?.title || tool.name}
-            </Type>
+            </Text>
             {tool.annotations?.readOnlyHint && (
               <Badge variant="neutral" background className="text-xs">
                 Read-only
@@ -584,9 +586,9 @@ function ToolCard({ tool }: { tool: Tool }) {
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.2 }}
             >
-              <Type small muted>
+              <Text small muted>
                 {firstSentence}
-              </Type>
+              </Text>
             </motion.div>
           )}
         </AnimatePresence>
@@ -601,12 +603,12 @@ function ToolCard({ tool }: { tool: Tool }) {
             className="overflow-hidden"
           >
             <div className="mt-2 border-t pt-2">
-              <Type
+              <Text
                 small
                 className="prose prose-sm max-w-none whitespace-pre-wrap"
               >
                 {tool.description}
-              </Type>
+              </Text>
             </div>
           </motion.div>
         )}

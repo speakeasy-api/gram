@@ -99,7 +99,8 @@ func newClient(serverURL string) *client {
 		sdk: sdk.New(
 			sdk.WithServerURL(strings.TrimRight(serverURL, "/")),
 			sdk.WithClient(&http.Client{
-				Timeout: perAttemptTime,
+				Timeout:   perAttemptTime,
+				Transport: &deviceTransport{base: http.DefaultTransport},
 				CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 					return http.ErrUseLastResponse
 				},
@@ -132,7 +133,7 @@ func (cl *client) uploadSkillContent(ctx context.Context, c creds, rawSHA256, co
 		Body: components.UploadSkillContentPayload{
 			Content:       content,
 			RawSha256:     rawSHA256,
-			SchemaVersion: components.SchemaVersionHookSkillContentV1,
+			SchemaVersion: components.UploadSkillContentPayloadSchemaVersionHookSkillContentV1,
 		},
 	}
 	security := &operations.UploadSkillContentSecurity{

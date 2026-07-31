@@ -7,6 +7,7 @@ import {
   Globe,
   KeyRound,
   Link2,
+  MessageSquare,
   Package,
   Puzzle,
   Rocket,
@@ -16,8 +17,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Link } from "react-router";
-import { DashboardCard } from "@/components/ui/dashboard-card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { DashboardCard } from "@/components/ui/DashboardCard";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { subjectHref } from "@/components/auditlogs/subject-href";
 import { useSlugs } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
@@ -222,6 +223,13 @@ function getActionMeta(action: string): ActionMeta {
       fg: "text-violet-600 dark:text-violet-400",
     };
   }
+  if (action.startsWith("chat_session:")) {
+    return {
+      icon: MessageSquare,
+      bg: "bg-cyan-100 dark:bg-cyan-950",
+      fg: "text-cyan-600 dark:text-cyan-400",
+    };
+  }
   if (action.startsWith("plugin:")) {
     return {
       icon: Puzzle,
@@ -279,6 +287,7 @@ const ACTION_LABELS: Record<string, string> = {
   "plugin:server_remove": "removed server from plugin",
   "plugin:assignments_set": "updated plugin access",
   "plugin:publish": "published plugins",
+  "chat_session:access": "accessed chat session",
 };
 
 function recordString(value: unknown, key: string): string | undefined {

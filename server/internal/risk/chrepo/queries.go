@@ -19,27 +19,48 @@ var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 // string, and one-way fingerprints. See internal/risk/finding_ch.go for how it
 // is populated and internal/risk/fingerprint.go for the fingerprint scheme.
 type RiskFindingRow struct {
-	ID                       uuid.UUID `ch:"id"`
-	CreatedAt                time.Time `ch:"created_at"`
-	OrganizationID           string    `ch:"organization_id"`
-	ProjectID                string    `ch:"project_id"`
-	RequestID                string    `ch:"request_id"`
-	ChatMessageID            string    `ch:"chat_message_id"`
-	RiskPolicyID             string    `ch:"risk_policy_id"`
-	RiskPolicyVersion        int64     `ch:"risk_policy_version"`
-	RuleID                   string    `ch:"rule_id"`
-	Description              string    `ch:"description"`
-	Source                   string    `ch:"source"`
-	Confidence               float64   `ch:"confidence"`
-	Tags                     []string  `ch:"tags"`
-	StartPos                 int32     `ch:"start_pos"`
-	EndPos                   int32     `ch:"end_pos"`
-	DeadLetterReason         string    `ch:"dead_letter_reason"`
-	MatchLen                 uint32    `ch:"match_len"`
-	MatchRedacted            string    `ch:"match_redacted"`
-	FingerprintPepperVersion string    `ch:"fingerprint_pepper_version"`
-	FingerprintGlobalHS256   string    `ch:"fingerprint_global_hs256"`
-	FingerprintTenantHS256   string    `ch:"fingerprint_tenant_hs256"`
+	ID                uuid.UUID `ch:"id"`
+	CreatedAt         time.Time `ch:"created_at"`
+	OrganizationID    string    `ch:"organization_id"`
+	ProjectID         string    `ch:"project_id"`
+	RequestID         string    `ch:"request_id"`
+	ChatMessageID     string    `ch:"chat_message_id"`
+	ContentPartID     string    `ch:"content_part_id"`
+	RiskPolicyID      string    `ch:"risk_policy_id"`
+	RiskPolicyVersion int64     `ch:"risk_policy_version"`
+	RuleID            string    `ch:"rule_id"`
+	Description       string    `ch:"description"`
+	Source            string    `ch:"source"`
+	Confidence        float64   `ch:"confidence"`
+	Tags              []string  `ch:"tags"`
+	StartPos          int32     `ch:"start_pos"`
+	EndPos            int32     `ch:"end_pos"`
+	DeadLetterReason  string    `ch:"dead_letter_reason"`
+
+	// Denormalized attribution, resolved from Postgres at ingest so
+	// session-level and per-user rollups never need a cross-store join. All
+	// empty when unresolved (missing message, deleted chat, lookup failure).
+	ChatID         string `ch:"chat_id"`
+	UserID         string `ch:"user_id"`
+	ExternalUserID string `ch:"external_user_id"`
+
+	// MessageCreatedAt is the scanned chat message's event time, the sort and
+	// cursor key for the Risk Events listing. Falls back to CreatedAt (scan
+	// time) when attribution is unresolved, matching the column's DEFAULT for
+	// pre-column rows. AssistantID is the chat's live assistant link at ingest,
+	// empty when the chat has none.
+	MessageCreatedAt time.Time `ch:"message_created_at"`
+	AssistantID      string    `ch:"assistant_id"`
+
+	// Category is the canonical risk category for (source, rule_id), computed
+	// via internal/risk/categories at ingest. Empty for dead-letter sentinels.
+	Category string `ch:"category"`
+
+	MatchLen                 uint32 `ch:"match_len"`
+	MatchRedacted            string `ch:"match_redacted"`
+	FingerprintPepperVersion string `ch:"fingerprint_pepper_version"`
+	FingerprintGlobalHS256   string `ch:"fingerprint_global_hs256"`
+	FingerprintTenantHS256   string `ch:"fingerprint_tenant_hs256"`
 
 	// Exclusion annotation: set when a going-forward exclusion suppressed the
 	// finding. Both nil when the finding is not excluded (maps to the Nullable
@@ -69,13 +90,10 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 		return nil
 	}
 
-	ctx = clickhouse.Context(ctx,
-		clickhouse.WithAsync(false),
-		clickhouse.WithSettings(clickhouse.Settings{
-			"async_insert":          1,
-			"wait_for_async_insert": 0,
-		}),
-	)
+	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+		"async_insert":          1,
+		"wait_for_async_insert": 0,
+	}))
 
 	builder := sq.Insert("risk_findings").
 		Columns(
@@ -85,6 +103,7 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			"project_id",
 			"request_id",
 			"chat_message_id",
+			"content_part_id",
 			"risk_policy_id",
 			"risk_policy_version",
 			"rule_id",
@@ -95,6 +114,10 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			"start_pos",
 			"end_pos",
 			"dead_letter_reason",
+			"chat_id",
+			"user_id",
+			"external_user_id",
+			"category",
 			"match_len",
 			"match_redacted",
 			"fingerprint_pepper_version",
@@ -102,6 +125,8 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			"fingerprint_tenant_hs256",
 			"excluded_at",
 			"exclusion_id",
+			"message_created_at",
+			"assistant_id",
 		)
 
 	for _, row := range rows {
@@ -112,6 +137,7 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			row.ProjectID,
 			row.RequestID,
 			row.ChatMessageID,
+			row.ContentPartID,
 			row.RiskPolicyID,
 			row.RiskPolicyVersion,
 			row.RuleID,
@@ -122,6 +148,10 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			row.StartPos,
 			row.EndPos,
 			row.DeadLetterReason,
+			row.ChatID,
+			row.UserID,
+			row.ExternalUserID,
+			row.Category,
 			row.MatchLen,
 			row.MatchRedacted,
 			row.FingerprintPepperVersion,
@@ -134,6 +164,8 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			// the column binds as NULL.
 			chNullable(row.ExcludedAt),
 			chNullable(row.ExclusionID),
+			row.MessageCreatedAt,
+			row.AssistantID,
 		)
 	}
 

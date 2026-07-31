@@ -53,12 +53,12 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 	}
 }
 
-func (m *metrics) RecordHookEventDuration(ctx context.Context, source string, eventName string, outcome string, decision string, orgSlug string, duration time.Duration) {
+func (m *metrics) RecordHookEventDuration(ctx context.Context, source string, eventName string, outcome string, decision string, orgSlug string, riskScanned bool, duration time.Duration) {
 	if m == nil || m.eventDuration == nil {
 		return
 	}
 
-	m.eventDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(hookEventMetricAttributes(source, eventName, outcome, decision, orgSlug)...))
+	m.eventDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(hookEventMetricAttributes(source, eventName, outcome, decision, orgSlug, riskScanned)...))
 }
 
 // claudeHookDecision maps a Claude hook response to the verdict dimension on
@@ -97,12 +97,13 @@ func codexHookDecision(res *gen.CodexHookResult) string {
 	return conv.Default(conv.PtrValOr(res.Decision, ""), hookMetricDecisionAllow)
 }
 
-func hookEventMetricAttributes(source string, eventName string, outcome string, decision string, orgSlug string) []attribute.KeyValue {
+func hookEventMetricAttributes(source string, eventName string, outcome string, decision string, orgSlug string, riskScanned bool) []attribute.KeyValue {
 	attrs := []attribute.KeyValue{
 		attr.HookSource(source),
 		attr.HookEvent(eventName),
 		attr.Outcome(outcome),
 		attr.HookDecision(decision),
+		attr.HookRiskScanned(riskScanned),
 	}
 	if orgSlug != "" {
 		attrs = append(attrs, attr.OrganizationSlug(orgSlug))

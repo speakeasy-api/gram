@@ -1,9 +1,14 @@
 import { useRBAC } from "@/hooks/useRBAC";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { cn } from "@/lib/utils";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
 import React from "react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/Tooltip";
 
 type RenderFn = (props: { disabled: boolean }) => React.ReactNode;
 
@@ -74,7 +79,9 @@ export function RequireScope(
 
   switch (level) {
     case "page":
-      return <>{props.fallback ?? <Unauthorized />}</>;
+      return (
+        <>{props.fallback ?? <Unauthorized scopes={scopes} all={all} />}</>
+      );
 
     case "section":
       return <>{props.fallback ?? null}</>;
@@ -160,10 +167,16 @@ function ScopeDisabled({
 function Unauthorized({
   title = "Access restricted",
   description = "You don't have permission to view this page. Contact your organization admin to request access.",
+  scopes,
+  all,
 }: {
   title?: string;
   description?: string;
+  scopes: Scope[];
+  all: boolean;
 }) {
+  const [open, setOpen] = React.useState(false);
+
   return (
     <div className="flex h-full min-h-[400px] w-full items-center justify-center">
       <div className="flex max-w-sm flex-col items-center gap-3 text-center">
@@ -172,6 +185,55 @@ function Unauthorized({
         </div>
         <h2 className="text-lg font-medium">{title}</h2>
         <p className="text-muted-foreground text-sm">{description}</p>
+        {scopes.length > 0 && (
+          /* The wrapper keeps the collapsed height (h-7 == trigger height) in
+             flow while the card is absolutely positioned on top of it, so
+             expanding grows downward instead of re-centring the whole block. */
+          <div className="relative h-7 w-full">
+            <Collapsible
+              open={open}
+              onOpenChange={setOpen}
+              className="absolute inset-x-0 top-0"
+            >
+              <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex w-full cursor-pointer items-center justify-center gap-1 px-3 py-1.5 text-xs transition-colors">
+                <Icon
+                  name="chevron-right"
+                  className={cn(
+                    "size-3.5 transition-transform",
+                    open && "rotate-90",
+                  )}
+                />
+                What access do I need?
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-2">
+                <div className="bg-muted/25 rounded-lg border px-3 py-5">
+                  <p className="text-muted-foreground text-center text-xs">
+                    {scopes.length === 1 || !all
+                      ? "Your account is missing a permission."
+                      : "Your account is missing permissions."}
+                  </p>
+                  <p className="text-muted-foreground mt-1 text-center text-xs">
+                    {scopes.length === 1
+                      ? "An organization admin can grant you:"
+                      : all
+                        ? "An organization admin can grant you all of:"
+                        : "An organization admin can grant you any of:"}
+                  </p>
+                  <ul className="mt-2 flex flex-wrap justify-center gap-1.5">
+                    {scopes.map((s) => (
+                      <li
+                        key={s}
+                        className="bg-background text-foreground rounded border px-1.5 py-0.5 font-mono text-xs"
+                      >
+                        {s}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          </div>
+        )}
       </div>
     </div>
   );

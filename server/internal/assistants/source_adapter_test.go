@@ -47,6 +47,7 @@ func TestComposeInstructions_SlackIncludesRespondDecisionGuidance(t *testing.T) 
 	require.Contains(t, instructions, "end the turn without posting anything")
 	require.Contains(t, instructions, "Never post a message explaining a tool error")
 	require.NotContains(t, instructions, "calling platform_slack_set_thread_status with status set to an empty string")
+	require.NotContains(t, instructions, "## Elements visualizations")
 }
 
 func TestComposeInstructions_IncludesSkillsBeforeMCPAuthInOrder(t *testing.T) {
@@ -74,7 +75,63 @@ func TestComposeInstructions_IncludesSkillsBeforeMCPAuthInOrder(t *testing.T) {
 	beta := strings.Index(instructions, `Name: "beta"`)
 	auth := strings.Index(instructions, "## MCP authentication")
 	require.True(t, base >= 0 && skills > base && alpha > skills && beta > alpha && auth > beta)
-	require.Contains(t, instructions, `Call mcp__p-assistants_skills_load with name "alpha" before relying on this skill.`)
+	require.Contains(t, instructions, `Unless this turn already includes a <skill-context> for this skill, call mcp__p-assistants_skills_load with name "alpha" before relying on this skill.`)
+	require.Contains(t, instructions, "<skill-content> is already loaded and takes precedence for that turn")
+	require.Contains(t, instructions, "Do not call mcp__p-assistants_skills_load for that skill in that turn.")
+}
+
+func TestComposeInstructions_DashboardIncludesElementsPrompts(t *testing.T) {
+	t.Parallel()
+
+	thread := assistantThreadRecord{
+		ID:            uuid.New(),
+		AssistantID:   uuid.New(),
+		ProjectID:     uuid.New(),
+		CorrelationID: "dashboard:test",
+		ChatID:        uuid.New(),
+		SourceKind:    sourceKindDashboard,
+		SourceRefJSON: []byte(`{}`),
+		LastEventAt:   time.Now(),
+	}
+
+	instructions, err := composeInstructions("Base instructions.", thread, nil)
+	require.NoError(t, err)
+	require.Contains(t, instructions, "## Elements visualizations")
+	require.Contains(t, instructions, "The code fence language must be exactly `chart` or `ui`")
+	require.Contains(t, instructions, elementsSystemPrompt)
+	require.Contains(t, instructions, elementsChartPrompt)
+	require.Contains(t, instructions, elementsGenerativeUIPrompt)
+	require.Contains(t, instructions, "Only render ONE generative UI widget")
+	require.Contains(t, instructions, "BarChart")
+	require.Contains(t, instructions, "```ui code blocks")
+}
+
+func TestDashboardAdapterDecodeTurnIncludesSelectedSkills(t *testing.T) {
+	t.Parallel()
+
+	skillID := uuid.New()
+	versionID := uuid.New()
+	got, err := dashboardAdapter{}.DecodeTurn(assistantThreadEventRecord{
+		EventID:   "evt-selected-skills",
+		CreatedAt: time.Date(2026, 7, 29, 12, 0, 0, 0, time.UTC),
+		NormalizedPayloadJSON: []byte(`{
+			"text":"Use the project conventions",
+			"user_id":"user-test",
+			"skill_context":[{
+				"skill_id":"` + skillID.String() + `",
+				"name":"project-conventions",
+				"description":"Project coding conventions",
+				"resolved_version_id":"` + versionID.String() + `",
+				"content":"---\nname: project-conventions\ndescription: Project coding conventions\n---\n\nFollow the repository conventions exactly."
+			}]
+		}`),
+	})
+	require.NoError(t, err)
+	require.Contains(t, got, "<skill-context>\nName: project-conventions")
+	require.Contains(t, got, "<skill-content>\n---\nname: project-conventions")
+	require.Contains(t, got, "Follow the repository conventions exactly.\n</skill-content>")
+	require.Contains(t, got, "</skill-context>\n\nUse the project conventions")
+	require.NotContains(t, got, "skills_load")
 }
 
 func TestComposeInstructions_SanitizesAndCapsSkillMetadata(t *testing.T) {

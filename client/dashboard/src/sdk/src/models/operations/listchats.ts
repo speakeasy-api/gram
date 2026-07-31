@@ -85,7 +85,7 @@ export type SortOrder = ClosedEnum<typeof SortOrder>;
 
 export type ListChatsRequest = {
   /**
-   * Search query (searches chat ID, user ID, and title)
+   * Search query (searches chat ID, user ID, user name, and title)
    */
   search?: string | undefined;
   /**

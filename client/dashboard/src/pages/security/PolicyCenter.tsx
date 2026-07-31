@@ -3,44 +3,42 @@ import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
-import type { Action } from "@/components/ui/more-actions";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { SearchBar } from "@/components/ui/search-bar";
-import { Switch } from "@/components/ui/switch";
-import { Dialog } from "@/components/ui/dialog";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import type { Action } from "@/components/ui/MoreActions";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
+import { SearchBar } from "@/components/ui/SearchBar";
+import { Switch } from "@/components/ui/Switch";
+import { Dialog } from "@/components/ui/Dialog";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
   SheetDescription,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Text } from "@/components/ui/Text";
 import {
+  PageTabsList,
   PageTabsTrigger,
   Tabs,
   TabsContent,
-  TabsList,
-} from "@/components/ui/tabs";
+} from "@/components/ui/Tabs";
 import { ExclusionsTab, type ExclusionSheetState } from "./ExclusionsTab";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
-  Badge,
-  Button,
-  type Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-  Stack,
-  Table,
-} from "@speakeasy-api/moonshine";
-import type { BadgeProps, IconName } from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Stack } from "@/components/ui/Stack";
+import { type Column, Table } from "@/components/ui/Table";
+import { type BadgeProps } from "@/components/ui/Badge";
 import {
   Plus,
   Shield,
@@ -95,7 +93,6 @@ import { Outlet } from "react-router";
 import {
   ACTION_OPTIONS,
   ALL_POLICY_MESSAGE_TYPES,
-  AVAILABLE_CATEGORIES,
   categoriesToPayload,
   policyMessageTypesForForm,
   policyToCategories,
@@ -106,83 +103,6 @@ import {
   getPolicyRuleGroupNamesForDeleteDialog,
 } from "./policy-delete-dialog";
 import { SeverityBadge } from "./risk-ui";
-
-/** One built-in detector as a toggleable card (Detect step). "Customize" opens
- *  a side-sheet to pick which rules in the category are active. */
-export function DetectorCard({
-  category,
-  selected,
-  disabledRules,
-  onToggle,
-  onCustomize,
-}: {
-  category: RuleCategory;
-  selected: boolean;
-  disabledRules: Set<string>;
-  onToggle: (checked: boolean) => void;
-  onCustomize: () => void;
-}): JSX.Element {
-  const meta = RULE_CATEGORY_META[category];
-  const available = AVAILABLE_CATEGORIES.has(category);
-  const rules = DETECTION_RULES[category].filter((r) => !r.hidden);
-  const customizable = available && rules.length > 1;
-  const enabledCount = rules.filter((r) => !disabledRules.has(r.id)).length;
-  const customized = selected && enabledCount < rules.length;
-  return (
-    <div
-      className={cn(
-        "flex gap-3 rounded-lg border p-3 transition-colors",
-        selected ? "border-foreground bg-muted/40" : "border-border",
-      )}
-    >
-      <Icon
-        name={meta.icon as IconName}
-        className="text-muted-foreground mt-0.5 size-5 shrink-0"
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">{meta.label}</span>
-          {!available && (
-            <Badge variant="neutral">
-              <Badge.Text>Coming soon</Badge.Text>
-            </Badge>
-          )}
-        </div>
-        <p className="text-muted-foreground mt-0.5 text-xs">
-          {meta.description}
-        </p>
-        <div className="mt-2 flex items-center gap-3 text-xs">
-          {rules.length > 0 && (
-            <span
-              className={cn(
-                "bg-muted rounded-full px-2 py-0.5",
-                customized ? "text-foreground" : "text-muted-foreground",
-              )}
-            >
-              {customized
-                ? `${enabledCount} of ${rules.length} rules`
-                : `${rules.length} rules`}
-            </span>
-          )}
-          {selected && customizable && (
-            <button
-              type="button"
-              onClick={onCustomize}
-              className="text-primary hover:underline"
-            >
-              Customize
-            </button>
-          )}
-        </div>
-      </div>
-      <Switch
-        checked={selected}
-        disabled={!available}
-        onCheckedChange={onToggle}
-      />
-    </div>
-  );
-}
 
 /** Per-policy config for the Non-Corporate Accounts category: the list of
  *  email domains treated as corporate. Rendered inside the category's
@@ -726,13 +646,13 @@ function PolicyCenterContent() {
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Shield className="text-muted-foreground h-6 w-6" />
       </div>
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         No Risk Policies
-      </Type>
-      <Type small muted className="mb-4 max-w-md text-center">
+      </Text>
+      <Text small muted className="mb-4 max-w-md text-center">
         Risk policies scan your chat messages for secrets and sensitive data.
         Create your first policy to get started.
-      </Type>
+      </Text>
       <Button
         onClick={() => {
           const {
@@ -1035,12 +955,12 @@ function PolicyCenterContent() {
               }
             >
               <div className="border-b">
-                <TabsList className="h-auto justify-start gap-4 rounded-none bg-transparent p-0 text-sm">
+                <PageTabsList>
                   <PageTabsTrigger value="policies">Policies</PageTabsTrigger>
                   <PageTabsTrigger value="exclusions">
                     Exclusions
                   </PageTabsTrigger>
-                </TabsList>
+                </PageTabsList>
               </div>
               <TabsContent value="policies" className="mt-6">
                 {policiesBody}
@@ -1080,23 +1000,23 @@ function PolicyCenterContent() {
               <Dialog.Title>Delete Policy</Dialog.Title>
             </Dialog.Header>
             <Stack gap={4}>
-              <Type variant="body">
+              <Text variant="body">
                 <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
                   {policyToDelete?.policy.name}
                 </code>{" "}
                 policy will be permanently deleted.
-              </Type>
+              </Text>
               {policyDeleteImpactText && (
-                <Type variant="body">{policyDeleteImpactText}</Type>
+                <Text variant="body">{policyDeleteImpactText}</Text>
               )}
               {policyDeleteRuleListItems.length > 0 && (
                 <div className="space-y-2">
                   <ul className="list-disc space-y-1 pl-5">
                     {policyDeleteRuleListItems.map((ruleName, index) => (
                       <li key={`${ruleName}-${index}`}>
-                        <Type variant="body" muted as="span">
+                        <Text variant="body" muted as="span">
                           {ruleName}
-                        </Type>
+                        </Text>
                       </li>
                     ))}
                   </ul>
@@ -1686,39 +1606,6 @@ function ActionBadge({ action }: { action: PolicyAction }): JSX.Element {
     <Badge variant={config.variant}>
       <Badge.Text>{config.label}</Badge.Text>
     </Badge>
-  );
-}
-
-/** One session-part as a selectable card (Scope step). */
-export function ScopeCard({
-  type,
-  checked,
-  onToggle,
-}: {
-  type: PolicyMessageType;
-  checked: boolean;
-  onToggle: (checked: boolean) => void;
-}): JSX.Element {
-  const meta = POLICY_MESSAGE_TYPE_META[type];
-  return (
-    <label
-      className={cn(
-        "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
-        checked
-          ? "border-foreground bg-muted/40"
-          : "border-border hover:bg-muted/30",
-      )}
-    >
-      <Checkbox
-        checked={checked}
-        onCheckedChange={(next) => onToggle(!!next)}
-        className="mt-0.5"
-      />
-      <div className="min-w-0">
-        <div className="text-sm font-medium">{meta.label}</div>
-        <div className="text-muted-foreground text-xs">{meta.description}</div>
-      </div>
-    </label>
   );
 }
 

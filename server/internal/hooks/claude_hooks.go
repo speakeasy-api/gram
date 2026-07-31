@@ -28,7 +28,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	claudeevents "github.com/speakeasy-api/gram/server/internal/hookevents/adapters/claude"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -210,33 +209,6 @@ func (d *formDecoder) Decode(v any) error {
 	return nil
 }
 
-// Metrics handles authenticated OTEL metrics data from Claude Code
-func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) error {
-	logger := s.logger.With(
-		attr.SlogHookSource("claude"),
-		attr.SlogHookEvent("Metrics"),
-	)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return oops.E(oops.CodeUnauthorized, errors.New("rejected unauthorized claude OTEL metrics request"), "unauthorized").LogWarn(ctx, logger, attr.SlogEvent("claude_metrics_unauthorized"))
-	}
-
-	orgID := authCtx.ActiveOrganizationID
-	projectID := authCtx.ProjectID.String()
-
-	logger.InfoContext(ctx, "Received Claude token metrics",
-		attr.SlogEvent("claude_metrics"),
-		attr.SlogOrganizationID(orgID),
-		attr.SlogProjectID(projectID),
-	)
-
-	// Write metrics to ClickHouse
-	s.writeMetricsToClickHouse(ctx, payload, orgID, projectID)
-
-	return nil
-}
-
 // Claude is the unified endpoint for all Claude Code hook events.
 func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *gen.ClaudeHookResult, err error) {
 	start := time.Now()
@@ -275,11 +247,12 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 	}
 	orgSlug := ""
 	outcome := hookMetricOutcomeAccepted
+	ctx, riskScanned := withRiskScanTracker(ctx)
 	defer func() {
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
-		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, claudeHookDecision(res), orgSlug, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, claudeHookDecision(res), orgSlug, *riskScanned, time.Since(start))
 	}()
 
 	if hasPluginAuth {
@@ -867,6 +840,43 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	if payload == nil {
 		return makeHookResult(ev.RawEventType), nil
 	}
+	// Spend gate runs before any risk-policy evaluation: an over-budget user
+	// gets tool calls denied even mid-turn, for native and MCP tools alike.
+	if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+		auditReason := spendBlockReason("tool call", block)
+		userReason := auditReason
+		if payload.SessionID != nil {
+			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
+				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
+			}
+		}
+		if blockID, err := uuid.NewV7(); err == nil && !s.isHookDuplicate(ctx) && s.repo != nil && strings.TrimSpace(ev.Context.OrganizationID) != "" && ev.Context.ProjectID != uuid.Nil {
+			userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+			userID := ev.Context.User.ID
+			userEmail := ev.Context.User.Email
+			asyncCtx := context.WithoutCancel(ctx)
+			// Resolve the owning user inside the goroutine so any DB lookup
+			// stays off the deny hot path.
+			go func() {
+				if userID == "" {
+					userID = s.resolveUserByEmail(asyncCtx, userEmail, ev.Context.OrganizationID)
+				}
+				s.insertToolCallBlock(asyncCtx, blockID, toolCallBlockParams{
+					Provider:       "claude",
+					OrganizationID: ev.Context.OrganizationID,
+					ProjectID:      ev.Context.ProjectID,
+					Reason:         auditReason,
+					ToolName:       ev.ToolName,
+					UserID:         userID,
+					RiskPolicyID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+					RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+					ChatID:         chatIDForBlock(conv.PtrValOr(payload.SessionID, "")),
+					ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				})
+			}()
+		}
+		return constructBlockResponse(payload.HookEventName, userReason), nil
+	}
 	if s.riskScanner != nil && ev.ConversationID != "" {
 		// Acknowledged warn is excluded from the enforcement block so it falls
 		// through to the shadow-MCP guard below: an ack clears the risk
@@ -1045,7 +1055,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	switch {
 	case matched == nil:
 		detail = fmt.Sprintf("MCP server %q is not in the active configuration", serverPrefix)
-	case matched.URL != "" && !s.isGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID):
+	case matched.URL != "" && !s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID):
 		detail = fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", serverPrefix, matched.URL)
 	case matched.URL == "" && matched.Command != "":
 		// Local stdio servers have no URL, so the Gram-hosted check above
@@ -1326,7 +1336,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 		OrganizationID:    metadata.GramOrgID,
 		RiskPolicyID:      policyID,
 		RiskPolicyVersion: policy.Version,
-		ChatMessageID:     msgID,
+		ChatMessageID:     uuid.NullUUID{UUID: msgID, Valid: true},
 		Description:       pgtype.Text{String: description, Valid: description != ""},
 		Match:             pgtype.Text{String: match, Valid: match != ""},
 		Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},

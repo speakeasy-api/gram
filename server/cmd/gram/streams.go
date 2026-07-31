@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/gen"
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -49,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/streams"
+	"github.com/speakeasy-api/gram/server/internal/subscribers"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
@@ -235,11 +237,6 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("embedded descriptor set is empty: cannot generate pubsub topology")
 			}
 
-			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider)
-			if err != nil {
-				return err
-			}
-
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
@@ -269,7 +266,11 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to connect to redis: %w", err)
 			}
-			_ = redisClient
+
+			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider, redisClient)
+			if err != nil {
+				return err
+			}
 
 			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
 			var featureFlags feature.Provider = posthogClient
@@ -312,14 +313,14 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to parse risk fingerprint pepper keyring: %w", err)
 			}
 
-			// ClickHouse risk_findings writer (shadow path). Only connect when
-			// the kill switch is off so a disabled deployment does not require
-			// ClickHouse reachability.
+			// ClickHouse risk_findings writer (sole write path). Only connect
+			// when the kill switch is off so a disabled deployment does not
+			// require ClickHouse reachability.
 			//
-			// A ClickHouse connect/ping failure must NOT abort streams: this is a
-			// shadow writer, and taking the process down would also kill the
-			// BigQuery finding path and every other receiver. Degrade instead —
-			// log the failure and disable only the ClickHouse receiver.
+			// A ClickHouse connect/ping failure must NOT abort streams: taking
+			// the process down would also kill every other receiver. Degrade
+			// instead — log the failure and disable only the ClickHouse
+			// receiver.
 			enableCHRiskWrites := !c.Bool("disable-clickhouse-risk-writes")
 			var chConn clickhouse.Conn
 			if enableCHRiskWrites {
@@ -407,10 +408,13 @@ func newStreamsCommand() *cli.Command {
 			// Start subscription receivers in this block
 			{
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, pingLogLevel))
+
 				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)
 				mustReceive(rg, &riskv1.PromptInjectionAnalysis{}, &riskv1.PromptInjectionAnalyzer{}, promptInjectionHandler)
 				mustReceive(rg, &riskv1.PromptPolicyAnalysis{}, &riskv1.PromptPolicyAnalyzer{}, promptPolicyHandler)
 				mustReceive(rg, &riskv1.CustomRulesAnalysis{}, &riskv1.CustomRulesAnalyzer{}, customRulesHandler)
+
+				mustReceive(rg, &telemetryv1.LogRecord{}, &telemetryv1.Noop{}, new(subscribers.NoopHandler[*telemetryv1.LogRecord]))
 
 				if enableCHRiskWrites {
 					mustReceiveBatch(

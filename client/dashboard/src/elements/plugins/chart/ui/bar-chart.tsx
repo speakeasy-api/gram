@@ -10,12 +10,13 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  Cell,
+  Rectangle,
   ResponsiveContainer,
-  TooltipProps,
+  TooltipContentProps,
+  BarShapeProps,
 } from "recharts";
 
-const CustomTooltip = ({ active, payload }: TooltipProps<number, string>) => {
+const CustomTooltip = ({ active, payload }: TooltipContentProps) => {
   if (!active || !payload || payload.length === 0) return null;
   const value = payload[0]?.value;
   return (
@@ -116,7 +117,7 @@ export const BarChart: FC<BarChartProps> = ({
                 />
               </>
             )}
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={CustomTooltip} />
             {showLegend && (
               <Legend
                 wrapperStyle={{ color: "var(--foreground)" }}
@@ -129,14 +130,17 @@ export const BarChart: FC<BarChartProps> = ({
               dataKey="value"
               radius={[4, 4, 0, 0]}
               isAnimationActive={false}
-            >
-              {data.map((entry, index) => (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={entry.color || COLORS[index % COLORS.length]}
-                />
-              ))}
-            </Bar>
+              shape={(props: BarShapeProps) => {
+                const { index, payload, ...rectProps } = props;
+                const entry = payload as DataPoint | undefined;
+                return (
+                  <Rectangle
+                    {...rectProps}
+                    fill={entry?.color || COLORS[index % COLORS.length]}
+                  />
+                );
+              }}
+            />
           </RechartsBarChart>
         </ResponsiveContainer>
       </div>

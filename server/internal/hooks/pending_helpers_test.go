@@ -139,6 +139,62 @@ func TestBuildTelemetryAttributesWithMetadata_HookSourceCoworkFromSessionStart(t
 	assert.Equal(t, agentVariantCowork, attrs[attr.HookSourceKey])
 }
 
+// Current cowork builds self-identify with OTEL service.name "cowork" — the
+// source of truth. Tool rows must be labelled cowork from it alone, with no
+// SessionStart inventory variant on file (the canonical ingest transport
+// stamps none).
+func TestBuildTelemetryAttributesWithMetadata_HookSourceFromCoworkServiceName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	metadata := &SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "cowork",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		SessionID:     &sessionID,
+	}, metadata)
+
+	assert.Equal(t, agentVariantCowork, attrs[attr.HookSourceKey])
+}
+
+// Claude Code Desktop is its own surface: the desktop hook adapter slug must
+// pass through as hook_source, not collapse into claude-code (CLI) — and not
+// into cowork, which shares the same adapter but is distinguished by the OTEL
+// service.name or the SessionStart variant.
+func TestBuildTelemetryAttributesWithMetadata_HookSourceClaudeCodeDesktop(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	metadata := &SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "claude-code-desktop",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		SessionID:     &sessionID,
+	}, metadata)
+
+	assert.Equal(t, surfaceClaudeCodeDesktop, attrs[attr.HookSourceKey])
+}
+
 // A claude-code variant (or no cached variant) must not be rewritten to
 // "cowork"; hook_source keeps the ServiceName / "claude" default.
 func TestBuildTelemetryAttributesWithMetadata_HookSourceDefaultsWithoutCoworkVariant(t *testing.T) {

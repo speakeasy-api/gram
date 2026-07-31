@@ -1,26 +1,28 @@
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import {
   Sheet,
   SheetContent,
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
 import { useCreateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/createOrganizationRemoteSessionIssuer.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -95,7 +97,10 @@ export function CreateRemoteIdentityProviderSheet({
     showDiscoverControls,
     showResetControls,
     endpointWarnings,
-  } = useIssuerDiscovery(null);
+    // This sheet can create an organization-level issuer, which has no project
+    // to authorize against, so it fetches metadata through the org-scoped
+    // endpoint rather than borrowing the active project's scope.
+  } = useIssuerDiscovery(null, { scope: "organization" });
 
   const createMutation = useCreateOrganizationRemoteSessionIssuerMutation({
     onSuccess: async (created) => {
@@ -220,10 +225,10 @@ export function CreateRemoteIdentityProviderSheet({
                   ))}
                 </SelectContent>
               </Select>
-              <Type muted small>
+              <Text muted small>
                 Organizational providers are inherited by every project. Choose
                 a project to scope the provider to it.
-              </Type>
+              </Text>
             </Stack>
 
             <IssuerUrlField
@@ -260,10 +265,10 @@ export function CreateRemoteIdentityProviderSheet({
                 }}
                 placeholder="my-identity-provider"
               />
-              <Type muted small>
+              <Text muted small>
                 Identifier for this identity provider. Auto-derived from the
                 Issuer URL until you edit it.
-              </Type>
+              </Text>
             </Stack>
 
             <Stack gap={2}>
@@ -278,11 +283,11 @@ export function CreateRemoteIdentityProviderSheet({
                 }}
                 placeholder="My Identity Provider"
               />
-              <Type muted small>
+              <Text muted small>
                 Friendly label shown in the dashboard. Auto-derived from the
                 Issuer URL until you edit it; falls back to the Issuer URL when
                 left blank.
-              </Type>
+              </Text>
             </Stack>
 
             <Stack gap={2}>
@@ -294,10 +299,10 @@ export function CreateRemoteIdentityProviderSheet({
                 onChange={setClientSetupDocumentationUrl}
                 placeholder="https://docs.example.com/oauth/apps"
               />
-              <Type muted small>
+              <Text muted small>
                 Linked from the New Client sheet so operators can set up an
                 OAuth client with this provider themselves.
-              </Type>
+              </Text>
             </Stack>
 
             <EndpointsFields

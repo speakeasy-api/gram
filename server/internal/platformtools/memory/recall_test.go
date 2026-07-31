@@ -31,6 +31,7 @@ func TestRecallTool_RequiresAssistantPrincipal(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{"query":"x"}`), &bytes.Buffer{})
 	require.Error(t, err)
 
@@ -76,6 +77,7 @@ func TestRecallTool_DefaultsLimitAndShapesResponse(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{"query":"hello","tags":["x"]}`), &out)
 	require.NoError(t, err)
 
@@ -116,6 +118,7 @@ func TestRecallTool_HonorsExplicitLimit(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{"query":"x","limit":3}`), &bytes.Buffer{})
 	require.NoError(t, err)
 

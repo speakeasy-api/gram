@@ -29,6 +29,7 @@ export const GroupBy = {
   BillingMode: "billing_mode",
   QuerySource: "query_source",
   SkillName: "skill_name",
+  SkillVersion: "skill_version",
   AgentName: "agent_name",
   McpServerName: "mcp_server_name",
   McpToolName: "mcp_tool_name",
@@ -53,6 +54,9 @@ export const QueryPayloadSortBy = {
   CacheCreationInputTokens: "cache_creation_input_tokens",
   TotalToolCalls: "total_tool_calls",
   TotalChats: "total_chats",
+  TotalWorkUnits: "total_work_units",
+  ScoredCost: "scored_cost",
+  ScoredTokens: "scored_tokens",
 } as const;
 /**
  * Measure used to rank groups for top_n. Defaults to total_cost.
@@ -60,7 +64,7 @@ export const QueryPayloadSortBy = {
 export type QueryPayloadSortBy = ClosedEnum<typeof QueryPayloadSortBy>;
 
 /**
- * Payload for a generic org-scoped analytics query
+ * Payload for a generic org-scoped analytics query. Queries involving skill_version use raw telemetry retained for 90 days and attribute each whole session to every activated version; timeseries place the whole session in its start-time bucket.
  */
 export type QueryPayload = {
   /**

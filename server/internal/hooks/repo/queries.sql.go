@@ -12,37 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const backfillLatestClaudeUserMessagePromptID = `-- name: BackfillLatestClaudeUserMessagePromptID :execrows
-WITH latest_user_message AS (
-  SELECT chat_messages.id
-  FROM chat_messages
-  WHERE chat_messages.chat_id = $2
-    AND (chat_messages.project_id IS NULL OR chat_messages.project_id = $3::uuid)
-    AND chat_messages.role = 'user'
-  ORDER BY chat_messages.created_at DESC, chat_messages.seq DESC
-  LIMIT 1
-)
-UPDATE chat_messages
-SET message_id = $1
-WHERE chat_messages.id = (SELECT latest_user_message.id FROM latest_user_message)
-  AND $1::text <> ''
-  AND (chat_messages.message_id IS NULL OR chat_messages.message_id = '' OR chat_messages.message_id != $1::text)
-`
-
-type BackfillLatestClaudeUserMessagePromptIDParams struct {
-	MessageID pgtype.Text
-	ChatID    uuid.UUID
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) BackfillLatestClaudeUserMessagePromptID(ctx context.Context, arg BackfillLatestClaudeUserMessagePromptIDParams) (int64, error) {
-	result, err := q.db.Exec(ctx, backfillLatestClaudeUserMessagePromptID, arg.MessageID, arg.ChatID, arg.ProjectID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const countEmployeesForExternalOrg = `-- name: CountEmployeesForExternalOrg :one
 SELECT COUNT(DISTINCT user_id)::bigint
 FROM user_accounts
@@ -329,7 +298,7 @@ type InsertShadowMCPBlockResultParams struct {
 	OrganizationID    string
 	RiskPolicyID      uuid.UUID
 	RiskPolicyVersion int64
-	ChatMessageID     uuid.UUID
+	ChatMessageID     uuid.NullUUID
 	Description       pgtype.Text
 	Match             pgtype.Text
 	Confidence        pgtype.Float8
@@ -350,7 +319,7 @@ func (q *Queries) InsertShadowMCPBlockResult(ctx context.Context, arg InsertShad
 	return err
 }
 
-const insertSkillObservation = `-- name: InsertSkillObservation :exec
+const insertSkillObservation = `-- name: InsertSkillObservation :execrows
 INSERT INTO skill_observations (
     project_id
   , idempotency_key
@@ -360,6 +329,7 @@ INSERT INTO skill_observations (
   , hostname
   , session_id
   , skill_name
+  , source
   , source_level
   , source_path
   , raw_sha256
@@ -377,6 +347,7 @@ INSERT INTO skill_observations (
   , $10
   , $11
   , $12
+  , $13
 )
 ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL
 DO NOTHING
@@ -391,14 +362,15 @@ type InsertSkillObservationParams struct {
 	Hostname       pgtype.Text
 	SessionID      pgtype.Text
 	SkillName      string
+	Source         pgtype.Text
 	SourceLevel    pgtype.Text
 	SourcePath     pgtype.Text
 	RawSha256      pgtype.Text
 	SeenAt         pgtype.Timestamptz
 }
 
-func (q *Queries) InsertSkillObservation(ctx context.Context, arg InsertSkillObservationParams) error {
-	_, err := q.db.Exec(ctx, insertSkillObservation,
+func (q *Queries) InsertSkillObservation(ctx context.Context, arg InsertSkillObservationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertSkillObservation,
 		arg.ProjectID,
 		arg.IdempotencyKey,
 		arg.Provider,
@@ -407,12 +379,16 @@ func (q *Queries) InsertSkillObservation(ctx context.Context, arg InsertSkillObs
 		arg.Hostname,
 		arg.SessionID,
 		arg.SkillName,
+		arg.Source,
 		arg.SourceLevel,
 		arg.SourcePath,
 		arg.RawSha256,
 		arg.SeenAt,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const insertToolCallBlock = `-- name: InsertToolCallBlock :exec
@@ -551,7 +527,7 @@ func (q *Queries) ListHooksServerNameOverrides(ctx context.Context, projectID uu
 }
 
 const listSkillObservations = `-- name: ListSkillObservations :many
-SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source_level, source_path, raw_sha256, seen_at, created_at
+SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source, source_level, source_path, raw_sha256, seen_at, skill_id, skill_version_id, reconciled_at, metrics_synced_at, efficacy_enqueued_at, reconcile_error_code, created_at
 FROM skill_observations
 WHERE project_id = $1
 ORDER BY seen_at ASC, id ASC
@@ -576,10 +552,17 @@ func (q *Queries) ListSkillObservations(ctx context.Context, projectID uuid.UUID
 			&i.Hostname,
 			&i.SessionID,
 			&i.SkillName,
+			&i.Source,
 			&i.SourceLevel,
 			&i.SourcePath,
 			&i.RawSha256,
 			&i.SeenAt,
+			&i.SkillID,
+			&i.SkillVersionID,
+			&i.ReconciledAt,
+			&i.MetricsSyncedAt,
+			&i.EfficacyEnqueuedAt,
+			&i.ReconcileErrorCode,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -649,26 +632,43 @@ func (q *Queries) ListUserAccountsByUsers(ctx context.Context, arg ListUserAccou
 }
 
 const rememberKnownSkillRawHash = `-- name: RememberKnownSkillRawHash :one
-WITH inserted AS (
-  INSERT INTO skill_raw_hashes (project_id, raw_sha256, canonical_sha256)
-  SELECT s.project_id, $2, sv.canonical_sha256
+WITH existing_alias AS (
+  SELECT srh.canonical_sha256
+  FROM skill_raw_hashes srh
+  WHERE srh.project_id = $1
+    AND srh.raw_sha256 = $2
+), known_version AS (
+  SELECT MIN(sv.canonical_sha256) AS canonical_sha256
   FROM skill_versions sv
   JOIN skills s ON s.id = sv.skill_id
   WHERE s.project_id = $1
+    AND s.archived_at IS NULL
     AND sv.raw_sha256 = $2
-  ORDER BY sv.created_at DESC, sv.id DESC
-  LIMIT 1
+    AND NOT EXISTS (SELECT 1 FROM existing_alias)
+  HAVING COUNT(*) = 1
+), inserted AS (
+  INSERT INTO skill_raw_hashes (project_id, raw_sha256, canonical_sha256)
+  SELECT $1, $2, canonical_sha256
+  FROM known_version
+  WHERE canonical_sha256 IS NOT NULL
   ON CONFLICT (project_id, raw_sha256) DO NOTHING
-  RETURNING 1
+  RETURNING canonical_sha256
+), canonical_hash AS (
+  SELECT canonical_sha256 FROM existing_alias
+  UNION ALL
+  SELECT canonical_sha256 FROM inserted
+), resolved AS (
+  SELECT sv.id
+  FROM canonical_hash hash
+  JOIN skills s ON s.project_id = $1
+  JOIN skill_versions sv
+    ON sv.skill_id = s.id
+    AND sv.canonical_sha256 = hash.canonical_sha256
+  WHERE s.archived_at IS NULL
+  LIMIT 2
 )
-SELECT (
-  EXISTS (
-    SELECT 1
-    FROM skill_raw_hashes srh
-    WHERE srh.project_id = $1
-      AND srh.raw_sha256 = $2
-  ) OR EXISTS (SELECT 1 FROM inserted)
-)::boolean AS known
+SELECT COUNT(*) = 1 AS known
+FROM resolved
 `
 
 type RememberKnownSkillRawHashParams struct {

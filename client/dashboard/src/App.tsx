@@ -1,13 +1,9 @@
-import "@speakeasy-api/moonshine/moonshine.css";
-import "./App.css"; // Import this second to override certain values in moonshine.css
+import "./App.css";
 
 import { NuqsAdapter } from "nuqs/adapters/react-router/v8";
-import { Toaster } from "@/components/ui/sonner";
-import { TooltipProvider as LocalTooltipProvider } from "@/components/ui/tooltip";
-import {
-  MoonshineConfigProvider,
-  TooltipProvider,
-} from "@speakeasy-api/moonshine";
+import { Toaster } from "@/components/ui/Sonner";
+import { ConfigProvider } from "@/components/ui/context/ConfigContext";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import { useEffect, useMemo, useState } from "react";
 import {
   BrowserRouter,
@@ -40,6 +36,8 @@ import CliCallback from "./pages/cli/CliCallback";
 import ShadowMCPRequestAccess from "./pages/shadow-mcp/RequestAccess";
 import RiskPolicyChallengeAcknowledge from "./pages/risk-policy-challenge/Acknowledge";
 import { BlockPage } from "./pages/blocks/BlockDetail";
+import { SHARED_SKILL_BASE_PATH } from "./pages/skills/share-link";
+import { SharedSkillPage } from "./pages/skills/SharedSkillPage";
 import SwitchOrg from "./pages/demo/SwitchOrg";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
@@ -94,25 +92,23 @@ export default function App(): JSX.Element {
   }, []);
 
   return (
-    <MoonshineConfigProvider theme={theme} setTheme={applyTheme}>
-      <LocalTooltipProvider>
-        <TooltipProvider>
-          <TelemetryProvider>
-            <CommandPaletteProvider>
-              <BrowserRouter>
-                <NuqsAdapter>
-                  <SdkProvider>
-                    <AppContent />
-                    <Toaster />
-                    <CommandPalette />
-                  </SdkProvider>
-                </NuqsAdapter>
-              </BrowserRouter>
-            </CommandPaletteProvider>
-          </TelemetryProvider>
-        </TooltipProvider>
-      </LocalTooltipProvider>
-    </MoonshineConfigProvider>
+    <ConfigProvider theme={theme} setTheme={applyTheme}>
+      <TooltipProvider>
+        <TelemetryProvider>
+          <CommandPaletteProvider>
+            <BrowserRouter>
+              <NuqsAdapter>
+                <SdkProvider>
+                  <AppContent />
+                  <Toaster />
+                  <CommandPalette />
+                </SdkProvider>
+              </NuqsAdapter>
+            </BrowserRouter>
+          </CommandPaletteProvider>
+        </TelemetryProvider>
+      </TooltipProvider>
+    </ConfigProvider>
   );
 }
 
@@ -306,6 +302,10 @@ const RouteProvider = () => {
           element={<RiskPolicyChallengeAcknowledge />}
         />
         <Route path="/blocks/:id" element={<BlockPage />} />
+        <Route
+          path={`${SHARED_SKILL_BASE_PATH}/:token`}
+          element={<SharedSkillPage />}
+        />
         <Route path="/" element={<LoginCheck />}>
           <Route path=":orgSlug/projects/:projectSlug">
             {routesWithSubroutes(outsideStructureRoutes)}

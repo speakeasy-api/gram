@@ -1,5 +1,6 @@
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { formatCost } from "@/lib/money";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import type { SessionSummary } from "@gram/client/models/components/sessionsummary.js";
 import { formatDistanceToNow } from "date-fns";
@@ -14,19 +15,13 @@ import {
 } from "./gridTable";
 import { EstimatedCostIndicator } from "@/components/estimated-cost";
 import { costMeasureLabel } from "@/components/estimated-cost-utils";
+import { formatPlatform } from "@/lib/formatPlatform";
 
 const PAGE_SIZE = 10;
 
 // The list arrives ranked by the server's sortBy (cost) and capped at this many
 // rows; surfaced so the footer can flag when the slice is truncated.
 const DEFAULT_LIMIT = 100;
-
-function formatCost(value: number): string {
-  return `$${value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
 
 function displayOrDash(value: string | undefined): string {
   return value && value.length > 0 ? value : "—";
@@ -154,7 +149,9 @@ const SESSION_COLUMNS: SessionColumn[] = [
     track: "minmax(max-content,1fr)",
     render: (s) => (
       <div className="flex min-w-0 items-center">
-        <span className="truncate">{displayOrDash(s.hookSource)}</span>
+        <span className="truncate">
+          {s.hookSource ? formatPlatform(s.hookSource) : "—"}
+        </span>
       </div>
     ),
   },
@@ -319,7 +316,7 @@ export function SessionTable({
   if (isLoading) return <SkeletonTable />;
   if (isError) {
     return (
-      <Type className="text-muted-foreground">Failed to load sessions.</Type>
+      <Text className="text-muted-foreground">Failed to load sessions.</Text>
     );
   }
 
@@ -366,9 +363,9 @@ export function SessionTable({
           className="px-5 py-10 text-center"
           style={{ gridColumn: "1 / -1" }}
         >
-          <Type className="text-muted-foreground">
+          <Text className="text-muted-foreground">
             {emptyMessage ?? "No sessions in this slice."}
-          </Type>
+          </Text>
         </div>
       ) : (
         pageItems.map((s, i) => (
@@ -393,9 +390,9 @@ export function SessionTable({
 
       {sliceTruncated && (
         <div className="px-5 py-3" style={{ gridColumn: "1 / -1" }}>
-          <Type small className="text-muted-foreground">
+          <Text small className="text-muted-foreground">
             {truncationNote}
-          </Type>
+          </Text>
         </div>
       )}
 

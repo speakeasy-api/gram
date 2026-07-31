@@ -1,17 +1,16 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
+import { Heading } from "@/components/ui/Heading";
 import {
+  PageTabsList,
   PageTabsTrigger,
   Tabs,
   TabsContent,
-  TabsList,
-} from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tabs";
+import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useOrgRoutes } from "@/routes";
-import { Alert } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { Link, Navigate, useLocation, useNavigate } from "react-router";
@@ -33,16 +32,10 @@ const tabDisplayNames: Record<string, string> = {
 
 export default function Access(): JSX.Element {
   const location = useLocation();
-  const telemetry = useTelemetry();
-  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
 
   const pathSegments = location.pathname.split("/");
   const lastSegment = pathSegments[pathSegments.length - 1];
   const shouldRedirect = lastSegment === "access";
-
-  if (!isRbacEnabled) {
-    return <Navigate to=".." replace />;
-  }
 
   if (shouldRedirect) {
     return <Navigate to="roles" replace />;
@@ -93,10 +86,10 @@ function AccessInner() {
         <Heading variant="h4" className="mb-2">
           Roles &amp; Permissions
         </Heading>
-        <Type variant="body" className="text-muted-foreground mb-2">
+        <Text variant="body" className="text-muted-foreground mb-2">
           Manage access control for your team by defining roles and assigning
           permissions. View past authorization challenges.
-        </Type>
+        </Text>
       </div>
 
       {organization.scimEnabled && (
@@ -114,7 +107,7 @@ function AccessInner() {
 
       <Tabs value={currentTab} onValueChange={handleTabChange}>
         <div className="border-border -mx-8 border-b px-8">
-          <TabsList className="h-auto justify-start gap-4 rounded-none bg-transparent p-0 text-sm">
+          <PageTabsList>
             <PageTabsTrigger value="roles">
               Roles{roleCount != null ? ` (${roleCount})` : ""}
             </PageTabsTrigger>
@@ -124,7 +117,7 @@ function AccessInner() {
             <PageTabsTrigger value="challenges">
               Authorization Challenges
             </PageTabsTrigger>
-          </TabsList>
+          </PageTabsList>
         </div>
 
         <TabsContent value="roles" className="mt-6">

@@ -1,15 +1,7 @@
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { cn } from "@/lib/utils";
-import { Check, ChevronRight, CircleAlert, Loader2 } from "lucide-react";
-import { Suspense, useState, type JSX } from "react";
+import { Check, CircleAlert, Loader2 } from "lucide-react";
+import { Suspense, type JSX } from "react";
 import { useCelStatus, type CelStatus } from "./use-cel-status";
 import { useCelEngine } from "./use-cel-engine";
-import { CelMatchPreview } from "./cel-match-preview";
-import type { CelReferenceData } from "./cel-wasm";
 import CelMonacoEditorLazy from "./cel-monaco-editor.lazy";
 
 /** A named, insertable CEL snippet shown beneath the field. */
@@ -90,76 +82,8 @@ function CelStatusLine({ status }: { status: CelStatus }): JSX.Element | null {
   }
 }
 
-// Collapsible reference of fields, matchers, and macros (from the engine catalog).
-function CelReference({
-  reference,
-}: {
-  reference?: CelReferenceData;
-}): JSX.Element {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs">
-        <ChevronRight
-          className={cn("h-3 w-3 transition-transform", open && "rotate-90")}
-        />
-        Fields &amp; matchers
-      </CollapsibleTrigger>
-      <CollapsibleContent className="mt-2 space-y-3">
-        <ReferenceGroup
-          title="Fields"
-          items={(reference?.variables ?? []).map((v) => ({
-            term: v.name,
-            note: `${v.type} — ${v.description}`,
-          }))}
-        />
-        <ReferenceGroup
-          title="Matchers"
-          items={(reference?.matchers ?? []).map((f) => ({
-            term: f.signature,
-            note: f.description,
-          }))}
-        />
-        <ReferenceGroup
-          title="Macros"
-          items={(reference?.macros ?? []).map((m) => ({
-            term: m.signature,
-            note: m.description,
-          }))}
-        />
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
-function ReferenceGroup({
-  title,
-  items,
-}: {
-  title: string;
-  items: { term: string; note: string }[];
-}): JSX.Element | null {
-  if (items.length === 0) return null;
-  return (
-    <div className="space-y-1">
-      <p className="text-muted-foreground text-xs font-medium uppercase">
-        {title}
-      </p>
-      <ul className="space-y-1">
-        {items.map((item) => (
-          <li key={item.term} className="text-xs">
-            <code className="text-foreground font-mono">{item.term}</code>
-            <span className="text-muted-foreground"> — {item.note}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-// The raw-CEL authoring field (Monaco editor + validation + examples +
-// reference), used for detection_expr and the policy scope predicates.
+// The raw-CEL authoring field (Monaco editor + validation + examples),
+// used for detection_expr and the per-category scope predicates.
 export function CelExpressionField({
   value,
   onChange,
@@ -199,8 +123,6 @@ export function CelExpressionField({
         <CelStatusLine status={status} />
       </div>
 
-      {ready && <CelMatchPreview expr={value} engine={ready} />}
-
       {examples && examples.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-muted-foreground text-xs">Examples:</span>
@@ -217,8 +139,6 @@ export function CelExpressionField({
           ))}
         </div>
       )}
-
-      <CelReference reference={ready?.reference} />
     </div>
   );
 }

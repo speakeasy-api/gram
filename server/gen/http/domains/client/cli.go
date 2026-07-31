@@ -30,6 +30,21 @@ func BuildGetDomainPayload(domainsGetDomainSessionToken string) (*domains.GetDom
 	return v, nil
 }
 
+// BuildListDomainsPayload builds the payload for the domains listDomains
+// endpoint from CLI flags.
+func BuildListDomainsPayload(domainsListDomainsSessionToken string) (*domains.ListDomainsPayload, error) {
+	var sessionToken *string
+	{
+		if domainsListDomainsSessionToken != "" {
+			sessionToken = &domainsListDomainsSessionToken
+		}
+	}
+	v := &domains.ListDomainsPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCreateDomainPayload builds the payload for the domains createDomain
 // endpoint from CLI flags.
 func BuildCreateDomainPayload(domainsCreateDomainBody string, domainsCreateDomainSessionToken string) (*domains.CreateDomainPayload, error) {
@@ -93,6 +108,21 @@ func BuildUpdateDomainPayload(domainsUpdateDomainBody string, domainsUpdateDomai
 	} else {
 		v.IPAllowlist = []string{}
 	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildCheckHealthPayload builds the payload for the domains checkHealth
+// endpoint from CLI flags.
+func BuildCheckHealthPayload(domainsCheckHealthSessionToken string) (*domains.CheckHealthPayload, error) {
+	var sessionToken *string
+	{
+		if domainsCheckHealthSessionToken != "" {
+			sessionToken = &domainsCheckHealthSessionToken
+		}
+	}
+	v := &domains.CheckHealthPayload{}
 	v.SessionToken = sessionToken
 
 	return v, nil

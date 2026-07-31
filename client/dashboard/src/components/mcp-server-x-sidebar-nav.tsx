@@ -7,15 +7,15 @@ import {
   McpServerReadinessBar,
   type ReadinessCheck,
 } from "@/components/mcp-server-readiness-bar";
-import { CopyButton } from "@/components/ui/copy-button";
-import { Type } from "@/components/ui/type";
-import { useTelemetry } from "@/contexts/Telemetry";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Text } from "@/components/ui/Text";
 import {
   getMcpServerArgs,
   remoteMcpRouteParam,
   tunneledMcpRouteParam,
 } from "@/lib/sources";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
+import { useRBAC } from "@/hooks/useRBAC";
 import { MCPServerStatusDropdown } from "@/pages/mcp/x/MCPServerDetails";
 import {
   activeTabFromPath,
@@ -43,10 +43,9 @@ import { useLocation, useParams } from "react-router";
 
 export function McpServerXSidebarNav(): React.JSX.Element | null {
   const routes = useRoutes();
-  const telemetry = useTelemetry();
   const location = useLocation();
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
-  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
+  const { hasScope } = useRBAC();
 
   const idOrSlug = mcpServerSlug ?? "";
   const { data: mcpServer } = useGetMcpServer(
@@ -102,6 +101,8 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const isRemoteBacked = !!mcpServer?.remoteMcpServerId;
   const isTunneledBacked = !!mcpServer?.tunneledMcpServerId;
   const isSourceBacked = isRemoteBacked || isTunneledBacked;
+  const canViewTeamAccess =
+    !!mcpServer && hasScope("org:read") && hasScope("mcp:read", mcpServer.id);
 
   let authenticationDescription =
     "Attach a remote identity provider so users can access the upstream service.";
@@ -179,13 +180,13 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       active: activeTab === "overview",
     },
     {
-      key: "tools",
-      title: "Tools",
+      key: "inspect",
+      title: "Inspect",
       Icon: Wrench,
-      href: mcpServerTabHref(routes, idOrSlug, "tools"),
-      active: activeTab === "tools",
+      href: mcpServerTabHref(routes, idOrSlug, "inspect"),
+      active: activeTab === "inspect",
     },
-    ...(isRbacEnabled
+    ...(canViewTeamAccess
       ? [
           {
             key: "team-access",
@@ -208,9 +209,9 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const cardContent = mcpServer && (
     <>
       <div className="flex flex-col gap-0.5">
-        <Type className="truncate font-semibold">
+        <Text className="truncate font-semibold">
           {mcpServer.name || "MCP Server"}
-        </Type>
+        </Text>
         {isRemoteBacked && (
           <McpSidebarInfoLabel>Remote MCP</McpSidebarInfoLabel>
         )}
@@ -228,16 +229,16 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         <div className="flex flex-col gap-1">
           <McpSidebarInfoLabel>URL</McpSidebarInfoLabel>
           <div className="flex items-start gap-1">
-            <Type
+            <Text
               variant="small"
               muted
               className="line-clamp-2 font-mono text-xs break-all"
             >
               {mcpUrl.replace(/^https?:\/\//, "")}
-            </Type>
+            </Text>
             <CopyButton
               text={mcpUrl}
-              size="inline"
+              size="xs"
               tooltip="Copy URL"
               className="mt-[-2px] shrink-0"
             />
@@ -249,16 +250,16 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         <div className="flex flex-col gap-1">
           <McpSidebarInfoLabel>Upstream URL</McpSidebarInfoLabel>
           <div className="flex items-start gap-1">
-            <Type
+            <Text
               variant="small"
               muted
               className="line-clamp-2 font-mono text-xs break-all"
             >
               {upstreamUrl.replace(/^https?:\/\//, "")}
-            </Type>
+            </Text>
             <CopyButton
               text={upstreamUrl}
-              size="inline"
+              size="xs"
               tooltip="Copy upstream URL"
               className="mt-[-2px] shrink-0"
             />

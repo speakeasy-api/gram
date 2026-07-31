@@ -9,6 +9,7 @@
   ],
   "fixed": [["@gram-ai/functions", "@gram-ai/create-function"]],
   "linked": [],
+  "ignore": ["hooks"],
   "access": "restricted",
   "baseBranch": "origin/main",
   "updateInternalDependencies": "patch",

@@ -1,9 +1,8 @@
 import { Page } from "@/components/page-layout";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -13,10 +12,11 @@ import {
 } from "@gram/client/react-query/getTokensUnderManagement.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { useSetBillingMetadataMutation } from "@gram/client/react-query/setBillingMetadata.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Info, RotateCcw } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { RotateCcw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { BillingCyclePicker } from "./billing-cycle-picker";
 import {
@@ -32,10 +32,12 @@ import {
 import {
   BREAKDOWN_TOTAL,
   breakdownValueLabel,
+  isServerRollupRow,
   stackModeFor,
 } from "./breakdown-options";
 import { BreakdownPicker } from "./breakdown-picker";
 import { type GroupSeries, TokenUsagePanel } from "./token-usage-panel";
+import { TumDefinitionTooltip } from "./tum-definition";
 import { TumDetailsTable } from "./tum-details-table";
 import { tumDetailsQuery } from "./tum-queries";
 import { TumUsageCard } from "./tum-usage-card";
@@ -79,11 +81,14 @@ function TumTokenBreakdown({
 
   // The selected dimension's rows. "" rows are real observed traffic that
   // lacks the attribute — charted as "(unset)", same as the details table.
+  // The server's top-N remainder row is flagged as the rollup so the chart
+  // pins it to the neutral color by identity, not by label.
   const groups = useMemo<GroupSeries[]>(() => {
     const rows = data?.breakdowns.find((b) => b.key === dimension)?.rows ?? [];
-    return rows.map((r) => ({
+    return rows.map((r, i) => ({
       label: breakdownValueLabel(dimension, r.value, projectNames),
       series: r.series,
+      rollup: isServerRollupRow(rows, i) || undefined,
     }));
   }, [data, dimension, projectNames]);
 
@@ -284,14 +289,22 @@ export const TumUsageSection = (): JSX.Element => {
   }, [period, cycles]);
 
   // Bar-click drill-down, clamped to the current period (week/month buckets
-  // can overhang the period's edges).
-  const handleBarSelect = (start: Date, end: Date): void => {
-    if (!period) return;
-    const s = Math.max(start.getTime(), period.start.getTime());
-    const e = Math.min(end.getTime(), period.end.getTime());
-    if (e <= s) return;
-    setCustomRange({ start: new Date(s), end: new Date(e), label: undefined });
-  };
+  // can overhang the period's edges). Stable identity — it feeds the chart
+  // panel's chartOptions memo.
+  const handleBarSelect = useCallback(
+    (start: Date, end: Date): void => {
+      if (!period) return;
+      const s = Math.max(start.getTime(), period.start.getTime());
+      const e = Math.min(end.getTime(), period.end.getTime());
+      if (e <= s) return;
+      setCustomRange({
+        start: new Date(s),
+        end: new Date(e),
+        label: undefined,
+      });
+    },
+    [period],
+  );
 
   return (
     <Page.Section>
@@ -305,12 +318,10 @@ export const TumUsageSection = (): JSX.Element => {
         {tum && period ? (
           <Stack gap={3} className="mb-6">
             <Stack direction="horizontal" align="center" gap={1}>
-              <Type variant="body" className="font-medium">
+              <Text variant="body" className="font-medium">
                 Tokens Under Management
-              </Type>
-              <SimpleTooltip tooltip="Counts the tokens observed in your users' agent sessions (input, output, and cache writes; cache reads excluded) during the selected billing cycle. Compared against your contracted monthly allowance.">
-                <Info className="text-muted-foreground h-4 w-4" />
-              </SimpleTooltip>
+              </Text>
+              <TumDefinitionTooltip />
               <div className="ml-auto flex items-center gap-2">
                 <BillingCyclePicker
                   cycles={cycles}
@@ -492,14 +503,14 @@ export const TumAdminSection = (): JSX.Element => {
               {mutation.isPending ? "SAVING..." : "SAVE CONTRACT TERMS"}
             </Button>
             {mutation.isSuccess && !mutation.isPending && (
-              <Type muted small>
+              <Text muted small>
                 Saved.
-              </Type>
+              </Text>
             )}
             {mutation.isError && (
-              <Type small className="text-destructive">
+              <Text small className="text-destructive">
                 Failed to save contract terms.
-              </Type>
+              </Text>
             )}
           </Stack>
         </Stack>

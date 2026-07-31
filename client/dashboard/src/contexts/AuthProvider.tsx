@@ -9,8 +9,8 @@ import {
   SidebarHeader,
   SidebarInset,
   SidebarProvider,
-} from "@/components/ui/sidebar";
-import { Skeleton } from "@/components/ui/skeleton";
+} from "@/components/ui/Sidebar";
+import { Skeleton } from "@/components/ui/Skeleton";
 import BookDemo from "@/pages/demo/BookDemo";
 import SwitchOrg from "@/pages/demo/SwitchOrg";
 import { useQueryClient } from "@tanstack/react-query";
@@ -54,6 +54,7 @@ const UNAUTHENTICATED_PATHS = [
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
   "/blocks",
+  "/shared",
 ];
 
 const SLUG_EXEMPT_PATHS = [
@@ -62,6 +63,7 @@ const SLUG_EXEMPT_PATHS = [
   "/risk-policy-bypass/request",
   "/risk-policy-challenge/acknowledge",
   "/blocks",
+  "/shared",
 ];
 
 export const AuthProvider = ({

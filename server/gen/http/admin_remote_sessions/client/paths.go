@@ -32,6 +32,16 @@ func DeleteGlobalIssuerAdminRemoteSessionsPath() string {
 	return "/rpc/adminRemoteSessions.deleteGlobalIssuer"
 }
 
+// FetchGlobalIssuerMetadataAdminRemoteSessionsPath returns the URL path to the adminRemoteSessions service fetchGlobalIssuerMetadata HTTP endpoint.
+func FetchGlobalIssuerMetadataAdminRemoteSessionsPath() string {
+	return "/rpc/adminRemoteSessions.fetchGlobalIssuerMetadata"
+}
+
+// RefreshGlobalIssuerMetadataAdminRemoteSessionsPath returns the URL path to the adminRemoteSessions service refreshGlobalIssuerMetadata HTTP endpoint.
+func RefreshGlobalIssuerMetadataAdminRemoteSessionsPath() string {
+	return "/rpc/adminRemoteSessions.refreshGlobalIssuerMetadata"
+}
+
 // CreateGlobalClientAdminRemoteSessionsPath returns the URL path to the adminRemoteSessions service createGlobalClient HTTP endpoint.
 func CreateGlobalClientAdminRemoteSessionsPath() string {
 	return "/rpc/adminRemoteSessions.createGlobalClient"

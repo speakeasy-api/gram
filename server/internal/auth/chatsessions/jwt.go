@@ -24,8 +24,7 @@ type ChatSessionClaims struct {
 	// engine will load and enforce RBAC grants for the user.
 	SessionID *string `json:"session_id,omitempty"`
 	// AccountType is the organization's billing tier (e.g. "enterprise").
-	// Required for RBAC enforcement — the authz engine only loads grants
-	// for enterprise accounts.
+	// It is carried as session metadata and does not control RBAC enforcement.
 	AccountType string `json:"account_type,omitempty"`
 	jwt.RegisteredClaims
 }

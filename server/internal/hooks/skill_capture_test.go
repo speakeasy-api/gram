@@ -93,10 +93,11 @@ func TestIngest_RecordsExplicitAndInferredSkillObservations(t *testing.T) {
 
 	content := captureManifest("repo-review", "explicit")
 	hash := rawHash(content)
-	level, path, hostname := "project", "/workspace/.agents/skills/repo-review/SKILL.md", "devbox"
+	source, level, path, hostname := "workspace", "project", "/workspace/.agents/skills/repo-review/SKILL.md", "devbox"
 	explicit := skillPayload("claude", eventTypeSkillActivated, "explicit-session", "repo-review", strings.ToUpper(hash))
 	explicit.IdempotencyKey = new(uuid.NewString())
 	explicit.Source.Hostname = &hostname
+	explicit.Data.Skill.Source = &source
 	explicit.Data.Skill.SourceLevel = &level
 	explicit.Data.Skill.SourcePath = &path
 	result, err := ti.service.Ingest(ctx, explicit)
@@ -116,11 +117,28 @@ func TestIngest_RecordsExplicitAndInferredSkillObservations(t *testing.T) {
 	require.Len(t, rows, 2)
 	require.Equal(t, "repo-review", rows[0].SkillName)
 	require.Equal(t, hash, rows[0].RawSha256.String)
+	require.Equal(t, source, rows[0].Source.String)
 	require.Equal(t, level, rows[0].SourceLevel.String)
 	require.Equal(t, path, rows[0].SourcePath.String)
 	require.Equal(t, hostname, rows[0].Hostname.String)
 	require.Equal(t, "another-skill", rows[1].SkillName)
 	require.False(t, rows[1].RawSha256.Valid, "malformed hashes degrade to name-only observations")
+}
+
+func TestIngest_ScopedSkillNameStoredCanonically(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	payload := skillPayload("claude", eventTypeSkillActivated, "scoped-session", "vendor-plugin: repo-review", "")
+	_, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+
+	rows, err := ti.service.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "repo-review", rows[0].SkillName)
 }
 
 func TestIngest_SkillObservationDurableIdempotencyIgnoresRedisDuplicate(t *testing.T) {
@@ -141,6 +159,7 @@ func TestIngest_SkillObservationDurableIdempotencyIgnoresRedisDuplicate(t *testi
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, key, rows[0].IdempotencyKey.String)
+	require.Equal(t, []uuid.UUID{*authCtx.ProjectID}, ti.efficacySignals.signaled(), "a duplicate durable no-op wakes nothing")
 }
 
 func TestIngest_SkillObservationFailureDoesNotChangeVerdict(t *testing.T) {
@@ -174,6 +193,62 @@ func TestIngest_BlockedInferredSkillIsNotObserved(t *testing.T) {
 	rows, err := ti.service.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
 	require.Empty(t, rows)
+}
+
+// Only a durable observation write is an efficacy wake. A blocked inferred
+// activation records nothing, and a failed recording records nothing — neither
+// may put a project in front of the coordinator.
+func TestIngest_OnlyDurableSkillObservationWakesEfficacy(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	_, err := ti.service.Ingest(ctx, skillPayload("claude", eventTypeSkillActivated, "woken-session", "repo-review", ""))
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{*authCtx.ProjectID}, ti.efficacySignals.signaled())
+
+	failedCtx, cancel := context.WithCancel(ctx)
+	cancel()
+	_, err = ti.service.Ingest(failedCtx, skillPayload("claude", eventTypeSkillActivated, "failed-session", "repo-review", ""))
+	require.NoError(t, err)
+
+	ti.service.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
+	toolName, identity := "mcp__local_server__search", "local-server"
+	blocked := skillPayload("codex", "tool.requested", "blocked-session", "repo-review", "")
+	blocked.Data.ToolCall = &gen.HookToolCallData{Name: &toolName, Input: map[string]any{"query": "x"}}
+	blocked.Data.Mcp = &gen.HookMCPData{ServerIdentity: &identity}
+	result, err := ti.service.Ingest(ctx, blocked)
+	require.NoError(t, err)
+	require.Equal(t, "deny", result.Decision)
+
+	require.Equal(t, []uuid.UUID{*authCtx.ProjectID}, ti.efficacySignals.signaled(),
+		"a failed or blocked-away recording wakes nothing")
+}
+
+func TestIngest_SessionEndDoesNotWakeBeforeTranscriptPersistence(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	_, err := ti.service.Ingest(ctx, canonicalIngestPayload("claude", "session.ended", "ending-session"))
+	require.NoError(t, err)
+
+	require.Empty(t, ti.efficacySignals.signaled(), "durable observations, messages, and the sweep provide later wakes")
+}
+
+func TestIngest_EfficacyWakeFailureDoesNotChangeVerdictOrRecording(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ti.efficacySignals.failWith(errors.New("coordinator unreachable"))
+
+	result, err := ti.service.Ingest(ctx, skillPayload("claude", eventTypeSkillActivated, "unwakeable-session", "repo-review", ""))
+	require.NoError(t, err)
+	require.Equal(t, "allow", result.Decision)
+
+	rows, err := ti.service.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
 }
 
 func TestSkillCapture_UnknownUploadThenKnown(t *testing.T) {
@@ -220,6 +295,79 @@ func TestIngest_ManualVersionRawHashIsKnownAndAliased(t *testing.T) {
 	alias, err := queries.GetSkillRawHash(ctx, skillsrepo.GetSkillRawHashParams{ProjectID: *authCtx.ProjectID, RawSha256: hash})
 	require.NoError(t, err)
 	require.Equal(t, version.CanonicalSha256, alias.CanonicalSha256)
+}
+
+func TestIngest_ManualVersionRawHashIgnoresArchivedSkills(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = captureFeatureStub{skills: true, metadataOnly: false, fail: ""}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	content := captureManifest("recreated-manual", "manual")
+	hash := rawHash(content)
+	queries := skillsrepo.New(ti.conn)
+
+	archived, err := queries.CreateSkill(ctx, skillsrepo.CreateSkillParams{
+		ProjectID: *authCtx.ProjectID, Name: "recreated-manual", DisplayName: "recreated-manual", Summary: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	_, err = queries.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
+		Content: content, CanonicalSha256: strings.Repeat("c", 64), RawSha256: hash,
+		Description: pgtype.Text{}, Metadata: []byte(`{}`), SpecValid: true,
+		ValidationErrors: []byte(`[]`), CreatedByUserID: authCtx.UserID,
+		ProjectID: *authCtx.ProjectID, SkillID: archived.ID,
+	})
+	require.NoError(t, err)
+	_, err = queries.ArchiveSkill(ctx, skillsrepo.ArchiveSkillParams{ProjectID: *authCtx.ProjectID, ID: archived.ID})
+	require.NoError(t, err)
+
+	active, err := queries.CreateSkill(ctx, skillsrepo.CreateSkillParams{
+		ProjectID: *authCtx.ProjectID, Name: "recreated-manual", DisplayName: "recreated-manual", Summary: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	activeVersion, err := queries.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
+		Content: content, CanonicalSha256: strings.Repeat("d", 64), RawSha256: hash,
+		Description: pgtype.Text{}, Metadata: []byte(`{}`), SpecValid: true,
+		ValidationErrors: []byte(`[]`), CreatedByUserID: authCtx.UserID,
+		ProjectID: *authCtx.ProjectID, SkillID: active.ID,
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.Ingest(ctx, skillPayload("claude", eventTypeSkillActivated, "recreated", "recreated-manual", hash))
+	require.NoError(t, err)
+	require.Equal(t, false, requireEffectMap(t, result.Effects, "skill_capture")["content_required"])
+	alias, err := queries.GetSkillRawHash(ctx, skillsrepo.GetSkillRawHashParams{ProjectID: *authCtx.ProjectID, RawSha256: hash})
+	require.NoError(t, err)
+	require.Equal(t, activeVersion.CanonicalSha256, alias.CanonicalSha256)
+}
+
+func TestIngest_AmbiguousManualVersionRawHashRequestsContent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = captureFeatureStub{skills: true, metadataOnly: false, fail: ""}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	rawSHA256 := strings.Repeat("a", 64)
+	queries := skillsrepo.New(ti.conn)
+	for _, name := range []string{"ambiguous-one", "ambiguous-two"} {
+		skill, err := queries.CreateSkill(ctx, skillsrepo.CreateSkillParams{
+			ProjectID: *authCtx.ProjectID, Name: name, DisplayName: name, Summary: pgtype.Text{},
+		})
+		require.NoError(t, err)
+		_, err = queries.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
+			Content: name, CanonicalSha256: "same-canonical", RawSha256: rawSHA256,
+			Description: pgtype.Text{}, Metadata: []byte(`{}`), SpecValid: true,
+			ValidationErrors: []byte(`[]`), CreatedByUserID: authCtx.UserID,
+			ProjectID: *authCtx.ProjectID, SkillID: skill.ID,
+		})
+		require.NoError(t, err)
+	}
+
+	result, err := ti.service.Ingest(ctx, skillPayload("claude", eventTypeSkillActivated, "ambiguous", "ambiguous-one", rawSHA256))
+	require.NoError(t, err)
+	require.Equal(t, true, requireEffectMap(t, result.Effects, "skill_capture")["content_required"])
+	_, err = queries.GetSkillRawHash(ctx, skillsrepo.GetSkillRawHashParams{ProjectID: *authCtx.ProjectID, RawSha256: rawSHA256})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestIngest_KnownSkillHashIsProjectLocal(t *testing.T) {
@@ -387,4 +535,32 @@ func TestUploadSkillContent_HTTPRouteRequiresAuthentication(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { require.NoError(t, resp.Body.Close()) }()
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+}
+
+func TestIngest_RejectsReservedAssistantAdapter(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = captureFeatureStub{skills: true, metadataOnly: false, fail: ""}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	content := captureManifest("spoofed", "body")
+	for _, adapter := range []string{"assistant", "Assistants", " ASSISTANT ", "assist ant"} {
+		_, err := ti.service.Ingest(ctx, skillPayload(adapter, eventTypeSkillActivated, "spoof-session", "spoofed", rawHash(content)))
+		require.Error(t, err, adapter)
+		var oopsErr *oops.ShareableError
+		require.ErrorAs(t, err, &oopsErr)
+		require.Equal(t, oops.CodeInvalid, oopsErr.Code, adapter)
+	}
+
+	rows, err := ti.service.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+
+	_, err = ti.service.Ingest(ctx, skillPayload("claude", eventTypeSkillActivated, "honest-session", "honest", rawHash(content)))
+	require.NoError(t, err)
+	rows, err = ti.service.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "claude", rows[0].Provider)
 }

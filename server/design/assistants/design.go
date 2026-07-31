@@ -146,6 +146,11 @@ var _ = Service("assistants", func() {
 			Attribute("idempotency_key", String, "Stable key the client mints once per message so retries dedupe instead of enqueuing twice. A new key is generated server-side when omitted.", func() {
 				MaxLength(255)
 			})
+			Attribute("skill_ids", ArrayOf(String, func() {
+				Format(FormatUUID)
+			}), "Project skills to make available for this turn.", func() {
+				MaxLength(10)
+			})
 			Required("assistant_id", "message")
 
 			security.SessionPayload()

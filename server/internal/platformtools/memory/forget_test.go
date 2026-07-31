@@ -30,6 +30,7 @@ func TestForgetTool_RequiresAssistantPrincipal(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{"query":"x"}`), &bytes.Buffer{})
 	require.Error(t, err)
 
@@ -71,6 +72,7 @@ func TestForgetTool_HappyPathReturnsID(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{"query":"the","tags":["t"]}`), &out)
 	require.NoError(t, err)
 
@@ -125,6 +127,7 @@ func TestForgetTool_AmbiguousReturnsCandidates(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{"query":"thing"}`), &out)
 	require.NoError(t, err)
 
@@ -167,6 +170,7 @@ func TestForgetTool_NoMatchReturnsReason(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{"query":"absent"}`), &out)
 	require.NoError(t, err)
 

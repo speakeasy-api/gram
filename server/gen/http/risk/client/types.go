@@ -35,6 +35,10 @@ type CreateRiskPolicyRequestBody struct {
 	// approved. Sessions whose AI-account email domain is not listed are flagged.
 	// Empty/omitted leaves the domain rule inert.
 	ApprovedEmailDomains []string `form:"approved_email_domains,omitempty" json:"approved_email_domains,omitempty" xml:"approved_email_domains,omitempty"`
+	// Per-category detection scopes. Each specified category replaces its
+	// centrally recommended scope; a scope with both predicates empty scans every
+	// message surface. Empty/omitted = all recommendations apply unchanged.
+	DetectionScopes []*RiskDetectionScopeRequestBody `form:"detection_scopes,omitempty" json:"detection_scopes,omitempty" xml:"detection_scopes,omitempty"`
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
@@ -59,6 +63,14 @@ type CreateRiskPolicyRequestBody struct {
 	// Principal URNs this policy applies to. For audience_type=everyone, the
 	// server stores user:all.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
+	// Complete desired canonical URL allow set for this policy. Omit or send empty
+	// to create no URL-specific allow decisions.
+	ShadowMcpAllowedUrls []string `json:"shadow_mcp_allowed_urls"`
+	// Default disposition for shadow MCP blocking policies: block_all (default)
+	// blocks every non-Gram-hosted server unless allowed, allow_all permits every
+	// server unless blocked. Only valid with the shadow_mcp source and block
+	// action. Immutable after create — switching requires delete + recreate.
+	ShadowMcpDisposition *string `form:"shadow_mcp_disposition,omitempty" json:"shadow_mcp_disposition,omitempty" xml:"shadow_mcp_disposition,omitempty"`
 	// Whether the policy name should be auto-generated.
 	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
 	// Optional message shown to end users when this policy blocks an action or
@@ -94,6 +106,10 @@ type UpdateRiskPolicyRequestBody struct {
 	// For the account_identity source: corporate email domains considered
 	// approved. Omit to preserve the current list; send an empty array to clear it.
 	ApprovedEmailDomains []string `form:"approved_email_domains,omitempty" json:"approved_email_domains,omitempty" xml:"approved_email_domains,omitempty"`
+	// Per-category detection scopes. Each specified category replaces its
+	// centrally recommended scope; a scope with both predicates empty scans every
+	// message surface. Omit to preserve the current value; send empty to clear.
+	DetectionScopes []*RiskDetectionScopeRequestBody `form:"detection_scopes,omitempty" json:"detection_scopes,omitempty" xml:"detection_scopes,omitempty"`
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
@@ -119,6 +135,13 @@ type UpdateRiskPolicyRequestBody struct {
 	// Principal URNs this policy applies to. Omit to preserve the current target
 	// principals.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
+	// Complete desired canonical URL allow set for this policy. Omit to preserve;
+	// send empty to clear.
+	ShadowMcpAllowedUrls []string `json:"shadow_mcp_allowed_urls"`
+	// The policy's shadow MCP disposition. Immutable: omit, or send the current
+	// value unchanged; any other value is rejected. Switching posture requires
+	// delete + recreate.
+	ShadowMcpDisposition *string `form:"shadow_mcp_disposition,omitempty" json:"shadow_mcp_disposition,omitempty" xml:"shadow_mcp_disposition,omitempty"`
 	// Whether the policy name should be auto-generated.
 	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
 	// Optional message shown to end users when this policy blocks an action or
@@ -340,8 +363,8 @@ type EvaluatePromptGuardrailRequestBody struct {
 	// judge model.
 	ModelConfig *RiskPolicyModelConfigRequestBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
 	// Message types to judge (user_message, assistant_message, tool_request,
-	// tool_response), matching a policy's message_types. When empty or omitted,
-	// judges all supported types.
+	// tool_response, prompt_attachment), matching a policy's message_types. When
+	// empty or omitted, judges all supported types.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
 	// CEL scope predicate: the replay judges a message only when this boolean
 	// expression is true (in addition to message_types). Omit/empty means all
@@ -389,6 +412,10 @@ type CreateRiskPolicyResponseBody struct {
 	// approved. Sessions whose AI-account email domain is not listed are flagged.
 	// Empty means the domain rule is inert.
 	ApprovedEmailDomains []string `form:"approved_email_domains,omitempty" json:"approved_email_domains,omitempty" xml:"approved_email_domains,omitempty"`
+	// Per-category detection scopes specified for this policy. The scan surface
+	// merges these with the recommended scopes, the specified scope winning on
+	// category conflict. Empty means every recommendation applies unchanged.
+	DetectionScopes []*RiskDetectionScopeResponseBody `form:"detection_scopes,omitempty" json:"detection_scopes,omitempty" xml:"detection_scopes,omitempty"`
 	// Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the
 	// policy author has unchecked within an otherwise-enabled category. Empty
 	// means every rule in the selected categories runs; matching findings are
@@ -399,7 +426,7 @@ type CreateRiskPolicyResponseBody struct {
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
-	// assistant_message.
+	// assistant_message, prompt_attachment.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
 	// CEL scope predicate: the policy evaluates a message only when this boolean
 	// expression is true (in addition to message_types). Null/empty means all
@@ -418,6 +445,11 @@ type CreateRiskPolicyResponseBody struct {
 	// Principal URNs the policy applies to. Contains user:all when audience_type
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
+	// Default disposition for shadow MCP blocking policies: block_all blocks every
+	// non-Gram-hosted server unless allowed, allow_all permits every server unless
+	// it appears on the blocked-URL list. Immutable after create. Only present on
+	// policies with the shadow_mcp source and block action.
+	ShadowMcpDisposition *string `form:"shadow_mcp_disposition,omitempty" json:"shadow_mcp_disposition,omitempty" xml:"shadow_mcp_disposition,omitempty"`
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
 	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
@@ -440,9 +472,12 @@ type CreateRiskPolicyResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the policy was last updated.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-	// Number of messages not yet analyzed at the current policy version.
+	// Number of messages not yet analyzed at the current policy version. Populated
+	// on single-policy reads; omitted from list responses (use riskPoliciesStatus
+	// for progress).
 	PendingMessages *int64 `form:"pending_messages,omitempty" json:"pending_messages,omitempty" xml:"pending_messages,omitempty"`
-	// Total number of messages in the project.
+	// Total number of messages in the project. Populated on single-policy reads;
+	// omitted from list responses.
 	TotalMessages *int64 `form:"total_messages,omitempty" json:"total_messages,omitempty" xml:"total_messages,omitempty"`
 }
 
@@ -488,6 +523,10 @@ type GetRiskPolicyResponseBody struct {
 	// approved. Sessions whose AI-account email domain is not listed are flagged.
 	// Empty means the domain rule is inert.
 	ApprovedEmailDomains []string `form:"approved_email_domains,omitempty" json:"approved_email_domains,omitempty" xml:"approved_email_domains,omitempty"`
+	// Per-category detection scopes specified for this policy. The scan surface
+	// merges these with the recommended scopes, the specified scope winning on
+	// category conflict. Empty means every recommendation applies unchanged.
+	DetectionScopes []*RiskDetectionScopeResponseBody `form:"detection_scopes,omitempty" json:"detection_scopes,omitempty" xml:"detection_scopes,omitempty"`
 	// Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the
 	// policy author has unchecked within an otherwise-enabled category. Empty
 	// means every rule in the selected categories runs; matching findings are
@@ -498,7 +537,7 @@ type GetRiskPolicyResponseBody struct {
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
-	// assistant_message.
+	// assistant_message, prompt_attachment.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
 	// CEL scope predicate: the policy evaluates a message only when this boolean
 	// expression is true (in addition to message_types). Null/empty means all
@@ -517,6 +556,11 @@ type GetRiskPolicyResponseBody struct {
 	// Principal URNs the policy applies to. Contains user:all when audience_type
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
+	// Default disposition for shadow MCP blocking policies: block_all blocks every
+	// non-Gram-hosted server unless allowed, allow_all permits every server unless
+	// it appears on the blocked-URL list. Immutable after create. Only present on
+	// policies with the shadow_mcp source and block action.
+	ShadowMcpDisposition *string `form:"shadow_mcp_disposition,omitempty" json:"shadow_mcp_disposition,omitempty" xml:"shadow_mcp_disposition,omitempty"`
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
 	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
@@ -539,9 +583,12 @@ type GetRiskPolicyResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the policy was last updated.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-	// Number of messages not yet analyzed at the current policy version.
+	// Number of messages not yet analyzed at the current policy version. Populated
+	// on single-policy reads; omitted from list responses (use riskPoliciesStatus
+	// for progress).
 	PendingMessages *int64 `form:"pending_messages,omitempty" json:"pending_messages,omitempty" xml:"pending_messages,omitempty"`
-	// Total number of messages in the project.
+	// Total number of messages in the project. Populated on single-policy reads;
+	// omitted from list responses.
 	TotalMessages *int64 `form:"total_messages,omitempty" json:"total_messages,omitempty" xml:"total_messages,omitempty"`
 }
 
@@ -571,6 +618,10 @@ type UpdateRiskPolicyResponseBody struct {
 	// approved. Sessions whose AI-account email domain is not listed are flagged.
 	// Empty means the domain rule is inert.
 	ApprovedEmailDomains []string `form:"approved_email_domains,omitempty" json:"approved_email_domains,omitempty" xml:"approved_email_domains,omitempty"`
+	// Per-category detection scopes specified for this policy. The scan surface
+	// merges these with the recommended scopes, the specified scope winning on
+	// category conflict. Empty means every recommendation applies unchanged.
+	DetectionScopes []*RiskDetectionScopeResponseBody `form:"detection_scopes,omitempty" json:"detection_scopes,omitempty" xml:"detection_scopes,omitempty"`
 	// Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the
 	// policy author has unchecked within an otherwise-enabled category. Empty
 	// means every rule in the selected categories runs; matching findings are
@@ -581,7 +632,7 @@ type UpdateRiskPolicyResponseBody struct {
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
-	// assistant_message.
+	// assistant_message, prompt_attachment.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
 	// CEL scope predicate: the policy evaluates a message only when this boolean
 	// expression is true (in addition to message_types). Null/empty means all
@@ -600,6 +651,11 @@ type UpdateRiskPolicyResponseBody struct {
 	// Principal URNs the policy applies to. Contains user:all when audience_type
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
+	// Default disposition for shadow MCP blocking policies: block_all blocks every
+	// non-Gram-hosted server unless allowed, allow_all permits every server unless
+	// it appears on the blocked-URL list. Immutable after create. Only present on
+	// policies with the shadow_mcp source and block action.
+	ShadowMcpDisposition *string `form:"shadow_mcp_disposition,omitempty" json:"shadow_mcp_disposition,omitempty" xml:"shadow_mcp_disposition,omitempty"`
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
 	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
@@ -622,9 +678,12 @@ type UpdateRiskPolicyResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the policy was last updated.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-	// Number of messages not yet analyzed at the current policy version.
+	// Number of messages not yet analyzed at the current policy version. Populated
+	// on single-policy reads; omitted from list responses (use riskPoliciesStatus
+	// for progress).
 	PendingMessages *int64 `form:"pending_messages,omitempty" json:"pending_messages,omitempty" xml:"pending_messages,omitempty"`
-	// Total number of messages in the project.
+	// Total number of messages in the project. Populated on single-policy reads;
+	// omitted from list responses.
 	TotalMessages *int64 `form:"total_messages,omitempty" json:"total_messages,omitempty" xml:"total_messages,omitempty"`
 }
 
@@ -700,6 +759,9 @@ type ListRiskCategoriesResponseBody struct {
 	// Categories in classification-priority order. The last entry is the 'custom'
 	// fallback for findings that match none of the others.
 	Categories []*RiskCategoryDefinitionResponseBody `form:"categories,omitempty" json:"categories,omitempty" xml:"categories,omitempty"`
+	// Version of the recommended-scope registry; bumps when any recommendation
+	// changes.
+	RecommendedScopesVersion *int64 `form:"recommended_scopes_version,omitempty" json:"recommended_scopes_version,omitempty" xml:"recommended_scopes_version,omitempty"`
 }
 
 // CompileExprResponseBody is the type of the "risk" service "compileExpr"
@@ -9228,6 +9290,18 @@ type DeleteRiskEvalReviewGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// RiskDetectionScopeRequestBody is used to define fields on request body types.
+type RiskDetectionScopeRequestBody struct {
+	// Risk category key this detection scope applies to.
+	Category string `form:"category" json:"category" xml:"category"`
+	// CEL scope predicate: the category detects on a message only when this
+	// boolean expression is true. Empty means every message surface is included.
+	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
+	// CEL exemption predicate: the category skips a message when this boolean
+	// expression is true. Empty means no exemption.
+	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
+}
+
 // RiskPolicyModelConfigRequestBody is used to define fields on request body
 // types.
 type RiskPolicyModelConfigRequestBody struct {
@@ -9240,6 +9314,19 @@ type RiskPolicyModelConfigRequestBody struct {
 	// When the judge errors or times out: true allows the message (fail-open),
 	// false blocks it (fail-closed). Defaults to fail-open.
 	FailOpen *bool `form:"fail_open,omitempty" json:"fail_open,omitempty" xml:"fail_open,omitempty"`
+}
+
+// RiskDetectionScopeResponseBody is used to define fields on response body
+// types.
+type RiskDetectionScopeResponseBody struct {
+	// Risk category key this detection scope applies to.
+	Category *string `form:"category,omitempty" json:"category,omitempty" xml:"category,omitempty"`
+	// CEL scope predicate: the category detects on a message only when this
+	// boolean expression is true. Empty means every message surface is included.
+	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
+	// CEL exemption predicate: the category skips a message when this boolean
+	// expression is true. Empty means no exemption.
+	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 }
 
 // RiskPolicyModelConfigResponseBody is used to define fields on response body
@@ -9281,6 +9368,10 @@ type RiskPolicyResponseBody struct {
 	// approved. Sessions whose AI-account email domain is not listed are flagged.
 	// Empty means the domain rule is inert.
 	ApprovedEmailDomains []string `form:"approved_email_domains,omitempty" json:"approved_email_domains,omitempty" xml:"approved_email_domains,omitempty"`
+	// Per-category detection scopes specified for this policy. The scan surface
+	// merges these with the recommended scopes, the specified scope winning on
+	// category conflict. Empty means every recommendation applies unchanged.
+	DetectionScopes []*RiskDetectionScopeResponseBody `form:"detection_scopes,omitempty" json:"detection_scopes,omitempty" xml:"detection_scopes,omitempty"`
 	// Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the
 	// policy author has unchecked within an otherwise-enabled category. Empty
 	// means every rule in the selected categories runs; matching findings are
@@ -9291,7 +9382,7 @@ type RiskPolicyResponseBody struct {
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
-	// assistant_message.
+	// assistant_message, prompt_attachment.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
 	// CEL scope predicate: the policy evaluates a message only when this boolean
 	// expression is true (in addition to message_types). Null/empty means all
@@ -9310,6 +9401,11 @@ type RiskPolicyResponseBody struct {
 	// Principal URNs the policy applies to. Contains user:all when audience_type
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
+	// Default disposition for shadow MCP blocking policies: block_all blocks every
+	// non-Gram-hosted server unless allowed, allow_all permits every server unless
+	// it appears on the blocked-URL list. Immutable after create. Only present on
+	// policies with the shadow_mcp source and block action.
+	ShadowMcpDisposition *string `form:"shadow_mcp_disposition,omitempty" json:"shadow_mcp_disposition,omitempty" xml:"shadow_mcp_disposition,omitempty"`
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
 	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
@@ -9332,9 +9428,12 @@ type RiskPolicyResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the policy was last updated.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-	// Number of messages not yet analyzed at the current policy version.
+	// Number of messages not yet analyzed at the current policy version. Populated
+	// on single-policy reads; omitted from list responses (use riskPoliciesStatus
+	// for progress).
 	PendingMessages *int64 `form:"pending_messages,omitempty" json:"pending_messages,omitempty" xml:"pending_messages,omitempty"`
-	// Total number of messages in the project.
+	// Total number of messages in the project. Populated on single-policy reads;
+	// omitted from list responses.
 	TotalMessages *int64 `form:"total_messages,omitempty" json:"total_messages,omitempty" xml:"total_messages,omitempty"`
 }
 
@@ -9371,8 +9470,11 @@ type RiskResultResponseBody struct {
 	// ID of the durable tool call block recorded for this finding's message, when
 	// one exists. Links to the block page at /blocks/:id.
 	BlockID *string `form:"block_id,omitempty" json:"block_id,omitempty" xml:"block_id,omitempty"`
-	// The chat message that was scanned.
+	// The chat message that was scanned, when the finding is anchored to a message.
 	ChatMessageID *string `form:"chat_message_id,omitempty" json:"chat_message_id,omitempty" xml:"chat_message_id,omitempty"`
+	// The chat content part that was scanned, when the finding is anchored to a
+	// content part.
+	ChatContentPartID *string `form:"chat_content_part_id,omitempty" json:"chat_content_part_id,omitempty" xml:"chat_content_part_id,omitempty"`
 	// The chat session containing the message.
 	ChatID *string `form:"chat_id,omitempty" json:"chat_id,omitempty" xml:"chat_id,omitempty"`
 	// Title of the chat session.
@@ -9409,10 +9511,6 @@ type RiskResultResponseBody struct {
 	MatchRedacted *string `form:"match_redacted,omitempty" json:"match_redacted,omitempty" xml:"match_redacted,omitempty"`
 	// When this result was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// True when the scanned message arrived as a replay from a device's offline
-	// spool after control-plane downtime — the finding was produced retroactively
-	// rather than from live traffic.
-	Replayed *bool `form:"replayed,omitempty" json:"replayed,omitempty" xml:"replayed,omitempty"`
 }
 
 // RiskSpanResponseBody is used to define fields on response body types.
@@ -9441,8 +9539,11 @@ type RiskResultRedactedResponseBody struct {
 	PolicyID *string `form:"policy_id,omitempty" json:"policy_id,omitempty" xml:"policy_id,omitempty"`
 	// Policy version when this result was produced.
 	PolicyVersion *int64 `form:"policy_version,omitempty" json:"policy_version,omitempty" xml:"policy_version,omitempty"`
-	// The chat message that was scanned.
+	// The chat message that was scanned, when the finding is anchored to a message.
 	ChatMessageID *string `form:"chat_message_id,omitempty" json:"chat_message_id,omitempty" xml:"chat_message_id,omitempty"`
+	// The chat content part that was scanned, when the finding is anchored to a
+	// content part.
+	ChatContentPartID *string `form:"chat_content_part_id,omitempty" json:"chat_content_part_id,omitempty" xml:"chat_content_part_id,omitempty"`
 	// The chat session containing the message.
 	ChatID *string `form:"chat_id,omitempty" json:"chat_id,omitempty" xml:"chat_id,omitempty"`
 	// Title of the chat session.
@@ -9568,6 +9669,17 @@ type RiskCategoryDefinitionResponseBody struct {
 	// When non-empty, findings whose rule_id starts with this prefix belong to
 	// this category. The catch-all for a family (e.g. 'pii.').
 	RuleIDPrefix *string `form:"rule_id_prefix,omitempty" json:"rule_id_prefix,omitempty" xml:"rule_id_prefix,omitempty"`
+	// Centrally recommended CEL scope predicate for this category; empty = no
+	// include restriction.
+	RecommendedScopeInclude *string `form:"recommended_scope_include,omitempty" json:"recommended_scope_include,omitempty" xml:"recommended_scope_include,omitempty"`
+	// Centrally recommended CEL exemption predicate; empty = no exemption.
+	RecommendedScopeExempt *string `form:"recommended_scope_exempt,omitempty" json:"recommended_scope_exempt,omitempty" xml:"recommended_scope_exempt,omitempty"`
+	// User-facing explanation of the recommended scope and the consequences of
+	// disabling it. Empty when the category has no recommendation.
+	RecommendedScopeRationale *string `form:"recommended_scope_rationale,omitempty" json:"recommended_scope_rationale,omitempty" xml:"recommended_scope_rationale,omitempty"`
+	// False when the category is session-scoped and message scoping does not apply
+	// (e.g. account_identity).
+	RecommendedScopeApplicable *bool `form:"recommended_scope_applicable,omitempty" json:"recommended_scope_applicable,omitempty" xml:"recommended_scope_applicable,omitempty"`
 }
 
 // RiskPolicyBypassRequestResponseBody is used to define fields on response
@@ -9690,7 +9802,7 @@ type PromptGuardrailMessageVerdictResponseBody struct {
 	// Message sequence within the chat generation, ascending.
 	Seq *int64 `form:"seq,omitempty" json:"seq,omitempty" xml:"seq,omitempty"`
 	// The judged message type (user_message, assistant_message, tool_request,
-	// tool_response).
+	// tool_response, prompt_attachment).
 	MessageType *string `form:"message_type,omitempty" json:"message_type,omitempty" xml:"message_type,omitempty"`
 	// Tool name for a single-call tool_request message; empty otherwise.
 	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
@@ -9746,6 +9858,7 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 		Enabled:                p.Enabled,
 		Action:                 p.Action,
 		AudienceType:           p.AudienceType,
+		ShadowMcpDisposition:   p.ShadowMcpDisposition,
 		AutoName:               p.AutoName,
 		UserMessage:            p.UserMessage,
 		Prompt:                 p.Prompt,
@@ -9779,6 +9892,16 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 		body.ApprovedEmailDomains = make([]string, len(p.ApprovedEmailDomains))
 		for i, val := range p.ApprovedEmailDomains {
 			body.ApprovedEmailDomains[i] = val
+		}
+	}
+	if p.DetectionScopes != nil {
+		body.DetectionScopes = make([]*RiskDetectionScopeRequestBody, len(p.DetectionScopes))
+		for i, val := range p.DetectionScopes {
+			if val == nil {
+				body.DetectionScopes[i] = nil
+				continue
+			}
+			body.DetectionScopes[i] = marshalTypesRiskDetectionScopeToRiskDetectionScopeRequestBody(val)
 		}
 	}
 	if p.DisabledRules != nil {
@@ -9817,6 +9940,12 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 			body.AudiencePrincipalUrns[i] = val
 		}
 	}
+	if p.ShadowMcpAllowedUrls != nil {
+		body.ShadowMcpAllowedUrls = make([]string, len(p.ShadowMcpAllowedUrls))
+		for i, val := range p.ShadowMcpAllowedUrls {
+			body.ShadowMcpAllowedUrls[i] = val
+		}
+	}
 	if p.ModelConfig != nil {
 		body.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody(p.ModelConfig)
 	}
@@ -9841,6 +9970,7 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 		Enabled:                p.Enabled,
 		Action:                 p.Action,
 		AudienceType:           p.AudienceType,
+		ShadowMcpDisposition:   p.ShadowMcpDisposition,
 		AutoName:               p.AutoName,
 		UserMessage:            p.UserMessage,
 		Prompt:                 p.Prompt,
@@ -9870,6 +10000,16 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 			body.ApprovedEmailDomains[i] = val
 		}
 	}
+	if p.DetectionScopes != nil {
+		body.DetectionScopes = make([]*RiskDetectionScopeRequestBody, len(p.DetectionScopes))
+		for i, val := range p.DetectionScopes {
+			if val == nil {
+				body.DetectionScopes[i] = nil
+				continue
+			}
+			body.DetectionScopes[i] = marshalTypesRiskDetectionScopeToRiskDetectionScopeRequestBody(val)
+		}
+	}
 	if p.DisabledRules != nil {
 		body.DisabledRules = make([]string, len(p.DisabledRules))
 		for i, val := range p.DisabledRules {
@@ -9892,6 +10032,12 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 		body.AudiencePrincipalUrns = make([]string, len(p.AudiencePrincipalUrns))
 		for i, val := range p.AudiencePrincipalUrns {
 			body.AudiencePrincipalUrns[i] = val
+		}
+	}
+	if p.ShadowMcpAllowedUrls != nil {
+		body.ShadowMcpAllowedUrls = make([]string, len(p.ShadowMcpAllowedUrls))
+		for i, val := range p.ShadowMcpAllowedUrls {
+			body.ShadowMcpAllowedUrls[i] = val
 		}
 	}
 	if p.ModelConfig != nil {
@@ -10203,6 +10349,7 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 		Enabled:                *body.Enabled,
 		Action:                 *body.Action,
 		AudienceType:           *body.AudienceType,
+		ShadowMcpDisposition:   body.ShadowMcpDisposition,
 		AutoName:               *body.AutoName,
 		UserMessage:            body.UserMessage,
 		Prompt:                 body.Prompt,
@@ -10210,8 +10357,8 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 		Version:                *body.Version,
 		CreatedAt:              *body.CreatedAt,
 		UpdatedAt:              *body.UpdatedAt,
-		PendingMessages:        *body.PendingMessages,
-		TotalMessages:          *body.TotalMessages,
+		PendingMessages:        body.PendingMessages,
+		TotalMessages:          body.TotalMessages,
 	}
 	v.Sources = make([]string, len(body.Sources))
 	for i, val := range body.Sources {
@@ -10233,6 +10380,16 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 		v.ApprovedEmailDomains = make([]string, len(body.ApprovedEmailDomains))
 		for i, val := range body.ApprovedEmailDomains {
 			v.ApprovedEmailDomains[i] = val
+		}
+	}
+	if body.DetectionScopes != nil {
+		v.DetectionScopes = make([]*types.RiskDetectionScope, len(body.DetectionScopes))
+		for i, val := range body.DetectionScopes {
+			if val == nil {
+				v.DetectionScopes[i] = nil
+				continue
+			}
+			v.DetectionScopes[i] = unmarshalRiskDetectionScopeResponseBodyToTypesRiskDetectionScope(val)
 		}
 	}
 	if body.DisabledRules != nil {
@@ -10762,6 +10919,7 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 		Enabled:                *body.Enabled,
 		Action:                 *body.Action,
 		AudienceType:           *body.AudienceType,
+		ShadowMcpDisposition:   body.ShadowMcpDisposition,
 		AutoName:               *body.AutoName,
 		UserMessage:            body.UserMessage,
 		Prompt:                 body.Prompt,
@@ -10769,8 +10927,8 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 		Version:                *body.Version,
 		CreatedAt:              *body.CreatedAt,
 		UpdatedAt:              *body.UpdatedAt,
-		PendingMessages:        *body.PendingMessages,
-		TotalMessages:          *body.TotalMessages,
+		PendingMessages:        body.PendingMessages,
+		TotalMessages:          body.TotalMessages,
 	}
 	v.Sources = make([]string, len(body.Sources))
 	for i, val := range body.Sources {
@@ -10792,6 +10950,16 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 		v.ApprovedEmailDomains = make([]string, len(body.ApprovedEmailDomains))
 		for i, val := range body.ApprovedEmailDomains {
 			v.ApprovedEmailDomains[i] = val
+		}
+	}
+	if body.DetectionScopes != nil {
+		v.DetectionScopes = make([]*types.RiskDetectionScope, len(body.DetectionScopes))
+		for i, val := range body.DetectionScopes {
+			if val == nil {
+				v.DetectionScopes[i] = nil
+				continue
+			}
+			v.DetectionScopes[i] = unmarshalRiskDetectionScopeResponseBodyToTypesRiskDetectionScope(val)
 		}
 	}
 	if body.DisabledRules != nil {
@@ -10987,6 +11155,7 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 		Enabled:                *body.Enabled,
 		Action:                 *body.Action,
 		AudienceType:           *body.AudienceType,
+		ShadowMcpDisposition:   body.ShadowMcpDisposition,
 		AutoName:               *body.AutoName,
 		UserMessage:            body.UserMessage,
 		Prompt:                 body.Prompt,
@@ -10994,8 +11163,8 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 		Version:                *body.Version,
 		CreatedAt:              *body.CreatedAt,
 		UpdatedAt:              *body.UpdatedAt,
-		PendingMessages:        *body.PendingMessages,
-		TotalMessages:          *body.TotalMessages,
+		PendingMessages:        body.PendingMessages,
+		TotalMessages:          body.TotalMessages,
 	}
 	v.Sources = make([]string, len(body.Sources))
 	for i, val := range body.Sources {
@@ -11017,6 +11186,16 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 		v.ApprovedEmailDomains = make([]string, len(body.ApprovedEmailDomains))
 		for i, val := range body.ApprovedEmailDomains {
 			v.ApprovedEmailDomains[i] = val
+		}
+	}
+	if body.DetectionScopes != nil {
+		v.DetectionScopes = make([]*types.RiskDetectionScope, len(body.DetectionScopes))
+		for i, val := range body.DetectionScopes {
+			if val == nil {
+				v.DetectionScopes[i] = nil
+				continue
+			}
+			v.DetectionScopes[i] = unmarshalRiskDetectionScopeResponseBodyToTypesRiskDetectionScope(val)
 		}
 	}
 	if body.DisabledRules != nil {
@@ -12215,7 +12394,9 @@ func NewGetRiskOverviewGatewayError(body *GetRiskOverviewGatewayErrorResponseBod
 // NewListRiskCategoriesRiskCategoriesResultOK builds a "risk" service
 // "listRiskCategories" endpoint result from a HTTP "OK" response.
 func NewListRiskCategoriesRiskCategoriesResultOK(body *ListRiskCategoriesResponseBody) *risk.RiskCategoriesResult {
-	v := &risk.RiskCategoriesResult{}
+	v := &risk.RiskCategoriesResult{
+		RecommendedScopesVersion: *body.RecommendedScopesVersion,
+	}
 	v.Categories = make([]*risk.RiskCategoryDefinition, len(body.Categories))
 	for i, val := range body.Categories {
 		if val == nil {
@@ -17594,12 +17775,6 @@ func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (e
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
-	if body.PendingMessages == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("pending_messages", "body"))
-	}
-	if body.TotalMessages == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("total_messages", "body"))
-	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
@@ -17621,6 +17796,13 @@ func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (e
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.presidio_score_threshold", *body.PresidioScoreThreshold, 1, false))
 		}
 	}
+	for _, e := range body.DetectionScopes {
+		if e != nil {
+			if err2 := ValidateRiskDetectionScopeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.Action != nil {
 		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block"}))
@@ -17629,6 +17811,11 @@ func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (e
 	if body.AudienceType != nil {
 		if !(*body.AudienceType == "everyone" || *body.AudienceType == "targeted") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
+		}
+	}
+	if body.ShadowMcpDisposition != nil {
+		if !(*body.ShadowMcpDisposition == "block_all" || *body.ShadowMcpDisposition == "allow_all") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.shadow_mcp_disposition", *body.ShadowMcpDisposition, []any{"block_all", "allow_all"}))
 		}
 	}
 	if body.Score != nil {
@@ -17730,12 +17917,6 @@ func ValidateGetRiskPolicyResponseBody(body *GetRiskPolicyResponseBody) (err err
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
-	if body.PendingMessages == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("pending_messages", "body"))
-	}
-	if body.TotalMessages == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("total_messages", "body"))
-	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
@@ -17757,6 +17938,13 @@ func ValidateGetRiskPolicyResponseBody(body *GetRiskPolicyResponseBody) (err err
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.presidio_score_threshold", *body.PresidioScoreThreshold, 1, false))
 		}
 	}
+	for _, e := range body.DetectionScopes {
+		if e != nil {
+			if err2 := ValidateRiskDetectionScopeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.Action != nil {
 		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block"}))
@@ -17765,6 +17953,11 @@ func ValidateGetRiskPolicyResponseBody(body *GetRiskPolicyResponseBody) (err err
 	if body.AudienceType != nil {
 		if !(*body.AudienceType == "everyone" || *body.AudienceType == "targeted") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
+		}
+	}
+	if body.ShadowMcpDisposition != nil {
+		if !(*body.ShadowMcpDisposition == "block_all" || *body.ShadowMcpDisposition == "allow_all") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.shadow_mcp_disposition", *body.ShadowMcpDisposition, []any{"block_all", "allow_all"}))
 		}
 	}
 	if body.Score != nil {
@@ -17831,12 +18024,6 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
-	if body.PendingMessages == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("pending_messages", "body"))
-	}
-	if body.TotalMessages == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("total_messages", "body"))
-	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
@@ -17858,6 +18045,13 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.presidio_score_threshold", *body.PresidioScoreThreshold, 1, false))
 		}
 	}
+	for _, e := range body.DetectionScopes {
+		if e != nil {
+			if err2 := ValidateRiskDetectionScopeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.Action != nil {
 		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block"}))
@@ -17866,6 +18060,11 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 	if body.AudienceType != nil {
 		if !(*body.AudienceType == "everyone" || *body.AudienceType == "targeted") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
+		}
+	}
+	if body.ShadowMcpDisposition != nil {
+		if !(*body.ShadowMcpDisposition == "block_all" || *body.ShadowMcpDisposition == "allow_all") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.shadow_mcp_disposition", *body.ShadowMcpDisposition, []any{"block_all", "allow_all"}))
 		}
 	}
 	if body.Score != nil {
@@ -18031,6 +18230,9 @@ func ValidateGetRiskOverviewResponseBody(body *GetRiskOverviewResponseBody) (err
 func ValidateListRiskCategoriesResponseBody(body *ListRiskCategoriesResponseBody) (err error) {
 	if body.Categories == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("categories", "body"))
+	}
+	if body.RecommendedScopesVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("recommended_scopes_version", "body"))
 	}
 	for _, e := range body.Categories {
 		if e != nil {
@@ -29287,6 +29489,15 @@ func ValidateDeleteRiskEvalReviewGatewayErrorResponseBody(body *DeleteRiskEvalRe
 	return
 }
 
+// ValidateRiskDetectionScopeResponseBody runs the validations defined on
+// RiskDetectionScopeResponseBody
+func ValidateRiskDetectionScopeResponseBody(body *RiskDetectionScopeResponseBody) (err error) {
+	if body.Category == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("category", "body"))
+	}
+	return
+}
+
 // ValidateRiskPolicyResponseBody runs the validations defined on
 // RiskPolicyResponseBody
 func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
@@ -29332,12 +29543,6 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
-	if body.PendingMessages == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("pending_messages", "body"))
-	}
-	if body.TotalMessages == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("total_messages", "body"))
-	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
@@ -29359,6 +29564,13 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.presidio_score_threshold", *body.PresidioScoreThreshold, 1, false))
 		}
 	}
+	for _, e := range body.DetectionScopes {
+		if e != nil {
+			if err2 := ValidateRiskDetectionScopeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.Action != nil {
 		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block"}))
@@ -29367,6 +29579,11 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 	if body.AudienceType != nil {
 		if !(*body.AudienceType == "everyone" || *body.AudienceType == "targeted") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
+		}
+	}
+	if body.ShadowMcpDisposition != nil {
+		if !(*body.ShadowMcpDisposition == "block_all" || *body.ShadowMcpDisposition == "allow_all") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.shadow_mcp_disposition", *body.ShadowMcpDisposition, []any{"block_all", "allow_all"}))
 		}
 	}
 	if body.Score != nil {
@@ -29434,17 +29651,11 @@ func ValidateRiskResultResponseBody(body *RiskResultResponseBody) (err error) {
 	if body.PolicyVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("policy_version", "body"))
 	}
-	if body.ChatMessageID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("chat_message_id", "body"))
-	}
 	if body.Source == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("source", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.Replayed == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("replayed", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
@@ -29457,6 +29668,9 @@ func ValidateRiskResultResponseBody(body *RiskResultResponseBody) (err error) {
 	}
 	if body.ChatMessageID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_message_id", *body.ChatMessageID, goa.FormatUUID))
+	}
+	if body.ChatContentPartID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_content_part_id", *body.ChatContentPartID, goa.FormatUUID))
 	}
 	if body.ChatID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_id", *body.ChatID, goa.FormatUUID))
@@ -29495,9 +29709,6 @@ func ValidateRiskResultRedactedResponseBody(body *RiskResultRedactedResponseBody
 	if body.PolicyVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("policy_version", "body"))
 	}
-	if body.ChatMessageID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("chat_message_id", "body"))
-	}
 	if body.Source == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("source", "body"))
 	}
@@ -29518,6 +29729,9 @@ func ValidateRiskResultRedactedResponseBody(body *RiskResultRedactedResponseBody
 	}
 	if body.ChatMessageID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_message_id", *body.ChatMessageID, goa.FormatUUID))
+	}
+	if body.ChatContentPartID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_content_part_id", *body.ChatContentPartID, goa.FormatUUID))
 	}
 	if body.ChatID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_id", *body.ChatID, goa.FormatUUID))
@@ -29651,6 +29865,18 @@ func ValidateRiskCategoryDefinitionResponseBody(body *RiskCategoryDefinitionResp
 	}
 	if body.RuleIDPrefix == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("rule_id_prefix", "body"))
+	}
+	if body.RecommendedScopeInclude == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("recommended_scope_include", "body"))
+	}
+	if body.RecommendedScopeExempt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("recommended_scope_exempt", "body"))
+	}
+	if body.RecommendedScopeRationale == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("recommended_scope_rationale", "body"))
+	}
+	if body.RecommendedScopeApplicable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("recommended_scope_applicable", "body"))
 	}
 	return
 }

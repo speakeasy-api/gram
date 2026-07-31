@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -83,7 +84,7 @@ func judgeFanout(
 	}
 }
 
-func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, outOfPolicyScope []bool) [][]scanners.Finding {
+func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, masks CategoryScopeMasks) [][]scanners.Finding {
 	out := make([][]scanners.Finding, len(messages))
 	cfg := promptpolicy.ParseConfig(policy.ModelConfig)
 	if !a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagPromptPolicies) {
@@ -92,7 +93,7 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 
 	indices := make([]int, 0, len(messages))
 	for i := range messages {
-		if len(outOfPolicyScope) > 0 && outOfPolicyScope[i] {
+		if !masks.InScope(i, categories.CategoryPromptPolicy) {
 			continue
 		}
 		indices = append(indices, i)
@@ -143,6 +144,7 @@ func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args
 	publishResults := make([]gcp.PublishResult, 0, len(indices))
 	for _, idx := range indices {
 		msg := messages[idx]
+		chatMessageID, contentPartID := msg.anchorIDStrings()
 		jm := batchJudgeMessage(msg)
 		toolCalls := make([]*riskv1.PromptPolicyAnalysis_ToolCall, 0, len(jm.ToolCalls))
 		for _, call := range jm.ToolCalls {
@@ -154,7 +156,8 @@ func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args
 
 		publishResults = append(publishResults, a.promptPolicyPub.Publish(ctx, riskv1.PromptPolicyAnalysis_builder{
 			RequestId:         new(requestID.String()),
-			ChatMessageId:     new(msg.ID.String()),
+			ChatMessageId:     chatMessageID,
+			ContentPartId:     contentPartID,
 			ProjectId:         new(args.ProjectID.String()),
 			OrganizationId:    &args.OrganizationID,
 			RiskPolicyId:      new(args.RiskPolicyID.String()),

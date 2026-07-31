@@ -22,8 +22,8 @@ vi.mock("@/components/diffs/provider", () => ({
     return <div>{children}</div>;
   },
 }));
-vi.mock("@speakeasy-api/moonshine", () => ({
-  useMoonshineConfig: () => ({ theme: "light" }),
+vi.mock("@/components/ui/hooks/useConfig", () => ({
+  useConfig: () => ({ theme: "light" }),
 }));
 vi.mock("@pierre/diffs/react", () => ({
   MultiFileDiff: ({ options }: { options: unknown }) => {

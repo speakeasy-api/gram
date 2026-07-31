@@ -32,11 +32,11 @@ Declared in `pitchfork.toml`. Names are shown namespaced by project (e.g. `gram/
 ## Whole-stack lifecycle
 
 ```bash
-mise run start   # supervisor start + clean + start --all-local --force
+mise run start   # supervisor start + stop + clean + start --all-local
 mise run stop    # pitchfork stop --all-local
 ```
 
-`mise run start` force-restarts everything. If services fail because Docker infra (Postgres, ClickHouse, etc.) isn't up, run `./zero --agent` for full environment setup instead.
+`mise run start` cleanly stops and restarts everything. If services fail because Docker infra (Postgres, ClickHouse, etc.) isn't up, run `./zero --agent` for full environment setup instead.
 
 ## Individual daemons
 

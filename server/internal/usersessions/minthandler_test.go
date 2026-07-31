@@ -13,6 +13,7 @@ import (
 	sessionsgen "github.com/speakeasy-api/gram/server/gen/user_sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -45,6 +46,9 @@ func TestMintUserSessionRequiresMCPConnect(t *testing.T) {
 		ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, mcpaccess.ServerPermissionDeniedMessage, oopsErr.Error())
 }
 
 func TestMintUserSessionAllowsMCPConnect(t *testing.T) {
@@ -81,6 +85,13 @@ func TestMintUserSessionAllowsMCPConnect(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, row.UserSessionClientID.Valid)
 	require.True(t, strings.HasPrefix(row.RefreshTokenHash, "dashboard-mint:"))
+
+	// No registered OAuth client backs this mint, so the claim names our own
+	// surface rather than going out empty — empty would be indistinguishable
+	// from a token minted before the claim existed.
+	require.Equal(t, usersessions.FirstPartyClientID, claims.ClientID)
+	require.NotContains(t, claims.ClientID, "://",
+		"a URL-shaped client id would be read as an OAuth Client ID Metadata Document")
 }
 
 func TestMintUserSessionRequiresExactlyOneTarget(t *testing.T) {

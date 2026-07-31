@@ -1,9 +1,21 @@
 import { GramLogo } from "@/components/gram-logo/index";
 import { toError } from "@/lib/errors";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 
 interface FullPageErrorProps {
   error: unknown;
+}
+
+// Several public capability-URL endpoints carry a live credential in a
+// "token" query parameter (e.g. skills.getShared) or as the path segment
+// after /shared/skills/. Error messages and request URLs shown in this
+// debug box must never display them verbatim.
+function redactTokens(text: string): string {
+  return text
+    .replace(/([?&]token=)[^&\s]+/g, "$1REDACTED")
+    .replace(/(\/shared\/skills\/)[^/?\s]+/g, "$1REDACTED");
 }
 
 export function FullPageError({
@@ -28,13 +40,13 @@ export function FullPageError({
 
           <div className="bg-muted w-full rounded-md p-3">
             <p className="text-muted-foreground font-mono text-xs break-all">
-              {error.message}
+              {redactTokens(error.message)}
             </p>
             {"rawResponse" in error &&
               error.rawResponse instanceof Response &&
               error.rawResponse.url && (
                 <p className="text-muted-foreground mt-2 font-mono text-xs break-all">
-                  {error.rawResponse.url}
+                  {redactTokens(error.rawResponse.url)}
                 </p>
               )}
           </div>

@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -675,7 +676,7 @@ func TestDeploymentsService_Evolve_UpsertPackages(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Create a package in another project to avoid circular dependency
-	otherCtx := testenv.InitAuthContext(t, t.Context(), ti.conn, ti.sessionManager)
+	otherCtx := authztest.InitAuthContext(t, t.Context(), ti.conn, ti.sessionManager)
 
 	// Upload asset for package creation
 	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
@@ -772,8 +773,8 @@ func TestDeploymentsService_Evolve_ExcludePackages(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Create packages in different projects (since each project can only have one package)
-	otherCtx1 := testenv.InitAuthContext(t, t.Context(), ti.conn, ti.sessionManager)
-	otherCtx2 := testenv.InitAuthContext(t, t.Context(), ti.conn, ti.sessionManager)
+	otherCtx1 := authztest.InitAuthContext(t, t.Context(), ti.conn, ti.sessionManager)
+	otherCtx2 := authztest.InitAuthContext(t, t.Context(), ti.conn, ti.sessionManager)
 
 	// Upload assets for package creation
 	bs1 := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
@@ -1161,7 +1162,7 @@ func TestDeploymentsService_Evolve_ComplexScenario(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Create external package
-	otherCtx := testenv.InitAuthContext(t, t.Context(), ti.conn, ti.sessionManager)
+	otherCtx := authztest.InitAuthContext(t, t.Context(), ti.conn, ti.sessionManager)
 	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
 	packageAsset, err := ti.assets.UploadOpenAPIv3(otherCtx, &agen.UploadOpenAPIv3Form{
 		ApikeyToken:      nil,

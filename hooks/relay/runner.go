@@ -175,9 +175,17 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		}
 	}
 	base := agenthooks.EventOf(typed)
+	ctx = withHarnessInfo(ctx, base)
 	if base.Provider == agenthooks.ProviderClaudeCode &&
 		(base.Kind == agenthooks.KindSessionStart || base.NativeName == "ConfigChange") {
 		attachMCPInventory(&payload, collectClaudeMCPInventory(ctx, base.Session.CWD))
+	}
+	promptAttachmentAdvance := promptAttachmentHighWaterAdvance{}
+	if entries, advance, err := collectClaudePromptAttachments(base); err == nil {
+		attachPromptAttachments(&payload, entries)
+		promptAttachmentAdvance = advance
+	} else {
+		r.debugf("event=%s prompt-attachments skipped: %v", base.NativeName, err)
 	}
 	if email := resolveUserEmail(ctx, typed); email != "" {
 		payload.Source.UserEmail = new(email)
@@ -230,7 +238,10 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	// kept for replay, a healthy exchange flushes any backlog, and a
 	// definitive 4xx does neither — the server answered, and would reject a
 	// replay identically.
-	r.finishExchange(idemKey, payload, res)
+	r.finishExchange(idemKey, payload, res, resolvedSkill)
+	if res.accepted() || res.unsent() {
+		commitPromptAttachmentHighWater(promptAttachmentAdvance)
+	}
 	if err := startSkillContentUpload(finalCreds, res, resolvedSkill); err != nil {
 		r.debugf("skill upload: %v", err)
 	}

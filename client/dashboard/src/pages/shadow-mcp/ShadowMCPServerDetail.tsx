@@ -10,6 +10,7 @@ import {
   type ShadowMCPPolicy,
 } from "@/components/shadow-mcp/ShadowMCPInventoryActions";
 import {
+  eligibleShadowMCPAllowRulePolicies,
   shadowMCPInventoryStatus,
   shadowMCPInventoryStatusBadgeVariant,
   shadowMCPInventoryStatusDescription,
@@ -17,8 +18,9 @@ import {
   shadowMCPPolicyState,
   type ShadowMCPPolicyState,
 } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { ALLOW_RULE_POLICY_REQUIRED } from "@/components/shadow-mcp/shadowMCPInventoryActionItems";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import type { ShadowMCPInventoryUser } from "@gram/client/models/components/shadowmcpinventoryuser.js";
@@ -38,13 +40,10 @@ import {
   useShadowMCPInventoryUsers,
 } from "@gram/client/react-query/shadowMCPInventoryUsers.js";
 import { useUpsertShadowMCPInventoryPolicyBypassMutation } from "@gram/client/react-query/upsertShadowMCPInventoryPolicyBypass.js";
-import {
-  Badge,
-  Button,
-  type Column,
-  Icon,
-  Table,
-} from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { type Column, Table } from "@/components/ui/Table";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";
@@ -104,9 +103,9 @@ function ServerStatus({
       <Badge variant={shadowMCPInventoryStatusBadgeVariant(status)}>
         <Badge.Text>{shadowMCPInventoryStatusLabel(status)}</Badge.Text>
       </Badge>
-      <Type muted small>
+      <Text muted small>
         {shadowMCPInventoryStatusDescription(server, policyState)}
-      </Type>
+      </Text>
     </div>
   );
 }
@@ -122,15 +121,15 @@ function DetailStat({
 }) {
   return (
     <div className="min-w-0">
-      <Type muted small>
+      <Text muted small>
         {label}
-      </Type>
-      <Type
+      </Text>
+      <Text
         variant={emphasized ? "body" : "small"}
         className="mt-1 truncate font-medium"
       >
         {value}
-      </Type>
+      </Text>
     </div>
   );
 }
@@ -199,14 +198,14 @@ function TopUsersTable({
     {
       key: "user",
       header: "User",
-      render: (user) => <Type variant="small">{user.userKey}</Type>,
+      render: (user) => <Text variant="small">{user.userKey}</Text>,
       width: "1fr",
     },
     {
       key: "calls",
       header: "Calls",
       render: (user) => (
-        <Type variant="small">{usageCountLabel(user.observedUseCount)}</Type>
+        <Text variant="small">{usageCountLabel(user.observedUseCount)}</Text>
       ),
       width: "160px",
     },
@@ -214,7 +213,7 @@ function TopUsersTable({
       key: "lastCalled",
       header: "Last called",
       render: (user) => (
-        <Type variant="small">{formatShortDate(user.lastCalled)}</Type>
+        <Text variant="small">{formatShortDate(user.lastCalled)}</Text>
       ),
       width: "180px",
     },
@@ -223,12 +222,12 @@ function TopUsersTable({
   if (users.length === 0) {
     return (
       <div className="bg-muted/20 flex min-h-32 flex-col items-center justify-center rounded-md border border-dashed px-6 py-8 text-center">
-        <Type variant="body" className="font-medium">
+        <Text variant="body" className="font-medium">
           No user activity
-        </Type>
-        <Type muted small className="mt-1 max-w-md">
+        </Text>
+        <Text muted small className="mt-1 max-w-md">
           Users will appear here after this Shadow MCP server is called.
-        </Type>
+        </Text>
       </div>
     );
   }
@@ -249,45 +248,62 @@ function TopUsersTable({
 }
 
 function DetailActionButtons({
+  allowRuleUnavailableMessage,
+  canManageAllowRules,
   disabled,
   onOpenAction,
   server,
 }: {
+  allowRuleUnavailableMessage: string;
+  canManageAllowRules: boolean;
   disabled: boolean;
   onOpenAction: (mode: InventoryActionMode) => void;
   server: ShadowMCPInventoryServer;
 }) {
   const primaryMode = actionModeForServer(server);
+  const primaryRequiresAllowRule =
+    primaryMode === "add" || primaryMode === "edit";
+  const hasVisibleAllowRuleAction =
+    primaryRequiresAllowRule || server.access === "allowed";
+  const primaryDisabled =
+    disabled || (primaryRequiresAllowRule && !canManageAllowRules);
 
   return (
-    <div className="flex items-center gap-2">
-      <Button
-        disabled={disabled}
-        onClick={() => onOpenAction(primaryMode)}
-        variant="primary"
-      >
-        <Button.Text>{actionLabel(primaryMode)}</Button.Text>
-      </Button>
-      {server.access === "allowed" && primaryMode !== "edit" && (
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex items-center gap-2">
         <Button
-          disabled={disabled}
-          onClick={() => onOpenAction("edit")}
-          variant="tertiary"
+          disabled={primaryDisabled}
+          onClick={() => onOpenAction(primaryMode)}
+          variant="primary"
         >
-          <Button.Text>{actionLabel("edit")}</Button.Text>
+          <Button.Text>{actionLabel(primaryMode)}</Button.Text>
         </Button>
-      )}
-      {server.access === "allowed" && (
-        <Button
-          disabled={disabled}
-          onClick={() => onOpenAction("delete")}
-          variant="tertiary"
-        >
-          <Button.LeftIcon>
-            <Icon name="trash-2" />
-          </Button.LeftIcon>
-          <Button.Text>Delete Rule</Button.Text>
-        </Button>
+        {server.access === "allowed" && primaryMode !== "edit" && (
+          <Button
+            disabled={disabled || !canManageAllowRules}
+            onClick={() => onOpenAction("edit")}
+            variant="tertiary"
+          >
+            <Button.Text>{actionLabel("edit")}</Button.Text>
+          </Button>
+        )}
+        {server.access === "allowed" && (
+          <Button
+            disabled={disabled}
+            onClick={() => onOpenAction("delete")}
+            variant="tertiary"
+          >
+            <Button.LeftIcon>
+              <Icon name="trash-2" />
+            </Button.LeftIcon>
+            <Button.Text>Delete Rule</Button.Text>
+          </Button>
+        )}
+      </div>
+      {hasVisibleAllowRuleAction && !canManageAllowRules && (
+        <Text muted small>
+          {allowRuleUnavailableMessage}
+        </Text>
       )}
     </div>
   );
@@ -303,10 +319,15 @@ export default function ShadowMCPServerDetail(): JSX.Element {
   const policyState = policiesQuery.isError
     ? "unavailable"
     : shadowMCPPolicyState(policiesQuery.data?.policies);
-  const shadowMCPPolicies: ShadowMCPPolicy[] =
-    policiesQuery.data?.policies.filter((policy) =>
-      policy.sources.includes("shadow_mcp"),
-    ) ?? [];
+  let shadowMCPPolicies: ShadowMCPPolicy[] = [];
+  if (!policiesQuery.isError) {
+    shadowMCPPolicies = eligibleShadowMCPAllowRulePolicies(
+      policiesQuery.data?.policies,
+    );
+  }
+  const allowRuleUnavailableMessage = policiesQuery.isError
+    ? "Policy status is unavailable. Refresh the page to try again."
+    : ALLOW_RULE_POLICY_REQUIRED;
   const queryEnabled = project.id.length > 0 && serverSlug.length > 0;
   const [usersCursor, setUsersCursor] = useState<string | undefined>(undefined);
   const [userPages, setUserPages] = useState<UsersPage[]>([]);
@@ -556,6 +577,8 @@ export default function ShadowMCPServerDetail(): JSX.Element {
             <Page.Section.CTA>
               {server && (
                 <DetailActionButtons
+                  allowRuleUnavailableMessage={allowRuleUnavailableMessage}
+                  canManageAllowRules={shadowMCPPolicies.length > 0}
                   disabled={isSubmitting}
                   onOpenAction={openAction}
                   server={server}
@@ -567,12 +590,12 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                 <SkeletonTable />
               ) : serverQuery.error || !server ? (
                 <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-1 px-4 py-8 text-center">
-                  <Type variant="body" className="font-medium">
+                  <Text variant="body" className="font-medium">
                     Shadow MCP server could not be loaded
-                  </Type>
-                  <Type muted small className="max-w-md">
+                  </Text>
+                  <Text muted small className="max-w-md">
                     Refresh the page or try again later.
-                  </Type>
+                  </Text>
                 </div>
               ) : (
                 <div className="flex min-h-0 flex-col gap-6">
@@ -587,24 +610,25 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                     }}
                     onSubmit={submitInventoryAction}
                     open={activeAction !== null}
+                    policyUnavailableMessage={allowRuleUnavailableMessage}
                     roles={rolesQuery.data?.roles ?? []}
                     shadowMCPPolicies={shadowMCPPolicies}
                   />
                   <ServerSummary policyState={policyState} server={server} />
                   <section className="min-h-0 space-y-3">
                     <div>
-                      <Type variant="subheading">Top users</Type>
-                      <Type muted small>
+                      <Text variant="subheading">Top users</Text>
+                      <Text muted small>
                         Users with observed calls to this Shadow MCP server.
-                      </Type>
+                      </Text>
                     </div>
                     {usersQuery.isLoading && !hasLoadedUserPages ? (
                       <SkeletonTable />
                     ) : usersQuery.error && !hasLoadedUserPages ? (
                       <div className="bg-background flex min-h-24 flex-col items-center justify-center gap-1 px-4 py-6 text-center">
-                        <Type variant="body" className="font-medium">
+                        <Text variant="body" className="font-medium">
                           Users could not be loaded
-                        </Type>
+                        </Text>
                       </div>
                     ) : (
                       <TopUsersTable

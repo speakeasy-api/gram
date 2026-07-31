@@ -38,6 +38,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -83,6 +84,7 @@ import { useToolMentions } from "@/elements/hooks/useToolMentions";
 import { getApiUrl } from "@/elements/lib/api";
 import { EASE_OUT_QUINT } from "@/elements/lib/easing";
 import { MODELS } from "@/elements/lib/models";
+import type { ComposerSkill, SkillContextConfig } from "@/elements/types";
 import {
   type MentionableTool,
   toolSetToMentionableTools,
@@ -121,7 +123,7 @@ const useChatResolution = () => useContext(ChatResolutionContext);
 
 const DangerousApiKeyWarning = () => (
   <div className="m-2 rounded-md border border-red-500 bg-red-100 px-4 py-3 text-sm text-red-800 dark:border-red-600 dark:bg-red-900/30 dark:text-red-200">
-    <strong>Danger:</strong> You are using a Gram API key directly in the
+    <strong>Danger:</strong> You are using a Speakeasy API key directly in the
     browser. This exposes your key to anyone who inspects this page. Do NOT use
     this in production.
   </div>
@@ -274,7 +276,7 @@ const ThreadScrollToBottom: FC = () => {
       <TooltipIconButton
         tooltip="Scroll to bottom"
         variant="outline"
-        className="aui-thread-scroll-to-bottom absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible dark:bg-background dark:text-foreground dark:hover:bg-accent"
+        className="aui-thread-scroll-to-bottom pointer-events-auto absolute bottom-full left-1/2 mb-2 -translate-x-1/2 rounded-full p-4 disabled:invisible dark:bg-background dark:text-foreground dark:hover:bg-accent"
       >
         <ArrowDownIcon />
       </TooltipIconButton>
@@ -555,10 +557,11 @@ const ComposerFeedback: FC = () => {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}
               transition={{ duration: 0.2, ease: EASE_OUT_QUINT }}
-              className="mb-3"
+              // z-10 keeps the pill (and its portalled tooltips) above the
+              // scroll-to-bottom button that floats directly overhead.
+              className="pointer-events-auto relative z-10"
             >
               <MessageFeedback
-                className="mx-auto"
                 onResolved={setResolved}
                 onFeedback={(type) => {
                   void handleFeedback(type);
@@ -612,8 +615,13 @@ const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
         r("xl"),
       )}
     >
-      {showFeedback && <ComposerFeedback />}
-      <ThreadScrollToBottom />
+      {/* Floating overlay above the opaque composer: keeps the message list
+          scrolling all the way down to the composer instead of being cut off
+          by a band of background behind the feedback pill. */}
+      <div className="aui-composer-overlay pointer-events-none absolute inset-x-0 bottom-full z-20 flex justify-center pb-3">
+        {showFeedback && <ComposerFeedback />}
+        <ThreadScrollToBottom />
+      </div>
       {showFeedback && isResolved ? (
         <m.div
           className="aui-composer-resolved flex min-h-[118px] flex-col items-center justify-center gap-2 border-t border-input px-1"
@@ -645,6 +653,8 @@ const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
           {composerConfig.attachments && <ComposerAttachments />}
 
           {toolMentionsEnabled && <ComposerToolMentions tools={mcpTools} />}
+
+          <ComposerSkillContextBadges />
 
           <ComposerPrimitive.Input
             placeholder={composerConfig.placeholder}
@@ -1044,6 +1054,216 @@ const ComposerToolMentionPicker: FC = () => {
   );
 };
 
+const ComposerSkillContextBadges: FC = () => {
+  const skillContext = useElements().config.composer?.skillContext;
+  if (!skillContext || skillContext.selectedSkillIds.length === 0) {
+    return null;
+  }
+
+  const selectedIDs = new Set(skillContext.selectedSkillIds);
+  const selectedSkills = skillContext.skills.filter((skill) =>
+    selectedIDs.has(skill.id),
+  );
+
+  return (
+    <div className="aui-composer-skill-context-badges flex flex-wrap gap-1 px-3 pt-1">
+      {selectedSkills.map((skill) => (
+        <span
+          key={skill.id}
+          className="flex max-w-full items-center gap-1 rounded-md border border-input bg-muted px-2 py-1 text-xs text-foreground"
+        >
+          <AtSign className="size-3 shrink-0 text-muted-foreground" />
+          <span className="truncate">{skill.displayName}</span>
+          <button
+            type="button"
+            onClick={() =>
+              skillContext.onSelectedSkillIdsChange(
+                skillContext.selectedSkillIds.filter((id) => id !== skill.id),
+              )
+            }
+            className="ml-0.5 shrink-0 text-muted-foreground hover:text-foreground"
+            aria-label={`Remove ${skill.displayName} context`}
+          >
+            ×
+          </button>
+        </span>
+      ))}
+    </div>
+  );
+};
+
+const ComposerSkillContextPicker: FC = () => {
+  const skillContext = useElements().config.composer?.skillContext;
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
+
+  if (!skillContext) {
+    return null;
+  }
+
+  const selectedIDs = new Set(skillContext.selectedSkillIds);
+  const normalizedQuery = deferredQuery.trim().toLowerCase();
+  const visibleSkills = normalizedQuery
+    ? skillContext.skills.filter(
+        (skill) =>
+          skill.displayName.toLowerCase().includes(normalizedQuery) ||
+          skill.name.toLowerCase().includes(normalizedQuery) ||
+          (skill.summary?.toLowerCase().includes(normalizedQuery) ?? false),
+      )
+    : skillContext.skills;
+  const maxSelected = skillContext.maxSelected ?? 10;
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      setQuery("");
+    }
+  };
+
+  const toggleSkill = (skillID: string) => {
+    if (selectedIDs.has(skillID)) {
+      skillContext.onSelectedSkillIdsChange(
+        skillContext.selectedSkillIds.filter((id) => id !== skillID),
+      );
+      setOpen(false);
+      setQuery("");
+      return;
+    }
+    if (skillContext.selectedSkillIds.length >= maxSelected) {
+      return;
+    }
+    skillContext.onSelectedSkillIdsChange([
+      ...skillContext.selectedSkillIds,
+      skillID,
+    ]);
+    setOpen(false);
+    setQuery("");
+  };
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          data-state={open ? "open" : "closed"}
+          className="aui-composer-skill-context-picker flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold data-[state=open]:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30"
+          aria-label="Add skill context"
+        >
+          <AtSign className="size-4 stroke-[1.5px]" />
+          <span className="aui-composer-skill-context-picker-label">
+            Add context
+          </span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="start"
+        className="aui-composer-skill-context-popover w-[360px] overflow-hidden p-0"
+        onEscapeKeyDown={(event) => {
+          if (query !== "") {
+            event.preventDefault();
+            setQuery("");
+          }
+        }}
+      >
+        <div className="flex items-center gap-2 border-b border-input px-3 py-2">
+          <Search className="size-4 shrink-0 text-muted-foreground" />
+          <input
+            autoFocus
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search skills…"
+            className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            aria-label="Search skills"
+          />
+        </div>
+        <SkillContextPickerResults
+          skillContext={skillContext}
+          visibleSkills={visibleSkills}
+          selectedIDs={selectedIDs}
+          maxSelected={maxSelected}
+          onToggle={toggleSkill}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+};
+
+function SkillContextPickerResults({
+  skillContext,
+  visibleSkills,
+  selectedIDs,
+  maxSelected,
+  onToggle,
+}: {
+  skillContext: SkillContextConfig;
+  visibleSkills: ComposerSkill[];
+  selectedIDs: Set<string>;
+  maxSelected: number;
+  onToggle: (skillID: string) => void;
+}): React.ReactElement {
+  if (skillContext.loading) {
+    return (
+      <div className="px-3 py-8 text-center text-xs text-muted-foreground">
+        Loading skills…
+      </div>
+    );
+  }
+  if (skillContext.error) {
+    return (
+      <div className="px-3 py-8 text-center text-xs text-muted-foreground">
+        Unable to load skills
+      </div>
+    );
+  }
+  if (visibleSkills.length === 0) {
+    return (
+      <div className="px-3 py-8 text-center text-xs text-muted-foreground">
+        No skills found
+      </div>
+    );
+  }
+
+  const atLimit = selectedIDs.size >= maxSelected;
+  return (
+    <div className="max-h-72 overflow-y-auto p-2">
+      {visibleSkills.map((skill) => {
+        const selected = selectedIDs.has(skill.id);
+        return (
+          <button
+            key={skill.id}
+            type="button"
+            onClick={() => onToggle(skill.id)}
+            disabled={atLimit && !selected}
+            aria-pressed={selected}
+            className="flex w-full items-start gap-2 rounded px-2 py-2 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border border-input">
+              {selected ? <CheckIcon className="size-3" /> : null}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium text-foreground">
+                {skill.displayName}
+              </span>
+              <span className="block truncate font-mono text-[11px] text-muted-foreground">
+                {skill.name}
+              </span>
+              {skill.summary ? (
+                <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">
+                  {skill.summary}
+                </span>
+              ) : null}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 const ComposerAction: FC = () => {
   const { config } = useElements();
   const r = useRadius();
@@ -1058,6 +1278,8 @@ const ComposerAction: FC = () => {
         )}
 
         <ComposerToolMentionPicker />
+
+        <ComposerSkillContextPicker />
 
         {config.model?.showModelPicker && !config.languageModel && (
           <ComposerModelPicker />

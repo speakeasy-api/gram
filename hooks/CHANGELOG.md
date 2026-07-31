@@ -1,5 +1,12 @@
 # hooks
 
+## 0.3.0
+
+### Minor Changes
+
+- 5c3f00a: Capture observed coding-agent skills and request unknown manifest content through the hooks API.
+- b905de3: Detect Cursor skill activations from skill manifest reads.
+
 ## 0.2.0
 
 ### Minor Changes

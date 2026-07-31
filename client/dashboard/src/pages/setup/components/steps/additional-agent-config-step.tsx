@@ -6,24 +6,24 @@ import {
   KeyRound,
   Loader2,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
+} from "@/components/ui/Sheet";
 import { cn } from "@/lib/utils";
 import {
   AI_INTEGRATION_PROVIDERS,
   type AIIntegrationProvider,
 } from "@/pages/org/ai-integration-providers";
-import { CodexIcon } from "@/pages/hooks/HookSourceIcon";
 import { useAIIntegrationConfigForm } from "@/pages/org/use-ai-integration-config-form";
 import { useAiIntegrationConfig } from "@gram/client/react-query/aiIntegrationConfig";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { StepContainer } from "../step-container";
 
 interface AdditionalAgentConfigStepProps {
@@ -39,18 +39,6 @@ type AdditionalAgentConfigProvider = AIIntegrationProvider & {
 
 const ADDITIONAL_AGENT_CONFIG_PROVIDERS: AdditionalAgentConfigProvider[] = [
   ...AI_INTEGRATION_PROVIDERS,
-  {
-    provider: "codex",
-    name: "OpenAI Compliance API",
-    description: "Export Codex activity logs for audit workflows.",
-    onboardingDescription:
-      "Codex compliance exports for audit, monitoring, and investigations are coming soon.",
-    icon: CodexIcon,
-    apiKeyLabel: "OpenAI Compliance API key",
-    apiKeyPlaceholder: "Coming soon",
-    requiresOrganizationId: false,
-    available: false,
-  },
 ];
 
 export function AdditionalAgentConfigStep({

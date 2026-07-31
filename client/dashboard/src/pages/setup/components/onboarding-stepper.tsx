@@ -65,6 +65,15 @@ export function OnboardingStepper({
                 >
                   <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
                 </button>
+              ) : canJump ? (
+                /* Upcoming but jumpable: outlined circle as a button so the
+                   number itself previews the step, matching the content click. */
+                <button
+                  onClick={() => onStepClick?.(index)}
+                  className="border-border text-muted-foreground flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded-full border bg-background text-sm font-normal transition-all duration-200 ease-out hover:scale-[1.2] hover:text-foreground"
+                >
+                  {index + 1}
+                </button>
               ) : (
                 /* Upcoming step: light outlined circle with white fill to cover track */
                 <div

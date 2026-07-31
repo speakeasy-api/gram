@@ -150,11 +150,13 @@ func TestRelaySpoolsEnrichedUnsentSkillPayload(t *testing.T) {
 	require.True(t, result.unsent())
 	names := spoolFiles(t)
 	require.Len(t, names, 1)
-	skill := readSpoolEntry(t, names[0]).Envelope.Data.Skill
+	entry := readSpoolEntry(t, names[0])
+	skill := entry.Envelope.Data.Skill
 	require.NotNil(t, skill)
 	require.Equal(t, "project", *skill.SourceLevel)
 	require.Equal(t, path, *skill.SourcePath)
 	require.Equal(t, rawSHA256, *skill.RawSha256)
+	require.Equal(t, filepath.Dir(filepath.Dir(path)), entry.SkillSourceRoot)
 }
 
 func TestIngestRedirectDoesNotForwardKeyAndFailsClosedWithoutSpool(t *testing.T) {
