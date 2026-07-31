@@ -3,4 +3,4 @@
 "server": patch
 ---
 
-Shorten the Shadow MCP detector description to "Tool calls..." so supported agent harnesses are not listed in the copy.
+Shorten Shadow MCP detector copy to omit the list of supported agent harnesses (Cursor, Claude Code, Codex, …).
