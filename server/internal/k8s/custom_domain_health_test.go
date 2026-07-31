@@ -129,6 +129,100 @@ func TestCheckCustomDomainInfrastructureFutureCertificateIsUnhealthy(t *testing.
 	require.Equal(t, CustomDomainInfrastructureIssueCertificateInvalid, health.Issue)
 }
 
+func TestCheckCustomDomainInfrastructureMissingExpectedRootIsUnhealthy(t *testing.T) {
+	t.Parallel()
+
+	const (
+		namespace    = "gram-test"
+		domain       = "mcp.example.com"
+		resourceName = "mcp-example-com"
+		rootName     = "mcp-example-com-root"
+		secretName   = "mcp-example-com-tls"
+	)
+	now := time.Now().UTC()
+	clients := newCustomDomainHealthTestClients(t, namespace, domain, resourceName, secretName, now.Add(-time.Hour), now.Add(30*24*time.Hour), true)
+
+	health, err := clients.CheckCustomDomainInfrastructure(t.Context(), CustomDomainInfrastructureCheck{
+		Domain:                    domain,
+		ResourceName:              resourceName,
+		RootResourceName:          rootName,
+		WellKnownRootResourceName: "",
+		CertSecretName:            secretName,
+		ProvisionerKind:           ProvisionerKindIngress,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, CustomDomainInfrastructureIssueResourceMissing, health.Issue)
+}
+
+func TestCheckCustomDomainInfrastructureExpectedRootPresentIsHealthy(t *testing.T) {
+	t.Parallel()
+
+	const (
+		namespace         = "gram-test"
+		domain            = "mcp.example.com"
+		resourceName      = "mcp-example-com"
+		rootName          = "mcp-example-com-root"
+		wellKnownRootName = "mcp-example-com-wellknown-root"
+		secretName        = "mcp-example-com-tls"
+	)
+	now := time.Now().UTC()
+	expiresAt := now.Add(30 * 24 * time.Hour)
+	clients := newCustomDomainHealthTestClients(t, namespace, domain, resourceName, secretName, now.Add(-time.Hour), expiresAt, true)
+	_, err := clients.Clientset.NetworkingV1().Ingresses(namespace).Create(t.Context(), &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{Name: rootName, Namespace: namespace},
+	}, metav1.CreateOptions{})
+	require.NoError(t, err)
+	_, err = clients.Clientset.NetworkingV1().Ingresses(namespace).Create(t.Context(), &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{Name: wellKnownRootName, Namespace: namespace},
+	}, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	health, err := clients.CheckCustomDomainInfrastructure(t.Context(), CustomDomainInfrastructureCheck{
+		Domain:                    domain,
+		ResourceName:              resourceName,
+		RootResourceName:          rootName,
+		WellKnownRootResourceName: wellKnownRootName,
+		CertSecretName:            secretName,
+		ProvisionerKind:           ProvisionerKindIngress,
+	})
+
+	require.NoError(t, err)
+	require.Empty(t, health.Issue)
+	require.WithinDuration(t, expiresAt, *health.CertificateExpiresAt, time.Second)
+}
+
+func TestCheckCustomDomainInfrastructureMissingExpectedWellKnownRootIsUnhealthy(t *testing.T) {
+	t.Parallel()
+
+	const (
+		namespace         = "gram-test"
+		domain            = "mcp.example.com"
+		resourceName      = "mcp-example-com"
+		rootName          = "mcp-example-com-root"
+		wellKnownRootName = "mcp-example-com-wellknown-root"
+		secretName        = "mcp-example-com-tls"
+	)
+	now := time.Now().UTC()
+	clients := newCustomDomainHealthTestClients(t, namespace, domain, resourceName, secretName, now.Add(-time.Hour), now.Add(30*24*time.Hour), true)
+	_, err := clients.Clientset.NetworkingV1().Ingresses(namespace).Create(t.Context(), &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{Name: rootName, Namespace: namespace},
+	}, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	health, err := clients.CheckCustomDomainInfrastructure(t.Context(), CustomDomainInfrastructureCheck{
+		Domain:                    domain,
+		ResourceName:              resourceName,
+		RootResourceName:          rootName,
+		WellKnownRootResourceName: wellKnownRootName,
+		CertSecretName:            secretName,
+		ProvisionerKind:           ProvisionerKindIngress,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, CustomDomainInfrastructureIssueResourceMissing, health.Issue)
+}
+
 func TestListManagedCustomDomainResourcesReturnsLabeledResources(t *testing.T) {
 	t.Parallel()
 

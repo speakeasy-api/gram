@@ -1,13 +1,15 @@
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { RequireScope } from "@/components/require-scope";
 import { ScheduleStatusBadge } from "@/components/schedule-status-badge";
-import { Switch } from "@/components/ui/switch";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+import { Switch } from "@/components/ui/Switch";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { formatRelativeTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import type { DeviceIntegrationProviderSchedule } from "@gram/client/models/components/deviceintegrationproviderschedule.js";
-import { Button, type Column, Stack, Table } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
+import { type Column, Table } from "@/components/ui/Table";
 import { Clock3, RefreshCw } from "lucide-react";
 import { memo, useMemo } from "react";
 import { type ProviderRole, ROLE_COPY } from "./provider-role";
@@ -42,9 +44,9 @@ function scheduleColumns(
       key: "name",
       header: "Schedule",
       render: (row) => (
-        <Type variant="small" className="w-fit font-mono text-xs font-medium">
+        <Text variant="small" className="w-fit font-mono text-xs font-medium">
           {row.schedule.schedule}
-        </Type>
+        </Text>
       ),
     },
     {
@@ -54,9 +56,9 @@ function scheduleColumns(
       render: (row) => (
         <Stack direction="horizontal" align="center" gap={1.5}>
           <Clock3 className="text-muted-foreground size-3.5 shrink-0" />
-          <Type muted small className="whitespace-nowrap">
+          <Text muted small className="whitespace-nowrap">
             {formatCadence(row.schedule.intervalMinutes)}
-          </Type>
+          </Text>
         </Stack>
       ),
     },
@@ -65,9 +67,9 @@ function scheduleColumns(
       header: ROLE_COPY[role].lastRunHeader,
       width: "110px",
       render: (row) => (
-        <Type muted small className="whitespace-nowrap">
+        <Text muted small className="whitespace-nowrap">
           {lastSyncedLabel(row)}
-        </Type>
+        </Text>
       ),
     },
     {

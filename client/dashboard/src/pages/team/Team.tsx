@@ -1,16 +1,16 @@
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
-import { Dialog } from "@/components/ui/dialog";
-import { Heading } from "@/components/ui/heading";
+import { Dialog } from "@/components/ui/Dialog";
+import { Heading } from "@/components/ui/Heading";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Text } from "@/components/ui/Text";
 import { useOrganization, useUser } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
 import { formatDistanceToNow } from "date-fns";
@@ -31,21 +31,20 @@ import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { OrganizationInvitation } from "@gram/client/models/components/organizationinvitation.js";
 import { OrganizationUser } from "@gram/client/models/components/organizationuser.js";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import {
-  Alert,
-  Button,
-  Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Icon,
-  Input,
-  Stack,
-  Table,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
+import { Input } from "@/components/ui/Input";
+import { Stack } from "@/components/ui/Stack";
+import { Column, Table } from "@/components/ui/Table";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
@@ -68,7 +67,7 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+} from "@/components/ui/ContextMenu";
 import { useOrgRoutes } from "@/routes";
 import { cn } from "@/lib/utils";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
@@ -563,12 +562,12 @@ function TeamInner() {
             </div>
           )}
           <Stack direction="vertical" gap={0}>
-            <Type variant="body" className="font-medium">
+            <Text variant="body" className="font-medium">
               {member.name}
-            </Type>
-            <Type variant="body" className="text-muted-foreground text-sm">
+            </Text>
+            <Text variant="body" className="text-muted-foreground text-sm">
               {member.email}
-            </Type>
+            </Text>
           </Stack>
         </Stack>
       ),
@@ -578,12 +577,12 @@ function TeamInner() {
       header: "Joined",
       width: "200px",
       render: (member) => (
-        <Type
+        <Text
           variant="body"
           className="text-muted-foreground whitespace-nowrap"
         >
           <HumanizeDateTime date={member.createdAt} />
-        </Type>
+        </Text>
       ),
     },
     {
@@ -626,7 +625,7 @@ function TeamInner() {
       header: "Last active",
       width: "200px",
       render: (member) => (
-        <Type
+        <Text
           variant="body"
           className="text-muted-foreground whitespace-nowrap"
         >
@@ -635,7 +634,7 @@ function TeamInner() {
           ) : (
             <span className="text-muted-foreground/50">—</span>
           )}
-        </Type>
+        </Text>
       ),
     },
     {
@@ -727,7 +726,7 @@ function TeamInner() {
                 .slice(0, 2)
                 .toUpperCase() || "?"}
             </div>
-            <Type variant="body">{invite.email}</Type>
+            <Text variant="body">{invite.email}</Text>
           </Stack>
         );
       },
@@ -740,9 +739,9 @@ function TeamInner() {
         const inviteRole = getInviteRole(invite);
         if (roles.length === 0) {
           return (
-            <Type variant="body" className="text-muted-foreground">
+            <Text variant="body" className="text-muted-foreground">
               {invite.roleSlug ?? "—"}
-            </Type>
+            </Text>
           );
         }
 
@@ -807,12 +806,12 @@ function TeamInner() {
       header: "Sent",
       width: "1fr",
       render: (invite) => (
-        <Type
+        <Text
           variant="body"
           className={`text-muted-foreground whitespace-nowrap ${invite.state === "expired" ? "opacity-50" : ""}`}
         >
           <HumanizeDateTime date={invite.createdAt} />
-        </Type>
+        </Text>
       ),
     },
     {
@@ -824,7 +823,7 @@ function TeamInner() {
           invite.state === "expired" ||
           (invite.expiresAt && invite.expiresAt < new Date());
         return (
-          <Type
+          <Text
             variant="body"
             className={isExpired ? "text-destructive" : "text-muted-foreground"}
           >
@@ -833,7 +832,7 @@ function TeamInner() {
               : invite.expiresAt
                 ? formatDistanceToNow(invite.expiresAt, { addSuffix: true })
                 : "—"}
-          </Type>
+          </Text>
         );
       },
     },
@@ -891,9 +890,9 @@ function TeamInner() {
           >
             <Stack direction="vertical" gap={1}>
               <Heading variant="h4">Team Members</Heading>
-              <Type variant="body" className="text-muted-foreground">
+              <Text variant="body" className="text-muted-foreground">
                 Manage who has access to {organization.name}
-              </Type>
+              </Text>
             </Stack>
             <RequireScope scope="org:admin" level="component">
               {organization.scimEnabled ? (
@@ -943,8 +942,8 @@ function TeamInner() {
               type="text"
               placeholder="Search members..."
               value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
+              onChange={(value) => {
+                setSearch(value);
                 setPage(0);
               }}
               className="mb-4 w-full py-2 pl-9 text-sm"
@@ -973,21 +972,21 @@ function TeamInner() {
                 justify="center"
               >
                 <Users className="text-muted-foreground h-12 w-12" />
-                <Type variant="body" className="text-muted-foreground">
+                <Text variant="body" className="text-muted-foreground">
                   {search
                     ? "No members matching your search"
                     : "No team members yet"}
-                </Type>
+                </Text>
               </Stack>
             }
           />
           {totalPages > 1 && (
             <div className="flex items-center justify-between border-t px-4 py-3">
-              <Type variant="body" className="text-muted-foreground text-sm">
+              <Text variant="body" className="text-muted-foreground text-sm">
                 {safePage * MEMBERS_PAGE_SIZE + 1}–
                 {Math.min((safePage + 1) * MEMBERS_PAGE_SIZE, members.length)}{" "}
                 of {members.length}
-              </Type>
+              </Text>
               <div className="flex items-center gap-1">
                 <Button
                   variant="tertiary"
@@ -1021,9 +1020,9 @@ function TeamInner() {
           <div>
             <Stack direction="vertical" gap={1} className="mb-4">
               <Heading variant="h4">Pending Invites</Heading>
-              <Type variant="body" className="text-muted-foreground">
+              <Text variant="body" className="text-muted-foreground">
                 Invitations that haven't been accepted yet
-              </Type>
+              </Text>
             </Stack>
 
             <Table
@@ -1040,10 +1039,10 @@ function TeamInner() {
             <div className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-4 py-3">
               <FolderSync className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
               <div className="min-w-0 flex-1">
-                <Type variant="body" className="text-sm font-medium">
+                <Text variant="body" className="text-sm font-medium">
                   Directory Sync is enabled
-                </Type>
-                <Type muted small className="mt-0.5">
+                </Text>
+                <Text muted small className="mt-0.5">
                   Team membership and role assignments are managed by your
                   identity provider.{" "}
                   <Link
@@ -1052,17 +1051,17 @@ function TeamInner() {
                   >
                     Manage identity settings
                   </Link>
-                </Type>
+                </Text>
               </div>
             </div>
           ) : (
             <div className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-4 py-3">
               <Shield className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
               <div className="min-w-0 flex-1">
-                <Type variant="body" className="text-sm font-medium">
+                <Text variant="body" className="text-sm font-medium">
                   SSO & Directory Sync
-                </Type>
-                <Type muted small className="mt-0.5">
+                </Text>
+                <Text muted small className="mt-0.5">
                   Automate member provisioning and enforce identity provider
                   authentication.{" "}
                   <Link
@@ -1071,7 +1070,7 @@ function TeamInner() {
                   >
                     Set up SSO & SCIM
                   </Link>
-                </Type>
+                </Text>
               </div>
             </div>
           )}
@@ -1085,13 +1084,13 @@ function TeamInner() {
             <Dialog.Title>Invite Team Member</Dialog.Title>
           </Dialog.Header>
           <form className="space-y-4 py-4" onSubmit={handleInvite}>
-            <Type variant="body" className="text-muted-foreground">
+            <Text variant="body" className="text-muted-foreground">
               Enter the email address of the person you'd like to invite to{" "}
               <span className="text-foreground font-medium">
                 {organization.name}
               </span>
               .
-            </Type>
+            </Text>
             <InputField
               label="Email address"
               name="email"
@@ -1171,12 +1170,12 @@ function TeamInner() {
             <Dialog.Title>Remove Team Member</Dialog.Title>
           </Dialog.Header>
           <div className="space-y-4 py-4">
-            <Type variant="body">
+            <Text variant="body">
               Are you sure you want to remove{" "}
               <span className="font-bold">{memberToRemove?.name}</span> from{" "}
               {organization.name}? They will lose access to all projects and
               resources.
-            </Type>
+            </Text>
             <div className="flex justify-end space-x-2">
               <Button
                 variant="secondary"
@@ -1210,10 +1209,10 @@ function TeamInner() {
             <Dialog.Title>Cancel Invite</Dialog.Title>
           </Dialog.Header>
           <div className="space-y-4 py-4">
-            <Type variant="body">
+            <Text variant="body">
               Are you sure you want to cancel the invite to{" "}
               <span className="font-bold">{inviteToCancel?.email}</span>?
-            </Type>
+            </Text>
             <div className="flex justify-end space-x-2">
               <Button
                 variant="secondary"

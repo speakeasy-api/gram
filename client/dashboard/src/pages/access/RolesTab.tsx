@@ -1,6 +1,6 @@
-import { Badge } from "@/components/ui/badge";
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+import { Badge } from "@/components/ui/Badge";
+import { Heading } from "@/components/ui/Heading";
+import { Text } from "@/components/ui/Text";
 import type { Role } from "@gram/client/models/components/role.js";
 import {
   invalidateAllRoles,
@@ -11,15 +11,15 @@ import {
   useMembers,
 } from "@gram/client/react-query/members.js";
 import { useDeleteRoleMutation } from "@gram/client/react-query/deleteRole.js";
-import { SkeletonTable } from "@/components/ui/skeleton";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Button } from "@/components/ui/Button";
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
@@ -29,7 +29,7 @@ import { MemberFacepile } from "@/components/member-facepile";
 import { Ellipsis } from "lucide-react";
 import { RequireScope } from "@/components/require-scope";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
-import type { Action } from "@/components/ui/more-actions";
+import type { Action } from "@/components/ui/MoreActions";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { visiblePermissionCount } from "./roleDialogState";
@@ -157,19 +157,19 @@ function RoleRow({
         )}
       >
         <div className="flex items-center gap-2">
-          <Type variant="body" className="font-medium">
+          <Text variant="body" className="font-medium">
             {role.name}
-          </Type>
+          </Text>
           {role.isSystem && (
-            <Badge variant="outline" size="sm">
+            <Badge variant="neutral" size="sm">
               System
             </Badge>
           )}
         </div>
-        <Type variant="body" className="text-muted-foreground min-w-0 truncate">
+        <Text variant="body" className="text-muted-foreground min-w-0 truncate">
           {role.description}
-        </Type>
-        <Type variant="body">{visiblePermissionCount(role.grants)}</Type>
+        </Text>
+        <Text variant="body">{visiblePermissionCount(role.grants)}</Text>
         <MemberFacepile members={roleMembers} />
         <div aria-hidden />
         <div onClick={(e) => e.stopPropagation()} className="flex justify-end">
@@ -235,9 +235,9 @@ export function RolesTab(): JSX.Element {
       <div className="mb-1 flex items-center justify-between">
         <div>
           <Heading variant="h4">Roles</Heading>
-          <Type muted small className="mt-1">
+          <Text muted small className="mt-1">
             Define roles and their associated permissions.
-          </Type>
+          </Text>
         </div>
         <RequireScope scope="org:admin" level="component">
           <Button onClick={() => setIsCreateOpen(true)}>
@@ -287,35 +287,35 @@ export function RolesTab(): JSX.Element {
       )}
 
       <div className="border-border/50 bg-muted/30 mt-8 rounded-md border px-4 py-3">
-        <Type variant="subheading" className="mb-4">
+        <Text variant="subheading" className="mb-4">
           About System roles
-        </Type>
+        </Text>
         <div className="flex items-start gap-3 text-sm">
           <Badge
-            variant="outline"
+            variant="neutral"
             size="sm"
             className="mt-0.5 w-16 shrink-0 justify-center bg-white dark:bg-zinc-900"
           >
             Member
           </Badge>
-          <Type variant="body" className="text-muted-foreground text-sm">
+          <Text variant="body" className="text-muted-foreground text-sm">
             The default role for most users. Grants read access across the
             organization and projects. Gives the ability to connect to MCP
             servers and other resources.
-          </Type>
+          </Text>
         </div>
         <div className="mt-2 flex items-start gap-3 text-sm">
           <Badge
-            variant="outline"
+            variant="neutral"
             size="sm"
             className="mt-0.5 w-16 shrink-0 justify-center bg-white dark:bg-zinc-900"
           >
             Admin
           </Badge>
-          <Type variant="body" className="text-muted-foreground text-sm">
+          <Text variant="body" className="text-muted-foreground text-sm">
             Full access to all organization settings, billing, member
             management, every project, MCP server, skills and assistants.
-          </Type>
+          </Text>
         </div>
       </div>
 

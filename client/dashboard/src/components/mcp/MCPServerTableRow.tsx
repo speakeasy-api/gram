@@ -1,10 +1,10 @@
-import { DotRow } from "@/components/ui/dot-row";
-import { Type } from "@/components/ui/type";
+import { DotRow } from "@/components/ui/DotRow";
+import { Text } from "@/components/ui/Text";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { Network } from "lucide-react";
-import { Badge } from "../ui/badge";
+import { Badge } from "../ui/Badge";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
 import { MCPActivityIndicator } from "./MCPActivityIndicator";
 import type { McpActivityStatus } from "./mcp-activity";
@@ -43,14 +43,14 @@ export function MCPServerTableRow({
       {/* Name */}
       <td className="px-3 py-3">
         <div className="flex items-center gap-2">
-          <Type
+          <Text
             variant="subheading"
             as="div"
             className="group-hover:text-primary min-w-0 flex-1 truncate text-sm transition-colors"
             title={server.name ?? undefined}
           >
             {server.name || "MCP Server"}
-          </Type>
+          </Text>
           {activityStatus && (
             <MCPActivityIndicator
               status={activityStatus}
@@ -73,14 +73,14 @@ export function MCPServerTableRow({
 
       {/* URL column slot — endpoint count for mcp_servers-backed rows */}
       <td className="px-3 py-3">
-        <Type small muted>
+        <Text small muted>
           {endpointCount} {endpointCount === 1 ? "endpoint" : "endpoints"}
-        </Type>
+        </Text>
       </td>
 
       {/* Tools column slot — mcp_servers don't expose tool catalogs through Gram today */}
       <td className="px-3 py-3">
-        <Badge variant="outline">MCP Server</Badge>
+        <Badge variant="neutral">MCP Server</Badge>
       </td>
     </DotRow>
   );

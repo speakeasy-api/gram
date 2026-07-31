@@ -1,0 +1,10 @@
+{
+  "$comment": "Recommended external agent skills. Installed on opt-in by `mise run skills:recommended` (offered by ./zero); contents land in .agents/skills/<name>/ and are kept out of git via .git/info/exclude. Pin `ref` to a commit SHA.",
+  "skills": {
+    "worktrunk": {
+      "repo": "https://github.com/max-sixty/worktrunk",
+      "ref": "1eded279436736e432a467cb8a0bd5d4496d797a",
+      "path": "plugins/worktrunk/skills/worktrunk"
+    }
+  }
+}

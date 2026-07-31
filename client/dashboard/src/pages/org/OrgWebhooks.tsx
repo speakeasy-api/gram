@@ -1,18 +1,16 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
-import { Switch } from "@/components/ui/switch";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { Switch } from "@/components/ui/Switch";
+import { Text } from "@/components/ui/Text";
 import { useCreatePortalSessionMutation } from "@gram/client/react-query/createPortalSession.js";
 import { useDisableWebhooksMutation } from "@gram/client/react-query/disableWebhooks.js";
 import { useEnableWebhooksMutation } from "@gram/client/react-query/enableWebhooks.js";
 import { useOrganization } from "@gram/client/react-query/organization.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import {
-  Button as MoonshineButton,
-  Stack,
-  useMoonshineConfig,
-} from "@speakeasy-api/moonshine";
+import { Button as MoonshineButton } from "@/components/ui/Button";
+import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
+import { Stack } from "@/components/ui/Stack";
 import { Webhook } from "lucide-react";
 import { AppPortal } from "svix-react";
 import React, { JSX } from "react";
@@ -66,27 +64,27 @@ function OrgWebhooksInner() {
       <Heading variant="h3" className="mb-4">
         Webhooks
       </Heading>
-      <Type muted small className="mb-6">
+      <Text muted small className="mb-6">
         Configure webhook delivery for various platform events.
-      </Type>
+      </Text>
       <div className="border-border bg-card rounded-lg border p-4">
         <Stack gap={4}>
           <Stack direction="horizontal" justify="space-between" align="center">
             <Stack gap={1}>
               <Stack direction="horizontal" align="center" gap={2}>
                 <Webhook className="text-muted-foreground h-4 w-4" />
-                <Type variant="body" className="font-medium">
+                <Text variant="body" className="font-medium">
                   Enable Webhooks
-                </Type>
+                </Text>
               </Stack>
-              <Type
+              <Text
                 variant="body"
                 className="text-muted-foreground ml-6 text-sm"
               >
                 Enable or disable webhook delivery of organization events.
                 Disabling this option does not destroy existing webhook
                 configuration below.
-              </Type>
+              </Text>
             </Stack>
             <RequireScope scope="org:admin" level="component">
               <Switch

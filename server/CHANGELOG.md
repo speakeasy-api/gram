@@ -1,5 +1,48 @@
 # server
 
+## 1.1.0
+
+### Minor Changes
+
+- 9373aea: Support OAuth Client ID Metadata Documents (CIMD) on the Gram Session OAuth authorization server, gated per organization behind the `gram-user-session-cimd` feature flag. MCP clients that identify themselves with a URL-shaped `client_id`, such as Claude Code and VS Code, can now complete the OAuth flow without Dynamic Client Registration, including loopback redirects on any port.
+- 3b66258: Custom domains can now route their root URL to a default MCP server. Pick one of the domain's MCP endpoints as the default and `https://your-domain.com/` serves that server directly — MCP clients connect at the root and browsers see the installation page — while renaming the endpoint's slug updates the routing automatically. Custom domains can also serve an OpenAI app-submission verification token at `/.well-known/openai-apps-challenge`, so ChatGPT app reviews can verify domain ownership without any changes on your site. Both settings live on the custom domain page; the default server can also be set from an MCP server's own settings.
+
+### Patch Changes
+
+- debaf8e: Shadow MCP inventory server names now resolve reliably after renames. Name updates written in quick succession could previously tie on their stored version and intermittently revert to an older observed name; versions are now stored at full nanosecond precision and each update is guaranteed to supersede the state it was based on.
+- 80b855f: Stop enumerating supported coding agents (Cursor, Claude Code, Codex, …) in Shadow MCP detector copy and other user-facing product strings. Prefer generic wording so new agents like opencode do not require list updates.
+
+## 1.0.0
+
+### Major Changes
+
+- 228f828: feat: evidence records carry per-device attestation strength
+
+  Pushed Drata/Vanta coverage records replace assignedUserAgentActive /
+  assignedUserAgentLastSeenAt with agentActive, agentAttestation, and
+  agentLastSeenAt. agentAttestation is "device" when the record is backed by
+  that machine's own agent heartbeat (matched on hardware serial) and "user"
+  when only its assigned user's, so a single push can carry both strengths
+  truthfully. Breaking for the customer-declared Drata/Vanta record schemas.
+
+### Minor Changes
+
+- 2822d51: `remoteSessionIssuers.get` can now look an identity provider up by its upstream issuer URL, returning the one the project would use (preferring project over organization over platform) or 404 when nothing describes that URL yet. The dashboard's automatic setup flows use it to decide whether to reuse an existing provider instead of scanning the provider list in the browser, which also lets them reuse platform-catalog providers for the first time.
+- b5f47cb: Auto-provision the Drata Custom Connection on connect. When an evidence-sink provider implements the new optional `Provisioner` capability, the connect flow creates its vendor-side object and stores the resulting ids, so the customer no longer hand-crafts it against the vendor API. Drata implements it: it find-or-creates the dedicated Custom Connection with the exact record schema and `required` list (omitting `agentLastSeenAt` so never-seen-agent records are never rejected), keyed on a deterministic name so a re-save reuses the connection instead of duplicating it. A new optional `workspace_id` field defaults to 1, and `connection_id` becomes optional — filled in automatically.
+- 5cfbb83: Expose MCP Client Metadata to Gram Functions tool calls
+- 5bf2d45: Select project skills as additional context for an individual Project Assistant turn.
+
+### Patch Changes
+
+- d5e1ea6: Fix three Drata evidence-push defects found running against the live API. The stranded-session sweep failed to decode the session listing (Drata returns numeric session ids inside a data/pagination envelope; the sweep decoded them as strings and misreported the failure via a bare-array fallback) — session ids now tolerate numbers or strings, a null/absent data field counts as an empty sweep, and the envelope's real decode error surfaces. An empty fleet now clears evidence by deleting records directly, because Drata refuses to complete a session with no records. Per-record schema-validation rejections hidden inside 2xx upload responses now fail the push instead of silently publishing a partial fleet.
+- 1d888d5: Add `message_created_at` and `assistant_id` columns to the ClickHouse
+  `risk_findings` table and stamp them at ingest from the chat-message
+  attribution lookup. `message_created_at` (defaulting to scan time for
+  pre-existing rows) will let the Risk Events listing sort and paginate by
+  event time from ClickHouse; `assistant_id` will power the assistant filter
+  without a cross-store join.
+- eca5c54: Fix three Vanta evidence-sink defects against the real CustomResource API, all verified live. Every pushed record now carries the required top-level `externalUrl` base field (an omission was rejected with 400). `agent_last_seen_at` is always sent — an empty string when no agent has ever reported, rather than omitted — because Vanta's console cannot author an optional-property schema, so a device-declared record schema marks every property required and an omitted field fails at sync. And the response check now matches Vanta's actual full-state PUT contract — 200 `{"success": true}` on a valid set, 4xx on any schema violation — instead of requiring an `accepted`/`rejected` accounting object the API never returns, which was failing every push.
+
 ## 0.95.0
 
 ### Minor Changes

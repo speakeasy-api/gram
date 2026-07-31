@@ -1,10 +1,10 @@
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { DeviceIntegrationCoverage } from "@gram/client/models/components/deviceintegrationcoverage.js";
 import type { DeviceIntegrationProvider } from "@gram/client/models/components/deviceintegrationprovider.js";
 import { buildDeviceIntegrationConfigQuery } from "@gram/client/react-query/deviceIntegrationConfig.js";
 import { useDeviceIntegrationCoverage } from "@gram/client/react-query/deviceIntegrationCoverage.js";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/Stack";
 import { useQueries } from "@tanstack/react-query";
 import { ArrowRight } from "lucide-react";
 import { useMemo } from "react";
@@ -70,7 +70,7 @@ export function CoveragePipeline({
   // reports device attestation for every active device; otherwise fall back
   // to the weaker match wording (and default weak while coverage loads).
   const deviceAttested = coverage?.attestation === "device";
-  const agentLabel = deviceAttested ? "Running the agent" : "Active agent";
+  const agentLabel = deviceAttested ? "Running the agent" : "Active agents";
   const agentHint = deviceAttested
     ? "with a live device-agent heartbeat"
     : "assigned user has a live agent";
@@ -90,7 +90,7 @@ export function CoveragePipeline({
             label={agentLabel}
             value={running}
             hint={agentHint}
-            foot="reported by the agent"
+            foot="reported by device agent"
           />
         </div>
 
@@ -134,26 +134,26 @@ function InputNode({
 }) {
   return (
     <div className="bg-muted/40 flex flex-col gap-1 rounded-md p-3">
-      <Type
+      <Text
         variant="small"
         className="text-muted-foreground font-mono text-[10.5px] tracking-wider uppercase"
       >
         {label}
-      </Type>
+      </Text>
       <Stack direction="horizontal" align="baseline" gap={1.5}>
-        <Type variant="body" className="text-2xl font-semibold tabular-nums">
+        <Text variant="body" className="text-2xl font-semibold tabular-nums">
           {value}
-        </Type>
-        <Type muted small>
+        </Text>
+        <Text muted small>
           {hint}
-        </Type>
+        </Text>
       </Stack>
-      <Type
+      <Text
         variant="small"
         className="text-muted-foreground/70 font-mono text-[10px] tracking-wide uppercase"
       >
         {foot}
-      </Type>
+      </Text>
     </div>
   );
 }
@@ -172,15 +172,15 @@ function CoverageNode({
   if (!coverage || total === 0) {
     return (
       <div className="border-border/60 bg-muted/20 flex flex-col justify-center gap-1 rounded-md border border-dashed p-3">
-        <Type
+        <Text
           variant="small"
           className="text-muted-foreground font-mono text-[10.5px] tracking-wider uppercase"
         >
           Agent coverage
-        </Type>
-        <Type muted small>
+        </Text>
+        <Text muted small>
           No devices yet — connect an inventory source to build your fleet.
-        </Type>
+        </Text>
       </div>
     );
   }
@@ -199,25 +199,29 @@ function CoverageNode({
             "linear-gradient(90deg,#e11d48,#f59e0b,#10b981,#3b82f6,#8b5cf6)",
         }}
       />
-      <Type
+      <Text
         variant="small"
         className="text-muted-foreground font-mono text-[10.5px] tracking-wider uppercase"
       >
         Agent coverage
-      </Type>
+      </Text>
       <Stack direction="horizontal" align="baseline" gap={2}>
-        <Type
+        <Text
           variant="body"
           className="text-3xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400"
         >
           {percent}%
-        </Type>
-        <Type muted small>
+        </Text>
+        <Text muted small>
           covered · {running} of {total} devices
-        </Type>
+        </Text>
       </Stack>
+      {/* The track needs its own contrast: bg-muted collapses to the card
+          color in dark mode, which hides the uncovered remainder and makes the
+          filled portion read as far more than its true share. foreground/15
+          stays visible on both grounds. */}
       <div
-        className="bg-muted flex h-2 overflow-hidden rounded-full"
+        className="bg-foreground/15 flex h-2 overflow-hidden rounded-full"
         role="img"
         aria-label={`${running} running the agent, ${coverage.agentStale} stale, of ${total} devices`}
       >
@@ -272,31 +276,31 @@ function PipelineEnd({
 }) {
   return (
     <Stack gap={1} className={alignEnd ? "md:text-right" : undefined}>
-      <Type
+      <Text
         variant="small"
         className="text-muted-foreground font-mono text-[10.5px] tracking-wider uppercase"
       >
         {label}
-      </Type>
+      </Text>
       <Stack
         direction="horizontal"
         align="baseline"
         gap={1.5}
         className={alignEnd ? "md:justify-end" : undefined}
       >
-        <Type variant="body" className="text-2xl font-semibold tabular-nums">
+        <Text variant="body" className="text-2xl font-semibold tabular-nums">
           {count}
-        </Type>
-        <Type muted small>
+        </Text>
+        <Text muted small>
           {count === 1 ? noun.replace(/s$/, "") : noun}
-        </Type>
+        </Text>
       </Stack>
-      <Type
+      <Text
         variant="small"
         className="text-muted-foreground/70 font-mono text-[10px] tracking-wide uppercase"
       >
         {verb}
-      </Type>
+      </Text>
     </Stack>
   );
 }

@@ -39,7 +39,13 @@ function initialContext(input: Input): Context {
   return {
     discovered: input.discovered,
     initialPath: input.initialPath,
-    external: { slug: "", metadataJson: "", jsonError: null, prefilled: false },
+    external: {
+      issuerUrl: "",
+      slug: "",
+      metadataJson: "",
+      jsonError: null,
+      prefilled: false,
+    },
     proxy: initialProxy(),
     envSlug: null,
     error: null,
@@ -55,9 +61,10 @@ function externalFromDiscovered(
   d: DiscoveredOAuth,
 ): Pick<
   Context["external"],
-  "slug" | "metadataJson" | "jsonError" | "prefilled"
+  "issuerUrl" | "slug" | "metadataJson" | "jsonError" | "prefilled"
 > {
   return {
+    issuerUrl: typeof d.metadata.issuer === "string" ? d.metadata.issuer : "",
     slug: d.slug,
     metadataJson: JSON.stringify(d.metadata, null, 2),
     jsonError: null,

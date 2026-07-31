@@ -86,6 +86,7 @@ func benchToolRequest(tb testing.TB) callRequest {
 		ToolName:    "bench_tool",
 		Input:       json.RawMessage(`{"hello":"world"}`),
 		Environment: nil,
+		Meta:        nil,
 	})
 	if err != nil {
 		tb.Fatalf("marshal request: %v", err)

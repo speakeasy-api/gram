@@ -2,7 +2,7 @@ import {
   type FacepileMember,
   MemberFacepile,
 } from "@/components/member-facepile";
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { PluginAssignment } from "@gram/client/models/components/pluginassignment.js";
 import type { Role } from "@gram/client/models/components/role.js";
@@ -58,13 +58,13 @@ export function PluginAssignmentsList({
         <div className="flex items-center gap-3 py-3">
           <MemberFacepile members={facepileMembers} />
           <div className="min-w-0">
-            <Type as="div" className="truncate font-medium">
+            <Text as="div" className="truncate font-medium">
               {facepileMembers.length}{" "}
               {facepileMembers.length === 1 ? "member" : "members"}
-            </Type>
-            <Type as="div" small muted className="truncate">
+            </Text>
+            <Text as="div" small muted className="truncate">
               Assigned individually
-            </Type>
+            </Text>
           </div>
         </div>
       )}

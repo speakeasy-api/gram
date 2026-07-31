@@ -1,13 +1,14 @@
-import { DotCard } from "@/components/ui/dot-card";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
-import { Badge } from "@/components/ui/badge";
+import { DotCard } from "@/components/ui/DotCard";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
+import { Badge } from "@/components/ui/Badge";
 import { useOrganization } from "@/contexts/Auth";
 import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
 import { toolStats } from "@/pages/catalog/hooks/serverMetadata";
 import { buildCollectionMcpJson } from "@/lib/mcp-json";
 import { useOrgRoutes } from "@/routes";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import {
   ArrowRight,
   Download,
@@ -129,7 +130,7 @@ export function CollectionCard({
         collection.visibility === "private" ? (
           <div className="absolute top-3.5 left-3.5 z-10">
             <Badge
-              variant="outline"
+              variant="neutral"
               className="border-muted-foreground/30 bg-background/80 text-muted-foreground backdrop-blur-sm"
             >
               <Lock className="mr-1 h-3 w-3" />
@@ -141,25 +142,25 @@ export function CollectionCard({
     >
       <div className="mb-2 flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <Type
+          <Text
             variant="subheading"
             as="div"
             className="text-md group-hover:text-primary truncate transition-colors"
             title={collection.name}
           >
             {collection.name}
-          </Type>
+          </Text>
         </div>
-        <Badge variant="secondary">
+        <Badge variant="neutral">
           <Server className="mr-1 h-3 w-3" />
           {serverCount} {serverCount === 1 ? "server" : "servers"}
         </Badge>
       </div>
 
       {collection.description && (
-        <Type small muted className="mb-3 line-clamp-2">
+        <Text small muted className="mb-3 line-clamp-2">
           {collection.description}
-        </Type>
+        </Text>
       )}
 
       <div className="mt-auto flex items-center justify-end gap-2 pt-2">
@@ -171,9 +172,9 @@ export function CollectionCard({
             className="text-muted-foreground mr-auto"
           >
             <Eye className="h-3.5 w-3.5" />
-            <Type small muted>
+            <Text small muted>
               Public
-            </Type>
+            </Text>
           </Stack>
         )}
 

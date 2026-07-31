@@ -1,14 +1,14 @@
 import { DetailHero } from "@/components/detail-hero";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
+import { Heading } from "@/components/ui/Heading";
 import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
   TabsList,
-} from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tabs";
+import { Text } from "@/components/ui/Text";
 import { remoteSessionScopeTier } from "@/lib/sources";
 import { useOrgRoutes } from "@/routes";
 import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
@@ -67,9 +67,9 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
       <Page.Body fullWidth noPadding className="gap-0">
         <DetailHero>
           <div className="flex items-center gap-3">
-            <Type small muted>
+            <Text small muted>
               Remote Identity Provider
-            </Type>
+            </Text>
             {issuer && (
               <ScopeBadge
                 projectId={issuer.projectId}
@@ -108,12 +108,12 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
               </TabsContent>
               <TabsContent value="clients" className="mt-0">
                 {issuer && <ClientsTab issuer={issuer} />}
-                {isLoading && <Type muted>Loading…</Type>}
+                {isLoading && <Text muted>Loading…</Text>}
               </TabsContent>
               {!isPlatform && (
                 <TabsContent value="settings" className="mt-0">
                   {issuer && <SettingsTab key={issuer.id} issuer={issuer} />}
-                  {isLoading && <Type muted>Loading…</Type>}
+                  {isLoading && <Text muted>Loading…</Text>}
                 </TabsContent>
               )}
             </div>

@@ -1,15 +1,15 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
-import { Checkbox } from "@/components/ui/checkbox";
-import { MultiSelect } from "@/components/ui/multi-select";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { MultiSelect } from "@/components/ui/MultiSelect";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Icon } from "@speakeasy-api/moonshine";
+} from "@/components/ui/Select";
+import { Icon } from "@/components/ui/Icon";
 import {
   allLabelFor,
   flattenOptions,

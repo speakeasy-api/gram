@@ -633,7 +633,7 @@ export const INSIGHTS_SUGGESTIONS = {
       label: "Compare clients",
       icon: "bot",
       prompt:
-        "Compare usage across different AI coding clients (Claude Code, Cursor, Codex, etc). Which is most popular?",
+        "Compare usage across different AI coding clients. Which is most popular?",
     },
   ],
 

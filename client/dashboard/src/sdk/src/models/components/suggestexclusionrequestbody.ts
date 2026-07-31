@@ -7,19 +7,24 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type SuggestExclusionRequestBody = {
   /**
+   * IDs of example findings (e.g. a multiselect batch) to derive a suggestion from. Looked up server-side rather than trusted from the client, but only rule_id/source cross into the suggestion — a finding's matched value (a detected secret/PII value the caller hasn't reviewed) is never read for this, so batch-derived suggestions are rule_id/source scoped rather than exact-value. Optional when prompt is provided.
+   */
+  findingIds?: Array<string> | undefined;
+  /**
    * Built-in and custom rule ids the suggestion may reference in rule_id filters.
    */
   knownRuleIds?: Array<string> | undefined;
   /**
-   * Natural-language description of the findings to stop flagging.
+   * Natural-language description of the findings to stop flagging. Optional when finding_ids is provided.
    */
-  prompt: string;
+  prompt?: string | undefined;
 };
 
 /** @internal */
 export type SuggestExclusionRequestBody$Outbound = {
+  finding_ids?: Array<string> | undefined;
   known_rule_ids?: Array<string> | undefined;
-  prompt: string;
+  prompt?: string | undefined;
 };
 
 /** @internal */
@@ -28,11 +33,13 @@ export const SuggestExclusionRequestBody$outboundSchema: z.ZodMiniType<
   SuggestExclusionRequestBody
 > = z.pipe(
   z.object({
+    findingIds: z.optional(z.array(z.string())),
     knownRuleIds: z.optional(z.array(z.string())),
-    prompt: z.string(),
+    prompt: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      findingIds: "finding_ids",
       knownRuleIds: "known_rule_ids",
     });
   }),

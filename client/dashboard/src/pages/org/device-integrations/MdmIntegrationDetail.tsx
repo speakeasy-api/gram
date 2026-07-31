@@ -2,22 +2,28 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { Switch } from "@/components/ui/switch";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+import { Switch } from "@/components/ui/Switch";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import type { DeviceIntegrationCoverage } from "@gram/client/models/components/deviceintegrationcoverage.js";
 import type { DeviceIntegrationProvider } from "@gram/client/models/components/deviceintegrationprovider.js";
 import { buildDeviceIntegrationCoverageQuery } from "@gram/client/react-query/deviceIntegrationCoverage.js";
 import { useDeviceIntegrationCoverage } from "@gram/client/react-query/deviceIntegrationCoverage.js";
 import { useDeviceIntegrationProviders } from "@gram/client/react-query/deviceIntegrationProviders.js";
 import { useManagedDevicesInfinite } from "@gram/client/react-query/managedDevices.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useQueries } from "@tanstack/react-query";
 import { PlugZap } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, Navigate, useParams } from "react-router";
 import { CoverageSummaryTiles, ManagedDeviceTable } from "./coverage-widgets";
-import { isSink, providerRole, ROLE_COPY } from "./provider-role";
+import {
+  isProviderVisible,
+  isSink,
+  providerRole,
+  ROLE_COPY,
+} from "./provider-role";
 import {
   ConnectionStatusBadge,
   DeviceIntegrationConfigureSheet,
@@ -56,7 +62,11 @@ export default function MdmIntegrationDetail(): JSX.Element | null {
 
   const provider = data?.providers.find((p) => p.id === providerID);
   if (isLoading) return null;
-  if (!provider) return <Navigate to=".." replace />;
+  // Hidden providers 404 to the list even by direct URL, so a not-yet-supported
+  // integration can't be reached out of band.
+  if (!provider || !isProviderVisible(provider)) {
+    return <Navigate to=".." replace />;
+  }
 
   return (
     <Page>
@@ -189,9 +199,9 @@ function MdmIntegrationDetailInner({
         <Page.Section.Body>
           <Stack gap={4}>
             {coverageError ? (
-              <Type muted role="alert">
+              <Text muted role="alert">
                 Coverage could not be loaded. It will retry automatically.
-              </Type>
+              </Text>
             ) : null}
             {coverage ? (
               sink ? (
@@ -281,10 +291,10 @@ function CoverageHeadline({
 }) {
   if (coverage.totalDevices === 0) {
     return (
-      <Type muted>
+      <Text muted>
         No devices synced yet. Devices appear after the first successful
         inventory sync.
-      </Type>
+      </Text>
     );
   }
   const percent = Math.floor(
@@ -292,10 +302,10 @@ function CoverageHeadline({
   );
   return (
     <Stack direction="horizontal" align="baseline" gap={2}>
-      <Type variant="body" className="text-3xl font-semibold tabular-nums">
+      <Text variant="body" className="text-3xl font-semibold tabular-nums">
         {percent}%
-      </Type>
-      <Type muted>{coverageHeadlineCopy(coverage)}</Type>
+      </Text>
+      <Text muted>{coverageHeadlineCopy(coverage)}</Text>
     </Stack>
   );
 }
@@ -320,27 +330,27 @@ function SinkEvidenceHeadline({
   // sink's own state.
   if (coverage.totalDevices === 0) {
     return (
-      <Type muted>
+      <Text muted>
         Connect a device inventory source (Jamf, Iru, or Intune) first — there
         is nothing to publish to {providerName} yet.
-      </Type>
+      </Text>
     );
   }
 
   const noun = coverage.totalDevices === 1 ? "device" : "devices";
   const count = (
-    <Type variant="body" className="text-3xl font-semibold tabular-nums">
+    <Text variant="body" className="text-3xl font-semibold tabular-nums">
       {coverage.totalDevices}
-    </Type>
+    </Text>
   );
 
   if (!configured) {
     return (
       <Stack direction="horizontal" align="baseline" gap={2}>
         {count}
-        <Type muted>
+        <Text muted>
           managed {noun} ready to publish — connect {providerName} to start.
-        </Type>
+        </Text>
       </Stack>
     );
   }
@@ -348,19 +358,19 @@ function SinkEvidenceHeadline({
     return (
       <Stack direction="horizontal" align="baseline" gap={2}>
         {count}
-        <Type muted>
+        <Text muted>
           managed {noun} ready to publish — enable the connection to resume
           pushing to {providerName}.
-        </Type>
+        </Text>
       </Stack>
     );
   }
   return (
     <Stack direction="horizontal" align="baseline" gap={2}>
       {count}
-      <Type muted>
+      <Text muted>
         managed {noun} published to {providerName} as coverage evidence
-      </Type>
+      </Text>
     </Stack>
   );
 }
@@ -370,7 +380,7 @@ function SinkEvidenceHeadline({
 // integrations list, where the inventory sources live.
 function InventorySourceNote() {
   return (
-    <Type muted small>
+    <Text muted small>
       Coverage is computed from your{" "}
       <Link
         to=".."
@@ -381,7 +391,7 @@ function InventorySourceNote() {
       </Link>
       . This destination republishes that fleet — it has no device list of its
       own.
-    </Type>
+    </Text>
   );
 }
 
@@ -397,7 +407,10 @@ function FleetSourceBreakdown() {
     staleTime: 300_000,
   });
   const sources = useMemo(
-    () => (data?.providers ?? []).filter((provider) => !isSink(provider)),
+    () =>
+      (data?.providers ?? []).filter(
+        (provider) => !isSink(provider) && isProviderVisible(provider),
+      ),
     [data],
   );
   const coverageQueries = useQueries({
@@ -426,12 +439,12 @@ function FleetSourceBreakdown() {
 
   return (
     <Stack gap={2}>
-      <Type
+      <Text
         variant="small"
         className="text-muted-foreground font-mono text-[10.5px] tracking-wider uppercase"
       >
         Fleet sourced from
-      </Type>
+      </Text>
       <div className="flex flex-wrap gap-2">
         {contributions.map(({ provider, total }) => (
           <Link
@@ -447,10 +460,10 @@ function FleetSourceBreakdown() {
           </Link>
         ))}
       </div>
-      <Type muted small>
+      <Text muted small>
         This destination republishes that fleet — it has no device list of its
         own.
-      </Type>
+      </Text>
     </Stack>
   );
 }

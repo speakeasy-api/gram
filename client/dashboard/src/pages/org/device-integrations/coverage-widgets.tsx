@@ -5,9 +5,9 @@ import {
   type FilterValue,
   useFilterState,
 } from "@/components/filters";
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { formatRelativeTime } from "@/lib/dates";
@@ -16,13 +16,10 @@ import type {
   CoverageBucket,
   ManagedDevice,
 } from "@gram/client/models/components/manageddevice.js";
-import {
-  Badge,
-  Button,
-  type Column,
-  Stack,
-  Table,
-} from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
+import { type Column, Table } from "@/components/ui/Table";
 import {
   CheckCircle2,
   CircleSlash,
@@ -215,12 +212,12 @@ function CoverageStatTile({
   return (
     <SimpleTooltip tooltip={display.detail}>
       <div className="border-border bg-card flex flex-col gap-1 rounded-lg border p-3">
-        <Type variant="body" className="text-2xl font-semibold tabular-nums">
+        <Text variant="body" className="text-2xl font-semibold tabular-nums">
           {count}
-        </Type>
-        <Type muted small className="truncate">
+        </Text>
+        <Text muted small className="truncate">
           {display.label}
-        </Type>
+        </Text>
       </div>
     </SimpleTooltip>
   );
@@ -281,7 +278,7 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
   if (isError) {
     return (
       <Stack gap={2} align="start">
-        <Type muted>Could not load the device inventory.</Type>
+        <Text muted>Could not load the device inventory.</Text>
         {onRetry ? (
           <Button variant="secondary" size="sm" onClick={onRetry}>
             <Button.Text>Retry</Button.Text>
@@ -332,10 +329,10 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
               {isLoadingMore ? "Loading…" : "Load more devices"}
             </Button.Text>
           </Button>
-          <Type muted small>
+          <Text muted small>
             Showing {devices.length} synced devices so far — search covers only
             loaded devices.
-          </Type>
+          </Text>
         </Stack>
       ) : null}
     </Stack>
@@ -378,12 +375,12 @@ function deviceColumns(
       header: "Device",
       render: (device) => (
         <Stack gap={0.5} className="min-w-0">
-          <Type variant="body" className="truncate font-medium">
+          <Text variant="body" className="truncate font-medium">
             {device.hostname ?? device.externalId}
-          </Type>
-          <Type muted small className="truncate font-mono text-xs">
+          </Text>
+          <Text muted small className="truncate font-mono text-xs">
             {deviceSubtitle(device)}
-          </Type>
+          </Text>
         </Stack>
       ),
     },
@@ -407,16 +404,16 @@ function AssignedUserCell({
 }) {
   if (!device.userEmail) {
     return (
-      <Type muted small className="truncate">
+      <Text muted small className="truncate">
         —
-      </Type>
+      </Text>
     );
   }
   if (!href) {
     return (
-      <Type muted small className="truncate">
+      <Text muted small className="truncate">
         {device.userEmail}
-      </Type>
+      </Text>
     );
   }
   return (
@@ -435,9 +432,9 @@ const trailingDeviceColumns: Column<ManagedDevice>[] = [
     header: "Agent last seen",
     width: "130px",
     render: (device) => (
-      <Type muted small className="whitespace-nowrap">
+      <Text muted small className="whitespace-nowrap">
         {formatRelativeTime(device.agentLastSeenAt ?? null) ?? "—"}
-      </Type>
+      </Text>
     ),
   },
   {
@@ -445,9 +442,9 @@ const trailingDeviceColumns: Column<ManagedDevice>[] = [
     header: "MDM check-in",
     width: "130px",
     render: (device) => (
-      <Type muted small className="whitespace-nowrap">
+      <Text muted small className="whitespace-nowrap">
         {formatRelativeTime(device.mdmLastCheckInAt ?? null) ?? "—"}
-      </Type>
+      </Text>
     ),
   },
   {

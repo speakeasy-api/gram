@@ -79,6 +79,8 @@ type Publishers struct {
 }
 
 type Activities struct {
+	db                              *pgxpool.Pool
+	temporalEnv                     *tenv.Environment
 	collectOpenRouterCreditsMetrics *activities.CollectOpenRouterCreditsMetrics
 	collectPlatformUsageMetrics     *activities.CollectPlatformUsageMetrics
 	getAIIntegrationsCandidates     *activities.GetAIIntegrationsCandidates
@@ -251,6 +253,8 @@ func NewActivities(
 	}
 
 	return &Activities{
+		db:                              db,
+		temporalEnv:                     temporalEnv,
 		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
 		getAIIntegrationsCandidates:     activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
@@ -380,6 +384,13 @@ func (a *Activities) VerifyCustomDomain(ctx context.Context, input activities.Ve
 
 func (a *Activities) CustomDomainIngress(ctx context.Context, input activities.CustomDomainIngressArgs) error {
 	return a.customDomainIngress.Do(ctx, input)
+}
+
+func (a *Activities) ReconcileCustomDomain(ctx context.Context, input activities.ReconcileCustomDomainArgs) error {
+	if err := a.customDomainIngress.ReconcileCustomDomain(ctx, input); err != nil {
+		return fmt.Errorf("reconcile custom domain: %w", err)
+	}
+	return nil
 }
 
 func (a *Activities) ListCustomDomainsForHealthCheck(ctx context.Context, input activities.ListCustomDomainsForHealthCheckArgs) ([]activities.CustomDomainHealthCheckTarget, error) {

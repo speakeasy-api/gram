@@ -286,6 +286,10 @@ var RiskResult = Type("RiskResult", func() {
 	Attribute("created_at", String, "When this result was created.", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("false_positive_at", String, "When this result was manually marked as a false positive. Null when not dismissed.", func() {
+		Format(FormatDateTime)
+	})
+
 	Required("id", "policy_id", "policy_version", "source", "created_at")
 })
 

@@ -1,5 +1,33 @@
 # dashboard
 
+## 0.98.0
+
+### Minor Changes
+
+- 3b66258: Custom domains can now route their root URL to a default MCP server. Pick one of the domain's MCP endpoints as the default and `https://your-domain.com/` serves that server directly — MCP clients connect at the root and browsers see the installation page — while renaming the endpoint's slug updates the routing automatically. Custom domains can also serve an OpenAI app-submission verification token at `/.well-known/openai-apps-challenge`, so ChatGPT app reviews can verify domain ownership without any changes on your site. Both settings live on the custom domain page; the default server can also be set from an MCP server's own settings.
+
+### Patch Changes
+
+- 80b855f: Stop enumerating supported coding agents (Cursor, Claude Code, Codex, …) in Shadow MCP detector copy and other user-facing product strings. Prefer generic wording so new agents like opencode do not require list updates.
+
+## 0.97.0
+
+### Minor Changes
+
+- 2822d51: `remoteSessionIssuers.get` can now look an identity provider up by its upstream issuer URL, returning the one the project would use (preferring project over organization over platform) or 404 when nothing describes that URL yet. The dashboard's automatic setup flows use it to decide whether to reuse an existing provider instead of scanning the provider list in the browser, which also lets them reuse platform-catalog providers for the first time.
+- 56aa9f2: Restructure the Device Agent MDM integrations page around the source → coverage → destination pipeline. A pipeline banner shows live connected counts (updating as connections are enabled/disabled) and the org-wide fleet coverage, over two role-labeled groups. Detail pages are now role-specific: inventory sources keep their device inventory and "synced" language, while evidence destinations drop the inventory table (a sink owns no devices), show what they publish org-wide, use "pushed" language, and surface a "Fleet sourced from" breakdown linking to the sources that feed them.
+- 5bf2d45: Select project skills as additional context for an individual Project Assistant turn.
+
+### Patch Changes
+
+- 936828a: Fix the agent-coverage meter reading as far more filled than its real percentage in dark mode. The track used `bg-muted`, which collapses to the card color in dark mode, hiding the uncovered remainder so the filled portion looked much larger than its true share. The track now uses a foreground tint that stays visible on both light and dark grounds.
+- b5f47cb: Tuck optional device-integration settings behind an "Advanced" disclosure in the connect/configure sheet, so the default view shows only the required fields (e.g. Drata is just Region + API Key + Test — the Custom Connection ID is created automatically). Driven by the descriptor's `required` flag, so it applies to every provider; the section auto-expands when an optional field already holds a value.
+- 19f2841: Apply RBAC grants regardless of account tier and remove the dashboard rollout flag.
+- 1a74d9d: Restore external OAuth configuration on eligible MCP server authentication pages.
+- 36aa306: Improve external OAuth setup with automatic metadata discovery, inline validation, connection testing, and clearer authentication actions.
+- 1ad71b0: Hide Microsoft Intune from the MDM integrations UI until it is fully supported — a central `isProviderVisible` filter removes hidden providers from the list, the pipeline source count, the fleet-source breakdown, and direct-URL access, while leaving backend registration untouched. Also pluralize the pipeline agent-input label to "Active agents" and label its source as "reported by device agent".
+- b5f47cb: Hide the Vanta evidence-push provider from the MDM integrations UI until a supported path exists — Vanta does not support custom resources for partner-built integrations. Uses the existing `isProviderVisible` frontend gate, so backend registration is untouched and revealing it later is a one-line change.
+
 ## 0.96.0
 
 ### Minor Changes

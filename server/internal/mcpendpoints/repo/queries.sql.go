@@ -57,6 +57,54 @@ func (q *Queries) CheckSlugAvailability(ctx context.Context, arg CheckSlugAvaila
 	return column_1, err
 }
 
+const clearRootMCPEndpointsByMCPServerID = `-- name: ClearRootMCPEndpointsByMCPServerID :many
+UPDATE mcp_endpoints
+SET
+    is_domain_root = NULL,
+    updated_at = clock_timestamp()
+WHERE mcp_server_id = $1
+  AND project_id = $2
+  AND is_domain_root IS TRUE
+  AND deleted IS FALSE
+RETURNING id, project_id, custom_domain_id, mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
+`
+
+type ClearRootMCPEndpointsByMCPServerIDParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) ClearRootMCPEndpointsByMCPServerID(ctx context.Context, arg ClearRootMCPEndpointsByMCPServerIDParams) ([]McpEndpoint, error) {
+	rows, err := q.db.Query(ctx, clearRootMCPEndpointsByMCPServerID, arg.McpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpEndpoint
+	for rows.Next() {
+		var i McpEndpoint
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.CustomDomainID,
+			&i.McpServerID,
+			&i.Slug,
+			&i.IsDomainRoot,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createMCPEndpoint = `-- name: CreateMCPEndpoint :one
 INSERT INTO mcp_endpoints (
     project_id,
@@ -105,7 +153,9 @@ func (q *Queries) CreateMCPEndpoint(ctx context.Context, arg CreateMCPEndpointPa
 
 const deleteMCPEndpoint = `-- name: DeleteMCPEndpoint :one
 UPDATE mcp_endpoints
-SET deleted_at = clock_timestamp()
+SET
+    is_domain_root = NULL,
+    deleted_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 RETURNING id, project_id, custom_domain_id, mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
 `
@@ -231,12 +281,48 @@ func (q *Queries) GetMCPEndpointByProjectAndCustomDomainAndSlug(ctx context.Cont
 	return i, err
 }
 
+const listCustomDomainIDsByMCPServerID = `-- name: ListCustomDomainIDsByMCPServerID :many
+SELECT DISTINCT custom_domain_id::uuid
+FROM mcp_endpoints
+WHERE mcp_server_id = $1
+  AND project_id = $2
+  AND custom_domain_id IS NOT NULL
+  AND deleted IS FALSE
+ORDER BY custom_domain_id::uuid
+`
+
+type ListCustomDomainIDsByMCPServerIDParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) ListCustomDomainIDsByMCPServerID(ctx context.Context, arg ListCustomDomainIDsByMCPServerIDParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listCustomDomainIDsByMCPServerID, arg.McpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var custom_domain_id uuid.UUID
+		if err := rows.Scan(&custom_domain_id); err != nil {
+			return nil, err
+		}
+		items = append(items, custom_domain_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMCPEndpointsByCustomDomainID = `-- name: ListMCPEndpointsByCustomDomainID :many
 SELECT
     e.id,
     e.project_id,
     e.mcp_server_id,
     e.slug,
+    e.is_domain_root,
     p.name AS project_name,
     p.slug AS project_slug,
     s.name AS mcp_server_name,
@@ -254,6 +340,7 @@ type ListMCPEndpointsByCustomDomainIDRow struct {
 	ProjectID     uuid.UUID
 	McpServerID   uuid.UUID
 	Slug          string
+	IsDomainRoot  pgtype.Bool
 	ProjectName   string
 	ProjectSlug   string
 	McpServerName pgtype.Text
@@ -278,6 +365,7 @@ func (q *Queries) ListMCPEndpointsByCustomDomainID(ctx context.Context, customDo
 			&i.ProjectID,
 			&i.McpServerID,
 			&i.Slug,
+			&i.IsDomainRoot,
 			&i.ProjectName,
 			&i.ProjectSlug,
 			&i.McpServerName,
@@ -376,9 +464,184 @@ func (q *Queries) ListMCPEndpointsByProject(ctx context.Context, projectID uuid.
 	return items, nil
 }
 
+const listRootMCPEndpointsByMCPServerID = `-- name: ListRootMCPEndpointsByMCPServerID :many
+SELECT id, project_id, custom_domain_id, mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
+FROM mcp_endpoints
+WHERE mcp_server_id = $1
+  AND project_id = $2
+  AND is_domain_root IS TRUE
+  AND deleted IS FALSE
+ORDER BY custom_domain_id, id
+`
+
+type ListRootMCPEndpointsByMCPServerIDParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) ListRootMCPEndpointsByMCPServerID(ctx context.Context, arg ListRootMCPEndpointsByMCPServerIDParams) ([]McpEndpoint, error) {
+	rows, err := q.db.Query(ctx, listRootMCPEndpointsByMCPServerID, arg.McpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpEndpoint
+	for rows.Next() {
+		var i McpEndpoint
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.CustomDomainID,
+			&i.McpServerID,
+			&i.Slug,
+			&i.IsDomainRoot,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockMCPEndpointByID = `-- name: LockMCPEndpointByID :one
+SELECT id, project_id, custom_domain_id, mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
+FROM mcp_endpoints
+WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockMCPEndpointByIDParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) LockMCPEndpointByID(ctx context.Context, arg LockMCPEndpointByIDParams) (McpEndpoint, error) {
+	row := q.db.QueryRow(ctx, lockMCPEndpointByID, arg.ID, arg.ProjectID)
+	var i McpEndpoint
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.CustomDomainID,
+		&i.McpServerID,
+		&i.Slug,
+		&i.IsDomainRoot,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const lockMCPEndpointsByMCPServerID = `-- name: LockMCPEndpointsByMCPServerID :many
+SELECT id, project_id, custom_domain_id, mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
+FROM mcp_endpoints
+WHERE mcp_server_id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+ORDER BY id
+FOR UPDATE
+`
+
+type LockMCPEndpointsByMCPServerIDParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+// Lock every live endpoint (not only current roots) before the server row
+// lock: root selection holds endpoint locks while waiting on the server row,
+// so writing an unlocked endpoint after taking the server lock can deadlock.
+// Re-run after the server lock for the authoritative pre-delete root set.
+func (q *Queries) LockMCPEndpointsByMCPServerID(ctx context.Context, arg LockMCPEndpointsByMCPServerIDParams) ([]McpEndpoint, error) {
+	rows, err := q.db.Query(ctx, lockMCPEndpointsByMCPServerID, arg.McpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpEndpoint
+	for rows.Next() {
+		var i McpEndpoint
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.CustomDomainID,
+			&i.McpServerID,
+			&i.Slug,
+			&i.IsDomainRoot,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockRootMCPEndpointsByMCPServerID = `-- name: LockRootMCPEndpointsByMCPServerID :many
+SELECT id, project_id, custom_domain_id, mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
+FROM mcp_endpoints
+WHERE mcp_server_id = $1
+  AND project_id = $2
+  AND is_domain_root IS TRUE
+  AND deleted IS FALSE
+ORDER BY id
+FOR UPDATE
+`
+
+type LockRootMCPEndpointsByMCPServerIDParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) LockRootMCPEndpointsByMCPServerID(ctx context.Context, arg LockRootMCPEndpointsByMCPServerIDParams) ([]McpEndpoint, error) {
+	rows, err := q.db.Query(ctx, lockRootMCPEndpointsByMCPServerID, arg.McpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpEndpoint
+	for rows.Next() {
+		var i McpEndpoint
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.CustomDomainID,
+			&i.McpServerID,
+			&i.Slug,
+			&i.IsDomainRoot,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const softDeleteMCPEndpointsByCustomDomainID = `-- name: SoftDeleteMCPEndpointsByCustomDomainID :many
 UPDATE mcp_endpoints
-SET deleted_at = clock_timestamp()
+SET
+    is_domain_root = NULL,
+    deleted_at = clock_timestamp()
 WHERE custom_domain_id = $1::uuid AND deleted IS FALSE
 RETURNING id, project_id, custom_domain_id, mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
 `
@@ -424,7 +687,9 @@ func (q *Queries) SoftDeleteMCPEndpointsByCustomDomainID(ctx context.Context, cu
 
 const softDeleteMCPEndpointsByMCPServerID = `-- name: SoftDeleteMCPEndpointsByMCPServerID :many
 UPDATE mcp_endpoints
-SET deleted_at = clock_timestamp()
+SET
+    is_domain_root = NULL,
+    deleted_at = clock_timestamp()
 WHERE mcp_server_id = $1 AND project_id = $2 AND deleted IS FALSE
 RETURNING id, project_id, custom_domain_id, mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
 `
@@ -476,8 +741,9 @@ SET
     custom_domain_id = $1,
     mcp_server_id = $2,
     slug = $3,
+    is_domain_root = $4,
     updated_at = clock_timestamp()
-WHERE id = $4 AND project_id = $5 AND deleted IS FALSE
+WHERE id = $5 AND project_id = $6 AND deleted IS FALSE
 RETURNING id, project_id, custom_domain_id, mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
 `
 
@@ -485,6 +751,7 @@ type UpdateMCPEndpointParams struct {
 	CustomDomainID uuid.NullUUID
 	McpServerID    uuid.UUID
 	Slug           string
+	IsDomainRoot   pgtype.Bool
 	ID             uuid.UUID
 	ProjectID      uuid.UUID
 }
@@ -494,6 +761,7 @@ func (q *Queries) UpdateMCPEndpoint(ctx context.Context, arg UpdateMCPEndpointPa
 		arg.CustomDomainID,
 		arg.McpServerID,
 		arg.Slug,
+		arg.IsDomainRoot,
 		arg.ID,
 		arg.ProjectID,
 	)

@@ -1,7 +1,7 @@
 import { InputField } from "@/components/moon/input-field";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import type { Skill } from "@gram/client/models/components/skill.js";
 import { useUpdateSkillMutation } from "@gram/client/react-query/updateSkill.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -114,7 +114,7 @@ export function EditSkillDetailsDialog({
         </div>
         <Dialog.Footer>
           <Button
-            variant="outline"
+            variant="secondary"
             disabled={update.isPending}
             onClick={() => handleOpenChange(false)}
           >
