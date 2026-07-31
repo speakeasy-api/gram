@@ -1,8 +1,10 @@
 import { getServerURL } from "@/lib/utils";
 import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
 import { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
-import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
+import type { McpServerVisibility } from "@gram/client/models/components/mcpserver.js";
 import { useListDomains } from "@gram/client/react-query/listDomains.js";
+import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
+import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useMemo } from "react";
 
 export function useCustomDomain(enabled = true): {
@@ -111,79 +113,74 @@ export function useResolvedMcpServerUrl(
   };
 }
 
-export function useMcpUrl(
-  toolset:
-    | Pick<ToolsetEntry, "customDomainId" | "mcpSlug" | "mcpIsPublic">
-    | undefined,
-): {
-  url: string | undefined;
-  customServerURL: string | undefined;
-  installPageUrl: string | undefined;
+export type ToolsetMcpServerInfo = {
+  visibility: McpServerVisibility;
+  /**
+   * The Gram-origin runtime URL from the wrapper server's platform-domain
+   * endpoint, or undefined when no such endpoint is registered.
+   */
+  platformUrl: string | undefined;
+};
+
+/**
+ * Server-keyed lookup for toolset surfaces: maps each toolset id to the
+ * mcp_server wrapping it. When a toolset backs several servers, the one with
+ * a platform-domain endpoint wins so URL consumers stay routable.
+ */
+export function useToolsetMcpServers(gramProject?: string): {
+  byToolsetId: Map<string, ToolsetMcpServerInfo>;
+  isLoading: boolean;
 } {
-  // Only fetch domain data when the toolset actually has a custom domain
-  // configured. This avoids a ~1s request on pages like Home where most
-  // toolsets don't use custom domains.
-  const { domain } = useCustomDomain(!!toolset?.customDomainId);
+  const request = useMemo(
+    () => (gramProject ? { gramProject } : undefined),
+    [gramProject],
+  );
+  const { data: serversData, isLoading: isLoadingServers } = useMcpServers(
+    request,
+    undefined,
+    { throwOnError: false },
+  );
+  const { data: endpointsData, isLoading: isLoadingEndpoints } =
+    useMcpEndpoints(request, undefined, { throwOnError: false });
 
-  if (!toolset)
-    return {
-      url: undefined,
-      customServerURL: undefined,
-      installPageUrl: undefined,
-    };
+  const byToolsetId = useMemo(() => {
+    const platformSlugByServerId = new Map<string, string>();
+    for (const endpoint of endpointsData?.mcpEndpoints ?? []) {
+      if (endpoint.customDomainId) continue;
+      if (!platformSlugByServerId.has(endpoint.mcpServerId)) {
+        platformSlugByServerId.set(endpoint.mcpServerId, endpoint.slug);
+      }
+    }
 
-  let customServerURL: string | undefined;
-  if (domain && toolset.customDomainId && domain.id == toolset.customDomainId) {
-    customServerURL = `https://${domain.domain}`;
-  }
+    const map = new Map<string, ToolsetMcpServerInfo>();
+    for (const server of serversData?.mcpServers ?? []) {
+      if (!server.toolsetId) continue;
+      const slug = platformSlugByServerId.get(server.id);
+      const info: ToolsetMcpServerInfo = {
+        visibility: server.visibility,
+        platformUrl: slug ? `${getServerURL()}/mcp/${slug}` : undefined,
+      };
+      const existing = map.get(server.toolsetId);
+      if (!existing || (!existing.platformUrl && info.platformUrl)) {
+        map.set(server.toolsetId, info);
+      }
+    }
+    return map;
+  }, [serversData, endpointsData]);
 
-  // A toolset that was never published under an MCP slug has no runtime URL.
-  if (!toolset.mcpSlug) {
-    return { url: undefined, customServerURL, installPageUrl: undefined };
-  }
-
-  // A custom-domain toolset renders its custom-domain URL or nothing: until
-  // the domain resolves there is no guarantee a platform-host alias exists.
-  if (toolset.customDomainId && !customServerURL) {
-    return { url: undefined, customServerURL, installPageUrl: undefined };
-  }
-
-  const mcpUrl = `${customServerURL ?? getServerURL()}/mcp/${toolset.mcpSlug}`;
-
-  // Always use our URL for install page when server is private, even for
-  // custom domains to ensure cookie is present
-  const installPageUrl = toolset.mcpIsPublic
-    ? `${mcpUrl}/install`
-    : `${getServerURL()}/mcp/${toolset.mcpSlug}/install`;
-
-  return {
-    url: mcpUrl,
-    customServerURL,
-    installPageUrl,
-  };
+  return { byToolsetId, isLoading: isLoadingServers || isLoadingEndpoints };
 }
 
 /**
- * Returns an MCP URL that always uses the Gram domain, ignoring any custom domain.
- * Use this for internal tools like the playground where we want consistent routing.
+ * The MCP URL for a single toolset's wrapper server that always uses the Gram
+ * domain, ignoring any custom domain. Use this for internal tools like the
+ * playground where we want consistent routing.
  */
-export function useInternalMcpUrl(
-  toolset: Pick<ToolsetEntry, "mcpSlug"> | undefined,
+export function useToolsetPlatformMcpUrl(
+  toolsetId: string | undefined,
 ): string | undefined {
-  if (!toolset) return undefined;
-  return internalMcpUrl(toolset);
-}
-
-/**
- * Non-hook variant of {@link useInternalMcpUrl}. Use this when the toolset is
- * already in scope (e.g. when mapping over an array of toolsets). Returns
- * `undefined` for a toolset that was never published under an MCP slug.
- */
-export function internalMcpUrl(
-  toolset: Pick<ToolsetEntry, "mcpSlug">,
-): string | undefined {
-  if (!toolset.mcpSlug) return undefined;
-  return `${getServerURL()}/mcp/${toolset.mcpSlug}`;
+  const { byToolsetId } = useToolsetMcpServers();
+  return toolsetId ? byToolsetId.get(toolsetId)?.platformUrl : undefined;
 }
 
 /**

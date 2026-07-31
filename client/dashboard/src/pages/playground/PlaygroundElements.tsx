@@ -1,6 +1,6 @@
 import { useToolset } from "@/hooks/toolTypes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
-import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
+import { useToolsetPlatformMcpUrl } from "@/hooks/useToolsetUrl";
 import type { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
@@ -36,7 +36,7 @@ export function PlaygroundElements({
   const { data: toolset } = useToolset(toolsetSlug ?? undefined);
 
   // Always use the platform domain for the playground to avoid CSP issues
-  const mcpUrl = useInternalMcpUrl(toolset);
+  const mcpUrl = useToolsetPlatformMcpUrl(toolset?.id);
 
   // Get environments and MCP metadata for auth status check
   const { data: environmentsData } = useListEnvironments();

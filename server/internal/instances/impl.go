@@ -3,6 +3,7 @@ package instances
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -12,9 +13,8 @@ import (
 	"strings"
 	"time"
 
-	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -55,21 +56,20 @@ const toolUrnQueryParam = "tool_urn"
 const environmentSlugQueryParam = "environment_slug"
 
 type Service struct {
-	logger            *slog.Logger
-	tracer            trace.Tracer
-	db                *pgxpool.Pool
-	auth              *auth.Auth
-	chatSessions      *chatsessions.Manager
-	toolset           *toolsets.Toolsets
-	environmentsRepo  *environments_repo.Queries
-	env               *environments.EnvironmentEntries
-	toolProxy         *gateway.ToolProxy
-	tracking          billing.Tracker
-	toolsetCache      cache.TypedCacheObject[mv.ToolsetBaseContents]
-	featuresClient    *productfeatures.Client
-	telemLogger       *tm.Logger
-	customDomainsRepo *customdomainsRepo.Queries
-	serverURL         *url.URL
+	logger           *slog.Logger
+	tracer           trace.Tracer
+	db               *pgxpool.Pool
+	auth             *auth.Auth
+	chatSessions     *chatsessions.Manager
+	toolset          *toolsets.Toolsets
+	environmentsRepo *environments_repo.Queries
+	env              *environments.EnvironmentEntries
+	toolProxy        *gateway.ToolProxy
+	tracking         billing.Tracker
+	toolsetCache     cache.TypedCacheObject[mv.ToolsetBaseContents]
+	featuresClient   *productfeatures.Client
+	telemLogger      *tm.Logger
+	serverURL        *url.URL
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -119,11 +119,10 @@ func NewService(
 			funcCaller,
 			platformTools,
 		),
-		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
-		telemLogger:       telemLogger,
-		featuresClient:    featClient,
-		customDomainsRepo: customdomainsRepo.New(db),
-		serverURL:         serverURL,
+		toolsetCache:   cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
+		telemLogger:    telemLogger,
+		featuresClient: featClient,
+		serverURL:      serverURL,
 	}
 }
 
@@ -180,20 +179,24 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		}
 	}
 
-	baseURL := s.serverURL.String()
-	if toolset.CustomDomainID != nil {
-		customDomain, err := s.customDomainsRepo.GetCustomDomainByID(ctx, uuid.MustParse(*toolset.CustomDomainID))
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get custom domain").LogError(ctx, s.logger)
-		}
-		baseURL = fmt.Sprintf("https://%s", customDomain.Domain)
-	}
-
-	// modern gram toolsets always have an MCP slug
+	// The toolset's MCP address lives on its wrapper mcp_server's endpoint;
+	// a toolset without one has no MCP server URL to advertise.
 	mcpServers := make([]*gen.InstanceMcpServer, 0)
-	if toolset.McpSlug != nil {
+	endpoint, err := mcpendpointsRepo.New(s.db).GetPreferredMCPEndpointByToolsetID(ctx, mcpendpointsRepo.GetPreferredMCPEndpointByToolsetIDParams{
+		ToolsetID: uuid.NullUUID{UUID: uuid.MustParse(toolset.ID), Valid: true},
+		ProjectID: *authCtx.ProjectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset mcp endpoint").LogError(ctx, s.logger)
+	default:
+		baseURL := s.serverURL.String()
+		if endpoint.CustomDomain.Valid && endpoint.CustomDomain.String != "" {
+			baseURL = fmt.Sprintf("https://%s", endpoint.CustomDomain.String)
+		}
 		mcpServers = append(mcpServers, &gen.InstanceMcpServer{
-			URL: fmt.Sprintf("%s/mcp/%s", baseURL, string(*toolset.McpSlug)),
+			URL: fmt.Sprintf("%s/mcp/%s", baseURL, endpoint.Slug),
 		})
 	}
 

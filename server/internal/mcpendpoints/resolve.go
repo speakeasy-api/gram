@@ -19,12 +19,8 @@ import (
 // ErrAddressMiss reports that no live mcp_endpoints row exists for the
 // requested (slug, custom domain) pair. It is wrapped inside the
 // oops.CodeNotFound error returned by BySlugAndCustomDomain so callers can
-// tell a true addressing miss apart from an address that exists but is
+// tell a missing address apart from an address that exists but is
 // unavailable (disabled visibility or a dangling/deleted parent server).
-// Only a true miss may fall back to the legacy toolsets.mcp_slug lookup: an
-// existing endpoint is authoritative for its slug, and letting an
-// unavailable endpoint fall through would resurface a retired legacy
-// toolset that shares the slug.
 var ErrAddressMiss = errors.New("no mcp endpoint at address")
 
 // BySlugAndCustomDomain walks the public addressing chain shared by the /mcp
@@ -35,10 +31,10 @@ var ErrAddressMiss = errors.New("no mcp endpoint at address")
 // avoid leaking existence to unauthenticated callers. logger should already
 // carry the slug attribute.
 //
-// Callers that fall back to a legacy lookup (e.g. /mcp's existing
-// toolsets.mcp_slug path) must gate the fallback on
-// errors.Is(err, ErrAddressMiss). A plain oops.CodeNotFound without the
-// sentinel means the address exists but is unavailable and must stay a 404.
+// Callers that need to distinguish the two 404 shapes check
+// errors.Is(err, ErrAddressMiss): the sentinel means no endpoint row exists
+// at the address, while a plain oops.CodeNotFound means the address exists
+// but is unavailable.
 func BySlugAndCustomDomain(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, slug string) (*repo.McpEndpoint, *mcpservers_repo.McpServer, error) {
 	var customDomainID uuid.NullUUID
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {

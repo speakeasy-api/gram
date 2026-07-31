@@ -35,6 +35,61 @@ WHERE project_id = @project_id
   AND custom_domain_id IS NOT DISTINCT FROM @custom_domain_id
   AND deleted IS FALSE;
 
+-- name: GetMCPEndpointByProjectAndSlug :one
+-- Management-surface resolution by slug alone (no custom-domain context),
+-- preferring the platform-domain endpoint when the same slug also exists
+-- under a custom domain.
+SELECT *
+FROM mcp_endpoints
+WHERE project_id = @project_id
+  AND slug = @slug
+  AND deleted IS FALSE
+ORDER BY (custom_domain_id IS NULL) DESC, created_at
+LIMIT 1;
+
+-- name: GetMCPEndpointSlugByToolsetID :one
+-- Resolves the public slug for a toolset's wrapper mcp_server, preferring the
+-- platform-domain endpoint. Used to build issuer URLs for toolset-gated
+-- user sessions.
+SELECT e.slug
+FROM mcp_endpoints e
+JOIN mcp_servers ws ON ws.id = e.mcp_server_id AND ws.deleted IS FALSE
+WHERE ws.toolset_id = @toolset_id
+  AND ws.project_id = @project_id
+  AND e.deleted IS FALSE
+ORDER BY (e.custom_domain_id IS NULL) DESC, e.created_at
+LIMIT 1;
+
+-- name: GetPreferredMCPEndpointByToolsetID :one
+-- The toolset's wrapper endpoint used for URL construction: custom-domain
+-- endpoints (with a live domain) win over platform endpoints, then oldest
+-- created_at.
+SELECT e.slug, cd.domain AS custom_domain
+FROM mcp_endpoints e
+JOIN mcp_servers ws ON ws.id = e.mcp_server_id AND ws.deleted IS FALSE
+LEFT JOIN custom_domains cd ON cd.id = e.custom_domain_id AND cd.deleted IS FALSE
+WHERE ws.toolset_id = @toolset_id
+  AND ws.project_id = @project_id
+  AND e.deleted IS FALSE
+  AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+ORDER BY (e.custom_domain_id IS NULL) ASC, e.created_at ASC
+LIMIT 1;
+
+-- name: ListToolsetMCPAddressesByProject :many
+-- One row per (toolset, endpoint slug) for every toolset in the project whose
+-- wrapper mcp_server is live and non-disabled. Used to classify hosted-MCP
+-- telemetry traffic by public URL slug.
+SELECT DISTINCT t.slug AS toolset_slug, t.name AS toolset_name, e.slug AS mcp_slug
+FROM toolsets t
+JOIN mcp_servers ws
+  ON ws.toolset_id = t.id
+  AND ws.project_id = t.project_id
+  AND ws.deleted IS FALSE
+  AND ws.visibility <> 'disabled'
+JOIN mcp_endpoints e ON e.mcp_server_id = ws.id AND e.deleted IS FALSE
+WHERE t.project_id = @project_id
+  AND t.deleted IS FALSE;
+
 -- name: GetMCPEndpointByCustomDomainAndSlug :one
 -- Resolve an endpoint by its globally-unique (custom_domain_id, slug) pair.
 -- This is intended for use in the public-facing endpoint resolution path.

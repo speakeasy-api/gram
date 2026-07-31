@@ -80,8 +80,8 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const { data: toolset } = useToolset(
     isToolsetBacked ? toolsetSlug : undefined,
   );
-  // The authentication warning mirrors the old hosted-server sidebar: missing
-  // required env vars or an unconfigured catalog OAuth requirement.
+  // The authentication warning covers missing required env vars or an
+  // unconfigured catalog OAuth requirement.
   const { data: environmentsData } = useListEnvironments(undefined, undefined, {
     enabled: isToolsetBacked,
     throwOnError: false,

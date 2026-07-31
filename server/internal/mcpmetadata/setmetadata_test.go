@@ -39,8 +39,6 @@ func createTestToolset(t *testing.T, ctx context.Context, ti *testInstance, slug
 		Slug:                   slug,
 		Description:            conv.ToPGText("A test MCP server"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "", Valid: false},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
 
@@ -67,8 +65,6 @@ func TestService_SetMcpMetadata(t *testing.T) {
 			Slug:                   "test-mcp",
 			Description:            conv.ToPGText("A test MCP server"),
 			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-			McpSlug:                pgtype.Text{String: "", Valid: false},
-			McpEnabled:             false,
 		})
 		require.NoError(t, err)
 
@@ -109,8 +105,6 @@ func TestService_SetMcpMetadata(t *testing.T) {
 			Slug:                   "test-mcp-update",
 			Description:            conv.ToPGText("A test MCP server"),
 			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-			McpSlug:                pgtype.Text{String: "", Valid: false},
-			McpEnabled:             false,
 		})
 		require.NoError(t, err)
 
@@ -162,8 +156,6 @@ func TestService_SetMcpMetadata(t *testing.T) {
 			Slug:                   "test-mcp-logo",
 			Description:            conv.ToPGText("A test MCP server"),
 			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-			McpSlug:                pgtype.Text{String: "", Valid: false},
-			McpEnabled:             false,
 		})
 		require.NoError(t, err)
 
@@ -218,8 +210,6 @@ func TestService_SetMcpMetadata(t *testing.T) {
 			Slug:                   "test-mcp-instructions",
 			Description:            conv.ToPGText("A test MCP server"),
 			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-			McpSlug:                pgtype.Text{String: "", Valid: false},
-			McpEnabled:             false,
 		})
 		require.NoError(t, err)
 
@@ -689,8 +679,6 @@ func TestService_SetMcpMetadata_RejectsForeignProjectMcpServer(t *testing.T) {
 		Slug:                   "foreign-toolset-" + uuid.NewString()[:8],
 		Description:            pgtype.Text{String: "", Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "", Valid: false},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
 

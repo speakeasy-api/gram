@@ -18,7 +18,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -41,7 +40,7 @@ type ResolvedMcpEndpoint struct {
 	// CustomDomainID, when valid, scopes the endpoint to a custom domain.
 	CustomDomainID uuid.NullUUID
 
-	// IsPublic mirrors toolsets.mcp_is_public — controls
+	// IsPublic reflects the resolved mcp_server's visibility — controls
 	// HandleAuthorize's anonymous-vs-IDP path selection.
 	IsPublic bool
 
@@ -61,8 +60,7 @@ type ResolvedMcpEndpoint struct {
 	// consent form action, and the redirect from idp_callback.
 	RouteBase string
 
-	// Slug is the public-facing endpoint slug (mcp_slug or
-	// mcp_endpoints.slug).
+	// Slug is the public-facing mcp_endpoints slug.
 	Slug string
 
 	// ToolsetID is populated when the endpoint resolves through the
@@ -264,37 +262,15 @@ func NewResolvedMcpEndpointFromMcpServer(
 	}
 }
 
-// newResolvedMcpEndpointFromToolset materialises a ResolvedMcpEndpoint
-// from a resolved toolsets row. Caller is responsible for first checking
-// toolset.UserSessionIssuerID.Valid. routeBase is the URL surface the
-// request arrived under ("mcp" or "x/mcp") — passed explicitly because a
-// toolset-backed endpoint can be addressed from either /mcp/{slug} or
-// /x/mcp/{slug} and the WWW-Authenticate URL, OAuth issuer URL, and
-// consent form action all need to match the caller's surface.
-func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, routeBase string) *ResolvedMcpEndpoint {
-	return &ResolvedMcpEndpoint{
-		AudienceURN:         urn.NewToolset(toolset.ID).String(),
-		CustomDomainID:      toolset.CustomDomainID,
-		IsPublic:            toolset.McpIsPublic,
-		McpServerID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:      toolset.OrganizationID,
-		ProjectID:           toolset.ProjectID,
-		RouteBase:           routeBase,
-		Slug:                conv.PtrValOr(conv.FromPGText[string](toolset.McpSlug), ""),
-		ToolsetID:           uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		UpstreamResource:    "",
-		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-	}
-}
-
 // newResolvedMcpEndpointFromToolsetBackedServer materialises a
 // ResolvedMcpEndpoint for a toolset-backed mcp_server whose own issuer
 // column is NULL but whose backing toolset carries a user-session
 // issuer. Identity (slug, custom domain, project, route surface) binds
-// to the mcp_endpoint; auth (issuer, JWT audience) stays on the toolset
-// so sessions minted before the toolsets → mcp_servers data-model swap
-// keep validating; visibility comes from the wrapper. Caller is
-// responsible for first checking toolset.UserSessionIssuerID.Valid.
+// to the mcp_endpoint; auth (issuer, JWT audience) binds to the toolset
+// carrying the issuer — sessions are minted against the toolset URN, so
+// they validate on any endpoint that serves the toolset; visibility
+// comes from the wrapper. Caller is responsible for first checking
+// toolset.UserSessionIssuerID.Valid.
 func newResolvedMcpEndpointFromToolsetBackedServer(
 	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
 	mcpServer *mcpservers_repo.McpServer,
@@ -319,12 +295,12 @@ func newResolvedMcpEndpointFromToolsetBackedServer(
 // loadResolvedMcpEndpointByRef resolves the cached EndpointRef stored
 // on an in-flight AuthnChallengeState back to a fresh
 // ResolvedMcpEndpoint and verifies its issuer FK is still live.
-// Dispatches on the ref's McpServerID — when valid, resolves through the
-// /x/mcp mcp_endpoints → mcp_servers path; otherwise resolves through
-// the legacy /mcp toolsets path. Returns CodeNotFound when the
-// underlying row is missing or no longer issuer-gated. Used by
-// HandleIDPCallback (mounted under both route surfaces) to resume an
-// in-flight challenge against the addressing path it was minted under.
+// Resolution is mcp_endpoint-keyed: a ref must carry a valid
+// McpServerID, and anything else 404s — the client simply restarts its
+// OAuth flow. Returns CodeNotFound when the underlying row is missing
+// or not issuer-gated. Used by HandleIDPCallback (mounted under both
+// route surfaces) to resume an in-flight challenge against the
+// addressing path it was minted under.
 func (s *Service) loadResolvedMcpEndpointByRef(ctx context.Context, ref EndpointRef) (*ResolvedMcpEndpoint, error) {
 	endpoint, err := s.buildResolvedMcpEndpointByRef(ctx, ref)
 	if err != nil {
@@ -337,133 +313,85 @@ func (s *Service) loadResolvedMcpEndpointByRef(ctx context.Context, ref Endpoint
 }
 
 func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref EndpointRef) (*ResolvedMcpEndpoint, error) {
-	if ref.McpServerID.Valid {
-		mcpEndpoint, err := mcpendpoints_repo.New(s.db).GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpoints_repo.GetMCPEndpointByCustomDomainAndSlugParams{
-			Slug:           ref.McpSlug,
-			CustomDomainID: ref.CustomDomainID,
-		})
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			return nil, oops.E(oops.CodeNotFound, err, "mcp endpoint not found")
-		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "load mcp endpoint").LogError(ctx, s.logger)
-		}
-		mcpServer, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
-			ID:        mcpEndpoint.McpServerID,
-			ProjectID: mcpEndpoint.ProjectID,
-		})
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			return nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
-		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
-		}
-		// A tunnel flipped to public visibility mid-OAuth-flow has no OAuth
-		// surface: reject the cached-ref resumption (e.g. /mcp/idp_callback)
-		// so a visibility change closes in-flight flows.
-		if isTunneledPublic(&mcpServer) {
-			return nil, oops.E(oops.CodeNotFound, nil, "not found")
-		}
-		// A wrapper disabled mid-flow must close in-flight flows the same
-		// way the serving path 404s it — the cached ref must not bypass
-		// endpoint availability.
-		if mcpServer.Visibility == mcpservers.VisibilityDisabled {
-			return nil, oops.E(oops.CodeNotFound, nil, "not found")
-		}
-		// Guard against an mcp_endpoint that has been re-pointed mid-flow
-		// at a different mcp_server: the cached challenge belongs to the
-		// original server, not the one the endpoint currently resolves to.
-		if mcpServer.ID != ref.McpServerID.UUID {
-			return nil, errToolsetEndpointMismatch
-		}
-		// A toolset-backed server with no issuer of its own resumes
-		// through the backing toolset's issuer with the endpoint's
-		// identity — the same adapter the mint-time handlers use.
-		if !mcpServer.UserSessionIssuerID.Valid {
-			if !mcpServer.ToolsetID.Valid {
-				return nil, oops.E(oops.CodeNotFound, nil, "not found")
-			}
-			toolset, err := toolsets_repo.New(s.db).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
-				ID:        mcpServer.ToolsetID.UUID,
-				ProjectID: mcpEndpoint.ProjectID,
-			})
-			switch {
-			case errors.Is(err, pgx.ErrNoRows):
-				return nil, oops.E(oops.CodeNotFound, err, "toolset not found")
-			case err != nil:
-				return nil, oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, s.logger)
-			}
-			if !toolset.UserSessionIssuerID.Valid {
-				return nil, oops.E(oops.CodeNotFound, nil, "not found")
-			}
-			return newResolvedMcpEndpointFromToolsetBackedServer(&mcpEndpoint, &mcpServer, &toolset, conv.Default(ref.RouteBase, "mcp")), nil
-		}
-		project, err := projects_repo.New(s.db).GetProjectByID(ctx, mcpEndpoint.ProjectID)
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			return nil, oops.E(oops.CodeNotFound, err, "project not found")
-		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "load project").LogError(ctx, s.logger)
-		}
-		endpoint := NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID)
-		if ref.RouteBase != "" {
-			endpoint.RouteBase = ref.RouteBase
-		}
-		upstreamResource, err := s.resolveUpstreamResource(ctx, s.logger, mcpEndpoint.ProjectID, &mcpServer)
-		if err != nil {
-			return nil, err
-		}
-		endpoint.UpstreamResource = upstreamResource
-		return endpoint, nil
+	if !ref.McpServerID.Valid {
+		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
 
-	toolset, err := s.loadToolset(ctx, ref.McpSlug, ref.CustomDomainID, true)
+	mcpEndpoint, err := mcpendpoints_repo.New(s.db).GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpoints_repo.GetMCPEndpointByCustomDomainAndSlugParams{
+		Slug:           ref.McpSlug,
+		CustomDomainID: ref.CustomDomainID,
+	})
 	switch {
-	case errors.Is(err, errToolsetNotFound):
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "mcp endpoint not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "load mcp endpoint").LogError(ctx, s.logger)
+	}
+	mcpServer, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
+		ID:        mcpEndpoint.McpServerID,
+		ProjectID: mcpEndpoint.ProjectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
 	}
-	if !toolset.UserSessionIssuerID.Valid {
+	// A tunnel flipped to public visibility mid-OAuth-flow has no OAuth
+	// surface: reject the cached-ref resumption (e.g. /mcp/idp_callback)
+	// so a visibility change closes in-flight flows.
+	if isTunneledPublic(&mcpServer) {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
-	// Honour the surface the challenge was minted under so the resumed
-	// endpoint's URLs match the original mint. Empty ref.RouteBase falls
-	// back to "mcp" for states cached before EndpointRef.RouteBase existed.
-	routeBase := ref.RouteBase
-	if routeBase == "" {
-		routeBase = "mcp"
+	// A wrapper disabled mid-flow must close in-flight flows the same way
+	// the serving path 404s it — the cached ref must not bypass endpoint
+	// availability.
+	if mcpServer.Visibility == mcpservers.VisibilityDisabled {
+		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
-	return newResolvedMcpEndpointFromToolset(toolset, routeBase), nil
-}
-
-// loadResolvedMcpEndpointByToolsetSlug resolves an mcp_slug to a
-// ResolvedMcpEndpoint via the legacy toolsets path and verifies its
-// issuer FK is still live. Returns CodeNotFound when either no toolset
-// matches the slug or the toolset is not issuer-gated. routeBase ("mcp"
-// or "x/mcp") is the surface the request arrived under and propagates
-// into the resolved endpoint's URL building. Used as the fallback leaf
-// of LoadResolvedMcpEndpointBySlug for slugs with no mcp_endpoint →
-// mcp_server row yet (issuer-gated toolset-backed servers predating the
-// toolsets → mcp_servers migration).
-func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpSlug, routeBase string) (*ResolvedMcpEndpoint, error) {
-	var customDomainID uuid.NullUUID
-	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
-		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
+	// Guard against an mcp_endpoint that has been re-pointed mid-flow
+	// at a different mcp_server: the cached challenge belongs to the
+	// original server, not the one the endpoint currently resolves to.
+	if mcpServer.ID != ref.McpServerID.UUID {
+		return nil, errToolsetEndpointMismatch
 	}
-	toolset, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
+	// A toolset-backed server with no issuer of its own resumes
+	// through the backing toolset's issuer with the endpoint's
+	// identity — the same adapter the mint-time handlers use.
+	if !mcpServer.UserSessionIssuerID.Valid {
+		if !mcpServer.ToolsetID.Valid {
+			return nil, oops.E(oops.CodeNotFound, nil, "not found")
+		}
+		toolset, err := toolsets_repo.New(s.db).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
+			ID:        mcpServer.ToolsetID.UUID,
+			ProjectID: mcpEndpoint.ProjectID,
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return nil, oops.E(oops.CodeNotFound, err, "toolset not found")
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, s.logger)
+		}
+		if !toolset.UserSessionIssuerID.Valid {
+			return nil, oops.E(oops.CodeNotFound, nil, "not found")
+		}
+		return newResolvedMcpEndpointFromToolsetBackedServer(&mcpEndpoint, &mcpServer, &toolset, conv.Default(ref.RouteBase, "mcp")), nil
+	}
+	project, err := projects_repo.New(s.db).GetProjectByID(ctx, mcpEndpoint.ProjectID)
 	switch {
-	case errors.Is(err, errToolsetNotFound):
-		return nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "project not found")
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "load project").LogError(ctx, s.logger)
 	}
-	if !toolset.UserSessionIssuerID.Valid {
-		return nil, oops.E(oops.CodeNotFound, nil, "not found")
+	endpoint := NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID)
+	if ref.RouteBase != "" {
+		endpoint.RouteBase = ref.RouteBase
 	}
-	endpoint := newResolvedMcpEndpointFromToolset(toolset, routeBase)
-	if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
+	upstreamResource, err := s.resolveUpstreamResource(ctx, s.logger, mcpEndpoint.ProjectID, &mcpServer)
+	if err != nil {
 		return nil, err
 	}
+	endpoint.UpstreamResource = upstreamResource
 	return endpoint, nil
 }

@@ -14,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
-	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -397,14 +396,13 @@ func TestToolsetsService_UpdateToolset_EmptyToolUrns(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
-func TestToolsetsService_UpdateToolset_McpEnabled(t *testing.T) {
+func TestToolsetsService_UpdateToolset_PublishingFieldsRejected(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
 	require.NoError(t, err)
 
-	// Create a toolset first
 	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "MCP Toolset",
@@ -416,33 +414,78 @@ func TestToolsetsService_UpdateToolset_McpEnabled(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Publishing-field updates only translate for rows that still carry
-	// pre-swap columns; backdate the toolset to that shape.
-	seedPublishingColumns(t, ctx, ti, uuid.MustParse(created.ID), "seed-"+string(created.Slug), false)
-
-	// Update to enable MCP
-	result, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
-		SessionToken:           nil,
-		Slug:                   created.Slug,
-		Name:                   nil,
-		Description:            nil,
-		DefaultEnvironmentSlug: nil,
-		ToolUrns:               nil,
-		ResourceUrns:           nil,
-		PromptTemplateNames:    nil,
-		McpSlug:                nil,
-		McpIsPublic:            nil,
-		McpEnabled:             new(true),
-		CustomDomainID:         nil,
-		ProjectSlugInput:       nil,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.True(t, *result.McpEnabled)
+	// Publishing is managed exclusively through the mcpServers/mcpEndpoints
+	// APIs: setting any of the four publishing fields fails the update.
+	for _, payload := range []*gen.UpdateToolsetPayload{
+		{
+			SessionToken:           nil,
+			Slug:                   created.Slug,
+			Name:                   nil,
+			Description:            nil,
+			DefaultEnvironmentSlug: nil,
+			ToolUrns:               nil,
+			ResourceUrns:           nil,
+			PromptTemplateNames:    nil,
+			McpSlug:                nil,
+			McpIsPublic:            nil,
+			McpEnabled:             new(true),
+			CustomDomainID:         nil,
+			ProjectSlugInput:       nil,
+		},
+		{
+			SessionToken:           nil,
+			Slug:                   created.Slug,
+			Name:                   nil,
+			Description:            nil,
+			DefaultEnvironmentSlug: nil,
+			ToolUrns:               nil,
+			ResourceUrns:           nil,
+			PromptTemplateNames:    nil,
+			McpSlug:                new(types.Slug("rejected-slug")),
+			McpIsPublic:            nil,
+			McpEnabled:             nil,
+			CustomDomainID:         nil,
+			ProjectSlugInput:       nil,
+		},
+		{
+			SessionToken:           nil,
+			Slug:                   created.Slug,
+			Name:                   nil,
+			Description:            nil,
+			DefaultEnvironmentSlug: nil,
+			ToolUrns:               nil,
+			ResourceUrns:           nil,
+			PromptTemplateNames:    nil,
+			McpSlug:                nil,
+			McpIsPublic:            new(true),
+			McpEnabled:             nil,
+			CustomDomainID:         nil,
+			ProjectSlugInput:       nil,
+		},
+		{
+			SessionToken:           nil,
+			Slug:                   created.Slug,
+			Name:                   nil,
+			Description:            nil,
+			DefaultEnvironmentSlug: nil,
+			ToolUrns:               nil,
+			ResourceUrns:           nil,
+			PromptTemplateNames:    nil,
+			McpSlug:                nil,
+			McpIsPublic:            nil,
+			McpEnabled:             nil,
+			CustomDomainID:         new(uuid.New().String()),
+			ProjectSlugInput:       nil,
+		},
+	} {
+		_, err = ti.service.UpdateToolset(ctx, payload)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "managed through the mcpServers API")
+	}
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
 	require.NoError(t, err)
-	require.Equal(t, beforeCount+1, afterCount)
+	require.Equal(t, beforeCount, afterCount, "rejected updates must not record audit events")
 }
 
 func TestToolsetsService_UpdateToolset_ResourceUrnsNil_PreservesResources(t *testing.T) {
@@ -635,79 +678,6 @@ func TestToolsetsService_UpdateToolset_AuditLog(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
-func TestToolsetsService_UpdateToolset_ClearsExternalOAuth_AuditLog(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestToolsetsService(t)
-	ctx = withProAccount(t, ctx)
-	toolset := createMinimalPublicToolset(t, ctx, ti, "Audit Clear External OAuth Toolset")
-	// The visibility-flip OAuth-clear semantics belong to the pre-swap
-	// column path; backdate the toolset to that shape.
-	seedPublishingColumns(t, ctx, ti, uuid.MustParse(toolset.ID), "seed-"+string(toolset.Slug), true)
-	seedPublishingPublicColumn(t, ctx, ti, uuid.MustParse(toolset.ID), true)
-	attached, err := ti.service.AddExternalOAuthServer(ctx, &gen.AddExternalOAuthServerPayload{
-		SessionToken: nil,
-		ApikeyToken:  nil,
-		Slug:         toolset.Slug,
-		ExternalOauthServer: &types.ExternalOAuthServerForm{
-			Slug: types.Slug("update-detach-external-oauth"),
-			Metadata: map[string]any{
-				"issuer":         "https://example.com",
-				"token_endpoint": "https://example.com/token",
-			},
-		},
-		ProjectSlugInput: nil,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, attached)
-	require.NotNil(t, attached.ExternalOauthServer)
-
-	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetDetachExternalOAuth)
-	require.NoError(t, err)
-
-	private := false
-	updated, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
-		SessionToken:           nil,
-		ApikeyToken:            nil,
-		Slug:                   toolset.Slug,
-		Name:                   nil,
-		Description:            nil,
-		DefaultEnvironmentSlug: nil,
-		ToolUrns:               nil,
-		ResourceUrns:           nil,
-		PromptTemplateNames:    nil,
-		McpSlug:                nil,
-		McpEnabled:             nil,
-		McpIsPublic:            &private,
-		CustomDomainID:         nil,
-		ProjectSlugInput:       nil,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, updated)
-	require.Nil(t, updated.ExternalOauthServer)
-	require.NotNil(t, updated.McpIsPublic)
-	require.False(t, *updated.McpIsPublic)
-
-	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionToolsetDetachExternalOAuth)
-	require.NoError(t, err)
-	require.Equal(t, string(audit.ActionToolsetDetachExternalOAuth), record.Action)
-	require.Equal(t, "toolset", record.SubjectType)
-	require.Equal(t, updated.Name, record.SubjectDisplay)
-	require.Equal(t, string(updated.Slug), record.SubjectSlug)
-	require.Nil(t, record.BeforeSnapshot)
-	require.Nil(t, record.AfterSnapshot)
-
-	metadata, err := audittest.DecodeAuditData(record.Metadata)
-	require.NoError(t, err)
-	require.Equal(t, attached.ExternalOauthServer.ID, metadata["external_oauth_server_id"])
-	require.Equal(t, string(attached.ExternalOauthServer.Slug), metadata["external_oauth_server_slug"])
-	require.InDelta(t, updated.ToolsetVersion, metadata["toolset_version_after"], 0)
-
-	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetDetachExternalOAuth)
-	require.NoError(t, err)
-	require.Equal(t, beforeCount+1, afterCount)
-}
-
 func TestToolsetsService_UpdateToolset_NotFound_NoAuditLog(t *testing.T) {
 	t.Parallel()
 
@@ -736,104 +706,4 @@ func TestToolsetsService_UpdateToolset_NotFound_NoAuditLog(t *testing.T) {
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount, afterCount)
-}
-
-func TestToolsetsService_UpdateToolset_EnableMcp_AttachesToDefaultPlugin(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestToolsetsService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	pluginsQueries := pluginsrepo.New(ti.conn)
-	defaultPlugin, err := pluginsQueries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
-
-	// First toolset in the org auto-enables MCP (and gets attached).
-	_, err = ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
-		SessionToken:           nil,
-		Name:                   "First Toolset",
-		Description:            nil,
-		ToolUrns:               []string{},
-		ResourceUrns:           nil,
-		DefaultEnvironmentSlug: nil,
-		ProjectSlugInput:       nil,
-	})
-	require.NoError(t, err)
-
-	// Second toolset in the org does not auto-enable.
-	second, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
-		SessionToken:           nil,
-		Name:                   "Second Toolset",
-		Description:            nil,
-		ToolUrns:               []string{},
-		ResourceUrns:           nil,
-		DefaultEnvironmentSlug: nil,
-		ProjectSlugInput:       nil,
-	})
-	require.NoError(t, err)
-	require.False(t, *second.McpEnabled)
-
-	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
-	require.NoError(t, err)
-	require.Len(t, servers, 1, "only the auto-enabled first toolset should be attached so far")
-
-	// Publishing-field updates only translate for rows that still carry
-	// pre-swap columns; backdate the second toolset to that shape.
-	seedPublishingColumns(t, ctx, ti, uuid.MustParse(second.ID), "seed-"+string(second.Slug), false)
-
-	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerAdd)
-	require.NoError(t, err)
-
-	result, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
-		SessionToken:           nil,
-		Slug:                   second.Slug,
-		Name:                   nil,
-		Description:            nil,
-		DefaultEnvironmentSlug: nil,
-		ToolUrns:               nil,
-		ResourceUrns:           nil,
-		PromptTemplateNames:    nil,
-		McpSlug:                nil,
-		McpIsPublic:            nil,
-		McpEnabled:             new(true),
-		CustomDomainID:         nil,
-		ProjectSlugInput:       nil,
-	})
-	require.NoError(t, err)
-	require.True(t, *result.McpEnabled)
-
-	servers, err = pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
-	require.NoError(t, err)
-	require.Len(t, servers, 2)
-
-	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerAdd)
-	require.NoError(t, err)
-	require.Equal(t, beforeCount+1, afterCount)
-
-	// Idempotent: re-enabling an already-enabled toolset must not double-attach.
-	_, err = ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
-		SessionToken:           nil,
-		Slug:                   second.Slug,
-		Name:                   nil,
-		Description:            nil,
-		DefaultEnvironmentSlug: nil,
-		ToolUrns:               nil,
-		ResourceUrns:           nil,
-		PromptTemplateNames:    nil,
-		McpSlug:                nil,
-		McpIsPublic:            nil,
-		McpEnabled:             new(true),
-		CustomDomainID:         nil,
-		ProjectSlugInput:       nil,
-	})
-	require.NoError(t, err)
-
-	servers, err = pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
-	require.NoError(t, err)
-	require.Len(t, servers, 2, "re-enabling an already-enabled toolset must not double-attach")
 }

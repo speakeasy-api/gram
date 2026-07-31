@@ -156,26 +156,10 @@ func CreateIssuerGatedToolset(
 		Slug:                   slug,
 		Description:            conv.ToPGText("Test toolset bound to user_session_issuer"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText(slug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 
-	if opts.IsPublic {
-		toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-			Name:                   toolset.Name,
-			Description:            toolset.Description,
-			DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-			McpSlug:                toolset.McpSlug,
-			McpIsPublic:            true,
-			McpEnabled:             toolset.McpEnabled,
-			CustomDomainID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			ToolSelectionMode:      "",
-			Slug:                   toolset.Slug,
-			ProjectID:              toolset.ProjectID,
-		})
-		require.NoError(t, err)
-	}
+	publishToolsetForTest(t, ctx, conn, toolset, slug, opts.IsPublic)
 
 	toolset, err = toolsetsRepo.UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
 		UserSessionIssuerID: uuid.NullUUID{UUID: usi.ID, Valid: true},

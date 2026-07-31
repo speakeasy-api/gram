@@ -6,7 +6,10 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type {
+  McpServer,
+  McpServerVisibility,
+} from "@gram/client/models/components/mcpserver.js";
 import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { Badge } from "@/components/ui/Badge";
@@ -15,6 +18,7 @@ import { Network, Trash2 } from "lucide-react";
 export function PluginServerTableRow({
   server,
   toolset,
+  toolsetVisibility,
   mcpServer,
   isLoading,
   onRemove,
@@ -22,6 +26,8 @@ export function PluginServerTableRow({
 }: {
   server: PluginServer;
   toolset: ToolsetEntry | undefined;
+  /** The toolset's wrapper mcp_server visibility, once loaded. */
+  toolsetVisibility: McpServerVisibility | undefined;
   mcpServer: McpServer | undefined;
   isLoading: boolean;
   onRemove: () => void;
@@ -59,11 +65,11 @@ export function PluginServerTableRow({
         —
       </Text>
     );
-  } else if (toolset) {
+  } else if (toolsetVisibility) {
     visibilityContent = (
       <MCPStatusIndicator
-        mcpEnabled={toolset.mcpEnabled}
-        mcpIsPublic={toolset.mcpIsPublic}
+        mcpEnabled={toolsetVisibility !== "disabled"}
+        mcpIsPublic={toolsetVisibility === "public"}
         size="sm"
       />
     );

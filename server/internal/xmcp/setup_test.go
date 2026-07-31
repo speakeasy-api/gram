@@ -294,10 +294,10 @@ func seedRemoteMCPEndpoint(t *testing.T, ctx context.Context, ti *testInstance, 
 
 // seedToolsetMCPEndpoint wires up a full /x/mcp/{slug} resolution chain for
 // a toolset-backed mcp_server: an mcp_servers row pointing at the given
-// toolset + an mcp_endpoints row exposing it under the toolset's mcp_slug.
-// The endpoint slug intentionally mirrors the toolset's mcp_slug — the
-// production model assumes the two stay aligned until OAuth handling is
-// migrated off toolsets onto mcp_servers (AGE-1902).
+// toolset + an mcp_endpoints row exposing it under a fresh random slug.
+// The random slug keeps this chain independent of any endpoint the toolset
+// may already be published under (e.g. by the oauthtest fixtures), since
+// platform endpoint slugs are globally unique.
 func seedToolsetMCPEndpoint(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, toolset toolsetsrepo.Toolset, visibility string) (slug string, mcpServer mcpserversrepo.McpServer) {
 	t.Helper()
 	return seedToolsetMCPEndpointOnDomain(t, ctx, ti, projectID, toolset, visibility, uuid.NullUUID{})
@@ -324,7 +324,7 @@ func seedToolsetMCPEndpointOnDomain(t *testing.T, ctx context.Context, ti *testI
 	})
 	require.NoError(t, err)
 
-	slug = toolset.McpSlug.String
+	slug = randomSlug()
 	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      projectID,
 		CustomDomainID: customDomainID,
@@ -432,27 +432,8 @@ func seedIssuerGatedToolsetMCPEndpoint(
 		Slug:                   toolsetSlug,
 		Description:            pgtype.Text{String: "issuer-gated /x/mcp test", Valid: true},
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: toolsetSlug, Valid: true},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-
-	// Align toolset.mcp_is_public with the mcp_server visibility so the
-	// toolset-backed branch inside ServeToolsetResolved evaluates against
-	// the same public/private intent the /x/mcp caller observed.
-	if visibility == mcpservers.VisibilityPublic {
-		_, err = toolsetsrepo.New(ti.conn).UpdateToolset(ctx, toolsetsrepo.UpdateToolsetParams{
-			Name:                   toolset.Name,
-			Description:            toolset.Description,
-			DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-			McpSlug:                toolset.McpSlug,
-			McpIsPublic:            true,
-			McpEnabled:             toolset.McpEnabled,
-			Slug:                   toolset.Slug,
-			ProjectID:              toolset.ProjectID,
-		})
-		require.NoError(t, err)
-	}
 
 	mcpServerID, err := uuid.NewV7()
 	require.NoError(t, err)

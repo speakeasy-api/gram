@@ -3,6 +3,7 @@ package mcpmetadata_test
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -24,7 +26,7 @@ func TestService_ExportMcpMetadata_Success(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	// Create a toolset with MCP enabled
+	// Create a toolset published at /mcp/test-export-mcp via its wrapper.
 	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
@@ -32,14 +34,16 @@ func TestService_ExportMcpMetadata_Success(t *testing.T) {
 		Slug:                   "test-export",
 		Description:            conv.ToPGText("A test toolset for export"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "test-export-mcp", Valid: true},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err, "create toolset")
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		endpointSlug: "test-export-mcp",
+	})
 
-	// Export the MCP metadata using the MCP slug
+	// Export the MCP metadata using the endpoint slug
 	result, err := ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{
-		McpSlug: types.Slug(toolset.McpSlug.String),
+		McpSlug: types.Slug("test-export-mcp"),
 	})
 	require.NoError(t, err, "export mcp metadata")
 	require.NotNil(t, result, "result should not be nil")
@@ -47,7 +51,7 @@ func TestService_ExportMcpMetadata_Success(t *testing.T) {
 	// Verify the export structure
 	require.Equal(t, toolset.Name, result.Name, "name should match")
 	require.Equal(t, toolset.Slug, result.Slug, "slug should match")
-	require.Contains(t, result.ServerURL, toolset.McpSlug.String, "server URL should contain MCP slug")
+	require.Contains(t, result.ServerURL, "test-export-mcp", "server URL should contain the endpoint slug")
 
 	// Verify authentication info
 	require.NotNil(t, result.Authentication, "authentication should not be nil")
@@ -79,7 +83,7 @@ func TestService_ExportMcpMetadata_McpNotEnabled(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	// Create a toolset with MCP slug but MCP disabled
+	// Create a toolset whose wrapper is disabled — addressable but unavailable.
 	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
@@ -87,14 +91,17 @@ func TestService_ExportMcpMetadata_McpNotEnabled(t *testing.T) {
 		Slug:                   "test-disabled-mcp",
 		Description:            conv.ToPGText("A test toolset with MCP disabled"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "disabled-mcp-slug", Valid: true},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err, "create toolset")
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		endpointSlug: "disabled-mcp-slug",
+		visibility:   mcpservers.VisibilityDisabled,
+	})
 
-	// Try to export - should fail because MCP is not enabled
+	// Try to export - should fail because the wrapper is disabled
 	_, err = ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{
-		McpSlug: types.Slug(toolset.McpSlug.String),
+		McpSlug: types.Slug("disabled-mcp-slug"),
 	})
 	require.Error(t, err, "should return error for toolset with MCP disabled")
 	require.Contains(t, err.Error(), "MCP server not found", "error should indicate server not found")
@@ -110,7 +117,7 @@ func TestService_ExportMcpMetadata_WithMetadata(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	// Create a toolset with MCP enabled
+	// Create a toolset published at /mcp/test-meta-mcp via its wrapper.
 	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
@@ -118,10 +125,12 @@ func TestService_ExportMcpMetadata_WithMetadata(t *testing.T) {
 		Slug:                   "test-export-metadata",
 		Description:            conv.ToPGText("A toolset with metadata"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "test-meta-mcp", Valid: true},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err, "create toolset")
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		endpointSlug: "test-meta-mcp",
+	})
 
 	// Set MCP metadata (uses toolset slug)
 	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
@@ -131,9 +140,9 @@ func TestService_ExportMcpMetadata_WithMetadata(t *testing.T) {
 	})
 	require.NoError(t, err, "set mcp metadata")
 
-	// Export the MCP metadata using MCP slug
+	// Export the MCP metadata using the endpoint slug
 	result, err := ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{
-		McpSlug: types.Slug(toolset.McpSlug.String),
+		McpSlug: types.Slug("test-meta-mcp"),
 	})
 	require.NoError(t, err, "export mcp metadata")
 
@@ -175,7 +184,7 @@ func TestService_ExportMcpMetadata_WithCustomDomain(t *testing.T) {
 	})
 	require.NoError(t, err, "activate custom domain")
 
-	// Create a toolset with MCP enabled
+	// Create a toolset published on the custom domain via its wrapper endpoint.
 	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
@@ -183,14 +192,17 @@ func TestService_ExportMcpMetadata_WithCustomDomain(t *testing.T) {
 		Slug:                   "test-custom-domain",
 		Description:            conv.ToPGText("A toolset with custom domain"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "custom-domain-mcp", Valid: true},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err, "create toolset")
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		toolsetID:      uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		endpointSlug:   "custom-domain-mcp",
+		customDomainID: uuid.NullUUID{UUID: customDomain.ID, Valid: true},
+	})
 
 	// Export the MCP metadata
 	result, err := ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{
-		McpSlug: types.Slug(toolset.McpSlug.String),
+		McpSlug: types.Slug("custom-domain-mcp"),
 	})
 	require.NoError(t, err, "export mcp metadata")
 

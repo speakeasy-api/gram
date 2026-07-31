@@ -45,9 +45,9 @@ WHERE p.organization_id = $1
 `
 
 // Counts the organization's available MCP servers. mcp_servers visibility is
-// the canonical publishing state; toolsets that still carry pre-swap
-// publishing columns are mirrored onto wrapper rows, so counting servers
-// covers both generations without double counting.
+// the canonical publishing state; every published toolset is represented by
+// its wrapper row, so counting servers covers all backends without double
+// counting.
 func (q *Queries) GetEnabledServerCount(ctx context.Context, organizationID string) (int64, error) {
 	row := q.db.QueryRow(ctx, getEnabledServerCount, organizationID)
 	var count int64

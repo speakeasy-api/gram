@@ -76,13 +76,13 @@ func (s *Service) MigrateLegacyClientRegistrations(ctx context.Context, txRepo *
 
 	// Registrations are keyed by whichever URL the MCP client originally hit,
 	// so collect every variant: the default-domain URL always, plus the
-	// custom-domain URL when the toolset has one.
+	// custom-domain URL when the endpoint has one.
 	baseURL := strings.TrimRight(s.serverURL.String(), "/")
 	mcpURLs := make([]string, 0, len(endpoints)*2)
 	for _, endpoint := range endpoints {
-		mcpURLs = append(mcpURLs, baseURL+"/mcp/"+endpoint.McpSlug.String)
+		mcpURLs = append(mcpURLs, baseURL+"/mcp/"+endpoint.McpSlug)
 		if endpoint.CustomDomain.Valid && endpoint.CustomDomain.String != "" {
-			mcpURLs = append(mcpURLs, "https://"+endpoint.CustomDomain.String+"/mcp/"+endpoint.McpSlug.String)
+			mcpURLs = append(mcpURLs, "https://"+endpoint.CustomDomain.String+"/mcp/"+endpoint.McpSlug)
 		}
 	}
 

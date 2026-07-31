@@ -1,6 +1,6 @@
 // servepublic_mcpendpoint_test.go verifies that /mcp/{mcpSlug} resolves
-// through mcp_endpoints → mcp_servers first and falls back to the
-// legacy toolsets.mcp_slug lookup on any not-found.
+// through mcp_endpoints → mcp_servers, the only addressing path for hosted
+// MCP servers.
 package mcp_test
 
 import (
@@ -224,23 +224,21 @@ func createUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Po
 // ---------------------------------------------------------------------------
 
 // TestServePublic_McpEndpoint_ToolsetBacked_ResolvesViaEndpoints
-// confirms /mcp/{slug} resolves via the new mcp_endpoints lookup when
+// confirms /mcp/{slug} resolves via the mcp_endpoints lookup when
 // the endpoint is backed by a toolset, dispatching through
-// ServeToolsetResolved just like the legacy mcp_slug path.
+// ServeToolsetResolved.
 func TestServePublic_McpEndpoint_ToolsetBacked_ResolvesViaEndpoints(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsetsrepo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	// Toolset's mcp_slug is intentionally different from the endpoint
-	// slug — confirms resolution flows through mcp_endpoints, not the
-	// legacy toolset.mcp_slug query.
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "toolset-slug-"+uuid.NewString()[:8])
+	// The endpoint slug is intentionally different from the toolset
+	// slug — confirms resolution keys off the mcp_endpoints row.
+	toolset := createPublicMCPToolset(t, ctx, ti.conn, authCtx, "toolset-slug-"+uuid.NewString()[:8])
 
 	endpointSlug := "endpoint-" + uuid.NewString()
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{}, uuid.Nil)
@@ -251,11 +249,10 @@ func TestServePublic_McpEndpoint_ToolsetBacked_ResolvesViaEndpoints(t *testing.T
 	require.NotEmpty(t, w.Header().Get("Mcp-Session-Id"))
 }
 
-// TestServePublic_NoMcpEndpoint_FallsBackToLegacyToolset confirms that
-// when no mcp_endpoint matches the slug, /mcp/{slug} falls back to the
-// legacy toolsets.mcp_slug lookup so existing customers without
-// mcp_endpoints rows keep working unchanged.
-func TestServePublic_NoMcpEndpoint_FallsBackToLegacyToolset(t *testing.T) {
+// TestServePublic_ToolsetWithoutEndpoint_NotAddressable pins the addressing
+// rule: a toolset without an mcp_endpoints row is not addressable at
+// /mcp/{slug} at all.
+func TestServePublic_ToolsetWithoutEndpoint_NotAddressable(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -265,13 +262,24 @@ func TestServePublic_NoMcpEndpoint_FallsBackToLegacyToolset(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	// No mcp_endpoints row is created — the slug is only addressable
-	// via the legacy toolsets.mcp_slug path.
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "legacy-only-"+uuid.NewString()[:8])
-
-	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
+	// Created directly on the toolsets repo — no wrapper mcp_server and
+	// no mcp_endpoints row, so nothing publishes this slug.
+	slug := "unpublished-" + uuid.NewString()[:8]
+	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Unpublished MCP " + slug,
+		Slug:                   slug,
+		Description:            conv.ToPGText("A toolset with no published endpoint"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+	})
 	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+
+	_, err = servePublicHTTP(t, ctx, ti, toolset.Slug, makeInitializeBody(), "", nil)
+	require.Error(t, err, "unpublished toolset slug must not resolve at /mcp/{slug}")
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
 // mintIssuerBearerForEndpoint drives ServeToken with a synthesised
@@ -451,36 +459,29 @@ func TestServePublic_McpEndpoint_IssuerGated_NoAuth_EmitsChallenge(t *testing.T)
 	require.Equal(t, expected, wwwAuth, "mcpRouteBase must be 'mcp' (not 'x/mcp') for /mcp callers")
 }
 
-// TestServePublic_McpEndpoint_DisabledMcpServer_DoesNotFallBackToToolset
-// verifies that an mcp_endpoint whose parent server is disabled is
-// authoritative for its slug: the request 404s WITHOUT falling through
-// to the direct toolsets.mcp_slug lookup, even when an enabled toolset
-// shares the slug. Only a true addressing miss (no endpoint row at
-// all) may fall back — otherwise disabling a server would resurface
-// whatever same-slug toolset the endpoint superseded.
-func TestServePublic_McpEndpoint_DisabledMcpServer_DoesNotFallBackToToolset(t *testing.T) {
+// TestServePublic_McpEndpoint_DisabledMcpServer_NotFound verifies that
+// an mcp_endpoint whose parent server is disabled is authoritative for
+// its slug: the request 404s even though the backing toolset would be
+// perfectly servable behind an enabled wrapper.
+func TestServePublic_McpEndpoint_DisabledMcpServer_NotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsetsrepo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	// A separate (disabled) toolset is the mcp_endpoint's backend; a
-	// different public toolset shares the slug via
-	// createPublicMCPToolset (which sets both Slug and McpSlug to the
-	// same value). The endpoint address exists, so its disabled state
-	// is terminal — the same-slug public toolset must NOT be served.
-	sharedSlug := "shared-" + uuid.NewString()[:8]
-	disabledToolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "disabled-"+uuid.NewString()[:8])
-	createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, sharedSlug)
+	// The backing toolset is also published (enabled) at its own slug —
+	// proving the 404 below comes from the disabled wrapper, not from a
+	// broken backend.
+	slug := "disabled-ep-" + uuid.NewString()[:8]
+	backingToolset := createPublicMCPToolset(t, ctx, ti.conn, authCtx, "disabled-backend-"+uuid.NewString()[:8])
 
-	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, disabledToolset.ID, sharedSlug, "disabled", uuid.NullUUID{}, uuid.Nil)
+	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, backingToolset.ID, slug, "disabled", uuid.NullUUID{}, uuid.Nil)
 
-	_, err := servePublicHTTP(t, ctx, ti, sharedSlug, makeInitializeBody(), "", nil)
-	require.Error(t, err, "disabled mcp_server must be terminal, not fall through to the toolset lookup")
+	_, err := servePublicHTTP(t, ctx, ti, slug, makeInitializeBody(), "", nil)
+	require.Error(t, err, "disabled mcp_server must not be served")
 	var shareErr *oops.ShareableError
 	require.ErrorAs(t, err, &shareErr)
 	require.Equal(t, oops.CodeNotFound, shareErr.Code)
@@ -488,68 +489,39 @@ func TestServePublic_McpEndpoint_DisabledMcpServer_DoesNotFallBackToToolset(t *t
 
 // TestServePublic_McpEndpoint_PrivateWrapper_OverridesPublicToolset
 // verifies that the mcp_servers row's visibility governs serving at an
-// endpoint address: a private wrapper in front of a toolset whose own
-// mcp_is_public column is (stale-)true must apply private semantics —
-// an unauthenticated request is rejected rather than served publicly.
-// The toolsets publishing columns only mirror the wrapper while the
-// expand/contract swap is in flight; the wrapper wins at an endpoint.
+// endpoint address: the same toolset can be published publicly at one
+// endpoint and privately at another, and the private endpoint must
+// reject unauthenticated requests regardless of the sibling.
 func TestServePublic_McpEndpoint_PrivateWrapper_OverridesPublicToolset(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsetsrepo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
 	slug := "privwrap-" + uuid.NewString()[:8]
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, slug)
+	toolset := createPublicMCPToolset(t, ctx, ti.conn, authCtx, slug)
 
 	endpointSlug := "endpoint-" + uuid.NewString()[:8]
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "private", uuid.NullUUID{}, uuid.Nil)
 
 	// context.Background() carries no auth context, so the request is
 	// unauthenticated; the private wrapper must reject it even though
-	// the backing toolset's own column says public.
+	// the same toolset serves publicly at its other endpoint.
 	_, err := servePublicHTTP(t, context.Background(), ti, endpointSlug, makeInitializeBody(), "", nil)
-	require.Error(t, err, "private wrapper must not serve unauthenticated requests despite public toolset column")
-}
-
-// TestServePublic_McpEndpoint_AddressMiss_FallsBackToToolset verifies
-// the companion contract: when NO mcp_endpoint row exists for the
-// slug, resolution reports a true address miss and the direct
-// toolsets.mcp_slug lookup serves the request.
-func TestServePublic_McpEndpoint_AddressMiss_FallsBackToToolset(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsetsrepo.New(ti.conn)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	slug := "missonly-" + uuid.NewString()[:8]
-	createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, slug)
-
-	w, err := servePublicHTTP(t, ctx, ti, slug, makeInitializeBody(), "", nil)
-	require.NoError(t, err, "address miss must fall through to the toolset lookup")
-	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+	require.Error(t, err, "private wrapper must not serve unauthenticated requests despite a public sibling endpoint")
 }
 
 // TestServePublic_PlatformDomain_DoesNotResolveCustomDomainEndpoint
 // regression-guards the platform-only resolution semantic: a
 // custom-domain-scoped mcp_endpoint must not resolve for a request
-// arriving on the platform domain, even when the slug matches and no
-// legacy toolset claims the slug. Asymmetric to the toolsets fallback
-// path, which DOES allow platform requests to resolve custom-domain
-// toolsets (see loadToolset docstring).
+// arriving on the platform domain, even when the slug matches.
 func TestServePublic_PlatformDomain_DoesNotResolveCustomDomainEndpoint(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsetsrepo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -572,14 +544,13 @@ func TestServePublic_PlatformDomain_DoesNotResolveCustomDomainEndpoint(t *testin
 	})
 	require.NoError(t, err)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "custom-only-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti.conn, authCtx, "custom-only-"+uuid.NewString()[:8])
 	endpointSlug := "endpoint-" + uuid.NewString()
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{UUID: customDomain.ID, Valid: true}, uuid.Nil)
 
 	// Request arrives on the platform domain (no customdomains.Context).
-	// The custom-domain mcp_endpoint must not resolve, and the legacy
-	// toolset lookup must not find the slug either (toolset.mcp_slug
-	// differs from endpointSlug). Expect CodeNotFound from ServePublic.
+	// The custom-domain mcp_endpoint must not resolve there. Expect
+	// CodeNotFound from ServePublic.
 	_, err = servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), "", nil)
 	require.Error(t, err, "platform-domain request must not resolve a custom-domain mcp_endpoint")
 	var oopsErr *oops.ShareableError

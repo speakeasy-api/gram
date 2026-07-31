@@ -1,6 +1,6 @@
 import { useProxiedMcpTools } from "@/hooks/useProxiedMcpTools";
 import { useUserSessionToken } from "@/hooks/useUserSessionToken";
-import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
+import { useToolsetPlatformMcpUrl } from "@/hooks/useToolsetUrl";
 import { Toolset } from "@/lib/toolTypes";
 import { firstPartyConnectUrl, mcpConnectionUrl } from "@/lib/utils";
 import { useCallback, useMemo } from "react";
@@ -46,7 +46,7 @@ export function usePlaygroundIssuerConnection(
     userSessionIssuerId: toolset?.userSessionIssuerId,
   });
 
-  const mcpUrl = useInternalMcpUrl(toolset);
+  const mcpUrl = useToolsetPlatformMcpUrl(toolset?.id);
   // Connect through the dev proxy origin (same-origin) so the AI SDK transport
   // carries the gram_session cookie; no-op in prod. Mirrors the remote Tools tab.
   const connectUrl = useMemo(() => mcpConnectionUrl(mcpUrl), [mcpUrl]);

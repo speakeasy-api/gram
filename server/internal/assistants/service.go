@@ -185,13 +185,15 @@ type assistantThreadEventRecord struct {
 }
 
 // assistantToolsetRow is the hydrated view of a row in assistant_toolsets
-// joined with toolsets + environments. Everything dispatch needs to build
-// MCP server URLs comes from one read.
+// joined with toolsets, the toolset's wrapper mcp_server/mcp_endpoint, and
+// environments. Everything dispatch needs to build MCP server URLs comes from
+// one read: McpReachable reports a live, non-disabled wrapper and McpSlug is
+// its Gram-hosted endpoint slug ("" when none exists).
 type assistantToolsetRow struct {
 	ToolsetID              uuid.UUID
 	ToolsetSlug            string
-	McpEnabled             bool
-	McpSlug                pgtype.Text
+	McpReachable           bool
+	McpSlug                string
 	DefaultEnvironmentSlug pgtype.Text
 	EnvironmentID          uuid.NullUUID
 	EnvironmentSlug        pgtype.Text
@@ -933,7 +935,7 @@ func (s *ServiceCore) loadAssistantToolsets(ctx context.Context, projectID uuid.
 		out[row.AssistantID] = append(out[row.AssistantID], assistantToolsetRow{
 			ToolsetID:              row.ToolsetID,
 			ToolsetSlug:            row.ToolsetSlug,
-			McpEnabled:             row.McpEnabled,
+			McpReachable:           row.McpReachable,
 			McpSlug:                row.McpSlug,
 			DefaultEnvironmentSlug: row.DefaultEnvironmentSlug,
 			EnvironmentID:          row.EnvironmentID,
@@ -3057,16 +3059,16 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 	// colliding direct attachments are skipped with a warning.
 	seenIDs := map[string]struct{}{}
 	for _, t := range toolsets {
-		// Misconfiguration (no MCP slug, MCP disabled) is a tenant-side
-		// problem, not a server fault. Skip the broken toolset and let
-		// the rest of the thread admit — the assistant just won't see
-		// these tools.
-		if !t.McpEnabled || !t.McpSlug.Valid || t.McpSlug.String == "" {
+		// Misconfiguration (disabled wrapper, no Gram-hosted endpoint) is a
+		// tenant-side problem, not a server fault. Skip the broken toolset
+		// and let the rest of the thread admit — the assistant just won't
+		// see these tools.
+		if !t.McpReachable || t.McpSlug == "" {
 			logger.WarnContext(ctx, "skipping assistant toolset that is not MCP-reachable",
 				attr.SlogToolsetID(t.ToolsetID.String()),
 				attr.SlogToolsetSlug(t.ToolsetSlug),
-				attr.SlogToolsetMCPSlug(t.McpSlug.String),
-				attr.SlogToolsetMCPEnabled(t.McpEnabled),
+				attr.SlogToolsetMCPSlug(t.McpSlug),
+				attr.SlogToolsetMCPEnabled(t.McpReachable),
 			)
 			continue
 		}
@@ -3085,7 +3087,7 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 		seenIDs[t.ToolsetSlug] = struct{}{}
 		servers = append(servers, runtimeMCPServer{
 			ID:      t.ToolsetSlug,
-			URL:     serverURL.JoinPath("mcp", t.McpSlug.String).String(),
+			URL:     serverURL.JoinPath("mcp", t.McpSlug).String(),
 			Headers: headers,
 		})
 	}

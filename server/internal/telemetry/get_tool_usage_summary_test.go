@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -183,18 +184,7 @@ func TestGetToolUsageSummary_ClassifiesHookObservedHostedMCP(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
-	toolsets := toolsetsRepo.New(ti.conn)
-	_, err := toolsets.CreateToolset(ctx, toolsetsRepo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Hosted Payments",
-		Slug:                   "hosted-payments",
-		Description:            pgtype.Text{},
-		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{String: "acme-hosted-payments", Valid: true},
-		McpEnabled:             true,
-	})
-	require.NoError(t, err)
+	seedHostedPaymentsToolset(t, ctx, ti)
 	now := time.Now().UTC()
 	insertHookEvent(t, ctx, hookEventParams{
 		projectID:      projectID,
@@ -415,18 +405,7 @@ func TestGetToolUsageFilterOptions_ClassifiesHookObservedHostedMCP(t *testing.T)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
-	toolsets := toolsetsRepo.New(ti.conn)
-	_, err := toolsets.CreateToolset(ctx, toolsetsRepo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Hosted Payments",
-		Slug:                   "hosted-payments",
-		Description:            pgtype.Text{},
-		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{String: "acme-hosted-payments", Valid: true},
-		McpEnabled:             true,
-	})
-	require.NoError(t, err)
+	seedHostedPaymentsToolset(t, ctx, ti)
 
 	now := time.Now().UTC()
 	insertHookEvent(t, ctx, hookEventParams{
@@ -536,6 +515,52 @@ func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, 
 type tunneledMCPServerFixtureParams struct {
 	name string
 	slug string
+}
+
+// seedHostedPaymentsToolset creates the "hosted-payments" toolset with a live
+// wrapper mcp_server and the "acme-hosted-payments" Gram-hosted endpoint so
+// hosted-MCP telemetry matchers recognise traffic addressed to that slug.
+func seedHostedPaymentsToolset(t *testing.T, ctx context.Context, ti *testInstance) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset, err := toolsetsRepo.New(ti.conn).CreateToolset(ctx, toolsetsRepo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Hosted Payments",
+		Slug:                   "hosted-payments",
+		Description:            pgtype.Text{},
+		DefaultEnvironmentSlug: pgtype.Text{},
+	})
+	require.NoError(t, err)
+
+	wrapperID, err := uuid.NewV7()
+	require.NoError(t, err)
+	wrapper, err := mcpserversRepo.New(ti.conn).CreateMCPServer(ctx, mcpserversRepo.CreateMCPServerParams{
+		ID:                    wrapperID,
+		ProjectID:             *authCtx.ProjectID,
+		Name:                  pgtype.Text{String: "Hosted Payments", Valid: true},
+		Slug:                  pgtype.Text{String: "hosted-payments-wrapper", Valid: true},
+		EnvironmentID:         uuid.NullUUID{},
+		UserSessionIssuerID:   uuid.NullUUID{},
+		RemoteMcpServerID:     uuid.NullUUID{},
+		TunneledMcpServerID:   uuid.NullUUID{},
+		ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ToolVariationsGroupID: uuid.NullUUID{},
+		Visibility:            "private",
+	})
+	require.NoError(t, err)
+
+	_, err = mcpendpointsRepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsRepo.CreateMCPEndpointParams{
+		ProjectID:      *authCtx.ProjectID,
+		CustomDomainID: uuid.NullUUID{},
+		McpServerID:    wrapper.ID,
+		Slug:           "acme-hosted-payments",
+	})
+	require.NoError(t, err)
 }
 
 type tunneledMCPServerFixture struct {

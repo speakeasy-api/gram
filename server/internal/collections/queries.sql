@@ -134,33 +134,6 @@ WHERE
   AND toolset_id = @toolset_id
   AND deleted IS FALSE;
 
--- name: ListOrganizationMcpCollectionServerAttachments :many
--- The wrapper subquery resolves the toolset's single live wrapper mcp_server
--- (COALESCEd to the zero uuid — sqlc cannot infer scalar-subquery
--- nullability) so metadata reads can fall back to server-keyed rows once
--- ownership moves onto the wrapper.
-SELECT t.*, rt.published_at AS published_at,
-  COALESCE((
-    SELECT ws.id
-    FROM mcp_servers ws
-    WHERE ws.toolset_id = t.id
-      AND ws.project_id = t.project_id
-      AND ws.deleted IS FALSE
-    ORDER BY ws.created_at
-    LIMIT 1
-  ), '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS wrapper_mcp_server_id
-FROM toolsets t
-JOIN organization_mcp_collection_server_attachments rt ON t.id = rt.toolset_id
-JOIN organization_mcp_collections c ON c.id = rt.collection_id
-WHERE
-  rt.collection_id = @collection_id
-  AND c.organization_id = @organization_id
-  AND c.deleted IS FALSE
-  AND rt.deleted IS FALSE
-  AND t.mcp_enabled IS TRUE
-  AND t.deleted IS FALSE
-ORDER BY rt.published_at DESC;
-
 -- name: IsServerAttachedToOrganizationMcpCollection :one
 SELECT EXISTS (
   SELECT 1 FROM organization_mcp_collection_server_attachments a
@@ -207,8 +180,7 @@ RETURNING *;
 -- name: MoveCollectionAttachmentToMcpServer :execrows
 -- Rekeys a collection's live toolset-keyed attachment onto the toolset's
 -- wrapper mcp_server in place, preserving the row id, published_at,
--- published_by, and created_at so publish history survives the
--- expand/contract swap from toolset-column publishing to mcp_servers.
+-- published_by, and created_at so publish history survives the rekey.
 WITH org_collection AS (
   SELECT omc.id FROM organization_mcp_collections omc
   WHERE omc.id = @collection_id AND omc.organization_id = @organization_id AND omc.deleted IS FALSE

@@ -125,9 +125,8 @@ func createMCPEnabledToolset(
 	})
 	require.NoError(t, err)
 
-	// Availability lives on the wrapper mcp_servers row after the write
-	// freeze; make the toolset's server available the way the mcpServers
-	// management API would.
+	// Availability lives on the wrapper mcp_servers row; make the toolset's
+	// server available the way the mcpServers management API would.
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)

@@ -21,6 +21,7 @@ import { TextArea } from "@/components/ui/Textarea";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useToolsetMcpServers } from "@/hooks/useToolsetUrl";
 import { cn, getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Chat, GramElementsProvider, type ElementsConfig } from "@/elements";
@@ -226,12 +227,14 @@ function ChatElementsInner() {
     [toolsetsData],
   );
 
-  // Helper to get MCP URL for a toolset
-  const getMcpUrl = (toolset: (typeof toolsets)[0]) => {
-    const urlSuffix = toolset.mcpSlug
-      ? toolset.mcpSlug
-      : `${project.slug}/${toolset.slug}/${toolset.defaultEnvironmentSlug}`;
-    return `${getServerURL()}/mcp/${urlSuffix}`;
+  // A toolset is connectable when its wrapper mcp_server is not disabled and
+  // has a platform-domain endpoint URL.
+  const { byToolsetId } = useToolsetMcpServers();
+  const getMcpUrl = (toolset: (typeof toolsets)[0]) =>
+    byToolsetId.get(toolset.id)?.platformUrl;
+  const isConnectable = (toolset: (typeof toolsets)[0]) => {
+    const entry = byToolsetId.get(toolset.id);
+    return !!entry && entry.visibility !== "disabled" && !!entry.platformUrl;
   };
 
   // Set toolset from URL param (priority) or first available toolset as default when toolsets load
@@ -241,11 +244,11 @@ function ChatElementsInner() {
     // If URL param is provided, always try to select that toolset
     if (toolsetSlugFromUrl) {
       const toolsetFromUrl = toolsets.find(
-        (t) => t.slug === toolsetSlugFromUrl && t.mcpEnabled,
+        (t) => t.slug === toolsetSlugFromUrl && isConnectable(t),
       );
       if (toolsetFromUrl) {
         const mcpUrl = getMcpUrl(toolsetFromUrl);
-        if (config.mcp !== mcpUrl) {
+        if (mcpUrl && config.mcp !== mcpUrl) {
           updateConfig("mcp", mcpUrl);
         }
         return;
@@ -254,13 +257,14 @@ function ChatElementsInner() {
 
     // Otherwise, if no MCP is set, use first enabled toolset
     if (!config.mcp) {
-      const firstEnabledToolset = toolsets.find((t) => t.mcpEnabled);
-      if (firstEnabledToolset) {
-        updateConfig("mcp", getMcpUrl(firstEnabledToolset));
+      const firstEnabledToolset = toolsets.find((t) => isConnectable(t));
+      const mcpUrl = firstEnabledToolset && getMcpUrl(firstEnabledToolset);
+      if (mcpUrl) {
+        updateConfig("mcp", mcpUrl);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run when toolsets or URL param change, not when config.mcp updates (would cause loop)
-  }, [toolsets, toolsetSlugFromUrl]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run when toolsets, server lookup, or URL param change, not when config.mcp updates (would cause loop)
+  }, [toolsets, toolsetSlugFromUrl, byToolsetId]);
 
   const updateConfig = <K extends keyof ElementsFormConfig>(
     key: K,
@@ -417,16 +421,17 @@ function ChatElementsInner() {
                               <SelectContent>
                                 {toolsets.map((toolset) => {
                                   const mcpUrl = getMcpUrl(toolset);
+                                  const connectable = isConnectable(toolset);
                                   return (
                                     <SelectItem
                                       key={toolset.id}
-                                      value={mcpUrl}
-                                      disabled={!toolset.mcpEnabled}
+                                      value={mcpUrl ?? toolset.id}
+                                      disabled={!connectable}
                                     >
                                       <div className="flex items-center gap-2">
                                         <Server className="text-muted-foreground h-4 w-4" />
                                         <span>{toolset.name}</span>
-                                        {!toolset.mcpEnabled && (
+                                        {!connectable && (
                                           <span className="text-muted-foreground text-xs">
                                             (disabled)
                                           </span>

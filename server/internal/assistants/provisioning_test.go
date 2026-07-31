@@ -5,15 +5,15 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
+	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -85,34 +85,24 @@ func TestEnableManagedAssistantAttachesNoToolsets(t *testing.T) {
 	core := newProvisioningCore(t, conn)
 	projectID := newProvisioningProject(t, conn, "managed-toolsets")
 
-	toolsetsQ := toolsetsrepo.New(conn)
-	// An MCP-reachable toolset already exists in the project. The managed
-	// assistant must still start empty — admins add project MCP servers
-	// deliberately, not by default.
-	reachable, err := toolsetsQ.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
-		OrganizationID:         "org-test",
-		ProjectID:              projectID,
-		Name:                   "Billing",
-		Slug:                   "billing",
-		Description:            pgtype.Text{},
-		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{String: "org-test-billing-xyz", Valid: true},
-		McpEnabled:             false,
-	})
-	require.NoError(t, err)
+	// An MCP-capable toolset already exists in the project, its wrapper
+	// disabled. The managed assistant must still start empty — admins add
+	// project MCP servers deliberately, not by default.
+	_, wrapperID := seedToolsetWithWrapper(t, conn, projectID, "Billing", "billing", "org-test-billing-xyz", visibility.Disabled)
 
 	record, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1")
 	require.NoError(t, err)
 
 	require.Empty(t, record.Toolsets, "managed assistant must not attach project toolsets by default")
 
-	// Provisioning must not touch the project's toolsets — MCP stays as it was.
-	reloaded, err := toolsetsQ.GetToolset(ctx, toolsetsrepo.GetToolsetParams{
-		Slug:      reachable.Slug,
+	// Provisioning must not touch the project's MCP publishing state — the
+	// wrapper stays disabled.
+	wrapper, err := mcpserversRepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversRepo.GetMCPServerByIDAndProjectIDParams{
+		ID:        wrapperID,
 		ProjectID: projectID,
 	})
 	require.NoError(t, err)
-	require.False(t, reloaded.McpEnabled, "provisioning must not auto-enable MCP on project toolsets")
+	require.Equal(t, visibility.Disabled, wrapper.Visibility, "provisioning must not auto-enable MCP on project toolsets")
 }
 
 func TestDisableManagedAssistantTearsDown(t *testing.T) {

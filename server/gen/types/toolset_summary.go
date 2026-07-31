@@ -22,12 +22,6 @@ type ToolsetSummary struct {
 	Slug Slug
 	// The slug of the environment to use as the default for the toolset
 	DefaultEnvironmentSlug *Slug
-	// The slug of the MCP to use for the toolset
-	McpSlug *Slug
-	// Whether the toolset is enabled for MCP
-	McpEnabled *bool
-	// Whether the toolset is public in MCP
-	McpIsPublic *bool
 	// The mode to use for tool selection
 	ToolSelectionMode string
 	// The tools in this toolset

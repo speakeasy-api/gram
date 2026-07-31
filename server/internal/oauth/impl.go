@@ -39,6 +39,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/providers"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
@@ -194,60 +197,55 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	})
 }
 
-// loadToolsetFromCurrentURLContext loads a toolset from the MCP slug and returns the full MCP URL
+// loadToolsetFromCurrentURLContext resolves an MCP slug through its
+// mcp_endpoint and wrapper mcp_server to the backing toolset, and returns the
+// full MCP URL for the surface the request arrived under.
 func (s *Service) loadToolsetFromCurrentURLContext(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, string, error) {
-	var toolset toolsets_repo.Toolset
-	var toolsetErr error
-	var mcpURL string
-
+	var customDomainID uuid.NullUUID
+	mcpURL := s.serverURL.String() + "/mcp/" + mcpSlug
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
-		toolset, toolsetErr = s.toolsetsRepo.GetToolsetByMcpSlugAndCustomDomain(ctx, toolsets_repo.GetToolsetByMcpSlugAndCustomDomainParams{
-			McpSlug:        conv.ToPGText(mcpSlug),
-			CustomDomainID: uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true},
-		})
+		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
 		mcpURL = fmt.Sprintf("https://%s/mcp/%s", domainCtx.Domain, mcpSlug)
-	} else {
-		toolset, toolsetErr = s.toolsetsRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
-		mcpURL = s.serverURL.String() + "/mcp/" + mcpSlug
 	}
 
-	switch {
-	case errors.Is(toolsetErr, pgx.ErrNoRows):
-		return nil, "", fmt.Errorf("%w: %w", errToolsetNotFound, toolsetErr)
-	case toolsetErr != nil:
-		return nil, "", fmt.Errorf("lookup toolset: %w", toolsetErr)
-	}
-
-	if !toolset.McpEnabled {
-		return nil, "", fmt.Errorf("%w: mcp disabled", errToolsetNotFound)
-	}
-
-	if !toolset.McpIsPublic && !toolset.OauthProxyServerID.Valid {
-		return nil, "", errOAuthUnavailable
-	}
-
-	return &toolset, mcpURL, nil
-}
-
-func (s *Service) loadToolsetForProjectAndMCPSlug(ctx context.Context, projectID uuid.UUID, mcpSlug string) (*toolsets_repo.Toolset, string, error) {
-	toolset, err := s.toolsetsRepo.GetToolsetByMCPSlug(ctx, toolsets_repo.GetToolsetByMCPSlugParams{
-		ProjectID: projectID,
-		McpSlug:   conv.ToPGText(mcpSlug),
+	endpoint, err := mcpendpoints_repo.New(s.db).GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpoints_repo.GetMCPEndpointByCustomDomainAndSlugParams{
+		Slug:           mcpSlug,
+		CustomDomainID: customDomainID,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, "", fmt.Errorf("%w: %w", errToolsetNotFound, err)
 	case err != nil:
-		return nil, "", fmt.Errorf("lookup toolset: %w", err)
+		return nil, "", fmt.Errorf("lookup mcp endpoint: %w", err)
 	}
 
-	if !toolset.McpEnabled {
-		return nil, "", fmt.Errorf("%w: mcp disabled", errToolsetNotFound)
+	toolset, err := s.loadToolsetForEndpoint(ctx, endpoint)
+	if err != nil {
+		return nil, "", err
+	}
+	return toolset, mcpURL, nil
+}
+
+func (s *Service) loadToolsetForProjectAndMCPSlug(ctx context.Context, projectID uuid.UUID, mcpSlug string) (*toolsets_repo.Toolset, string, error) {
+	endpoint, err := mcpendpoints_repo.New(s.db).GetMCPEndpointByProjectAndSlug(ctx, mcpendpoints_repo.GetMCPEndpointByProjectAndSlugParams{
+		ProjectID: projectID,
+		Slug:      mcpSlug,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, "", fmt.Errorf("%w: %w", errToolsetNotFound, err)
+	case err != nil:
+		return nil, "", fmt.Errorf("lookup mcp endpoint: %w", err)
+	}
+
+	toolset, err := s.loadToolsetForEndpoint(ctx, endpoint)
+	if err != nil {
+		return nil, "", err
 	}
 
 	mcpURL := fmt.Sprintf("%s/mcp/%s", s.serverURL.String(), mcpSlug)
-	if toolset.CustomDomainID.Valid {
-		domain, err := s.customDomainsRepo.GetCustomDomainByID(ctx, toolset.CustomDomainID.UUID)
+	if endpoint.CustomDomainID.Valid {
+		domain, err := s.customDomainsRepo.GetCustomDomainByID(ctx, endpoint.CustomDomainID.UUID)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			return nil, "", fmt.Errorf("%w: %w", errCustomDomainNotFound, err)
@@ -257,7 +255,48 @@ func (s *Service) loadToolsetForProjectAndMCPSlug(ctx context.Context, projectID
 
 		mcpURL = fmt.Sprintf("https://%s/mcp/%s", domain.Domain, mcpSlug)
 	}
-	return &toolset, mcpURL, nil
+	return toolset, mcpURL, nil
+}
+
+// loadToolsetForEndpoint follows a resolved mcp_endpoint to its wrapper
+// mcp_server and backing toolset. Disabled or non-toolset-backed servers
+// resolve as not found; a non-public server without an OAuth proxy has no
+// legacy OAuth surface.
+func (s *Service) loadToolsetForEndpoint(ctx context.Context, endpoint mcpendpoints_repo.McpEndpoint) (*toolsets_repo.Toolset, error) {
+	server, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
+		ID:        endpoint.McpServerID,
+		ProjectID: endpoint.ProjectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, fmt.Errorf("%w: %w", errToolsetNotFound, err)
+	case err != nil:
+		return nil, fmt.Errorf("lookup mcp server: %w", err)
+	}
+
+	if server.Visibility == mcpservers.VisibilityDisabled {
+		return nil, fmt.Errorf("%w: mcp disabled", errToolsetNotFound)
+	}
+	if !server.ToolsetID.Valid {
+		return nil, fmt.Errorf("%w: not toolset-backed", errToolsetNotFound)
+	}
+
+	toolset, err := s.toolsetsRepo.GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
+		ID:        server.ToolsetID.UUID,
+		ProjectID: endpoint.ProjectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, fmt.Errorf("%w: %w", errToolsetNotFound, err)
+	case err != nil:
+		return nil, fmt.Errorf("lookup toolset: %w", err)
+	}
+
+	if server.Visibility != mcpservers.VisibilityPublic && !toolset.OauthProxyServerID.Valid {
+		return nil, errOAuthUnavailable
+	}
+
+	return &toolset, nil
 }
 
 // handleAuthorize handles OAuth 2.1 authorization requests
@@ -374,7 +413,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		"code_challenge":        req.CodeChallenge,
 		"code_challenge_method": req.CodeChallengeMethod,
 		"nonce":                 req.Nonce,
-		"mcp_slug":              toolset.McpSlug.String,
+		"mcp_slug":              mcpSlug,
 		"project_id":            toolset.ProjectID.String(),
 	}
 

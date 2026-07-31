@@ -158,14 +158,20 @@ function CollectionDetailInner() {
     toolsetQueries.some((q) => q.isLoading) ||
     mcpServerQueries.some((q) => q.isLoading);
 
-  // All publishable servers from all projects: MCP-enabled toolsets plus
-  // Remote MCP-backed, non-disabled mcp_servers.
+  // All publishable servers from all projects: toolsets whose wrapper
+  // mcp_server is not disabled plus Remote MCP-backed, non-disabled
+  // mcp_servers.
   const allServers = useMemo(() => {
     const all: ServerOption[] = [];
     for (let i = 0; i < projects.length; i++) {
       const project = projects[i];
+      const enabledToolsetIds = new Set(
+        (mcpServerQueries[i]?.data?.mcpServers ?? [])
+          .filter((s) => !!s.toolsetId && s.visibility !== "disabled")
+          .map((s) => s.toolsetId),
+      );
       for (const t of toolsetQueries[i]?.data?.toolsets ?? []) {
-        if (!t.mcpEnabled || !t.mcpSlug) continue;
+        if (!enabledToolsetIds.has(t.id)) continue;
         all.push({
           kind: "toolset",
           id: t.id,

@@ -277,6 +277,10 @@ func orgObservabilitySlugs(t *testing.T, ctx context.Context, ti *testInstance) 
 	return plugins.ClaudeObservabilitySlug(cfg), plugins.CursorObservabilitySlug(cfg)
 }
 
+// createTestToolset creates a toolset published via a wrapper mcp_server
+// (private) with a Gram-hosted endpoint at the toolset's slug, so the
+// plugin paths treat it as MCP-enabled. Use setToolsetWrapperVisibility to
+// flip it public or disabled.
 func createTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name string) toolsetsrepo.Toolset {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -289,11 +293,65 @@ func createTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, na
 		Slug:                   slug,
 		Description:            pgtype.Text{Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{Valid: false},
-		McpSlug:                pgtype.Text{String: slug, Valid: true},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+
+	wrapperID, err := uuid.NewV7()
+	require.NoError(t, err)
+	wrapper, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:         wrapperID,
+		ProjectID:  *authCtx.ProjectID,
+		Name:       pgtype.Text{String: name, Valid: true},
+		Slug:       pgtype.Text{String: slug + "-wrapper", Valid: true},
+		ToolsetID:  uuid.NullUUID{UUID: ts.ID, Valid: true},
+		Visibility: "private",
+	})
+	require.NoError(t, err)
+
+	_, err = mcpendpointsrepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:      *authCtx.ProjectID,
+		CustomDomainID: uuid.NullUUID{},
+		McpServerID:    wrapper.ID,
+		Slug:           slug,
+	})
+	require.NoError(t, err)
+
 	return ts
+}
+
+// getToolsetWrapper returns the wrapper mcp_server createTestToolset made
+// for the given toolset.
+func getToolsetWrapper(t *testing.T, ctx context.Context, conn *pgxpool.Pool, toolset toolsetsrepo.Toolset) mcpserversrepo.McpServer {
+	t.Helper()
+	wrappers, err := mcpserversrepo.New(conn).GetMCPServersByToolsetID(ctx, mcpserversrepo.GetMCPServersByToolsetIDParams{
+		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ProjectID: toolset.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, wrappers, 1)
+	return wrappers[0]
+}
+
+// setToolsetWrapperVisibility flips the toolset's wrapper mcp_server to the
+// given visibility — the endpoint-era equivalent of toggling the old
+// mcp_is_public / mcp_enabled toolset columns.
+func setToolsetWrapperVisibility(t *testing.T, ctx context.Context, conn *pgxpool.Pool, toolset toolsetsrepo.Toolset, visibility string) {
+	t.Helper()
+	w := getToolsetWrapper(t, ctx, conn, toolset)
+	_, err := mcpserversrepo.New(conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{
+		Name:                  w.Name,
+		Slug:                  w.Slug,
+		EnvironmentID:         w.EnvironmentID,
+		UserSessionIssuerID:   uuid.NullUUID{},
+		RemoteMcpServerID:     w.RemoteMcpServerID,
+		TunneledMcpServerID:   w.TunneledMcpServerID,
+		ToolsetID:             w.ToolsetID,
+		ToolVariationsGroupID: w.ToolVariationsGroupID,
+		Visibility:            visibility,
+		ID:                    w.ID,
+		ProjectID:             w.ProjectID,
+	})
+	require.NoError(t, err)
 }
 
 // mcpServerFixture is an mcp_server with (optionally) a single endpoint,

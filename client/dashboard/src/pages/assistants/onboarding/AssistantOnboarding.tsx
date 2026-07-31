@@ -2,7 +2,7 @@ import { Page } from "@/components/page-layout";
 import { useHideInsightsDock } from "@/components/insights-context";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
-import { internalMcpUrl } from "@/hooks/useToolsetUrl";
+import { useToolsetMcpServers } from "@/hooks/useToolsetUrl";
 import { DEFAULT_ASSISTANT_MODEL } from "@/lib/models";
 import { getServerURL } from "@/lib/utils";
 import {
@@ -166,6 +166,7 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
   const onboarding = useOnboardingTools();
 
   const { data: toolsetsData } = useListToolsets();
+  const { byToolsetId } = useToolsetMcpServers();
   const mcps = useMemo<MCPServerEntry[] | undefined>(() => {
     const fallbackEnv = draft.assistantEnv?.slug;
     const toolsetBySlug = new Map(
@@ -175,8 +176,8 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
     for (const ref of draft.assistant?.toolsets ?? []) {
       const toolset = toolsetBySlug.get(ref.toolsetSlug);
       if (!toolset) continue;
-      // A toolset without an MCP slug has no runtime URL to dial.
-      const url = internalMcpUrl(toolset);
+      // A toolset without a platform-domain endpoint has no runtime URL to dial.
+      const url = byToolsetId.get(toolset.id)?.platformUrl;
       if (!url) continue;
       entries.push({
         url,
@@ -202,6 +203,7 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
     draft.assistant?.mcpServers,
     draft.assistantEnv?.slug,
     toolsetsData?.toolsets,
+    byToolsetId,
   ]);
 
   const getSession = useCallback(async () => {

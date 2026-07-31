@@ -6,10 +6,12 @@ import { Heading } from "@/components/ui/Heading";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useToolsetMcpServers } from "@/hooks/useToolsetUrl";
 import { attachmentToURNPrefix } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
+import type { McpServerVisibility } from "@gram/client/models/components/mcpserver.js";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
@@ -83,6 +85,7 @@ export default function ExternalMCPDetails(): JSX.Element {
   }, [source]);
 
   const { data: toolsets, isLoading: isLoadingToolsets } = useListToolsets();
+  const { byToolsetId } = useToolsetMcpServers();
 
   // Find ALL toolsets that use this external MCP source (could be multiple).
   // A catalog-imported source contributes one URN per registry tool
@@ -298,7 +301,11 @@ export default function ExternalMCPDetails(): JSX.Element {
               ) : associatedToolsets.length > 0 ? (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {associatedToolsets.map((toolset) => (
-                    <MCPServerPortalCard key={toolset.slug} toolset={toolset} />
+                    <MCPServerPortalCard
+                      key={toolset.slug}
+                      toolset={toolset}
+                      visibility={byToolsetId.get(toolset.id)?.visibility}
+                    />
                   ))}
                 </div>
               ) : (
@@ -360,7 +367,14 @@ export default function ExternalMCPDetails(): JSX.Element {
 }
 
 // Portal-style card for MCP servers
-function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
+function MCPServerPortalCard({
+  toolset,
+  visibility,
+}: {
+  toolset: ToolsetEntry;
+  /** The toolset's wrapper mcp_server visibility, once loaded. */
+  visibility: McpServerVisibility | undefined;
+}) {
   const routes = useRoutes();
 
   return (
@@ -380,8 +394,10 @@ function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
                 {toolset.name}
               </Text>
               <div className="mt-1 flex items-center gap-2">
-                <McpEnabledBadge enabled={!!toolset.mcpEnabled} />
-                <McpPublicBadge isPublic={!!toolset.mcpIsPublic} />
+                <McpEnabledBadge
+                  enabled={!!visibility && visibility !== "disabled"}
+                />
+                <McpPublicBadge isPublic={visibility === "public"} />
               </div>
             </div>
           </div>

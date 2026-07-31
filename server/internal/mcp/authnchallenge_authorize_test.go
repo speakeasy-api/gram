@@ -17,6 +17,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -73,7 +75,7 @@ func TestAuthorize_CustomDomainPrivateChallengeUsesGramIDPCallback(t *testing.T)
 	_, authnCache := buildChallengeManagerForTest(t, ti)
 	stored, err := authnCache.Get(ctx, "authnChallenge:"+loc.Query().Get("state"))
 	require.NoError(t, err)
-	require.Equal(t, toolset.McpSlug.String, stored.Endpoint.McpSlug)
+	require.Equal(t, toolset.Slug, stored.Endpoint.McpSlug)
 	require.True(t, stored.Endpoint.CustomDomainID.Valid)
 	require.Equal(t, domain.ID, stored.Endpoint.CustomDomainID.UUID)
 }
@@ -91,6 +93,13 @@ func TestIDPCallback_StaticRouteResolvesToolsetFromChallengeState(t *testing.T) 
 	toolset, issuer := createPrivateIssuerGatedToolset(t, ctx, ti, authCtx, slug)
 	toolset, domain := attachCustomDomainToToolset(t, ctx, ti, authCtx, toolset, "idp-static-callback.example.com")
 
+	wrappers, err := mcpservers_repo.New(ti.conn).GetMCPServersByToolsetID(ctx, mcpservers_repo.GetMCPServersByToolsetIDParams{
+		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ProjectID: toolset.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, wrappers, 1)
+
 	_, authnCache := buildChallengeManagerForTest(t, ti)
 	stateID := uuid.NewString()
 	clientRedirectURI := "http://example.com/cb"
@@ -98,8 +107,9 @@ func TestIDPCallback_StaticRouteResolvesToolsetFromChallengeState(t *testing.T) 
 		ID:                  stateID,
 		UserSessionIssuerID: issuer.ID,
 		Endpoint: mcp.EndpointRef{
-			McpSlug:        toolset.McpSlug.String,
+			McpSlug:        toolset.Slug,
 			CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
+			McpServerID:    uuid.NullUUID{UUID: wrappers[0].ID, Valid: true},
 		},
 		ClientID:            "test-mcp-client",
 		RedirectURI:         clientRedirectURI,
@@ -136,12 +146,13 @@ func TestAuthorize_PublicToolset_IgnoresAmbientSessionCredentials(t *testing.T) 
 
 	slug := "auth-public-anon-" + uuid.New().String()[:8]
 	toolset, issuer := createPrivateIssuerGatedToolset(t, ctx, ti, authCtx, slug)
-	require.NoError(t, toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	}))
-	toolset.McpIsPublic = true
+	wrappers, err := mcpservers_repo.New(ti.conn).GetMCPServersByToolsetID(ctx, mcpservers_repo.GetMCPServersByToolsetIDParams{
+		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ProjectID: toolset.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, wrappers, 1)
+	setMcpServerVisibility(t, ctx, ti.conn, wrappers[0], mcpservers.VisibilityPublic)
 
 	clientID := "public-anon-client"
 	insertUserSessionClient(t, ctx, ti.conn, issuer.ID, clientID)
@@ -157,11 +168,11 @@ func TestAuthorize_PublicToolset_IgnoresAmbientSessionCredentials(t *testing.T) 
 	q.Set("state", "state-"+uuid.NewString()[:8])
 	q.Set("code_challenge", "challenge")
 	q.Set("code_challenge_method", "S256")
-	req := httptest.NewRequest(http.MethodGet, "/mcp/"+toolset.McpSlug.String+"/authorize?"+q.Encode(), nil)
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+toolset.Slug+"/authorize?"+q.Encode(), nil)
 
 	req.Header.Set("Authorization", "Bearer "+bearerUserToken)
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+	rctx.URLParams.Add("mcpSlug", toolset.Slug)
 	requestCtx := contextvalues.SetSessionTokenInContext(context.Background(), sessionToken)
 	req = req.WithContext(context.WithValue(requestCtx, chi.RouteCtxKey, rctx))
 
@@ -213,8 +224,6 @@ func createPrivateIssuerGatedToolset(
 		Slug:                   slug,
 		Description:            conv.ToPGText("A private issuer-gated MCP for auth testing"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText(slug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 
@@ -224,6 +233,10 @@ func createPrivateIssuerGatedToolset(
 		ProjectID:           toolset.ProjectID,
 	})
 	require.NoError(t, err)
+
+	// Publishing lives on the wrapper mcp_server/mcp_endpoint; the wrapper
+	// issuer stays NULL so auth resolves through the toolset issuer.
+	publishToolset(t, ctx, ti.conn, toolset, slug, mcpservers.VisibilityPrivate, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 
 	return toolset, issuer
 }

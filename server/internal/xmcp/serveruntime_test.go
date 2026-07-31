@@ -1318,8 +1318,6 @@ func TestServeMCP_CustomDomainMismatchReturns404(t *testing.T) {
 		Slug:                   toolsetSlug,
 		Description:            pgtype.Text{String: "custom domain mismatch test", Valid: true},
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: toolsetSlug, Valid: true},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 

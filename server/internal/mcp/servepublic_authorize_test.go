@@ -17,6 +17,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -30,7 +31,7 @@ func TestServePublic_AllowsUnauthenticatedAccessToPublicMCP(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	// Create a public toolset
+	// Create a toolset and publish it publicly
 	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
@@ -38,23 +39,10 @@ func TestServePublic_AllowsUnauthenticatedAccessToPublicMCP(t *testing.T) {
 		Slug:                   "public-unauth-mcp",
 		Description:            conv.ToPGText("A public MCP accessible without auth"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("public-unauth-mcp"),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 
-	// Make the toolset public
-	toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	publishToolset(t, ctx, ti.conn, toolset, toolset.Slug, mcpservers.VisibilityPublic, uuid.NullUUID{})
 
 	reqBody := map[string]any{
 		"jsonrpc": "2.0",
@@ -72,7 +60,7 @@ func TestServePublic_AllowsUnauthenticatedAccessToPublicMCP(t *testing.T) {
 	bodyBytes, err := json.Marshal(reqBody)
 	require.NoError(t, err)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(bodyBytes))
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
@@ -107,7 +95,7 @@ func TestServePublic_AllowsCrossOrgAccessToPublicMCP(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	// Create toolset in the original org
+	// Create toolset in the original org and publish it publicly
 	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
@@ -115,23 +103,10 @@ func TestServePublic_AllowsCrossOrgAccessToPublicMCP(t *testing.T) {
 		Slug:                   "public-cross-org-mcp",
 		Description:            conv.ToPGText("A public MCP accessible from other orgs"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("public-cross-org-mcp"),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 
-	// Make the toolset public
-	toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	publishToolset(t, ctx, ti.conn, toolset, toolset.Slug, mcpservers.VisibilityPublic, uuid.NullUUID{})
 
 	// Create a different organization
 	differentOrgID := uuid.New().String()
@@ -159,7 +134,7 @@ func TestServePublic_AllowsCrossOrgAccessToPublicMCP(t *testing.T) {
 	bodyBytes, err := json.Marshal(reqBody)
 	require.NoError(t, err)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(bodyBytes))
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
@@ -203,11 +178,10 @@ func TestServePublic_DeniesCrossOrgAccessToPrivateMCP(t *testing.T) {
 		Slug:                   "private-cross-org-mcp",
 		Description:            conv.ToPGText("A private MCP not accessible from other orgs"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("private-cross-org-mcp"),
-		McpEnabled:             true,
-		// McpIsPublic defaults to false
 	})
 	require.NoError(t, err)
+
+	publishToolset(t, ctx, ti.conn, toolset, toolset.Slug, mcpservers.VisibilityPrivate, uuid.NullUUID{})
 
 	// Create a different organization
 	differentOrgID := uuid.New().String()
@@ -227,7 +201,7 @@ func TestServePublic_DeniesCrossOrgAccessToPrivateMCP(t *testing.T) {
 	bodyBytes, err := json.Marshal(reqBody)
 	require.NoError(t, err)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(bodyBytes))
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
@@ -257,7 +231,7 @@ func TestServePublic_SameOrgAuthenticatedUserGetsFullAccess(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	// Create a public toolset with a default environment
+	// Create a toolset with a default environment and publish it publicly
 	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
@@ -265,23 +239,10 @@ func TestServePublic_SameOrgAuthenticatedUserGetsFullAccess(t *testing.T) {
 		Slug:                   "public-same-org-mcp",
 		Description:            conv.ToPGText("A public MCP for same-org test"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "production", Valid: true},
-		McpSlug:                conv.ToPGText("public-same-org-mcp"),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 
-	// Make the toolset public
-	toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	publishToolset(t, ctx, ti.conn, toolset, toolset.Slug, mcpservers.VisibilityPublic, uuid.NullUUID{})
 
 	reqBody := map[string]any{
 		"jsonrpc": "2.0",
@@ -299,7 +260,7 @@ func TestServePublic_SameOrgAuthenticatedUserGetsFullAccess(t *testing.T) {
 	bodyBytes, err := json.Marshal(reqBody)
 	require.NoError(t, err)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(bodyBytes))
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")

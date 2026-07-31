@@ -2,14 +2,9 @@ package mcp
 
 import (
 	"encoding/json"
-	"errors"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
-)
-
-var (
-	errToolsetNotFound = errors.New("toolset not found")
 )
 
 // ToolMode specifies whether tools should be loaded statically or dynamically.
@@ -89,12 +84,15 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		mcpEnvVariables:  m.McpEnvVariables,
 		oauthTokenInputs: oauthInputs,
 		authenticated:    m.Authenticated,
-		sessionID:        m.SessionID,
-		chatID:           m.ChatID,
-		mode:             m.Mode,
-		userID:           m.UserID,
-		externalUserID:   m.ExternalUserID,
-		apiKeyID:         m.APIKeyID,
+		// isPublic is resolved from the wrapper mcp_server by
+		// HandleToolsList / HandleToolsCall after conversion.
+		isPublic:       false,
+		sessionID:      m.SessionID,
+		chatID:         m.ChatID,
+		mode:           m.Mode,
+		userID:         m.UserID,
+		externalUserID: m.ExternalUserID,
+		apiKeyID:       m.APIKeyID,
 		// Internal clients (agent workflows) always use the project-default
 		// variation group, never filter by tag, and have no fronting
 		// mcp_servers row to record.

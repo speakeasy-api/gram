@@ -15,10 +15,10 @@ import { Stack } from "@/components/ui/Stack";
 import { Navigate, useLocation, useParams } from "react-router";
 import { activeTabFromPath, initialTabFromHash } from "./MCPDetailsRouting";
 
-// The /mcp/:toolsetSlug detail pages moved to the mcp_servers-backed details
-// route (/mcp/x/:serverSlug). This component keeps old bookmarks and in-app
-// links working by resolving the toolset slug to its wrapper server via the
-// servers list and redirecting to the matching tab.
+// A toolset's detail pages live on the mcp_servers-backed details route
+// (/mcp/x/:serverSlug). This component keeps /mcp/:toolsetSlug bookmarks and
+// in-app links working by resolving the toolset slug to its wrapper server
+// via the servers list and redirecting to the matching tab.
 export default function ToolsetDetailRedirect(): JSX.Element {
   const { toolsetSlug } = useParams<{ toolsetSlug: string }>();
   const location = useLocation();

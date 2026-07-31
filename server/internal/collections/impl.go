@@ -497,10 +497,10 @@ func (s *Service) DetachServer(ctx context.Context, payload *gen.DetachServerPay
 		return oops.E(oops.CodeUnexpected, err, "error accessing collection").LogError(ctx, s.logger)
 	}
 
-	// A toolset reference may be published under either key during the
-	// expand/contract swap: as a toolset-keyed attachment (direct mcp_slug
-	// publishing) or as a server-keyed attachment on its canonical wrapper.
-	// Detach resolves both so callers holding either identity fully unpublish.
+	// A toolset reference may be published under either key: as a
+	// toolset-keyed attachment or as a server-keyed attachment on its
+	// wrapper. Detach resolves both so callers holding either identity
+	// fully unpublish.
 	detachToolsetID := backend.toolsetID
 	detachMcpServerID := backend.mcpServerID
 	if backend.toolsetID.Valid {
@@ -618,14 +618,9 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing collection registry").LogError(ctx, s.logger)
 	}
 
-	toolsets, err := s.repo.ListOrganizationMcpCollectionServerAttachments(ctx, repo.ListOrganizationMcpCollectionServerAttachmentsParams{
-		CollectionID:   collection.ID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list collection servers").LogError(ctx, s.logger)
-	}
-
+	// Every published toolset resolves through its wrapper mcp_server, so
+	// server-keyed attachments fully cover wrapped toolsets (the attach path
+	// rekeys toolset-keyed rows in place on republish).
 	mcpServerRows, err := s.repo.ListOrganizationMcpCollectionMcpServerAttachments(ctx, repo.ListOrganizationMcpCollectionMcpServerAttachmentsParams{
 		CollectionID:   collection.ID,
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -637,54 +632,7 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 	collectionRegistryIDStr := registry.ID.String()
 	mcpMetaRepo := mcpmetadataRepo.New(s.db)
 
-	// Toolset-backed and mcp_server-backed attachments are listed independently
-	// (Option A) and merged into one published_at DESC stream so a collection
-	// that mixes both backends presents a single stable ordering.
-	entries := make([]collectionServerEntry, 0, len(toolsets)+len(mcpServerRows))
-	for _, t := range toolsets {
-		if !t.McpSlug.Valid {
-			continue
-		}
-
-		remoteURL := s.serverURL.JoinPath("mcp", t.McpSlug.String).String()
-		wrapperID := uuid.NullUUID{UUID: t.WrapperMcpServerID, Valid: t.WrapperMcpServerID != uuid.Nil}
-		remoteHeaders, err := s.collectionRemoteHeaders(ctx, mcpMetaRepo, wrapperID, uuid.NullUUID{UUID: t.ID, Valid: true}, t.McpIsPublic)
-		if err != nil {
-			return nil, err
-		}
-		desc := ""
-		if t.Description.Valid {
-			desc = t.Description.String
-		}
-		specifier := t.McpSlug.String
-		if registry.Namespace != "" {
-			specifier = path.Join(registry.Namespace, t.McpSlug.String)
-		}
-		toolsetID := t.ID.String()
-		entries = append(entries, collectionServerEntry{
-			publishedAt: t.PublishedAt.Time,
-			tiebreak:    toolsetID,
-			server: &types.ExternalMCPServer{
-				RegistrySpecifier:                   specifier,
-				Version:                             "1.0.0",
-				Description:                         desc,
-				ToolsetID:                           &toolsetID,
-				McpServerID:                         nil,
-				RegistryID:                          nil,
-				OrganizationMcpCollectionRegistryID: &collectionRegistryIDStr,
-				Title:                               &t.Name,
-				IconURL:                             nil,
-				Meta:                                nil,
-				Tools:                               nil,
-				Remotes: []*types.ExternalMCPRemote{{
-					URL:           remoteURL,
-					TransportType: "streamable-http",
-					Headers:       remoteHeaders,
-				}},
-			},
-		})
-	}
-
+	entries := make([]collectionServerEntry, 0, len(mcpServerRows))
 	for _, m := range mcpServerRows {
 		// Custom-domain endpoints are served from the domain host; platform
 		// endpoints from the Gram server URL. The query already resolved the
@@ -711,7 +659,7 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 		// client to collect. A toolset-backed server publishes with toolset
 		// semantics instead: visibility drives the Gram key/environment
 		// headers and user env configs come from its (server- or
-		// toolset-keyed) metadata, matching the toolset-keyed branch above.
+		// toolset-keyed) metadata.
 		description := ""
 		var toolsetID *string
 		remoteHeaders := []*types.ExternalMCPRemoteHeader{}
@@ -777,8 +725,8 @@ type collectionServerEntry struct {
 
 // collectionRemoteHeaders derives the client-facing headers for a published
 // toolset (or its wrapper mcp_server). Metadata is read server-keyed first
-// when a wrapper id is known, then toolset-keyed — both keys are live during
-// the expand/contract publishing swap.
+// when a wrapper id is known, then toolset-keyed — both key shapes are valid
+// addresses for a toolset-backed server's metadata.
 func (s *Service) collectionRemoteHeaders(ctx context.Context, mcpMetaRepo *mcpmetadataRepo.Queries, mcpServerID, toolsetID uuid.NullUUID, mcpIsPublic bool) ([]*types.ExternalMCPRemoteHeader, error) {
 	headers := make([]*types.ExternalMCPRemoteHeader, 0)
 
@@ -921,36 +869,18 @@ func (s *Service) attachServerToCollection(ctx context.Context, queries *repo.Qu
 		return oops.E(oops.CodeUnexpected, err, "error accessing toolset").LogError(ctx, s.logger)
 	}
 
-	// A toolset with a canonical wrapper publishes through mcp_servers now:
-	// resolve the reference and write a server-keyed attachment so new
-	// publishes stop re-creating toolset-keyed rows.
+	// A toolset publishes through its wrapper mcp_server: resolve the
+	// reference and write a server-keyed attachment. A toolset without a
+	// wrapper has no serving address and cannot be attached.
 	wrapperID, err := s.resolveToolsetWrapper(ctx, toolsetID, toolset.ProjectID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "resolve toolset wrapper mcp server").LogError(ctx, s.logger)
 	}
-	if wrapperID.Valid {
-		return s.attachWrappedToolsetToCollection(ctx, queries, collectionID, toolsetID, wrapperID.UUID, organizationID, userID)
-	}
-
-	if !toolset.McpEnabled || !toolset.McpSlug.Valid {
+	if !wrapperID.Valid {
 		return oops.E(oops.CodeInvalid, nil, "cannot attach a toolset that is not enabled as an MCP server").LogError(ctx, s.logger)
 	}
 
-	_, err = queries.AttachServerToOrganizationMcpCollection(ctx, repo.AttachServerToOrganizationMcpCollectionParams{
-		CollectionID:   collectionID,
-		OrganizationID: organizationID,
-		ToolsetID:      uuid.NullUUID{UUID: toolsetID, Valid: true},
-		PublishedBy:    conv.PtrToPGTextEmpty(&userID),
-	})
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return oops.E(oops.CodeConflict, err, "toolset already attached to collection").LogError(ctx, s.logger)
-		}
-		return oops.E(oops.CodeUnexpected, err, "failed to attach server to collection").LogError(ctx, s.logger)
-	}
-
-	return nil
+	return s.attachWrappedToolsetToCollection(ctx, queries, collectionID, toolsetID, wrapperID.UUID, organizationID, userID)
 }
 
 // resolveToolsetWrapper returns the toolset's canonical wrapper: its single

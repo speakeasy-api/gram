@@ -48,17 +48,17 @@ type UpdateToolsetRequestBody struct {
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
 	// List of resource URNs to include in the toolset
 	ResourceUrns []string `form:"resource_urns,omitempty" json:"resource_urns,omitempty" xml:"resource_urns,omitempty"`
-	// Deprecated: manage availability through the mcpServers API (visibility).
-	// Only accepted for toolsets that predate MCP servers.
+	// Deprecated: no longer accepted; setting it fails the request. Manage
+	// availability through the mcpServers API (visibility).
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
-	// Deprecated: manage addressing through the mcpEndpoints API. Only accepted
-	// for toolsets that predate MCP servers.
+	// Deprecated: no longer accepted; setting it fails the request. Manage
+	// addressing through the mcpEndpoints API.
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
-	// Deprecated: manage visibility through the mcpServers API. Only accepted for
-	// toolsets that predate MCP servers.
+	// Deprecated: no longer accepted; setting it fails the request. Manage
+	// visibility through the mcpServers API.
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
-	// Deprecated: manage custom-domain addressing through the mcpEndpoints API.
-	// Only accepted for toolsets that predate MCP servers.
+	// Deprecated: no longer accepted; setting it fails the request. Manage
+	// custom-domain addressing through the mcpEndpoints API.
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
@@ -141,18 +141,16 @@ type CreateToolsetResponseBody struct {
 	// The prompt templates in this toolset -- Note: these are actual prompts, as
 	// in MCP prompts
 	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
-	// The slug of the MCP to use for the toolset
-	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
-	// Whether the toolset is public in MCP
-	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
-	// Whether the toolset is enabled for MCP
-	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
-	// The ID of the custom domain to use for the toolset
-	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
+	// The public slug of the MCP server endpoint that serves this toolset; absent
+	// when the toolset is not published
+	McpEndpointSlug *string `form:"mcp_endpoint_slug,omitempty" json:"mcp_endpoint_slug,omitempty" xml:"mcp_endpoint_slug,omitempty"`
+	// The custom domain that serves the toolset's MCP endpoint; absent for
+	// platform-domain endpoints
+	McpEndpointDomain *string `form:"mcp_endpoint_domain,omitempty" json:"mcp_endpoint_domain,omitempty" xml:"mcp_endpoint_domain,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -229,18 +227,16 @@ type UpdateToolsetResponseBody struct {
 	// The prompt templates in this toolset -- Note: these are actual prompts, as
 	// in MCP prompts
 	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
-	// The slug of the MCP to use for the toolset
-	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
-	// Whether the toolset is public in MCP
-	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
-	// Whether the toolset is enabled for MCP
-	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
-	// The ID of the custom domain to use for the toolset
-	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
+	// The public slug of the MCP server endpoint that serves this toolset; absent
+	// when the toolset is not published
+	McpEndpointSlug *string `form:"mcp_endpoint_slug,omitempty" json:"mcp_endpoint_slug,omitempty" xml:"mcp_endpoint_slug,omitempty"`
+	// The custom domain that serves the toolset's MCP endpoint; absent for
+	// platform-domain endpoints
+	McpEndpointDomain *string `form:"mcp_endpoint_domain,omitempty" json:"mcp_endpoint_domain,omitempty" xml:"mcp_endpoint_domain,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -303,18 +299,16 @@ type GetToolsetResponseBody struct {
 	// The prompt templates in this toolset -- Note: these are actual prompts, as
 	// in MCP prompts
 	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
-	// The slug of the MCP to use for the toolset
-	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
-	// Whether the toolset is public in MCP
-	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
-	// Whether the toolset is enabled for MCP
-	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
-	// The ID of the custom domain to use for the toolset
-	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
+	// The public slug of the MCP server endpoint that serves this toolset; absent
+	// when the toolset is not published
+	McpEndpointSlug *string `form:"mcp_endpoint_slug,omitempty" json:"mcp_endpoint_slug,omitempty" xml:"mcp_endpoint_slug,omitempty"`
+	// The custom domain that serves the toolset's MCP endpoint; absent for
+	// platform-domain endpoints
+	McpEndpointDomain *string `form:"mcp_endpoint_domain,omitempty" json:"mcp_endpoint_domain,omitempty" xml:"mcp_endpoint_domain,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -397,18 +391,16 @@ type CloneToolsetResponseBody struct {
 	// The prompt templates in this toolset -- Note: these are actual prompts, as
 	// in MCP prompts
 	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
-	// The slug of the MCP to use for the toolset
-	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
-	// Whether the toolset is public in MCP
-	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
-	// Whether the toolset is enabled for MCP
-	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
-	// The ID of the custom domain to use for the toolset
-	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
+	// The public slug of the MCP server endpoint that serves this toolset; absent
+	// when the toolset is not published
+	McpEndpointSlug *string `form:"mcp_endpoint_slug,omitempty" json:"mcp_endpoint_slug,omitempty" xml:"mcp_endpoint_slug,omitempty"`
+	// The custom domain that serves the toolset's MCP endpoint; absent for
+	// platform-domain endpoints
+	McpEndpointDomain *string `form:"mcp_endpoint_domain,omitempty" json:"mcp_endpoint_domain,omitempty" xml:"mcp_endpoint_domain,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -471,18 +463,16 @@ type AddExternalOAuthServerResponseBody struct {
 	// The prompt templates in this toolset -- Note: these are actual prompts, as
 	// in MCP prompts
 	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
-	// The slug of the MCP to use for the toolset
-	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
-	// Whether the toolset is public in MCP
-	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
-	// Whether the toolset is enabled for MCP
-	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
-	// The ID of the custom domain to use for the toolset
-	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
+	// The public slug of the MCP server endpoint that serves this toolset; absent
+	// when the toolset is not published
+	McpEndpointSlug *string `form:"mcp_endpoint_slug,omitempty" json:"mcp_endpoint_slug,omitempty" xml:"mcp_endpoint_slug,omitempty"`
+	// The custom domain that serves the toolset's MCP endpoint; absent for
+	// platform-domain endpoints
+	McpEndpointDomain *string `form:"mcp_endpoint_domain,omitempty" json:"mcp_endpoint_domain,omitempty" xml:"mcp_endpoint_domain,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -545,18 +535,16 @@ type RemoveOAuthServerResponseBody struct {
 	// The prompt templates in this toolset -- Note: these are actual prompts, as
 	// in MCP prompts
 	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
-	// The slug of the MCP to use for the toolset
-	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
-	// Whether the toolset is public in MCP
-	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
-	// Whether the toolset is enabled for MCP
-	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
-	// The ID of the custom domain to use for the toolset
-	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
+	// The public slug of the MCP server endpoint that serves this toolset; absent
+	// when the toolset is not published
+	McpEndpointSlug *string `form:"mcp_endpoint_slug,omitempty" json:"mcp_endpoint_slug,omitempty" xml:"mcp_endpoint_slug,omitempty"`
+	// The custom domain that serves the toolset's MCP endpoint; absent for
+	// platform-domain endpoints
+	McpEndpointDomain *string `form:"mcp_endpoint_domain,omitempty" json:"mcp_endpoint_domain,omitempty" xml:"mcp_endpoint_domain,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -619,18 +607,16 @@ type AddOAuthProxyServerResponseBody struct {
 	// The prompt templates in this toolset -- Note: these are actual prompts, as
 	// in MCP prompts
 	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
-	// The slug of the MCP to use for the toolset
-	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
-	// Whether the toolset is public in MCP
-	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
-	// Whether the toolset is enabled for MCP
-	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
-	// The ID of the custom domain to use for the toolset
-	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
+	// The public slug of the MCP server endpoint that serves this toolset; absent
+	// when the toolset is not published
+	McpEndpointSlug *string `form:"mcp_endpoint_slug,omitempty" json:"mcp_endpoint_slug,omitempty" xml:"mcp_endpoint_slug,omitempty"`
+	// The custom domain that serves the toolset's MCP endpoint; absent for
+	// platform-domain endpoints
+	McpEndpointDomain *string `form:"mcp_endpoint_domain,omitempty" json:"mcp_endpoint_domain,omitempty" xml:"mcp_endpoint_domain,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -693,18 +679,16 @@ type UpdateOAuthProxyServerResponseBody struct {
 	// The prompt templates in this toolset -- Note: these are actual prompts, as
 	// in MCP prompts
 	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
-	// The slug of the MCP to use for the toolset
-	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
-	// Whether the toolset is public in MCP
-	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
-	// Whether the toolset is enabled for MCP
-	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
-	// The ID of the custom domain to use for the toolset
-	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
+	// The public slug of the MCP server endpoint that serves this toolset; absent
+	// when the toolset is not published
+	McpEndpointSlug *string `form:"mcp_endpoint_slug,omitempty" json:"mcp_endpoint_slug,omitempty" xml:"mcp_endpoint_slug,omitempty"`
+	// The custom domain that serves the toolset's MCP endpoint; absent for
+	// platform-domain endpoints
+	McpEndpointDomain *string `form:"mcp_endpoint_domain,omitempty" json:"mcp_endpoint_domain,omitempty" xml:"mcp_endpoint_domain,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -767,18 +751,16 @@ type SetUserSessionIssuerResponseBody struct {
 	// The prompt templates in this toolset -- Note: these are actual prompts, as
 	// in MCP prompts
 	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
-	// The slug of the MCP to use for the toolset
-	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
-	// Whether the toolset is public in MCP
-	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
-	// Whether the toolset is enabled for MCP
-	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
-	// The ID of the custom domain to use for the toolset
-	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
+	// The public slug of the MCP server endpoint that serves this toolset; absent
+	// when the toolset is not published
+	McpEndpointSlug *string `form:"mcp_endpoint_slug,omitempty" json:"mcp_endpoint_slug,omitempty" xml:"mcp_endpoint_slug,omitempty"`
+	// The custom domain that serves the toolset's MCP endpoint; absent for
+	// platform-domain endpoints
+	McpEndpointDomain *string `form:"mcp_endpoint_domain,omitempty" json:"mcp_endpoint_domain,omitempty" xml:"mcp_endpoint_domain,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -841,18 +823,16 @@ type SetToolVariationsGroupResponseBody struct {
 	// The prompt templates in this toolset -- Note: these are actual prompts, as
 	// in MCP prompts
 	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
-	// The slug of the MCP to use for the toolset
-	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
-	// Whether the toolset is public in MCP
-	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
-	// Whether the toolset is enabled for MCP
-	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
-	// The ID of the custom domain to use for the toolset
-	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
+	// The public slug of the MCP server endpoint that serves this toolset; absent
+	// when the toolset is not published
+	McpEndpointSlug *string `form:"mcp_endpoint_slug,omitempty" json:"mcp_endpoint_slug,omitempty" xml:"mcp_endpoint_slug,omitempty"`
+	// The custom domain that serves the toolset's MCP endpoint; absent for
+	// platform-domain endpoints
+	McpEndpointDomain *string `form:"mcp_endpoint_domain,omitempty" json:"mcp_endpoint_domain,omitempty" xml:"mcp_endpoint_domain,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
@@ -4246,16 +4226,8 @@ type ToolsetEntryResponseBody struct {
 	// The prompt templates in this toolset -- Note: these are actual prompts, as
 	// in MCP prompts
 	PromptTemplates []*PromptTemplateEntryResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
-	// The slug of the MCP to use for the toolset
-	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
-	// Whether the toolset is public in MCP
-	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
-	// Whether the toolset is enabled for MCP
-	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
-	// The ID of the custom domain to use for the toolset
-	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// When the toolset was created.
@@ -4317,12 +4289,6 @@ type ToolsetSummaryResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// The slug of the environment to use as the default for the toolset
 	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
-	// The slug of the MCP to use for the toolset
-	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
-	// Whether the toolset is enabled for MCP
-	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
-	// Whether the toolset is public in MCP
-	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The tools in this toolset
@@ -4417,10 +4383,8 @@ func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody
 		Slug:                  string(res.Slug),
 		Description:           res.Description,
 		ToolsetVersion:        res.ToolsetVersion,
-		McpIsPublic:           res.McpIsPublic,
-		McpEnabled:            res.McpEnabled,
 		ToolSelectionMode:     res.ToolSelectionMode,
-		CustomDomainID:        res.CustomDomainID,
+		McpEndpointDomain:     res.McpEndpointDomain,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		ToolVariationsGroupID: res.ToolVariationsGroupID,
 		CreatedAt:             res.CreatedAt,
@@ -4430,9 +4394,9 @@ func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
 		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
-	if res.McpSlug != nil {
-		mcpSlug := string(*res.McpSlug)
-		body.McpSlug = &mcpSlug
+	if res.McpEndpointSlug != nil {
+		mcpEndpointSlug := string(*res.McpEndpointSlug)
+		body.McpEndpointSlug = &mcpEndpointSlug
 	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
@@ -4595,10 +4559,8 @@ func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody
 		Slug:                  string(res.Slug),
 		Description:           res.Description,
 		ToolsetVersion:        res.ToolsetVersion,
-		McpIsPublic:           res.McpIsPublic,
-		McpEnabled:            res.McpEnabled,
 		ToolSelectionMode:     res.ToolSelectionMode,
-		CustomDomainID:        res.CustomDomainID,
+		McpEndpointDomain:     res.McpEndpointDomain,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		ToolVariationsGroupID: res.ToolVariationsGroupID,
 		CreatedAt:             res.CreatedAt,
@@ -4608,9 +4570,9 @@ func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
 		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
-	if res.McpSlug != nil {
-		mcpSlug := string(*res.McpSlug)
-		body.McpSlug = &mcpSlug
+	if res.McpEndpointSlug != nil {
+		mcpEndpointSlug := string(*res.McpEndpointSlug)
+		body.McpEndpointSlug = &mcpEndpointSlug
 	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
@@ -4735,10 +4697,8 @@ func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 		Slug:                  string(res.Slug),
 		Description:           res.Description,
 		ToolsetVersion:        res.ToolsetVersion,
-		McpIsPublic:           res.McpIsPublic,
-		McpEnabled:            res.McpEnabled,
 		ToolSelectionMode:     res.ToolSelectionMode,
-		CustomDomainID:        res.CustomDomainID,
+		McpEndpointDomain:     res.McpEndpointDomain,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		ToolVariationsGroupID: res.ToolVariationsGroupID,
 		CreatedAt:             res.CreatedAt,
@@ -4748,9 +4708,9 @@ func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
 		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
-	if res.McpSlug != nil {
-		mcpSlug := string(*res.McpSlug)
-		body.McpSlug = &mcpSlug
+	if res.McpEndpointSlug != nil {
+		mcpEndpointSlug := string(*res.McpEndpointSlug)
+		body.McpEndpointSlug = &mcpEndpointSlug
 	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
@@ -4910,10 +4870,8 @@ func NewCloneToolsetResponseBody(res *types.Toolset) *CloneToolsetResponseBody {
 		Slug:                  string(res.Slug),
 		Description:           res.Description,
 		ToolsetVersion:        res.ToolsetVersion,
-		McpIsPublic:           res.McpIsPublic,
-		McpEnabled:            res.McpEnabled,
 		ToolSelectionMode:     res.ToolSelectionMode,
-		CustomDomainID:        res.CustomDomainID,
+		McpEndpointDomain:     res.McpEndpointDomain,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		ToolVariationsGroupID: res.ToolVariationsGroupID,
 		CreatedAt:             res.CreatedAt,
@@ -4923,9 +4881,9 @@ func NewCloneToolsetResponseBody(res *types.Toolset) *CloneToolsetResponseBody {
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
 		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
-	if res.McpSlug != nil {
-		mcpSlug := string(*res.McpSlug)
-		body.McpSlug = &mcpSlug
+	if res.McpEndpointSlug != nil {
+		mcpEndpointSlug := string(*res.McpEndpointSlug)
+		body.McpEndpointSlug = &mcpEndpointSlug
 	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
@@ -5050,10 +5008,8 @@ func NewAddExternalOAuthServerResponseBody(res *types.Toolset) *AddExternalOAuth
 		Slug:                  string(res.Slug),
 		Description:           res.Description,
 		ToolsetVersion:        res.ToolsetVersion,
-		McpIsPublic:           res.McpIsPublic,
-		McpEnabled:            res.McpEnabled,
 		ToolSelectionMode:     res.ToolSelectionMode,
-		CustomDomainID:        res.CustomDomainID,
+		McpEndpointDomain:     res.McpEndpointDomain,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		ToolVariationsGroupID: res.ToolVariationsGroupID,
 		CreatedAt:             res.CreatedAt,
@@ -5063,9 +5019,9 @@ func NewAddExternalOAuthServerResponseBody(res *types.Toolset) *AddExternalOAuth
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
 		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
-	if res.McpSlug != nil {
-		mcpSlug := string(*res.McpSlug)
-		body.McpSlug = &mcpSlug
+	if res.McpEndpointSlug != nil {
+		mcpEndpointSlug := string(*res.McpEndpointSlug)
+		body.McpEndpointSlug = &mcpEndpointSlug
 	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
@@ -5190,10 +5146,8 @@ func NewRemoveOAuthServerResponseBody(res *types.Toolset) *RemoveOAuthServerResp
 		Slug:                  string(res.Slug),
 		Description:           res.Description,
 		ToolsetVersion:        res.ToolsetVersion,
-		McpIsPublic:           res.McpIsPublic,
-		McpEnabled:            res.McpEnabled,
 		ToolSelectionMode:     res.ToolSelectionMode,
-		CustomDomainID:        res.CustomDomainID,
+		McpEndpointDomain:     res.McpEndpointDomain,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		ToolVariationsGroupID: res.ToolVariationsGroupID,
 		CreatedAt:             res.CreatedAt,
@@ -5203,9 +5157,9 @@ func NewRemoveOAuthServerResponseBody(res *types.Toolset) *RemoveOAuthServerResp
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
 		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
-	if res.McpSlug != nil {
-		mcpSlug := string(*res.McpSlug)
-		body.McpSlug = &mcpSlug
+	if res.McpEndpointSlug != nil {
+		mcpEndpointSlug := string(*res.McpEndpointSlug)
+		body.McpEndpointSlug = &mcpEndpointSlug
 	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
@@ -5330,10 +5284,8 @@ func NewAddOAuthProxyServerResponseBody(res *types.Toolset) *AddOAuthProxyServer
 		Slug:                  string(res.Slug),
 		Description:           res.Description,
 		ToolsetVersion:        res.ToolsetVersion,
-		McpIsPublic:           res.McpIsPublic,
-		McpEnabled:            res.McpEnabled,
 		ToolSelectionMode:     res.ToolSelectionMode,
-		CustomDomainID:        res.CustomDomainID,
+		McpEndpointDomain:     res.McpEndpointDomain,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		ToolVariationsGroupID: res.ToolVariationsGroupID,
 		CreatedAt:             res.CreatedAt,
@@ -5343,9 +5295,9 @@ func NewAddOAuthProxyServerResponseBody(res *types.Toolset) *AddOAuthProxyServer
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
 		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
-	if res.McpSlug != nil {
-		mcpSlug := string(*res.McpSlug)
-		body.McpSlug = &mcpSlug
+	if res.McpEndpointSlug != nil {
+		mcpEndpointSlug := string(*res.McpEndpointSlug)
+		body.McpEndpointSlug = &mcpEndpointSlug
 	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
@@ -5470,10 +5422,8 @@ func NewUpdateOAuthProxyServerResponseBody(res *types.Toolset) *UpdateOAuthProxy
 		Slug:                  string(res.Slug),
 		Description:           res.Description,
 		ToolsetVersion:        res.ToolsetVersion,
-		McpIsPublic:           res.McpIsPublic,
-		McpEnabled:            res.McpEnabled,
 		ToolSelectionMode:     res.ToolSelectionMode,
-		CustomDomainID:        res.CustomDomainID,
+		McpEndpointDomain:     res.McpEndpointDomain,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		ToolVariationsGroupID: res.ToolVariationsGroupID,
 		CreatedAt:             res.CreatedAt,
@@ -5483,9 +5433,9 @@ func NewUpdateOAuthProxyServerResponseBody(res *types.Toolset) *UpdateOAuthProxy
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
 		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
-	if res.McpSlug != nil {
-		mcpSlug := string(*res.McpSlug)
-		body.McpSlug = &mcpSlug
+	if res.McpEndpointSlug != nil {
+		mcpEndpointSlug := string(*res.McpEndpointSlug)
+		body.McpEndpointSlug = &mcpEndpointSlug
 	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
@@ -5610,10 +5560,8 @@ func NewSetUserSessionIssuerResponseBody(res *types.Toolset) *SetUserSessionIssu
 		Slug:                  string(res.Slug),
 		Description:           res.Description,
 		ToolsetVersion:        res.ToolsetVersion,
-		McpIsPublic:           res.McpIsPublic,
-		McpEnabled:            res.McpEnabled,
 		ToolSelectionMode:     res.ToolSelectionMode,
-		CustomDomainID:        res.CustomDomainID,
+		McpEndpointDomain:     res.McpEndpointDomain,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		ToolVariationsGroupID: res.ToolVariationsGroupID,
 		CreatedAt:             res.CreatedAt,
@@ -5623,9 +5571,9 @@ func NewSetUserSessionIssuerResponseBody(res *types.Toolset) *SetUserSessionIssu
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
 		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
-	if res.McpSlug != nil {
-		mcpSlug := string(*res.McpSlug)
-		body.McpSlug = &mcpSlug
+	if res.McpEndpointSlug != nil {
+		mcpEndpointSlug := string(*res.McpEndpointSlug)
+		body.McpEndpointSlug = &mcpEndpointSlug
 	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
@@ -5750,10 +5698,8 @@ func NewSetToolVariationsGroupResponseBody(res *types.Toolset) *SetToolVariation
 		Slug:                  string(res.Slug),
 		Description:           res.Description,
 		ToolsetVersion:        res.ToolsetVersion,
-		McpIsPublic:           res.McpIsPublic,
-		McpEnabled:            res.McpEnabled,
 		ToolSelectionMode:     res.ToolSelectionMode,
-		CustomDomainID:        res.CustomDomainID,
+		McpEndpointDomain:     res.McpEndpointDomain,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		ToolVariationsGroupID: res.ToolVariationsGroupID,
 		CreatedAt:             res.CreatedAt,
@@ -5763,9 +5709,9 @@ func NewSetToolVariationsGroupResponseBody(res *types.Toolset) *SetToolVariation
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
 		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
 	}
-	if res.McpSlug != nil {
-		mcpSlug := string(*res.McpSlug)
-		body.McpSlug = &mcpSlug
+	if res.McpEndpointSlug != nil {
+		mcpEndpointSlug := string(*res.McpEndpointSlug)
+		body.McpEndpointSlug = &mcpEndpointSlug
 	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)

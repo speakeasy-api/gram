@@ -7,7 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type UpdateToolsetRequestBody = {
   /**
-   * Deprecated: manage custom-domain addressing through the mcpEndpoints API. Only accepted for toolsets that predate MCP servers.
+   * Deprecated: no longer accepted; setting it fails the request. Manage custom-domain addressing through the mcpEndpoints API.
    */
   customDomainId?: string | undefined;
   /**
@@ -19,15 +19,15 @@ export type UpdateToolsetRequestBody = {
    */
   description?: string | undefined;
   /**
-   * Deprecated: manage availability through the mcpServers API (visibility). Only accepted for toolsets that predate MCP servers.
+   * Deprecated: no longer accepted; setting it fails the request. Manage availability through the mcpServers API (visibility).
    */
   mcpEnabled?: boolean | undefined;
   /**
-   * Deprecated: manage visibility through the mcpServers API. Only accepted for toolsets that predate MCP servers.
+   * Deprecated: no longer accepted; setting it fails the request. Manage visibility through the mcpServers API.
    */
   mcpIsPublic?: boolean | undefined;
   /**
-   * Deprecated: manage addressing through the mcpEndpoints API. Only accepted for toolsets that predate MCP servers.
+   * Deprecated: no longer accepted; setting it fails the request. Manage addressing through the mcpEndpoints API.
    */
   mcpSlug?: string | undefined;
   /**

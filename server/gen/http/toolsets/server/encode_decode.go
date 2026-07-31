@@ -4206,20 +4206,13 @@ func marshalTypesToolsetEntryToToolsetEntryResponseBody(v *types.ToolsetEntry) *
 		Name:              v.Name,
 		Slug:              string(v.Slug),
 		Description:       v.Description,
-		McpIsPublic:       v.McpIsPublic,
-		McpEnabled:        v.McpEnabled,
 		ToolSelectionMode: v.ToolSelectionMode,
-		CustomDomainID:    v.CustomDomainID,
 		CreatedAt:         v.CreatedAt,
 		UpdatedAt:         v.UpdatedAt,
 	}
 	if v.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := string(*v.DefaultEnvironmentSlug)
 		res.DefaultEnvironmentSlug = &defaultEnvironmentSlug
-	}
-	if v.McpSlug != nil {
-		mcpSlug := string(*v.McpSlug)
-		res.McpSlug = &mcpSlug
 	}
 	if v.SecurityVariables != nil {
 		res.SecurityVariables = make([]*SecurityVariableResponseBody, len(v.SecurityVariables))
@@ -4373,8 +4366,6 @@ func marshalTypesToolsetSummaryToToolsetSummaryResponseBody(v *types.ToolsetSumm
 		OrganizationID:    v.OrganizationID,
 		Name:              v.Name,
 		Slug:              string(v.Slug),
-		McpEnabled:        v.McpEnabled,
-		McpIsPublic:       v.McpIsPublic,
 		ToolSelectionMode: v.ToolSelectionMode,
 		CreatedAt:         v.CreatedAt,
 		UpdatedAt:         v.UpdatedAt,
@@ -4382,10 +4373,6 @@ func marshalTypesToolsetSummaryToToolsetSummaryResponseBody(v *types.ToolsetSumm
 	if v.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := string(*v.DefaultEnvironmentSlug)
 		res.DefaultEnvironmentSlug = &defaultEnvironmentSlug
-	}
-	if v.McpSlug != nil {
-		mcpSlug := string(*v.McpSlug)
-		res.McpSlug = &mcpSlug
 	}
 	if v.Tools != nil {
 		res.Tools = make([]*ToolEntryResponseBody, len(v.Tools))

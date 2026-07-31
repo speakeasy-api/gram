@@ -1,8 +1,8 @@
 -- name: GetEnabledServerCount :one
 -- Counts the organization's available MCP servers. mcp_servers visibility is
--- the canonical publishing state; toolsets that still carry pre-swap
--- publishing columns are mirrored onto wrapper rows, so counting servers
--- covers both generations without double counting.
+-- the canonical publishing state; every published toolset is represented by
+-- its wrapper row, so counting servers covers all backends without double
+-- counting.
 SELECT COUNT(*)
 FROM mcp_servers s
 JOIN projects p ON p.id = s.project_id

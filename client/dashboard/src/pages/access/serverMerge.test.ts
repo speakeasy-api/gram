@@ -13,8 +13,7 @@ import {
 const toolsetServer = (id: string, name = `toolset ${id}`): Server => ({
   id,
   name,
-  slug: `host/mcp/${id}`,
-  mcpSlug: id,
+  slug: id,
   tools: [{ id: `${id}-tool`, name: "do_thing", type: "http" }],
   dynamicTools: false,
   remoteBacked: false,
@@ -131,7 +130,6 @@ describe("mergeMcpServersIntoGroups", () => {
         id: "ts-9",
         name: "Zero Tools",
         slug: "",
-        mcpSlug: undefined,
         tools: [],
         dynamicTools: false,
         remoteBacked: false,

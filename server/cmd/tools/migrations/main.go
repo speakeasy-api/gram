@@ -7,9 +7,6 @@
 //   - riskfindingscols: backfills the message_created_at and assistant_id
 //     columns onto existing risk_findings rows via ClickHouse mutations (see
 //     RISKFINDINGS_COLS_MIGRATION.md).
-//   - wraptoolsets: a Postgres-only migration that wraps toolsets publishing
-//     directly through toolsets.mcp_slug in toolset-backed mcp_servers and
-//     mcp_endpoints rows (see WRAPTOOLSETS.md).
 //
 // It is an offline operator tool, run by hand against production reached
 // through Cloud SQL Auth Proxy and a ClickHouse tunnel:
@@ -104,11 +101,9 @@ func run() int {
 		return runRiskFindings(args)
 	case "riskfindingscols":
 		return runRiskFindingsCols(args)
-	case "wraptoolsets":
-		return runWrapToolsets(args)
 	default:
 		// The unrecognized name is deliberately not echoed (log injection).
-		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, wraptoolsets)")
+		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols)")
 		return 2
 	}
 }

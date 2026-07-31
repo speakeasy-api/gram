@@ -1304,12 +1304,7 @@ func TestPluginsService_PublishPlugins_PublicToolsetEnvConfigs(t *testing.T) {
 
 	// Create a toolset and make it public.
 	toolset := createTestToolset(t, ctx, ti.conn, "public-toolset")
-	err = toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	setToolsetWrapperVisibility(t, ctx, ti.conn, toolset, "public")
 
 	// Create MCP metadata + environment config for the public toolset.
 	mcpRepo := mcpmetarepo.New(ti.conn)
@@ -1386,12 +1381,7 @@ func TestPluginsService_PublishPlugins_SkipsUserEnvConfigsWithoutHeaderName(t *t
 	require.NoError(t, err)
 
 	toolset := createTestToolset(t, ctx, ti.conn, "headerless-toolset")
-	err = toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	setToolsetWrapperVisibility(t, ctx, ti.conn, toolset, "public")
 
 	mcpRepo := mcpmetarepo.New(ti.conn)
 	metadata, err := mcpRepo.UpsertMetadata(ctx, mcpmetarepo.UpsertMetadataParams{
@@ -1459,9 +1449,9 @@ func TestPluginsService_PublishPlugins_SkipsUserEnvConfigsWithoutHeaderName(t *t
 	}
 }
 
-// AddPluginServer rejects toolsets without mcp_enabled, but mcp can be
-// disabled later without removing the persisted mcp_slug. The publish path
-// must filter those out so generated configs don't reference dead URLs.
+// AddPluginServer rejects toolsets without a live wrapper mcp_server, but
+// the wrapper can be disabled after attach. The publish path must filter
+// those out so generated configs don't reference dead URLs.
 func TestPluginsService_PublishPlugins_SkipsDisabledMCPToolsets(t *testing.T) {
 	t.Parallel()
 
@@ -1485,13 +1475,8 @@ func TestPluginsService_PublishPlugins_SkipsDisabledMCPToolsets(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Disable MCP after the server was added (slug stays persisted).
-	err = toolsetsrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{
-		McpEnabled: false,
-		ID:         disabled.ID,
-		ProjectID:  disabled.ProjectID,
-	})
-	require.NoError(t, err)
+	// Disable the wrapper after the server was added (endpoint stays).
+	setToolsetWrapperVisibility(t, ctx, ti.conn, disabled, "disabled")
 
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
@@ -1521,12 +1506,7 @@ func TestPluginsService_PublishPlugins_PublicToolsetWithoutMetadata(t *testing.T
 	require.NoError(t, err)
 
 	toolset := createTestToolset(t, ctx, ti.conn, "public-no-meta")
-	err = toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	setToolsetWrapperVisibility(t, ctx, ti.conn, toolset, "public")
 
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
@@ -1819,12 +1799,7 @@ func TestPluginsService_PublishPlugins_CodexPublicToolsetEnvHeaders(t *testing.T
 	require.NoError(t, err)
 
 	toolset := createTestToolset(t, ctx, ti.conn, "codex-public-toolset")
-	err = toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	setToolsetWrapperVisibility(t, ctx, ti.conn, toolset, "public")
 
 	mcpRepo := mcpmetarepo.New(ti.conn)
 	metadata, err := mcpRepo.UpsertMetadata(ctx, mcpmetarepo.UpsertMetadataParams{
@@ -1905,12 +1880,7 @@ func TestPluginsService_PublishPlugins_CodexSkipsDisabledMCPToolsets(t *testing.
 		require.NoError(t, err)
 	}
 
-	err = toolsetsrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{
-		McpEnabled: false,
-		ID:         disabled.ID,
-		ProjectID:  disabled.ProjectID,
-	})
-	require.NoError(t, err)
+	setToolsetWrapperVisibility(t, ctx, ti.conn, disabled, "disabled")
 
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)

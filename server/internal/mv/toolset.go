@@ -23,6 +23,7 @@ import (
 	deploymentR "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	externalmcpR "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpmetadataR "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	oauth "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -559,11 +560,7 @@ func DescribeToolsetEntries(
 			FunctionEnvironmentVariables: dedupeFunctionEnvVars(functionEnvVars),
 			ExternalMcpHeaderDefinitions: dedupeExternalMCPHeaderDefinitions(externalMCPHeaderDefinitions),
 			Description:                  conv.FromPGText[string](toolset.Description),
-			McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),
-			McpEnabled:                   &toolset.McpEnabled,
 			ToolSelectionMode:            toolset.ToolSelectionMode,
-			CustomDomainID:               conv.FromNullableUUID(toolset.CustomDomainID),
-			McpIsPublic:                  &toolset.McpIsPublic,
 			Origin:                       originsByToolsetID[toolset.ID],
 			CreatedAt:                    toolset.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:                    toolset.UpdatedAt.Time.Format(time.RFC3339),
@@ -836,6 +833,23 @@ func DescribeToolset(
 		}
 	}
 
+	var mcpEndpointSlug *types.Slug
+	var mcpEndpointDomain *string
+	preferredEndpoint, err := mcpendpointsRepo.New(tx).GetPreferredMCPEndpointByToolsetID(ctx, mcpendpointsRepo.GetPreferredMCPEndpointByToolsetIDParams{
+		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ProjectID: pid,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// Unpublished toolset: no endpoint address to expose.
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset mcp endpoint").LogError(ctx, logger)
+	default:
+		slug := types.Slug(preferredEndpoint.Slug)
+		mcpEndpointSlug = &slug
+		mcpEndpointDomain = conv.FromPGText[string](preferredEndpoint.CustomDomain)
+	}
+
 	result := &types.Toolset{
 		ID:                           toolset.ID.String(),
 		OrganizationID:               toolset.OrganizationID,
@@ -843,6 +857,8 @@ func DescribeToolset(
 		ProjectID:                    toolset.ProjectID.String(),
 		Name:                         toolset.Name,
 		Slug:                         types.Slug(toolset.Slug),
+		McpEndpointSlug:              mcpEndpointSlug,
+		McpEndpointDomain:            mcpEndpointDomain,
 		DefaultEnvironmentSlug:       conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
 		SecurityVariables:            toolsetTools.SecurityVars,
 		ServerVariables:              toolsetTools.ServerVars,
@@ -853,11 +869,7 @@ func DescribeToolset(
 		ToolsetVersion:               toolsetVersion,
 		Resources:                    toolsetTools.Resources,
 		PromptTemplates:              promptTemplates,
-		McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),
-		McpEnabled:                   &toolset.McpEnabled,
 		ToolSelectionMode:            toolset.ToolSelectionMode,
-		CustomDomainID:               conv.FromNullableUUID(toolset.CustomDomainID),
-		McpIsPublic:                  &toolset.McpIsPublic,
 		Origin:                       toolsetOrigin,
 		CreatedAt:                    toolset.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                    toolset.UpdatedAt.Time.Format(time.RFC3339),
@@ -1125,9 +1137,6 @@ func GetToolsetsSummary(
 			Name:                   ts.Name,
 			Slug:                   types.Slug(ts.Slug),
 			DefaultEnvironmentSlug: conv.FromPGText[types.Slug](ts.DefaultEnvironmentSlug),
-			McpSlug:                conv.FromPGText[types.Slug](ts.McpSlug),
-			McpEnabled:             &ts.McpEnabled,
-			McpIsPublic:            &ts.McpIsPublic,
 			ToolSelectionMode:      ts.ToolSelectionMode,
 			Tools:                  tools,
 			CreatedAt:              ts.CreatedAt.Time.Format(time.RFC3339),

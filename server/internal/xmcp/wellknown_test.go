@@ -56,20 +56,19 @@ func runWellKnown(
 	return w, err
 }
 
-// seedBareToolset creates a toolset with the given mcp_slug and no OAuth
-// configuration. Used for the "no OAuth configured" branches.
-func seedBareToolset(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, organizationID, mcpSlug string) toolsetsrepo.Toolset {
+// seedBareToolset creates a toolset with no OAuth configuration. Used for
+// the "no OAuth configured" branches; publishing happens separately via
+// seedToolsetMCPEndpoint.
+func seedBareToolset(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, organizationID, slug string) toolsetsrepo.Toolset {
 	t.Helper()
 
 	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID:         organizationID,
 		ProjectID:              projectID,
-		Name:                   "xmcp-bare-" + mcpSlug,
-		Slug:                   mcpSlug,
+		Name:                   "xmcp-bare-" + slug,
+		Slug:                   slug,
 		Description:            conv.ToPGText("xmcp wellknown_test bare toolset"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText(mcpSlug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 	return toolset

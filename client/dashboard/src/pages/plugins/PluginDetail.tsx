@@ -58,7 +58,10 @@ import {
   useState,
 } from "react";
 import { useNavigate, useParams } from "react-router";
-import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type {
+  McpServer,
+  McpServerVisibility,
+} from "@gram/client/models/components/mcpserver.js";
 import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useProject } from "@/contexts/Auth";
@@ -360,6 +363,17 @@ export default function PluginDetail(): JSX.Element | null {
     return map;
   }, [mcpServers]);
 
+  // Publishing state for toolset-backed rows lives on the wrapper mcp_server.
+  const wrapperVisibilityByToolsetId = useMemo(() => {
+    const map = new Map<string, McpServerVisibility>();
+    for (const s of mcpServersData?.mcpServers ?? []) {
+      if (s.toolsetId && !map.has(s.toolsetId)) {
+        map.set(s.toolsetId, s.visibility);
+      }
+    }
+    return map;
+  }, [mcpServersData]);
+
   // Merge toolsets and publishable Remote MCP-backed servers into one
   // selectable list.
   const serverOptions = useMemo<ServerOption[]>(() => {
@@ -451,6 +465,11 @@ export default function PluginDetail(): JSX.Element | null {
             toolset={
               server.toolsetId ? toolsetById.get(server.toolsetId) : undefined
             }
+            toolsetVisibility={
+              server.toolsetId
+                ? wrapperVisibilityByToolsetId.get(server.toolsetId)
+                : undefined
+            }
             mcpServer={
               server.mcpServerId
                 ? mcpServerById.get(server.mcpServerId)
@@ -472,6 +491,11 @@ export default function PluginDetail(): JSX.Element | null {
             server={server}
             toolset={
               server.toolsetId ? toolsetById.get(server.toolsetId) : undefined
+            }
+            toolsetVisibility={
+              server.toolsetId
+                ? wrapperVisibilityByToolsetId.get(server.toolsetId)
+                : undefined
             }
             mcpServer={
               server.mcpServerId
@@ -1097,6 +1121,7 @@ function PublishFreshnessIndicator({
 function PluginServerCard({
   server,
   toolset,
+  toolsetVisibility,
   mcpServer,
   isLoading,
   onRemove,
@@ -1104,6 +1129,8 @@ function PluginServerCard({
 }: {
   server: PluginServer;
   toolset: ToolsetEntry | undefined;
+  /** The toolset's wrapper mcp_server visibility, once loaded. */
+  toolsetVisibility: McpServerVisibility | undefined;
   mcpServer: McpServer | undefined;
   isLoading: boolean;
   onRemove: () => void;
@@ -1184,10 +1211,10 @@ function PluginServerCard({
       <div className="mt-auto flex items-center justify-between gap-2 pt-2">
         {isRemote ? (
           <span />
-        ) : toolset ? (
+        ) : toolsetVisibility ? (
           <MCPStatusIndicator
-            mcpEnabled={toolset.mcpEnabled}
-            mcpIsPublic={toolset.mcpIsPublic}
+            mcpEnabled={toolsetVisibility !== "disabled"}
+            mcpIsPublic={toolsetVisibility === "public"}
           />
         ) : isLoading ? (
           <Skeleton className="h-3.5 w-20" />

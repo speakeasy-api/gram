@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -75,18 +76,9 @@ func newTestCIMDService(t *testing.T) (context.Context, *testInstance, *cimdDocS
 	ds := startCIMDDocServer(t)
 	ctx, ti := newTestMCPServiceWithGuardianOptions(t, guardian.WithTLSRootCAs(ds.certPool()))
 
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	toolset, err := toolsets_repo.New(ti.conn).UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	toolset, _, _, wrapper := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	// Publicness lives on the wrapper mcp_server's visibility.
+	setMcpServerVisibility(t, ctx, ti.conn, wrapper, mcpservers.VisibilityPublic)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -134,7 +126,7 @@ func TestOAuthCIMD_FullFlow(t *testing.T) {
 	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	redirectURI := "http://127.0.0.1:51423/callback"
 	verifier := pkceVerifier(t)
 
@@ -220,7 +212,7 @@ func TestOAuthCIMD_FlagOff_RejectsURLClientID(t *testing.T) {
 
 	_, ti, ds, toolset, _ := newTestCIMDService(t)
 
-	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
+	w := doCIMDAuthorize(t, ti, toolset.Slug, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
 }
 
@@ -234,11 +226,11 @@ func TestOAuthCIMD_FlagOffAfterResolution_RejectsAtAuthorize(t *testing.T) {
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
 
 	redirectURI := "http://127.0.0.1:33418/callback"
-	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
+	w := doCIMDAuthorize(t, ti, toolset.Slug, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
 	require.Equal(t, http.StatusFound, w.Code)
 
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, false)
-	w = doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
+	w = doCIMDAuthorize(t, ti, toolset.Slug, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
 }
 
@@ -249,7 +241,7 @@ func TestOAuthCIMD_ConfidentialAuthMethodRejected(t *testing.T) {
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
 	ds.doc["token_endpoint_auth_method"] = "client_secret_basic"
 
-	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
+	w := doCIMDAuthorize(t, ti, toolset.Slug, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client_metadata")
 }
 
@@ -260,7 +252,7 @@ func TestOAuthCIMD_DocumentClientIDMismatchRejected(t *testing.T) {
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
 	ds.doc["client_id"] = ds.srv.URL + "/oauth/other.json"
 
-	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
+	w := doCIMDAuthorize(t, ti, toolset.Slug, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client_metadata")
 }
 
@@ -271,7 +263,7 @@ func TestOAuthCIMD_CrossOriginRedirectURIRejected(t *testing.T) {
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
 	ds.doc["redirect_uris"] = []any{"https://elsewhere.example.com/callback"}
 
-	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "https://elsewhere.example.com/callback", pkceChallenge(pkceVerifier(t)))
+	w := doCIMDAuthorize(t, ti, toolset.Slug, ds.clientID, "https://elsewhere.example.com/callback", pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_redirect_uri")
 }
 
@@ -281,7 +273,7 @@ func TestOAuthCIMD_UnregisteredRedirectURIRejected(t *testing.T) {
 	_, ti, ds, toolset, orgID := newTestCIMDService(t)
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
 
-	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/other-path", pkceChallenge(pkceVerifier(t)))
+	w := doCIMDAuthorize(t, ti, toolset.Slug, ds.clientID, "http://127.0.0.1:51423/other-path", pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
 }
 
@@ -300,7 +292,7 @@ func TestOAuthCIMD_NonLoopbackPortVarianceRejected(t *testing.T) {
 	require.NoError(t, err)
 	variedPort := "https://" + docURL.Hostname() + ":1/callback"
 
-	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, variedPort, pkceChallenge(pkceVerifier(t)))
+	w := doCIMDAuthorize(t, ti, toolset.Slug, ds.clientID, variedPort, pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
 }
 
@@ -313,7 +305,7 @@ func TestOAuthCIMD_UnknownExtensionFieldsAccepted(t *testing.T) {
 	ds.doc["client_id_expires_at"] = 4102444800
 	ds.doc["x_vendor_extension"] = map[string]any{"nested": true}
 
-	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
+	w := doCIMDAuthorize(t, ti, toolset.Slug, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
 	require.Equal(t, http.StatusFound, w.Code, "documents with unrecognized extension fields must be accepted: %s", w.Body.String())
 }
 
@@ -326,7 +318,7 @@ func TestOAuthCIMD_TokenRejectsSecretForCIMDClient(t *testing.T) {
 	_, ti, ds, toolset, orgID := newTestCIMDService(t)
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	w := doCIMDAuthorize(t, ti, mcpSlug, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
 	require.Equal(t, http.StatusFound, w.Code)
 
@@ -356,7 +348,7 @@ func TestOAuthCIMD_ASMetadataAdvertisesSupportWhenFlagOn(t *testing.T) {
 	_, ti, _, toolset, orgID := newTestCIMDService(t)
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+mcpSlug, nil)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("mcpSlug", mcpSlug)
@@ -375,7 +367,7 @@ func TestOAuthCIMD_ASMetadataOmitsSupportWhenFlagOff(t *testing.T) {
 
 	_, ti, _, toolset, _ := newTestCIMDService(t)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+mcpSlug, nil)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("mcpSlug", mcpSlug)
@@ -411,7 +403,7 @@ func TestOAuthCIMD_RepeatAuthorizeRefreshesClient(t *testing.T) {
 	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
 
-	mcpSlug := toolset.McpSlug.String
+	mcpSlug := toolset.Slug
 	redirectURI := "http://127.0.0.1:33418/callback"
 
 	w := doCIMDAuthorize(t, ti, mcpSlug, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
@@ -460,7 +452,7 @@ func TestOAuthCIMD_SecretBearingCollisionRejected(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
+	w := doCIMDAuthorize(t, ti, toolset.Slug, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
 
 	row, err := usersessions_repo.New(ti.conn).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
@@ -481,7 +473,7 @@ func TestOAuthCIMD_LoopbackQueryInjectionRejected(t *testing.T) {
 	_, ti, ds, toolset, orgID := newTestCIMDService(t)
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
 
-	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback?injected=1", pkceChallenge(pkceVerifier(t)))
+	w := doCIMDAuthorize(t, ti, toolset.Slug, ds.clientID, "http://127.0.0.1:51423/callback?injected=1", pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
 }
 
@@ -494,7 +486,7 @@ func TestOAuthCIMD_LoopbackUserinfoRejected(t *testing.T) {
 	_, ti, ds, toolset, orgID := newTestCIMDService(t)
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
 
-	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://user:pass@127.0.0.1:51423/callback", pkceChallenge(pkceVerifier(t)))
+	w := doCIMDAuthorize(t, ti, toolset.Slug, ds.clientID, "http://user:pass@127.0.0.1:51423/callback", pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
 }
 
@@ -504,10 +496,10 @@ func TestOAuthDCR_LoopbackPortVarianceRejected(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, _, client, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
 	// The seeded DCR client registers http://localhost:3000/callback.
-	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, client.ClientID, "http://localhost:9999/callback", pkceChallenge(pkceVerifier(t)))
+	w := doCIMDAuthorize(t, ti, toolset.Slug, client.ClientID, "http://localhost:9999/callback", pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
 }
 
@@ -521,7 +513,7 @@ func TestOAuthCIMD_FetchFailureReturns503(t *testing.T) {
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
 
 	missingDocURL := ds.srv.URL + "/missing.json"
-	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, missingDocURL, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
+	w := doCIMDAuthorize(t, ti, toolset.Slug, missingDocURL, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
 	require.Equal(t, http.StatusServiceUnavailable, w.Code)
 	var body map[string]string
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
@@ -539,12 +531,12 @@ func TestOAuthCIMD_ConsentEscapesHostileClientName(t *testing.T) {
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
 	ds.doc["client_name"] = `<img src=x onerror=alert(1)> Client`
 
-	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
+	w := doCIMDAuthorize(t, ti, toolset.Slug, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
 	require.Equal(t, http.StatusFound, w.Code)
 	consentLoc, err := url.Parse(w.Header().Get("Location"))
 	require.NoError(t, err)
 
-	cw := doCIMDConsentGet(t, ti, toolset.McpSlug.String, consentLoc.Query().Get("state"))
+	cw := doCIMDConsentGet(t, ti, toolset.Slug, consentLoc.Query().Get("state"))
 	require.Equal(t, http.StatusOK, cw.Code)
 	require.NotContains(t, cw.Body.String(), "<img src=x")
 	require.Contains(t, cw.Body.String(), "&lt;img src=x onerror=alert(1)&gt; Client")
@@ -561,12 +553,12 @@ func TestOAuthCIMD_ConsentNoLoopbackWarningForSameOriginRedirect(t *testing.T) {
 	redirectURI := ds.srv.URL + "/callback"
 	ds.doc["redirect_uris"] = []any{redirectURI}
 
-	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
+	w := doCIMDAuthorize(t, ti, toolset.Slug, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
 	require.Equal(t, http.StatusFound, w.Code)
 	consentLoc, err := url.Parse(w.Header().Get("Location"))
 	require.NoError(t, err)
 
-	cw := doCIMDConsentGet(t, ti, toolset.McpSlug.String, consentLoc.Query().Get("state"))
+	cw := doCIMDConsentGet(t, ti, toolset.Slug, consentLoc.Query().Get("state"))
 	require.Equal(t, http.StatusOK, cw.Code)
 	require.Contains(t, cw.Body.String(), "Client verified from")
 	require.NotContains(t, cw.Body.String(), "local address on your")
@@ -583,7 +575,7 @@ func TestOAuthCIMD_LoopbackEncodedPathRejected(t *testing.T) {
 
 	// The document registers /callback; /%63allback decodes to the same
 	// path but is a different URI byte-for-byte.
-	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/%63allback", pkceChallenge(pkceVerifier(t)))
+	w := doCIMDAuthorize(t, ti, toolset.Slug, ds.clientID, "http://127.0.0.1:51423/%63allback", pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
 }
 
@@ -596,7 +588,7 @@ func TestOAuthCIMD_LoopbackFragmentRejected(t *testing.T) {
 	_, ti, ds, toolset, orgID := newTestCIMDService(t)
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
 
-	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback#frag", pkceChallenge(pkceVerifier(t)))
+	w := doCIMDAuthorize(t, ti, toolset.Slug, ds.clientID, "http://127.0.0.1:51423/callback#frag", pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
 }
 
@@ -612,6 +604,6 @@ func TestOAuthCIMD_LoopbackEmptyFragmentRegistrationRejected(t *testing.T) {
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
 	ds.doc["redirect_uris"] = []any{"http://127.0.0.1:33418/callback#"}
 
-	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(pkceVerifier(t)))
+	w := doCIMDAuthorize(t, ti, toolset.Slug, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
 }

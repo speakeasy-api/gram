@@ -86,12 +86,10 @@ var Toolset = Type("Toolset", func() {
 	Attribute("resource_urns", ArrayOf(String), "The resource URNs in this toolset")
 
 	Attribute("prompt_templates", ArrayOf(PromptTemplate), "The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts")
-	Attribute("mcp_slug", Slug, "The slug of the MCP to use for the toolset")
-	Attribute("mcp_is_public", Boolean, "Whether the toolset is public in MCP")
-	Attribute("mcp_enabled", Boolean, "Whether the toolset is enabled for MCP")
 	Attribute("tool_selection_mode", String, "The mode to use for tool selection")
-	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
 	Attribute("origin", ToolsetOrigin, "The registry lineage for toolsets installed from an external MCP catalog")
+	Attribute("mcp_endpoint_slug", Slug, "The public slug of the MCP server endpoint that serves this toolset; absent when the toolset is not published")
+	Attribute("mcp_endpoint_domain", String, "The custom domain that serves the toolset's MCP endpoint; absent for platform-domain endpoints")
 	Attribute("external_oauth_server", ExternalOAuthServer, "The external OAuth server details")
 	Attribute("oauth_proxy_server", OAuthProxyServer, "The OAuth proxy server details")
 	Attribute("user_session_issuer_id", String, "The id of the user_session_issuer wired to this toolset. Set via toolsets.setUserSessionIssuer; null when no USI is linked.")
@@ -128,11 +126,7 @@ var ToolsetEntry = Type("ToolsetEntry", func() {
 	Attribute("resource_urns", ArrayOf(String), "The resource URNs in this toolset")
 
 	Attribute("prompt_templates", ArrayOf(PromptTemplateEntry), "The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts")
-	Attribute("mcp_slug", Slug, "The slug of the MCP to use for the toolset")
-	Attribute("mcp_is_public", Boolean, "Whether the toolset is public in MCP")
-	Attribute("mcp_enabled", Boolean, "Whether the toolset is enabled for MCP")
 	Attribute("tool_selection_mode", String, "The mode to use for tool selection")
-	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
 	Attribute("origin", ToolsetOrigin, "The registry lineage for toolsets installed from an external MCP catalog")
 	Attribute("created_at", String, func() {
 		Description("When the toolset was created.")
@@ -155,9 +149,6 @@ var ToolsetSummary = Type("ToolsetSummary", func() {
 	Attribute("name", String, "The name of the toolset")
 	Attribute("slug", Slug, "The slug of the toolset")
 	Attribute("default_environment_slug", Slug, "The slug of the environment to use as the default for the toolset")
-	Attribute("mcp_slug", Slug, "The slug of the MCP to use for the toolset")
-	Attribute("mcp_enabled", Boolean, "Whether the toolset is enabled for MCP")
-	Attribute("mcp_is_public", Boolean, "Whether the toolset is public in MCP")
 	Attribute("tool_selection_mode", String, "The mode to use for tool selection")
 	Attribute("tools", ArrayOf(ToolEntry), "The tools in this toolset")
 	Attribute("created_at", String, func() {

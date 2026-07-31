@@ -87,7 +87,6 @@ func handleToolsList(
 			"toolset_id":           toolset.ID,
 			"mcp_domain":           requestContext.Host,
 			"mcp_url":              requestContext.Host + requestContext.ReqURL,
-			"mcp_enabled":          toolset.McpEnabled,
 			"disable_notification": true,
 			"mcp_session_id":       payload.sessionID,
 		}); err != nil {
@@ -114,7 +113,7 @@ func handleToolsList(
 	// Filter tools by RBAC grants. Private authenticated MCPs enforce
 	// per-tool mcp:connect checks — the same dimensions used by tools/call.
 	// Public MCPs skip this (open to everyone, matching the connection guard).
-	if payload.authenticated && authzEngine != nil && (toolset.McpIsPublic == nil || !*toolset.McpIsPublic) {
+	if payload.authenticated && authzEngine != nil && !payload.isPublic {
 		allowed := make([]*toolListEntry, 0, len(tools))
 		for _, t := range tools {
 			disposition := dispositionFromAnnotations(t.Annotations)

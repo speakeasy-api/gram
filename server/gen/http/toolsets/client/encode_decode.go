@@ -4278,20 +4278,13 @@ func unmarshalToolsetEntryResponseBodyToTypesToolsetEntry(v *ToolsetEntryRespons
 		Name:              *v.Name,
 		Slug:              types.Slug(*v.Slug),
 		Description:       v.Description,
-		McpIsPublic:       v.McpIsPublic,
-		McpEnabled:        v.McpEnabled,
 		ToolSelectionMode: *v.ToolSelectionMode,
-		CustomDomainID:    v.CustomDomainID,
 		CreatedAt:         *v.CreatedAt,
 		UpdatedAt:         *v.UpdatedAt,
 	}
 	if v.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := types.Slug(*v.DefaultEnvironmentSlug)
 		res.DefaultEnvironmentSlug = &defaultEnvironmentSlug
-	}
-	if v.McpSlug != nil {
-		mcpSlug := types.Slug(*v.McpSlug)
-		res.McpSlug = &mcpSlug
 	}
 	if v.SecurityVariables != nil {
 		res.SecurityVariables = make([]*types.SecurityVariable, len(v.SecurityVariables))
@@ -4425,8 +4418,6 @@ func unmarshalToolsetSummaryResponseBodyToTypesToolsetSummary(v *ToolsetSummaryR
 		OrganizationID:    *v.OrganizationID,
 		Name:              *v.Name,
 		Slug:              types.Slug(*v.Slug),
-		McpEnabled:        v.McpEnabled,
-		McpIsPublic:       v.McpIsPublic,
 		ToolSelectionMode: *v.ToolSelectionMode,
 		CreatedAt:         *v.CreatedAt,
 		UpdatedAt:         *v.UpdatedAt,
@@ -4434,10 +4425,6 @@ func unmarshalToolsetSummaryResponseBodyToTypesToolsetSummary(v *ToolsetSummaryR
 	if v.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := types.Slug(*v.DefaultEnvironmentSlug)
 		res.DefaultEnvironmentSlug = &defaultEnvironmentSlug
-	}
-	if v.McpSlug != nil {
-		mcpSlug := types.Slug(*v.McpSlug)
-		res.McpSlug = &mcpSlug
 	}
 	res.Tools = make([]*types.ToolEntry, len(v.Tools))
 	for i, val := range v.Tools {

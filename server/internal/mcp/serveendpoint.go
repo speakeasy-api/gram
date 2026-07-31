@@ -96,9 +96,7 @@ func (s *Service) enforceCustomDomainLockdown(ctx context.Context, logger *slog.
 // issuer-gated and then dispatches to the appropriate backend.
 //
 // Split from ServeMCPEndpoint so ServePublic can avoid a redundant
-// resolve+lookup when it already has the rows in hand (ServePublic tries
-// mcp_endpoints first and falls back to the legacy toolsets lookup on
-// miss; only the hit case needs dispatch).
+// resolve+lookup when it already has the rows in hand.
 func (s *Service) serveResolvedMCPEndpoint(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -125,8 +123,8 @@ func (s *Service) serveResolvedMCPEndpoint(
 	}
 
 	// Toolset-backed servers can carry auth on the backing toolset instead
-	// of the wrapper (the toolsets → mcp_servers swap leaves the wrapper
-	// issuer NULL deliberately). Load the toolset up front: a toolset
+	// of the wrapper (a wrapper with a NULL issuer defers to its toolset's
+	// issuer). Load the toolset up front: a toolset
 	// issuer gates the request here with the endpoint's identity — so the
 	// challenge, cached ref, and WWW-Authenticate all name the address the
 	// client used — and the dispatch below reuses the loaded row.
@@ -206,14 +204,10 @@ func (s *Service) serveResolvedMCPEndpoint(
 		// The mcp_servers row is the publishing config for this address:
 		// its visibility and environment govern serving, while auth (OAuth
 		// refs, user-session issuer) and tool definitions stay on the
-		// toolset. ServeToolsetResolved reads publishing config off the
-		// toolset row, so substitute the wrapper-governed fields into a
-		// copy. The toolsets columns mirror the wrapper only while the
-		// expand/contract swap is in flight and can drift; the wrapper
-		// wins at an endpoint address.
+		// toolset. Visibility is passed explicitly; the environment override
+		// is substituted into a copy of the toolset row.
 		effective := toolset
-		effective.McpIsPublic = mcpServer.Visibility == mcpservers.VisibilityPublic
-		effective.McpEnabled = true
+		isPublic := mcpServer.Visibility == mcpservers.VisibilityPublic
 		if mcpServer.EnvironmentID.Valid {
 			env, err := environmentsrepo.New(s.db).GetEnvironmentByID(ctx, environmentsrepo.GetEnvironmentByIDParams{
 				ID:        mcpServer.EnvironmentID.UUID,
@@ -239,7 +233,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			mcpServerVariationsGroupID = &id
 		}
 
-		if err := s.ServeToolsetResolved(w, r, &effective, slug, mcpRouteBase, issuerGated, upstreamTokens, mcpServerVariationsGroupID, &mcpServer.ID); err != nil {
+		if err := s.ServeToolsetResolved(w, r, &effective, slug, mcpRouteBase, isPublic, issuerGated, upstreamTokens, mcpServerVariationsGroupID, &mcpServer.ID); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
 		}
 		return nil
@@ -279,13 +273,6 @@ func singleUpstreamToken(tokens map[uuid.UUID]string) (string, error) {
 // existence to unauthenticated callers. logger should already carry the
 // slug attribute.
 //
-// Callers that fall back to a legacy lookup (e.g. /mcp's existing toolsets
-// path) must gate the fallback on errors.Is(err,
-// mcpendpoints.ErrAddressMiss) — a true addressing miss. A plain
-// CodeNotFound means the address exists but is unavailable (disabled
-// visibility, dangling server) and is terminal: the endpoint is
-// authoritative for its slug.
-//
 // Thin wrapper around mcpendpoints.BySlugAndCustomDomain; kept as a method
 // for the existing /mcp and /x/mcp call sites.
 func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.Logger, slug string) (*mcpendpointsrepo.McpEndpoint, *mcpserversrepo.McpServer, error) {
@@ -294,21 +281,19 @@ func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.
 
 // LoadResolvedMcpEndpointBySlug resolves a slug to a *ResolvedMcpEndpoint
 // for the issuer-gated OAuth handlers, shared by both the /mcp and /x/mcp
-// surfaces. It mirrors the well-known handlers' resolution model:
+// surfaces. It shares the well-known handlers' resolution model:
 //
 //   - Addressing hit, issuer-gated: build the endpoint from the
 //     (mcp_endpoint, mcp_server) pair.
 //   - Addressing hit, not issuer-gated: CodeNotFound. The mcp_server is
-//     authoritative for the slug and is not an OAuth endpoint, so we do
-//     NOT fall back — this keeps non-issuer-gated remote-backed servers
-//     returning not-found, matching the well-known surface.
-//   - Addressing miss (CodeNotFound): fall back to the legacy
-//     toolsets.mcp_slug lookup so issuer-gated toolset-backed servers
-//     without an mcp_endpoint row (predating the toolsets → mcp_servers
-//     migration) still resolve.
+//     authoritative for the slug and is not an OAuth endpoint, so
+//     non-issuer-gated remote-backed servers return not-found, matching
+//     the well-known surface.
+//   - Addressing miss: CodeNotFound. mcp_endpoints is authoritative for
+//     its slug.
 //
 // mcpRouteBase ("mcp" or "x/mcp") propagates into the resolved endpoint's
-// URL building on both the primary and fallback paths.
+// URL building.
 func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug, mcpRouteBase string) (*ResolvedMcpEndpoint, error) {
 	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, slug)
 	switch {
@@ -343,11 +328,7 @@ func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slo
 		}
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	case errors.Is(err, mcpendpoints.ErrAddressMiss):
-		resolved, err := s.loadResolvedMcpEndpointByToolsetSlug(ctx, slug, mcpRouteBase)
-		if err == nil {
-			s.metrics.RecordToolsetSlugFallback(ctx, toolsetFallbackSurfaceOAuth, slug)
-		}
-		return resolved, err
+		return nil, oops.E(oops.CodeNotFound, err, "not found")
 	default:
 		return nil, err
 	}

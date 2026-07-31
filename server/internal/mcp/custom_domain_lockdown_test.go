@@ -17,15 +17,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-// TestServePublic_Lockdown_LegacyToolset_AllowlistBlocksPlatform is the
-// primary regression: a custom-domain-bound toolset (legacy mcp_slug path)
-// must not be served on the platform domain once its domain has an IP
-// allowlist. Without the lockdown, GetToolsetByMcpSlug's fallback would serve
-// it on getgram.ai with no IP filtering.
-func TestServePublic_Lockdown_LegacyToolset_AllowlistBlocksPlatform(t *testing.T) {
+// TestServePublic_Lockdown_DomainBoundEndpoint_AllowlistedDomainStillServes
+// covers the domain-bound shape under an IP allowlist: the platform host
+// never resolves a custom-domain endpoint (its slug resolves only under
+// its own domain, so the request 404s before the allowlist is even
+// consulted), while the
+// custom-domain request serves normally because the ingress already
+// enforced the allowlist.
+func TestServePublic_Lockdown_DomainBoundEndpoint_AllowlistedDomainStillServes(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -33,10 +34,11 @@ func TestServePublic_Lockdown_LegacyToolset_AllowlistBlocksPlatform(t *testing.T
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset, domain := createPublicMCPToolsetWithCustomDomain(
+	slug := "lockdown-domain-" + uuid.New().String()[:8]
+	_, domain := createPublicMCPToolsetWithCustomDomain(
 		t, ctx, ti, authCtx,
-		"lockdown-legacy-"+uuid.New().String()[:8],
-		"lockdown-legacy.example.com",
+		slug,
+		"lockdown-domain.example.com",
 	)
 
 	// Configure a non-empty allowlist on the org's custom domain.
@@ -46,12 +48,13 @@ func TestServePublic_Lockdown_LegacyToolset_AllowlistBlocksPlatform(t *testing.T
 	})
 	require.NoError(t, err)
 
-	// Platform-domain request (no custom domain context) must be denied.
-	_, err = servePublicHTTP(t, context.Background(), ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
-	require.Error(t, err, "platform request must be denied when the org's custom domain has an allowlist")
+	// Platform-domain request (no custom domain context) cannot address a
+	// domain-bound endpoint at all.
+	_, err = servePublicHTTP(t, context.Background(), ti, slug, makeInitializeBody(), "", nil)
+	require.Error(t, err, "platform request must not resolve a domain-bound endpoint")
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 
 	// Same request via the custom domain context resolves normally — the
 	// ingress already enforced the allowlist, so the app does not block.
@@ -60,7 +63,7 @@ func TestServePublic_Lockdown_LegacyToolset_AllowlistBlocksPlatform(t *testing.T
 		Domain:         domain.Domain,
 		DomainID:       domain.ID,
 	})
-	w, err := servePublicHTTP(t, customCtx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
+	w, err := servePublicHTTP(t, customCtx, ti, slug, makeInitializeBody(), "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "custom-domain request must serve; body=%s", w.Body.String())
 }
@@ -73,7 +76,6 @@ func TestServePublic_Lockdown_McpEndpoint_AllowlistBlocksPlatform(t *testing.T) 
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsetsrepo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -86,7 +88,7 @@ func TestServePublic_Lockdown_McpEndpoint_AllowlistBlocksPlatform(t *testing.T) 
 	})
 	require.NoError(t, err)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "lockdown-ep-ts-"+uuid.New().String()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti.conn, authCtx, "lockdown-ep-ts-"+uuid.New().String()[:8])
 	platformSlug := "platform-ep-" + uuid.NewString()
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, platformSlug, "public", uuid.NullUUID{}, uuid.Nil)
 
@@ -100,7 +102,7 @@ func TestServePublic_Lockdown_McpEndpoint_AllowlistBlocksPlatform(t *testing.T) 
 
 // TestServePublic_Lockdown_EmptyAllowlist_PlatformStillWorks guards against
 // over-blocking: a custom domain with an empty allowlist must not restrict
-// platform access (dual-serve remains the default).
+// the org's platform-scoped endpoints.
 func TestServePublic_Lockdown_EmptyAllowlist_PlatformStillWorks(t *testing.T) {
 	t.Parallel()
 
@@ -110,13 +112,18 @@ func TestServePublic_Lockdown_EmptyAllowlist_PlatformStillWorks(t *testing.T) {
 	require.True(t, ok)
 
 	// createPublicMCPToolsetWithCustomDomain seeds an empty allowlist.
-	toolset, _ := createPublicMCPToolsetWithCustomDomain(
+	createPublicMCPToolsetWithCustomDomain(
 		t, ctx, ti, authCtx,
 		"lockdown-empty-"+uuid.New().String()[:8],
 		"lockdown-empty.example.com",
 	)
 
-	w, err := servePublicHTTP(t, context.Background(), ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
+	// A separate platform-published toolset in the same org must keep
+	// serving on the platform host.
+	platformSlug := "lockdown-empty-platform-" + uuid.New().String()[:8]
+	createPublicMCPToolset(t, ctx, ti.conn, authCtx, platformSlug)
+
+	w, err := servePublicHTTP(t, context.Background(), ti, platformSlug, makeInitializeBody(), "", nil)
 	require.NoError(t, err, "empty allowlist must not lock down the platform domain")
 	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
 }

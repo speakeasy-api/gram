@@ -136,11 +136,6 @@ func createIssuerGatedMcpServer(
 		AuthnChallengeMode:           opts.AuthnChallengeMode,
 	})
 
-	mcpSlug := base.Toolset.McpSlug.String
-	if mcpSlug == "" {
-		mcpSlug = base.Toolset.Slug
-	}
-
 	var (
 		toolsetID       uuid.NullUUID
 		remoteServerID  uuid.NullUUID
@@ -154,7 +149,10 @@ func createIssuerGatedMcpServer(
 		toolsetID = uuid.NullUUID{UUID: base.Toolset.ID, Valid: true}
 		tk := base.Toolset
 		toolsetOut = &tk
-		endpointSlug = mcpSlug
+		// The /x/mcp endpoint carries its own slug: oauthtest already
+		// published the toolset's own /mcp endpoint under the toolset
+		// slug, and platform endpoint slugs are globally unique.
+		endpointSlug = "xmcp-issuer-gated-ts-" + uuid.New().String()[:8]
 	case issuerGatedBackendRemote:
 		remote := remotemcptest.SeedServer(t, ctx, conn, remotemcp_repo.CreateServerParams{
 			ID:            uuid.New(),

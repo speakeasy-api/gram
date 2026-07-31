@@ -1,13 +1,34 @@
 import { DotCard } from "@/components/ui/DotCard";
 import { Text } from "@/components/ui/Text";
+import { useToolsetMcpServers } from "@/hooks/useToolsetUrl";
 import { useRoutes } from "@/routes";
+import type { McpServerVisibility } from "@gram/client/models/components/mcpserver.js";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ArrowRight, Network, Server } from "lucide-react";
 
-function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
+function visibilityLabel(visibility: McpServerVisibility | undefined): string {
+  switch (visibility) {
+    case "public":
+      return "Public";
+    case "private":
+      return "Private";
+    default:
+      return "Disabled";
+  }
+}
+
+function MCPServerPortalCard({
+  toolset,
+  visibility,
+}: {
+  toolset: ToolsetEntry;
+  /** The toolset's wrapper mcp_server visibility, once loaded. */
+  visibility: McpServerVisibility | undefined;
+}) {
   const routes = useRoutes();
+  const enabled = !!visibility && visibility !== "disabled";
 
   return (
     <routes.mcp.details.Link
@@ -38,19 +59,15 @@ function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">
           <div className="flex items-center gap-2">
             <div className="relative flex h-2.5 w-2.5">
-              {toolset.mcpEnabled && (
+              {enabled && (
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
               )}
               <span
-                className={`relative inline-flex h-2.5 w-2.5 rounded-full ${toolset.mcpEnabled ? "bg-green-500" : "bg-red-500"}`}
+                className={`relative inline-flex h-2.5 w-2.5 rounded-full ${enabled ? "bg-green-500" : "bg-red-500"}`}
               />
             </div>
             <Text variant="small" muted>
-              {toolset.mcpEnabled
-                ? toolset.mcpIsPublic
-                  ? "Public"
-                  : "Private"
-                : "Disabled"}
+              {visibilityLabel(visibility)}
             </Text>
           </div>
           <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
@@ -69,13 +86,18 @@ export function SourceMCPServersTab({
   associatedToolsets: ToolsetEntry[];
 }): JSX.Element {
   const routes = useRoutes();
+  const { byToolsetId } = useToolsetMcpServers();
 
   return (
     <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
       {associatedToolsets.length > 0 ? (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {associatedToolsets.map((toolset) => (
-            <MCPServerPortalCard key={toolset.slug} toolset={toolset} />
+            <MCPServerPortalCard
+              key={toolset.slug}
+              toolset={toolset}
+              visibility={byToolsetId.get(toolset.id)?.visibility}
+            />
           ))}
         </div>
       ) : (

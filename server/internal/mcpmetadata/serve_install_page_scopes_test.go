@@ -41,19 +41,20 @@ func createPublicToolsetWithTools(t *testing.T, ctx context.Context, ti *testIns
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   slug,
 		Slug:                   slug,
-		McpSlug:                conv.ToPGText(slug),
 		Description:            conv.ToPGText("scopes test toolset"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 
-	err = toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		name:                "",
+		toolsetID:           uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		endpointSlug:        slug,
+		visibility:          mcpservers.VisibilityPublic,
+		remoteMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		customDomainID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		userSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
-	require.NoError(t, err)
 
 	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
 		ProjectID:      *authCtx.ProjectID,

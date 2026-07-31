@@ -30,6 +30,8 @@ import (
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -67,7 +69,7 @@ func TestRemoteLoginCallback_AuthenticatedSubject(t *testing.T) {
 		ID:                  parentID,
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
 		Endpoint: mcp.EndpointRef{
-			McpSlug:        result.Toolset.McpSlug.String,
+			McpSlug:        result.Toolset.Slug,
 			CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		},
 		ClientID:            "test-mcp-client",
@@ -111,7 +113,7 @@ func TestRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 		ID:                  parentID,
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
 		Endpoint: mcp.EndpointRef{
-			McpSlug:        result.Toolset.McpSlug.String,
+			McpSlug:        result.Toolset.Slug,
 			CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		},
 		ClientID:            "test-mcp-client",
@@ -127,9 +129,9 @@ func TestRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 
 	// Hitting HandleConsent GET through the service exercises the real
 	// card-render path (loadToolset → requireUserSessionIssuer → card build).
-	req := httptest.NewRequest(http.MethodGet, "/mcp/"+result.Toolset.McpSlug.String+"/connect?state="+parentID, nil)
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+result.Toolset.Slug+"/connect?state="+parentID, nil)
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("mcpSlug", result.Toolset.McpSlug.String)
+	rctx.URLParams.Add("mcpSlug", result.Toolset.Slug)
 	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
@@ -205,7 +207,7 @@ func TestRemoteLoginChallenge_CustomDomainRegistersGramCallback(t *testing.T) {
 		ProjectID:           result.Toolset.ProjectID,
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
 		Subject:             &userSubject,
-		McpSlug:             result.Toolset.McpSlug.String,
+		McpSlug:             result.Toolset.Slug,
 		FinalRedirectURI:    "",
 	}, clients[0])
 	require.NoError(t, err)
@@ -254,7 +256,7 @@ func runRemoteLoginRoundTrip(
 		ProjectID:           result.Toolset.ProjectID,
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
 		Subject:             expectedSubject,
-		McpSlug:             result.Toolset.McpSlug.String,
+		McpSlug:             result.Toolset.Slug,
 		FinalRedirectURI:    finalRedirectURI,
 	}
 	authURL, err := mgr.BuildAuthorizationUrl(ctx, parent, clients[0])
@@ -280,7 +282,7 @@ func runRemoteLoginRoundTrip(
 	if finalRedirectURI != "" {
 		require.Equal(t, finalRedirectURI, cbW.Header().Get("Location"))
 	} else {
-		require.Contains(t, cbW.Header().Get("Location"), "/mcp/"+result.Toolset.McpSlug.String+"/connect")
+		require.Contains(t, cbW.Header().Get("Location"), "/mcp/"+result.Toolset.Slug+"/connect")
 		require.Contains(t, cbW.Header().Get("Location"), parentChallengeID)
 	}
 
@@ -341,17 +343,30 @@ func attachCustomDomainToToolset(
 	})
 	require.NoError(t, err)
 
-	toolset, err = toolsets_repo.New(ti.conn).UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            toolset.McpIsPublic,
-		CustomDomainID:         uuid.NullUUID{UUID: domain.ID, Valid: true},
-		McpEnabled:             toolset.McpEnabled,
-		ToolSelectionMode:      toolset.ToolSelectionMode,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
+	// The domain binding lives on the toolset's published mcp_endpoint, so
+	// move that endpoint under the new custom domain.
+	wrappers, err := mcpservers_repo.New(ti.conn).GetMCPServersByToolsetID(ctx, mcpservers_repo.GetMCPServersByToolsetIDParams{
+		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ProjectID: toolset.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, wrappers, 1)
+
+	endpointsRepo := mcpendpoints_repo.New(ti.conn)
+	endpoints, err := endpointsRepo.ListMCPEndpointsByMCPServerID(ctx, mcpendpoints_repo.ListMCPEndpointsByMCPServerIDParams{
+		ProjectID:   toolset.ProjectID,
+		McpServerID: wrappers[0].ID,
+	})
+	require.NoError(t, err)
+	require.Len(t, endpoints, 1)
+
+	_, err = endpointsRepo.UpdateMCPEndpoint(ctx, mcpendpoints_repo.UpdateMCPEndpointParams{
+		CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
+		McpServerID:    endpoints[0].McpServerID,
+		Slug:           endpoints[0].Slug,
+		IsDomainRoot:   endpoints[0].IsDomainRoot,
+		ID:             endpoints[0].ID,
+		ProjectID:      toolset.ProjectID,
 	})
 	require.NoError(t, err)
 
