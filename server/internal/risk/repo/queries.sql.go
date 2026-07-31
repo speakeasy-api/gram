@@ -2067,6 +2067,48 @@ type InsertRiskResultsParams struct {
 	DeadLetterReason  pgtype.Text
 }
 
+const listChatTitlesByIDs = `-- name: ListChatTitlesByIDs :many
+SELECT c.id, c.title
+FROM chats c
+WHERE c.project_id = $1
+  AND c.id = ANY($2::uuid[])
+  AND c.deleted IS FALSE
+`
+
+type ListChatTitlesByIDsParams struct {
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
+
+type ListChatTitlesByIDsRow struct {
+	ID    uuid.UUID
+	Title pgtype.Text
+}
+
+// Display enrichment for the ClickHouse-served risk events listing: chat
+// titles are read from Postgres at page render time rather than denormalized
+// into ClickHouse, because titles are generated after the scan and would be
+// stale at ingest.
+func (q *Queries) ListChatTitlesByIDs(ctx context.Context, arg ListChatTitlesByIDsParams) ([]ListChatTitlesByIDsRow, error) {
+	rows, err := q.db.Query(ctx, listChatTitlesByIDs, arg.ProjectID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatTitlesByIDsRow
+	for rows.Next() {
+		var i ListChatTitlesByIDsRow
+		if err := rows.Scan(&i.ID, &i.Title); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCustomDetectionRules = `-- name: ListCustomDetectionRules :many
 SELECT id, project_id, organization_id, rule_id, title, description, regex, match_config, detection_expr, severity, created_at, updated_at, deleted_at, deleted
 FROM risk_custom_detection_rules
@@ -2493,6 +2535,48 @@ func (q *Queries) ListFalsePositiveRiskResults(ctx context.Context, arg ListFals
 			&i.ChatTitle,
 			&i.ChatUserID,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLatestToolCallBlocksByMessageIDs = `-- name: ListLatestToolCallBlocksByMessageIDs :many
+SELECT DISTINCT ON (tcb.chat_message_id) tcb.chat_message_id, tcb.id AS block_id
+FROM tool_call_blocks tcb
+WHERE tcb.project_id = $1
+  AND tcb.chat_message_id = ANY($2::uuid[])
+  AND tcb.deleted IS FALSE
+ORDER BY tcb.chat_message_id, tcb.created_at DESC
+`
+
+type ListLatestToolCallBlocksByMessageIDsParams struct {
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
+
+type ListLatestToolCallBlocksByMessageIDsRow struct {
+	ChatMessageID uuid.NullUUID
+	BlockID       uuid.UUID
+}
+
+// Display enrichment for the ClickHouse-served risk events listing: the
+// latest live tool call block per chat message, mirroring the LATERAL join in
+// ListRiskResultsByProjectFound.
+func (q *Queries) ListLatestToolCallBlocksByMessageIDs(ctx context.Context, arg ListLatestToolCallBlocksByMessageIDsParams) ([]ListLatestToolCallBlocksByMessageIDsRow, error) {
+	rows, err := q.db.Query(ctx, listLatestToolCallBlocksByMessageIDs, arg.ProjectID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLatestToolCallBlocksByMessageIDsRow
+	for rows.Next() {
+		var i ListLatestToolCallBlocksByMessageIDsRow
+		if err := rows.Scan(&i.ChatMessageID, &i.BlockID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

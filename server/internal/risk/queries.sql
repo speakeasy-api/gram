@@ -1740,6 +1740,28 @@ WHERE ccp.id = ANY(@ids::uuid[])
       AND pc.project_id = ccp.project_id
   );
 
+-- name: ListChatTitlesByIDs :many
+-- Display enrichment for the ClickHouse-served risk events listing: chat
+-- titles are read from Postgres at page render time rather than denormalized
+-- into ClickHouse, because titles are generated after the scan and would be
+-- stale at ingest.
+SELECT c.id, c.title
+FROM chats c
+WHERE c.project_id = @project_id
+  AND c.id = ANY(@ids::uuid[])
+  AND c.deleted IS FALSE;
+
+-- name: ListLatestToolCallBlocksByMessageIDs :many
+-- Display enrichment for the ClickHouse-served risk events listing: the
+-- latest live tool call block per chat message, mirroring the LATERAL join in
+-- ListRiskResultsByProjectFound.
+SELECT DISTINCT ON (tcb.chat_message_id) tcb.chat_message_id, tcb.id AS block_id
+FROM tool_call_blocks tcb
+WHERE tcb.project_id = @project_id
+  AND tcb.chat_message_id = ANY(@ids::uuid[])
+  AND tcb.deleted IS FALSE
+ORDER BY tcb.chat_message_id, tcb.created_at DESC;
+
 -- name: CreateChatForTest :one
 INSERT INTO chats (project_id, organization_id, user_id, external_user_id)
 VALUES (@project_id, @organization_id, @user_id, @external_user_id)
