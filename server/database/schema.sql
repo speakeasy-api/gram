@@ -1696,13 +1696,14 @@ CREATE TABLE IF NOT EXISTS toolsets (
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
   description TEXT CHECK (description <> '' AND CHAR_LENGTH(description) <= 250),
   default_environment_slug TEXT CHECK (default_environment_slug <> '' AND CHAR_LENGTH(default_environment_slug) <= 60),
-  mcp_slug TEXT CHECK (
-    mcp_slug IS NULL OR (mcp_slug <> '' AND CHAR_LENGTH(mcp_slug) <= 60)
-  ),
-  mcp_is_public BOOLEAN NOT NULL DEFAULT FALSE,
-  mcp_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  -- Deprecated MCP publishing columns: publishing state lives on
+  -- mcp_servers/mcp_endpoints. Kept renamed (not dropped) so the pre-swap
+  -- values remain recoverable; a later contract migration drops them.
+  deprecated_mcp_slug TEXT,
+  deprecated_mcp_is_public BOOLEAN NOT NULL DEFAULT FALSE,
+  deprecated_mcp_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   tool_selection_mode TEXT NOT NULL DEFAULT 'static',
-  custom_domain_id uuid,
+  deprecated_custom_domain_id uuid,
 
   -- OAuth configuration - mutually exclusive
   external_oauth_server_id uuid,
@@ -1724,7 +1725,7 @@ CREATE TABLE IF NOT EXISTS toolsets (
 
   CONSTRAINT toolsets_pkey PRIMARY KEY (id),
   CONSTRAINT toolsets_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL,
-  CONSTRAINT toolsets_custom_domain_id_fkey FOREIGN key (custom_domain_id) REFERENCES custom_domains (id) ON DELETE SET NULL,
+  CONSTRAINT toolsets_custom_domain_id_fkey FOREIGN key (deprecated_custom_domain_id) REFERENCES custom_domains (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_external_oauth_server_id_fkey FOREIGN KEY (external_oauth_server_id) REFERENCES external_oauth_server_metadata (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_oauth_proxy_server_id_fkey FOREIGN KEY (oauth_proxy_server_id) REFERENCES oauth_proxy_servers (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
@@ -1735,14 +1736,6 @@ CREATE TABLE IF NOT EXISTS toolsets (
 CREATE UNIQUE INDEX IF NOT EXISTS toolsets_project_id_slug_key
 ON toolsets (project_id, slug)
 WHERE deleted IS FALSE;
-
-CREATE UNIQUE INDEX IF NOT EXISTS toolsets_mcp_slug_custom_domain_id_key
-ON toolsets (mcp_slug, custom_domain_id)
-WHERE mcp_slug IS NOT NULL AND custom_domain_id IS NOT NULL AND deleted IS FALSE;
-
-CREATE UNIQUE INDEX IF NOT EXISTS toolsets_mcp_slug_null_custom_domain_id_key
-ON toolsets (mcp_slug)
-WHERE mcp_slug IS NOT NULL AND custom_domain_id IS NULL AND deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS toolset_versions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
