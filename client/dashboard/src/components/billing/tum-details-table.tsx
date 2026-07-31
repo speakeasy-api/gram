@@ -284,6 +284,16 @@ function DetailGroupSection({
   );
 }
 
+// What the Total column carries: billed-normalized tokens whenever the
+// billed data covers the view (full cycles and ranges within them), raw
+// analytics otherwise.
+function totalTooltipFor(billedNormalized: boolean): string {
+  if (billedNormalized) {
+    return "Billed tokens under management, attributed across metrics by the analytics distribution.";
+  }
+  return "Tokens for the selected range, from the analytics aggregates. This range extends beyond the billed daily data, so billed normalization does not apply.";
+}
+
 // What the Overage column means in the current view: full-cycle attribution,
 // range attribution, or not attributable at all (the "—" column).
 function overageTooltipFor(
@@ -344,31 +354,46 @@ export function TumDetailsTable({
     });
   };
 
-  // Billed normalization and overage attribution are organization-cycle
-  // concepts (the TUM contract has no sub-cycle split), so both switch off
-  // when a custom range narrows the data.
+  // Billed normalization and overage attribution apply to full cycles and
+  // to custom ranges the billed daily series fully covers; both switch off
+  // when the range escapes the billed data.
   const billedCycle = period.cycle;
+  const rangeCovered = useMemo(
+    () =>
+      billedCycle == null && periodCoveredByBilled(period, billedDays.covered),
+    [billedCycle, period, billedDays],
+  );
 
   // The table presents BILLED tokens: the analytics aggregate supplies the
   // distribution across metrics (it has the dimensions; billing's per-session
   // qualification can't be expressed there), and one uniform scale converts
-  // it into billed units so the Total row equals the cycle's billed tokens —
-  // the usage card's number — exactly. The two aggregates track within a
-  // fraction of a percent, so the correction is invisible per metric.
+  // it into billed units so the Total row equals the billed tokens for the
+  // period — the usage card's number — exactly. The two aggregates track
+  // within a fraction of a percent, so the correction is invisible per
+  // metric.
   const billedScale = useMemo(() => {
-    if (!billedCycle) return 1;
     const analyticsTotal = data?.totals?.totalTokens ?? 0;
     if (analyticsTotal === 0) return 1;
-    // A CLOSED zero-token cycle is a known zero: scale everything to 0 so
-    // the Total row matches the card even when live analytics recomputed
-    // nonzero tokens after the seal. The active cycle is exempt — its card
-    // total is a live number that can trail the details query by a refetch,
-    // and a transient zero must not blank real traffic.
-    if (billedCycle.tokens === 0) {
-      return billedCycle.current ? 1 : 0;
+    if (billedCycle) {
+      // A CLOSED zero-token cycle is a known zero: scale everything to 0 so
+      // the Total row matches the card even when live analytics recomputed
+      // nonzero tokens after the seal. The active cycle is exempt — its card
+      // total is a live number that can trail the details query by a refetch,
+      // and a transient zero must not blank real traffic.
+      if (billedCycle.tokens === 0) {
+        return billedCycle.current ? 1 : 0;
+      }
+      return billedCycle.tokens / analyticsTotal;
     }
-    return billedCycle.tokens / analyticsTotal;
-  }, [data, billedCycle]);
+    if (!rangeCovered) return 1;
+    // Covered custom range: normalize to the billed range total, the number
+    // on the usage card. A zero billed total stays unscaled — unlike a
+    // sealed cycle there is no per-range seal, and a transiently stale TUM
+    // response must not blank live traffic.
+    const billedTotal = sumDaysInPeriod(billedDays.byDate, period);
+    if (billedTotal === 0) return 1;
+    return billedTotal / analyticsTotal;
+  }, [data, billedCycle, rangeCovered, billedDays, period]);
 
   const groups = useMemo<DetailGroup[]>(() => {
     const points = data?.points ?? [];
@@ -426,8 +451,7 @@ export function TumDetailsTable({
     const points = data?.points ?? [];
 
     if (cycle == null) {
-      if (overageDays == null) return null;
-      if (!periodCoveredByBilled(period, billedDays.covered)) return null;
+      if (overageDays == null || !rangeCovered) return null;
       // Per-day overage fraction of the billed series, applied to each
       // metric's tokens that day.
       const weights = points.map((p) => {
@@ -436,12 +460,12 @@ export function TumDetailsTable({
         if (dayBilled <= 0) return 0;
         return (overageDays.get(key) ?? 0) / dayBilled;
       });
-      // The rows are analytics tokens, which track the billed series closely
-      // but not to the token — pin the "Total tokens" row's overage to the
-      // usage card's range figure exactly.
+      // The rows are billed-scaled analytics, which track the billed series
+      // closely but not to the token — pin the "Total tokens" row's overage
+      // to the usage card's range figure exactly.
       const rangeOverage = Math.round(sumDaysInPeriod(overageDays, period));
       const weightedTotal = points.reduce(
-        (sum, p, i) => sum + p.totalTokens * weights[i]!,
+        (sum, p, i) => sum + p.totalTokens * billedScale * weights[i]!,
         0,
       );
       if (weightedTotal === 0) return weights.map(() => 0);
@@ -494,14 +518,21 @@ export function TumDetailsTable({
     if (weightedTotal === 0) return weights.map(() => 0);
     const scale = billedOverage / weightedTotal;
     return weights.map((w) => w * scale);
-  }, [data, limit, billedCycle, billedScale, period, billedDays, overageDays]);
+  }, [
+    data,
+    limit,
+    billedCycle,
+    billedScale,
+    period,
+    billedDays,
+    overageDays,
+    rangeCovered,
+  ]);
 
   const loading = isFetching && !data;
   const failed = !loading && !data && isError;
 
-  const totalTooltip = billedCycle
-    ? "Billed tokens under management, attributed across metrics by the analytics distribution."
-    : "Tokens for the selected range, from the analytics aggregates. Billed normalization applies to full billing cycles only.";
+  const totalTooltip = totalTooltipFor(billedCycle != null || rangeCovered);
   const overageTooltip = overageTooltipFor(
     billedCycle,
     overageWeights !== null,

@@ -21,14 +21,17 @@ export const TumAdminSection = (): JSX.Element => {
   const [tokenLimit, setTokenLimit] = useState("");
   const [alertEmail, setAlertEmail] = useState("");
   const [anchorDay, setAnchorDay] = useState("1");
+  const [prefilled, setPrefilled] = useState(false);
 
-  // Prefill the form once the current contract terms load.
+  // Prefill the form once the current contract terms load. Once only — a
+  // background refetch must not clobber in-progress edits.
   useEffect(() => {
-    if (!tum) return;
+    if (!tum || prefilled) return;
     setTokenLimit(tum.monthlyTokenLimit?.toString() ?? "");
     setAlertEmail(tum.alertEmail ?? "");
     setAnchorDay(tum.billingCycleAnchorDay.toString());
-  }, [tum]);
+    setPrefilled(true);
+  }, [tum, prefilled]);
 
   const mutation = useSetBillingMetadataMutation({
     onSuccess: () => {
@@ -38,9 +41,10 @@ export const TumAdminSection = (): JSX.Element => {
 
   const parsedLimit = tokenLimit.trim() === "" ? undefined : Number(tokenLimit);
   const parsedAnchorDay = Number(anchorDay);
+  // The limit is a token count: the API schema only accepts integers.
   const limitInvalid =
     parsedLimit !== undefined &&
-    (!Number.isFinite(parsedLimit) || parsedLimit < 0);
+    (!Number.isInteger(parsedLimit) || parsedLimit < 0);
   const anchorDayInvalid =
     !Number.isInteger(parsedAnchorDay) ||
     parsedAnchorDay < 1 ||

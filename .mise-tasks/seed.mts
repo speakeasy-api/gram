@@ -3829,9 +3829,13 @@ async function seedObservabilityData(init: {
   // when the seed runs. The billed TUM population is much narrower than the
   // raw telemetry inserted here (registry exclusions, cache reads dropped,
   // stored-evidence gating): an unboosted seed bills ~350k tokens/day, the
-  // divisor below. Capped so an early-cycle run doesn't inflate sessions to
-  // absurdity. Run-date dependent, which is fine: the full-project delete
-  // preamble in chSQL resets every re-run.
+  // divisor below. The cap only guards against pathological division — it
+  // sits above the worst-case single-elapsed-day boost (~286x) so the
+  // overage renders whether the cycle is a day old or nearly sealed. Sole
+  // gap: on the cycle's first day the history (which ends yesterday) has no
+  // rows inside the cycle yet, so overage appears from day two. Run-date
+  // dependent, which is fine: the full-project delete preamble in chSQL
+  // resets every re-run.
   const nowUtc = new Date(now);
   const currentCycleStartMs = Date.UTC(
     nowUtc.getUTCFullYear(),
@@ -3843,7 +3847,7 @@ async function seedObservabilityData(init: {
     Math.floor((todayUtcStart - currentCycleStartMs) / msPerDay),
   );
   const currentCycleBoost = Math.min(
-    60,
+    300,
     Math.max(1, 100_000_000 / (elapsedCycleDays * 350_000)),
   );
   const chBackfillInserts: string[] = [];

@@ -103,7 +103,11 @@ export function useBillingPeriod(cycles: BillingCycle[]): {
 
   const setPickedRange = useCallback(
     (from: Date, to: Date, label?: string): void => {
-      setCustomRange({ ...customRangeFromPicker(from, to), label });
+      const range = customRangeFromPicker(from, to);
+      // A natural-language parse can hand back an inverted window; keep the
+      // prior selection rather than scoping the page to an empty range.
+      if (range.end.getTime() <= range.start.getTime()) return;
+      setCustomRange({ ...range, label });
     },
     [],
   );

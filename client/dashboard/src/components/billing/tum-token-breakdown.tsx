@@ -7,6 +7,7 @@ import {
   type BilledDays,
   type BillingPeriod,
   bucketDateKey,
+  periodCoveredByBilled,
 } from "./billing-cycles";
 import {
   BREAKDOWN_TOTAL,
@@ -69,27 +70,20 @@ export function TumTokenBreakdown({
   }, [data, dimension, projectNames]);
 
   // The billed series aligned to the points grid, used only when the billed
-  // data COVERS every charted day — coverage, not positivity: a sealed
+  // data COVERS the whole period — coverage, not positivity: a sealed
   // zero-token cycle is fully known (all zeros beat late-recomputed
   // telemetry), while a day outside every covered cycle window (e.g. a
-  // synthesized active cycle without history) makes the whole view fall
-  // back to the details totals rather than charting misleading zeros.
+  // synthesized active cycle without history) or a non-day-aligned range
+  // (whose partial first/last day a full billed-day value would overstate)
+  // makes the whole view fall back to the details totals rather than
+  // charting misleading numbers.
   const billedSeries = useMemo(() => {
     if (points.length === 0) return null;
-    const series: number[] = [];
-    for (const p of points) {
-      const key = bucketDateKey(p.bucketTimeUnixNano);
-      // Bucket dates are UTC midnights, so the key parses back to the
-      // bucket's exact start instant.
-      const ms = Date.parse(key);
-      const coveredDay = billedDays.covered.some(
-        (r) => ms >= r.start && ms < r.end,
-      );
-      if (!coveredDay) return null;
-      series.push(billedDays.byDate.get(key) ?? 0);
-    }
-    return series;
-  }, [points, billedDays]);
+    if (!periodCoveredByBilled(period, billedDays.covered)) return null;
+    return points.map(
+      (p) => billedDays.byDate.get(bucketDateKey(p.bucketTimeUnixNano)) ?? 0,
+    );
+  }, [points, billedDays, period]);
 
   const breakdownPicker = (
     <BreakdownPicker
