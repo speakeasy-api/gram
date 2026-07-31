@@ -18,7 +18,12 @@ const preview: Preview = {
     controls: { matchers: { color: /(background|color)$/i, date: /Date$/i } },
     options: {
       storySort: {
-        order: ["Design System", ["All Components"]],
+        // Without an explicit method, anything not named in `order` keeps its
+        // import order, which is effectively random.
+        method: "alphabetical",
+        // `*` is the slot the unnamed entries sort into, so the gallery stays
+        // pinned above the individual components.
+        order: ["Design System", ["All Components", "*"]],
       },
     },
   },
