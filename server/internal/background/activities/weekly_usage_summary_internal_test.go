@@ -1,6 +1,7 @@
 package activities
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -107,6 +108,31 @@ func TestRenderWeeklyUsageRows_PairsComponentsByKey(t *testing.T) {
 
 	require.Contains(t, text, "Input tokens: 32,030 (previous cycle at this point: 55,470, -42%)")
 	require.Contains(t, text, "Total: 33,220 (previous cycle at this point: 56,470, -41%)")
+}
+
+func TestRenderWeeklyUsageRows_SortsByCurrentUsageDescending(t *testing.T) {
+	t.Parallel()
+
+	// Registry order lists input tokens first, but the email orders line
+	// items by current-cycle usage, largest first.
+	current := []telemetryrepo.TumComponentTotal{
+		{Key: "input_tokens", Label: "Input tokens", Tokens: 100},
+		{Key: "output_tokens", Label: "Output tokens", Tokens: 9000},
+		{Key: "cache_write_tokens", Label: "Cache write tokens", Tokens: 500},
+	}
+
+	html, text, err := renderWeeklyUsageRows(current, nil, 9600, 0)
+	require.NoError(t, err)
+
+	lines := strings.Split(text, "\n")
+	require.Len(t, lines, 4)
+	require.True(t, strings.HasPrefix(lines[0], "Output tokens:"))
+	require.True(t, strings.HasPrefix(lines[1], "Cache write tokens:"))
+	require.True(t, strings.HasPrefix(lines[2], "Input tokens:"))
+	require.True(t, strings.HasPrefix(lines[3], "Total:"))
+
+	require.Less(t, strings.Index(html, "Output tokens"), strings.Index(html, "Cache write tokens"))
+	require.Less(t, strings.Index(html, "Cache write tokens"), strings.Index(html, "Input tokens"))
 }
 
 func TestRenderWeeklyUsageRows_MissingPreviousComponentReadsAsNew(t *testing.T) {

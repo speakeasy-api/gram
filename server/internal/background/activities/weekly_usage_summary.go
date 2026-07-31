@@ -2,12 +2,14 @@ package activities
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"html/template"
 	"log/slog"
 	"math"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -262,16 +264,23 @@ var weeklyUsageRowsTemplate = template.Must(template.New("weekly_usage_rows").Pa
 
 // renderWeeklyUsageRows renders the per-component usage table as HTML plus a
 // plain-text fallback. Components arrive in billing.TumComponents order and
-// are paired by key, so the table shape follows the TUM definition.
+// are paired by key, so the table shape follows the TUM definition; line
+// items are ordered by current-cycle usage, largest first, with registry
+// order breaking ties.
 func renderWeeklyUsageRows(current, previous []telemetryrepo.TumComponentTotal, currentTotal, previousTotal int64) (string, string, error) {
 	previousByKey := make(map[string]int64, len(previous))
 	for _, p := range previous {
 		previousByKey[p.Key] = p.Tokens
 	}
 
-	rows := make([]weeklyUsageRow, 0, len(current))
-	textLines := make([]string, 0, len(current)+1)
-	for _, c := range current {
+	ordered := slices.Clone(current)
+	slices.SortStableFunc(ordered, func(a, b telemetryrepo.TumComponentTotal) int {
+		return cmp.Compare(b.Tokens, a.Tokens)
+	})
+
+	rows := make([]weeklyUsageRow, 0, len(ordered))
+	textLines := make([]string, 0, len(ordered)+1)
+	for _, c := range ordered {
 		prev := previousByKey[c.Key]
 		row := weeklyUsageRow{
 			Label:    c.Label,

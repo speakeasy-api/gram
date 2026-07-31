@@ -35,7 +35,9 @@ var tumComponents = []TumComponent{
 }
 
 // TumComponents lists the token measures that make up tokens under
-// management, in display order.
+// management, in stable registry order. Consumers that display line items
+// (the weekly usage summary email) re-sort by usage; registry order is the
+// tie-break.
 func TumComponents() []TumComponent {
 	return slices.Clone(tumComponents)
 }
