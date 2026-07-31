@@ -239,6 +239,18 @@ func assign(pkgs []pkg, index int, total int) []pkg {
 		)
 	})
 
+	// Weights are always positive, so an empty shard is lighter than any shard
+	// holding a package: with more shards than packages, the shards past the
+	// last package are always empty. Only tracking the ones that can win keeps
+	// a spec like -i 1/1000000000 from allocating its way to an OOM.
+	if total > len(ordered) {
+		if index > len(ordered) {
+			return nil
+		}
+
+		total = len(ordered)
+	}
+
 	loads := make([]int64, total)
 	var selected []pkg
 

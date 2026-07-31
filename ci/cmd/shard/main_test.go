@@ -96,6 +96,16 @@ func TestAssign_MoreShardsThanPackages(t *testing.T) {
 	require.Empty(t, assign(pkgs, 4, 4))
 }
 
+func TestAssign_ShardCountFarBeyondPackageCount(t *testing.T) {
+	t.Parallel()
+
+	pkgs := testPackages(3)
+
+	// Tracking a load per requested shard would allocate 8GB here.
+	require.Len(t, assign(pkgs, 1, 1_000_000_000), 1)
+	require.Empty(t, assign(pkgs, 4, 1_000_000_000))
+}
+
 func TestAssign_BalancesWeight(t *testing.T) {
 	t.Parallel()
 

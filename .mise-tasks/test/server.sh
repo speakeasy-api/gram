@@ -32,21 +32,35 @@ fi
 # tests, so CI can spread the suite over several runners. See ci/cmd/shard for
 # how packages are distributed.
 if [ -n "$shard" ]; then
-  # Package patterns are sharded; every other argument is passed to 'go test'
-  # as-is. Build tags also go to the shard tool so it and 'go test' agree on
-  # which packages and test files exist.
+  # Only package patterns are sharded. Everything else reaches 'go test' in the
+  # order it was given, including values that follow a flag — the 'TestFoo' in
+  # '-run TestFoo' is not a package. Build tags also go to the shard tool so it
+  # and 'go test' agree on which packages and test files exist.
   flags=()
   patterns=()
   tags=()
+  tags_next=false
   for arg in "${args[@]}"; do
+    if [ "$tags_next" = true ]; then
+      tags_next=false
+      tags+=("-tags=$arg")
+      flags+=("$arg")
+      continue
+    fi
+
     case $arg in
       -tags=*|--tags=*)
         tags+=("$arg")
         flags+=("$arg") ;;
-      -*)
+      -tags|--tags)
+        tags_next=true
         flags+=("$arg") ;;
-      *)
+      # Relative paths, anything ending in "..." and import paths such as
+      # example.com/mod/pkg. A bare word like "TestFoo" is a flag value.
+      ./*|../*|/*|.|*...|*.*/*)
         patterns+=("$arg") ;;
+      *)
+        flags+=("$arg") ;;
     esac
   done
 
