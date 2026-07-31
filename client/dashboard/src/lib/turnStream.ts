@@ -83,7 +83,26 @@ export async function streamTurn(args: {
    */
   projectSlug: string;
 }): Promise<void> {
-  const { chatId, writer, abortSignal, sessionToken, projectSlug } = args;
+  const {
+    chatId,
+    writer: rawWriter,
+    abortSignal,
+    sessionToken,
+    projectSlug,
+  } = args;
+
+  // Temporary: the turn renders correctly and the stream completes without
+  // error, yet assistant-ui still re-sends the turn. Log the exact chunk
+  // sequence so the emitted stream can be compared against what the resume
+  // check expects, instead of inferring it from the network trace.
+  const writer = {
+    ...rawWriter,
+    write: (chunk: Parameters<typeof rawWriter.write>[0]) => {
+      const c = chunk as { type: string; id?: string; toolCallId?: string };
+      console.log("[turnstream chunk]", c.type, c.id ?? c.toolCallId ?? "");
+      return rawWriter.write(chunk);
+    },
+  } as typeof rawWriter;
 
   let cursor = "";
   let reconnects = 0;
