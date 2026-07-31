@@ -411,8 +411,8 @@ const (
 	RetryAttemptKey = attribute.Key("retry.attempt")
 	RetryWaitKey    = attribute.Key("retry.wait")
 
-	TelemetryCHOperationKey = attribute.Key("gram.telemetry.ch.operation")
-	TelemetryCHRowCountKey  = attribute.Key("gram.telemetry.ch.row_count")
+	TelemetryCHOperationKey = attribute.Key("gram.telemetry.ch_operation")
+	TelemetryCHRowCountKey  = attribute.Key("gram.telemetry.ch_row_count")
 
 	PubSubDrainFailedCountKey    = attribute.Key("gram.pubsub.drain_failed_count")
 	PubSubDrainBatchSizeKey      = attribute.Key("gram.pubsub.drain_batch_size")
