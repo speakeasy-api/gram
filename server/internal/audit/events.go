@@ -34,7 +34,7 @@ const (
 	subjectTypeModelProviderKey      subjectType = "model_provider_key"
 	subjectTypeOtelForwarding        subjectType = "otel_forwarding_config"
 	subjectTypeOrganizationInvite    subjectType = "organization_invitation"
-	subjectTypePassthroughMcpServer  subjectType = "passthrough_mcp_server"
+	subjectTypeUnproxiedMcpServer    subjectType = "unproxied_mcp_server"
 	subjectTypePlugin                subjectType = "plugin"
 	subjectTypeProject               subjectType = "project"
 	subjectTypeRemoteMcpServer       subjectType = "remote_mcp_server"

@@ -43,10 +43,6 @@ export type McpServer = {
    */
   name?: string | undefined;
   /**
-   * The ID of the pass-through MCP server used as the backend, if any. A server backed by a pass-through MCP server is never proxied by Gram.
-   */
-  passthroughMcpServerId?: string | undefined;
-  /**
    * The project ID this MCP server belongs to
    */
   projectId: string;
@@ -70,6 +66,10 @@ export type McpServer = {
    * The ID of the tunneled MCP server used as the backend
    */
   tunneledMcpServerId?: string | undefined;
+  /**
+   * The ID of the unproxied MCP server used as the backend, if any. A server backed by an unproxied MCP server is never proxied by Gram.
+   */
+  unproxiedMcpServerId?: string | undefined;
   /**
    * When the MCP server was last updated
    */
@@ -100,13 +100,13 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
       environment_id: z.optional(z.string()),
       id: z.string(),
       name: z.optional(z.string()),
-      passthrough_mcp_server_id: z.optional(z.string()),
       project_id: z.string(),
       remote_mcp_server_id: z.optional(z.string()),
       slug: z.optional(z.string()),
       tool_variations_group_id: z.optional(z.string()),
       toolset_id: z.optional(z.string()),
       tunneled_mcp_server_id: z.optional(z.string()),
+      unproxied_mcp_server_id: z.optional(z.string()),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -118,12 +118,12 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
       return remap$(v, {
         "created_at": "createdAt",
         "environment_id": "environmentId",
-        "passthrough_mcp_server_id": "passthroughMcpServerId",
         "project_id": "projectId",
         "remote_mcp_server_id": "remoteMcpServerId",
         "tool_variations_group_id": "toolVariationsGroupId",
         "toolset_id": "toolsetId",
         "tunneled_mcp_server_id": "tunneledMcpServerId",
+        "unproxied_mcp_server_id": "unproxiedMcpServerId",
         "updated_at": "updatedAt",
         "user_session_issuer_id": "userSessionIssuerId",
       });

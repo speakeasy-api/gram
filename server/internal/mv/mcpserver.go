@@ -12,20 +12,20 @@ import (
 // type.
 func BuildMcpServerView(server repo.McpServer) *types.McpServer {
 	return &types.McpServer{
-		ID:                     server.ID.String(),
-		ProjectID:              server.ProjectID.String(),
-		Name:                   conv.FromPGText[string](server.Name),
-		Slug:                   conv.FromPGText[string](server.Slug),
-		EnvironmentID:          conv.FromNullableUUID(server.EnvironmentID),
-		UserSessionIssuerID:    conv.FromNullableUUID(server.UserSessionIssuerID),
-		RemoteMcpServerID:      conv.FromNullableUUID(server.RemoteMcpServerID),
-		TunneledMcpServerID:    conv.FromNullableUUID(server.TunneledMcpServerID),
-		ToolsetID:              conv.FromNullableUUID(server.ToolsetID),
-		PassthroughMcpServerID: conv.FromNullableUUID(server.PassthroughMcpServerID),
-		ToolVariationsGroupID:  conv.FromNullableUUID(server.ToolVariationsGroupID),
-		Visibility:             types.McpServerVisibility(server.Visibility),
-		CreatedAt:              server.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:              server.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                    server.ID.String(),
+		ProjectID:             server.ProjectID.String(),
+		Name:                  conv.FromPGText[string](server.Name),
+		Slug:                  conv.FromPGText[string](server.Slug),
+		EnvironmentID:         conv.FromNullableUUID(server.EnvironmentID),
+		UserSessionIssuerID:   conv.FromNullableUUID(server.UserSessionIssuerID),
+		RemoteMcpServerID:     conv.FromNullableUUID(server.RemoteMcpServerID),
+		TunneledMcpServerID:   conv.FromNullableUUID(server.TunneledMcpServerID),
+		ToolsetID:             conv.FromNullableUUID(server.ToolsetID),
+		UnproxiedMcpServerID:  conv.FromNullableUUID(server.UnproxiedMcpServerID),
+		ToolVariationsGroupID: conv.FromNullableUUID(server.ToolVariationsGroupID),
+		Visibility:            types.McpServerVisibility(server.Visibility),
+		CreatedAt:             server.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:             server.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 

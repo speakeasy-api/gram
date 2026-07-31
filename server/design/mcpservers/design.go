@@ -71,7 +71,7 @@ var _ = Service("mcpServers", func() {
 	})
 
 	Method("listMcpServers", func() {
-		Description("List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or passthrough_mcp_server_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.")
+		Description("List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.")
 
 		Payload(func() {
 			Attribute("remote_mcp_server_id", String, "Filter to MCP servers backed by this remote MCP server", func() {
@@ -83,7 +83,7 @@ var _ = Service("mcpServers", func() {
 			Attribute("toolset_id", String, "Filter to MCP servers backed by this toolset", func() {
 				Format(FormatUUID)
 			})
-			Attribute("passthrough_mcp_server_id", String, "Filter to MCP servers backed by this pass-through MCP server", func() {
+			Attribute("unproxied_mcp_server_id", String, "Filter to MCP servers backed by this unproxied MCP server", func() {
 				Format(FormatUUID)
 			})
 			security.SessionPayload()
@@ -98,7 +98,7 @@ var _ = Service("mcpServers", func() {
 			Param("remote_mcp_server_id")
 			Param("tunneled_mcp_server_id")
 			Param("toolset_id")
-			Param("passthrough_mcp_server_id")
+			Param("unproxied_mcp_server_id")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
@@ -374,7 +374,7 @@ var McpServerVisibility = Type("McpServerVisibility", String, func() {
 })
 
 var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
-	Description("Form for creating a new MCP server. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or passthrough_mcp_server_id must be provided.")
+	Description("Form for creating a new MCP server. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided.")
 
 	Attribute("name", String, "A human-readable display name for the server")
 	Attribute("environment_id", String, "The ID of the environment to associate with the server", func() {
@@ -389,7 +389,7 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 	Attribute("toolset_id", String, "The ID of the toolset to use as the backend", func() {
 		Format(FormatUUID)
 	})
-	Attribute("passthrough_mcp_server_id", String, "The ID of the pass-through MCP server to use as the backend", func() {
+	Attribute("unproxied_mcp_server_id", String, "The ID of the unproxied MCP server to use as the backend", func() {
 		Format(FormatUUID)
 	})
 	Attribute("tool_variations_group_id", String, "The ID of the tool variations group enabling MCP tool filtering for this server. Omit to leave filtering disabled.", func() {
@@ -401,7 +401,7 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 })
 
 var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
-	Description("Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The user session issuer cannot be changed after create. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or passthrough_mcp_server_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.")
+	Description("Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The user session issuer cannot be changed after create. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.")
 
 	Attribute("id", String, "The ID of the MCP server to update", func() {
 		Format(FormatUUID)
@@ -419,7 +419,7 @@ var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
 	Attribute("toolset_id", String, "The ID of the toolset to use as the backend", func() {
 		Format(FormatUUID)
 	})
-	Attribute("passthrough_mcp_server_id", String, "The ID of the pass-through MCP server to use as the backend", func() {
+	Attribute("unproxied_mcp_server_id", String, "The ID of the unproxied MCP server to use as the backend", func() {
 		Format(FormatUUID)
 	})
 	Attribute("tool_variations_group_id", String, "The ID of the tool variations group enabling MCP tool filtering for this server. Omit to disable filtering (cleared to null, consistent with the full-record replace semantics of the other UUID references).", func() {
@@ -458,7 +458,7 @@ var McpServer = Type("McpServer", func() {
 	Attribute("toolset_id", String, "The ID of the toolset used as the backend", func() {
 		Format(FormatUUID)
 	})
-	Attribute("passthrough_mcp_server_id", String, "The ID of the pass-through MCP server used as the backend, if any. A server backed by a pass-through MCP server is never proxied by Gram.", func() {
+	Attribute("unproxied_mcp_server_id", String, "The ID of the unproxied MCP server used as the backend, if any. A server backed by an unproxied MCP server is never proxied by Gram.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("tool_variations_group_id", String, "The ID of the tool variations group enabling MCP tool filtering for this server, if any.", func() {

@@ -25,7 +25,7 @@ func BuildCreateMcpServerPayload(mcpServersCreateMcpServerBody string, mcpServer
 	{
 		err = json.Unmarshal([]byte(mcpServersCreateMcpServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"passthrough_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"unproxied_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
 		}
 		if body.EnvironmentID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
@@ -39,8 +39,8 @@ func BuildCreateMcpServerPayload(mcpServersCreateMcpServerBody string, mcpServer
 		if body.ToolsetID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
 		}
-		if body.PassthroughMcpServerID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.passthrough_mcp_server_id", *body.PassthroughMcpServerID, goa.FormatUUID))
+		if body.UnproxiedMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.unproxied_mcp_server_id", *body.UnproxiedMcpServerID, goa.FormatUUID))
 		}
 		if body.ToolVariationsGroupID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
@@ -71,14 +71,14 @@ func BuildCreateMcpServerPayload(mcpServersCreateMcpServerBody string, mcpServer
 		}
 	}
 	v := &mcpservers.CreateMcpServerPayload{
-		Name:                   body.Name,
-		EnvironmentID:          body.EnvironmentID,
-		RemoteMcpServerID:      body.RemoteMcpServerID,
-		TunneledMcpServerID:    body.TunneledMcpServerID,
-		ToolsetID:              body.ToolsetID,
-		PassthroughMcpServerID: body.PassthroughMcpServerID,
-		ToolVariationsGroupID:  body.ToolVariationsGroupID,
-		Visibility:             types.McpServerVisibility(body.Visibility),
+		Name:                  body.Name,
+		EnvironmentID:         body.EnvironmentID,
+		RemoteMcpServerID:     body.RemoteMcpServerID,
+		TunneledMcpServerID:   body.TunneledMcpServerID,
+		ToolsetID:             body.ToolsetID,
+		UnproxiedMcpServerID:  body.UnproxiedMcpServerID,
+		ToolVariationsGroupID: body.ToolVariationsGroupID,
+		Visibility:            types.McpServerVisibility(body.Visibility),
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -137,7 +137,7 @@ func BuildGetMcpServerPayload(mcpServersGetMcpServerID string, mcpServersGetMcpS
 
 // BuildListMcpServersPayload builds the payload for the mcpServers
 // listMcpServers endpoint from CLI flags.
-func BuildListMcpServersPayload(mcpServersListMcpServersRemoteMcpServerID string, mcpServersListMcpServersTunneledMcpServerID string, mcpServersListMcpServersToolsetID string, mcpServersListMcpServersPassthroughMcpServerID string, mcpServersListMcpServersSessionToken string, mcpServersListMcpServersApikeyToken string, mcpServersListMcpServersProjectSlugInput string) (*mcpservers.ListMcpServersPayload, error) {
+func BuildListMcpServersPayload(mcpServersListMcpServersRemoteMcpServerID string, mcpServersListMcpServersTunneledMcpServerID string, mcpServersListMcpServersToolsetID string, mcpServersListMcpServersUnproxiedMcpServerID string, mcpServersListMcpServersSessionToken string, mcpServersListMcpServersApikeyToken string, mcpServersListMcpServersProjectSlugInput string) (*mcpservers.ListMcpServersPayload, error) {
 	var err error
 	var remoteMcpServerID *string
 	{
@@ -169,11 +169,11 @@ func BuildListMcpServersPayload(mcpServersListMcpServersRemoteMcpServerID string
 			}
 		}
 	}
-	var passthroughMcpServerID *string
+	var unproxiedMcpServerID *string
 	{
-		if mcpServersListMcpServersPassthroughMcpServerID != "" {
-			passthroughMcpServerID = &mcpServersListMcpServersPassthroughMcpServerID
-			err = goa.MergeErrors(err, goa.ValidateFormat("passthrough_mcp_server_id", *passthroughMcpServerID, goa.FormatUUID))
+		if mcpServersListMcpServersUnproxiedMcpServerID != "" {
+			unproxiedMcpServerID = &mcpServersListMcpServersUnproxiedMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("unproxied_mcp_server_id", *unproxiedMcpServerID, goa.FormatUUID))
 			if err != nil {
 				return nil, err
 			}
@@ -201,7 +201,7 @@ func BuildListMcpServersPayload(mcpServersListMcpServersRemoteMcpServerID string
 	v.RemoteMcpServerID = remoteMcpServerID
 	v.TunneledMcpServerID = tunneledMcpServerID
 	v.ToolsetID = toolsetID
-	v.PassthroughMcpServerID = passthroughMcpServerID
+	v.UnproxiedMcpServerID = unproxiedMcpServerID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -232,7 +232,7 @@ func BuildUpdateMcpServerPayload(mcpServersUpdateMcpServerBody string, mcpServer
 	{
 		err = json.Unmarshal([]byte(mcpServersUpdateMcpServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"passthrough_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"unproxied_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.EnvironmentID != nil {
@@ -247,8 +247,8 @@ func BuildUpdateMcpServerPayload(mcpServersUpdateMcpServerBody string, mcpServer
 		if body.ToolsetID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
 		}
-		if body.PassthroughMcpServerID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.passthrough_mcp_server_id", *body.PassthroughMcpServerID, goa.FormatUUID))
+		if body.UnproxiedMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.unproxied_mcp_server_id", *body.UnproxiedMcpServerID, goa.FormatUUID))
 		}
 		if body.ToolVariationsGroupID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
@@ -279,15 +279,15 @@ func BuildUpdateMcpServerPayload(mcpServersUpdateMcpServerBody string, mcpServer
 		}
 	}
 	v := &mcpservers.UpdateMcpServerPayload{
-		ID:                     body.ID,
-		Name:                   body.Name,
-		EnvironmentID:          body.EnvironmentID,
-		RemoteMcpServerID:      body.RemoteMcpServerID,
-		TunneledMcpServerID:    body.TunneledMcpServerID,
-		ToolsetID:              body.ToolsetID,
-		PassthroughMcpServerID: body.PassthroughMcpServerID,
-		ToolVariationsGroupID:  body.ToolVariationsGroupID,
-		Visibility:             types.McpServerVisibility(body.Visibility),
+		ID:                    body.ID,
+		Name:                  body.Name,
+		EnvironmentID:         body.EnvironmentID,
+		RemoteMcpServerID:     body.RemoteMcpServerID,
+		TunneledMcpServerID:   body.TunneledMcpServerID,
+		ToolsetID:             body.ToolsetID,
+		UnproxiedMcpServerID:  body.UnproxiedMcpServerID,
+		ToolVariationsGroupID: body.ToolVariationsGroupID,
+		Visibility:            types.McpServerVisibility(body.Visibility),
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

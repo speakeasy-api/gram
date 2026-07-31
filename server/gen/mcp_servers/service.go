@@ -23,7 +23,7 @@ type Service interface {
 	// Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
 	GetMcpServer(context.Context, *GetMcpServerPayload) (res *types.McpServer, err error)
 	// List MCP servers for a project. Accepts optional remote_mcp_server_id,
-	// tunneled_mcp_server_id, toolset_id, or passthrough_mcp_server_id filters to
+	// tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id filters to
 	// scope the result to a single backend; at most one filter may be supplied
 	// since the backends are mutually exclusive.
 	ListMcpServers(context.Context, *ListMcpServersPayload) (res *ListMcpServersResult, err error)
@@ -123,8 +123,8 @@ type CreateMcpServerPayload struct {
 	TunneledMcpServerID *string
 	// The ID of the toolset to use as the backend
 	ToolsetID *string
-	// The ID of the pass-through MCP server to use as the backend
-	PassthroughMcpServerID *string
+	// The ID of the unproxied MCP server to use as the backend
+	UnproxiedMcpServerID *string
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server. Omit to leave filtering disabled.
 	ToolVariationsGroupID *string
@@ -181,11 +181,11 @@ type ListMcpServersPayload struct {
 	TunneledMcpServerID *string
 	// Filter to MCP servers backed by this toolset
 	ToolsetID *string
-	// Filter to MCP servers backed by this pass-through MCP server
-	PassthroughMcpServerID *string
-	SessionToken           *string
-	ApikeyToken            *string
-	ProjectSlugInput       *string
+	// Filter to MCP servers backed by this unproxied MCP server
+	UnproxiedMcpServerID *string
+	SessionToken         *string
+	ApikeyToken          *string
+	ProjectSlugInput     *string
 }
 
 // ListMcpServersResult is the result type of the mcpServers service
@@ -308,8 +308,8 @@ type UpdateMcpServerPayload struct {
 	TunneledMcpServerID *string
 	// The ID of the toolset to use as the backend
 	ToolsetID *string
-	// The ID of the pass-through MCP server to use as the backend
-	PassthroughMcpServerID *string
+	// The ID of the unproxied MCP server to use as the backend
+	UnproxiedMcpServerID *string
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server. Omit to disable filtering (cleared to null, consistent with the
 	// full-record replace semantics of the other UUID references).

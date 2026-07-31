@@ -37,13 +37,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	passthroughmcprepo "github.com/speakeasy-api/gram/server/internal/passthroughmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
+	unproxiedmcprepo "github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	variationsrepo "github.com/speakeasy-api/gram/server/internal/variations/repo"
@@ -121,18 +121,18 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		return nil, oops.E(oops.CodeBadRequest, nil, "name must be non-empty").LogError(ctx, logger)
 	}
 
-	ids, err := parseServerIDs(
-		payload.EnvironmentID,
-		payload.RemoteMcpServerID,
-		payload.TunneledMcpServerID,
-		payload.ToolsetID,
-		payload.PassthroughMcpServerID,
-		payload.ToolVariationsGroupID,
-	)
+	ids, err := parseServerIDs(serverIDStrings{
+		EnvironmentID:         payload.EnvironmentID,
+		RemoteMcpServerID:     payload.RemoteMcpServerID,
+		TunneledMcpServerID:   payload.TunneledMcpServerID,
+		ToolsetID:             payload.ToolsetID,
+		UnproxiedMcpServerID:  payload.UnproxiedMcpServerID,
+		ToolVariationsGroupID: payload.ToolVariationsGroupID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server").LogError(ctx, logger)
 	}
-	if err := validateServerBackendExclusivity(ids.RemoteMcpServerID, ids.TunneledMcpServerID, ids.ToolsetID, ids.PassthroughMcpServerID); err != nil {
+	if err := validateServerBackendExclusivity(ids); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
 
@@ -176,18 +176,18 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	}
 
 	server, err := txRepo.CreateMCPServer(ctx, repo.CreateMCPServerParams{
-		ID:                     serverID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   conv.ToPGText(name),
-		Slug:                   conv.ToPGText(slug),
-		EnvironmentID:          ids.EnvironmentID,
-		UserSessionIssuerID:    ids.UserSessionIssuerID,
-		RemoteMcpServerID:      ids.RemoteMcpServerID,
-		TunneledMcpServerID:    ids.TunneledMcpServerID,
-		ToolsetID:              ids.ToolsetID,
-		PassthroughMcpServerID: ids.PassthroughMcpServerID,
-		ToolVariationsGroupID:  ids.ToolVariationsGroupID,
-		Visibility:             string(payload.Visibility),
+		ID:                    serverID,
+		ProjectID:             *authCtx.ProjectID,
+		Name:                  conv.ToPGText(name),
+		Slug:                  conv.ToPGText(slug),
+		EnvironmentID:         ids.EnvironmentID,
+		UserSessionIssuerID:   ids.UserSessionIssuerID,
+		RemoteMcpServerID:     ids.RemoteMcpServerID,
+		TunneledMcpServerID:   ids.TunneledMcpServerID,
+		ToolsetID:             ids.ToolsetID,
+		UnproxiedMcpServerID:  ids.UnproxiedMcpServerID,
+		ToolVariationsGroupID: ids.ToolVariationsGroupID,
+		Visibility:            string(payload.Visibility),
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -382,20 +382,20 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServer
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset_id").LogError(ctx, logger)
 	}
-	passthroughMcpServerID, err := conv.PtrToNullUUID(payload.PassthroughMcpServerID)
+	unproxiedMcpServerID, err := conv.PtrToNullUUID(payload.UnproxiedMcpServerID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid passthrough_mcp_server_id").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid unproxied_mcp_server_id").LogError(ctx, logger)
 	}
-	if backendFilterCount(remoteMcpServerID, tunneledMcpServerID, toolsetID, passthroughMcpServerID) > 1 {
-		return nil, oops.E(oops.CodeInvalid, nil, "at most one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or passthrough_mcp_server_id may be provided").LogWarn(ctx, logger)
+	if backendFilterCount(remoteMcpServerID, tunneledMcpServerID, toolsetID, unproxiedMcpServerID) > 1 {
+		return nil, oops.E(oops.CodeInvalid, nil, "at most one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id may be provided").LogWarn(ctx, logger)
 	}
 
 	servers, err := repo.New(s.db).ListMCPServersByProjectID(ctx, repo.ListMCPServersByProjectIDParams{
-		ProjectID:              *authCtx.ProjectID,
-		RemoteMcpServerID:      remoteMcpServerID,
-		TunneledMcpServerID:    tunneledMcpServerID,
-		ToolsetID:              toolsetID,
-		PassthroughMcpServerID: passthroughMcpServerID,
+		ProjectID:            *authCtx.ProjectID,
+		RemoteMcpServerID:    remoteMcpServerID,
+		TunneledMcpServerID:  tunneledMcpServerID,
+		ToolsetID:            toolsetID,
+		UnproxiedMcpServerID: unproxiedMcpServerID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers").LogError(ctx, logger)
@@ -441,18 +441,18 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
 
-	ids, err := parseServerIDs(
-		payload.EnvironmentID,
-		payload.RemoteMcpServerID,
-		payload.TunneledMcpServerID,
-		payload.ToolsetID,
-		payload.PassthroughMcpServerID,
-		payload.ToolVariationsGroupID,
-	)
+	ids, err := parseServerIDs(serverIDStrings{
+		EnvironmentID:         payload.EnvironmentID,
+		RemoteMcpServerID:     payload.RemoteMcpServerID,
+		TunneledMcpServerID:   payload.TunneledMcpServerID,
+		ToolsetID:             payload.ToolsetID,
+		UnproxiedMcpServerID:  payload.UnproxiedMcpServerID,
+		ToolVariationsGroupID: payload.ToolVariationsGroupID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server").LogError(ctx, logger)
 	}
-	if err := validateServerBackendExclusivity(ids.RemoteMcpServerID, ids.TunneledMcpServerID, ids.ToolsetID, ids.PassthroughMcpServerID); err != nil {
+	if err := validateServerBackendExclusivity(ids); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
 
@@ -528,15 +528,15 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		EnvironmentID: ids.EnvironmentID,
 		// Always NULL: the query COALESCEs to the stored issuer, which is
 		// attached at create time for the server's lifetime.
-		UserSessionIssuerID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteMcpServerID:      ids.RemoteMcpServerID,
-		TunneledMcpServerID:    ids.TunneledMcpServerID,
-		ToolsetID:              ids.ToolsetID,
-		PassthroughMcpServerID: ids.PassthroughMcpServerID,
-		ToolVariationsGroupID:  ids.ToolVariationsGroupID,
-		Visibility:             string(payload.Visibility),
-		ID:                     serverID,
-		ProjectID:              *authCtx.ProjectID,
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:     ids.RemoteMcpServerID,
+		TunneledMcpServerID:   ids.TunneledMcpServerID,
+		ToolsetID:             ids.ToolsetID,
+		UnproxiedMcpServerID:  ids.UnproxiedMcpServerID,
+		ToolVariationsGroupID: ids.ToolVariationsGroupID,
+		Visibility:            string(payload.Visibility),
+		ID:                    serverID,
+		ProjectID:             *authCtx.ProjectID,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -993,54 +993,60 @@ func (s *Service) reconcileMcpServerCustomDomains(ctx context.Context, customDom
 type serverIDs struct {
 	EnvironmentID uuid.NullUUID
 	// Set by mintServerUserSessionIssuer during create, never parsed from a payload.
-	UserSessionIssuerID    uuid.NullUUID
-	RemoteMcpServerID      uuid.NullUUID
-	TunneledMcpServerID    uuid.NullUUID
-	ToolsetID              uuid.NullUUID
-	PassthroughMcpServerID uuid.NullUUID
-	ToolVariationsGroupID  uuid.NullUUID
+	UserSessionIssuerID   uuid.NullUUID
+	RemoteMcpServerID     uuid.NullUUID
+	TunneledMcpServerID   uuid.NullUUID
+	ToolsetID             uuid.NullUUID
+	UnproxiedMcpServerID  uuid.NullUUID
+	ToolVariationsGroupID uuid.NullUUID
+}
+
+// serverIDStrings bundles the optional UUID payload fields shared by the
+// create/update forms, as raw strings straight off the wire, so
+// parseServerIDs takes one labeled argument instead of a positional run of
+// same-typed *string parameters.
+type serverIDStrings struct {
+	EnvironmentID         *string
+	RemoteMcpServerID     *string
+	TunneledMcpServerID   *string
+	ToolsetID             *string
+	UnproxiedMcpServerID  *string
+	ToolVariationsGroupID *string
 }
 
 // parseServerIDs parses the optional UUID payload fields into a
 // serverIDs struct. Any malformed UUID surfaces with a field-specific error.
-func parseServerIDs(
-	environmentIDStr *string,
-	remoteMcpServerIDStr *string,
-	tunneledMcpServerIDStr *string,
-	toolsetIDStr *string,
-	passthroughMcpServerIDStr *string,
-	toolVariationsGroupIDStr *string,
-) (serverIDs, error) {
+func parseServerIDs(in serverIDStrings) (serverIDs, error) {
 	var (
 		ids serverIDs
 		err error
 	)
 
-	if ids.EnvironmentID, err = conv.PtrToNullUUID(environmentIDStr); err != nil {
+	if ids.EnvironmentID, err = conv.PtrToNullUUID(in.EnvironmentID); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid environment_id: %w", err)
 	}
-	if ids.RemoteMcpServerID, err = conv.PtrToNullUUID(remoteMcpServerIDStr); err != nil {
+	if ids.RemoteMcpServerID, err = conv.PtrToNullUUID(in.RemoteMcpServerID); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid remote_mcp_server_id: %w", err)
 	}
-	if ids.TunneledMcpServerID, err = conv.PtrToNullUUID(tunneledMcpServerIDStr); err != nil {
+	if ids.TunneledMcpServerID, err = conv.PtrToNullUUID(in.TunneledMcpServerID); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid tunneled_mcp_server_id: %w", err)
 	}
-	if ids.ToolsetID, err = conv.PtrToNullUUID(toolsetIDStr); err != nil {
+	if ids.ToolsetID, err = conv.PtrToNullUUID(in.ToolsetID); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid toolset_id: %w", err)
 	}
-	if ids.PassthroughMcpServerID, err = conv.PtrToNullUUID(passthroughMcpServerIDStr); err != nil {
-		return serverIDs{}, fmt.Errorf("invalid passthrough_mcp_server_id: %w", err)
+	if ids.UnproxiedMcpServerID, err = conv.PtrToNullUUID(in.UnproxiedMcpServerID); err != nil {
+		return serverIDs{}, fmt.Errorf("invalid unproxied_mcp_server_id: %w", err)
 	}
-	if ids.ToolVariationsGroupID, err = conv.PtrToNullUUID(toolVariationsGroupIDStr); err != nil {
+	if ids.ToolVariationsGroupID, err = conv.PtrToNullUUID(in.ToolVariationsGroupID); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid tool_variations_group_id: %w", err)
 	}
 
 	return ids, nil
 }
 
-func validateServerBackendExclusivity(remoteMcpServerID, tunneledMcpServerID, toolsetID, passthroughMcpServerID uuid.NullUUID) error {
-	if backendFilterCount(remoteMcpServerID, tunneledMcpServerID, toolsetID, passthroughMcpServerID) != 1 {
-		return fmt.Errorf("exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or passthrough_mcp_server_id must be provided")
+func validateServerBackendExclusivity(ids serverIDs) error {
+	if backendFilterCount(ids.RemoteMcpServerID, ids.TunneledMcpServerID, ids.ToolsetID, ids.UnproxiedMcpServerID) != 1 {
+		return fmt.Errorf("exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided")
 	}
 	return nil
 }
@@ -1141,15 +1147,15 @@ func verifyServerReferenceOwnership(
 		}
 	}
 
-	if ids.PassthroughMcpServerID.Valid {
-		if _, err := passthroughmcprepo.New(dbtx).GetServerByID(ctx, passthroughmcprepo.GetServerByIDParams{
-			ID:        ids.PassthroughMcpServerID.UUID,
+	if ids.UnproxiedMcpServerID.Valid {
+		if _, err := unproxiedmcprepo.New(dbtx).GetServerByID(ctx, unproxiedmcprepo.GetServerByIDParams{
+			ID:        ids.UnproxiedMcpServerID.UUID,
 			ProjectID: projectID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("passthrough_mcp_server_id does not reference a resource in this project")
+				return fmt.Errorf("unproxied_mcp_server_id does not reference a resource in this project")
 			}
-			return fmt.Errorf("check passthrough mcp server ownership: %w", err)
+			return fmt.Errorf("check unproxied mcp server ownership: %w", err)
 		}
 	}
 

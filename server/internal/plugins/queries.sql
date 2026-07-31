@@ -187,7 +187,7 @@ RETURNING *;
 -- Resolve an mcp_server for plugin-server validation, scoped to the project so
 -- IDs alone are never trusted. has_endpoint reports whether the server has at
 -- least one usable endpoint so the caller can reject unpublishable servers.
--- is_passthrough reports whether the server is backed by a pass-through MCP
+-- is_unproxied reports whether the server is backed by an unproxied MCP
 -- server, which is never proxied and so never has an mcp_endpoints row; the
 -- caller exempts those servers from the has_endpoint requirement.
 SELECT
@@ -199,7 +199,7 @@ SELECT
     SELECT 1 FROM mcp_endpoints e
     WHERE e.mcp_server_id = s.id AND e.deleted IS FALSE
   ) AS has_endpoint,
-  (s.passthrough_mcp_server_id IS NOT NULL)::boolean AS is_passthrough
+  (s.unproxied_mcp_server_id IS NOT NULL)::boolean AS is_unproxied
 FROM mcp_servers s
 WHERE
   s.id = @mcp_server_id

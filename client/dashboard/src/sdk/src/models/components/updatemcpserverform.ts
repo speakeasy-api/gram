@@ -22,7 +22,7 @@ export type UpdateMcpServerFormVisibility = ClosedEnum<
 >;
 
 /**
- * Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The user session issuer cannot be changed after create. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or passthrough_mcp_server_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.
+ * Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The user session issuer cannot be changed after create. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.
  */
 export type UpdateMcpServerForm = {
   /**
@@ -37,10 +37,6 @@ export type UpdateMcpServerForm = {
    * A human-readable display name for the server. Omit to leave the existing name unchanged; if provided, must be non-empty.
    */
   name?: string | undefined;
-  /**
-   * The ID of the pass-through MCP server to use as the backend
-   */
-  passthroughMcpServerId?: string | undefined;
   /**
    * The ID of the remote MCP server to use as the backend
    */
@@ -58,6 +54,10 @@ export type UpdateMcpServerForm = {
    */
   tunneledMcpServerId?: string | undefined;
   /**
+   * The ID of the unproxied MCP server to use as the backend
+   */
+  unproxiedMcpServerId?: string | undefined;
+  /**
    * The visibility of an MCP server
    */
   visibility: UpdateMcpServerFormVisibility;
@@ -73,11 +73,11 @@ export type UpdateMcpServerForm$Outbound = {
   environment_id?: string | undefined;
   id: string;
   name?: string | undefined;
-  passthrough_mcp_server_id?: string | undefined;
   remote_mcp_server_id?: string | undefined;
   tool_variations_group_id?: string | undefined;
   toolset_id?: string | undefined;
   tunneled_mcp_server_id?: string | undefined;
+  unproxied_mcp_server_id?: string | undefined;
   visibility: string;
 };
 
@@ -90,21 +90,21 @@ export const UpdateMcpServerForm$outboundSchema: z.ZodMiniType<
     environmentId: z.optional(z.string()),
     id: z.string(),
     name: z.optional(z.string()),
-    passthroughMcpServerId: z.optional(z.string()),
     remoteMcpServerId: z.optional(z.string()),
     toolVariationsGroupId: z.optional(z.string()),
     toolsetId: z.optional(z.string()),
     tunneledMcpServerId: z.optional(z.string()),
+    unproxiedMcpServerId: z.optional(z.string()),
     visibility: UpdateMcpServerFormVisibility$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       environmentId: "environment_id",
-      passthroughMcpServerId: "passthrough_mcp_server_id",
       remoteMcpServerId: "remote_mcp_server_id",
       toolVariationsGroupId: "tool_variations_group_id",
       toolsetId: "toolset_id",
       tunneledMcpServerId: "tunneled_mcp_server_id",
+      unproxiedMcpServerId: "unproxied_mcp_server_id",
     });
   }),
 );

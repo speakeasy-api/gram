@@ -576,18 +576,18 @@ func TestPluginsService_AddPluginServer_RejectsMcpServerWithoutEndpoint(t *testi
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
-func TestPluginsService_AddPluginServer_PassthroughBackedWithoutEndpointSucceeds(t *testing.T) {
+func TestPluginsService_AddPluginServer_UnproxiedBackedWithoutEndpointSucceeds(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestPluginsService(t)
 
-	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Passthrough Test"})
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Unproxied Test"})
 	require.NoError(t, err)
 
-	// Pass-through servers are never proxied, so they never gain an
+	// Unproxied servers are never proxied, so they never gain an
 	// mcp_endpoints row. AddPluginServer must not reject them for lacking one
 	// the way it would a remote- or toolset-backed server.
-	mcpServer := createTestPassthroughMcpServer(t, ctx, ti.conn, "Passthrough Widget", mcpservers.VisibilityPublic)
+	mcpServer := createTestUnproxiedMcpServer(t, ctx, ti.conn, "Unproxied Widget", mcpservers.VisibilityPublic)
 
 	server, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
@@ -596,7 +596,7 @@ func TestPluginsService_AddPluginServer_PassthroughBackedWithoutEndpointSucceeds
 		SortOrder:   0,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "Passthrough Widget", server.DisplayName)
+	require.Equal(t, "Unproxied Widget", server.DisplayName)
 	require.NotNil(t, server.McpServerID)
 	require.Equal(t, mcpServer.idStr, *server.McpServerID)
 }
@@ -1683,7 +1683,7 @@ func TestPluginsService_PublishPlugins_ObservabilityConfigContainsAPIKey(t *test
 	// Relay configs embed the publish-time hooks key as the org-wide fallback:
 	// per-user browser login still takes precedence when cached, but a machine
 	// with no personal credentials sends through the baked key instead of
-	// degrading to the unauthenticated pass-through.
+	// degrading to the unauthenticated unproxied.
 	for _, root := range []string{claudeObservability, "cursor-plugins/" + cursorObservability} {
 		config := string(mock.lastPushedFiles[root+"/speakeasy.json"])
 		require.NotEmpty(t, config, root+"/speakeasy.json missing")

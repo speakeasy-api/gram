@@ -553,8 +553,8 @@ func EncodeListMcpServersRequest(encoder func(*http.Request) goahttp.Encoder) fu
 		if p.ToolsetID != nil {
 			values.Add("toolset_id", *p.ToolsetID)
 		}
-		if p.PassthroughMcpServerID != nil {
-			values.Add("passthrough_mcp_server_id", *p.PassthroughMcpServerID)
+		if p.UnproxiedMcpServerID != nil {
+			values.Add("unproxied_mcp_server_id", *p.UnproxiedMcpServerID)
 		}
 		req.URL.RawQuery = values.Encode()
 		return nil
@@ -2913,20 +2913,20 @@ func DecodeDeleteMcpServerResponse(decoder func(*http.Response) goahttp.Decoder,
 // *types.McpServer from a value of type *McpServerResponseBody.
 func unmarshalMcpServerResponseBodyToTypesMcpServer(v *McpServerResponseBody) *types.McpServer {
 	res := &types.McpServer{
-		ID:                     *v.ID,
-		ProjectID:              *v.ProjectID,
-		Name:                   v.Name,
-		Slug:                   v.Slug,
-		EnvironmentID:          v.EnvironmentID,
-		UserSessionIssuerID:    v.UserSessionIssuerID,
-		RemoteMcpServerID:      v.RemoteMcpServerID,
-		TunneledMcpServerID:    v.TunneledMcpServerID,
-		ToolsetID:              v.ToolsetID,
-		PassthroughMcpServerID: v.PassthroughMcpServerID,
-		ToolVariationsGroupID:  v.ToolVariationsGroupID,
-		Visibility:             types.McpServerVisibility(*v.Visibility),
-		CreatedAt:              *v.CreatedAt,
-		UpdatedAt:              *v.UpdatedAt,
+		ID:                    *v.ID,
+		ProjectID:             *v.ProjectID,
+		Name:                  v.Name,
+		Slug:                  v.Slug,
+		EnvironmentID:         v.EnvironmentID,
+		UserSessionIssuerID:   v.UserSessionIssuerID,
+		RemoteMcpServerID:     v.RemoteMcpServerID,
+		TunneledMcpServerID:   v.TunneledMcpServerID,
+		ToolsetID:             v.ToolsetID,
+		UnproxiedMcpServerID:  v.UnproxiedMcpServerID,
+		ToolVariationsGroupID: v.ToolVariationsGroupID,
+		Visibility:            types.McpServerVisibility(*v.Visibility),
+		CreatedAt:             *v.CreatedAt,
+		UpdatedAt:             *v.UpdatedAt,
 	}
 
 	return res

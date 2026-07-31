@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listMcpServers mcpServers
  *
  * @remarks
- * List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or passthrough_mcp_server_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
+ * List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
  */
 export function mcpServersList(
   client: GramCore,
@@ -107,10 +107,10 @@ async function $do(
   const path = pathToFunc("/rpc/mcpServers.list")();
 
   const query = encodeFormQuery({
-    "passthrough_mcp_server_id": payload?.passthrough_mcp_server_id,
     "remote_mcp_server_id": payload?.remote_mcp_server_id,
     "toolset_id": payload?.toolset_id,
     "tunneled_mcp_server_id": payload?.tunneled_mcp_server_id,
+    "unproxied_mcp_server_id": payload?.unproxied_mcp_server_id,
   });
 
   const headers = new Headers(compactMap({
