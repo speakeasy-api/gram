@@ -1389,6 +1389,18 @@ WHERE id = @id
 -- result here drops it out of the "active findings" surfaces the same way an
 -- exclusion does, without touching excluded_at.
 
+-- name: GetRiskResultsByIDs :many
+-- Fetches full rows for a batch of finding ids, scoped to the project. Powers
+-- suggestExclusion's batch-suggestion path (deriving a suggested exclusion
+-- pattern from a multiselect of findings) — needs match/rule_id/source per
+-- row, not just the id, and looking them up server-side (rather than trusting
+-- client-supplied content) means the suggestion sees authoritative,
+-- unmasked data regardless of what the UI has revealed.
+SELECT *
+FROM risk_results
+WHERE project_id = @project_id
+  AND id = ANY(@ids::uuid[]);
+
 -- name: MarkRiskResultsFalsePositive :many
 -- Returns full rows (not just id): the caller republishes each one onto the
 -- findings topic to append a ClickHouse state-change row, and needs the

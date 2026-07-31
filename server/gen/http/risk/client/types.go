@@ -349,10 +349,15 @@ type SuggestCustomDetectionRuleRequestBody struct {
 // SuggestExclusionRequestBody is the type of the "risk" service
 // "suggestExclusion" endpoint HTTP request body.
 type SuggestExclusionRequestBody struct {
-	// Natural-language description of the findings to stop flagging.
-	Prompt string `form:"prompt" json:"prompt" xml:"prompt"`
+	// Natural-language description of the findings to stop flagging. Optional when
+	// finding_ids is provided.
+	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
 	// Built-in and custom rule ids the suggestion may reference in rule_id filters.
 	KnownRuleIds []string `form:"known_rule_ids,omitempty" json:"known_rule_ids,omitempty" xml:"known_rule_ids,omitempty"`
+	// IDs of example findings (e.g. a multiselect batch) to derive a suggestion
+	// from. Looked up server-side so the suggestion sees authoritative, unmasked
+	// content. Optional when prompt is provided.
+	FindingIds []string `form:"finding_ids,omitempty" json:"finding_ids,omitempty" xml:"finding_ids,omitempty"`
 }
 
 // TestDetectionRuleRequestBody is the type of the "risk" service
@@ -10921,6 +10926,12 @@ func NewSuggestExclusionRequestBody(p *risk.SuggestExclusionPayload) *SuggestExc
 		body.KnownRuleIds = make([]string, len(p.KnownRuleIds))
 		for i, val := range p.KnownRuleIds {
 			body.KnownRuleIds[i] = val
+		}
+	}
+	if p.FindingIds != nil {
+		body.FindingIds = make([]string, len(p.FindingIds))
+		for i, val := range p.FindingIds {
+			body.FindingIds[i] = val
 		}
 	}
 	return body

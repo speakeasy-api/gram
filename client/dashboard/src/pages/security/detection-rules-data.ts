@@ -145,6 +145,15 @@ export const BUILTIN_RULES_BY_CATEGORY: Record<RuleCategory, BuiltinRule[]> = (
   {} as Record<RuleCategory, BuiltinRule[]>,
 );
 
+// Rule ids the exclusion AI suggestion may reference in rule_id clauses.
+// Built-ins only: they cover the common asks ("email findings", "AWS keys")
+// without an extra fetch; custom rule ids can still be named in the prompt
+// itself. Lives here (not exclusion-sheet.tsx) since it's a derived constant,
+// not a component — co-exporting it from a component file breaks fast refresh.
+export const BUILTIN_RULE_ID_LIST = Object.values(BUILTIN_RULES_BY_CATEGORY)
+  .flat()
+  .map((rule) => rule.id);
+
 /** All builtin rule ids, used for custom rule id collision checks. Includes
  *  hidden/deprecated rule ids (which BUILTIN_RULES_BY_CATEGORY omits) so a
  *  custom rule can never reuse an id that legacy findings still resolve. */

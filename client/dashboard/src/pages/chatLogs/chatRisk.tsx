@@ -3,6 +3,7 @@ import {
   Fragment,
   type ReactElement,
   type ReactNode,
+  useContext,
   useMemo,
   useState,
 } from "react";
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/popover";
 import { MoreActions, type Action } from "@/components/ui/more-actions";
 import { useDismissFinding } from "@/pages/security/useDismissFinding";
+import { CreateExclusionContext } from "./exclusionContext";
 import {
   collapseToMatchWindows,
   getMatchStrings,
@@ -191,6 +193,7 @@ type TranscriptFinding = {
   count?: number;
   showRuleId?: boolean;
   onMarkFalsePositive?: () => void;
+  onSetupExclusionRule?: () => void;
 };
 
 // spansOf returns a finding's matched spans: the spans array when the backend
@@ -243,15 +246,28 @@ function TranscriptFindingsCard({
                     ×{finding.count}
                   </Badge>
                 )}
-                {finding.onMarkFalsePositive && (
+                {(finding.onMarkFalsePositive ||
+                  finding.onSetupExclusionRule) && (
                   <div className={(finding.count ?? 1) > 1 ? "" : "ml-auto"}>
                     <MoreActions
                       actions={
                         [
-                          {
-                            label: "Mark false positive",
-                            onClick: finding.onMarkFalsePositive,
-                          },
+                          ...(finding.onMarkFalsePositive
+                            ? [
+                                {
+                                  label: "Mark false positive",
+                                  onClick: finding.onMarkFalsePositive,
+                                },
+                              ]
+                            : []),
+                          ...(finding.onSetupExclusionRule
+                            ? [
+                                {
+                                  label: "Setup exclusion rule",
+                                  onClick: finding.onSetupExclusionRule,
+                                },
+                              ]
+                            : []),
                         ] satisfies Action[]
                       }
                     />
@@ -321,11 +337,13 @@ function riskResultToTranscriptFinding({
   spans,
   count,
   onMarkFalsePositive,
+  onSetupExclusionRule,
 }: {
   result: RiskResult;
   spans: FindingSpan[];
   count: number;
   onMarkFalsePositive?: () => void;
+  onSetupExclusionRule?: () => void;
 }): TranscriptFinding {
   return {
     id: result.id,
@@ -338,6 +356,7 @@ function riskResultToTranscriptFinding({
     count,
     showRuleId: shouldShowRiskRuleId(result),
     onMarkFalsePositive,
+    onSetupExclusionRule,
   };
 }
 
@@ -355,6 +374,7 @@ export function RiskBadge({
   trigger?: ReactElement;
 }): ReactNode {
   const { dismiss, isOptimisticallyDismissed } = useDismissFinding();
+  const openCreateExclusion = useContext(CreateExclusionContext);
   const findings = useMemo(() => {
     const grouped = new Map<
       string,
@@ -405,6 +425,14 @@ export function RiskBadge({
             riskResultToTranscriptFinding({
               ...f,
               onMarkFalsePositive: () => dismiss([f.result]),
+              // llm_judge findings aren't exclusion-eligible: exclusions
+              // don't yet support prompt-based (LLM-judge) policy scoping
+              // (AGE-2750), matching the same filter the old turn-header
+              // "Actions" menu applied before it was merged into this menu.
+              onSetupExclusionRule:
+                openCreateExclusion && f.result.ruleId !== "llm_judge"
+                  ? () => openCreateExclusion(f.result)
+                  : undefined,
             }),
           )}
         />

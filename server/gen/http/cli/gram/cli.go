@@ -15439,7 +15439,7 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    update-risk-exclusion: Update a risk exclusion.`)
 	fmt.Fprintln(os.Stderr, `    delete-risk-exclusion: Delete a risk exclusion. Previously suppressed findings are restored.`)
 	fmt.Fprintln(os.Stderr, `    suggest-custom-detection-rule: Suggest a custom detection rule (rule_id, title, description, regex, severity) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.`)
-	fmt.Fprintln(os.Stderr, `    suggest-exclusion: Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt describing findings an operator wants to stop flagging. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form.`)
+	fmt.Fprintln(os.Stderr, `    suggest-exclusion: Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt, a batch of example findings, or both. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form. At least one of prompt or finding_ids is required.`)
 	fmt.Fprintln(os.Stderr, `    test-detection-rule: Run a single detection rule against pasted sample text and return any matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection, custom regex) that the analyzer runs in production so the playground match shape mirrors the chat-message path.`)
 	fmt.Fprintln(os.Stderr, `    evaluate-prompt-guardrail: Replay a prompt_based guardrail against a single chat session and return the LLM judge's per-message verdict. The guardrail (prompt + judge config + message-type scope + CEL scope) is passed inline so the policy-eval workbench can evaluate an unsaved draft before a policy exists. This path is read-only: it never writes risk_results, publishes to the outbox, or enforces. It exists purely to tune a guardrail against real transcripts. Judges only the chat's latest generation; message-type scoping and CEL scope predicates are both applied.`)
 	fmt.Fprintln(os.Stderr, `    save-risk-eval-review: Record (or replace) the current reviewer's ground-truth verdict for one chat session under a prompt-based policy. This is the durable regression set the eval workbench scores the live guardrail against. Upserts: a reviewer has at most one verdict per session per policy.`)
@@ -16448,7 +16448,7 @@ func riskSuggestExclusionUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt describing findings an operator wants to stop flagging. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form.`)
+	fmt.Fprintln(os.Stderr, `Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt, a batch of example findings, or both. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form. At least one of prompt or finding_ids is required.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -16458,7 +16458,7 @@ func riskSuggestExclusionUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk suggest-exclusion --body '{\n      \"known_rule_ids\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"aaa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk suggest-exclusion --body '{\n      \"finding_ids\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"known_rule_ids\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"aaa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskTestDetectionRuleUsage() {

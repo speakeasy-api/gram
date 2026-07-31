@@ -7,6 +7,7 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { Checkbox } from "@/components/ui/checkbox";
+import { MoreActions, type Action } from "@/components/ui/more-actions";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
@@ -25,6 +26,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { Loader2, Sparkles } from "lucide-react";
 import { useParams, useSearchParams } from "react-router";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
 import { getRuleTitleFallback, isJudgeSource } from "./risk-utils";
@@ -37,6 +39,7 @@ import {
   RuleLabel,
 } from "./risk-ui";
 import { useDismissFinding } from "./useDismissFinding";
+import { useSetupExclusionRule } from "./useSetupExclusionRule";
 
 const RISK_OVERVIEW_PRESETS: DateRangePreset[] = [
   "15m",
@@ -177,6 +180,14 @@ function RiskOverviewCategoryDetailContent() {
     selection.clear();
   }, [selection, dismiss]);
 
+  const exclusionRule = useSetupExclusionRule();
+  const handleSetupExclusionSelected = useCallback(() => {
+    const selected = selection.selectedItems;
+    if (selected.length === 0) return;
+    exclusionRule.open(selected);
+    selection.clear();
+  }, [selection, exclusionRule]);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const handleScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
@@ -257,10 +268,26 @@ function RiskOverviewCategoryDetailContent() {
             </div>
             <BulkActionBar
               selectedCount={selection.selectedCount}
-              actionLabel="Mark as false positive"
-              onAction={handleDismissSelected}
+              actions={[
+                {
+                  label: "Mark as false positive",
+                  onClick: handleDismissSelected,
+                },
+                {
+                  label: "Setup exclusion rule",
+                  onClick: handleSetupExclusionSelected,
+                  variant: "secondary",
+                  disabled: exclusionRule.isSuggesting,
+                  leftIcon: exclusionRule.isSuggesting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
+                  ),
+                },
+              ]}
               onClear={selection.clear}
             />
+            {exclusionRule.sheet}
             <ResultsTable
               results={visibleResults}
               isLoading={resultsQuery.isLoading}
@@ -268,6 +295,8 @@ function RiskOverviewCategoryDetailContent() {
               onScroll={handleScroll}
               onSelectChat={setSelectedChatId}
               selection={selection}
+              onDismiss={(r) => dismiss([r])}
+              onSetupExclusion={(r) => exclusionRule.open([r])}
             />
           </div>
         </Page.Section.Body>
@@ -290,6 +319,8 @@ function ResultsTable({
   onScroll,
   onSelectChat,
   selection,
+  onDismiss,
+  onSetupExclusion,
 }: {
   results: RiskResult[];
   isLoading: boolean;
@@ -297,6 +328,8 @@ function ResultsTable({
   onScroll: (e: React.UIEvent<HTMLDivElement>) => void;
   onSelectChat: (chatId: string) => void;
   selection: RowSelection<RiskResult>;
+  onDismiss: (result: RiskResult) => void;
+  onSetupExclusion: (result: RiskResult) => void;
 }) {
   if (isLoading) {
     return (
@@ -416,13 +449,24 @@ function ResultsTable({
                   />
                 )}
               </td>
-              <td className="px-4 py-3 text-right">
-                {result.chatId && (
-                  <Icon
-                    name="chevron-right"
-                    className="text-muted-foreground size-4"
-                  />
-                )}
+              <td
+                className="px-4 py-3 text-right"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreActions
+                  actions={
+                    [
+                      {
+                        label: "Mark as false positive",
+                        onClick: () => onDismiss(result),
+                      },
+                      {
+                        label: "Setup exclusion rule",
+                        onClick: () => onSetupExclusion(result),
+                      },
+                    ] satisfies Action[]
+                  }
+                />
               </td>
             </tr>
           ))}

@@ -1897,6 +1897,76 @@ func (q *Queries) GetRiskResultByID(ctx context.Context, arg GetRiskResultByIDPa
 	return i, err
 }
 
+const getRiskResultsByIDs = `-- name: GetRiskResultsByIDs :many
+
+SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
+FROM risk_results
+WHERE project_id = $1
+  AND id = ANY($2::uuid[])
+`
+
+type GetRiskResultsByIDsParams struct {
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
+
+// Manual false-positive dismissal -------------------------------------------
+// Distinct from rule-based exclusions (excluded_at/excluded_exclusion_id):
+// these mark specific results a reviewer picked by hand as noise, via
+// false_positive_at/false_positive_reason. Both partial indexes on
+// risk_results already filter on false_positive_at IS NULL, so marking a
+// result here drops it out of the "active findings" surfaces the same way an
+// exclusion does, without touching excluded_at.
+// Fetches full rows for a batch of finding ids, scoped to the project. Powers
+// suggestExclusion's batch-suggestion path (deriving a suggested exclusion
+// pattern from a multiselect of findings) — needs match/rule_id/source per
+// row, not just the id, and looking them up server-side (rather than trusting
+// client-supplied content) means the suggestion sees authoritative,
+// unmasked data regardless of what the UI has revealed.
+func (q *Queries) GetRiskResultsByIDs(ctx context.Context, arg GetRiskResultsByIDsParams) ([]RiskResult, error) {
+	rows, err := q.db.Query(ctx, getRiskResultsByIDs, arg.ProjectID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskResult
+	for rows.Next() {
+		var i RiskResult
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.RiskPolicyID,
+			&i.RiskPolicyVersion,
+			&i.ChatMessageID,
+			&i.ChatContentPartID,
+			&i.Source,
+			&i.Found,
+			&i.RuleID,
+			&i.Description,
+			&i.Match,
+			&i.StartPos,
+			&i.EndPos,
+			&i.Confidence,
+			&i.Tags,
+			&i.Spans,
+			&i.DeadLetterReason,
+			&i.ExcludedAt,
+			&i.ExcludedExclusionID,
+			&i.FalsePositiveAt,
+			&i.FalsePositiveReason,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getToolCallBlock = `-- name: GetToolCallBlock :one
 SELECT
     b.id,
@@ -3946,7 +4016,6 @@ func (q *Queries) MarkRiskPolicyChallengeDeclined(ctx context.Context, arg MarkR
 }
 
 const markRiskResultsFalsePositive = `-- name: MarkRiskResultsFalsePositive :many
-
 UPDATE risk_results
 SET false_positive_at = clock_timestamp()
   , false_positive_reason = $1
@@ -3962,13 +4031,6 @@ type MarkRiskResultsFalsePositiveParams struct {
 	Ids       []uuid.UUID
 }
 
-// Manual false-positive dismissal -------------------------------------------
-// Distinct from rule-based exclusions (excluded_at/excluded_exclusion_id):
-// these mark specific results a reviewer picked by hand as noise, via
-// false_positive_at/false_positive_reason. Both partial indexes on
-// risk_results already filter on false_positive_at IS NULL, so marking a
-// result here drops it out of the "active findings" surfaces the same way an
-// exclusion does, without touching excluded_at.
 // Returns full rows (not just id): the caller republishes each one onto the
 // findings topic to append a ClickHouse state-change row, and needs the
 // finding content (source/rule_id/match/...) to build that message.

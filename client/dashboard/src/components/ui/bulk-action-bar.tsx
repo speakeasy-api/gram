@@ -1,15 +1,26 @@
 import { Button } from "@speakeasy-api/moonshine";
-import { useEffect, useRef, type JSX } from "react";
+import { useEffect, useRef, type JSX, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+
+export interface BulkAction {
+  label: string;
+  onClick: () => void;
+  variant?: "primary" | "secondary" | "tertiary";
+  /** e.g. a spinner while an async suggestion is in flight. */
+  leftIcon?: ReactNode;
+  disabled?: boolean;
+}
 
 /** Bar shown above a selectable list/table once at least one row is selected.
  * New for AIS-321 — no bulk-select affordance existed anywhere in the dashboard before
  * "mark false positive" needed one.
  *
  * Callers must always mount this (not `{selectedCount > 0 && <BulkActionBar .../>}`)
- * so its height stays reserved in the layout. It fades its own content in/out via
- * opacity instead of mounting/unmounting, so selecting or clearing a row doesn't
- * shift every row in the table below it.
+ * — an actual mount/unmount snaps the table below it up and down instantly. Instead
+ * this collapses its own height to zero via the CSS grid `0fr -> 1fr` technique
+ * (the outer grid row is what animates; the inner `overflow-hidden` wrapper clips
+ * the content during the transition), so toggling selection animates smoothly
+ * instead of both reserving dead space when idle AND snapping when active.
  *
  * Both current callers (RiskEvents.tsx, RiskOverviewCategoryDetail.tsx) already
  * render this outside the selectable list's own scrolling container, so it stays
@@ -23,13 +34,13 @@ import { cn } from "@/lib/utils";
  * ancestor *outside* that boundary. */
 export function BulkActionBar({
   selectedCount,
-  actionLabel,
-  onAction,
+  actions,
   onClear,
 }: {
   selectedCount: number;
-  actionLabel: string;
-  onAction: () => void;
+  /** One or two actions (e.g. "Mark as false positive" and "Setup exclusion
+   * rule"), rendered side by side in the order given. */
+  actions: BulkAction[];
   onClear: () => void;
 }): JSX.Element {
   const visible = selectedCount > 0;
@@ -53,31 +64,44 @@ export function BulkActionBar({
 
   return (
     <div
-      ref={containerRef}
-      aria-hidden={!visible}
       className={cn(
-        "bg-muted/60 sticky top-0 z-10 flex items-center justify-between gap-3 border-b px-5 py-2 text-sm transition-opacity",
-        visible ? "opacity-100" : "pointer-events-none opacity-0",
+        "sticky top-0 z-10 grid transition-[grid-template-rows] duration-200 ease-out",
+        visible ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
       )}
     >
-      <span className="font-medium">{selectedCount} selected</span>
-      <div className="flex items-center gap-2">
-        <Button
-          variant="tertiary"
-          size="sm"
-          onClick={onClear}
-          tabIndex={visible ? 0 : -1}
-        >
-          Clear
-        </Button>
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={onAction}
-          tabIndex={visible ? 0 : -1}
-        >
-          {actionLabel}
-        </Button>
+      <div
+        ref={containerRef}
+        aria-hidden={!visible}
+        className="min-h-0 overflow-hidden"
+      >
+        <div className="bg-muted/60 flex items-center justify-between gap-3 border-b px-5 py-2 text-sm">
+          <span className="font-medium">{selectedCount} selected</span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="tertiary"
+              size="sm"
+              onClick={onClear}
+              tabIndex={visible ? 0 : -1}
+            >
+              Clear
+            </Button>
+            {actions.map((action) => (
+              <Button
+                key={action.label}
+                variant={action.variant ?? "primary"}
+                size="sm"
+                onClick={action.onClick}
+                disabled={action.disabled}
+                tabIndex={visible ? 0 : -1}
+              >
+                {action.leftIcon && (
+                  <Button.LeftIcon>{action.leftIcon}</Button.LeftIcon>
+                )}
+                <Button.Text>{action.label}</Button.Text>
+              </Button>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

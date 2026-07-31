@@ -2216,16 +2216,7 @@ func BuildSuggestExclusionPayload(riskSuggestExclusionBody string, riskSuggestEx
 	{
 		err = json.Unmarshal([]byte(riskSuggestExclusionBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"known_rule_ids\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"aaa\"\n   }'")
-		}
-		if utf8.RuneCountInString(body.Prompt) < 3 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.prompt", body.Prompt, utf8.RuneCountInString(body.Prompt), 3, true))
-		}
-		if utf8.RuneCountInString(body.Prompt) > 500 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.prompt", body.Prompt, utf8.RuneCountInString(body.Prompt), 500, false))
-		}
-		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"finding_ids\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"known_rule_ids\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"aaa\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -2253,6 +2244,12 @@ func BuildSuggestExclusionPayload(riskSuggestExclusionBody string, riskSuggestEx
 		v.KnownRuleIds = make([]string, len(body.KnownRuleIds))
 		for i, val := range body.KnownRuleIds {
 			v.KnownRuleIds[i] = val
+		}
+	}
+	if body.FindingIds != nil {
+		v.FindingIds = make([]string, len(body.FindingIds))
+		for i, val := range body.FindingIds {
+			v.FindingIds[i] = val
 		}
 	}
 	v.ApikeyToken = apikeyToken

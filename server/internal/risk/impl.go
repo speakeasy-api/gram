@@ -2294,20 +2294,45 @@ func (s *Service) SuggestExclusion(ctx context.Context, payload *gen.SuggestExcl
 		return nil, err
 	}
 
-	prompt := strings.TrimSpace(payload.Prompt)
-	if prompt == "" {
-		return nil, oops.E(oops.CodeInvalid, nil, "prompt is required")
+	prompt := strings.TrimSpace(conv.PtrValOr(payload.Prompt, ""))
+
+	// finding_ids are looked up server-side rather than trusting client-supplied
+	// match/rule_id/source content: the caller may be suggesting from a batch
+	// whose sensitive fields the dashboard hasn't unmasked, and this way the
+	// suggestion always sees authoritative data.
+	var findings []repo.RiskResult
+	if len(payload.FindingIds) > 0 {
+		ids := make([]uuid.UUID, 0, len(payload.FindingIds))
+		for _, raw := range payload.FindingIds {
+			id, err := uuid.Parse(raw)
+			if err != nil {
+				return nil, oops.E(oops.CodeInvalid, err, "invalid finding id %q", raw)
+			}
+			ids = append(ids, id)
+		}
+		rows, err := s.repo.GetRiskResultsByIDs(ctx, repo.GetRiskResultsByIDsParams{
+			ProjectID: *authCtx.ProjectID,
+			Ids:       ids,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "get risk results by ids").LogError(ctx, s.logger)
+		}
+		findings = rows
+	}
+
+	if prompt == "" && len(findings) == 0 {
+		return nil, oops.E(oops.CodeInvalid, nil, "prompt or finding_ids is required")
 	}
 
 	if s.completionClient == nil {
 		s.logger.WarnContext(ctx, "completion client not configured; returning heuristic exclusion suggestion")
-		return heuristicExclusionSuggestion(prompt), nil
+		return heuristicExclusionSuggestion(prompt, findings), nil
 	}
 
-	suggestion, err := s.suggestExclusionViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), prompt, payload.KnownRuleIds)
+	suggestion, err := s.suggestExclusionViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), prompt, findings, payload.KnownRuleIds)
 	if err != nil {
 		s.logger.WarnContext(ctx, "openrouter exclusion suggestion failed; returning heuristic suggestion", attr.SlogError(err))
-		return heuristicExclusionSuggestion(prompt), nil
+		return heuristicExclusionSuggestion(prompt, findings), nil
 	}
 	return suggestion, nil
 }
@@ -2324,11 +2349,18 @@ func exclusionSuggestionResult(matchType, matchValue, ruleIDFilter, sourceFilter
 }
 
 // heuristicExclusionSuggestion is the deterministic fallback when the LLM is
-// unavailable: treat the prompt as the literal value to suppress. Usually
-// wrong as-is, but it prefills an editable expression rather than dead-ending
-// the operator (mirrors heuristicCustomRuleSuggestion).
-func heuristicExclusionSuggestion(prompt string) *gen.SuggestExclusionResult {
-	return exclusionSuggestionResult("exact", strings.TrimSpace(prompt), "", "")
+// unavailable. With a prompt, treats it as the literal value to suppress;
+// with only a findings batch, falls back to the first finding's matched
+// value. Usually wrong as-is, but it prefills an editable expression rather
+// than dead-ending the operator (mirrors heuristicCustomRuleSuggestion).
+func heuristicExclusionSuggestion(prompt string, findings []repo.RiskResult) *gen.SuggestExclusionResult {
+	if prompt != "" {
+		return exclusionSuggestionResult("exact", strings.TrimSpace(prompt), "", "")
+	}
+	if len(findings) > 0 {
+		return exclusionSuggestionResult("exact", findings[0].Match.String, "", "")
+	}
+	return exclusionSuggestionResult("exact", "", "", "")
 }
 
 // heuristicCustomRuleSuggestion is the deterministic fallback when the LLM
@@ -2682,12 +2714,12 @@ var exclusionMatchTypeAllow = map[string]bool{
 	"entity_type": true,
 }
 
-func (s *Service) suggestExclusionViaLLM(ctx context.Context, orgID, projectID, userID, userEmail, userPrompt string, knownRuleIDs []string) (*gen.SuggestExclusionResult, error) {
+func (s *Service) suggestExclusionViaLLM(ctx context.Context, orgID, projectID, userID, userEmail, userPrompt string, findings []repo.RiskResult, knownRuleIDs []string) (*gen.SuggestExclusionResult, error) {
 	systemPrompt := `You are a security-rules assistant for a runtime risk detection product.
 
-Given a single natural-language description of findings an operator wants to stop flagging, return a JSON object the dashboard uses to prefill a "create exclusion" form. An exclusion suppresses matching findings retroactively and going forward.
+Given a natural-language description of findings an operator wants to stop flagging, a batch of example findings they selected, or both, return a JSON object the dashboard uses to prefill a "create exclusion" form. An exclusion suppresses matching findings retroactively and going forward.
 
-Each finding carries: the matched text ("match", e.g. the detected email address or token), the id of the rule that flagged it ("rule_id", e.g. "pii.email_address", "secret.aws_access_token", "custom.acme_token"), and the detector source ("source", e.g. "gitleaks", "presidio", "prompt_injection", "custom").
+Each finding carries: the matched text ("match", e.g. the detected email address or token), the id of the rule that flagged it ("rule_id", e.g. "pii.email_address", "secret.aws_access_token", "custom.acme_token"), and the detector source ("source", e.g. "gitleaks", "presidio", "prompt_injection", "custom"). When given a batch of example findings instead of (or alongside) a description, look for what they share — the same rule_id, the same source, a common pattern in match — and suggest an exclusion that covers all of them without being so broad it would suppress unrelated findings.
 
 Fields:
 - "match_type": how match_value is compared, one of:
@@ -2708,7 +2740,21 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 	if knownList == "" {
 		knownList = "(none)"
 	}
-	userMessage := fmt.Sprintf("Operator request: %s\n\nKnown rule ids: %s", userPrompt, knownList)
+
+	var messageParts []string
+	if userPrompt != "" {
+		messageParts = append(messageParts, fmt.Sprintf("Operator request: %s", userPrompt))
+	}
+	if len(findings) > 0 {
+		var b strings.Builder
+		b.WriteString("Example findings the operator selected:\n")
+		for _, f := range findings {
+			fmt.Fprintf(&b, "- rule_id=%q source=%q match=%q\n", f.RuleID.String, f.Source, f.Match.String)
+		}
+		messageParts = append(messageParts, strings.TrimRight(b.String(), "\n"))
+	}
+	messageParts = append(messageParts, fmt.Sprintf("Known rule ids: %s", knownList))
+	userMessage := strings.Join(messageParts, "\n\n")
 
 	strict := false
 	schema := map[string]any{

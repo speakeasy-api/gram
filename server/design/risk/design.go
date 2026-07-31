@@ -1383,18 +1383,20 @@ var _ = Service("risk", func() {
 	})
 
 	Method("suggestExclusion", func() {
-		Description("Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt describing findings an operator wants to stop flagging. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form.")
+		Description("Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt, a batch of example findings, or both. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form. At least one of prompt or finding_ids is required.")
 
 		Payload(func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
-			Attribute("prompt", String, "Natural-language description of the findings to stop flagging.", func() {
+			Attribute("prompt", String, "Natural-language description of the findings to stop flagging. Optional when finding_ids is provided.", func() {
 				MinLength(3)
 				MaxLength(500)
 			})
 			Attribute("known_rule_ids", ArrayOf(String), "Built-in and custom rule ids the suggestion may reference in rule_id filters.")
-			Required("prompt")
+			Attribute("finding_ids", ArrayOf(String), "IDs of example findings (e.g. a multiselect batch) to derive a suggestion from. Looked up server-side so the suggestion sees authoritative, unmasked content. Optional when prompt is provided.", func() {
+				MaxLength(50)
+			})
 		})
 
 		Result(SuggestExclusionResult)

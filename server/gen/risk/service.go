@@ -134,9 +134,10 @@ type Service interface {
 	// form.
 	SuggestCustomDetectionRule(context.Context, *SuggestCustomDetectionRulePayload) (res *SuggestCustomDetectionRuleResult, err error)
 	// Suggest a risk exclusion (match_type, match_value, filters) from a
-	// natural-language prompt describing findings an operator wants to stop
-	// flagging. Calls the configured LLM with a JSON-schema constrained response
-	// so the dashboard can prefill the create exclusion form.
+	// natural-language prompt, a batch of example findings, or both. Calls the
+	// configured LLM with a JSON-schema constrained response so the dashboard can
+	// prefill the create exclusion form. At least one of prompt or finding_ids is
+	// required.
 	SuggestExclusion(context.Context, *SuggestExclusionPayload) (res *SuggestExclusionResult, err error)
 	// Run a single detection rule against pasted sample text and return any
 	// matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection,
@@ -1154,10 +1155,15 @@ type SuggestExclusionPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
-	// Natural-language description of the findings to stop flagging.
-	Prompt string
+	// Natural-language description of the findings to stop flagging. Optional when
+	// finding_ids is provided.
+	Prompt *string
 	// Built-in and custom rule ids the suggestion may reference in rule_id filters.
 	KnownRuleIds []string
+	// IDs of example findings (e.g. a multiselect batch) to derive a suggestion
+	// from. Looked up server-side so the suggestion sees authoritative, unmasked
+	// content. Optional when prompt is provided.
+	FindingIds []string
 }
 
 // SuggestExclusionResult is the result type of the risk service

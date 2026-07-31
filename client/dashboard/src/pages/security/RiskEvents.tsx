@@ -7,6 +7,7 @@ import {
 import { Page } from "@/components/page-layout";
 import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { Checkbox } from "@/components/ui/checkbox";
+import { MoreActions, type Action } from "@/components/ui/more-actions";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
 import { cn } from "@/lib/utils";
@@ -19,11 +20,12 @@ import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { History, Share2 } from "lucide-react";
+import { History, Loader2, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useDismissFinding } from "./useDismissFinding";
+import { useSetupExclusionRule } from "./useSetupExclusionRule";
 import {
   CategoryLabel,
   EventMatchDialog,
@@ -266,6 +268,14 @@ export default function RiskEvents(): JSX.Element {
     selection.clear();
   }, [selection, dismiss]);
 
+  const exclusionRule = useSetupExclusionRule();
+  const handleSetupExclusionSelected = useCallback(() => {
+    const selected = selection.selectedItems;
+    if (selected.length === 0) return;
+    exclusionRule.open(selected);
+    selection.clear();
+  }, [selection, exclusionRule]);
+
   const handleScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
       const container = e.currentTarget;
@@ -312,10 +322,26 @@ export default function RiskEvents(): JSX.Element {
             ) : null}
             <BulkActionBar
               selectedCount={selection.selectedCount}
-              actionLabel="Mark as false positive"
-              onAction={handleDismissSelected}
+              actions={[
+                {
+                  label: "Mark as false positive",
+                  onClick: handleDismissSelected,
+                },
+                {
+                  label: "Setup exclusion rule",
+                  onClick: handleSetupExclusionSelected,
+                  variant: "secondary",
+                  disabled: exclusionRule.isSuggesting,
+                  leftIcon: exclusionRule.isSuggesting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
+                  ),
+                },
+              ]}
               onClear={selection.clear}
             />
+            {exclusionRule.sheet}
             {resultsQuery.isFetching && results.length > 0 ? (
               <div className="bg-primary/20 h-1 shrink-0">
                 <div className="bg-primary h-full animate-pulse" />
@@ -363,6 +389,8 @@ export default function RiskEvents(): JSX.Element {
           scrollRef={containerRef}
           onSelectChat={setSelectedChatId}
           selection={selection}
+          onDismiss={(r) => dismiss([r])}
+          onSetupExclusion={(r) => exclusionRule.open([r])}
         />
       </LogWorkbench>
     </RevealAllProvider>
@@ -436,6 +464,8 @@ function RiskEventsRows({
   scrollRef,
   onSelectChat,
   selection,
+  onDismiss,
+  onSetupExclusion,
 }: {
   error: Error | null;
   isLoading: boolean;
@@ -445,6 +475,8 @@ function RiskEventsRows({
   scrollRef: RefObject<HTMLDivElement | null>;
   onSelectChat: (chatId: string | null) => void;
   selection: RowSelection<RiskResult>;
+  onDismiss: (result: RiskResult) => void;
+  onSetupExclusion: (result: RiskResult) => void;
 }) {
   const rowVirtualizer = useVirtualizer({
     count: results.length,
@@ -519,6 +551,8 @@ function RiskEventsRows({
               policyScore={policyScoreById.get(result.policyId)}
               onSelectChat={onSelectChat}
               selection={selection}
+              onDismiss={onDismiss}
+              onSetupExclusion={onSetupExclusion}
             />
           </div>
         );
@@ -533,12 +567,16 @@ function RiskEventsRow({
   policyScore,
   onSelectChat,
   selection,
+  onDismiss,
+  onSetupExclusion,
 }: {
   result: RiskResult;
   policyName: string | undefined;
   policyScore: number | undefined;
   onSelectChat: (chatId: string | null) => void;
   selection: RowSelection<RiskResult>;
+  onDismiss: (result: RiskResult) => void;
+  onSetupExclusion: (result: RiskResult) => void;
 }) {
   const isShadowMCP = result.source === "shadow_mcp";
   const isEventSource = isJudgeSource(result.source);
@@ -550,21 +588,25 @@ function RiskEventsRow({
   // cell and would otherwise open the chat.
   const pointerDownInsideRef = useRef(false);
 
-  const handleShare = useCallback(
-    async (e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (!result.chatId) return;
-      const url = new URL(window.location.href);
-      url.searchParams.set("chat_id", result.chatId);
-      try {
-        await navigator.clipboard.writeText(url.toString());
-        toast.success("Link copied to clipboard");
-      } catch {
-        toast.error("Failed to copy link");
-      }
-    },
-    [result.chatId],
-  );
+  const handleShare = useCallback(async () => {
+    if (!result.chatId) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("chat_id", result.chatId);
+    try {
+      await navigator.clipboard.writeText(url.toString());
+      toast.success("Link copied to clipboard");
+    } catch {
+      toast.error("Failed to copy link");
+    }
+  }, [result.chatId]);
+
+  const rowActions: Action[] = [
+    ...(result.chatId
+      ? [{ label: "Copy link", onClick: () => void handleShare() }]
+      : []),
+    { label: "Mark as false positive", onClick: () => onDismiss(result) },
+    { label: "Setup exclusion rule", onClick: () => onSetupExclusion(result) },
+  ];
 
   return (
     <div
@@ -653,21 +695,12 @@ function RiskEventsRow({
       <div className="min-w-0 truncate" title={policyName}>
         {policyName ?? "-"}
       </div>
-      <div className="flex min-w-0 justify-center">
-        {result.chatId ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              void handleShare(e);
-            }}
-            onKeyDown={(e) => e.stopPropagation()}
-            className="text-muted-foreground hover:text-foreground inline-flex items-center transition-colors"
-            aria-label="Copy link to this event"
-            title="Copy link to this event"
-          >
-            <Share2 className="h-3 w-3" />
-          </button>
-        ) : null}
+      <div
+        className="flex min-w-0 justify-center"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        <MoreActions actions={rowActions} />
       </div>
     </div>
   );

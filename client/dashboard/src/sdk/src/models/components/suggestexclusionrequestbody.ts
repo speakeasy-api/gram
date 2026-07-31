@@ -7,19 +7,24 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type SuggestExclusionRequestBody = {
   /**
+   * IDs of example findings (e.g. a multiselect batch) to derive a suggestion from. Looked up server-side so the suggestion sees authoritative, unmasked content. Optional when prompt is provided.
+   */
+  findingIds?: Array<string> | undefined;
+  /**
    * Built-in and custom rule ids the suggestion may reference in rule_id filters.
    */
   knownRuleIds?: Array<string> | undefined;
   /**
-   * Natural-language description of the findings to stop flagging.
+   * Natural-language description of the findings to stop flagging. Optional when finding_ids is provided.
    */
-  prompt: string;
+  prompt?: string | undefined;
 };
 
 /** @internal */
 export type SuggestExclusionRequestBody$Outbound = {
+  finding_ids?: Array<string> | undefined;
   known_rule_ids?: Array<string> | undefined;
-  prompt: string;
+  prompt?: string | undefined;
 };
 
 /** @internal */
@@ -28,11 +33,13 @@ export const SuggestExclusionRequestBody$outboundSchema: z.ZodMiniType<
   SuggestExclusionRequestBody
 > = z.pipe(
   z.object({
+    findingIds: z.optional(z.array(z.string())),
     knownRuleIds: z.optional(z.array(z.string())),
-    prompt: z.string(),
+    prompt: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      findingIds: "finding_ids",
       knownRuleIds: "known_rule_ids",
     });
   }),

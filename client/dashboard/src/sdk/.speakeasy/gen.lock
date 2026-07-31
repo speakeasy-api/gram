@@ -7144,7 +7144,7 @@ examples:
   suggestExclusion:
     speakeasy-default-suggest-exclusion:
       requestBody:
-        application/json: {"prompt": "<value>"}
+        application/json: {}
       responses:
         "200":
           application/json: {"match_type": "<value>", "match_value": "<value>"}

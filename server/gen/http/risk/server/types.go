@@ -351,10 +351,15 @@ type SuggestCustomDetectionRuleRequestBody struct {
 // SuggestExclusionRequestBody is the type of the "risk" service
 // "suggestExclusion" endpoint HTTP request body.
 type SuggestExclusionRequestBody struct {
-	// Natural-language description of the findings to stop flagging.
+	// Natural-language description of the findings to stop flagging. Optional when
+	// finding_ids is provided.
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
 	// Built-in and custom rule ids the suggestion may reference in rule_id filters.
 	KnownRuleIds []string `form:"known_rule_ids,omitempty" json:"known_rule_ids,omitempty" xml:"known_rule_ids,omitempty"`
+	// IDs of example findings (e.g. a multiselect batch) to derive a suggestion
+	// from. Looked up server-side so the suggestion sees authoritative, unmasked
+	// content. Optional when prompt is provided.
+	FindingIds []string `form:"finding_ids,omitempty" json:"finding_ids,omitempty" xml:"finding_ids,omitempty"`
 }
 
 // TestDetectionRuleRequestBody is the type of the "risk" service
@@ -18976,12 +18981,18 @@ func NewSuggestCustomDetectionRulePayload(body *SuggestCustomDetectionRuleReques
 // payload.
 func NewSuggestExclusionPayload(body *SuggestExclusionRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.SuggestExclusionPayload {
 	v := &risk.SuggestExclusionPayload{
-		Prompt: *body.Prompt,
+		Prompt: body.Prompt,
 	}
 	if body.KnownRuleIds != nil {
 		v.KnownRuleIds = make([]string, len(body.KnownRuleIds))
 		for i, val := range body.KnownRuleIds {
 			v.KnownRuleIds[i] = val
+		}
+	}
+	if body.FindingIds != nil {
+		v.FindingIds = make([]string, len(body.FindingIds))
+		for i, val := range body.FindingIds {
+			v.FindingIds[i] = val
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -19452,9 +19463,6 @@ func ValidateSuggestCustomDetectionRuleRequestBody(body *SuggestCustomDetectionR
 // ValidateSuggestExclusionRequestBody runs the validations defined on
 // SuggestExclusionRequestBody
 func ValidateSuggestExclusionRequestBody(body *SuggestExclusionRequestBody) (err error) {
-	if body.Prompt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("prompt", "body"))
-	}
 	if body.Prompt != nil {
 		if utf8.RuneCountInString(*body.Prompt) < 3 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.prompt", *body.Prompt, utf8.RuneCountInString(*body.Prompt), 3, true))
@@ -19464,6 +19472,9 @@ func ValidateSuggestExclusionRequestBody(body *SuggestExclusionRequestBody) (err
 		if utf8.RuneCountInString(*body.Prompt) > 500 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.prompt", *body.Prompt, utf8.RuneCountInString(*body.Prompt), 500, false))
 		}
+	}
+	if len(body.FindingIds) > 50 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.finding_ids", body.FindingIds, len(body.FindingIds), 50, false))
 	}
 	return
 }
