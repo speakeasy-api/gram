@@ -96,11 +96,15 @@ export async function streamTurn(args: {
   // message index rather than per row id.
   let messageIndex = 0;
   let sawTextThisMessage = false;
+  // Whether the open step already carries a row, so the next row knows to
+  // close it rather than sharing.
+  let stepHasMessage = false;
 
   const closeStep = () => {
     if (stepOpen) {
       writer.write({ type: "finish-step" });
       stepOpen = false;
+      stepHasMessage = false;
     }
   };
   const openStep = () => {
@@ -185,10 +189,18 @@ export async function streamTurn(args: {
               break;
             }
             case "message": {
-              // The row for the text just streamed. Its tool calls are the new
-              // information; the text is already rendered, so it is not
-              // re-emitted.
+              // A new row starts a new step, so close the previous one first.
+              // The step must NOT be closed straight after emitting tool
+              // inputs: their outputs arrive as later frames and belong in the
+              // same step. assistant-ui's resume check looks at the last step,
+              // and a step holding tool calls with no outputs makes it re-send
+              // a turn the server is still running — which is exactly what
+              // produced a second sendMessage mid-turn.
+              if (stepHasMessage) closeStep();
               openStep();
+              stepHasMessage = true;
+              // The text is already on screen from its deltas; only the tool
+              // calls are new information.
               for (const call of parseFrameToolCalls(frame.tool_calls)) {
                 writer.write({
                   type: "tool-input-available",
@@ -197,7 +209,6 @@ export async function streamTurn(args: {
                   input: call.input,
                 });
               }
-              closeStep();
               if (sawTextThisMessage) messageIndex++;
               sawTextThisMessage = false;
               break;

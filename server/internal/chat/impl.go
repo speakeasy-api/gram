@@ -1512,7 +1512,17 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
 
-		if err := s.streamCompletion(ctx, w, streamBody, getContextWindow); err != nil {
+		// A watchable chat also gets its tokens republished as turn frames on
+		// the way past, so the dashboard renders text as it is generated. The
+		// bytes still reach this caller untouched; the tee is a side channel.
+		src := io.Reader(streamBody)
+		if s.turnStream != nil && chatID != uuid.Nil {
+			teed, done := s.teeStreamText(ctx, chatID)
+			src = io.TeeReader(streamBody, teed)
+			defer done()
+		}
+
+		if err := s.streamCompletion(ctx, w, src, getContextWindow); err != nil {
 			return err
 		}
 

@@ -209,3 +209,36 @@ func (s *Service) teedCompletion(ctx context.Context, req openrouter.CompletionR
 		Content:      assembled.Content,
 	}, nil
 }
+
+// teeStreamText returns a writer that republishes assistant text as turn
+// frames, and a func to close it. Callers tee the upstream SSE body into the
+// writer so the passthrough response is unaffected: parsing happens on a
+// separate goroutine and a failure there can never corrupt or stall the bytes
+// the caller is forwarding.
+func (s *Service) teeStreamText(ctx context.Context, chatID uuid.UUID) (io.Writer, func()) {
+	pr, pw := io.Pipe()
+	finished := make(chan struct{})
+
+	go func() {
+		defer close(finished)
+		publish := func(text string) {
+			if _, err := s.turnStream.Publish(ctx, chatID, TurnFrame{
+				Kind: TurnFrameText, Cursor: "", Text: text, MessageID: "",
+				ToolCalls: nil, FinishReason: "", ToolCallID: "", Output: nil,
+			}); err != nil {
+				s.logger.WarnContext(ctx, "publish turn text frame", attr.SlogError(err))
+			}
+		}
+		if _, err := teeCompletionStream(pr, publish); err != nil {
+			s.logger.WarnContext(ctx, "parse streamed completion for turn frames", attr.SlogError(err))
+		}
+		// Drain whatever is left so a tee write never blocks on a reader that
+		// stopped early.
+		_, _ = io.Copy(io.Discard, pr)
+	}()
+
+	return pw, func() {
+		_ = pw.Close()
+		<-finished
+	}
+}
