@@ -2,6 +2,7 @@ import { assistantsSendMessage } from "@gram/client/funcs/assistantsSendMessage"
 import { chatLoad } from "@gram/client/funcs/chatLoad";
 import type { GramCore } from "@gram/client/core";
 import { sleep, type ElementsTransportContext } from "@/elements";
+import { getServerURL } from "@/lib/utils";
 import {
   type ChatTransport,
   createUIMessageStream,
@@ -109,8 +110,11 @@ function subscribeToDeltas(args: {
 
   void (async () => {
     try {
+      // Absolute: the dashboard and the API are different origins in every
+      // environment, so a relative URL would ask the dashboard's own server
+      // for a route it does not serve.
       const res = await fetch(
-        `/chat/deltas?chat_id=${encodeURIComponent(chatId)}`,
+        `${getServerURL()}/chat/deltas?chat_id=${encodeURIComponent(chatId)}`,
         {
           credentials: "include",
           signal,
