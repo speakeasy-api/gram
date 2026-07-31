@@ -474,6 +474,50 @@ func TestFindOrphanCustomDomainResourcesAllResourcesAccountedFor(t *testing.T) {
 	require.NoError(t, checker.FindOrphanResources(t.Context()))
 }
 
+func TestFindOrphanCustomDomainResourcesFlagsClearedRootIngress(t *testing.T) {
+	t.Parallel()
+
+	const domainName = "cleared-root.example.com"
+	conn, err := infra.CloneTestDatabase(t, "custom_domain_orphan_cleared_root")
+	require.NoError(t, err)
+	createActivatedCustomDomainResource(t, customdomainsrepo.New(conn), "test-organization", domainName, "cleared-root-example-com", k8s.ProvisionerKindIngress)
+	rootName, err := k8s.RootIngressNameForDomain(domainName)
+	require.NoError(t, err)
+
+	stub := &stubInfrastructureChecker{resources: []k8s.ManagedCustomDomainResource{
+		{Kind: k8s.ProvisionerKindIngress, Name: "cleared-root-example-com", Domain: domainName},
+		{Kind: k8s.ProvisionerKindIngress, Name: rootName, Domain: domainName},
+	}}
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", noopEmailService(t), nil, nil)
+
+	err = checker.FindOrphanResources(t.Context())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "1 orphaned custom domain resources")
+	require.Contains(t, err.Error(), rootName)
+}
+
+func TestFindOrphanCustomDomainResourcesFlagsClearedWellKnownRootIngress(t *testing.T) {
+	t.Parallel()
+
+	const domainName = "cleared-wellknown-root.example.com"
+	conn, err := infra.CloneTestDatabase(t, "custom_domain_orphan_cleared_wellknown_root")
+	require.NoError(t, err)
+	createActivatedCustomDomainResource(t, customdomainsrepo.New(conn), "test-organization", domainName, "cleared-wellknown-root-example-com", k8s.ProvisionerKindIngress)
+	wellKnownRootName, err := k8s.WellKnownRootIngressNameForDomain(domainName)
+	require.NoError(t, err)
+
+	stub := &stubInfrastructureChecker{resources: []k8s.ManagedCustomDomainResource{
+		{Kind: k8s.ProvisionerKindIngress, Name: "cleared-wellknown-root-example-com", Domain: domainName},
+		{Kind: k8s.ProvisionerKindIngress, Name: wellKnownRootName, Domain: domainName},
+	}}
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", noopEmailService(t), nil, nil)
+
+	err = checker.FindOrphanResources(t.Context())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "1 orphaned custom domain resources")
+	require.Contains(t, err.Error(), wellKnownRootName)
+}
+
 func TestFindOrphanCustomDomainResourcesFlagsUnactivatedDomain(t *testing.T) {
 	t.Parallel()
 
