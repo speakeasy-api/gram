@@ -28,28 +28,28 @@ func TestChallengeCHWriter_HandleBatch_InsertsIntoClickHouse(t *testing.T) {
 		Id:             &id,
 		Timestamp:      &ts,
 		OrganizationId: &orgID,
-		ProjectId:      ptr("proj_1"),
-		TraceId:        ptr("trace"),
-		SpanId:         ptr("span"),
+		ProjectId:      new("proj_1"),
+		TraceId:        new("trace"),
+		SpanId:         new("span"),
 		RequestId:      &reqID,
-		PrincipalUrn:   ptr("user:u1"),
-		PrincipalType:  ptr(string(authzrepo.PrincipalTypeUser)),
-		UserId:         ptr("u1"),
-		Operation:      ptr(string(authzrepo.OperationRequire)),
-		Outcome:        ptr(string(authzrepo.OutcomeAllow)),
-		Reason:         ptr(string(authzrepo.ReasonGrantMatched)),
-		Scope:          ptr(string(ScopeProjectRead)),
-		ResourceKind:   ptr("project"),
-		ResourceId:     ptr("proj_1"),
+		PrincipalUrn:   new("user:u1"),
+		PrincipalType:  new(string(authzrepo.PrincipalTypeUser)),
+		UserId:         new("u1"),
+		Operation:      new(string(authzrepo.OperationRequire)),
+		Outcome:        new(string(authzrepo.OutcomeAllow)),
+		Reason:         new(string(authzrepo.ReasonGrantMatched)),
+		Scope:          new(string(ScopeProjectRead)),
+		ResourceKind:   new("project"),
+		ResourceId:     new("proj_1"),
 		RequestedChecks: []*authzv1.ChallengeRow_RequestedCheck{
 			authzv1.ChallengeRow_RequestedCheck_builder{
-				Scope:        ptr(string(ScopeProjectRead)),
-				ResourceKind: ptr("project"),
-				ResourceId:   ptr("proj_1"),
-				Selector:     ptr(`{"resource_kind":"project"}`),
+				Scope:        new(string(ScopeProjectRead)),
+				ResourceKind: new("project"),
+				ResourceId:   new("proj_1"),
+				Selector:     new(`{"resource_kind":"project"}`),
 			}.Build(),
 		},
-		EvaluatedGrantCount: ptrUint32(2),
+		EvaluatedGrantCount: new(uint32(2)),
 	}.Build()
 
 	require.NoError(t, w.HandleBatch(t.Context(), []*authzv1.ChallengeRow{msg}, []gcp.MessageMetadata{{}}))
@@ -180,7 +180,3 @@ func TestChallengeRowProtoRoundTrip(t *testing.T) {
 	require.Equal(t, row.FilterAllowedCount, got.FilterAllowedCount)
 	require.True(t, row.Timestamp.Equal(got.Timestamp))
 }
-
-func ptr(s string) *string { return &s }
-
-func ptrUint32(v uint32) *uint32 { return &v }

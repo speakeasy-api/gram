@@ -59,6 +59,7 @@ func NewDirectChallengePublisher(t *testing.T, logger *slog.Logger, conn clickho
 	return NewChallengePublisher(
 		logger,
 		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
 		&directCHPublisher{conn: conn},
 	)
 }

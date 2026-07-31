@@ -2,26 +2,19 @@ package authz
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
-	"sync"
-	"time"
 
+	"go.opentelemetry.io/otel/metric"
+	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
 	"github.com/speakeasy-api/gram/server/internal/inv"
-)
-
-const (
-	// publishAckAwaitTimeout bounds the detached goroutine that drains the
-	// publish ack for one challenge row. The broker publish itself is bounded
-	// separately by PublishSettings.Timeout, configured where the authz
-	// challenge publisher is constructed.
-	publishAckAwaitTimeout = 10 * time.Second
+	"github.com/speakeasy-api/gram/server/internal/pubsub"
 )
 
 // NewNoopChallengePublisher returns an inert ChallengePublisher for tests and
@@ -30,6 +23,7 @@ func NewNoopChallengePublisher(logger *slog.Logger) *ChallengePublisher {
 	return NewChallengePublisher(
 		logger,
 		tracenoop.NewTracerProvider(),
+		metricnoop.NewMeterProvider(),
 		gcp.NewNoopPublisher[*authzv1.ChallengeRow](),
 	)
 }
@@ -39,13 +33,9 @@ func NewNoopChallengePublisher(logger *slog.Logger) *ChallengePublisher {
 // consumer inserts them into ClickHouse — keeping the CH pool off the authz
 // request path.
 type ChallengePublisher struct {
-	logger *slog.Logger
-	tracer trace.Tracer
-	pub    gcp.Publisher[*authzv1.ChallengeRow]
-
-	// drains tracks in-flight ack-drain goroutines so tests can await them
-	// deterministically (see WaitForPublishDrains in export_test.go).
-	drains sync.WaitGroup
+	tracer  trace.Tracer
+	pub     gcp.Publisher[*authzv1.ChallengeRow]
+	drainer *pubsub.Drainer
 }
 
 // NewChallengePublisher constructs a ChallengePublisher. Callers must always
@@ -54,6 +44,7 @@ type ChallengePublisher struct {
 func NewChallengePublisher(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
 	pub gcp.Publisher[*authzv1.ChallengeRow],
 ) *ChallengePublisher {
 	inv.Require(
@@ -62,42 +53,42 @@ func NewChallengePublisher(
 	)
 
 	return &ChallengePublisher{
-		logger: logger.With(attr.SlogComponent("authz_challenge_publisher")),
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/authz"),
 		pub:    pub,
-		drains: sync.WaitGroup{},
+		// The drainer stamps the component attribute on its own logger, so it
+		// takes the raw one.
+		drainer: pubsub.NewDrainer(
+			logger,
+			meterProvider,
+			"authz_challenge_publisher",
+			"failed to publish authz challenge to pubsub",
+		),
 	}
 }
 
 // PublishChallenge publishes one challenge row to Pub/Sub. It is best-effort
-// and non-blocking: it never blocks on broker acks (results are drained on a
-// detached goroutine) and must never stall the authz request path.
+// and non-blocking: it never waits on broker acks (results are handed to a
+// bounded drain pool) and must never stall the authz request path.
 func (p *ChallengePublisher) PublishChallenge(ctx context.Context, row authzrepo.ChallengeRow) {
 	// Caller cancellation (request teardown) must not abort the publish: a
 	// row skipped here is never re-emitted. Detach cancellation while keeping
-	// trace context; PublishSettings.Timeout and publishAckAwaitTimeout bound
-	// the work instead.
+	// trace context; PublishSettings.Timeout bounds the work instead.
 	ctx = context.WithoutCancel(ctx)
 
 	ctx, span := p.tracer.Start(ctx, "authz.publishChallenge")
 	defer span.End()
 
-	result := p.pub.Publish(ctx, challengeRowToProto(row))
-
-	p.drains.Add(1)
-	go p.drainPublishAck(ctx, result)
+	// The span covers the enqueue only. The ack lands after it closes, and is
+	// reported on the pubsub.publish.ack_* counters instead.
+	p.drainer.Enqueue(ctx, p.pub.Publish(ctx, challengeRowToProto(row)))
 }
 
-// drainPublishAck waits for one publish result and surfaces failures.
-func (p *ChallengePublisher) drainPublishAck(ctx context.Context, result gcp.PublishResult) {
-	defer p.drains.Done()
-
-	ctx, cancel := context.WithTimeout(ctx, publishAckAwaitTimeout)
-	defer cancel()
-
-	if _, err := result.Get(ctx); err != nil {
-		p.logger.ErrorContext(ctx, "failed to publish authz challenge to pubsub",
-			attr.SlogError(err),
-		)
+// Close releases the ack drain pool, waiting for queued publishes to resolve
+// until ctx expires.
+func (p *ChallengePublisher) Close(ctx context.Context) error {
+	if err := p.drainer.Close(ctx); err != nil {
+		return fmt.Errorf("close authz challenge publisher: %w", err)
 	}
+
+	return nil
 }

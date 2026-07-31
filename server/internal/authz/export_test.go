@@ -1,7 +1,9 @@
 package authz
 
-// WaitForPublishDrains blocks until every ack-drain goroutine spawned by
-// PublishChallenge so far has finished. Test-only synchronization barrier.
+// WaitForPublishDrains blocks until the drain pool has observed every publish
+// result enqueued by PublishChallenge so far. Test-only synchronization
+// barrier: callers must have already returned from the PublishChallenge whose
+// drain they await.
 func (p *ChallengePublisher) WaitForPublishDrains() {
-	p.drains.Wait()
+	p.drainer.Wait()
 }

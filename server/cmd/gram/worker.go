@@ -535,7 +535,8 @@ func newWorkerCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, chShutdown)
 
 			// we don't require a real workOS client for workers as they bypass RBAC
-			authzChallengePublisher := authz.NewChallengePublisher(logger, tracerProvider, publishers.AuthzChallenges)
+			authzChallengePublisher := authz.NewChallengePublisher(logger, tracerProvider, meterProvider, publishers.AuthzChallenges)
+			shutdownFuncs = append(shutdownFuncs, authzChallengePublisher.Close)
 			authzEngine := authz.NewEngine(
 				logger,
 				db,
@@ -556,6 +557,7 @@ func newWorkerCommand() *cli.Command {
 			}
 
 			telemetryLogPublisher := telemetry.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs)
+			shutdownFuncs = append(shutdownFuncs, telemetryLogPublisher.Close)
 
 			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled, telemetryLogPublisher)
 			shutdownFuncs = append(shutdownFuncs, shutdown)

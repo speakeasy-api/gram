@@ -696,7 +696,8 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create publishers: %w", err)
 			}
 
-			authzChallengePublisher := authz.NewChallengePublisher(logger, tracerProvider, publishers.AuthzChallenges)
+			authzChallengePublisher := authz.NewChallengePublisher(logger, tracerProvider, meterProvider, publishers.AuthzChallenges)
+			shutdownFuncs = append(shutdownFuncs, authzChallengePublisher.Close)
 			authzEngine := authz.NewEngine(
 				logger,
 				db,
@@ -708,6 +709,7 @@ func newStartCommand() *cli.Command {
 			)
 
 			telemetryLogPublisher := tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs)
+			shutdownFuncs = append(shutdownFuncs, telemetryLogPublisher.Close)
 
 			telemLogger, shutdown := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled, telemetryLogPublisher)
 			shutdownFuncs = append(shutdownFuncs, shutdown)

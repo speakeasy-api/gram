@@ -411,9 +411,12 @@ const (
 	RetryAttemptKey = attribute.Key("retry.attempt")
 	RetryWaitKey    = attribute.Key("retry.wait")
 
-	TelemetryPublishFailedCountKey = attribute.Key("gram.telemetry.publish_failed_count")
-	TelemetryCHOperationKey        = attribute.Key("gram.telemetry.ch.operation")
-	TelemetryCHRowCountKey         = attribute.Key("gram.telemetry.ch.row_count")
+	TelemetryCHOperationKey = attribute.Key("gram.telemetry.ch.operation")
+	TelemetryCHRowCountKey  = attribute.Key("gram.telemetry.ch.row_count")
+
+	PubSubDrainFailedCountKey    = attribute.Key("gram.pubsub.drain_failed_count")
+	PubSubDrainBatchSizeKey      = attribute.Key("gram.pubsub.drain_batch_size")
+	PubSubDrainSuppressedLogsKey = attribute.Key("gram.pubsub.drain_suppressed_logs")
 
 	// GenAI semantic convention keys (OTel GenAI semconv - experimental)
 	// See: https://opentelemetry.io/docs/specs/semconv/gen-ai/
@@ -648,8 +651,16 @@ func HookDecision(v string) attribute.KeyValue { return HookDecisionKey.String(v
 
 func HookRiskScanned(v bool) attribute.KeyValue { return HookRiskScannedKey.Bool(v) }
 
-func SlogTelemetryPublishFailedCount(v int) slog.Attr {
-	return slog.Int(string(TelemetryPublishFailedCountKey), v)
+func SlogPubSubDrainFailedCount(v int) slog.Attr {
+	return slog.Int(string(PubSubDrainFailedCountKey), v)
+}
+
+func SlogPubSubDrainBatchSize(v int) slog.Attr {
+	return slog.Int(string(PubSubDrainBatchSizeKey), v)
+}
+
+func SlogPubSubDrainSuppressedLogs(v int64) slog.Attr {
+	return slog.Int64(string(PubSubDrainSuppressedLogsKey), v)
 }
 
 func TelemetryCHOperation(v string) attribute.KeyValue { return TelemetryCHOperationKey.String(v) }
