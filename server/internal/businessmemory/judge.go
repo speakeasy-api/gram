@@ -33,7 +33,7 @@ const (
 	JudgeName = "business_memory"
 
 	extractionModel      = "google/gemini-3.1-flash-lite"
-	extractionPrompt     = "v2"
+	extractionPrompt     = "v3"
 	extractionTimeout    = 60 * time.Second
 	maxExtractedMemories = 12
 	maxMemoryBodyBytes   = 8192

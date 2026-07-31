@@ -159,15 +159,20 @@ export function BusinessMemoryCorpus(): JSX.Element {
       scopeFilter.contentScopeNamespace,
       SEARCH_LIMIT,
     ],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       unwrapAsync(
-        businessMemoriesSearch(client, {
-          searchBusinessMemoriesRequestBody: {
-            query: normalizedSearch,
-            limit: SEARCH_LIMIT,
-            ...scopeFilter,
+        businessMemoriesSearch(
+          client,
+          {
+            searchBusinessMemoriesRequestBody: {
+              query: normalizedSearch,
+              limit: SEARCH_LIMIT,
+              ...scopeFilter,
+            },
           },
-        }),
+          undefined,
+          { signal },
+        ),
       ),
     enabled: normalizedSearch.length > 0,
     throwOnError: false,
