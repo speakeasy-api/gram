@@ -17,7 +17,13 @@ import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { type QueryRow } from "@gram/client/models/components/queryrow.js";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { ChevronLeft, Download, Home, Info, RotateCcw } from "lucide-react";
 import { CostMeasureLabel } from "@/components/estimated-cost";
 import { BreakdownBar } from "./BreakdownBar";
@@ -199,6 +205,18 @@ function HeaderStat({
   return <div className="flex flex-col">{inner}</div>;
 }
 
+// Walk up from `el` to the nearest ancestor that actually scrolls vertically.
+// The app shell scrolls an inner container (Page.Body / TabsContent), not the
+// window — callers that need the scrollport (sticky pinning, scroll-to-top)
+// must find that ancestor rather than assuming `window`.
+function findVerticalScrollParent(el: HTMLElement | null): HTMLElement | null {
+  let root: HTMLElement | null = el?.parentElement ?? null;
+  while (root && !/auto|scroll/.test(getComputedStyle(root).overflowY)) {
+    root = root.parentElement;
+  }
+  return root;
+}
+
 // ── EntityProfile ───────────────────────────────────────────────────────────
 
 export type EntityProfileProps = {
@@ -364,10 +382,7 @@ export function EntityProfile({
   useEffect(() => {
     const sentinel = pinSentinelRef.current;
     if (!sentinel) return;
-    let root: HTMLElement | null = sentinel.parentElement;
-    while (root && !/auto|scroll/.test(getComputedStyle(root).overflowY)) {
-      root = root.parentElement;
-    }
+    const root = findVerticalScrollParent(sentinel);
     const observer = new IntersectionObserver(
       ([entry]) => setPinned(entry ? !entry.isIntersecting : false),
       { root, threshold: 0 },
@@ -375,6 +390,18 @@ export function EntityProfile({
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, []);
+
+  // Drill navigation keeps the EntityProfile mounted and only swaps props, so
+  // the browser never resets scroll on its own. Jump back to the top of the
+  // scrollport whenever the drill path changes — otherwise a mid-table click
+  // lands the new profile still scrolled down, and it looks like nothing moved.
+  // useLayoutEffect so the reset lands before paint (no flash of mid-page).
+  const pathKey = path.map((c) => `${c.dim}:${c.value}`).join("/");
+  useLayoutEffect(() => {
+    const root = findVerticalScrollParent(pinSentinelRef.current);
+    if (root) root.scrollTop = 0;
+    else window.scrollTo(0, 0);
+  }, [pathKey]);
 
   // The efficiency lens quotes the slice's work units where the cost lenses
   // quote spend — the caption's grammar fits either ("… — 1,204.5 work units
