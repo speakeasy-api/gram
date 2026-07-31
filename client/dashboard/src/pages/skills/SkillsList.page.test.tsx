@@ -201,7 +201,7 @@ vi.mock("@gram/client/react-query/unknownSkillActivations.js", () => ({
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
-vi.mock("@/components/ui/tooltip", () => ({
+vi.mock("@/components/ui/Tooltip", () => ({
   Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
   TooltipTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
   TooltipContent: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -244,9 +244,15 @@ vi.mock("@/components/page-layout", () => {
     }),
   };
 });
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/Badge", () => ({
   Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+}));
+
+vi.mock("@/components/ui/Icon", () => ({
   Icon: () => <span />,
+}));
+
+vi.mock("@/components/ui/Table", () => ({
   Table: ({
     columns,
     data,

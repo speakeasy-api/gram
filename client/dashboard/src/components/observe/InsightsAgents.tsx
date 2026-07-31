@@ -1,4 +1,4 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
@@ -11,11 +11,11 @@ import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { useInsightsState } from "@/components/insights-context";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { Dialog } from "@/components/ui/dialog";
-import { ErrorAlert } from "@/components/ui/alert";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog } from "@/components/ui/Dialog";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { slugify } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -55,14 +55,10 @@ import {
   type ChartOptions,
 } from "chart.js";
 import ZoomPlugin from "chartjs-plugin-zoom";
-import {
-  Button,
-  type Column,
-  Icon,
-  type SortDescriptor,
-  Table,
-  sortTableData,
-} from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
+import { sortTableData } from "@/components/ui/Table/sorting";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bar, Chart } from "react-chartjs-2";
 import { Link } from "react-router";

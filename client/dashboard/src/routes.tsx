@@ -1,4 +1,5 @@
-import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
+import { Icon, IconProps } from "@/components/ui/Icon";
+import { IconName } from "@/components/ui/Icon/names";
 import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { ReleaseStage } from "./components/release-stage-badge";

@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -44,9 +45,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -87,20 +90,31 @@ type IdentityResolver interface {
 }
 
 type Service struct {
-	logger                 *slog.Logger
-	tracer                 trace.Tracer
-	metrics                *metrics
-	guardianPolicy         *guardian.Policy
-	db                     *pgxpool.Pool
-	authRepo               *auth_repo.Queries
-	toolsetsRepo           *toolsets_repo.Queries
-	mcpMetadataRepo        *metadata_repo.Queries
-	orgsRepo               *organizations_repo.Queries
-	auth                   *auth.Auth
-	env                    toolconfig.EnvironmentLoader
-	serverURL              *url.URL
-	siteURL                *url.URL
-	posthog                *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	logger          *slog.Logger
+	tracer          trace.Tracer
+	metrics         *metrics
+	guardianPolicy  *guardian.Policy
+	db              *pgxpool.Pool
+	authRepo        *auth_repo.Queries
+	toolsetsRepo    *toolsets_repo.Queries
+	mcpMetadataRepo *metadata_repo.Queries
+	orgsRepo        *organizations_repo.Queries
+	auth            *auth.Auth
+	env             toolconfig.EnvironmentLoader
+	serverURL       *url.URL
+	siteURL         *url.URL
+	posthog         *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	// features gates flag-controlled behavior on the OAuth surface (inbound
+	// CIMD). Wired from the same posthog client in production; typed as the
+	// interface so tests can inject feature.InMemory.
+	features feature.Provider
+	// cimdOrgFlagLastKnown remembers the last successful per-organization
+	// evaluation of FlagUserSessionCIMD so a flag-provider outage degrades
+	// to the last known state instead of failing closed on the
+	// unauthenticated OAuth surface. Guarded by cimdOrgFlagMu; holds one bool
+	// per organization that touches the surface.
+	cimdOrgFlagMu          sync.RWMutex
+	cimdOrgFlagLastKnown   map[string]bool
 	toolProxy              *gateway.ToolProxy
 	oauthService           OAuthService
 	oauthRepo              *oauth_repo.Queries
@@ -244,6 +258,7 @@ func NewService(
 	chatSessionsManager *chatsessions.Manager,
 	env toolconfig.EnvironmentLoader,
 	posthog *posthog.Posthog,
+	features feature.Provider,
 	serverURL *url.URL,
 	siteURL *url.URL,
 	enc *encryption.Client,
@@ -291,22 +306,25 @@ func NewService(
 	)
 
 	return &Service{
-		logger:          logger,
-		tracer:          tracer,
-		metrics:         newMetrics(meter, logger),
-		guardianPolicy:  guardianPolicy,
-		db:              db,
-		authRepo:        auth_repo.New(db),
-		toolsetsRepo:    toolsets_repo.New(db),
-		mcpMetadataRepo: metadata_repo.New(db),
-		orgsRepo:        organizations_repo.New(db),
-		deploymentsRepo: deployments_repo.New(db),
-		externalmcpRepo: externalmcp_repo.New(db),
-		auth:            auth.New(logger, db, sessions, authzEngine),
-		env:             env,
-		serverURL:       serverURL,
-		siteURL:         siteURL,
-		posthog:         posthog,
+		logger:               logger,
+		tracer:               tracer,
+		metrics:              newMetrics(meter, logger),
+		guardianPolicy:       guardianPolicy,
+		db:                   db,
+		authRepo:             auth_repo.New(db),
+		toolsetsRepo:         toolsets_repo.New(db),
+		mcpMetadataRepo:      metadata_repo.New(db),
+		orgsRepo:             organizations_repo.New(db),
+		deploymentsRepo:      deployments_repo.New(db),
+		externalmcpRepo:      externalmcp_repo.New(db),
+		auth:                 auth.New(logger, db, sessions, authzEngine),
+		env:                  env,
+		serverURL:            serverURL,
+		siteURL:              siteURL,
+		posthog:              posthog,
+		features:             features,
+		cimdOrgFlagMu:        sync.RWMutex{},
+		cimdOrgFlagLastKnown: map[string]bool{},
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			tracerProvider,
@@ -372,6 +390,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	// Public, unauthenticated outbound-CIMD document endpoint. Deployment-global
 	// (not slug-scoped): clients are addressed by their globally unique id.
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-client/{id}", oops.ErrHandle(service.logger, service.HandleClientMetadataDocument).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/.well-known/openai-apps-challenge", oops.ErrHandle(service.logger, service.HandleOpenAIAppsChallenge).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}", oops.MCPErrHandle(service.logger, service.ServePublic).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", oops.MCPErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
 		return service.HandleGetServer(w, r, metadataService)
@@ -412,6 +431,34 @@ func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Reque
 // remote-session handlers without reaching into the unexported manager field.
 func (s *Service) HandleClientMetadataDocument(w http.ResponseWriter, r *http.Request) error {
 	return s.remoteChallengeMgr.HandleClientMetadataDocument(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
+}
+
+// HandleOpenAIAppsChallenge serves the domain-verification token configured
+// for the custom domain resolved by middleware. The platform host has no
+// custom-domain context and intentionally returns not found.
+func (s *Service) HandleOpenAIAppsChallenge(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	domainCtx := customdomains.FromContext(ctx)
+	if domainCtx == nil {
+		return oops.E(oops.CodeNotFound, nil, "OpenAI apps challenge token not found").LogInfo(ctx, s.logger)
+	}
+
+	domain, err := customdomains_repo.New(s.db).GetCustomDomainByID(ctx, domainCtx.DomainID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return oops.E(oops.CodeNotFound, err, "OpenAI apps challenge token not found").LogInfo(ctx, s.logger)
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "load OpenAI apps challenge token").LogError(ctx, s.logger)
+	}
+	if !domain.OpenaiAppsChallengeToken.Valid {
+		return oops.E(oops.CodeNotFound, nil, "OpenAI apps challenge token not found").LogInfo(ctx, s.logger)
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	if _, err := w.Write([]byte(domain.OpenaiAppsChallengeToken.String)); err != nil {
+		return fmt.Errorf("write OpenAI apps challenge token: %w", err)
+	}
+	return nil
 }
 
 // HandleGetServer handles GET requests to /mcp/{mcpSlug}, checking for HTML requests

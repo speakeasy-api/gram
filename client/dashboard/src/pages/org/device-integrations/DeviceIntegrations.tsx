@@ -1,9 +1,9 @@
 import { Page } from "@/components/page-layout";
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import type { DeviceIntegrationProvider } from "@gram/client/models/components/deviceintegrationprovider.js";
 import { useDeviceIntegrationProviders } from "@gram/client/react-query/deviceIntegrationProviders.js";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/Stack";
 import React from "react";
 import { CoveragePipeline } from "./coverage-pipeline";
 import { DeviceIntegrationConnectionRow } from "./device-integration-connection-row";
@@ -39,9 +39,9 @@ export function MdmIntegrationsTab(): React.JSX.Element {
         {isLoading ? (
           <SkeletonTable />
         ) : providers.length === 0 ? (
-          <Type muted className="block p-4">
+          <Text muted className="block p-4">
             No integration providers are available.
-          </Type>
+          </Text>
         ) : (
           <Stack gap={8}>
             <CoveragePipeline sources={sources} sinks={sinks} />
@@ -75,12 +75,12 @@ function ProviderGroup({
   return (
     <Stack gap={3}>
       <Stack gap={1}>
-        <Type variant="body" className="font-semibold">
+        <Text variant="body" className="font-semibold">
           {title}
-        </Type>
-        <Type muted small className="max-w-prose">
+        </Text>
+        <Text muted small className="max-w-prose">
           {description}
-        </Type>
+        </Text>
       </Stack>
       <div className="border-border bg-card divide-border divide-y overflow-hidden rounded-lg border">
         {providers.map((provider) => (

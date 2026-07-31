@@ -2079,9 +2079,12 @@ jobs:
           set -uo pipefail
 
           # `detect` exits 0 when clean and 2 when anti-patterns are found.
+          # GitHub runs this step with `-e`, so the non-zero exit has to be
+          # caught inline — otherwise the step aborts here and the findings are
+          # never summarised.
+          status=0
           npx --yes "impeccable@${IMPECCABLE_VERSION}" detect --json \
-            client ts-framework functions > findings.json
-          status=$?
+            client ts-framework functions > findings.json || status=$?
 
           if [ "$status" -ne 0 ] && [ "$status" -ne 2 ]; then
             echo "::error::impeccable exited with unexpected status $status"

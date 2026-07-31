@@ -1,17 +1,17 @@
 import { MetricCard } from "@/components/chart/MetricCard";
 import { Page } from "@/components/page-layout";
-import { Button } from "@/components/ui/button";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/Button";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Switch } from "@/components/ui/Switch";
 import {
   PageTabsList,
   PageTabsTrigger,
   Tabs,
   TabsContent,
-} from "@/components/ui/tabs";
+} from "@/components/ui/Tabs";
 import { cn } from "@/lib/utils";
-import { Table, type Column } from "@speakeasy-api/moonshine";
+import { Table, type Column } from "@/components/ui/Table";
 import { Inbox, Plus, SearchX, TriangleAlert, Wallet } from "lucide-react";
 import { useEffect, useMemo, useState, type JSX } from "react";
 import { toast } from "sonner";
@@ -329,7 +329,7 @@ function RulesTab({
         title="Couldn't load budget rules"
         description="Something went wrong while loading your budget rules. Retry, or refresh the page if the problem persists."
         action={
-          <Button variant="outline" onClick={onRetry}>
+          <Button variant="secondary" onClick={onRetry}>
             Retry
           </Button>
         }
@@ -615,7 +615,7 @@ function EventsTab({ rules }: { rules: SpendRule[] }): JSX.Element {
         title="Couldn't load budget events"
         description="Something went wrong while loading the event history. Retry, or refresh the page if the problem persists."
         action={
-          <Button variant="outline" onClick={() => refetch()}>
+          <Button variant="secondary" onClick={() => refetch()}>
             Retry
           </Button>
         }
@@ -671,7 +671,7 @@ function EventsTab({ rules }: { rules: SpendRule[] }): JSX.Element {
           {nextCursor && (
             <div className="flex justify-center">
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={() => setCursor(nextCursor)}
                 disabled={isFetching}

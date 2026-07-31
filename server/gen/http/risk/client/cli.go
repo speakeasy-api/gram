@@ -873,6 +873,181 @@ func BuildListRiskResultsByChatPayload(riskListRiskResultsByChatCursor string, r
 	return v, nil
 }
 
+// BuildMarkRiskResultsFalsePositivePayload builds the payload for the risk
+// markRiskResultsFalsePositive endpoint from CLI flags.
+func BuildMarkRiskResultsFalsePositivePayload(riskMarkRiskResultsFalsePositiveBody string, riskMarkRiskResultsFalsePositiveApikeyToken string, riskMarkRiskResultsFalsePositiveSessionToken string, riskMarkRiskResultsFalsePositiveProjectSlugInput string) (*risk.MarkRiskResultsFalsePositivePayload, error) {
+	var err error
+	var body MarkRiskResultsFalsePositiveRequestBody
+	{
+		err = json.Unmarshal([]byte(riskMarkRiskResultsFalsePositiveBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"reason\": \"abc123\",\n      \"result_ids\": [\n         \"abc123\",\n         \"abc123\"\n      ]\n   }'")
+		}
+		if body.ResultIds == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("result_ids", "body"))
+		}
+		if len(body.ResultIds) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.result_ids", body.ResultIds, len(body.ResultIds), 1, true))
+		}
+		if len(body.ResultIds) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.result_ids", body.ResultIds, len(body.ResultIds), 500, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskMarkRiskResultsFalsePositiveApikeyToken != "" {
+			apikeyToken = &riskMarkRiskResultsFalsePositiveApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskMarkRiskResultsFalsePositiveSessionToken != "" {
+			sessionToken = &riskMarkRiskResultsFalsePositiveSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskMarkRiskResultsFalsePositiveProjectSlugInput != "" {
+			projectSlugInput = &riskMarkRiskResultsFalsePositiveProjectSlugInput
+		}
+	}
+	v := &risk.MarkRiskResultsFalsePositivePayload{
+		Reason: body.Reason,
+	}
+	if body.ResultIds != nil {
+		v.ResultIds = make([]string, len(body.ResultIds))
+		for i, val := range body.ResultIds {
+			v.ResultIds[i] = val
+		}
+	} else {
+		v.ResultIds = []string{}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUnmarkRiskResultsFalsePositivePayload builds the payload for the risk
+// unmarkRiskResultsFalsePositive endpoint from CLI flags.
+func BuildUnmarkRiskResultsFalsePositivePayload(riskUnmarkRiskResultsFalsePositiveBody string, riskUnmarkRiskResultsFalsePositiveApikeyToken string, riskUnmarkRiskResultsFalsePositiveSessionToken string, riskUnmarkRiskResultsFalsePositiveProjectSlugInput string) (*risk.UnmarkRiskResultsFalsePositivePayload, error) {
+	var err error
+	var body UnmarkRiskResultsFalsePositiveRequestBody
+	{
+		err = json.Unmarshal([]byte(riskUnmarkRiskResultsFalsePositiveBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"result_ids\": [\n         \"abc123\",\n         \"abc123\"\n      ]\n   }'")
+		}
+		if body.ResultIds == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("result_ids", "body"))
+		}
+		if len(body.ResultIds) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.result_ids", body.ResultIds, len(body.ResultIds), 1, true))
+		}
+		if len(body.ResultIds) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.result_ids", body.ResultIds, len(body.ResultIds), 500, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskUnmarkRiskResultsFalsePositiveApikeyToken != "" {
+			apikeyToken = &riskUnmarkRiskResultsFalsePositiveApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskUnmarkRiskResultsFalsePositiveSessionToken != "" {
+			sessionToken = &riskUnmarkRiskResultsFalsePositiveSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskUnmarkRiskResultsFalsePositiveProjectSlugInput != "" {
+			projectSlugInput = &riskUnmarkRiskResultsFalsePositiveProjectSlugInput
+		}
+	}
+	v := &risk.UnmarkRiskResultsFalsePositivePayload{}
+	if body.ResultIds != nil {
+		v.ResultIds = make([]string, len(body.ResultIds))
+		for i, val := range body.ResultIds {
+			v.ResultIds[i] = val
+		}
+	} else {
+		v.ResultIds = []string{}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListDismissedRiskResultsPayload builds the payload for the risk
+// listDismissedRiskResults endpoint from CLI flags.
+func BuildListDismissedRiskResultsPayload(riskListDismissedRiskResultsCursor string, riskListDismissedRiskResultsLimit string, riskListDismissedRiskResultsApikeyToken string, riskListDismissedRiskResultsSessionToken string, riskListDismissedRiskResultsProjectSlugInput string) (*risk.ListDismissedRiskResultsPayload, error) {
+	var err error
+	var cursor *string
+	{
+		if riskListDismissedRiskResultsCursor != "" {
+			cursor = &riskListDismissedRiskResultsCursor
+		}
+	}
+	var limit *int
+	{
+		if riskListDismissedRiskResultsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(riskListDismissedRiskResultsLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
+			}
+			if *limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskListDismissedRiskResultsApikeyToken != "" {
+			apikeyToken = &riskListDismissedRiskResultsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskListDismissedRiskResultsSessionToken != "" {
+			sessionToken = &riskListDismissedRiskResultsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskListDismissedRiskResultsProjectSlugInput != "" {
+			projectSlugInput = &riskListDismissedRiskResultsProjectSlugInput
+		}
+	}
+	v := &risk.ListDismissedRiskResultsPayload{}
+	v.Cursor = cursor
+	v.Limit = limit
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetRiskOverviewPayload builds the payload for the risk getRiskOverview
 // endpoint from CLI flags.
 func BuildGetRiskOverviewPayload(riskGetRiskOverviewFrom string, riskGetRiskOverviewTo string, riskGetRiskOverviewApikeyToken string, riskGetRiskOverviewSessionToken string, riskGetRiskOverviewProjectSlugInput string) (*risk.GetRiskOverviewPayload, error) {
@@ -2041,16 +2216,7 @@ func BuildSuggestExclusionPayload(riskSuggestExclusionBody string, riskSuggestEx
 	{
 		err = json.Unmarshal([]byte(riskSuggestExclusionBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"known_rule_ids\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"aaa\"\n   }'")
-		}
-		if utf8.RuneCountInString(body.Prompt) < 3 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.prompt", body.Prompt, utf8.RuneCountInString(body.Prompt), 3, true))
-		}
-		if utf8.RuneCountInString(body.Prompt) > 500 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.prompt", body.Prompt, utf8.RuneCountInString(body.Prompt), 500, false))
-		}
-		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"finding_ids\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"known_rule_ids\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"aaa\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -2078,6 +2244,12 @@ func BuildSuggestExclusionPayload(riskSuggestExclusionBody string, riskSuggestEx
 		v.KnownRuleIds = make([]string, len(body.KnownRuleIds))
 		for i, val := range body.KnownRuleIds {
 			v.KnownRuleIds[i] = val
+		}
+	}
+	if body.FindingIds != nil {
+		v.FindingIds = make([]string, len(body.FindingIds))
+		for i, val := range body.FindingIds {
+			v.FindingIds[i] = val
 		}
 	}
 	v.ApikeyToken = apikeyToken

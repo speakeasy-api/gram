@@ -35,6 +35,14 @@ const (
 
 	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
 	FlagRiskAsyncScanShadow  Flag = "risk-async-scan-shadow"
+
+	// FlagUserSessionCIMD gates inbound OAuth Client ID Metadata Document
+	// (CIMD) support on the user-session authorization server: URL-shaped
+	// client_id values on /mcp/{slug}/authorize are resolved by fetching the
+	// metadata document instead of requiring RFC 7591 DCR. Evaluated
+	// server-side per organization with distinctID = the issuer's org ID and
+	// no groups.
+	FlagUserSessionCIMD Flag = "gram-user-session-cimd"
 	// FlagRiskOverviewFromClickHouse serves the risk overview endpoint from
 	// ClickHouse risk_findings instead of Postgres risk_results. Per-org
 	// rollout gate; removed once the ClickHouse read path is GA.

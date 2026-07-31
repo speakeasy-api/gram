@@ -1,5 +1,29 @@
 import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
+
+// The design system ships semantic font-size utilities (`text-body-md`,
+// `text-heading-lg`, …) that tailwind-merge does not know about, so without
+// this extension it treats them as unrelated to `text-sm` and friends and
+// keeps both when they conflict.
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      "font-size": [
+        {
+          text: [
+            (value: string) =>
+              ["heading", "body", "codeline", "display"].some((element) =>
+                value.includes(element),
+              ) &&
+              ["xs", "sm", "md", "lg", "xl", "2xl"].some((element) =>
+                value.includes(element),
+              ),
+          ],
+        },
+      ],
+    },
+  },
+});
 
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));

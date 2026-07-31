@@ -37,6 +37,7 @@ import (
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/keys"
@@ -95,6 +96,9 @@ type testInstance struct {
 	authzEngine         *authz.Engine
 	audit               *audit.Logger
 	tunnelRoutes        route.Store
+	// features is the injectable flag provider wired into the service; tests
+	// enable flag-gated behavior (e.g. inbound CIMD) with SetFlag.
+	features *feature.InMemory
 }
 
 // newTestMCPService wires a permissive identity resolver. Tests asserting
@@ -139,7 +143,22 @@ func newTestMCPServiceWithIdentityResolver(t *testing.T, identityResolver mcp.Id
 	})
 }
 
-func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.IdentityResolver, tunnelPublicConfig mcp.TunnelPublicConfig) (context.Context, *testInstance) {
+// newTestMCPServiceWithGuardianOptions wires the permissive identity
+// resolver plus extra guardian policy options — e.g. guardian.WithTLSRootCAs
+// so CIMD document fetches trust an httptest.NewTLSServer certificate.
+func newTestMCPServiceWithGuardianOptions(t *testing.T, guardianOpts ...func(*guardian.Policy)) (context.Context, *testInstance) {
+	t.Helper()
+
+	return newTestMCPServiceWithTunnelPublicConfig(t, &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
+		SessionTTL:         0,
+		LiveSessionCap:     0,
+		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+		RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+		MaxRequestLifetime: 0,
+	}, guardianOpts...)
+}
+
+func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.IdentityResolver, tunnelPublicConfig mcp.TunnelPublicConfig, guardianOpts ...func(*guardian.Policy)) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -147,7 +166,7 @@ func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{}, guardianOpts...)
 	require.NoError(t, err)
 
 	conn, err := infra.CloneTestDatabase(t, "mcptest")
@@ -223,7 +242,8 @@ func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.
 		ManagedAssistantInsightsTools: managedLogsTools,
 	})
 	tunnelRoutes := route.NewRouteTable()
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, siteURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, remoteProxyManager, tunnelRoutes, "", nil, redisClient, tunnelPublicConfig)
+	features := &feature.InMemory{}
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, remoteProxyManager, tunnelRoutes, "", nil, redisClient, tunnelPublicConfig)
 
 	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](logger, cacheAdapter, cache.SuffixNone)
 
@@ -241,6 +261,7 @@ func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.
 		authzEngine:         authzEngine,
 		audit:               auditLogger,
 		tunnelRoutes:        tunnelRoutes,
+		features:            features,
 	}
 }
 

@@ -27,6 +27,11 @@ func UpdateDomainDomainsPath() string {
 	return "/rpc/domain.update"
 }
 
+// SetRootMcpEndpointDomainsPath returns the URL path to the domains service setRootMcpEndpoint HTTP endpoint.
+func SetRootMcpEndpointDomainsPath() string {
+	return "/rpc/domain.setRootMcpEndpoint"
+}
+
 // CheckHealthDomainsPath returns the URL path to the domains service checkHealth HTTP endpoint.
 func CheckHealthDomainsPath() string {
 	return "/rpc/domain.checkHealth"

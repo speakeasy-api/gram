@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	users_repo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -86,6 +87,17 @@ type consentTemplateData struct {
 	// completion message: a first-party challenge has no MCP client to grant
 	// to, so linking the cards is the whole job.
 	FirstParty bool
+	// ClientIDOrigin is the host of the client_id URL for CIMD-resolved
+	// clients, empty otherwise. Surfaced because a metadata document's
+	// client_name (and logo) are attacker-chosen for any accepted document;
+	// the origin is the trust anchor a human can actually verify
+	// (draft-ietf-oauth-client-id-metadata-document-02 §8.5).
+	ClientIDOrigin string
+	// LoopbackRedirectWarning is set when a CIMD client will receive the
+	// authorization code on a loopback redirect: any process on the user's
+	// machine can bind the same port, so the page shows a caution (MCP
+	// SHOULD).
+	LoopbackRedirectWarning bool
 	// AutoClose marks a fully completed first-party connection: every bound
 	// remote_session_client is connected. The consent script closes only this
 	// terminal state; partially-linked connections (some cards still
@@ -195,11 +207,10 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	// user's own upstream sessions. Skip the client lookup and label the page
 	// generically.
 	clientName := "Gram"
+	clientIDOrigin := ""
+	loopbackRedirectWarning := false
 	if !challengeState.FirstParty {
-		client, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
-			UserSessionIssuerID: endpoint.UserSessionIssuerID,
-			ClientID:            challengeState.ClientID,
-		})
+		client, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return oops.E(oops.CodeUnauthorized, err, "user session client revoked").LogError(ctx, logger)
@@ -207,6 +218,14 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 		}
 		clientName = client.ClientName
+		if client.ClientIDMetadataUri.Valid {
+			if u, err := url.Parse(client.ClientIDMetadataUri.String); err == nil {
+				clientIDOrigin = u.Host
+			}
+			if u, err := url.Parse(challengeState.RedirectURI); err == nil && cimd.IsLoopbackRedirectURI(u) {
+				loopbackRedirectWarning = true
+			}
+		}
 	}
 
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
@@ -230,18 +249,20 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	consentEnabled := len(cards) == 0 || hasConnectedCard
 
 	data := consentTemplateData{
-		ClientName:         clientName,
-		MCPSlug:            endpoint.Slug,
-		MCPRouteBase:       endpoint.RouteBase,
-		State:              stateID,
-		CSRFToken:          challengeState.CSRFToken,
-		SubjectDisplay:     subjectDisplay,
-		RedirectURI:        challengeState.RedirectURI,
-		ScriptURL:          consentScriptURL,
-		RemoteSessionCards: cards,
-		ConsentEnabled:     consentEnabled,
-		FirstParty:         challengeState.FirstParty,
-		AutoClose:          shouldAutoCloseFirstParty(challengeState.FirstParty, cards),
+		ClientName:              clientName,
+		MCPSlug:                 endpoint.Slug,
+		MCPRouteBase:            endpoint.RouteBase,
+		State:                   stateID,
+		CSRFToken:               challengeState.CSRFToken,
+		SubjectDisplay:          subjectDisplay,
+		RedirectURI:             challengeState.RedirectURI,
+		ScriptURL:               consentScriptURL,
+		RemoteSessionCards:      cards,
+		ConsentEnabled:          consentEnabled,
+		FirstParty:              challengeState.FirstParty,
+		ClientIDOrigin:          clientIDOrigin,
+		LoopbackRedirectWarning: loopbackRedirectWarning,
+		AutoClose:               shouldAutoCloseFirstParty(challengeState.FirstParty, cards),
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -331,10 +352,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	subject := *challengeState.Subject
 
 	// Resolve the user_session_clients row id for the consent FK.
-	clientRow, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
-		UserSessionIssuerID: endpoint.UserSessionIssuerID,
-		ClientID:            challengeState.ClientID,
-	})
+	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
 	if err != nil {
 		// Client revoked mid-flow (config change) or DB error — either way the
 		// approved flow can't complete.

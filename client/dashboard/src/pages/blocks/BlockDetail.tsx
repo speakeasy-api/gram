@@ -1,10 +1,12 @@
 import { GramLogo } from "@/components/gram-logo";
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import { useSession } from "@/contexts/Auth";
 import { buildLoginRedirectURL } from "@/lib/utils";
 import { useRiskGetBlock } from "@gram/client/react-query/riskGetBlock.js";
 import { useRiskSubmitBlockFeedbackMutation } from "@gram/client/react-query/riskSubmitBlockFeedback.js";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { ThumbsDown, ThumbsUp } from "lucide-react";
 import { useEffect } from "react";
 import { useParams } from "react-router";
@@ -38,9 +40,9 @@ export function BlockPage(): JSX.Element {
         ) : (
           <Stack direction="horizontal" gap={2} align="center">
             <Icon name="loader-circle" className="size-4 animate-spin" />
-            <Type muted small>
+            <Text muted small>
               Redirecting to sign in…
-            </Type>
+            </Text>
           </Stack>
         )}
       </Stack>
@@ -64,24 +66,24 @@ function BlockBody({ id }: { id: string | undefined }) {
     useRiskSubmitBlockFeedbackMutation();
 
   if (!id) {
-    return <Type muted>This block link is missing its identifier.</Type>;
+    return <Text muted>This block link is missing its identifier.</Text>;
   }
   if (isLoading) {
     return (
       <Stack direction="horizontal" gap={2} align="center">
         <Icon name="loader-circle" className="size-4 animate-spin" />
-        <Type muted small>
+        <Text muted small>
           Loading block…
-        </Type>
+        </Text>
       </Stack>
     );
   }
   if (error || !block) {
     return (
-      <Type muted className="max-w-md text-center">
+      <Text muted className="max-w-md text-center">
         We couldn't load this block. It may have been removed, or you may not
         have access to it in your current organization.
-      </Type>
+      </Text>
     );
   }
 
@@ -99,28 +101,28 @@ function BlockBody({ id }: { id: string | undefined }) {
           <Icon name="shield" className="text-destructive size-5" />
         </div>
         <Stack gap={1} align="center">
-          <Type variant="subheading" className="text-center">
+          <Text variant="subheading" className="text-center">
             Tool call blocked
-          </Type>
-          <Type muted small className="text-center">
+          </Text>
+          <Text muted small className="text-center">
             Blocked by policy “{block.policyName}”
             {block.toolName ? ` · tool ${block.toolName}` : ""}
-          </Type>
+          </Text>
         </Stack>
       </Stack>
 
       {block.reason ? (
         <div className="bg-muted/40 w-full rounded-md border p-4">
-          <Type small className="whitespace-pre-wrap text-center">
+          <Text small className="whitespace-pre-wrap text-center">
             {block.reason}
-          </Type>
+          </Text>
         </div>
       ) : null}
 
       <Stack gap={2} align="center">
-        <Type muted small className="text-center">
+        <Text muted small className="text-center">
           Was this block helpful?
-        </Type>
+        </Text>
         <Stack direction="horizontal" gap={2} align="center">
           <Button
             variant={block.feedback === "up" ? "secondary" : "tertiary"}
@@ -144,9 +146,9 @@ function BlockBody({ id }: { id: string | undefined }) {
           </Button>
         </Stack>
         {block.feedback ? (
-          <Type muted small className="text-center">
+          <Text muted small className="text-center">
             Thanks for the feedback.
-          </Type>
+          </Text>
         ) : null}
       </Stack>
     </Stack>

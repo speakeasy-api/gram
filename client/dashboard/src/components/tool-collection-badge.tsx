@@ -1,14 +1,14 @@
 import { ReactElement } from "react";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import {
-  Badge,
-  Icon,
-  Stack,
   Tooltip,
   TooltipContent,
   TooltipPortal,
   TooltipTrigger,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Tooltip";
 
 export const ToolCollectionBadge = ({
   toolNames,

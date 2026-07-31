@@ -1,5 +1,5 @@
-import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar";
-import { Skeleton } from "@/components/ui/skeleton";
+import { SidebarMenu, SidebarMenuItem } from "@/components/ui/Sidebar";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 
 // Deterministic label widths so the placeholder reads like a real nav list

@@ -93,7 +93,7 @@ export const RULE_CATEGORY_META: Record<
   shadow_mcp: {
     label: "Shadow MCP",
     description:
-      "Tool calls in Cursor, Claude Code, and Codex that don't come from a Speakeasy-issued MCP server. Requires Speakeasy hooks to be installed on the agent.",
+      "Tool calls that don't come from a Speakeasy-issued MCP server. Requires Speakeasy hooks to be installed on the agent.",
     icon: "shield-off",
   },
   destructive_tool: {

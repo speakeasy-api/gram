@@ -1381,6 +1381,82 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- Manual false-positive dismissal -------------------------------------------
+-- Distinct from rule-based exclusions (excluded_at/excluded_exclusion_id):
+-- these mark specific results a reviewer picked by hand as noise, via
+-- false_positive_at/false_positive_reason. Both partial indexes on
+-- risk_results already filter on false_positive_at IS NULL, so marking a
+-- result here drops it out of the "active findings" surfaces the same way an
+-- exclusion does, without touching excluded_at.
+
+-- name: GetRiskResultsByIDs :many
+-- Fetches full rows for a batch of finding ids, scoped to the project. Powers
+-- suggestExclusion's batch-suggestion path (deriving a suggested exclusion
+-- pattern from a multiselect of findings) — needs match/rule_id/source per
+-- row, not just the id, and looking them up server-side (rather than trusting
+-- client-supplied content) means the suggestion sees authoritative,
+-- unmasked data regardless of what the UI has revealed.
+SELECT *
+FROM risk_results
+WHERE project_id = @project_id
+  AND id = ANY(@ids::uuid[]);
+
+-- name: MarkRiskResultsFalsePositive :many
+-- Returns full rows (not just id): the caller republishes each one onto the
+-- findings topic to append a ClickHouse state-change row, and needs the
+-- finding content (source/rule_id/match/...) to build that message.
+UPDATE risk_results
+SET false_positive_at = clock_timestamp()
+  , false_positive_reason = sqlc.narg(reason)
+WHERE project_id = @project_id
+  AND id = ANY(@ids::uuid[])
+  AND false_positive_at IS NULL
+RETURNING *;
+
+-- name: UnmarkRiskResultsFalsePositive :many
+UPDATE risk_results
+SET false_positive_at = NULL
+  , false_positive_reason = NULL
+WHERE project_id = @project_id
+  AND id = ANY(@ids::uuid[])
+  AND false_positive_at IS NOT NULL
+RETURNING *;
+
+-- name: ListFalsePositiveRiskResults :many
+-- Powers the Dismissed tab: every result manually marked as a false positive
+-- in this project, newest dismissal first. Cursor is (false_positive_at, id)
+-- for stable pagination, matching the ListRiskResultsByProjectFound
+-- convention. block_id is always the nil UUID (foundRowToResult maps that to
+-- a nil pointer) since the Dismissed tab doesn't need durable tool-call-block
+-- links. LEFT JOINs both anchor tables (a result is anchored to exactly one,
+-- per risk_results_anchor_check) so content-part-anchored dismissals are not
+-- silently dropped, matching the ListRiskResultsByProjectFound convention.
+SELECT
+    rr.id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id,
+    rr.source, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos,
+    rr.confidence, rr.tags, rr.spans, rr.created_at,
+    rr.false_positive_at, rr.false_positive_reason,
+    COALESCE(cm.chat_id, ccp.chat_id) AS chat_id,
+    c.title AS chat_title, c.external_user_id AS chat_user_id
+FROM risk_results rr
+LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
+LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
+LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
+WHERE rr.project_id = @project_id
+  AND rr.false_positive_at IS NOT NULL
+  AND (
+    sqlc.narg(cursor_false_positive_at)::timestamptz IS NULL
+    OR (rr.false_positive_at, rr.id) < (sqlc.narg(cursor_false_positive_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
+  )
+ORDER BY rr.false_positive_at DESC, rr.id DESC
+LIMIT @page_limit;
+
+-- name: CountFalsePositiveRiskResults :one
+SELECT COUNT(*)::BIGINT
+FROM risk_results
+WHERE project_id = @project_id
+  AND false_positive_at IS NOT NULL;
+
 -- Exclusion reconcile sweep -------------------------------------------------
 -- All batches are keyset-paginated by id (id > @cursor, ORDER BY id, LIMIT
 -- @batch_limit) and RETURNING id so the caller can advance the cursor to the

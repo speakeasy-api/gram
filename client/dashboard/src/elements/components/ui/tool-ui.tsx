@@ -79,8 +79,11 @@ interface SectionMatch {
   /** Short rule label shown when this match is active (e.g. "pii.phone_number"). */
   label?: string;
   /** Optional action for this finding, surfaced as a button while it is the
-   * active match (e.g. open the create-exclusion flow). */
+   * active match (e.g. open the setup-exclusion-rule flow). */
   onExclude?: () => void;
+  /** Optional action for this finding, surfaced alongside onExclude while it
+   * is the active match (mark this one finding as a false positive). */
+  onMarkFalsePositive?: () => void;
 }
 
 interface SectionHighlight {
@@ -528,14 +531,24 @@ function HighlightedCode({
                 {activeMatch.label}
               </span>
             )}
+            {!isSearch && activeMatch?.onMarkFalsePositive && (
+              <button
+                type="button"
+                onClick={activeMatch.onMarkFalsePositive}
+                title="Mark this finding as a false positive"
+                className="shrink-0 rounded px-1.5 py-0.5 text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
+              >
+                Mark false positive
+              </button>
+            )}
             {!isSearch && activeMatch?.onExclude && (
               <button
                 type="button"
                 onClick={activeMatch.onExclude}
-                title="Create an exclusion for this finding"
+                title="Set up an exclusion rule for this finding"
                 className="shrink-0 rounded px-1.5 py-0.5 text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
               >
-                Create exclusion
+                Set up exclusion rule
               </button>
             )}
           </div>

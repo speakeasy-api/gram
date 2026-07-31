@@ -1,11 +1,11 @@
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { ToolVariationBadge } from "@/components/tool-variation-badge";
-import { MoreActions } from "@/components/ui/more-actions";
-import { SearchBar } from "@/components/ui/search-bar";
-import { Type } from "@/components/ui/type";
+import { MoreActions } from "@/components/ui/MoreActions";
+import { SearchBar } from "@/components/ui/SearchBar";
+import { Text } from "@/components/ui/Text";
 import { ToolUpdateFields } from "@/hooks/useToolUpdate";
 import type { Tool } from "@/lib/toolTypes";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import { useState } from "react";
 import { useSourceToolActions } from "./useSourceToolActions";
 
@@ -235,7 +235,7 @@ function FilteredToolsList({
   if (filtered.length === 0) {
     return (
       <div className="flex h-full items-center justify-center">
-        <Type muted>No matching tools found</Type>
+        <Text muted>No matching tools found</Text>
       </div>
     );
   }
@@ -286,7 +286,7 @@ export function SourceToolsTab({
     return (
       <div className="mx-auto w-full max-w-[1270px] px-8 py-6">
         <div className="py-12 text-center">
-          <Type muted>No tools derived from this source yet.</Type>
+          <Text muted>No tools derived from this source yet.</Text>
         </div>
       </div>
     );

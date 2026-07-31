@@ -3,43 +3,43 @@ import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
-import type { Action } from "@/components/ui/more-actions";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { SearchBar } from "@/components/ui/search-bar";
-import { Switch } from "@/components/ui/switch";
-import { Dialog } from "@/components/ui/dialog";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import type { Action } from "@/components/ui/MoreActions";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
+import { SearchBar } from "@/components/ui/SearchBar";
+import { Switch } from "@/components/ui/Switch";
+import { Dialog } from "@/components/ui/Dialog";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
   SheetDescription,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Text } from "@/components/ui/Text";
 import {
   PageTabsList,
   PageTabsTrigger,
   Tabs,
   TabsContent,
-} from "@/components/ui/tabs";
+} from "@/components/ui/Tabs";
 import { ExclusionsTab, type ExclusionSheetState } from "./ExclusionsTab";
+import { DismissedFindingsTab } from "./DismissedFindingsTab";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
-  Badge,
-  Button,
-  type Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Stack,
-  Table,
-} from "@speakeasy-api/moonshine";
-import type { BadgeProps } from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Stack } from "@/components/ui/Stack";
+import { type Column, Table } from "@/components/ui/Table";
+import { type BadgeProps } from "@/components/ui/Badge";
 import {
   Plus,
   Shield,
@@ -57,7 +57,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import { useQueryState } from "nuqs";
+import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
@@ -524,6 +524,15 @@ function PolicyDateCell({ date }: { date: Date }): JSX.Element {
   );
 }
 
+const POLICY_CENTER_TABS = ["policies", "exclusions", "dismissed"] as const;
+type PolicyCenterTab = (typeof POLICY_CENTER_TABS)[number];
+
+function toPolicyCenterTab(value: string): PolicyCenterTab {
+  return (POLICY_CENTER_TABS as readonly string[]).includes(value)
+    ? (value as PolicyCenterTab)
+    : "policies";
+}
+
 export default function PolicyCenter(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">
@@ -562,8 +571,9 @@ function PolicyCenterContent() {
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
   const [policyToDelete, setPolicyToDelete] = useState<PolicyRow | null>(null);
 
-  const [activeTab, setActiveTab] = useState<"policies" | "exclusions">(
-    "policies",
+  const [activeTab, setActiveTab] = useQueryState(
+    "tab",
+    parseAsStringLiteral(POLICY_CENTER_TABS).withDefault("policies"),
   );
   const [exclusionSheet, setExclusionSheet] =
     useState<ExclusionSheetState | null>(null);
@@ -647,13 +657,13 @@ function PolicyCenterContent() {
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Shield className="text-muted-foreground h-6 w-6" />
       </div>
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         No Risk Policies
-      </Type>
-      <Type small muted className="mb-4 max-w-md text-center">
+      </Text>
+      <Text small muted className="mb-4 max-w-md text-center">
         Risk policies scan your chat messages for secrets and sensitive data.
         Create your first policy to get started.
-      </Type>
+      </Text>
       <Button
         onClick={() => {
           const {
@@ -876,7 +886,7 @@ function PolicyCenterContent() {
     activeTab === "policies"
       ? { label: "New Policy", onClick: () => routes.policyCenter.new.goTo() }
       : {
-          label: "Create Exclusion",
+          label: "Set up Exclusion Rule",
           onClick: () => setExclusionSheet({ mode: "create" }),
         };
   const policyDeleteRuleListItems = policyToDelete
@@ -952,14 +962,17 @@ function PolicyCenterContent() {
             <Tabs
               value={activeTab}
               onValueChange={(value) =>
-                setActiveTab(value as "policies" | "exclusions")
+                void setActiveTab(toPolicyCenterTab(value))
               }
             >
               <div className="border-b">
                 <PageTabsList>
                   <PageTabsTrigger value="policies">Policies</PageTabsTrigger>
                   <PageTabsTrigger value="exclusions">
-                    Exclusions
+                    Exclusion rules
+                  </PageTabsTrigger>
+                  <PageTabsTrigger value="dismissed">
+                    False Positives
                   </PageTabsTrigger>
                 </PageTabsList>
               </div>
@@ -972,6 +985,9 @@ function PolicyCenterContent() {
                   sheet={exclusionSheet}
                   onSheetChange={setExclusionSheet}
                 />
+              </TabsContent>
+              <TabsContent value="dismissed" className="mt-6">
+                <DismissedFindingsTab />
               </TabsContent>
             </Tabs>
           </Page.Section.Body>
@@ -1001,23 +1017,23 @@ function PolicyCenterContent() {
               <Dialog.Title>Delete Policy</Dialog.Title>
             </Dialog.Header>
             <Stack gap={4}>
-              <Type variant="body">
+              <Text variant="body">
                 <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
                   {policyToDelete?.policy.name}
                 </code>{" "}
                 policy will be permanently deleted.
-              </Type>
+              </Text>
               {policyDeleteImpactText && (
-                <Type variant="body">{policyDeleteImpactText}</Type>
+                <Text variant="body">{policyDeleteImpactText}</Text>
               )}
               {policyDeleteRuleListItems.length > 0 && (
                 <div className="space-y-2">
                   <ul className="list-disc space-y-1 pl-5">
                     {policyDeleteRuleListItems.map((ruleName, index) => (
                       <li key={`${ruleName}-${index}`}>
-                        <Type variant="body" muted as="span">
+                        <Text variant="body" muted as="span">
                           {ruleName}
-                        </Type>
+                        </Text>
                       </li>
                     ))}
                   </ul>

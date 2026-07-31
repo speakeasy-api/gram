@@ -1,17 +1,18 @@
-import { Heading } from "@/components/ui/heading";
+import { Heading } from "@/components/ui/Heading";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Text } from "@/components/ui/Text";
 import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useDeploymentSuspense } from "@gram/client/react-query/deployment.js";
 import { useDeploymentLogsSuspense } from "@gram/client/react-query/deploymentLogs.js";
-import { Icon, Input } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
+import { Input } from "@/components/ui/Input";
 import React, {
   useCallback,
   useDeferredValue,
@@ -614,9 +615,9 @@ export const LogsTabContent = ({
       {!embeddedMode && sourceOptions.length > 0 && (
         <div className="mb-4 flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1.5">
-            <Type small muted>
+            <Text small muted>
               Source
-            </Type>
+            </Text>
             <Select value={selectedSource} onValueChange={setSelectedSource}>
               <SelectTrigger size="sm" className="bg-background min-w-[180px]">
                 <SelectValue placeholder="All sources" />
@@ -704,7 +705,7 @@ export const LogsTabContent = ({
                 type="text"
                 placeholder="Search logs"
                 value={searchQuery}
-                onChange={(e) => handleSearchChange(e.target.value)}
+                onChange={handleSearchChange}
                 onFocus={() => setSearchInputFocused(true)}
                 onBlur={() => setSearchInputFocused(false)}
                 className="w-48 rounded-sm py-1 pr-16 pl-7 text-xs"
