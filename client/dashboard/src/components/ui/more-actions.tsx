@@ -26,6 +26,7 @@ export function MoreActions({
   actions,
   triggerLabel,
   triggerLoading,
+  triggerStyle,
 }: {
   actions: Action[];
   triggerLabel?: string;
@@ -33,6 +34,15 @@ export function MoreActions({
    * for an async action (e.g. an AI suggestion) already in flight from a
    * previous click. Only meaningful alongside `triggerLabel`. */
   triggerLoading?: boolean;
+  /** Inline style for the trigger button. Every `Button` carries a 200ms
+   * `transition-all` (`button.tsx`'s `.trans`), which per the CSS
+   * Transitions spec holds a `visible → hidden` element at `visible` for
+   * the whole transition before flipping — so a trigger inheriting
+   * `visibility` from an ancestor that toggles it visually lingers ~200ms
+   * after the rest of that ancestor's subtree has already vanished. Pass
+   * `{ transitionProperty: "none" }` when this trigger's own visibility is
+   * driven by an ancestor's `visible`/`invisible` toggle. */
+  triggerStyle?: React.CSSProperties;
 }): JSX.Element {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -53,6 +63,7 @@ export function MoreActions({
             size="sm"
             disabled={triggerLoading}
             aria-busy={triggerLoading}
+            style={triggerStyle}
           >
             <Icon
               name={triggerLoading ? "loader-circle" : "ellipsis-vertical"}

@@ -284,8 +284,8 @@ function RiskOverviewCategoryDetailContent() {
                     onClick: handleSetupExclusionSelected,
                   },
                 ]}
-                onClear={selection.clear}
                 loading={exclusionRule.isSuggesting}
+                leftOffsetPx={32}
               />
               <ResultsTable
                 results={visibleResults}

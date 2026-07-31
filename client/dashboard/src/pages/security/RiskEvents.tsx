@@ -347,8 +347,8 @@ export default function RiskEvents(): JSX.Element {
                   onClick: handleSetupExclusionSelected,
                 },
               ]}
-              onClear={selection.clear}
               loading={exclusionRule.isSuggesting}
+              leftOffsetPx={28}
             />
             <RiskEventsHeader selection={selection} />
           </div>

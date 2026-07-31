@@ -1,4 +1,3 @@
-import { Button } from "@speakeasy-api/moonshine";
 import { MoreActions, type Action } from "@/components/ui/more-actions";
 import { useEffect, useRef, type JSX } from "react";
 import { cn } from "@/lib/utils";
@@ -22,6 +21,14 @@ export interface BulkAction {
  * than opacity/pointer-events) additionally drops the bar out of the tab
  * order for free while hidden, matching how a `hidden` element behaves.
  *
+ * Starts well clear of `leftOffsetPx` (the header row's own select-all
+ * checkbox column) rather than the container's left edge, so that checkbox
+ * stays fully uncovered and clickable — it already clears the selection
+ * when all rows are checked, so the bar itself carries no separate "Clear"
+ * control. Sized to its own content (not stretched to the table's full
+ * width) and rounded, so it reads as a small floating pill rather than a
+ * bar spanning the whole row.
+ *
  * Both current callers (RiskEvents.tsx, RiskOverviewCategoryDetail.tsx)
  * already render this outside the selectable list's own scrolling
  * container, so it stays visible while the list itself scrolls with no
@@ -36,27 +43,28 @@ export interface BulkAction {
 export function BulkActionBar({
   selectedCount,
   actions,
-  onClear,
   loading,
+  leftOffsetPx,
 }: {
   selectedCount: number;
   /** One or two actions (e.g. "Mark as false positive" and "Setup exclusion
    * rule"), listed in the "Bulk actions" dropdown in the order given. */
   actions: BulkAction[];
-  onClear: () => void;
   /** An action is running asynchronously (e.g. an AI suggestion) — shows a
    * spinner on the "Bulk actions" trigger itself, since the action that
    * triggered it is inside a menu that isn't necessarily open right now. */
   loading?: boolean;
+  /** Width of the header row's own select-all checkbox column in pixels —
+   * the bar starts immediately after it, leaving that checkbox uncovered
+   * and clickable. */
+  leftOffsetPx: number;
 }): JSX.Element {
   const visible = selectedCount > 0;
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // A hidden-but-focused control (e.g. Enter on "Clear" fires onClear
-  // synchronously, dropping selectedCount to 0 on the very next render
-  // while its own button still has DOM focus) must not silently vanish
-  // with focus still inside it — blur so focus lands somewhere assistive
-  // tech can see.
+  // A hidden-but-focused control must not silently vanish with focus still
+  // inside it (e.g. the trigger loses visibility mid-async-action) — blur
+  // so focus lands somewhere assistive tech can see.
   useEffect(() => {
     if (visible) return;
     const active = document.activeElement;
@@ -72,18 +80,19 @@ export function BulkActionBar({
     <div
       ref={containerRef}
       aria-hidden={!visible}
+      style={{ left: leftOffsetPx + 16 }}
       className={cn(
-        "bg-background absolute inset-x-0 top-0 z-20 flex items-center gap-3 border-b px-5 py-2 text-sm shadow-sm",
+        "bg-background absolute top-0 z-20 flex w-fit items-center gap-3 rounded-lg border px-3 py-2 text-sm shadow-md",
         visible ? "visible" : "invisible",
       )}
     >
-      <span className="font-medium">{selectedCount} selected</span>
-      <Button variant="tertiary" size="sm" onClick={onClear}>
-        Clear
-      </Button>
+      <span className="font-medium whitespace-nowrap">
+        {selectedCount} selected
+      </span>
       <MoreActions
         triggerLabel="Bulk actions"
         triggerLoading={loading}
+        triggerStyle={{ transitionProperty: "none" }}
         actions={actions.map(
           (a): Action => ({
             label: a.label,
