@@ -83,13 +83,22 @@ export function BulkActionBar({
     }
   }, [visible]);
 
+  // Insets the bar a few px from the header row's own top/bottom edge — at
+  // heightPx exactly (its prior sizing), the bar's shadow read as fused to
+  // the table's own top border instead of floating above it.
+  const verticalInset = 3;
+
   return (
     <div
       ref={containerRef}
       aria-hidden={!visible}
-      style={{ left: leftOffsetPx + 16, height: heightPx }}
+      style={{
+        left: leftOffsetPx + 16,
+        top: verticalInset,
+        height: heightPx != null ? heightPx - verticalInset * 2 : undefined,
+      }}
       className={cn(
-        "bg-background absolute top-0 z-20 flex w-fit items-center gap-3 rounded-lg border px-3 text-sm shadow-md",
+        "bg-background absolute z-20 flex w-fit items-center gap-3 rounded-lg px-3 text-sm shadow-md",
         heightPx == null && "py-2",
         visible ? "visible" : "invisible",
       )}
