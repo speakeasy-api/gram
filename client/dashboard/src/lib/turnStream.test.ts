@@ -249,6 +249,49 @@ describe("streamTurn", () => {
     expect(chat.status).toBe("ready");
   });
 
+  // Subscribing starts from "now", so the caller only sends the message once
+  // the subscription is live. Signalling that any later would reopen the race
+  // the ordering exists to close: frames published in the gap are lost, and a
+  // turn that finished inside it leaves the client tailing forever.
+  it("signals the subscription is live before any frame arrives", async () => {
+    stubFetch([
+      sseBody([
+        { kind: "text", cursor: "1-0", text: "hi" },
+        { kind: "done", cursor: "1-1", finish_reason: "stop" },
+      ]),
+    ]);
+
+    const events: string[] = [];
+    const stream = createUIMessageStream<UIMessage>({
+      originalMessages: [{ id: "u1", role: "user", parts: [] }],
+      execute: async ({ writer }) => {
+        writer.write({ type: "start" });
+        await streamTurn({
+          chatId: CHAT_ID,
+          writer,
+          sessionToken: "session",
+          projectSlug: "proj",
+          onSubscribed: () => events.push("subscribed"),
+          replayFromStart: true,
+        });
+        writer.write({ type: "finish" });
+      },
+    });
+    for await (const message of readUIMessageStream({ stream })) {
+      if (message.parts.some((p) => p.type === "text")) {
+        events.push("text");
+        break;
+      }
+    }
+
+    expect(events[0]).toBe("subscribed");
+    // A chat created by this turn has no earlier turn to replay, so starting
+    // from the beginning is exact — and it cannot miss frames published before
+    // the connection was made.
+    const first = vi.mocked(fetch).mock.calls[0]![0] as URL;
+    expect(first.searchParams.get("after")).toBe("0");
+  });
+
   // The reconnect contract: a body that ends without a terminal frame means
   // the turn is still running, so the next request resumes from the last
   // cursor rather than the client treating the turn as over.

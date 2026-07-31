@@ -682,6 +682,55 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 	}
 }
 
+// authorizeChatRead decides whether the caller may read a chat's content.
+//
+// It is shared by every path that hands a transcript to a caller — LoadChat
+// and the turn stream — because they expose the same data and so must answer
+// this the same way. The turn stream originally checked only that the chat
+// belonged to the caller's project, which let an embedded chat-session token
+// watch any other user's chat in that project.
+//
+// The caller has already established that the chat belongs to authCtx's
+// project; this covers who within the project may read it.
+func (s *Service) authorizeChatRead(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.GetChatRow) error {
+	// External-user and chat-session-token callers must match the chat owner.
+	// First-party project credentials read any session in their project: the
+	// dashboard session, the managed-assistant runtime, and a direct API key,
+	// which the RBAC engine already treats as self-scoped (see
+	// authz.Engine.ShouldEnforce).
+	//
+	// A chat-session token minted via an API key restores that key's APIKeyID
+	// (chatsessions.Manager.Authorize), so APIKeyID alone does not prove the
+	// caller authenticated *as* the key — treating it as first-party would let
+	// an end user's chat-session token read every project chat. Only direct
+	// Gram-Key auth carries the key's scopes (auth.KeyBasedAuth); a chat-session
+	// token has none, so gate the exemption on the scopes being present.
+	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
+	isDirectAPIKeyCall := authCtx.APIKeyID != "" && len(authCtx.APIKeyScopes) > 0
+	if authCtx.SessionID == nil && !isDirectAPIKeyCall {
+		if !isAssistantCall {
+			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
+				return oops.C(oops.CodeUnauthorized)
+			}
+		}
+	}
+
+	// Gate dashboard access on chat:read. The check is a no-op unless RBAC is
+	// enforced for the org (feature flag + session). Members can
+	// always read sessions they own, so bypass the scope check for the owner;
+	// reading anyone else's session requires an unrestricted chat:read grant,
+	// which only admins hold. The managed-assistant runtime is exempt — it
+	// consumes transcripts programmatically, not as a reviewer.
+	isOwner := authCtx.UserID != "" && chat.UserID.Valid && chat.UserID.String == authCtx.UserID
+	if !isAssistantCall && !isOwner {
+		if err := s.authz.Require(ctx, authz.ChatReadCheck(chat.ID.String())); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*gen.Chat, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -708,44 +757,8 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
 	}
 
-	// older chat_messages may not have project_id in the model, but it will always exist on the chat
-	if chat.ProjectID != *authCtx.ProjectID {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	// External-user and chat-session-token callers must match the chat owner.
-	// First-party project credentials read any session in their project: the
-	// dashboard session, the managed-assistant runtime, and a direct API key,
-	// which the RBAC engine already treats as self-scoped (see
-	// authz.Engine.ShouldEnforce).
-	//
-	// A chat-session token minted via an API key restores that key's APIKeyID
-	// (chatsessions.Manager.Authorize), so APIKeyID alone does not prove the
-	// caller authenticated *as* the key — treating it as first-party would let
-	// an end user's chat-session token read every project chat. Only direct
-	// Gram-Key auth carries the key's scopes (auth.KeyBasedAuth); a chat-session
-	// token has none, so gate the exemption on the scopes being present.
-	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
-	isDirectAPIKeyCall := authCtx.APIKeyID != "" && len(authCtx.APIKeyScopes) > 0
-	if authCtx.SessionID == nil && !isDirectAPIKeyCall {
-		if !isAssistantCall {
-			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
-				return nil, oops.C(oops.CodeUnauthorized)
-			}
-		}
-	}
-
-	// Gate dashboard access on chat:read. The check is a no-op unless RBAC is
-	// enforced for the org (feature flag + session). Members can
-	// always read sessions they own, so bypass the scope check for the owner;
-	// reading anyone else's session requires an unrestricted chat:read grant,
-	// which only admins hold. The managed-assistant runtime is exempt — it
-	// consumes transcripts programmatically, not as a reviewer.
-	isOwner := authCtx.UserID != "" && chat.UserID.Valid && chat.UserID.String == authCtx.UserID
-	if !isAssistantCall && !isOwner {
-		if err := s.authz.Require(ctx, authz.ChatReadCheck(chat.ID.String())); err != nil {
-			return nil, err
-		}
+	if err := s.authorizeChatRead(ctx, authCtx, chat); err != nil {
+		return nil, err
 	}
 
 	// Record dashboard session-opens in the audit log. Scroll pagination

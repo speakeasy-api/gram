@@ -82,6 +82,26 @@ export async function streamTurn(args: {
    * and reject with "empty project slug" before the session is considered.
    */
   projectSlug: string;
+  /**
+   * Tool calls surfaced but not yet answered, owned by the caller so the state
+   * survives a failed stream. If this throws, whatever remains in here is a
+   * call the poll fallback still has to resolve from the persisted tool row.
+   */
+  pendingToolCalls?: Set<string>;
+  /**
+   * Called once the subscription is live on the server. The handler flushes
+   * the SSE headers immediately after subscribing, so a resolved response
+   * proves no frame published from here on can be missed — which is what lets
+   * the caller send the message only after the stream is listening.
+   */
+  onSubscribed?: () => void;
+  /**
+   * Replay the chat's retained frames instead of starting from now. Correct
+   * only for a chat created by this turn, where the retained history IS this
+   * turn; on an existing chat it would replay a previous turn's terminal frame
+   * and end this one before it began.
+   */
+  replayFromStart?: boolean;
 }): Promise<void> {
   const { chatId, writer, abortSignal, sessionToken, projectSlug } = args;
 
@@ -107,8 +127,19 @@ export async function streamTurn(args: {
   let stepHasMessage = false;
   // Tool calls announced but not yet answered. assistant-ui re-sends a turn
   // whose last step holds an unresolved call, so any still outstanding when
-  // the turn ends are closed out rather than left to trigger that.
-  const pendingToolCalls = new Set<string>();
+  // the turn ends cleanly are closed out rather than left to trigger that.
+  //
+  // The caller owns the set so a failed stream can hand its unresolved calls to
+  // the poll fallback, which resolves them from the persisted tool rows. Those
+  // ids are `chat_messages.tool_call_id`, the same ids the poll matches on.
+  const pendingToolCalls = args.pendingToolCalls ?? new Set<string>();
+  // Whether the turn reached its terminal frame. Only then is fabricating an
+  // empty output for an unanswered call safe: on a failure the call may still
+  // be running, and inventing a result both shows the user something that did
+  // not happen and can be sent back to the model as if it had.
+  let completed = false;
+  // Whether the caller has been told the subscription is live.
+  let subscribed = false;
 
   const closeStep = () => {
     if (stepOpen) {
@@ -132,7 +163,11 @@ export async function streamTurn(args: {
 
       const url = new URL(`${getServerURL()}/chat/turnstream`);
       url.searchParams.set("chat_id", chatId);
-      if (cursor) url.searchParams.set("after", cursor);
+      if (cursor) {
+        url.searchParams.set("after", cursor);
+      } else if (args.replayFromStart) {
+        url.searchParams.set("after", "0");
+      }
 
       let response: Response;
       try {
@@ -163,6 +198,12 @@ export async function streamTurn(args: {
         continue;
       }
       reconnects = 0;
+      // Only after the first successful connection: a reconnect is resuming a
+      // subscription the caller already acted on.
+      if (!subscribed) {
+        subscribed = true;
+        args.onSubscribed?.();
+      }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -177,8 +218,20 @@ export async function streamTurn(args: {
         void reader.cancel().catch(() => {});
       };
 
+      // Set when the connection fails mid-stream. A rejected read is a dropped
+      // connection, which is exactly what the reconnect loop below exists for
+      // — letting it propagate skipped straight past it to the poll fallback.
+      let dropped = false;
       while (!done) {
-        const { done: finished, value } = await reader.read();
+        let finished: boolean;
+        let value: Uint8Array | undefined;
+        try {
+          ({ done: finished, value } = await reader.read());
+        } catch (err) {
+          if (abortSignal?.aborted) throw err;
+          dropped = true;
+          break;
+        }
         if (finished) break;
         buffer += decoder.decode(value, { stream: true });
 
@@ -288,14 +341,20 @@ export async function streamTurn(args: {
       }
 
       if (done) {
+        completed = true;
         release();
         return;
       }
       release();
-      // The server closed without a terminal frame — the turn is still
-      // running, so resume from the cursor rather than treating it as over.
+      // The connection ended without a terminal frame — dropped, or closed by
+      // the server while the turn is still running. Either way resume from the
+      // cursor rather than treating the turn as over.
       if (++reconnects > MAX_RECONNECTS) {
-        throw new Error("turn stream ended before the turn finished");
+        throw new Error(
+          dropped
+            ? "turn stream connection dropped"
+            : "turn stream ended before the turn finished",
+        );
       }
       await new Promise((r) => {
         setTimeout(r, RECONNECT_DELAY_MS);
@@ -303,15 +362,21 @@ export async function streamTurn(args: {
     }
   } finally {
     // A turn that ended without an output for some call would otherwise be
-    // re-sent by assistant-ui's resume check.
-    for (const id of pendingToolCalls) {
-      writer.write({
-        type: "tool-output-available",
-        toolCallId: id,
-        output: "",
-      });
+    // re-sent by assistant-ui's resume check. Only do this once the turn is
+    // known to have ended: on a failed stream the call may still be running,
+    // and an invented empty result is both shown to the user and sent back to
+    // the model as though the tool had returned it. Those calls stay in the
+    // set instead, for the caller's resync to resolve from the tool rows.
+    if (completed) {
+      for (const id of pendingToolCalls) {
+        writer.write({
+          type: "tool-output-available",
+          toolCallId: id,
+          output: "",
+        });
+      }
+      pendingToolCalls.clear();
     }
-    pendingToolCalls.clear();
     if (sawTextThisMessage) {
       writer.write({ type: "text-end", id: `turn-${chatId}-${messageIndex}` });
       sawTextThisMessage = false;

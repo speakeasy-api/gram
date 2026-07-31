@@ -197,6 +197,22 @@ func (s *Service) teedCompletion(ctx context.Context, req openrouter.CompletionR
 		return nil, s.classifyCompletionError(ctx, "completion failed", err)
 	}
 
+	// OpenRouter intermittently produces nothing at all — the non-streaming
+	// client retries that case because a fresh request usually re-routes to a
+	// healthy provider (see ChatClient.GetCompletion). Streaming the request
+	// here must not lose that: without it a watchable chat silently returns an
+	// empty assistant message where an ordinary one would have recovered.
+	if assembled.Content == "" && len(assembled.ToolCalls) == 0 {
+		s.logger.WarnContext(ctx, "teed completion produced no content; falling back to a plain completion",
+			attr.SlogChatID(chatID.String()),
+		)
+		plain, plainErr := s.completionClient.GetCompletion(ctx, req)
+		if plainErr != nil {
+			return nil, s.classifyCompletionError(ctx, "completion failed", plainErr)
+		}
+		return plain, nil
+	}
+
 	message := assembled.Message()
 	return &openrouter.CompletionResponse{
 		StartTime:    time.Now(),
@@ -210,6 +226,14 @@ func (s *Service) teedCompletion(ctx context.Context, req openrouter.CompletionR
 	}, nil
 }
 
+// turnTextQueueDepth bounds the deltas waiting to be published. An io.Pipe
+// write blocks until the reader takes it, so publishing inline would put Redis
+// on the critical path of every token reaching the caller. The queue absorbs a
+// slow Redis; if it fills, frames are dropped rather than delaying the reply,
+// because the dashboard's cursor resync recovers dropped text while a stalled
+// completion is visible to the user.
+const turnTextQueueDepth = 256
+
 // teeStreamText returns a writer that republishes assistant text as turn
 // frames, and a func to close it. Callers tee the upstream SSE body into the
 // writer so the passthrough response is unaffected: parsing happens on a
@@ -217,11 +241,13 @@ func (s *Service) teedCompletion(ctx context.Context, req openrouter.CompletionR
 // the caller is forwarding.
 func (s *Service) teeStreamText(ctx context.Context, chatID uuid.UUID) (io.Writer, func()) {
 	pr, pw := io.Pipe()
-	finished := make(chan struct{})
+	parsed := make(chan struct{})
+	published := make(chan struct{})
+	queue := make(chan string, turnTextQueueDepth)
 
 	go func() {
-		defer close(finished)
-		publish := func(text string) {
+		defer close(published)
+		for text := range queue {
 			if _, err := s.turnStream.Publish(ctx, chatID, TurnFrame{
 				Kind: TurnFrameText, Cursor: "", Text: text, MessageID: "",
 				ToolCalls: nil, FinishReason: "", ToolCallID: "", Output: nil,
@@ -229,8 +255,26 @@ func (s *Service) teeStreamText(ctx context.Context, chatID uuid.UUID) (io.Write
 				s.logger.WarnContext(ctx, "publish turn text frame", attr.SlogError(err))
 			}
 		}
+	}()
+
+	go func() {
+		defer close(parsed)
+		dropped := 0
+		publish := func(text string) {
+			select {
+			case queue <- text:
+			default:
+				dropped++
+			}
+		}
 		if _, err := teeCompletionStream(pr, publish); err != nil {
 			s.logger.WarnContext(ctx, "parse streamed completion for turn frames", attr.SlogError(err))
+		}
+		if dropped > 0 {
+			s.logger.WarnContext(ctx, "dropped turn text frames",
+				attr.SlogChatID(chatID.String()),
+				attr.SlogChatTurnFramesDropped(int64(dropped)),
+			)
 		}
 		// Drain whatever is left so a tee write never blocks on a reader that
 		// stopped early.
@@ -239,6 +283,12 @@ func (s *Service) teeStreamText(ctx context.Context, chatID uuid.UUID) (io.Write
 
 	return pw, func() {
 		_ = pw.Close()
-		<-finished
+		<-parsed
+		// Text frames must all be published before the caller persists the
+		// turn: the writer publishes the row's `message` frame after commit,
+		// and text arriving behind it would be rendered as a later message.
+		// Only the tail of the stream waits here — never an individual token.
+		close(queue)
+		<-published
 	}
 }

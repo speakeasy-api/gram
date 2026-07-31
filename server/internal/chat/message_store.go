@@ -47,6 +47,7 @@ func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage as
 		observers:    nil,
 		shutdownCtx:  ctx,
 		cancel:       cancel,
+		turnStream:   nil,
 	}
 	shutdown = func(_ context.Context) error {
 		cancel()

@@ -48,11 +48,16 @@ func (s *Service) HandleTurnStream(w http.ResponseWriter, r *http.Request) error
 	if parseErr != nil {
 		return oops.E(oops.CodeBadRequest, parseErr, "invalid chat_id")
 	}
-	// Watching a chat is reading its content, so the caller must own it.
-	// GetChat is not project-scoped, hence the explicit comparison.
+	// Watching a chat streams its content, so it is authorized exactly like
+	// reading the transcript. Project equality alone is not enough: it would
+	// let an embedded chat-session token watch any other user's chat in the
+	// project. GetChat is not project-scoped, hence the explicit comparison.
 	chat, err := s.repo.GetChat(ctx, chatID)
 	if err != nil || chat.ProjectID != *authCtx.ProjectID {
 		return oops.E(oops.CodeNotFound, err, "chat not found")
+	}
+	if err := s.authorizeChatRead(ctx, authCtx, chat); err != nil {
+		return err
 	}
 
 	frames, err := s.turnStream.Subscribe(ctx, chatID, r.URL.Query().Get("after"))

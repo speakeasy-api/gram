@@ -113,6 +113,17 @@ func (t *TurnStream) Publish(ctx context.Context, chatID uuid.UUID, frame TurnFr
 		MaxLen: turnStreamMaxLen,
 		Approx: true,
 		Values: map[string]any{"f": payload},
+		// Redis assigns the id, the stream is created on first append, and the
+		// remaining knobs (MinID/Limit/Mode, producer-side idempotency) have no
+		// bearing on an append-only frame log.
+		NoMkStream:     false,
+		MinID:          "",
+		Limit:          0,
+		Mode:           "",
+		ID:             "",
+		ProducerID:     "",
+		IdempotentID:   "",
+		IdempotentAuto: false,
 	}).Result()
 	if err != nil {
 		return "", fmt.Errorf("append turn frame: %w", err)
@@ -201,6 +212,8 @@ func (t *TurnStream) Subscribe(ctx context.Context, chatID uuid.UUID, after stri
 				Streams: []string{turnStreamKey(chatID), cursor},
 				Block:   turnStreamBlock,
 				Count:   256,
+				// The cursor is carried in Streams above.
+				ID: "",
 			}).Result()
 			if err != nil {
 				if errors.Is(err, redis.Nil) {
