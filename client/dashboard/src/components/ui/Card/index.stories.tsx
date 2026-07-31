@@ -200,26 +200,6 @@ export const WithCustomRightElement: Story = {
   },
 };
 
-export const WithGauge: Story = {
-  args: {
-    children: [
-      <Card.Header
-        key="header"
-        subheader="With gauge"
-        rightElement={{
-          type: "gauge",
-          value: 75,
-        }}
-      >
-        Card with Gauge
-      </Card.Header>,
-      <Card.Content key="content">
-        This card shows how to combine a custom right element with a gauge.
-      </Card.Content>,
-    ],
-  },
-};
-
 export const AsLink: Story = {
   args: {
     children: [
@@ -231,28 +211,6 @@ export const AsLink: Story = {
       </Card.Content>,
     ],
     href: "/some-page",
-  },
-};
-
-export const WithGaugeAndLink: Story = {
-  args: {
-    children: [
-      <Card.Header
-        key="header"
-        subheader="With gauge and navigation"
-        rightElement={{
-          type: "gauge",
-          value: 75,
-        }}
-      >
-        Card with Gauge
-      </Card.Header>,
-      <Card.Content key="content">
-        Since a gauge isn't interactive, the card-level href works fine here.
-        Try clicking anywhere on the card.
-      </Card.Content>,
-    ],
-    href: "/dashboard",
   },
 };
 

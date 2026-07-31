@@ -3,23 +3,16 @@ import React, { FC, PropsWithChildren, ReactNode } from "react";
 import { Icon } from "../Icon";
 import { Stack } from "../Stack";
 import { Button } from "../Button";
-import { Score } from "../Score";
 import { Grid } from "../Grid";
 import { Skeleton, SkeletonParagraph } from "../Skeleton";
 import { iconNames } from "../Icon/names";
 import { Children } from "react";
-import { Range } from "@/components/ui/lib/typeUtils";
 
-type RightElement =
-  | {
-      type: "button";
-      label: string;
-      onClick: () => void;
-    }
-  | {
-      type: "gauge";
-      value: Range<100>;
-    };
+type RightElement = {
+  type: "button";
+  label: string;
+  onClick: () => void;
+};
 
 type IconProps = {
   name: (typeof iconNames)[number];
@@ -70,9 +63,6 @@ const CardHeader: FC<CardHeaderProps> = ({
           <Button onClick={rightElement.onClick} variant="secondary">
             {rightElement.label}
           </Button>
-        )}
-        {rightElement.type === "gauge" && rightElement.value && (
-          <Score score={rightElement.value} size="small" />
         )}
       </div>
     )}

@@ -1,5 +1,3 @@
-import { assertNever } from "./assert";
-
 // Button variants
 export const buttonVariants = [
   "brand",
@@ -12,11 +10,11 @@ export const buttonVariants = [
 export type ButtonVariant = (typeof buttonVariants)[number];
 
 // Button sizes
-export const buttonSizes = ["xs", "sm", "md", "lg"] as const;
+const buttonSizes = ["xs", "sm", "md", "lg"] as const;
 export type ButtonSize = (typeof buttonSizes)[number];
 
 // Button contexts
-export const buttonContexts = ["product", "marketing"] as const;
+const buttonContexts = ["product", "marketing"] as const;
 export type ButtonContext = (typeof buttonContexts)[number];
 
 // Badge variants
@@ -30,7 +28,7 @@ export const badgeVariants = [
 export type BadgeVariant = (typeof badgeVariants)[number];
 
 // Badge sizes
-export const badgeSizes = ["sm", "md", "lg"] as const;
+const badgeSizes = ["sm", "md", "lg"] as const;
 export type BadgeSize = (typeof badgeSizes)[number];
 
 // Generic
@@ -45,25 +43,25 @@ export type Breakpoint = (typeof breakpoints)[number];
 export type ResponsiveValue<T> = T | { [key in Breakpoint]?: T };
 
 // Stack
-export const directionOptions = ["row", "column"] as const;
+const directionOptions = ["row", "column"] as const;
 export type Direction = (typeof directionOptions)[number];
 
-export const tailwindScale = [
+const tailwindScale = [
   0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 20, 24,
   28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80, 96,
 ] as const;
 
 // Gap
-export const gapValues = tailwindScale;
+const gapValues = tailwindScale;
 export type Gap = (typeof gapValues)[number];
 
 // Grid Columns
-export const gridColumnValues = tailwindScale;
+const gridColumnValues = tailwindScale;
 export type Columns = (typeof gridColumnValues)[number];
 
 // Padding
-export const paddingValues = tailwindScale;
-export type PaddingValue = (typeof paddingValues)[number];
+const paddingValues = tailwindScale;
+type PaddingValue = (typeof paddingValues)[number];
 
 export type PaddingPerAxis = { x?: PaddingValue; y?: PaddingValue };
 export type PaddingPerSides = {
@@ -85,7 +83,7 @@ export type PaddingPerSide =
 
 export type Padding = PaddingValue | PaddingPerSide;
 
-export const alignmentOptions = [
+const alignmentOptions = [
   "start",
   "center",
   "end",
@@ -98,7 +96,7 @@ export const alignmentOptions = [
  */
 export type Alignment = (typeof alignmentOptions)[number];
 
-export const supportedLanguages = [
+const supportedLanguages = [
   "typescript",
   "go",
   "java",
@@ -115,54 +113,7 @@ export const supportedLanguages = [
 
 export type SupportedLanguage = (typeof supportedLanguages)[number];
 
-export function isSupportedLanguage(
-  language: string,
-): language is SupportedLanguage {
-  return supportedLanguages.includes(language as SupportedLanguage);
-}
-
-export function prettyLanguageName(language: SupportedLanguage): string {
-  switch (language) {
-    case "typescript":
-      return "TypeScript";
-    case "go":
-      return "Go";
-    case "ruby":
-      return "Ruby";
-    case "python":
-      return "Python";
-    case "csharp":
-      return "C#";
-    case "php":
-      return "PHP";
-    case "java":
-      return "Java";
-    case "swift":
-      return "Swift";
-    case "postman":
-      return "Postman";
-    case "terraform":
-      return "Terraform";
-    case "unity":
-      return "Unity";
-    case "json":
-      return "JSON";
-    default:
-      assertNever(language);
-  }
-}
-
-export type ViewTransition = {
-  ready: Promise<void>;
-  finished: Promise<void>;
-  updateCallbackDone: Promise<void>;
-  skipTransition: () => void;
-};
-
-export const wrapOptions = ["nowrap", "wrap", "wrap-reverse"] as const;
-export type Wrap = (typeof wrapOptions)[number];
-
-export const programmingLanguages = [
+const programmingLanguages = [
   "javascript",
   "typescript",
   "python",
@@ -178,27 +129,4 @@ export function isProgrammingLanguage(
   language: string,
 ): language is ProgrammingLanguage {
   return programmingLanguages.includes(language as ProgrammingLanguage);
-}
-
-// Workspace selector - shared by Navbar and WorkspaceSelector
-export interface Org {
-  id: string;
-  label: string;
-  slug: string;
-  workspaces: Workspace[];
-}
-
-export interface Workspace {
-  id: string;
-  slug: string;
-  label: string;
-  active: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface GlobalWorkspaceSelectorProps {
-  orgs: Org[];
-  value?: string;
-  onSelect: (org: Org, workspace: Workspace) => void;
 }

@@ -83,7 +83,6 @@ import {
 } from "@/components/ui/Popover";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { ResizablePanel } from "@/components/ui/ResizablePanel";
-import { Score } from "@/components/ui/Score";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import {
@@ -300,10 +299,6 @@ export const Row = ({ name, origin, children }) => {
     </Alert>
     <ErrorAlert error="Request timed out after 30s" />
   </div>
-</Row>
-
-<Row name="Score" origin="DS">
-  <Score score={82} size="small" />
 </Row>
 
 <Row name="Skeleton" origin="DS">
