@@ -1527,9 +1527,24 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	/**
 	 * Non-Streaming
 	 */
-	response, err := s.completionClient.GetCompletion(ctx, completionReq)
-	if err != nil {
-		return s.classifyCompletionError(ctx, "completion failed", err)
+	// A watchable chat has its tokens streamed upstream and republished as
+	// they pass, so the dashboard can render text while it is still being
+	// generated; this caller still gets back the assembled JSON it asked for.
+	// With no chat to attribute frames to, or no stream to publish on, this is
+	// an ordinary completion.
+	var response *openrouter.CompletionResponse
+	if s.turnStream != nil && chatID != uuid.Nil {
+		teed, teeErr := s.teedCompletion(ctx, completionReq, chatID)
+		if teeErr != nil {
+			return teeErr
+		}
+		response = teed
+	} else {
+		plain, callErr := s.completionClient.GetCompletion(ctx, completionReq)
+		if callErr != nil {
+			return s.classifyCompletionError(ctx, "completion failed", callErr)
+		}
+		response = plain
 	}
 
 	var gramMetadata *openrouter.GramMetadata
