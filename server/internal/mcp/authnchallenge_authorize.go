@@ -11,7 +11,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"slices"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -23,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
-	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // HandleAuthorize implements the OAuth 2.1 authorization endpoint (RFC 6749
@@ -71,17 +69,41 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return writeAuthorizeOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
-	client, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
-		UserSessionIssuerID: endpoint.UserSessionIssuerID,
-		ClientID:            req.ClientID,
-	})
+	// URL-shaped client_ids resolve via CIMD here (flag-gated, inside the
+	// resolver). All resolution failures render inline per RFC 6749
+	// §4.1.2.1 — the redirect_uri of an unresolved client cannot be
+	// trusted — and a document fetch failure aborts the request per
+	// draft-ietf-oauth-client-id-metadata-document-02 §5.1 (fail closed,
+	// no stale fallback).
+	client, err := s.resolveUserSessionClient(ctx, logger, endpoint, req.ClientID, resolveClientCIMD)
 	if err != nil {
+		if oauthErr, ok := errors.AsType[*usersessions.OAuthError](err); ok {
+			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, oauthErr.Code, oauthErr.Description)
+		}
+		if errors.Is(err, errCIMDFetchFailed) {
+			// The cause may name internal network conditions (SSRF denials,
+			// DNS failures); log it and keep the wire response generic. A
+			// fetch failure is transient from the client's perspective — the
+			// document host may just be briefly unreachable — so signal
+			// retry-later (temporarily_unavailable, RFC 6749 §4.1.2.1)
+			// rather than a permanent invalid_client that would make SDKs
+			// stop retrying.
+			logger.InfoContext(ctx, "cimd document fetch failed", attr.SlogError(err))
+			return writeAuthorizeError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "failed to fetch client metadata document")
+		}
+		if errors.Is(err, errCIMDDisabled) {
+			// Same wire response as an unknown client so the rejection does
+			// not leak per-organization flag state; the log line is what
+			// distinguishes a kill-switch rejection during an incident.
+			logger.InfoContext(ctx, "rejecting url-shaped client_id while cimd flag is disabled")
+			return writeAuthorizeError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "unknown client_id")
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return writeAuthorizeError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "unknown client_id")
 		}
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
-	if !slices.Contains(client.RedirectUris, req.RedirectURI) {
+	if !redirectURIMatches(client, req.RedirectURI) {
 		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "redirect_uri is not registered for this client")
 	}
 

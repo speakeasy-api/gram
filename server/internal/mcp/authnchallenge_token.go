@@ -86,16 +86,25 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "missing_client_id")
 		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
 	}
-	clientRow, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
-		UserSessionIssuerID: endpoint.UserSessionIssuerID,
-		ClientID:            clientID,
-	})
+	// lookupClientOnly: any CIMD row was persisted at authorize time, and
+	// mid-flow token legs must keep working even if the CIMD flag flips off.
+	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientID, lookupClientOnly)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "unknown_client_id")
 			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "unknown client_id")
 		}
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
+	}
+	// CIMD-resolved clients are public by construction (the AS only accepts
+	// documents declaring token_endpoint_auth_method "none", and the schema
+	// forbids a secret on CIMD rows). Reject any attempt to authenticate
+	// one with credentials per RFC 6749 §5.2 — a URL-shaped client_id
+	// cannot travel via HTTP Basic (r.BasicAuth does no percent-decoding),
+	// so a legitimate CIMD client always presents form client_id + none.
+	if clientRow.ClientIDMetadataUri.Valid && presentedAuthMethod != "none" {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_client_presented_credentials")
+		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", `client_id metadata document clients must use token_endpoint_auth_method "none"`)
 	}
 	// Public clients (token_endpoint_auth_method=none) have a NULL hash:
 	// PKCE / refresh-token possession is the integrity proof, no secret check.
@@ -114,9 +123,9 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 
 	switch grantType {
 	case "authorization_code":
-		return s.handleTokenAuthorizationCodeGrant(ctx, w, r, endpoint, &clientRow, baseURL, presentedAuthMethod, logger)
+		return s.handleTokenAuthorizationCodeGrant(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, logger)
 	case "refresh_token":
-		return s.handleTokenRefreshTokenGrant(ctx, w, r, endpoint, &clientRow, baseURL, presentedAuthMethod, logger)
+		return s.handleTokenRefreshTokenGrant(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, logger)
 	default:
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", clientID, presentedAuthMethod, grantType, "unsupported_grant_type")
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "unsupported_grant_type", "unsupported grant_type")

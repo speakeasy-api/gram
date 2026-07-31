@@ -868,6 +868,7 @@ func newStartCommand() *cli.Command {
 				chatSessionsManager,
 				env,
 				posthogClient,
+				posthogClient,
 				serverURL,
 				siteURL,
 				encryptionClient,
