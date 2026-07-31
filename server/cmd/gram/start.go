@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/businessmemory"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
@@ -1096,6 +1097,14 @@ func newStartCommand() *cli.Command {
 				sessionManager,
 				authzEngine,
 				memorySvc,
+			))
+			businessmemory.Attach(mux, businessmemory.NewService(
+				logger,
+				tracerProvider,
+				db,
+				sessionManager,
+				authzEngine,
+				completionsClient,
 			))
 			hooks.Attach(mux, hooks.NewService(
 				logger,

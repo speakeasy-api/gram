@@ -14,6 +14,7 @@ import { AssistantMemories } from "./assistantmemories.js";
 import { Assistants } from "./assistants.js";
 import { Auditlogs } from "./auditlogs.js";
 import { Auth } from "./auth.js";
+import { BusinessMemories } from "./businessmemories.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
 import { CliAuth } from "./cliauth.js";
@@ -125,6 +126,11 @@ export class Gram extends ClientSDK {
   private _auth?: Auth;
   get auth(): Auth {
     return (this._auth ??= new Auth(this._options));
+  }
+
+  private _businessMemories?: BusinessMemories;
+  get businessMemories(): BusinessMemories {
+    return (this._businessMemories ??= new BusinessMemories(this._options));
   }
 
   private _chat?: Chat;

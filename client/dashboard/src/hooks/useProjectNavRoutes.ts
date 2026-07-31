@@ -4,6 +4,7 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { AppRoute, useRoutes } from "@/routes";
+import { useOrgMemoryDeveloperToggle } from "./useOrgMemoryDeveloperToggle";
 
 /** A project nav page plus the scopes that grant access to it. */
 export interface ProjectNavRoute {
@@ -36,13 +37,13 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   const routes = useRoutes();
   const { id: projectId } = useProject();
   const telemetry = useTelemetry();
+  const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
   const { data: productFeatures } = useProductFeatures(undefined, undefined, {
     staleTime: 30_000,
     throwOnError: false,
   });
 
   const isAssistantsEnabled = telemetry.isFeatureEnabled("assistants") ?? false;
-  const isOrgMemoryEnabled = telemetry.isFeatureEnabled("org-memory") ?? false;
   // Default true: opt-out via PostHog org-group targeting on `gram-deployments-page`.
   const isDeploymentsPageEnabled =
     telemetry.isFeatureEnabled("gram-deployments-page") ?? true;
