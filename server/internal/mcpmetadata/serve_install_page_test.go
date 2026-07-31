@@ -1676,20 +1676,22 @@ func TestServeInstallPage_CustomDomain_RootEndpointRendersBareDomainURL(t *testi
 	domainsRepo := customdomains_repo.New(testInstance.conn)
 
 	domain, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Domain:         "root-install.example.com",
-		IngressName:    pgtype.Text{String: "", Valid: false},
-		CertSecretName: pgtype.Text{String: "", Valid: false},
-		IpAllowlist:    []string{},
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          "root-install.example.com",
+		IngressName:     pgtype.Text{String: "", Valid: false},
+		CertSecretName:  pgtype.Text{String: "", Valid: false},
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
 	})
 	require.NoError(t, err)
 
 	domain, err = domainsRepo.UpdateCustomDomain(ctx, customdomains_repo.UpdateCustomDomainParams{
-		ID:             domain.ID,
-		Verified:       true,
-		Activated:      true,
-		IngressName:    pgtype.Text{String: "", Valid: false},
-		CertSecretName: pgtype.Text{String: "", Valid: false},
+		ID:              domain.ID,
+		Verified:        true,
+		Activated:       true,
+		IngressName:     pgtype.Text{String: "", Valid: false},
+		CertSecretName:  pgtype.Text{String: "", Valid: false},
+		ProvisionerKind: "ingress",
 	})
 	require.NoError(t, err)
 
