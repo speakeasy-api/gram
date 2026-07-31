@@ -74,38 +74,55 @@ export function pluginFilterOptions(plugins: Plugin[]): FilterOption[] {
   return plugins.map((plugin) => ({ value: plugin.id, label: plugin.name }));
 }
 
-export function toolsetFacets(
-  toolset: ToolsetEntry,
+// A toolset-backed wrapper keeps the hosted catalog/custom classification;
+// origin.registrySpecifier on the backing toolset is the only list-row signal
+// that a hosted MCP came from catalog.
+function mcpServerSource(
+  server: McpServer,
+  backingToolset: ToolsetEntry | undefined,
+): McpFacets["source"] {
+  if (server.toolsetId) {
+    return backingToolset?.origin?.registrySpecifier ? "catalog" : "custom";
+  }
+  return server.tunneledMcpServerId ? "tunneled" : "remote";
+}
+
+// Plugin membership may reference the wrapper server directly or — until the
+// plugin ownership move — its backing toolset, so a toolset-backed wrapper
+// resolves both.
+function mcpServerPluginIds(
+  server: McpServer,
   membership: PluginMembership,
-): McpFacets {
-  const status = !toolset.mcpEnabled
-    ? "disabled"
-    : toolset.mcpIsPublic
-      ? "public"
-      : "private";
-  // registrySpecifier is the only list-row signal that a hosted MCP came from catalog.
-  const source = toolset.origin?.registrySpecifier ? "catalog" : "custom";
-  return {
-    status,
-    source,
-    pluginIds: membership.byToolsetId.get(toolset.id) ?? [],
-  };
+): string[] {
+  const ids = [...(membership.byMcpServerId.get(server.id) ?? [])];
+  if (server.toolsetId) {
+    ids.push(...(membership.byToolsetId.get(server.toolsetId) ?? []));
+  }
+  return ids;
+}
+
+function mcpServerStatus(
+  visibility: McpServer["visibility"],
+): McpFacets["status"] {
+  switch (visibility) {
+    case "public":
+      return "public";
+    case "private":
+      return "private";
+    case "disabled":
+      return "disabled";
+  }
 }
 
 export function mcpServerFacets(
   server: McpServer,
   membership: PluginMembership,
+  backingToolset?: ToolsetEntry,
 ): McpFacets {
-  const status =
-    server.visibility === "public"
-      ? "public"
-      : server.visibility === "private"
-        ? "private"
-        : "disabled";
   return {
-    status,
-    source: server.tunneledMcpServerId ? "tunneled" : "remote",
-    pluginIds: membership.byMcpServerId.get(server.id) ?? [],
+    status: mcpServerStatus(server.visibility),
+    source: mcpServerSource(server, backingToolset),
+    pluginIds: mcpServerPluginIds(server, membership),
   };
 }
 

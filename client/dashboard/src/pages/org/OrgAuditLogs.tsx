@@ -342,18 +342,25 @@ function AuditLogsInsightsWrapper({ children }: { children: React.ReactNode }) {
 
   const serverURL = getServerURL();
 
-  // Build MCP server entries for all project toolsets
+  // Build MCP server entries for all project toolsets. A toolset without an
+  // MCP slug has no runtime URL and is skipped.
   const mcps = useMemo<MCPServerEntry[] | undefined>(() => {
     if (isLoadingToolsets || !toolsetsData?.toolsets?.length) {
       return undefined;
     }
 
-    return toolsetsData.toolsets.map((toolset) => ({
-      url: internalMcpUrl({ slug: projectSlug }, toolset),
-      name: toolset.slug,
-      environment: toolset.defaultEnvironmentSlug,
-    }));
-  }, [toolsetsData?.toolsets, projectSlug, isLoadingToolsets]);
+    return toolsetsData.toolsets.flatMap((toolset) => {
+      const url = internalMcpUrl(toolset);
+      if (!url) return [];
+      return [
+        {
+          url,
+          name: toolset.slug,
+          environment: toolset.defaultEnvironmentSlug,
+        },
+      ];
+    });
+  }, [toolsetsData?.toolsets, isLoadingToolsets]);
 
   const auditToolsFilter = useCallback(
     ({ toolName }: { toolName: string }) =>

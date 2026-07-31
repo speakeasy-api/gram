@@ -175,8 +175,11 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
     for (const ref of draft.assistant?.toolsets ?? []) {
       const toolset = toolsetBySlug.get(ref.toolsetSlug);
       if (!toolset) continue;
+      // A toolset without an MCP slug has no runtime URL to dial.
+      const url = internalMcpUrl(toolset);
+      if (!url) continue;
       entries.push({
-        url: internalMcpUrl({ slug: project.slug }, toolset),
+        url,
         name: capMcpEntryName(toolset.slug),
         environment: ref.environmentSlug ?? fallbackEnv,
       });
@@ -199,7 +202,6 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
     draft.assistant?.mcpServers,
     draft.assistantEnv?.slug,
     toolsetsData?.toolsets,
-    project.slug,
   ]);
 
   const getSession = useCallback(async () => {

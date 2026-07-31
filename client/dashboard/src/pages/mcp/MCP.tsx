@@ -19,8 +19,11 @@ import {
   indexMcpActivity,
   lookupMcpActivity,
   mcpActivityStatus,
+  type McpActivityStatus,
   type McpActivityTargetType,
 } from "@/components/mcp/mcp-activity";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -42,7 +45,7 @@ import {
   MCP_FILTER_OPTIONS,
   pluginFilterOptions,
   pluginMembership,
-  toolsetFacets,
+  type PluginMembership,
 } from "./mcp-filter-schema";
 import { usePlugins } from "@gram/client/react-query/plugins.js";
 
@@ -65,6 +68,109 @@ function mcpServerTargetType(server: {
   return server.tunneledMcpServerId
     ? "tunneled_mcp_server"
     : "hosted_mcp_server";
+}
+
+// The listing renders mcp_servers rows only. A row is toolset-backed when the
+// server's `toolsetId` resolves to a toolset entry, which then supplies the
+// hosted card's data (name, tools, origin); every other row renders through
+// the mcp_servers card.
+type McpListingRow =
+  | { kind: "toolset"; server: McpServer; toolset: ToolsetEntry }
+  | { kind: "server"; server: McpServer };
+
+function rowDisplayName(row: McpListingRow): string {
+  return row.kind === "toolset" ? row.toolset.name : (row.server.name ?? "");
+}
+
+function rowMatchesQuery(row: McpListingRow, query: string): boolean {
+  const haystack =
+    row.kind === "toolset"
+      ? [row.toolset.name, row.toolset.slug, row.server.slug]
+      : [row.server.name, row.server.slug];
+  return haystack.some((value) => value?.toLowerCase().includes(query));
+}
+
+function rowFacets(row: McpListingRow, membership: PluginMembership) {
+  return mcpServerFacets(
+    row.server,
+    membership,
+    row.kind === "toolset" ? row.toolset : undefined,
+  );
+}
+
+// Telemetry still attributes toolset-backed servers by their toolset slug;
+// remote/tunnelled servers attribute by the mcp_servers slug.
+function rowActivityTarget(row: McpListingRow): {
+  targetType: McpActivityTargetType;
+  targetId: string | undefined;
+} {
+  if (row.kind === "toolset") {
+    return { targetType: "hosted_mcp_server", targetId: row.toolset.slug };
+  }
+  return {
+    targetType: mcpServerTargetType(row.server),
+    targetId: row.server.slug,
+  };
+}
+
+function McpListingCard({
+  row,
+  endpointCount,
+  activityStatus,
+  recentWindowDays,
+}: {
+  row: McpListingRow;
+  endpointCount: number;
+  activityStatus?: McpActivityStatus | null;
+  recentWindowDays?: number;
+}): JSX.Element {
+  if (row.kind === "toolset") {
+    return (
+      <MCPCard
+        toolset={row.toolset}
+        activityStatus={activityStatus}
+        recentWindowDays={recentWindowDays}
+      />
+    );
+  }
+  return (
+    <MCPServerCard
+      server={row.server}
+      endpointCount={endpointCount}
+      activityStatus={activityStatus}
+      recentWindowDays={recentWindowDays}
+    />
+  );
+}
+
+function McpListingTableRow({
+  row,
+  endpointCount,
+  activityStatus,
+  recentWindowDays,
+}: {
+  row: McpListingRow;
+  endpointCount: number;
+  activityStatus?: McpActivityStatus | null;
+  recentWindowDays?: number;
+}): JSX.Element {
+  if (row.kind === "toolset") {
+    return (
+      <MCPTableRow
+        toolset={row.toolset}
+        activityStatus={activityStatus}
+        recentWindowDays={recentWindowDays}
+      />
+    );
+  }
+  return (
+    <MCPServerTableRow
+      server={row.server}
+      endpointCount={endpointCount}
+      activityStatus={activityStatus}
+      recentWindowDays={recentWindowDays}
+    />
+  );
 }
 
 export function MCPRoot(): JSX.Element {
@@ -91,10 +197,10 @@ function MCPOverview() {
   const routes = useRoutes();
   const client = useSdkClient();
 
-  // TODO(AGE-1902): collapse this fetch with useToolsets() once Hosted
-  // (toolset-backed) MCP servers also source from mcp_servers. Until then the
-  // listing merges two parallel collections — toolsets (Hosted) and
-  // mcp_servers (Remote-MCP-backed today) — in the same grid.
+  // mcp_servers is the single listing source: every published toolset has a
+  // wrapper mcp_servers row, so the grid renders mcp_servers only and the
+  // useToolsets() fetch above hydrates toolset-backed rows with hosted card
+  // data instead of contributing rows of its own.
   // These listing fetches are non-critical: degrade to the last good (or empty)
   // data with an inline indicator instead of throwing to the page error
   // boundary and replacing the whole screen. Key them by project so a tolerated
@@ -158,6 +264,10 @@ function MCPOverview() {
       lookupMcpActivity(activityByTarget, targetType, targetId),
     );
   };
+  const rowActivityStatus = (row: McpListingRow) => {
+    const { targetType, targetId } = rowActivityTarget(row);
+    return activityStatusFor(targetType, targetId);
+  };
   const handleRefresh = () => {
     void toolsets.refetch();
     void refetchMcpServers();
@@ -170,14 +280,17 @@ function MCPOverview() {
     isFetchingEndpoints ||
     isFetchingActivity ||
     toolsets.isFetching;
-  // Until AGE-1902 moves hosted rows here, this grid only renders mcp_servers-backed MCPs.
-  const mcpServers = useMemo(
-    () =>
-      (mcpServersResult?.mcpServers ?? []).filter(
-        (server) => !!server.remoteMcpServerId || !!server.tunneledMcpServerId,
-      ),
-    [mcpServersResult],
-  );
+  const listingRows = useMemo<McpListingRow[]>(() => {
+    const toolsetById = new Map(toolsets.map((t) => [t.id, t] as const));
+    return (mcpServersResult?.mcpServers ?? []).map((server) => {
+      const toolset = server.toolsetId
+        ? toolsetById.get(server.toolsetId)
+        : undefined;
+      return toolset
+        ? { kind: "toolset", server, toolset }
+        : { kind: "server", server };
+    });
+  }, [mcpServersResult, toolsets]);
   const endpointCountByServerId = useMemo(() => {
     const counts = new Map<string, number>();
     for (const endpoint of endpointsResult?.mcpEndpoints ?? []) {
@@ -208,56 +321,27 @@ function MCPOverview() {
     [plugins],
   );
 
-  const filteredToolsets = useMemo(() => {
+  const filteredRows = useMemo(() => {
     const query = search.toLowerCase();
-    return [...toolsets]
-      .filter((toolset) => {
-        if (
-          !matchesMcpFilters(
-            toolsetFacets(toolset, membership),
-            mcpFilters.values,
-          )
-        )
+    return [...listingRows]
+      .filter((row) => {
+        if (!matchesMcpFilters(rowFacets(row, membership), mcpFilters.values))
           return false;
         if (!query) return true;
-        return (
-          toolset.name.toLowerCase().includes(query) ||
-          toolset.slug.toLowerCase().includes(query)
-        );
+        return rowMatchesQuery(row, query);
       })
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [toolsets, search, mcpFilters.values, membership]);
-
-  const filteredMcpServers = useMemo(() => {
-    const query = search.toLowerCase();
-    return [...mcpServers]
-      .filter((server) => {
-        if (
-          !matchesMcpFilters(
-            mcpServerFacets(server, membership),
-            mcpFilters.values,
-          )
-        )
-          return false;
-        if (!query) return true;
-        return (
-          (server.name?.toLowerCase().includes(query) ?? false) ||
-          (server.slug?.toLowerCase().includes(query) ?? false)
-        );
-      })
-      .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
-  }, [mcpServers, search, mcpFilters.values, membership]);
+      .sort((a, b) => rowDisplayName(a).localeCompare(rowDisplayName(b)));
+  }, [listingRows, search, mcpFilters.values, membership]);
 
   // Show the filter bar once there's anything to filter. Filters can drive the
   // result set to empty on their own, so the no-matches state must consider an
   // active filter, not just a search query.
-  const hasItems = toolsets.length + mcpServers.length > 0;
+  const hasItems = listingRows.length > 0;
   const showFilters = !isLoading && hasItems;
   const showNoMatches =
     !isLoading &&
     (search !== "" || hasActiveMcpFilters(mcpFilters.values)) &&
-    filteredToolsets.length === 0 &&
-    filteredMcpServers.length === 0;
+    filteredRows.length === 0;
 
   const handleCreateMcpServerSubmit = async () => {
     const result = await client.toolsets.create({
@@ -336,12 +420,7 @@ function MCPOverview() {
     </Page.Section>
   );
 
-  if (
-    !isLoading &&
-    !hasRefreshError &&
-    toolsets.length === 0 &&
-    mcpServers.length === 0
-  ) {
+  if (!isLoading && !hasRefreshError && listingRows.length === 0) {
     return (
       <>
         <MCPEmptyState cta={newMcpServerButton} />
@@ -406,33 +485,17 @@ function MCPOverview() {
                   <MCPCardSkeleton />
                 </>
               ) : (
-                <>
-                  {filteredToolsets.map((toolset) => (
-                    <MCPCard
-                      key={toolset.id}
-                      toolset={toolset}
-                      activityStatus={activityStatusFor(
-                        "hosted_mcp_server",
-                        toolset.slug,
-                      )}
-                      recentWindowDays={recentWindowDays}
-                    />
-                  ))}
-                  {filteredMcpServers.map((server) => (
-                    <MCPServerCard
-                      key={server.id}
-                      server={server}
-                      endpointCount={
-                        endpointCountByServerId.get(server.id) ?? 0
-                      }
-                      activityStatus={activityStatusFor(
-                        mcpServerTargetType(server),
-                        server.slug,
-                      )}
-                      recentWindowDays={recentWindowDays}
-                    />
-                  ))}
-                </>
+                filteredRows.map((row) => (
+                  <McpListingCard
+                    key={row.server.id}
+                    row={row}
+                    endpointCount={
+                      endpointCountByServerId.get(row.server.id) ?? 0
+                    }
+                    activityStatus={rowActivityStatus(row)}
+                    recentWindowDays={recentWindowDays}
+                  />
+                ))
               )}
             </div>
           ) : (
@@ -450,33 +513,17 @@ function MCPOverview() {
                   <MCPTableRowSkeleton />
                 </>
               ) : (
-                <>
-                  {filteredToolsets.map((toolset) => (
-                    <MCPTableRow
-                      key={toolset.id}
-                      toolset={toolset}
-                      activityStatus={activityStatusFor(
-                        "hosted_mcp_server",
-                        toolset.slug,
-                      )}
-                      recentWindowDays={recentWindowDays}
-                    />
-                  ))}
-                  {filteredMcpServers.map((server) => (
-                    <MCPServerTableRow
-                      key={server.id}
-                      server={server}
-                      endpointCount={
-                        endpointCountByServerId.get(server.id) ?? 0
-                      }
-                      activityStatus={activityStatusFor(
-                        mcpServerTargetType(server),
-                        server.slug,
-                      )}
-                      recentWindowDays={recentWindowDays}
-                    />
-                  ))}
-                </>
+                filteredRows.map((row) => (
+                  <McpListingTableRow
+                    key={row.server.id}
+                    row={row}
+                    endpointCount={
+                      endpointCountByServerId.get(row.server.id) ?? 0
+                    }
+                    activityStatus={rowActivityStatus(row)}
+                    recentWindowDays={recentWindowDays}
+                  />
+                ))
               )}
             </DotTable>
           )}
