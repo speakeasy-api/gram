@@ -1,4 +1,8 @@
 import { RequireScope } from "@/components/require-scope";
+import {
+  StatusBanner,
+  type StatusBannerTone,
+} from "@/components/status-banner";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Popover,
@@ -203,8 +207,10 @@ export function SkillPluginBanner({
 
   const isRefetching = distributionsQuery.isFetching && isMembershipLoaded;
 
+  let tone: StatusBannerTone;
   let headline: JSX.Element;
   if (isBlocked) {
+    tone = "destructive";
     headline = (
       <>
         <CircleAlert className="text-destructive h-4 w-4 shrink-0" />
@@ -214,6 +220,7 @@ export function SkillPluginBanner({
       </>
     );
   } else if (isDistributed) {
+    tone = "success";
     headline = (
       <>
         <CircleCheck className="text-emerald-500 h-4 w-4 shrink-0" />
@@ -224,6 +231,7 @@ export function SkillPluginBanner({
       </>
     );
   } else {
+    tone = "warning";
     headline = (
       <>
         <AlertTriangle className="text-warning-foreground h-4 w-4 shrink-0" />
@@ -235,29 +243,8 @@ export function SkillPluginBanner({
   }
 
   return (
-    <div className="border-border/70 relative overflow-hidden rounded-xl border shadow-sm">
-      <div
-        aria-hidden="true"
-        className={cn(
-          "absolute inset-0 bg-gradient-to-tr from-slate-50 via-slate-50 to-orange-100 transition-all duration-700 ease-in-out dark:from-slate-950 dark:via-neutral-800 dark:to-amber-900/60",
-          !isDistributed && !isBlocked ? "opacity-100" : "opacity-0",
-        )}
-      />
-      <div
-        aria-hidden="true"
-        className={cn(
-          "absolute inset-0 bg-gradient-to-br from-slate-50/10 via-slate-50 to-emerald-100/50 transition-colors transition-opacity duration-700 ease-in-out dark:from-slate-950/60 dark:via-neutral-800 dark:to-emerald-900/30",
-          isDistributed && !isBlocked ? "opacity-100" : "opacity-0",
-        )}
-      />
-      <div
-        aria-hidden="true"
-        className={cn(
-          "absolute inset-0 bg-gradient-to-tr from-slate-50 via-slate-50 to-red-100 transition-all duration-700 ease-in-out dark:from-slate-950 dark:via-neutral-800 dark:to-red-900/60",
-          isBlocked ? "opacity-100" : "opacity-0",
-        )}
-      />
-      <div className="relative flex items-center justify-between gap-8 p-6">
+    <StatusBanner tone={tone}>
+      <div className="flex items-center justify-between gap-8 p-6">
         <div className="flex max-w-md flex-col gap-3">
           <div className="flex items-center gap-2">
             {headline}
@@ -343,6 +330,6 @@ export function SkillPluginBanner({
         </div>
         <ClientIconFan />
       </div>
-    </div>
+    </StatusBanner>
   );
 }
