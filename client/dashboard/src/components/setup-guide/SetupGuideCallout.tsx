@@ -1,9 +1,9 @@
 import { docsUrl } from "@/components/setup-guide/guideDocs";
 import { useSetupGuide } from "@/components/setup-guide/useSetupGuide";
 import { StatusBanner } from "@/components/status-banner";
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import type { MCPSetupGuide } from "@gram/client/models/components/mcpsetupguide.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { BookOpen, ExternalLink } from "lucide-react";
 
 /**
@@ -36,13 +36,13 @@ export function SetupGuideCallout({
         <div className="flex max-w-md flex-col gap-3">
           <div className="flex items-center gap-2">
             <BookOpen className="text-warning-foreground h-4 w-4 shrink-0" />
-            <Type className="text-warning-foreground text-base font-semibold">
+            <Text className="text-warning-foreground text-base font-semibold">
               Setup guide available
-            </Type>
+            </Text>
           </div>
-          <Type variant="small" className="text-muted-foreground/90">
+          <Text variant="small" className="text-muted-foreground/90">
             {describeSetupWork(guide.only)}
-          </Type>
+          </Text>
         </div>
         <div className="flex items-center gap-2 self-end">
           {guide.openGuide && (

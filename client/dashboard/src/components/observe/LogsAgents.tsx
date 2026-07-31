@@ -21,9 +21,11 @@ import {
   useListChats,
 } from "@gram/client/react-query/listChats.js";
 import { formatPlatform } from "@/lib/formatPlatform";
-import { Badge } from "@/components/ui/badge";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { Alert, Button, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
 import { Pin } from "lucide-react";
 import {
@@ -735,7 +737,7 @@ function AgentSessionsPageContent({
           />
           {hasAssistantFilter && (
             <Badge
-              variant="secondary"
+              variant="neutral"
               className="w-fit gap-1.5 px-2.5 py-1 text-xs"
             >
               <Icon name="bot" className="size-3" />

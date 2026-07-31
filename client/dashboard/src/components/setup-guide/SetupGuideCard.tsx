@@ -1,6 +1,6 @@
 import { docsUrl } from "@/components/setup-guide/guideDocs";
 import { useSetupGuide } from "@/components/setup-guide/useSetupGuide";
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import { BookOpen, ExternalLink } from "lucide-react";
 
 // text-link-primary is Moonshine's link color; the rest keeps this at the size
@@ -31,9 +31,9 @@ export function SetupGuideCard({
 
   return (
     <div className="bg-card border-border dark:bg-neutral-950 flex flex-col gap-2 rounded-lg border px-4 py-3 shadow-md">
-      <Type variant="small" muted className="text-xs">
+      <Text variant="small" muted className="text-xs">
         This MCP server may require some additional setup.
-      </Type>
+      </Text>
       {guide.openGuide ? (
         <button type="button" onClick={guide.openGuide} className={ACTION}>
           <BookOpen className="h-3.5 w-3.5" />

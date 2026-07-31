@@ -67,6 +67,11 @@ type RiskFindingRow struct {
 	// ClickHouse columns).
 	ExcludedAt  *time.Time `ch:"excluded_at"`
 	ExclusionID *uuid.UUID `ch:"exclusion_id"`
+
+	// FalsePositiveAt is set when a reviewer manually dismissed this finding
+	// (risk.markResultsFalsePositive), independent of ExcludedAt. Nil for a
+	// freshly-scanned finding or after risk.unmarkResultsFalsePositive.
+	FalsePositiveAt *time.Time `ch:"false_positive_at"`
 }
 
 // chNullable maps a nil pointer to an untyped nil interface so a Nullable
@@ -99,6 +104,7 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 		Columns(
 			"id",
 			"created_at",
+			"inserted_at",
 			"organization_id",
 			"project_id",
 			"request_id",
@@ -125,14 +131,37 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			"fingerprint_tenant_hs256",
 			"excluded_at",
 			"exclusion_id",
+			"false_positive_at",
 			"message_created_at",
 			"assistant_id",
 		)
 
-	for _, row := range rows {
+	// inserted_at must be strictly increasing within this batch, not just
+	// "now" — the read-side dedup (ROW_NUMBER() OVER (PARTITION BY id ORDER BY
+	// inserted_at DESC), see overview.go) relies on it to pick the latest
+	// state for an id. Two things independently break that if inserted_at is
+	// left off this column list and allowed to fall back to the table's
+	// DEFAULT now64(9): (1) ClickHouse evaluates a DEFAULT once per INSERT
+	// statement, so every row in one multi-row batch gets the identical
+	// timestamp, and (2) under async_insert, the server can coalesce several
+	// distinct client Exec calls that arrive close together into one physical
+	// flush, evaluating DEFAULT once for the whole coalesced write — so even
+	// splitting a batch into separate statements doesn't guarantee distinct
+	// timestamps. A finding can appear twice within that flush window (a
+	// rapid mark/unmark, or a redelivered Pub/Sub backlog), so an identical
+	// inserted_at would make the dedup's choice between them
+	// non-deterministic. The fix is to bind an explicit, strictly-increasing
+	// value per row — but bind it as a formatted string, not a native
+	// time.Time: the clickhouse-go driver truncates a time.Time bound through
+	// this Exec(ctx, query, args...) path to whole-second precision (verified
+	// empirically), silently discarding the very sub-second ordering this
+	// exists to provide.
+	insertedAt := time.Now().UTC()
+	for i, row := range rows {
 		builder = builder.Values(
 			row.ID,
 			row.CreatedAt,
+			insertedAt.Add(time.Duration(i)*time.Nanosecond).Format("2006-01-02 15:04:05.999999999"),
 			row.OrganizationID,
 			row.ProjectID,
 			row.RequestID,
@@ -164,6 +193,7 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			// the column binds as NULL.
 			chNullable(row.ExcludedAt),
 			chNullable(row.ExclusionID),
+			chNullable(row.FalsePositiveAt),
 			row.MessageCreatedAt,
 			row.AssistantID,
 		)

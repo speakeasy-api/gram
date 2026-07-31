@@ -175,6 +175,16 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_ENVIRONMENT"},
 		},
 		&cli.StringFlag{
+			Name:    "custom-domain-k8s-namespace",
+			Usage:   "Kubernetes namespace for custom domain ingresses (defaults to gram-<environment>)",
+			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_K8S_NAMESPACE"},
+		},
+		&cli.StringFlag{
+			Name:    "custom-domain-backend-service",
+			Usage:   "Kubernetes service that custom domain ingresses route to (defaults to gram-server)",
+			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_BACKEND_SERVICE"},
+		},
+		&cli.StringFlag{
 			Name:     "ssl-key-file",
 			Usage:    "The SSL key file path to use for the server",
 			Required: false,
@@ -597,7 +607,7 @@ func newStartCommand() *cli.Command {
 			mcpMetadataRepo := mcpmetadata_repo.New(db)
 			env := environments.NewEnvironmentEntries(logger, db, encryptionClient, mcpMetadataRepo)
 
-			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"))
+			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"), c.String("custom-domain-k8s-namespace"), c.String("custom-domain-backend-service"))
 			if err != nil {
 				return fmt.Errorf("failed to create kubernetes client: %w", err)
 			}
@@ -857,6 +867,7 @@ func newStartCommand() *cli.Command {
 				sessionManager,
 				chatSessionsManager,
 				env,
+				posthogClient,
 				posthogClient,
 				serverURL,
 				siteURL,
@@ -1252,6 +1263,7 @@ func newStartCommand() *cli.Command {
 					return urls, nil
 				},
 				riskchrepo.New(chDB),
+				publishers.RiskFindings,
 			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)

@@ -34,6 +34,7 @@ import {
 // ---------------------------------------------------------------------------
 
 const VALID_PROXY_METADATA = {
+  issuer: "https://example.com",
   authorization_endpoint: "https://example.com/auth",
   token_endpoint: "https://example.com/token",
   registration_endpoint: "https://example.com/register",
@@ -206,6 +207,7 @@ function withExternal(over: Partial<Context["external"]> = {}): Context {
   return {
     discovered: null,
     external: {
+      issuerUrl: "https://example.com",
       slug: "ok",
       metadataJson: VALID_EXTERNAL_METADATA_JSON,
       jsonError: null,
@@ -586,6 +588,11 @@ describe("oauthWizardMachine — external happy path", () => {
     const actor = makeActor(baseInput);
     actor.start();
     actor.send({ type: "SELECT_EXTERNAL" });
+    actor.send({
+      type: "FIELD_EXTERNAL",
+      key: "issuerUrl",
+      value: "https://example.com",
+    });
     actor.send({ type: "FIELD_EXTERNAL", key: "slug", value: "ext-slug" });
     actor.send({
       type: "FIELD_EXTERNAL",
@@ -605,6 +612,11 @@ describe("oauthWizardMachine — external happy path", () => {
     const actor = makeActor(baseInput);
     actor.start();
     actor.send({ type: "SELECT_EXTERNAL" });
+    actor.send({
+      type: "FIELD_EXTERNAL",
+      key: "issuerUrl",
+      value: "https://example.com",
+    });
     actor.send({ type: "FIELD_EXTERNAL", key: "slug", value: "ext-slug" });
     actor.send({
       type: "FIELD_EXTERNAL",

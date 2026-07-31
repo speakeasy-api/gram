@@ -1,6 +1,6 @@
-import { ContextMenu, ContextMenuTrigger } from "./ui/context-menu";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/ContextMenu";
 import { ActionContextMenuContent } from "./card-context-menu";
-import type { Action } from "./ui/more-actions";
+import type { Action } from "@/components/ui/MoreActions";
 
 /**
  * Row variant of CardContextMenu. Wraps a single row element (`<tr>`, list

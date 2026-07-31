@@ -1,15 +1,16 @@
 import { RequireScope } from "@/components/require-scope";
 import { useRBAC } from "@/hooks/useRBAC";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Type } from "@/components/ui/type";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { invalidateAllOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
 import { useRefreshOrganizationRemoteSessionIssuerMetadataMutation } from "@gram/client/react-query/refreshOrganizationRemoteSessionIssuerMetadata.js";
 import { useUpdateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionIssuer.js";
-import { Alert, Button } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
@@ -33,11 +34,11 @@ function SettingsSection({
   return (
     <div className="flex flex-col gap-4 border-b pb-6 last:border-b-0 last:pb-0">
       <div className="flex flex-col gap-1">
-        <Type className="font-medium">{title}</Type>
+        <Text className="font-medium">{title}</Text>
         {description && (
-          <Type small muted>
+          <Text small muted>
             {description}
-          </Type>
+          </Text>
         )}
       </div>
       {children}
@@ -309,11 +310,11 @@ export function SettingsTab({
                 </Button.Text>
               </Button>
             </div>
-            <Type small muted>
+            <Text small muted>
               Re-reads this provider's RFC 8414 metadata and saves the endpoints
               and advertised capabilities immediately. Your other changes on
               this page are not saved.
-            </Type>
+            </Text>
           </div>
         )}
       </SettingsSection>
@@ -346,11 +347,11 @@ export function SettingsTab({
       </div>
 
       <div className="border-destructive/30 flex flex-col gap-2 rounded-md border p-4">
-        <Type className="font-medium">Danger Zone</Type>
-        <Type small muted>
+        <Text className="font-medium">Danger Zone</Text>
+        <Text small muted>
           Deleting this provider is permanent. All clients must be deleted
           first.
-        </Type>
+        </Text>
         <div>
           <RequireScope scope="org:admin" level="component">
             <Button

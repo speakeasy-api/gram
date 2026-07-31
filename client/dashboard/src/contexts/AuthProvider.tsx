@@ -9,8 +9,8 @@ import {
   SidebarHeader,
   SidebarInset,
   SidebarProvider,
-} from "@/components/ui/sidebar";
-import { Skeleton } from "@/components/ui/skeleton";
+} from "@/components/ui/Sidebar";
+import { Skeleton } from "@/components/ui/Skeleton";
 import BookDemo from "@/pages/demo/BookDemo";
 import SwitchOrg from "@/pages/demo/SwitchOrg";
 import { useQueryClient } from "@tanstack/react-query";
@@ -25,6 +25,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { orgRoutePaths } from "@/routes";
+import { safeRedirectPath, UNAUTHENTICATED_PATHS } from "@/lib/session-expired";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
@@ -45,17 +46,6 @@ import {
 import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
 
 const PREFERRED_PROJECT_KEY = "preferredProject";
-
-const UNAUTHENTICATED_PATHS = [
-  "/login",
-  "/register",
-  "/invite",
-  "/book-demo",
-  "/shadow-mcp/request",
-  "/risk-policy-bypass/request",
-  "/blocks",
-  "/shared",
-];
 
 const SLUG_EXEMPT_PATHS = [
   "/switch-org",
@@ -168,8 +158,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to={newPath + location.search + location.hash} replace />;
   }
 
-  // Handle initial navigation
-  const redirectParam = searchParams.get("redirect");
+  // Handle initial navigation. The param is attacker-controllable, so only
+  // same-origin paths are honored — a protocol-relative value would send the
+  // freshly authenticated user to a foreign origin.
+  const redirectParam = safeRedirectPath(searchParams.get("redirect"));
   if (redirectParam) {
     return <Navigate to={redirectParam} replace />;
   } else if (isSlugExempt) {

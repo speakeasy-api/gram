@@ -1,12 +1,12 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Text } from "@/components/ui/Text";
 import {
   getActionCategory,
   getActionColorConfig,
@@ -18,7 +18,7 @@ import {
 } from "@/lib/audit-log-feed";
 import { formatAuditAction } from "@/lib/audit-log-format";
 import { cn } from "@/lib/utils";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
 import React from "react";
 
 export function DateGroupHeader({
@@ -84,9 +84,9 @@ export function FacetSelect({
 }): React.JSX.Element {
   return (
     <div className="flex flex-col gap-1.5">
-      <Type small muted>
+      <Text small muted>
         {label}
-      </Type>
+      </Text>
       <Select value={value} onValueChange={onValueChange}>
         <SelectTrigger size="sm" className="bg-background min-w-[220px]">
           <SelectValue placeholder={placeholder} />
@@ -137,14 +137,14 @@ export function AuditFeedFooter({
 
   return (
     <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
-      <Type muted small>
+      <Text muted small>
         {count.toLocaleString()} {noun}
         {count === 1 ? "" : "s"}
-      </Type>
+      </Text>
 
       {hasNextPage ? (
         <Button
-          variant="outline"
+          variant="secondary"
           size="sm"
           onClick={onLoadMore}
           disabled={isFetchingNextPage}
@@ -159,9 +159,9 @@ export function AuditFeedFooter({
           )}
         </Button>
       ) : (
-        <Type muted small>
+        <Text muted small>
           {isFetching ? "Refreshing..." : endLabel}
-        </Type>
+        </Text>
       )}
     </div>
   );

@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * suggestExclusion risk
  *
  * @remarks
- * Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt describing findings an operator wants to stop flagging. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form.
+ * Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt, a batch of example findings, or both. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form. At least one of prompt or finding_ids is required.
  */
 export function riskExclusionsSuggest(
   client: GramCore,

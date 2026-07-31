@@ -1,4 +1,4 @@
-import { cn } from "@speakeasy-api/moonshine";
+import { cn } from "@/lib/utils";
 
 // A gradient can't be transitioned, so every tone is painted as its own layer
 // and the active one is faded in over the others. Banners whose tone changes in

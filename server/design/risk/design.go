@@ -447,6 +447,95 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListResultsByChat"}`)
 	})
 
+	Method("markRiskResultsFalsePositive", func() {
+		Description("Mark one or more risk results as manually-reviewed false positives. Distinct from exclusions: this suppresses the specific results picked, not future findings matching a rule.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("result_ids", ArrayOf(String), "IDs of the risk results to mark as false positive.", func() {
+				MinLength(1)
+				MaxLength(500)
+			})
+			Attribute("reason", String, "Optional free-text reason for the dismissal.")
+			Required("result_ids")
+		})
+
+		HTTP(func() {
+			POST("/rpc/risk.markResultsFalsePositive")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "markRiskResultsFalsePositive")
+		Meta("openapi:extension:x-speakeasy-group", "risk.results")
+		Meta("openapi:extension:x-speakeasy-name-override", "markFalsePositive")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskMarkResultsFalsePositive", "type": "mutation"}`)
+	})
+
+	Method("unmarkRiskResultsFalsePositive", func() {
+		Description("Undo a false-positive dismissal for one or more risk results.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("result_ids", ArrayOf(String), "IDs of the risk results to restore.", func() {
+				MinLength(1)
+				MaxLength(500)
+			})
+			Required("result_ids")
+		})
+
+		HTTP(func() {
+			POST("/rpc/risk.unmarkResultsFalsePositive")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "unmarkRiskResultsFalsePositive")
+		Meta("openapi:extension:x-speakeasy-group", "risk.results")
+		Meta("openapi:extension:x-speakeasy-name-override", "unmarkFalsePositive")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskUnmarkResultsFalsePositive", "type": "mutation"}`)
+	})
+
+	Method("listDismissedRiskResults", func() {
+		Description("List risk results manually marked as false positive for the current project (the Dismissed tab). Kept separate from listRiskResults, which never returns dismissed results.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("cursor", String, "Cursor to fetch the next page of results.")
+			Attribute("limit", Int, "Maximum number of results to return per page.", func() {
+				Minimum(1)
+				Maximum(200)
+			})
+		})
+
+		Result(ListRiskResultsResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.listDismissedResults")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("cursor")
+			Param("limit")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listDismissedRiskResults")
+		Meta("openapi:extension:x-speakeasy-group", "risk.results")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDismissed")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListDismissedResults", "type": "query"}`)
+	})
+
 	Method("getRiskOverview", func() {
 		Description("Get risk overview metrics and trend data for the current project.")
 
@@ -1294,18 +1383,20 @@ var _ = Service("risk", func() {
 	})
 
 	Method("suggestExclusion", func() {
-		Description("Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt describing findings an operator wants to stop flagging. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form.")
+		Description("Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt, a batch of example findings, or both. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form. At least one of prompt or finding_ids is required.")
 
 		Payload(func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
-			Attribute("prompt", String, "Natural-language description of the findings to stop flagging.", func() {
+			Attribute("prompt", String, "Natural-language description of the findings to stop flagging. Optional when finding_ids is provided.", func() {
 				MinLength(3)
 				MaxLength(500)
 			})
 			Attribute("known_rule_ids", ArrayOf(String), "Built-in and custom rule ids the suggestion may reference in rule_id filters.")
-			Required("prompt")
+			Attribute("finding_ids", ArrayOf(String), "IDs of example findings (e.g. a multiselect batch) to derive a suggestion from. Looked up server-side rather than trusted from the client, but only rule_id/source cross into the suggestion — a finding's matched value (a detected secret/PII value the caller hasn't reviewed) is never read for this, so batch-derived suggestions are rule_id/source scoped rather than exact-value. Optional when prompt is provided.", func() {
+				MaxLength(50)
+			})
 		})
 
 		Result(SuggestExclusionResult)

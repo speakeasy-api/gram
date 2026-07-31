@@ -1,4 +1,4 @@
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import {
   SKILL_CLASSIFICATION_OPTIONS,
   SKILL_SOURCE_OPTIONS,

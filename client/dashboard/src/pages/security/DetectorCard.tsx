@@ -1,8 +1,9 @@
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Switch } from "@/components/ui/switch";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Switch } from "@/components/ui/Switch";
 import { cn } from "@/lib/utils";
-import { Badge, Icon } from "@speakeasy-api/moonshine";
-import type { IconName } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
+import { type IconName } from "@/components/ui/Icon/names";
 import {
   DETECTION_RULES,
   RULE_CATEGORY_META,

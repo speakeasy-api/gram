@@ -57,6 +57,21 @@ func ListRiskResultsByChatRiskPath() string {
 	return "/rpc/risk.listResultsByChat"
 }
 
+// MarkRiskResultsFalsePositiveRiskPath returns the URL path to the risk service markRiskResultsFalsePositive HTTP endpoint.
+func MarkRiskResultsFalsePositiveRiskPath() string {
+	return "/rpc/risk.markResultsFalsePositive"
+}
+
+// UnmarkRiskResultsFalsePositiveRiskPath returns the URL path to the risk service unmarkRiskResultsFalsePositive HTTP endpoint.
+func UnmarkRiskResultsFalsePositiveRiskPath() string {
+	return "/rpc/risk.unmarkResultsFalsePositive"
+}
+
+// ListDismissedRiskResultsRiskPath returns the URL path to the risk service listDismissedRiskResults HTTP endpoint.
+func ListDismissedRiskResultsRiskPath() string {
+	return "/rpc/risk.listDismissedResults"
+}
+
 // GetRiskOverviewRiskPath returns the URL path to the risk service getRiskOverview HTTP endpoint.
 func GetRiskOverviewRiskPath() string {
 	return "/rpc/risk.getOverview"

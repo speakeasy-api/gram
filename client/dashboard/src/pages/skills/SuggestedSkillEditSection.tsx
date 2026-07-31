@@ -1,9 +1,9 @@
 import { RequireScope } from "@/components/require-scope";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
 import type { SkillVersion } from "@gram/client/models/components/skillversion.js";
@@ -136,16 +136,16 @@ export function SuggestedSkillEditSection({
                 title="Unable to load the suggested edit"
                 error={review.loadError}
               />
-              <Button size="sm" variant="outline" onClick={review.retry}>
+              <Button size="sm" variant="secondary" onClick={review.retry}>
                 Retry
               </Button>
             </div>
           )}
           {suggestion && !suggestion.appliesCleanly && (
-            <Type small muted>
+            <Text small muted>
               This suggestion no longer lines up with the current manifest. It
               will be retired on the next analysis pass.
-            </Type>
+            </Text>
           )}
           {review.actionError && (
             <div className="space-y-2">
@@ -156,7 +156,7 @@ export function SuggestedSkillEditSection({
               {review.uncertain && (
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="secondary"
                   onClick={() => void review.refresh()}
                 >
                   Refresh suggestion
@@ -172,13 +172,13 @@ export function SuggestedSkillEditSection({
               reason="You need write access to review suggested edits."
             >
               <div className="border-border bg-card flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
-                <Type small muted>
+                <Text small muted>
                   {`${selectedIds.length} of ${anchors.length} changes selected`}
-                </Type>
+                </Text>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant="secondary"
                     disabled={review.actionsDisabled}
                     onClick={() => setReviewOpen(true)}
                   >

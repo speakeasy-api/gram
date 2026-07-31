@@ -1,11 +1,13 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { Input } from "@/components/ui/Input";
+import { Text } from "@/components/ui/Text";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { AlertCircle, Loader2, Network } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -109,10 +111,10 @@ function CreateRemoteMcpForm() {
           </div>
           <Heading variant="h3">Add a custom remote MCP server</Heading>
         </Stack>
-        <Type muted>
+        <Text muted>
           Register an existing remote MCP server by URL. We&apos;ll proxy
           requests to it using streamable-http transport.
-        </Type>
+        </Text>
       </Stack>
 
       <form
@@ -176,9 +178,9 @@ function CreateRemoteMcpForm() {
             <label className="text-sm leading-none font-medium">
               Transport
             </label>
-            <Type muted small>
+            <Text muted small>
               streamable-http
-            </Type>
+            </Text>
           </Stack>
 
           {createSource.isError && (

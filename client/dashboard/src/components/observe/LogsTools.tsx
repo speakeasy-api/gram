@@ -5,10 +5,10 @@ import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { LoggingPageHeader } from "@/components/observe/LoggingPageHeader";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Spinner } from "@/components/ui/Spinner";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
   FilterChip,
   ObserveFilterBar,
@@ -63,8 +63,9 @@ import type { ToolUsageUserFilter } from "@gram/client/models/components/toolusa
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useListAttributeKeys } from "@gram/client/react-query/listAttributeKeys.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Badge, Icon } from "@speakeasy-api/moonshine";
-import type { BadgeProps } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
+import { type BadgeProps } from "@/components/ui/Badge";
 import {
   useInfiniteQuery,
   useQuery,
@@ -682,7 +683,7 @@ function LogsToolsContent({
             />
             <div className="flex items-center gap-2">
               <HooksSetupButton />
-              <Button variant="outline" size="sm" asChild>
+              <Button variant="secondary" size="sm" asChild>
                 <Link to={orgRoutes.logs.href()}>
                   <Settings className="h-4 w-4" />
                   Configure settings

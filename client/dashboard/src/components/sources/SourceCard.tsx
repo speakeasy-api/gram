@@ -2,11 +2,11 @@ import {
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
-} from "@/components/ui/hover-card";
+} from "@/components/ui/HoverCard";
 import { CardContextMenu } from "@/components/card-context-menu";
-import { DotCard } from "@/components/ui/dot-card";
-import { MoreActions } from "@/components/ui/more-actions";
-import { Type } from "@/components/ui/type";
+import { DotCard } from "@/components/ui/DotCard";
+import { MoreActions } from "@/components/ui/MoreActions";
+import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import {
   formatRemoteMcpUrlForDisplay,
@@ -17,7 +17,7 @@ import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components/asset.js";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { HoverCardPortal } from "@radix-ui/react-hover-card";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import { ArrowRight, CircleAlertIcon, FileCode, Network } from "lucide-react";
 
 export type NamedAsset =
@@ -187,16 +187,16 @@ export function SourceCard({
           {/* Header row with name and actions */}
           <div className="mb-2 flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <Type
+              <Text
                 variant="subheading"
                 as="div"
                 className="text-md group-hover:text-primary truncate transition-colors"
                 title={displayName}
               >
                 {displayName}
-              </Type>
+              </Text>
               {displaySubtitle && (
-                <Type
+                <Text
                   as="div"
                   muted
                   small
@@ -204,7 +204,7 @@ export function SourceCard({
                   title={displaySubtitle}
                 >
                   {displaySubtitle}
-                </Type>
+                </Text>
               )}
             </div>
             <div className="flex shrink-0 items-center gap-1">

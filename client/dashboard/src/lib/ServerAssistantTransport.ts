@@ -48,6 +48,10 @@ export interface ServerAssistantTransportDeps {
   /** Optional poll tuning. */
   pollIntervalMs?: number;
   pollTimeoutMs?: number;
+  /** Reads the skill context selected for the turn at send time. */
+  getSkillIds?: () => string[];
+  /** Called after the server accepts the selected skills with the message. */
+  onSkillIdsSent?: (skillIds: string[]) => void;
 }
 
 interface Snapshot {
@@ -101,6 +105,7 @@ export function createServerAssistantTransport(
       if (!text) {
         throw new Error("No user message to send.");
       }
+      const skillIds = deps.getSkillIds?.() ?? [];
 
       // The stream is created up front and `execute` does all the async work —
       // send + poll — writing chunks as new assistant rows are discovered so
@@ -156,6 +161,7 @@ export function createServerAssistantTransport(
                 message: text,
                 chatId: chatId ?? undefined,
                 idempotencyKey: latest?.id,
+                skillIds: skillIds.length > 0 ? skillIds : undefined,
               },
             },
             undefined,
@@ -163,6 +169,9 @@ export function createServerAssistantTransport(
           );
           if (!sent.ok) {
             throw sent.error;
+          }
+          if (skillIds.length > 0) {
+            deps.onSkillIdsSent?.(skillIds);
           }
           if (!chatId) {
             // New conversation: adopt the server-minted id so the thread, its

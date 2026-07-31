@@ -2,9 +2,9 @@ import { Link, useNavigate } from "react-router";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { Page } from "@/components/page-layout";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { DashboardCard } from "@/components/ui/dashboard-card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
+import { DashboardCard } from "@/components/ui/DashboardCard";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes, useRoutes } from "@/routes";
@@ -24,7 +24,9 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, type ReactNode } from "react";
-import { Button, Card, Icon } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Icon } from "@/components/ui/Icon";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { Wand2 } from "lucide-react";
 import {
@@ -708,7 +710,7 @@ export function ProjectDashboard(): JSX.Element {
 
                     <DashboardCard
                       title="Most Used Agents"
-                      tooltip="Agents (e.g. Claude, Cursor, Codex) ranked by token volume in the selected period, identified from client metadata sent with each call."
+                      tooltip="Coding agents ranked by token volume in the selected period, identified from client metadata sent with each call."
                       action={
                         <CardActions>
                           <ExploreWithAIButton

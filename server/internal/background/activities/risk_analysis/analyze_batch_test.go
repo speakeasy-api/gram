@@ -415,9 +415,18 @@ func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *te
 	require.NoError(t, err)
 	var result risk_analysis.AnalyzeBatchResult
 	require.NoError(t, val.Get(&result))
-	// Content parts are not published to the async scanners yet: the request
-	// protos gain a content-part anchor in a follow-up.
-	require.Len(t, *published, len(msgIDs))
+	require.Len(t, *published, len(msgIDs)+1)
+
+	var partRequest *riskv1.PromptInjectionAnalysis
+	for _, req := range *published {
+		if req.GetContentPartId() == contentPartID.String() {
+			partRequest = req
+			break
+		}
+	}
+	require.NotNil(t, partRequest, "expected prompt injection async request for content part")
+	require.Empty(t, partRequest.GetChatMessageId())
+	require.Equal(t, contentPartID.String(), partRequest.GetContentPartId())
 }
 
 func TestAnalyzeBatch_PromptPolicyPublishesAsyncRequestsForEveryEligibleMessage(t *testing.T) {

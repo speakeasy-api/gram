@@ -13206,9 +13206,96 @@ paths:
             x-speakeasy-name-override: registerDomain
             x-speakeasy-react-hook:
                 name: registerDomain
+    /rpc/domain.setRootMcpEndpoint:
+        post:
+            description: Set or clear the MCP endpoint mapped to a custom domain's root
+            operationId: setRootMcpEndpoint
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetRootMcpEndpointRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CustomDomain'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: setRootMcpEndpoint domains
+            tags:
+                - domains
+            x-speakeasy-name-override: setRootMcpEndpoint
+            x-speakeasy-react-hook:
+                name: SetRootMcpEndpoint
     /rpc/domain.update:
         post:
-            description: Update the IP allowlist for the organization's custom domain
+            description: Update settings for the organization's custom domain
             operationId: updateDomain
             parameters:
                 - allowEmptyValue: true
@@ -24689,7 +24776,7 @@ paths:
                 name: UpdateInviteRole
     /rpc/organizations.verifyOnboardingHooksSetup:
         get:
-            description: Return recent hook events for the active organization so the onboarding wizard can confirm that Claude Code, Cursor, or Codex instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
+            description: Return recent hook events for the active organization so the onboarding wizard can confirm that coding agent instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
             operationId: verifyOnboardingHooksSetup
             parameters:
                 - allowEmptyValue: true
@@ -30578,7 +30665,12 @@ paths:
                 name: FetchRemoteSessionIssuerMetadata
     /rpc/remoteSessionIssuers.get:
         get:
-            description: Get a remote_session_issuer by id or by slug. Provide exactly one.
+            description: |-
+                Get a remote_session_issuer by id, by slug, or by upstream issuer URL. Provide exactly one.
+
+                Looking up by issuer is how an automatic setup flow decides whether an upstream authorization server already has an identity provider before creating one: a 404 means nothing describes that URL yet, so create it. Unlike id and slug, which address at most one record, several issuers may legitimately describe the same URL — a project may keep its own alongside one inherited from its organization or from the platform catalog. This returns the one this project would use, preferring project over organization over platform and, within a tier, the oldest.
+
+                The issuer URL is canonicalized before matching: scheme and host are lowercased, the scheme's default port is dropped, and trailing slashes are stripped. http and https are deliberately NOT equated, path case is significant, and a URL carrying a query or fragment is rejected (RFC 8414 forbids both on issuer identifiers). Canonicalization applies to the supplied URL only, never to stored values, so an issuer recorded with an unusual spelling may not be found and a duplicate is created instead, which is the safe direction to fail.
             operationId: getRemoteSessionIssuer
             parameters:
                 - allowEmptyValue: true
@@ -30595,6 +30687,13 @@ paths:
                   name: slug
                   schema:
                     description: The remote_session_issuer slug.
+                    type: string
+                - allowEmptyValue: true
+                  description: The upstream issuer URL (e.g. https://login.linear.app). Returns the issuer this project would use for that URL, or 404 when none describes it.
+                  in: query
+                  name: issuer
+                  schema:
+                    description: The upstream issuer URL (e.g. https://login.linear.app). Returns the issuer this project would use for that URL, or 404 when none describes it.
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -33742,6 +33841,123 @@ paths:
             x-speakeasy-react-hook:
                 name: RiskListCustomDetectionRules
                 type: query
+    /rpc/risk.listDismissedResults:
+        get:
+            description: List risk results manually marked as false positive for the current project (the Dismissed tab). Kept separate from listRiskResults, which never returns dismissed results.
+            operationId: listDismissedRiskResults
+            parameters:
+                - allowEmptyValue: true
+                  description: Cursor to fetch the next page of results.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor to fetch the next page of results.
+                    type: string
+                - allowEmptyValue: true
+                  description: Maximum number of results to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    description: Maximum number of results to return per page.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListRiskResultsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listDismissedRiskResults risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.results
+            x-speakeasy-name-override: listDismissed
+            x-speakeasy-react-hook:
+                name: RiskListDismissedResults
+                type: query
     /rpc/risk.listExclusions:
         get:
             description: List risk exclusions for the current project. Optionally filter to a single policy.
@@ -34566,6 +34782,108 @@ paths:
             x-speakeasy-name-override: listForAgent
             x-speakeasy-react-hook:
                 name: RiskListResultsForAgent
+    /rpc/risk.markResultsFalsePositive:
+        post:
+            description: 'Mark one or more risk results as manually-reviewed false positives. Distinct from exclusions: this suppresses the specific results picked, not future findings matching a rule.'
+            operationId: markRiskResultsFalsePositive
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/MarkRiskResultsFalsePositiveRequestBody'
+                required: true
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: markRiskResultsFalsePositive risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.results
+            x-speakeasy-name-override: markFalsePositive
+            x-speakeasy-react-hook:
+                name: RiskMarkResultsFalsePositive
+                type: mutation
     /rpc/risk.revokePolicyBypassRequest:
         post:
             description: Revoke a previously approved risk policy bypass request.
@@ -34869,7 +35187,7 @@ paths:
                 type: mutation
     /rpc/risk.suggestExclusion:
         post:
-            description: Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt describing findings an operator wants to stop flagging. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form.
+            description: Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt, a batch of example findings, or both. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form. At least one of prompt or finding_ids is required.
             operationId: suggestExclusion
             parameters:
                 - allowEmptyValue: true
@@ -35178,6 +35496,108 @@ paths:
                 - risk
             x-speakeasy-group: risk.policies
             x-speakeasy-name-override: trigger
+    /rpc/risk.unmarkResultsFalsePositive:
+        post:
+            description: Undo a false-positive dismissal for one or more risk results.
+            operationId: unmarkRiskResultsFalsePositive
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UnmarkRiskResultsFalsePositiveRequestBody'
+                required: true
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: unmarkRiskResultsFalsePositive risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.results
+            x-speakeasy-name-override: unmarkFalsePositive
+            x-speakeasy-react-hook:
+                name: RiskUnmarkResultsFalsePositive
+                type: mutation
     /rpc/risk.unmaskResult:
         post:
             description: Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.
@@ -53613,9 +54033,16 @@ components:
                 is_updating:
                     type: boolean
                     description: The custom domain is actively being registered
+                openai_apps_challenge_token:
+                    type: string
+                    description: The token served for OpenAI app-submission domain verification, if configured
                 organization_id:
                     type: string
                     description: The ID of the organization this domain belongs to
+                root_mcp_endpoint_id:
+                    type: string
+                    description: The MCP endpoint currently mapped to the domain root, if any
+                    format: uuid
                 unhealthy_since:
                     type: string
                     description: When the current unhealthy period began.
@@ -53644,6 +54071,9 @@ components:
                     type: string
                     description: The ID of the MCP endpoint
                     format: uuid
+                is_domain_root:
+                    type: boolean
+                    description: Whether this endpoint is mapped to the custom-domain root
                 mcp_server_id:
                     type: string
                     description: The ID of the parent MCP server
@@ -53675,6 +54105,7 @@ components:
                 - project_name
                 - project_slug
                 - mcp_server_id
+                - is_domain_root
         DeclineRiskPolicyChallengeResponseBody:
             type: object
             properties:
@@ -58958,6 +59389,21 @@ components:
                 - coverage_bucket
                 - first_seen_at
                 - last_seen_at
+        MarkRiskResultsFalsePositiveRequestBody:
+            type: object
+            properties:
+                reason:
+                    type: string
+                    description: Optional free-text reason for the dismissal.
+                result_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: IDs of the risk results to mark as false positive.
+                    minItems: 1
+                    maxItems: 500
+            required:
+                - result_ids
         MarketplaceSettingsResult:
             type: object
             properties:
@@ -58988,6 +59434,9 @@ components:
                     type: string
                     description: The ID of the MCP endpoint
                     format: uuid
+                is_domain_root:
+                    type: boolean
+                    description: Whether this endpoint is mapped to its custom-domain root
                 mcp_server_id:
                     type: string
                     description: The ID of the MCP server this endpoint addresses
@@ -59011,6 +59460,7 @@ components:
                 - project_id
                 - mcp_server_id
                 - slug
+                - is_domain_root
                 - created_at
                 - updated_at
         McpEnvironmentConfig:
@@ -63041,6 +63491,10 @@ components:
                     type: integer
                     description: End byte position within the message content.
                     format: int64
+                false_positive_at:
+                    type: string
+                    description: When this result was manually marked as a false positive. Null when not dismissed.
+                    format: date-time
                 id:
                     type: string
                     description: The result ID.
@@ -64077,6 +64531,13 @@ components:
                     description: The user's message text.
                     minLength: 1
                     maxLength: 10000
+                skill_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    description: Project skills to make available for this turn.
+                    maxItems: 10
             required:
                 - assistant_id
                 - message
@@ -64519,6 +64980,19 @@ components:
                     $ref: '#/components/schemas/Project'
             required:
                 - project
+        SetRootMcpEndpointRequestBody:
+            type: object
+            properties:
+                custom_domain_id:
+                    type: string
+                    description: The custom domain whose root mapping to change
+                    format: uuid
+                mcp_endpoint_id:
+                    type: string
+                    description: The MCP endpoint to map to the domain root. Omit to clear the mapping.
+                    format: uuid
+            required:
+                - custom_domain_id
         SetScheduleEnabledRequestBody:
             type: object
             properties:
@@ -66298,6 +66772,12 @@ components:
         SuggestExclusionRequestBody:
             type: object
             properties:
+                finding_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: IDs of example findings (e.g. a multiselect batch) to derive a suggestion from. Looked up server-side rather than trusted from the client, but only rule_id/source cross into the suggestion — a finding's matched value (a detected secret/PII value the caller hasn't reviewed) is never read for this, so batch-derived suggestions are rule_id/source scoped rather than exact-value. Optional when prompt is provided.
+                    maxItems: 50
                 known_rule_ids:
                     type: array
                     items:
@@ -66305,11 +66785,9 @@ components:
                     description: Built-in and custom rule ids the suggestion may reference in rule_id filters.
                 prompt:
                     type: string
-                    description: Natural-language description of the findings to stop flagging.
+                    description: Natural-language description of the findings to stop flagging. Optional when finding_ids is provided.
                     minLength: 3
                     maxLength: 500
-            required:
-                - prompt
         SuggestExclusionResult:
             type: object
             properties:
@@ -68494,6 +68972,18 @@ components:
                 - provider
                 - seen_at
                 - reason
+        UnmarkRiskResultsFalsePositiveRequestBody:
+            type: object
+            properties:
+                result_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: IDs of the risk results to restore.
+                    minItems: 1
+                    maxItems: 500
+            required:
+                - result_ids
         UnshareSkillRequestBody:
             type: object
             properties:
@@ -68642,8 +69132,9 @@ components:
                     items:
                         type: string
                     description: Replacement IP allowlist. Pass an empty list to remove all restrictions.
-            required:
-                - ip_allowlist
+                openai_apps_challenge_token:
+                    type: string
+                    description: Replacement OpenAI app-submission verification token. Pass an empty string to clear it.
         UpdateEnvironmentForm:
             type: object
             properties:

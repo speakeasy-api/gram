@@ -21,6 +21,7 @@ import (
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -57,6 +58,7 @@ func finding() *riskv1.Finding {
 		Id:                new("finding-1"),
 		RequestId:         new("req-1"),
 		ChatMessageId:     new("chat-1"),
+		ContentPartId:     nil,
 		ProjectId:         new("proj-1"),
 		OrganizationId:    new("org-1"),
 		RiskPolicyId:      new("policy-1"),
@@ -304,6 +306,31 @@ func TestFindingCHWriter_HandleBatch_InvalidTimestampSkipsFinding(t *testing.T) 
 	require.Equal(t, goodID, rows[0].ID, "the surviving row must be the valid finding, not the skipped one")
 }
 
+// TestFindingCHWriter_HandleBatch_InvalidFalsePositiveAtSkipsFinding guards
+// against a real regression: a false_positive_at that fails to parse used to
+// fall through with falsePositiveAt left nil, appending the row as if it
+// were an active (non-dismissed) finding — silently resurrecting a
+// previously-dismissed finding in ClickHouse's dedup instead of dropping the
+// malformed message, matching how an invalid created_at is already handled.
+func TestFindingCHWriter_HandleBatch_InvalidFalsePositiveAtSkipsFinding(t *testing.T) {
+	t.Parallel()
+
+	w, ins := newCHWriter(t)
+
+	bad := chFinding()
+	bad.SetFalsePositiveAt("not-a-timestamp")
+
+	good := finding()
+	goodID := uuid.Must(uuid.NewV7())
+	good.SetId(goodID.String())
+
+	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{bad, good}, nil))
+
+	rows := chRows(t, ins)
+	require.Len(t, rows, 1, "only the finding with a valid (or absent) false_positive_at is inserted")
+	require.Equal(t, goodID, rows[0].ID, "the surviving row must be the valid finding, not the skipped one")
+}
+
 func TestFindingCHWriter_HandleBatch_EmptyBatchSkipsInsert(t *testing.T) {
 	t.Parallel()
 
@@ -522,6 +549,207 @@ func TestFindingCHWriter_HandleBatch_ResolvesAttribution(t *testing.T) {
 	// Unresolved attribution: message_created_at falls back to the finding's
 	// own scan time.
 	require.True(t, unknownRow.CreatedAt.Equal(unknownRow.MessageCreatedAt))
+}
+
+func TestFindingCHWriter_HandleBatch_ResolvesContentPartAttribution(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	queries := riskrepo.New(ti.conn)
+	chatID, err := queries.CreateChatForTest(t.Context(), riskrepo.CreateChatForTestParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText("chat-user"),
+		ExternalUserID: conv.ToPGText("chat-user@example.com"),
+	})
+	require.NoError(t, err)
+
+	parentMessageID, err := queries.CreateChatMessageForTest(t.Context(), riskrepo.CreateChatMessageForTestParams{
+		ChatID:         chatID,
+		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		Content:        "prompt text",
+		UserID:         conv.ToPGText("parent-user"),
+		ExternalUserID: conv.ToPGText("parent-user@example.com"),
+	})
+	require.NoError(t, err)
+
+	contentPartID, err := queries.CreateChatContentPartForTest(t.Context(), riskrepo.CreateChatContentPartForTestParams{
+		ChatID:              chatID,
+		ProjectID:           uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		Kind:                "prompt_attachment",
+		ContentAssetUrl:     "file:///attachment.txt",
+		ParentChatMessageID: uuid.NullUUID{UUID: parentMessageID, Valid: true},
+	})
+	require.NoError(t, err)
+	attributionRows, err := queries.GetChatContentPartAttribution(t.Context(), riskrepo.GetChatContentPartAttributionParams{
+		Ids:        []uuid.UUID{contentPartID},
+		ProjectIds: []uuid.UUID{*authCtx.ProjectID},
+	})
+	require.NoError(t, err)
+	require.Len(t, attributionRows, 1)
+	require.Equal(t, chatID, attributionRows[0].ChatID)
+	require.Equal(t, "parent-user", attributionRows[0].UserID)
+
+	// Scoping to a different project returns nothing at all, so a caller that
+	// forgot the per-finding project check still cannot read across tenants.
+	otherScoped, err := queries.GetChatContentPartAttribution(t.Context(), riskrepo.GetChatContentPartAttributionParams{
+		Ids:        []uuid.UUID{contentPartID},
+		ProjectIds: []uuid.UUID{uuid.New()},
+	})
+	require.NoError(t, err)
+	require.Empty(t, otherScoped)
+
+	ins := &fakeCHInserter{}
+	fp, err := risk.ParsePepperKeyRing(keyRingJSON(t, testPepperVersion, map[string][]byte{testPepperVersion: testPepperKey}))
+	require.NoError(t, err)
+	w := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins, fp)
+
+	f := chFinding()
+	f.ClearChatMessageId()
+	f.SetContentPartId(contentPartID.String())
+	f.SetProjectId(authCtx.ProjectID.String())
+	f.SetRiskPolicyId(uuid.NewString())
+
+	require.NoError(t, w.HandleBatch(ctx, []*riskv1.Finding{f}, nil))
+
+	rows := chRows(t, ins)
+	require.Len(t, rows, 1)
+	require.Empty(t, rows[0].ChatMessageID)
+	require.Equal(t, contentPartID.String(), rows[0].ContentPartID)
+	require.Equal(t, chatID.String(), rows[0].ChatID)
+	require.Equal(t, "parent-user", rows[0].UserID)
+	require.Equal(t, "parent-user@example.com", rows[0].ExternalUserID)
+
+	// A finding claiming a part that belongs to another project resolves the
+	// row but must not inherit its chat or user ids. A findings batch can span
+	// projects, so this is enforced per finding rather than by scoping the query.
+	otherProject := &riskv1.Finding{}
+	otherProject.SetId(uuid.NewString())
+	otherProject.SetCreatedAt(time.Now().UTC().Format(time.RFC3339))
+	otherProject.SetOrganizationId(authCtx.ActiveOrganizationID)
+	otherProject.SetProjectId(uuid.NewString())
+	otherProject.SetContentPartId(contentPartID.String())
+	otherProject.SetRiskPolicyId(uuid.NewString())
+
+	ins2 := &fakeCHInserter{}
+	w2 := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins2, fp)
+	require.NoError(t, w2.HandleBatch(ctx, []*riskv1.Finding{otherProject}, nil))
+
+	crossRows := chRows(t, ins2)
+	require.Len(t, crossRows, 1)
+	require.Equal(t, contentPartID.String(), crossRows[0].ContentPartID)
+	require.Empty(t, crossRows[0].ChatID)
+	require.Empty(t, crossRows[0].UserID)
+	require.Empty(t, crossRows[0].ExternalUserID)
+}
+
+// A part whose parent_chat_message_id points outside its own chat must not
+// inherit that message's user ids. The join is what enforces this, so a stale
+// or forged parent id falls back to the part's own chat instead of leaking the
+// other chat's identifiers.
+func TestFindingCHWriter_HandleBatch_IgnoresParentMessageFromAnotherChat(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	queries := riskrepo.New(ti.conn)
+	ownChatID, err := queries.CreateChatForTest(t.Context(), riskrepo.CreateChatForTestParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText("own-chat-user"),
+		ExternalUserID: conv.ToPGText("own-chat-user@example.com"),
+	})
+	require.NoError(t, err)
+
+	foreignChatID, err := queries.CreateChatForTest(t.Context(), riskrepo.CreateChatForTestParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText("foreign-chat-user"),
+		ExternalUserID: conv.ToPGText("foreign-chat-user@example.com"),
+	})
+	require.NoError(t, err)
+
+	foreignMessageID, err := queries.CreateChatMessageForTest(t.Context(), riskrepo.CreateChatMessageForTestParams{
+		ChatID:         foreignChatID,
+		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		Content:        "prompt in another chat",
+		UserID:         conv.ToPGText("foreign-message-user"),
+		ExternalUserID: conv.ToPGText("foreign-message-user@example.com"),
+	})
+	require.NoError(t, err)
+
+	contentPartID, err := queries.CreateChatContentPartForTest(t.Context(), riskrepo.CreateChatContentPartForTestParams{
+		ChatID:              ownChatID,
+		ProjectID:           uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		Kind:                "prompt_attachment",
+		ContentAssetUrl:     "file:///attachment.txt",
+		ParentChatMessageID: uuid.NullUUID{UUID: foreignMessageID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	rows, err := queries.GetChatContentPartAttribution(t.Context(), riskrepo.GetChatContentPartAttributionParams{
+		Ids:        []uuid.UUID{contentPartID},
+		ProjectIds: []uuid.UUID{*authCtx.ProjectID},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, ownChatID, rows[0].ChatID)
+	require.Equal(t, "own-chat-user", rows[0].UserID)
+	require.Equal(t, "own-chat-user@example.com", rows[0].ExternalUserID)
+}
+
+// Nothing in the schema keeps a part's project_id in step with its chat's, so a
+// part claiming one project while its chat sits in another must resolve no
+// attribution at all: otherwise the caller's per-finding project check would be
+// comparing against a project id the chat never belonged to.
+func TestFindingCHWriter_HandleBatch_RejectsPartWhoseChatIsInAnotherProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "other-attr-" + uuid.New().String()[:8]
+	otherProject, err := projectsRepo.New(ti.conn).CreateProject(ctx, projectsRepo.CreateProjectParams{
+		Name:           slug,
+		Slug:           slug,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	queries := riskrepo.New(ti.conn)
+	// The chat lives in the other project while the part claims the caller's.
+	foreignChatID, err := queries.CreateChatForTest(t.Context(), riskrepo.CreateChatForTestParams{
+		ProjectID:      otherProject.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText("foreign-project-user"),
+		ExternalUserID: conv.ToPGText("foreign-project-user@example.com"),
+	})
+	require.NoError(t, err)
+
+	contentPartID, err := queries.CreateChatContentPartForTest(t.Context(), riskrepo.CreateChatContentPartForTestParams{
+		ChatID:              foreignChatID,
+		ProjectID:           uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		Kind:                "prompt_attachment",
+		ContentAssetUrl:     "file:///attachment.txt",
+		ParentChatMessageID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+
+	rows, err := queries.GetChatContentPartAttribution(t.Context(), riskrepo.GetChatContentPartAttributionParams{
+		Ids:        []uuid.UUID{contentPartID},
+		ProjectIds: []uuid.UUID{*authCtx.ProjectID},
+	})
+	require.NoError(t, err)
+	require.Empty(t, rows)
 }
 
 // chMessagesInsertedPoint returns the single data point for the CH

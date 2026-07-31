@@ -1,9 +1,56 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "tw-shimmer";
-@reference "../node_modules/@speakeasy-api/moonshine/src/global.css";
+@plugin "@tailwindcss/typography";
+
+/* Design system tokens and utilities. Order matters: base tokens must come
+   before the utilities that reference them. */
+@import "./components/ui/styles/base.css";
+@import "./components/ui/styles/utilities.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
+@custom-variant interact {
+  &:hover,
+  &:focus-visible {
+    @slot;
+  }
+}
+
+/* Stack, Grid and the responsive prop helpers build these class names at
+   runtime, so Tailwind cannot see them in the source and has to be told to
+   emit them. */
+/* The Gap and Padding prop types accept the whole Tailwind spacing scale, so
+   the unprefixed classes have to cover all of it or values like `gap={1.5}`
+   resolve to nothing. Responsive variants stay on the common subset to keep
+   the generated stylesheet from ballooning. */
+@source inline("{p-,px-,py-,pr-,pb-,pl-,pt-}{0,0.5,1,1.5,2,2.5,3,3.5,4,5,6,7,8,9,10,11,12,14,16,20,24,28,32,36,40,44,48,52,56,60,64,72,80,96}");
+@source inline("gap-{0,0.5,1,1.5,2,2.5,3,3.5,4,5,6,7,8,9,10,11,12,14,16,20,24,28,32,36,40,44,48,52,56,60,64,72,80,96}");
+@source inline(
+  "{sm:,md:,lg:,xl:,2xl:}{p-,px-,py-,pr-,pb-,pl-,pt-}{0,0.5,1,2,3,4,5,6,8,10,12,16}"
+);
+@source inline("{sm:,md:,lg:,xl:,2xl:}gap-{0,0.5,1,2,3,4,5,6,8,10,12,16}");
+@source inline("{,sm:,md:,lg:,xl:,2xl:}grid-cols-{1,2,3,4,5,6,7,8,9,10,11,12}");
+@source inline("{,sm:,md:,lg:,xl:,2xl:}col-span-{1,2,3,4,5,6,7,8,9,10,11,12}");
+@source inline(
+  "{,sm:,md:,lg:,xl:,2xl:}flex-{row,col,nowrap,wrap,wrap-reverse,none,1,auto,initial,grow,shrink}"
+);
+@source inline(
+  "{,sm:,md:,lg:,xl:,2xl:}justify-{start,center,end,between,evenly}"
+);
+@source inline(
+  "{,sm:,md:,lg:,xl:,2xl:}items-{start,center,end,stretch,baseline}"
+);
+@source inline("{,sm:,md:,lg:,xl:,2xl:}size-{8,12,16,24,32}");
+
+@theme {
+  --font-sans: var(--font-diatype);
+  --font-mono: var(--font-diatype-mono);
+  --font-display: var(--font-tobias);
+  --font-ascii: var(--font-speakeasy), var(--font-diatype-mono), monospace;
+
+  /* Extended text scale */
+  --text-2xs: 0.5625rem; /* 9px */
+}
 
 @font-face {
   font-family: "Diatype";

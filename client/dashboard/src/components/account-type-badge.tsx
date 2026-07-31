@@ -1,5 +1,5 @@
-import { Badge } from "@speakeasy-api/moonshine";
-import { SimpleTooltip } from "./ui/tooltip";
+import { Badge } from "@/components/ui/Badge";
+import { SimpleTooltip } from "./ui/Tooltip";
 
 // The backend `account_type` telemetry dimension resolves to team | personal.
 // Only `personal` is surfaced as a badge — team is the expected default, so

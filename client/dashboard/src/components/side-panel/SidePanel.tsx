@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { cn } from "@/lib/utils";
@@ -153,11 +153,11 @@ export function SidePanelSurface(): React.JSX.Element | null {
               )}
             </div>
             <div className="flex min-w-0 flex-1 flex-col">
-              <Type className="truncate font-semibold">{shown.title}</Type>
+              <Text className="truncate font-semibold">{shown.title}</Text>
               {shown.subtitle && (
-                <Type variant="small" muted className="truncate">
+                <Text variant="small" muted className="truncate">
                   {shown.subtitle}
-                </Type>
+                </Text>
               )}
             </div>
             <div className="flex shrink-0 items-center gap-1">

@@ -4,11 +4,11 @@ import {
   remarkSetupGuide,
   scopedHeadingId,
 } from "@/components/setup-guide/setupGuideMarkdown";
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import { Markdown, type MarkdownProps } from "@/elements/components/Markdown";
 import type { LinkResolver } from "@/elements/types";
 import { useGetMCPSetupDocs } from "@gram/client/react-query/getMCPSetupDocs.js";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import { ExternalLink } from "lucide-react";
 import { useMemo } from "react";
 
@@ -107,9 +107,9 @@ export function SetupGuidePanel({
   return (
     <div className="flex flex-col gap-6 px-6 pt-5 pb-8">
       {only?.summary && (
-        <Type variant="small" className="text-muted-foreground">
+        <Text variant="small" className="text-muted-foreground">
           {only.summary}
-        </Type>
+        </Text>
       )}
       {/* Two guides are stacked in the order the endpoint ranked them. */}
       <div className="flex flex-col gap-10">
@@ -171,9 +171,9 @@ function SetupGuideSection({
 
   return (
     <section className="flex flex-col gap-3">
-      <Type className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+      <Text className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
         {heading}
-      </Type>
+      </Text>
       <Markdown
         className={GUIDE_PROSE}
         extraRemarkPlugins={remarkPlugins}
