@@ -79,6 +79,16 @@ type Service struct {
 	telemetryService *telemetry.Service
 	billingRepo      billing.Repository
 	audit            *audit.Logger
+	// turnStream carries assistant turn frames to dashboard subscribers. Nil
+	// disables streaming — turns still complete and the dashboard falls back
+	// to loading the reply once it lands.
+	turnStream *TurnStream
+}
+
+// WithTurnStream enables streaming assistant turn frames to subscribers.
+func (s *Service) WithTurnStream(stream *TurnStream) *Service {
+	s.turnStream = stream
+	return s
 }
 
 func NewService(
@@ -118,6 +128,7 @@ func NewService(
 		telemetryService: telemetryService,
 		billingRepo:      billingRepo,
 		audit:            auditLogger,
+		turnStream:       nil, // opt in via WithTurnStream
 	}
 }
 
@@ -130,6 +141,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	srv.Mount(mux, server)
 
 	o11y.AttachHandler(mux, "POST", "/chat/completions", oops.ErrHandle(service.logger, service.HandleCompletion).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/chat/turnstream", oops.ErrHandle(service.logger, service.HandleTurnStream).ServeHTTP)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
