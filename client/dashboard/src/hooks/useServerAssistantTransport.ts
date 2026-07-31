@@ -147,7 +147,7 @@ export function useServerAssistantTransport(
       // The turn stream authenticates from headers, not cookies.
       sessionToken: session,
     });
-  }, [ready, client, assistantId, projectSlug]);
+  }, [ready, client, assistantId, projectSlug, session]);
 
   return { transport, assistantId, ready, error, needsAdmin };
 }
