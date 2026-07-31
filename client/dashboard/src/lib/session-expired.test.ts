@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 async function loadModule(pathname: string, search = "") {
   vi.resetModules();
   const assign = vi.fn();
-  vi.stubGlobal("window", { location: { pathname, search, assign } });
+  vi.stubGlobal("window", {
+    location: { origin: "https://app.example", pathname, search, assign },
+  });
   const mod = await import("./session-expired");
   return { assign, ...mod };
 }
@@ -24,6 +26,16 @@ describe("safeRedirectPath", () => {
     expect(safeRedirectPath("/\\evil.example/path")).toBeUndefined();
     expect(safeRedirectPath("https://evil.example")).toBeUndefined();
     expect(safeRedirectPath(null)).toBeUndefined();
+  });
+
+  // The URL parser strips these characters, so a literal prefix check would
+  // pass the value through and the browser would resolve it off-origin.
+  it("rejects paths that smuggle an origin past the leading slash", async () => {
+    const { safeRedirectPath } = await loadModule("/");
+
+    expect(safeRedirectPath("/\n/evil.example/path")).toBeUndefined();
+    expect(safeRedirectPath("/\t/evil.example/path")).toBeUndefined();
+    expect(safeRedirectPath("/\r/evil.example/path")).toBeUndefined();
   });
 });
 

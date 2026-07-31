@@ -16,16 +16,29 @@ export const UNAUTHENTICATED_PATHS = [
 let redirecting = false;
 
 /**
- * Narrows a value taken from the URL to a same-origin path. `//evil.com` and
- * `/\evil.com` are protocol-relative URLs that the browser (and react-router's
- * `Navigate`) resolve to a foreign origin, so anything but a single leading
- * slash is rejected and the caller falls back to the app root.
+ * Narrows a value taken from the URL to a same-origin path.
+ *
+ * Prefix checks alone are not enough: the URL parser strips ASCII tab and
+ * newline characters, so `/%0A/evil.example` reaches the browser as
+ * `//evil.example` — a protocol-relative URL pointing at a foreign origin.
+ * Resolving against the current origin and comparing the parsed origin catches
+ * those, and returning the parsed components hands the caller the normalized
+ * path rather than the raw input. A leading slash is still required so the
+ * value can only ever be an absolute in-app path.
  */
 export function safeRedirectPath(value: string | null): string | undefined {
-  if (!value) return undefined;
-  if (!value.startsWith("/")) return undefined;
-  if (value.startsWith("//") || value.startsWith("/\\")) return undefined;
-  return value;
+  if (!value || !value.startsWith("/")) return undefined;
+
+  const origin = window.location.origin;
+  let url: URL;
+  try {
+    url = new URL(value, origin);
+  } catch {
+    return undefined;
+  }
+
+  if (url.origin !== origin) return undefined;
+  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 /**
