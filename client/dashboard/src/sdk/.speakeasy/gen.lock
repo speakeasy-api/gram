@@ -289,10 +289,6 @@ trackedFiles:
   src/funcs/packagesListVersions.ts: {}
   src/funcs/packagesPublish.ts: {}
   src/funcs/packagesUpdate.ts: {}
-  src/funcs/passthroughMcpCreateServer.ts: {}
-  src/funcs/passthroughMcpDeleteServer.ts: {}
-  src/funcs/passthroughMcpGetServer.ts: {}
-  src/funcs/passthroughMcpListServers.ts: {}
   src/funcs/pluginsAddPluginServer.ts: {}
   src/funcs/pluginsCreatePlugin.ts: {}
   src/funcs/pluginsDeletePlugin.ts: {}
@@ -444,6 +440,7 @@ trackedFiles:
   src/funcs/telemetryGetToolUsageUserTimeSeries.ts: {}
   src/funcs/telemetryGetToolUsageUsers.ts: {}
   src/funcs/telemetryGetToolUsageUsersByTarget.ts: {}
+  src/funcs/telemetryGetUnproxiedMcpServerUsage.ts: {}
   src/funcs/telemetryGetUserMetricsSummary.ts: {}
   src/funcs/telemetryListAttributeKeys.ts: {}
   src/funcs/telemetryListFilterOptions.ts: {}
@@ -495,6 +492,11 @@ trackedFiles:
   src/funcs/tunneledMcpListServers.ts: {}
   src/funcs/tunneledMcpRotateServerKey.ts: {}
   src/funcs/tunneledMcpUpdateServer.ts: {}
+  src/funcs/unproxiedMcpCreateServer.ts: {}
+  src/funcs/unproxiedMcpDeleteServer.ts: {}
+  src/funcs/unproxiedMcpGetServer.ts: {}
+  src/funcs/unproxiedMcpListServers.ts: {}
+  src/funcs/unproxiedMcpListTools.ts: {}
   src/funcs/usageCreateCheckout.ts: {}
   src/funcs/usageCreateCustomerSession.ts: {}
   src/funcs/usageCreateTopUpCheckout.ts: {}
@@ -622,7 +624,6 @@ trackedFiles:
   src/models/components/createorganizationremotesessionclientform.ts: {}
   src/models/components/createpackageform.ts: {}
   src/models/components/createpackageresult.ts: {}
-  src/models/components/createpassthroughmcpserverform.ts: {}
   src/models/components/createpluginform.ts: {}
   src/models/components/createportalsessionresult.ts: {}
   src/models/components/createprojectrequestbody.ts: {}
@@ -648,6 +649,7 @@ trackedFiles:
   src/models/components/createtriggerinstanceform.ts: {}
   src/models/components/createtunneledmcpserverform.ts: {}
   src/models/components/createtunneledmcpserverresult.ts: {}
+  src/models/components/createunproxiedmcpserverform.ts: {}
   src/models/components/createusersessionissuerform.ts: {}
   src/models/components/creditusageresponsebody.ts: {}
   src/models/components/cursorhookpayload.ts: {}
@@ -746,6 +748,8 @@ trackedFiles:
   src/models/components/gettoolusageusersbytargetresult.ts: {}
   src/models/components/gettoolusageusersresult.ts: {}
   src/models/components/gettoolusageusertimeseriesresult.ts: {}
+  src/models/components/getunproxiedmcpserverusagerequestbody.ts: {}
+  src/models/components/getunproxiedmcpserverusageresult.ts: {}
   src/models/components/getusermetricssummarypayload.ts: {}
   src/models/components/getusermetricssummaryresult.ts: {}
   src/models/components/hookingestdata.ts: {}
@@ -816,7 +820,6 @@ trackedFiles:
   src/models/components/listorganizationremotesessionissuersresult.ts: {}
   src/models/components/listorganizationremotesessionsresult.ts: {}
   src/models/components/listpackagesresult.ts: {}
-  src/models/components/listpassthroughmcpserversresult.ts: {}
   src/models/components/listpluginsresult.ts: {}
   src/models/components/listprojectsresult.ts: {}
   src/models/components/listprompttemplatesresult.ts: {}
@@ -865,6 +868,8 @@ trackedFiles:
   src/models/components/listtriggerinstancesresult.ts: {}
   src/models/components/listtunneledmcpserversresult.ts: {}
   src/models/components/listunknownskillactivationsresult.ts: {}
+  src/models/components/listunproxiedmcpserversresult.ts: {}
+  src/models/components/listunproxiedmcpservertoolsresult.ts: {}
   src/models/components/listusergrantsresult.ts: {}
   src/models/components/listusersessionclientsresult.ts: {}
   src/models/components/listusersessionconsentsresult.ts: {}
@@ -941,7 +946,6 @@ trackedFiles:
   src/models/components/otelsum.ts: {}
   src/models/components/package.ts: {}
   src/models/components/packageversion.ts: {}
-  src/models/components/passthroughmcpserver.ts: {}
   src/models/components/periodusage.ts: {}
   src/models/components/platformtooldefinition.ts: {}
   src/models/components/plugin.ts: {}
@@ -1188,6 +1192,9 @@ trackedFiles:
   src/models/components/undistributeskillrequestbody.ts: {}
   src/models/components/unknownskillactivation.ts: {}
   src/models/components/unmarkriskresultsfalsepositiverequestbody.ts: {}
+  src/models/components/unproxiedmcpserver.ts: {}
+  src/models/components/unproxiedmcpservertool.ts: {}
+  src/models/components/unproxiedmcpserverusagebucket.ts: {}
   src/models/components/unshareskillrequestbody.ts: {}
   src/models/components/updateassistantform.ts: {}
   src/models/components/updateawsiamcredentialrequestbody.ts: {}
@@ -1316,7 +1323,6 @@ trackedFiles:
   src/models/operations/createorganizationremotesessionclient.ts: {}
   src/models/operations/createorganizationremotesessionissuer.ts: {}
   src/models/operations/createpackage.ts: {}
-  src/models/operations/createpassthroughmcpserver.ts: {}
   src/models/operations/createplugin.ts: {}
   src/models/operations/createportalsession.ts: {}
   src/models/operations/createproject.ts: {}
@@ -1336,6 +1342,7 @@ trackedFiles:
   src/models/operations/createtopupcheckout.ts: {}
   src/models/operations/createtriggerinstance.ts: {}
   src/models/operations/createtunneledmcpserver.ts: {}
+  src/models/operations/createunproxiedmcpserver.ts: {}
   src/models/operations/createusersessionissuer.ts: {}
   src/models/operations/creditusage.ts: {}
   src/models/operations/declineriskpolicychallenge.ts: {}
@@ -1363,7 +1370,6 @@ trackedFiles:
   src/models/operations/deleteorganizationremotesessionclient.ts: {}
   src/models/operations/deleteorganizationremotesessionissuer.ts: {}
   src/models/operations/deleteotelforwardingconfig.ts: {}
-  src/models/operations/deletepassthroughmcpserver.ts: {}
   src/models/operations/deleteplugin.ts: {}
   src/models/operations/deleteproject.ts: {}
   src/models/operations/deleteremotemcpserver.ts: {}
@@ -1382,6 +1388,7 @@ trackedFiles:
   src/models/operations/deletetoolsetenvironmentlink.ts: {}
   src/models/operations/deletetriggerinstance.ts: {}
   src/models/operations/deletetunneledmcpserver.ts: {}
+  src/models/operations/deleteunproxiedmcpserver.ts: {}
   src/models/operations/deleteusersessionissuer.ts: {}
   src/models/operations/denyriskpolicybypassrequest.ts: {}
   src/models/operations/detachserverfromcollection.ts: {}
@@ -1445,7 +1452,6 @@ trackedFiles:
   src/models/operations/getorganizationremotesessionissuerdeletepreflight.ts: {}
   src/models/operations/getorganizationremotesessionissuermigratepreflight.ts: {}
   src/models/operations/getotelforwardingconfig.ts: {}
-  src/models/operations/getpassthroughmcpserver.ts: {}
   src/models/operations/getperiodusage.ts: {}
   src/models/operations/getplugin.ts: {}
   src/models/operations/getproductfeatures.ts: {}
@@ -1488,6 +1494,8 @@ trackedFiles:
   src/models/operations/gettoolusageusertimeseries.ts: {}
   src/models/operations/gettriggerinstance.ts: {}
   src/models/operations/gettunneledmcpserver.ts: {}
+  src/models/operations/getunproxiedmcpserver.ts: {}
+  src/models/operations/getunproxiedmcpserverusage.ts: {}
   src/models/operations/getusermetricssummary.ts: {}
   src/models/operations/getusersessionclient.ts: {}
   src/models/operations/getusersessionissuer.ts: {}
@@ -1553,7 +1561,6 @@ trackedFiles:
   src/models/operations/listorganizationremotesessionissuers.ts: {}
   src/models/operations/listorganizationusers.ts: {}
   src/models/operations/listpackages.ts: {}
-  src/models/operations/listpassthroughmcpservers.ts: {}
   src/models/operations/listplatformexternalcredentials.ts: {}
   src/models/operations/listplugins.ts: {}
   src/models/operations/listprojects.ts: {}
@@ -1599,6 +1606,8 @@ trackedFiles:
   src/models/operations/listtunneledmcpserverconnections.ts: {}
   src/models/operations/listtunneledmcpservers.ts: {}
   src/models/operations/listunknownskillactivations.ts: {}
+  src/models/operations/listunproxiedmcpservers.ts: {}
+  src/models/operations/listunproxiedmcpservertools.ts: {}
   src/models/operations/listusersessionclients.ts: {}
   src/models/operations/listusersessionconsents.ts: {}
   src/models/operations/listusersessionfacets.ts: {}
@@ -1840,7 +1849,6 @@ trackedFiles:
   src/react-query/createOrganizationRemoteSessionClient.ts: {}
   src/react-query/createOrganizationRemoteSessionIssuer.ts: {}
   src/react-query/createPackage.ts: {}
-  src/react-query/createPassthroughMcpServer.ts: {}
   src/react-query/createPlugin.ts: {}
   src/react-query/createPortalSession.ts: {}
   src/react-query/createProject.ts: {}
@@ -1856,6 +1864,7 @@ trackedFiles:
   src/react-query/createTopUpCheckout.ts: {}
   src/react-query/createTrigger.ts: {}
   src/react-query/createTunneledMcpServer.ts: {}
+  src/react-query/createUnproxiedMcpServer.ts: {}
   src/react-query/createUserSessionIssuer.ts: {}
   src/react-query/customDomainMcpEndpoints.core.ts: {}
   src/react-query/customDomainMcpEndpoints.ts: {}
@@ -1878,7 +1887,6 @@ trackedFiles:
   src/react-query/deleteOrganizationRemoteSessionClient.ts: {}
   src/react-query/deleteOrganizationRemoteSessionIssuer.ts: {}
   src/react-query/deleteOtelForwardingConfig.ts: {}
-  src/react-query/deletePassthroughMcpServer.ts: {}
   src/react-query/deletePlugin.ts: {}
   src/react-query/deleteProject.ts: {}
   src/react-query/deleteRemoteMcpServer.ts: {}
@@ -1893,6 +1901,7 @@ trackedFiles:
   src/react-query/deleteToolsetEnvironmentLink.ts: {}
   src/react-query/deleteTrigger.ts: {}
   src/react-query/deleteTunneledMcpServer.ts: {}
+  src/react-query/deleteUnproxiedMcpServer.ts: {}
   src/react-query/deleteUserSessionIssuer.ts: {}
   src/react-query/deployment.core.ts: {}
   src/react-query/deployment.ts: {}
@@ -1953,8 +1962,6 @@ trackedFiles:
   src/react-query/getMcpServerActivity.ts: {}
   src/react-query/getObservabilityOverview.core.ts: {}
   src/react-query/getObservabilityOverview.ts: {}
-  src/react-query/getPassthroughMcpServer.core.ts: {}
-  src/react-query/getPassthroughMcpServer.ts: {}
   src/react-query/getPeriodUsage.core.ts: {}
   src/react-query/getPeriodUsage.ts: {}
   src/react-query/getProjectMetricsSummary.core.ts: {}
@@ -1991,6 +1998,10 @@ trackedFiles:
   src/react-query/getToolsetEnvironment.ts: {}
   src/react-query/getTunneledMcpServer.core.ts: {}
   src/react-query/getTunneledMcpServer.ts: {}
+  src/react-query/getUnproxiedMcpServer.core.ts: {}
+  src/react-query/getUnproxiedMcpServer.ts: {}
+  src/react-query/getUnproxiedMcpServerUsage.core.ts: {}
+  src/react-query/getUnproxiedMcpServerUsage.ts: {}
   src/react-query/getUsageTiers.core.ts: {}
   src/react-query/getUsageTiers.ts: {}
   src/react-query/getUserMetricsSummary.core.ts: {}
@@ -2155,8 +2166,6 @@ trackedFiles:
   src/react-query/organizationRemoteSessionIssuers.ts: {}
   src/react-query/otelForwardingConfig.core.ts: {}
   src/react-query/otelForwardingConfig.ts: {}
-  src/react-query/passthroughMcpServers.core.ts: {}
-  src/react-query/passthroughMcpServers.ts: {}
   src/react-query/pauseTrigger.ts: {}
   src/react-query/plugin.core.ts: {}
   src/react-query/plugin.ts: {}
@@ -2398,6 +2407,10 @@ trackedFiles:
   src/react-query/undistributeSkill.ts: {}
   src/react-query/unknownSkillActivations.core.ts: {}
   src/react-query/unknownSkillActivations.ts: {}
+  src/react-query/unproxiedMcpServerTools.core.ts: {}
+  src/react-query/unproxiedMcpServerTools.ts: {}
+  src/react-query/unproxiedMcpServers.core.ts: {}
+  src/react-query/unproxiedMcpServers.ts: {}
   src/react-query/unshareSkill.ts: {}
   src/react-query/updateAwsIamCredential.ts: {}
   src/react-query/updateAwsKmsKey.ts: {}
@@ -2516,7 +2529,6 @@ trackedFiles:
   src/sdk/otelforwarding.ts: {}
   src/sdk/overview.ts: {}
   src/sdk/packages.ts: {}
-  src/sdk/passthroughmcp.ts: {}
   src/sdk/plugins.ts: {}
   src/sdk/policies.ts: {}
   src/sdk/policybypassrequests.ts: {}
@@ -2541,6 +2553,7 @@ trackedFiles:
   src/sdk/toolsets.ts: {}
   src/sdk/triggers.ts: {}
   src/sdk/tunneledmcp.ts: {}
+  src/sdk/unproxiedmcp.ts: {}
   src/sdk/usage.ts: {}
   src/sdk/usersessionclients.ts: {}
   src/sdk/usersessionconsents.ts: {}
@@ -3387,6 +3400,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  createUnproxiedMcpServer:
+    speakeasy-default-create-unproxied-mcp-server:
+      requestBody:
+        application/json: {"url": "https://fragrant-step.name/"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-07-02T20:12:13.492Z", "id": "56aa47c3-7a7c-4e2b-883e-c43cb175bf6e", "project_id": "69fddc44-4360-4026-903b-a561509e46e1", "updated_at": "2024-01-06T07:38:13.366Z", "url": "https://considerate-newsletter.name"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   createUserSessionIssuer:
     speakeasy-default-create-user-session-issuer:
       requestBody:
@@ -3863,6 +3887,16 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  deleteUnproxiedMcpServer:
+    speakeasy-default-delete-unproxied-mcp-server:
+      parameters:
+        query:
+          id: "<id>"
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   deleteUserSessionIssuer:
     speakeasy-default-delete-user-session-issuer:
       parameters:
@@ -5054,6 +5088,26 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getUnproxiedMcpServer:
+    speakeasy-default-get-unproxied-mcp-server:
+      responses:
+        "200":
+          application/json: {"created_at": "2024-08-13T18:55:37.403Z", "id": "2698133b-2acb-4b27-8380-c4e933086cfa", "project_id": "3b4fd9ef-e7ff-4027-a9fc-7607f1adeae7", "updated_at": "2024-06-03T09:07:42.706Z", "url": "https://specific-detective.com/"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getUnproxiedMcpServerUsage:
+    speakeasy-default-get-unproxied-mcp-server-usage:
+      requestBody:
+        application/json: {"from": "2024-09-19T20:34:25.062Z", "to": "2026-02-15T15:40:31.889Z", "url": "https://cool-meal.org"}
+      responses:
+        "200":
+          application/json: {"buckets": [{"call_count": 710024, "date": "2024-10-22"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getUsageTiers:
     speakeasy-default-get-usage-tiers:
       responses:
@@ -6233,6 +6287,27 @@ examples:
       responses:
         "200":
           application/json: {"activations": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listUnproxiedMcpServerTools:
+    speakeasy-default-list-unproxied-mcp-server-tools:
+      parameters:
+        query:
+          id: "09a8c388-42c5-4069-bc3e-c7f3d51ece48"
+      responses:
+        "200":
+          application/json: {"status": "error", "tools": [{"name": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listUnproxiedMcpServers:
+    speakeasy-default-list-unproxied-mcp-servers:
+      responses:
+        "200":
+          application/json: {"unproxied_mcp_servers": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
