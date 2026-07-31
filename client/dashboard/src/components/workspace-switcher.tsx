@@ -114,7 +114,7 @@ export function WorkspaceSwitcher(): JSX.Element {
         <PopoverTrigger asChild>
           <Button
             variant="tertiary"
-            className="h-auto w-full justify-start gap-2 rounded-md border px-2 py-1.5 group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-1"
+            className="h-auto w-full justify-start gap-2 rounded-md border px-2 py-1.5 font-sans group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-1"
           >
             <ProjectAvatar
               project={project}

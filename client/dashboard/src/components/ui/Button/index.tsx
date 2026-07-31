@@ -505,7 +505,11 @@ const BaseButton = React.forwardRef<HTMLButtonElement, BaseButtonProps>(
             )}
             <span
               className={cn(
-                "relative flex items-center justify-center",
+                // w-full so alignment utilities a caller puts on a child
+                // (`ml-auto` on a trailing chevron, say) have room to work.
+                // On an auto-width button this resolves to the content width,
+                // so it is a no-op for the common case.
+                "relative flex w-full items-center justify-center",
                 getGapClass(size),
                 isBrandVariant ? `z-20` : "",
               )}
