@@ -19,7 +19,7 @@ const MAX_CONSECUTIVE_POLL_FAILURES = 3;
 // to feel responsive without dragging: short replies get a readable typing
 // cadence; long replies are paced to finish within the time budget instead of
 // crawling. assistant-ui can't tell these deltas apart from a real stream.
-const STREAM_BUDGET_MS = 1400; // target wall-clock to stream a whole reply
+const STREAM_BUDGET_MS = 600; // target wall-clock to stream a whole reply
 const STREAM_TICK_MS = 22; // upper bound on delay between chunks
 const STREAM_MIN_CHARS = 12; // below this, just emit in one shot
 const STREAM_MAX_TICKS = 350; // cap on delta events per reply (huge messages)
@@ -30,7 +30,7 @@ const STREAM_MAX_TICKS = 350; // cap on delta events per reply (huge messages)
 // those fast turns, then ramp toward the steady-state interval so long,
 // tool-heavy turns don't hammer chat.load. The ceiling is the configured
 // `pollIntervalMs`, so callers can still tune the upper bound.
-const FAST_POLL_INTERVAL_MS = 350;
+const FAST_POLL_INTERVAL_MS = 150;
 const POLL_BACKOFF_FACTOR = 1.6;
 
 function nextPollDelay(attempt: number, ceilingMs: number): number {

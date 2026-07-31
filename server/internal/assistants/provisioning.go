@@ -32,11 +32,15 @@ var managedAssistantInstructions string
 
 const (
 	// managedAssistantModel is the default model for the platform-managed
-	// assistant. Deliberately a tier below the in-app default chat model
-	// (openrouter.DefaultChatModel): the side panel's workload is log search
-	// and tabular summarisation, where time-to-first-token dominates perceived
-	// quality and Opus' slower token rate is felt on every turn.
-	managedAssistantModel = "anthropic/claude-sonnet-5"
+	// assistant. Deliberately well below the in-app default chat model
+	// (openrouter.DefaultChatModel), because the side panel is latency-bound in
+	// a way the playground is not: a turn is one short answer the user is
+	// actively waiting on, and measured against this deployment's completions
+	// proxy the fixed round trip is ~2.1s on Sonnet versus ~0.9s on Haiku. That
+	// 1.2s is paid on every message and dominates a reply that generates only a
+	// few dozen tokens. The workload — log search, risk rollups, tabular
+	// summarisation, driving `compose` scripts — is well within Haiku's range.
+	managedAssistantModel = "anthropic/claude-haiku-4.5"
 
 	// Schema defaults for the assistants table, applied explicitly so the
 	// managed assistant's intent is visible at the call site.
@@ -48,13 +52,21 @@ const (
 	managedAssistantWarmTTLSeconds int64 = 300
 	managedAssistantMaxConcurrency int64 = 10
 
-	// legacyManagedAssistantModel / legacyManagedAssistantWarmTTLSeconds are
-	// the previous defaults. Managed assistants provisioned before this change
-	// still carry them, and nothing else updates those rows — see
-	// ReconcileManagedAssistantDefaults.
-	legacyManagedAssistantModel                = "anthropic/claude-opus-5"
+	// legacyManagedAssistantWarmTTLSeconds is the previous warm-TTL default.
+	// Managed assistants provisioned before this change still carry it, and
+	// nothing else updates those rows — see ReconcileManagedAssistantDefaults.
 	legacyManagedAssistantWarmTTLSeconds int64 = 60
 )
+
+// legacyManagedAssistantModels are every model this codebase has previously
+// defaulted the managed assistant to. A row still sitting on one of these was
+// chosen by an older build rather than by an operator, so the reconcile is free
+// to move it forward; anything else is a deliberate choice and is left alone.
+// Append here — never replace — when the default changes again.
+var legacyManagedAssistantModels = []string{
+	"anthropic/claude-opus-5",
+	"anthropic/claude-sonnet-5",
+}
 
 // ErrManagedAssistantNameTaken is returned by EnableManagedAssistant when a
 // non-managed assistant already occupies the managed assistant's name in the
@@ -157,7 +169,7 @@ func (s *ServiceCore) GetManagedAssistant(ctx context.Context, projectID uuid.UU
 // Returns the number of rows moved (0 or 1); callers treat this as best-effort.
 func (s *ServiceCore) ReconcileManagedAssistantDefaults(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	moved, err := assistantrepo.New(s.db).ReconcileManagedAssistantDefaults(ctx, assistantrepo.ReconcileManagedAssistantDefaultsParams{
-		LegacyModel:          legacyManagedAssistantModel,
+		LegacyModels:         legacyManagedAssistantModels,
 		Model:                managedAssistantModel,
 		LegacyWarmTtlSeconds: legacyManagedAssistantWarmTTLSeconds,
 		WarmTtlSeconds:       managedAssistantWarmTTLSeconds,

@@ -52,8 +52,16 @@ services:
         "--db-filename",
         "/home/temporal/dev.db",
       ]
-    volumes:
-      - temporal_data:/home/temporal
+    # dev.db lives on tmpfs, not a named volume. SQLite's advisory locking is
+    # unreliable on the container filesystems Docker Desktop/OrbStack put
+    # volumes on: the dev server intermittently wedges with "cannot start a
+    # transaction within a transaction" or "database is locked (SQLITE_BUSY)",
+    # after which every signal-with-start times out and the whole local stack
+    # looks broken in ways that point everywhere except Temporal. The cost is
+    # that workflow history does not survive a container restart — acceptable
+    # locally, where the worker re-registers its schedules on boot.
+    tmpfs:
+      - /home/temporal:mode=0777
     healthcheck:
       test: ["CMD", "temporal", "operator", "cluster", "health"]
       interval: 5s
@@ -198,8 +206,6 @@ volumes:
   postgres_data:
     driver: local
   cache_data:
-    driver: local
-  temporal_data:
     driver: local
   clickhouse_data:
     driver: local

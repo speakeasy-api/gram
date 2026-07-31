@@ -3020,7 +3020,11 @@ Plan each turn as ONE compose script. Every additional compose call is another f
 - A discovery step and the query that depends on it belong in the same script: fetch the discovery result, branch on it in Lua, and run the follow-up call — do not return to yourself to decide.
 - Reduce in Lua, not in the transcript. Filter, aggregate, sort and cut to the rows you will actually cite. Whole-result dumps slow every later turn in the conversation, not just this one.
 - Set explicit limits and narrow time windows on any tool that takes them.
-- A second compose call is warranted only when what to do next genuinely depends on your judgement of the first result, not on a value the script could have read itself.`
+- A broad question ("scan X", "what's going on with Y", "give me an overview of Z") is still ONE script. Gather every tool result the answer could need up front, then write the answer. Do not work through the relevant tools one call at a time.
+
+Before calling compose a second time, stop and check: are you about to confirm, double-check, or broaden something you already have an answer for? If so, don't — answer from what you have, and say what you did not check. Re-reading the same state through a different tool almost never changes the reply, and it doubles the time the user waits. The only good reason for a second script is that the first surfaced something genuinely unanticipated that the answer cannot be written without.
+
+Never write a partial answer, call compose again, and then write a second answer. Finish gathering, then write once.`
 
 func composeInstructions(base string, thread assistantThreadRecord, skills []assistantSkillSnapshot) (string, error) {
 	adapter, err := getSourceAdapter(thread.SourceKind)

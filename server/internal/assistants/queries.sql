@@ -438,7 +438,7 @@ WHERE pma.project_id = @project_id
 -- across two different default eras.
 UPDATE assistants a
 SET
-  model = CASE WHEN a.model = @legacy_model::TEXT THEN @model::TEXT ELSE a.model END,
+  model = CASE WHEN a.model = ANY(@legacy_models::TEXT[]) THEN @model::TEXT ELSE a.model END,
   warm_ttl_seconds = CASE WHEN a.warm_ttl_seconds = @legacy_warm_ttl_seconds::BIGINT THEN @warm_ttl_seconds::BIGINT ELSE a.warm_ttl_seconds END,
   updated_at = clock_timestamp()
 FROM project_managed_assistants pma
@@ -446,7 +446,8 @@ WHERE pma.project_id = @project_id
   AND a.id = pma.assistant_id
   AND a.project_id = @project_id
   AND a.deleted IS FALSE
-  AND (a.model = @legacy_model::TEXT OR a.warm_ttl_seconds = @legacy_warm_ttl_seconds::BIGINT);
+  AND (a.model = ANY(@legacy_models::TEXT[]) OR a.warm_ttl_seconds = @legacy_warm_ttl_seconds::BIGINT)
+  AND (a.model IS DISTINCT FROM @model::TEXT OR a.warm_ttl_seconds IS DISTINCT FROM @warm_ttl_seconds::BIGINT);
 
 -- name: GetProjectName :one
 -- Display name of a project, used to compose the managed assistant's name so

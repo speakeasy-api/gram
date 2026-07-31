@@ -220,7 +220,7 @@ func TestReconcileManagedAssistantDefaultsMovesLegacyRows(t *testing.T) {
 	queries := assistantrepo.New(conn)
 	_, err = queries.UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{
 		Name:           pgtype.Text{},
-		Model:          pgtype.Text{String: legacyManagedAssistantModel, Valid: true},
+		Model:          pgtype.Text{String: legacyManagedAssistantModels[0], Valid: true},
 		Instructions:   pgtype.Text{},
 		WarmTtlSeconds: pgtype.Int8{Int64: legacyManagedAssistantWarmTTLSeconds, Valid: true},
 		MaxConcurrency: pgtype.Int8{},
