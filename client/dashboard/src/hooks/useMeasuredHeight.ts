@@ -19,7 +19,10 @@ export function useMeasuredHeight<T extends HTMLElement>(): {
   const ref = useCallback((el: T | null) => setNode(el), []);
 
   useLayoutEffect(() => {
-    if (!node) return;
+    if (!node) {
+      setHeight(undefined);
+      return;
+    }
     // Re-measure via getBoundingClientRect on every callback rather than
     // trusting ResizeObserver's own entry: `entry.contentRect` is the
     // content box (padding/border excluded), which would silently shrink

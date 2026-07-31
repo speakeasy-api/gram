@@ -368,14 +368,26 @@ function riskResultToTranscriptFinding({
 // secret flagged by more than one policy pass) into one entry with a count,
 // dropping anything already optimistically dismissed. Shared by RiskBadge's
 // popover list and useFindingActions' context-menu items so both surfaces
-// group findings identically.
+// group findings identically. Keeps every member result (not just the
+// first) — dismissing a grouped entry must clear all of them, or the ones
+// left behind keep the finding active under the hood.
 function groupFindings(
   results: RiskResult[],
   isOptimisticallyDismissed: (id: string) => boolean,
-): { result: RiskResult; spans: FindingSpan[]; count: number }[] {
+): {
+  result: RiskResult;
+  spans: FindingSpan[];
+  count: number;
+  allResults: RiskResult[];
+}[] {
   const grouped = new Map<
     string,
-    { result: RiskResult; spans: FindingSpan[]; count: number }
+    {
+      result: RiskResult;
+      spans: FindingSpan[];
+      count: number;
+      allResults: RiskResult[];
+    }
   >();
   for (const r of results) {
     if (isOptimisticallyDismissed(r.id)) continue;
@@ -384,8 +396,12 @@ function groupFindings(
       .map((s) => `${s.field ?? ""}:${s.path ?? ""}:${s.match}`)
       .join("|")}`;
     const hit = grouped.get(key);
-    if (hit) hit.count++;
-    else grouped.set(key, { result: r, spans, count: 1 });
+    if (hit) {
+      hit.count++;
+      hit.allResults.push(r);
+    } else {
+      grouped.set(key, { result: r, spans, count: 1, allResults: [r] });
+    }
   }
   return [...grouped.values()];
 }
@@ -405,7 +421,7 @@ function useFindingActions(results: RiskResult[]): Action[] {
       const actions: Action[] = [
         {
           label: `Mark false positive${suffix}`,
-          onClick: () => dismiss([f.result]),
+          onClick: () => dismiss(f.allResults),
           separatorBefore: i > 0,
         },
       ];
@@ -473,7 +489,7 @@ export function RiskBadge({
           findings={findings.map((f) =>
             riskResultToTranscriptFinding({
               ...f,
-              onMarkFalsePositive: () => dismiss([f.result]),
+              onMarkFalsePositive: () => dismiss(f.allResults),
               // llm_judge findings aren't exclusion-eligible: exclusions
               // don't yet support prompt-based (LLM-judge) policy scoping
               // (AGE-2750), matching the same filter the old turn-header

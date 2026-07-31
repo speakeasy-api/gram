@@ -72,7 +72,12 @@ export function MoreActions({
             {triggerLabel}
           </Button>
         ) : (
-          <Button variant="ghost" size="sm" className="mx-[-4px] h-8 w-8 p-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mx-[-4px] h-8 w-8 p-0"
+            style={triggerStyle}
+          >
             <Icon name="ellipsis-vertical" className="size-4" />
             <span className="sr-only">Open menu</span>
           </Button>
