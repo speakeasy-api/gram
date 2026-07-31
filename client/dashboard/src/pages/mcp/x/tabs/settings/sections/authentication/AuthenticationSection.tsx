@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/Badge";
 import {
   Field,
   FieldDescription,
@@ -39,6 +40,7 @@ export function AuthenticationSection({
 }: {
   mcpServer: McpServer;
 }): JSX.Element {
+  const isUnproxied = !!mcpServer.unproxiedMcpServerId;
   const target = useMcpServerAuthTarget(mcpServer);
 
   return (
@@ -47,23 +49,45 @@ export function AuthenticationSection({
         <SettingsSection.Header>
           <SettingsSection.Title>Authentication</SettingsSection.Title>
           <SettingsSection.Description>
-            Configure user sessions and, when required, upstream identity
-            providers for clients connecting to this server.
+            {isUnproxied
+              ? "Gram doesn't manage authentication for unproxied servers."
+              : "Configure user sessions and, when required, upstream identity providers for clients connecting to this server."}
           </SettingsSection.Description>
         </SettingsSection.Header>
         <SettingsSection.Panel>
           <SettingsSection.Body>
-            <AuthenticationSectionBody target={target} />
+            {isUnproxied ? (
+              <UnproxiedAuthenticationNotice />
+            ) : (
+              <AuthenticationSectionBody target={target} />
+            )}
           </SettingsSection.Body>
-          <SettingsSection.Footer>
-            <SettingsSection.FooterHint>
-              Authentication changes apply to new client connections.
-            </SettingsSection.FooterHint>
-          </SettingsSection.Footer>
+          {isUnproxied ? null : (
+            <SettingsSection.Footer>
+              <SettingsSection.FooterHint>
+                Authentication changes apply to new client connections.
+              </SettingsSection.FooterHint>
+            </SettingsSection.Footer>
+          )}
         </SettingsSection.Panel>
       </SettingsSection>
-      <McpServerSessionsPanel mcpServer={mcpServer} />
+      {isUnproxied ? null : <McpServerSessionsPanel mcpServer={mcpServer} />}
     </>
+  );
+}
+
+function UnproxiedAuthenticationNotice(): JSX.Element {
+  return (
+    <Field>
+      <FieldLabel>Authentication</FieldLabel>
+      <div>
+        <Badge variant="success">Not applicable</Badge>
+      </div>
+      <FieldDescription>
+        The customer connects directly using the vendor&apos;s own credentials —
+        there&apos;s nothing for Gram to configure here.
+      </FieldDescription>
+    </Field>
   );
 }
 

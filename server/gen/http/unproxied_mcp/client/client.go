@@ -29,6 +29,10 @@ type Client struct {
 	// endpoint.
 	GetServerDoer goahttp.Doer
 
+	// ListTools Doer is the HTTP client used to make requests to the listTools
+	// endpoint.
+	ListToolsDoer goahttp.Doer
+
 	// DeleteServer Doer is the HTTP client used to make requests to the
 	// deleteServer endpoint.
 	DeleteServerDoer goahttp.Doer
@@ -56,6 +60,7 @@ func NewClient(
 		CreateServerDoer:    doer,
 		ListServersDoer:     doer,
 		GetServerDoer:       doer,
+		ListToolsDoer:       doer,
 		DeleteServerDoer:    doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
@@ -132,6 +137,30 @@ func (c *Client) GetServer() goa.Endpoint {
 		resp, err := c.GetServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("unproxiedMcp", "getServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListTools returns an endpoint that makes HTTP requests to the unproxiedMcp
+// service listTools server.
+func (c *Client) ListTools() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListToolsRequest(c.encoder)
+		decodeResponse = DecodeListToolsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListToolsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListToolsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("unproxiedMcp", "listTools", err)
 		}
 		return decodeResponse(resp)
 	}

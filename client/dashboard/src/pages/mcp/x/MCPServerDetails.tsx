@@ -274,6 +274,7 @@ export function MCPServerStatusDropdown({
           remoteMcpServerId: server.remoteMcpServerId ?? undefined,
           tunneledMcpServerId: server.tunneledMcpServerId ?? undefined,
           toolsetId: server.toolsetId ?? undefined,
+          unproxiedMcpServerId: server.unproxiedMcpServerId ?? undefined,
           environmentId: server.environmentId ?? undefined,
           // updateMcpServer is a full-record replace for the optional UUID
           // references. Forwarding them keeps stored values intact across a

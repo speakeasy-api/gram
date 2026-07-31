@@ -22,6 +22,11 @@ func GetServerUnproxiedMcpPath() string {
 	return "/rpc/unproxiedMcp.getServer"
 }
 
+// ListToolsUnproxiedMcpPath returns the URL path to the unproxiedMcp service listTools HTTP endpoint.
+func ListToolsUnproxiedMcpPath() string {
+	return "/rpc/unproxiedMcp.listTools"
+}
+
 // DeleteServerUnproxiedMcpPath returns the URL path to the unproxiedMcp service deleteServer HTTP endpoint.
 func DeleteServerUnproxiedMcpPath() string {
 	return "/rpc/unproxiedMcp.deleteServer"

@@ -19,6 +19,7 @@ type Endpoints struct {
 	CreateServer goa.Endpoint
 	ListServers  goa.Endpoint
 	GetServer    goa.Endpoint
+	ListTools    goa.Endpoint
 	DeleteServer goa.Endpoint
 }
 
@@ -30,6 +31,7 @@ func NewEndpoints(s Service) *Endpoints {
 		CreateServer: NewCreateServerEndpoint(s, a.APIKeyAuth),
 		ListServers:  NewListServersEndpoint(s, a.APIKeyAuth),
 		GetServer:    NewGetServerEndpoint(s, a.APIKeyAuth),
+		ListTools:    NewListToolsEndpoint(s, a.APIKeyAuth),
 		DeleteServer: NewDeleteServerEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -39,6 +41,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateServer = m(e.CreateServer)
 	e.ListServers = m(e.ListServers)
 	e.GetServer = m(e.GetServer)
+	e.ListTools = m(e.ListTools)
 	e.DeleteServer = m(e.DeleteServer)
 }
 
@@ -216,6 +219,65 @@ func NewGetServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 			return nil, err
 		}
 		return s.GetServer(ctx, p)
+	}
+}
+
+// NewListToolsEndpoint returns an endpoint function that calls the method
+// "listTools" of service "unproxiedMcp".
+func NewListToolsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListToolsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListTools(ctx, p)
 	}
 }
 

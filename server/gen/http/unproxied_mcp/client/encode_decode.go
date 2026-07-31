@@ -745,6 +745,247 @@ func DecodeGetServerResponse(decoder func(*http.Response) goahttp.Decoder, resto
 	}
 }
 
+// BuildListToolsRequest instantiates a HTTP request object with method and
+// path set to call the "unproxiedMcp" service "listTools" endpoint
+func (c *Client) BuildListToolsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListToolsUnproxiedMcpPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("unproxiedMcp", "listTools", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListToolsRequest returns an encoder for requests sent to the
+// unproxiedMcp listTools server.
+func EncodeListToolsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*unproxiedmcp.ListToolsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("unproxiedMcp", "listTools", "*unproxiedmcp.ListToolsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListToolsResponse returns a decoder for responses returned by the
+// unproxiedMcp listTools endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeListToolsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListToolsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListToolsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("unproxiedMcp", "listTools", err)
+			}
+			err = ValidateListToolsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("unproxiedMcp", "listTools", err)
+			}
+			res := NewListToolsListUnproxiedMcpServerToolsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListToolsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("unproxiedMcp", "listTools", err)
+			}
+			err = ValidateListToolsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("unproxiedMcp", "listTools", err)
+			}
+			return nil, NewListToolsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListToolsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("unproxiedMcp", "listTools", err)
+			}
+			err = ValidateListToolsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("unproxiedMcp", "listTools", err)
+			}
+			return nil, NewListToolsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListToolsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("unproxiedMcp", "listTools", err)
+			}
+			err = ValidateListToolsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("unproxiedMcp", "listTools", err)
+			}
+			return nil, NewListToolsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListToolsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("unproxiedMcp", "listTools", err)
+			}
+			err = ValidateListToolsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("unproxiedMcp", "listTools", err)
+			}
+			return nil, NewListToolsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListToolsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("unproxiedMcp", "listTools", err)
+			}
+			err = ValidateListToolsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("unproxiedMcp", "listTools", err)
+			}
+			return nil, NewListToolsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListToolsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("unproxiedMcp", "listTools", err)
+			}
+			err = ValidateListToolsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("unproxiedMcp", "listTools", err)
+			}
+			return nil, NewListToolsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListToolsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("unproxiedMcp", "listTools", err)
+			}
+			err = ValidateListToolsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("unproxiedMcp", "listTools", err)
+			}
+			return nil, NewListToolsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListToolsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("unproxiedMcp", "listTools", err)
+				}
+				err = ValidateListToolsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("unproxiedMcp", "listTools", err)
+				}
+				return nil, NewListToolsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListToolsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("unproxiedMcp", "listTools", err)
+				}
+				err = ValidateListToolsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("unproxiedMcp", "listTools", err)
+				}
+				return nil, NewListToolsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("unproxiedMcp", "listTools", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListToolsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("unproxiedMcp", "listTools", err)
+			}
+			err = ValidateListToolsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("unproxiedMcp", "listTools", err)
+			}
+			return nil, NewListToolsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("unproxiedMcp", "listTools", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildDeleteServerRequest instantiates a HTTP request object with method and
 // path set to call the "unproxiedMcp" service "deleteServer" endpoint
 func (c *Client) BuildDeleteServerRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -986,6 +1227,18 @@ func unmarshalUnproxiedMcpServerResponseBodyToTypesUnproxiedMcpServer(v *Unproxi
 		Description: v.Description,
 		CreatedAt:   *v.CreatedAt,
 		UpdatedAt:   *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalUnproxiedMcpServerToolResponseBodyToUnproxiedmcpUnproxiedMcpServerTool
+// builds a value of type *unproxiedmcp.UnproxiedMcpServerTool from a value of
+// type *UnproxiedMcpServerToolResponseBody.
+func unmarshalUnproxiedMcpServerToolResponseBodyToUnproxiedmcpUnproxiedMcpServerTool(v *UnproxiedMcpServerToolResponseBody) *unproxiedmcp.UnproxiedMcpServerTool {
+	res := &unproxiedmcp.UnproxiedMcpServerTool{
+		Name:        *v.Name,
+		Description: v.Description,
 	}
 
 	return res

@@ -19,15 +19,17 @@ type Client struct {
 	CreateServerEndpoint goa.Endpoint
 	ListServersEndpoint  goa.Endpoint
 	GetServerEndpoint    goa.Endpoint
+	ListToolsEndpoint    goa.Endpoint
 	DeleteServerEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "unproxiedMcp" service client given the endpoints.
-func NewClient(createServer, listServers, getServer, deleteServer goa.Endpoint) *Client {
+func NewClient(createServer, listServers, getServer, listTools, deleteServer goa.Endpoint) *Client {
 	return &Client{
 		CreateServerEndpoint: createServer,
 		ListServersEndpoint:  listServers,
 		GetServerEndpoint:    getServer,
+		ListToolsEndpoint:    listTools,
 		DeleteServerEndpoint: deleteServer,
 	}
 }
@@ -96,6 +98,28 @@ func (c *Client) GetServer(ctx context.Context, p *GetServerPayload) (res *types
 		return
 	}
 	return ires.(*types.UnproxiedMcpServer), nil
+}
+
+// ListTools calls the "listTools" endpoint of the "unproxiedMcp" service.
+// ListTools may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListTools(ctx context.Context, p *ListToolsPayload) (res *ListUnproxiedMcpServerToolsResult, err error) {
+	var ires any
+	ires, err = c.ListToolsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListUnproxiedMcpServerToolsResult), nil
 }
 
 // DeleteServer calls the "deleteServer" endpoint of the "unproxiedMcp" service.

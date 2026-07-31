@@ -137,6 +137,45 @@ func BuildGetServerPayload(unproxiedMcpGetServerID string, unproxiedMcpGetServer
 	return v, nil
 }
 
+// BuildListToolsPayload builds the payload for the unproxiedMcp listTools
+// endpoint from CLI flags.
+func BuildListToolsPayload(unproxiedMcpListToolsID string, unproxiedMcpListToolsSessionToken string, unproxiedMcpListToolsApikeyToken string, unproxiedMcpListToolsProjectSlugInput string) (*unproxiedmcp.ListToolsPayload, error) {
+	var err error
+	var id string
+	{
+		id = unproxiedMcpListToolsID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if unproxiedMcpListToolsSessionToken != "" {
+			sessionToken = &unproxiedMcpListToolsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if unproxiedMcpListToolsApikeyToken != "" {
+			apikeyToken = &unproxiedMcpListToolsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if unproxiedMcpListToolsProjectSlugInput != "" {
+			projectSlugInput = &unproxiedMcpListToolsProjectSlugInput
+		}
+	}
+	v := &unproxiedmcp.ListToolsPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildDeleteServerPayload builds the payload for the unproxiedMcp
 // deleteServer endpoint from CLI flags.
 func BuildDeleteServerPayload(unproxiedMcpDeleteServerID string, unproxiedMcpDeleteServerSessionToken string, unproxiedMcpDeleteServerApikeyToken string, unproxiedMcpDeleteServerProjectSlugInput string) (*unproxiedmcp.DeleteServerPayload, error) {

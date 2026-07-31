@@ -94,6 +94,35 @@ var _ = Service("unproxiedMcp", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetUnproxiedMcpServer"}`)
 	})
 
+	Method("listTools", func() {
+		Description("Best-effort discovery of the tools available on the vendor's MCP server. Connects live to the server's URL and issues an MCP tools/list call; the result is never cached and the connection is never reused for actual tool execution.")
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the unproxied MCP server", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListToolsResult)
+
+		HTTP(func() {
+			GET("/rpc/unproxiedMcp.listTools")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listUnproxiedMcpServerTools")
+		Meta("openapi:extension:x-speakeasy-name-override", "listTools")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UnproxiedMcpServerTools"}`)
+	})
+
 	Method("deleteServer", func() {
 		Description("Delete an unproxied MCP server")
 
@@ -166,4 +195,25 @@ var ListServersResult = Type("ListUnproxiedMcpServersResult", func() {
 
 	Attribute("unproxied_mcp_servers", ArrayOf(UnproxiedMcpServer))
 	Required("unproxied_mcp_servers")
+})
+
+var UnproxiedMcpServerTool = Type("UnproxiedMcpServerTool", func() {
+	Description("A tool discovered on the vendor's MCP server")
+
+	Attribute("name", String, "Tool name")
+	Attribute("description", String, "Tool description")
+
+	Required("name")
+})
+
+var ListToolsResult = Type("ListUnproxiedMcpServerToolsResult", func() {
+	Description("Result of a live tool-discovery probe against an unproxied MCP server")
+
+	Attribute("status", String, "Outcome of the discovery attempt", func() {
+		Enum("success", "auth_required", "unreachable", "error")
+	})
+	Attribute("tools", ArrayOf(UnproxiedMcpServerTool))
+	Attribute("message", String, "Human-readable detail, present for non-success statuses")
+
+	Required("status", "tools")
 })

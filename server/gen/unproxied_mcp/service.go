@@ -27,6 +27,11 @@ type Service interface {
 	// Get an unproxied MCP server by ID or slug. Exactly one of id or slug must be
 	// provided.
 	GetServer(context.Context, *GetServerPayload) (res *types.UnproxiedMcpServer, err error)
+	// Best-effort discovery of the tools available on the vendor's MCP server.
+	// Connects live to the server's URL and issues an MCP tools/list call; the
+	// result is never cached and the connection is never reused for actual tool
+	// execution.
+	ListTools(context.Context, *ListToolsPayload) (res *ListUnproxiedMcpServerToolsResult, err error)
 	// Delete an unproxied MCP server
 	DeleteServer(context.Context, *DeleteServerPayload) (err error)
 }
@@ -51,7 +56,7 @@ const ServiceName = "unproxiedMcp"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"createServer", "listServers", "getServer", "deleteServer"}
+var MethodNames = [5]string{"createServer", "listServers", "getServer", "listTools", "deleteServer"}
 
 // CreateServerPayload is the payload type of the unproxiedMcp service
 // createServer method.
@@ -99,10 +104,38 @@ type ListServersPayload struct {
 	ProjectSlugInput *string
 }
 
+// ListToolsPayload is the payload type of the unproxiedMcp service listTools
+// method.
+type ListToolsPayload struct {
+	// The ID of the unproxied MCP server
+	ID               string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListUnproxiedMcpServerToolsResult is the result type of the unproxiedMcp
+// service listTools method.
+type ListUnproxiedMcpServerToolsResult struct {
+	// Outcome of the discovery attempt
+	Status string
+	Tools  []*UnproxiedMcpServerTool
+	// Human-readable detail, present for non-success statuses
+	Message *string
+}
+
 // ListUnproxiedMcpServersResult is the result type of the unproxiedMcp service
 // listServers method.
 type ListUnproxiedMcpServersResult struct {
 	UnproxiedMcpServers []*types.UnproxiedMcpServer
+}
+
+// A tool discovered on the vendor's MCP server
+type UnproxiedMcpServerTool struct {
+	// Tool name
+	Name string
+	// Tool description
+	Description *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -27,6 +28,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
+	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -41,6 +45,7 @@ type Service struct {
 	db     *pgxpool.Pool
 	auth   *auth.Auth
 	authz  *authz.Engine
+	policy *guardian.Policy
 	audit  *audit.Logger
 }
 
@@ -53,6 +58,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	policy *guardian.Policy,
 	auditLogger *audit.Logger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("unproxiedmcp"))
@@ -63,6 +69,7 @@ func NewService(
 		db:     db,
 		auth:   auth.New(logger, db, sessions, authzEngine),
 		authz:  authzEngine,
+		policy: policy,
 		audit:  auditLogger,
 	}
 }
@@ -240,6 +247,89 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 	}
 
 	return mv.BuildUnproxiedMcpServerView(server), nil
+}
+
+// listToolsTimeout bounds the live MCP handshake + tools/list round trip so a
+// slow or unresponsive vendor server can't hang the management API request.
+const listToolsTimeout = 10 * time.Second
+
+func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) (*gen.ListUnproxiedMcpServerToolsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	serverID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id").LogError(ctx, s.logger)
+	}
+
+	server, err := repo.New(s.db).GetServerByID(ctx, repo.GetServerByIDParams{
+		ID:        serverID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "unproxied mcp server not found").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get unproxied mcp server").LogError(ctx, s.logger)
+	}
+
+	probeCtx, cancel := context.WithTimeout(ctx, listToolsTimeout)
+	defer cancel()
+
+	client, err := externalmcp.NewClient(probeCtx, s.logger, s.policy, server.Url, externalmcptypes.TransportTypeStreamableHTTP, nil)
+	if err != nil {
+		var authErr *externalmcp.AuthRejectedError
+		if errors.As(err, &authErr) {
+			return &gen.ListUnproxiedMcpServerToolsResult{
+				Status:  "auth_required",
+				Tools:   []*gen.UnproxiedMcpServerTool{},
+				Message: conv.PtrEmpty("This server requires authentication Gram doesn't manage."),
+			}, nil
+		}
+		return &gen.ListUnproxiedMcpServerToolsResult{
+			Status:  "unreachable",
+			Tools:   []*gen.UnproxiedMcpServerTool{},
+			Message: conv.PtrEmpty("Could not connect to the server."),
+		}, nil
+	}
+	defer o11y.NoLogDefer(client.Close)
+
+	discovered, err := client.ListTools(probeCtx)
+	if err != nil {
+		var authErr *externalmcp.AuthRejectedError
+		if errors.As(err, &authErr) {
+			return &gen.ListUnproxiedMcpServerToolsResult{
+				Status:  "auth_required",
+				Tools:   []*gen.UnproxiedMcpServerTool{},
+				Message: conv.PtrEmpty("This server requires authentication Gram doesn't manage."),
+			}, nil
+		}
+		return &gen.ListUnproxiedMcpServerToolsResult{
+			Status:  "error",
+			Tools:   []*gen.UnproxiedMcpServerTool{},
+			Message: conv.PtrEmpty("The server didn't respond with a valid tool list."),
+		}, nil
+	}
+
+	tools := make([]*gen.UnproxiedMcpServerTool, 0, len(discovered))
+	for _, tool := range discovered {
+		tools = append(tools, &gen.UnproxiedMcpServerTool{
+			Name:        tool.Name,
+			Description: conv.PtrEmpty(tool.Description),
+		})
+	}
+
+	return &gen.ListUnproxiedMcpServerToolsResult{
+		Status:  "success",
+		Tools:   tools,
+		Message: nil,
+	}, nil
 }
 
 func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPayload) error {

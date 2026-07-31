@@ -74,6 +74,16 @@ type GetServerResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// ListToolsResponseBody is the type of the "unproxiedMcp" service "listTools"
+// endpoint HTTP response body.
+type ListToolsResponseBody struct {
+	// Outcome of the discovery attempt
+	Status string                                `form:"status" json:"status" xml:"status"`
+	Tools  []*UnproxiedMcpServerToolResponseBody `form:"tools" json:"tools" xml:"tools"`
+	// Human-readable detail, present for non-success statuses
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+}
+
 // CreateServerUnauthorizedResponseBody is the type of the "unproxiedMcp"
 // service "createServer" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -624,6 +634,188 @@ type GetServerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListToolsUnauthorizedResponseBody is the type of the "unproxiedMcp" service
+// "listTools" endpoint HTTP response body for the "unauthorized" error.
+type ListToolsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsForbiddenResponseBody is the type of the "unproxiedMcp" service
+// "listTools" endpoint HTTP response body for the "forbidden" error.
+type ListToolsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsBadRequestResponseBody is the type of the "unproxiedMcp" service
+// "listTools" endpoint HTTP response body for the "bad_request" error.
+type ListToolsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsNotFoundResponseBody is the type of the "unproxiedMcp" service
+// "listTools" endpoint HTTP response body for the "not_found" error.
+type ListToolsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsConflictResponseBody is the type of the "unproxiedMcp" service
+// "listTools" endpoint HTTP response body for the "conflict" error.
+type ListToolsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsUnsupportedMediaResponseBody is the type of the "unproxiedMcp"
+// service "listTools" endpoint HTTP response body for the "unsupported_media"
+// error.
+type ListToolsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsInvalidResponseBody is the type of the "unproxiedMcp" service
+// "listTools" endpoint HTTP response body for the "invalid" error.
+type ListToolsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsInvariantViolationResponseBody is the type of the "unproxiedMcp"
+// service "listTools" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListToolsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsUnexpectedResponseBody is the type of the "unproxiedMcp" service
+// "listTools" endpoint HTTP response body for the "unexpected" error.
+type ListToolsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolsGatewayErrorResponseBody is the type of the "unproxiedMcp" service
+// "listTools" endpoint HTTP response body for the "gateway_error" error.
+type ListToolsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DeleteServerUnauthorizedResponseBody is the type of the "unproxiedMcp"
 // service "deleteServer" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -829,6 +1021,15 @@ type UnproxiedMcpServerResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// UnproxiedMcpServerToolResponseBody is used to define fields on response body
+// types.
+type UnproxiedMcpServerToolResponseBody struct {
+	// Tool name
+	Name string `form:"name" json:"name" xml:"name"`
+	// Tool description
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+}
+
 // NewCreateServerResponseBody builds the HTTP response body from the result of
 // the "createServer" endpoint of the "unproxiedMcp" service.
 func NewCreateServerResponseBody(res *types.UnproxiedMcpServer) *CreateServerResponseBody {
@@ -876,6 +1077,28 @@ func NewGetServerResponseBody(res *types.UnproxiedMcpServer) *GetServerResponseB
 		Description: res.Description,
 		CreatedAt:   res.CreatedAt,
 		UpdatedAt:   res.UpdatedAt,
+	}
+	return body
+}
+
+// NewListToolsResponseBody builds the HTTP response body from the result of
+// the "listTools" endpoint of the "unproxiedMcp" service.
+func NewListToolsResponseBody(res *unproxiedmcp.ListUnproxiedMcpServerToolsResult) *ListToolsResponseBody {
+	body := &ListToolsResponseBody{
+		Status:  res.Status,
+		Message: res.Message,
+	}
+	if res.Tools != nil {
+		body.Tools = make([]*UnproxiedMcpServerToolResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
+			if val == nil {
+				body.Tools[i] = nil
+				continue
+			}
+			body.Tools[i] = marshalUnproxiedmcpUnproxiedMcpServerToolToUnproxiedMcpServerToolResponseBody(val)
+		}
+	} else {
+		body.Tools = []*UnproxiedMcpServerToolResponseBody{}
 	}
 	return body
 }
@@ -1300,6 +1523,146 @@ func NewGetServerGatewayErrorResponseBody(res *goa.ServiceError) *GetServerGatew
 	return body
 }
 
+// NewListToolsUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "listTools" endpoint of the "unproxiedMcp" service.
+func NewListToolsUnauthorizedResponseBody(res *goa.ServiceError) *ListToolsUnauthorizedResponseBody {
+	body := &ListToolsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsForbiddenResponseBody builds the HTTP response body from the
+// result of the "listTools" endpoint of the "unproxiedMcp" service.
+func NewListToolsForbiddenResponseBody(res *goa.ServiceError) *ListToolsForbiddenResponseBody {
+	body := &ListToolsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsBadRequestResponseBody builds the HTTP response body from the
+// result of the "listTools" endpoint of the "unproxiedMcp" service.
+func NewListToolsBadRequestResponseBody(res *goa.ServiceError) *ListToolsBadRequestResponseBody {
+	body := &ListToolsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsNotFoundResponseBody builds the HTTP response body from the
+// result of the "listTools" endpoint of the "unproxiedMcp" service.
+func NewListToolsNotFoundResponseBody(res *goa.ServiceError) *ListToolsNotFoundResponseBody {
+	body := &ListToolsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsConflictResponseBody builds the HTTP response body from the
+// result of the "listTools" endpoint of the "unproxiedMcp" service.
+func NewListToolsConflictResponseBody(res *goa.ServiceError) *ListToolsConflictResponseBody {
+	body := &ListToolsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "listTools" endpoint of the "unproxiedMcp" service.
+func NewListToolsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListToolsUnsupportedMediaResponseBody {
+	body := &ListToolsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsInvalidResponseBody builds the HTTP response body from the
+// result of the "listTools" endpoint of the "unproxiedMcp" service.
+func NewListToolsInvalidResponseBody(res *goa.ServiceError) *ListToolsInvalidResponseBody {
+	body := &ListToolsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listTools" endpoint of the "unproxiedMcp" service.
+func NewListToolsInvariantViolationResponseBody(res *goa.ServiceError) *ListToolsInvariantViolationResponseBody {
+	body := &ListToolsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsUnexpectedResponseBody builds the HTTP response body from the
+// result of the "listTools" endpoint of the "unproxiedMcp" service.
+func NewListToolsUnexpectedResponseBody(res *goa.ServiceError) *ListToolsUnexpectedResponseBody {
+	body := &ListToolsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolsGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "listTools" endpoint of the "unproxiedMcp" service.
+func NewListToolsGatewayErrorResponseBody(res *goa.ServiceError) *ListToolsGatewayErrorResponseBody {
+	body := &ListToolsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDeleteServerUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "deleteServer" endpoint of the "unproxiedMcp" service.
 func NewDeleteServerUnauthorizedResponseBody(res *goa.ServiceError) *DeleteServerUnauthorizedResponseBody {
@@ -1471,6 +1834,17 @@ func NewGetServerPayload(id *string, slug *string, sessionToken *string, apikeyT
 	v := &unproxiedmcp.GetServerPayload{}
 	v.ID = id
 	v.Slug = slug
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListToolsPayload builds a unproxiedMcp service listTools endpoint payload.
+func NewListToolsPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *unproxiedmcp.ListToolsPayload {
+	v := &unproxiedmcp.ListToolsPayload{}
+	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

@@ -6,8 +6,10 @@ import { unproxiedMcpCreateServer } from "../funcs/unproxiedMcpCreateServer.js";
 import { unproxiedMcpDeleteServer } from "../funcs/unproxiedMcpDeleteServer.js";
 import { unproxiedMcpGetServer } from "../funcs/unproxiedMcpGetServer.js";
 import { unproxiedMcpListServers } from "../funcs/unproxiedMcpListServers.js";
+import { unproxiedMcpListTools } from "../funcs/unproxiedMcpListTools.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ListUnproxiedMcpServersResult } from "../models/components/listunproxiedmcpserversresult.js";
+import { ListUnproxiedMcpServerToolsResult } from "../models/components/listunproxiedmcpservertoolsresult.js";
 import { UnproxiedMcpServer } from "../models/components/unproxiedmcpserver.js";
 import {
   CreateUnproxiedMcpServerRequest,
@@ -25,6 +27,10 @@ import {
   ListUnproxiedMcpServersRequest,
   ListUnproxiedMcpServersSecurity,
 } from "../models/operations/listunproxiedmcpservers.js";
+import {
+  ListUnproxiedMcpServerToolsRequest,
+  ListUnproxiedMcpServerToolsSecurity,
+} from "../models/operations/listunproxiedmcpservertools.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class UnproxiedMcp extends ClientSDK {
@@ -97,6 +103,25 @@ export class UnproxiedMcp extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListUnproxiedMcpServersResult> {
     return unwrapAsync(unproxiedMcpListServers(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listTools unproxiedMcp
+   *
+   * @remarks
+   * Best-effort discovery of the tools available on the vendor's MCP server. Connects live to the server's URL and issues an MCP tools/list call; the result is never cached and the connection is never reused for actual tool execution.
+   */
+  async listTools(
+    request: ListUnproxiedMcpServerToolsRequest,
+    security?: ListUnproxiedMcpServerToolsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListUnproxiedMcpServerToolsResult> {
+    return unwrapAsync(unproxiedMcpListTools(
       this,
       request,
       security,
