@@ -783,6 +783,7 @@ trackedFiles:
   src/models/components/getunproxiedmcpserveruserusageresult.ts: {}
   src/models/components/getusermetricssummarypayload.ts: {}
   src/models/components/getusermetricssummaryresult.ts: {}
+  src/models/components/globalremotesessionissuer.ts: {}
   src/models/components/hookingestdata.ts: {}
   src/models/components/hookingestevent.ts: {}
   src/models/components/hookingestsession.ts: {}
@@ -839,6 +840,7 @@ trackedFiles:
   src/models/components/listexternalkeysresult.ts: {}
   src/models/components/listfilteroptionspayload.ts: {}
   src/models/components/listfilteroptionsresult.ts: {}
+  src/models/components/listglobalremotesessionissuersresult.ts: {}
   src/models/components/listhookstracespayload.ts: {}
   src/models/components/listhookstracesresult.ts: {}
   src/models/components/listinstancesresponsebody.ts: {}
@@ -4534,7 +4536,7 @@ examples:
           id: "a899ca0f-2b91-4146-9aff-dbd0c0087f45"
       responses:
         "200":
-          application/json: {"client_id_metadata_document_supported": true, "created_at": "2024-09-21T00:29:22.321Z", "id": "484ce2ae-3cba-4802-8681-3057f85d5400", "issuer": "visa", "oidc": false, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2024-05-29T08:53:02.458Z"}
+          application/json: {"global_client_count": 657816, "issuer": {"client_id_metadata_document_supported": false, "created_at": "2025-09-20T02:13:20.950Z", "id": "9ca0f2b9-1146-4aff-9dbd-0c0087f45733", "issuer": "jcb", "oidc": true, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2026-08-26T07:24:26.250Z"}, "tenant_client_count": 130641}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -5792,7 +5794,7 @@ examples:
     speakeasy-default-list-global-remote-session-issuers:
       responses:
         "200":
-          application/json: {"items": [{"client_id_metadata_document_supported": true, "created_at": "2024-05-22T08:48:16.381Z", "id": "60abf4f3-2ba4-4095-a193-907bea3d776c", "issuer": "discover", "oidc": true, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2024-02-28T08:57:47.917Z"}]}
+          application/json: {"items": [{"global_client_count": 704193, "issuer": {"client_id_metadata_document_supported": true, "created_at": "2024-05-22T08:48:16.381Z", "id": "60abf4f3-2ba4-4095-a193-907bea3d776c", "issuer": "discover", "oidc": true, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2024-02-28T08:57:47.917Z"}, "tenant_client_count": 505016}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

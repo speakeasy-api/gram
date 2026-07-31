@@ -338,7 +338,7 @@ func DecodeListGlobalIssuersResponse(decoder func(*http.Response) goahttp.Decode
 			if err != nil {
 				return nil, goahttp.ErrValidationError("adminRemoteSessions", "listGlobalIssuers", err)
 			}
-			res := NewListGlobalIssuersListRemoteSessionIssuersResultOK(&body)
+			res := NewListGlobalIssuersListGlobalRemoteSessionIssuersResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -572,7 +572,7 @@ func DecodeGetGlobalIssuerResponse(decoder func(*http.Response) goahttp.Decoder,
 			if err != nil {
 				return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuer", err)
 			}
-			res := NewGetGlobalIssuerRemoteSessionIssuerOK(&body)
+			res := NewGetGlobalIssuerGlobalRemoteSessionIssuerOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -2819,6 +2819,19 @@ func DecodeDeleteGlobalClientResponse(decoder func(*http.Response) goahttp.Decod
 			return nil, goahttp.ErrInvalidResponse("adminRemoteSessions", "deleteGlobalClient", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// unmarshalGlobalRemoteSessionIssuerResponseBodyToAdminremotesessionsGlobalRemoteSessionIssuer
+// builds a value of type *adminremotesessions.GlobalRemoteSessionIssuer from a
+// value of type *GlobalRemoteSessionIssuerResponseBody.
+func unmarshalGlobalRemoteSessionIssuerResponseBodyToAdminremotesessionsGlobalRemoteSessionIssuer(v *GlobalRemoteSessionIssuerResponseBody) *adminremotesessions.GlobalRemoteSessionIssuer {
+	res := &adminremotesessions.GlobalRemoteSessionIssuer{
+		GlobalClientCount: *v.GlobalClientCount,
+		TenantClientCount: *v.TenantClientCount,
+	}
+	res.Issuer = unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v.Issuer)
+
+	return res
 }
 
 // unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer builds a

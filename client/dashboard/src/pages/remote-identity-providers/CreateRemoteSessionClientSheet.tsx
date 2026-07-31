@@ -22,6 +22,7 @@ import type { RemoteSessionIssuer } from "@gram/client/models/components/remotes
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { invalidateAllOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
+import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
@@ -231,9 +232,18 @@ export function CreateRemoteSessionClientSheet({
       return { unsupportedDcrAuthMethod };
     },
     onSuccess: async ({ unsupportedDcrAuthMethod }) => {
-      await invalidateAllOrganizationRemoteSessionClients(queryClient, {
-        refetchType: "all",
-      });
+      await Promise.all([
+        invalidateAllOrganizationRemoteSessionClients(queryClient, {
+          refetchType: "all",
+        }),
+        // The issuer listing carries a per-issuer client count, so creating a
+        // client makes that number stale. It shows on the same screen as this
+        // sheet when the operator starts from the provider list's Add Client
+        // action, and on back-navigation from the Clients tab.
+        invalidateAllOrganizationRemoteSessionIssuers(queryClient, {
+          refetchType: "all",
+        }),
+      ]);
       toast.success("Client created");
       if (unsupportedDcrAuthMethod) {
         toast.warning(
