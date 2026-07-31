@@ -172,6 +172,7 @@ func (w *ChatMessageWriter) Write(ctx context.Context, projectID uuid.UUID, para
 		return 0, err
 	}
 	if n > 0 {
+		w.publishTurnFrames(ctx, nil, params)
 		w.notifyMessagesStored(ctx, projectID)
 	}
 	return n, nil
@@ -259,6 +260,7 @@ func (w *ChatMessageWriter) WriteWithAssets(ctx context.Context, projectID uuid.
 	if err := w.storeMessages(ctx, w.db, rows); err != nil {
 		return err
 	}
+	w.publishRowFrames(ctx, rows)
 	w.notifyMessagesStored(ctx, projectID)
 	return nil
 }

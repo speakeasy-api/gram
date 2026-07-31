@@ -89,20 +89,12 @@ func (w *ChatMessageWriter) publishTurnFrames(
 // tool calls the runner still has to answer, and the model stopped of its own
 // accord rather than being cut off.
 func isTerminalAssistantRow(msg repo.CreateChatMessageParams) bool {
-	if len(msg.ToolCalls) > 0 {
-		var calls []json.RawMessage
-		if err := json.Unmarshal(msg.ToolCalls, &calls); err == nil && len(calls) > 0 {
-			return false
-		}
-	}
-	switch msg.FinishReason.String {
-	case "stop", "end_turn", "":
-		return true
-	default:
-		// length, content_filter, tool_calls — the turn is not cleanly done,
-		// so leave the stream open and let the client's resync decide.
+	if !isTerminalRow(msg.ToolCalls, "stop") {
 		return false
 	}
+	// length, content_filter, tool_calls mean the turn is not cleanly done, so
+	// the stream stays open and the client's resync decides.
+	return isTerminalRow(nil, msg.FinishReason.String)
 }
 
 func (w *ChatMessageWriter) publishTurnFrame(ctx context.Context, chatID uuid.UUID, frame TurnFrame) {
@@ -124,4 +116,61 @@ func marshalToolOutput(row chatMessageRow) json.RawMessage {
 		return nil
 	}
 	return encoded
+}
+
+// publishRowFrames emits frames for rows persisted through the row-shaped write
+// paths. Assistant turns reach the database through several of them — the
+// capture strategy writes pending rows, assistant rows and whole turns
+// separately — so every path publishes rather than relying on one funnel.
+func (w *ChatMessageWriter) publishRowFrames(ctx context.Context, rows []chatMessageRow) {
+	if w == nil || w.turnStream == nil {
+		return
+	}
+	for _, row := range rows {
+		switch row.role {
+		case "tool":
+			if row.toolCallID == "" {
+				continue
+			}
+			w.publishTurnFrame(ctx, row.chatID, TurnFrame{
+				Kind: TurnFrameToolOutput, Cursor: "", Text: "", MessageID: "",
+				ToolCalls: nil, FinishReason: "", ToolCallID: row.toolCallID,
+				Output: marshalToolOutput(row),
+			})
+		case "assistant":
+			finish := ""
+			if row.finishReason != nil {
+				finish = *row.finishReason
+			}
+			w.publishTurnFrame(ctx, row.chatID, TurnFrame{
+				Kind: TurnFrameMessage, Cursor: "", Text: "", MessageID: row.messageID,
+				ToolCalls: json.RawMessage(row.toolCalls), FinishReason: finish,
+				ToolCallID: "", Output: nil,
+			})
+			if isTerminalRow(row.toolCalls, finish) {
+				w.publishTurnFrame(ctx, row.chatID, TurnFrame{
+					Kind: TurnFrameDone, Cursor: "", Text: "", MessageID: row.messageID,
+					ToolCalls: nil, FinishReason: finish, ToolCallID: "", Output: nil,
+				})
+			}
+		}
+	}
+}
+
+// isTerminalRow reports whether a persisted assistant row ends the turn: no
+// tool calls left for the runner to answer, and the model stopped of its own
+// accord rather than being cut off.
+func isTerminalRow(toolCalls []byte, finishReason string) bool {
+	if len(toolCalls) > 0 {
+		var calls []json.RawMessage
+		if err := json.Unmarshal(toolCalls, &calls); err == nil && len(calls) > 0 {
+			return false
+		}
+	}
+	switch finishReason {
+	case "stop", "end_turn", "":
+		return true
+	default:
+		return false
+	}
 }
