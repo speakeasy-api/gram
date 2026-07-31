@@ -68,9 +68,9 @@ func TestWeeklyUsageSummaryWorkflow_ContinuesAsNewNearRunTimeout(t *testing.T) {
 
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
-	// With the run timeout equal to the reserved worst-case send window, the
-	// guard trips right after the first send.
-	env.SetWorkflowRunTimeout(weeklyUsageSummarySendWorstCaseRetryWindow)
+	// With the run timeout equal to the reserved activity budget, the guard
+	// trips right after the first send.
+	env.SetWorkflowRunTimeout(weeklyUsageSummaryActivityBudget)
 
 	env.RegisterActivityWithOptions(
 		func(_ context.Context) ([]activities.WeeklyUsageSummaryTarget, error) {

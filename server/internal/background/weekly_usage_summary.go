@@ -19,11 +19,13 @@ const (
 	weeklyUsageSummaryScheduleID = "v1:weekly-usage-summary-schedule"
 	weeklyUsageSummaryWorkflowID = "v1:weekly-usage-summary-schedule/scheduled"
 	weeklyUsageSummaryRunTimeout = 30 * time.Minute
-	// Worst-case wall clock for one send activity across its full retry
-	// budget: 3 attempts × 2m StartToClose plus 10s+20s backoff and Temporal
-	// jitter. The ContinueAsNew guard reserves this much headroom so a run
-	// never starts a send it cannot finish within the run timeout.
-	weeklyUsageSummarySendWorstCaseRetryWindow = 7 * time.Minute
+	// End-to-end budget for one activity: queue delay plus every retry
+	// attempt (3 × 2m StartToClose with 10s+20s backoff and Temporal
+	// jitter). Enforced as ScheduleToCloseTimeout — so a queued or retrying
+	// activity cannot outlive it — and reserved as headroom by the
+	// ContinueAsNew guard, so a run never starts an activity it cannot see
+	// finish within the run timeout.
+	weeklyUsageSummaryActivityBudget = 7 * time.Minute
 )
 
 // WeeklyUsageSummaryInput carries the sweep's state across ContinueAsNew
@@ -48,7 +50,8 @@ type WeeklyUsageSummaryInput struct {
 // target instead of being terminated mid-sweep.
 func WeeklyUsageSummaryWorkflow(ctx workflow.Context, input WeeklyUsageSummaryInput) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 2 * time.Minute,
+		StartToCloseTimeout:    2 * time.Minute,
+		ScheduleToCloseTimeout: weeklyUsageSummaryActivityBudget,
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts:    3,
 			InitialInterval:    10 * time.Second,
@@ -110,8 +113,8 @@ func WeeklyUsageSummaryWorkflow(ctx workflow.Context, input WeeklyUsageSummaryIn
 
 // shouldContinueWeeklyUsageSummaryAsNew reports whether the sweep should
 // hand off to a fresh run: either Temporal suggests it (history growth) or
-// the elapsed run time leaves less than one worst-case send window before
-// the run timeout.
+// the elapsed run time leaves less than one activity budget before the run
+// timeout.
 func shouldContinueWeeklyUsageSummaryAsNew(ctx workflow.Context) bool {
 	info := workflow.GetInfo(ctx)
 	if info.GetContinueAsNewSuggested() {
@@ -127,7 +130,7 @@ func shouldContinueWeeklyUsageSummaryAsNew(ctx workflow.Context) bool {
 	}
 
 	elapsed := workflow.Now(ctx).Sub(info.WorkflowStartTime)
-	return elapsed+weeklyUsageSummarySendWorstCaseRetryWindow >= runTimeout
+	return elapsed+weeklyUsageSummaryActivityBudget >= runTimeout
 }
 
 // AddWeeklyUsageSummarySchedule fires the sweep every Monday at 16:00 UTC —
