@@ -256,6 +256,10 @@ func chListRowToResult(row chrepo.RiskFindingListRow, titles map[uuid.UUID]strin
 		Tags:              tags,
 		Spans:             nil,
 		MatchRedacted:     conv.PtrEmpty(row.MatchRedacted),
+		// The ClickHouse listing filters false_positive_at IS NULL, so a
+		// served row is never dismissed; only ListDismissedRiskResults
+		// populates this.
+		FalsePositiveAt: nil,
 		// Message event time, not scan time: the Postgres listing exposes
 		// message_created_at as CreatedAt, and the sort order and cursor both
 		// key on it.
