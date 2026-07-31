@@ -182,6 +182,7 @@ func ManagedAssistantRiskTools(riskSvc platformrisk.RiskService) []platformtools
 		{Executor: platformrisk.NewListRiskResultsForAgentTool(riskSvc), RequiredFeature: ""},
 		{Executor: platformrisk.NewListRiskResultsByChatTool(riskSvc), RequiredFeature: ""},
 		{Executor: platformrisk.NewGetRiskPolicyStatusTool(riskSvc), RequiredFeature: ""},
+		{Executor: platformrisk.NewGetRiskRuleBreakdownTool(riskSvc), RequiredFeature: ""},
 		{Executor: platformrisk.NewListRiskExclusionsTool(riskSvc), RequiredFeature: ""},
 		{Executor: platformrisk.NewCreateRiskExclusionTool(riskSvc), RequiredFeature: ""},
 		{Executor: platformrisk.NewMarkRiskResultsFalsePositiveTool(riskSvc), RequiredFeature: ""},

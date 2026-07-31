@@ -16,6 +16,7 @@ type RiskService interface {
 	ListRiskResultsForAgent(ctx context.Context, payload *risk.ListRiskResultsForAgentPayload) (*risk.ListRiskResultsForAgentResult, error)
 	ListRiskResultsByChat(ctx context.Context, payload *risk.ListRiskResultsByChatPayload) (*risk.ListRiskResultsByChatResult, error)
 	GetRiskPolicyStatus(ctx context.Context, payload *risk.GetRiskPolicyStatusPayload) (*types.RiskPolicyStatus, error)
+	GetRiskRuleBreakdown(ctx context.Context, payload *risk.GetRiskRuleBreakdownPayload) (*risk.RiskRuleBreakdownResult, error)
 	ListRiskExclusions(ctx context.Context, payload *risk.ListRiskExclusionsPayload) (*risk.ListRiskExclusionsResult, error)
 	CreateRiskExclusion(ctx context.Context, payload *risk.CreateRiskExclusionPayload) (*types.RiskExclusion, error)
 	MarkRiskResultsFalsePositive(ctx context.Context, payload *risk.MarkRiskResultsFalsePositivePayload) error
