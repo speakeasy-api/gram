@@ -78,14 +78,21 @@ import { PublishDialog } from "./PublishDialog";
 import { SectionEmptyState } from "./SectionEmptyState";
 
 // A selectable server for a plugin, sourced from either a toolset (Hosted) or
-// a Remote MCP-backed mcp_server. The kind determines whether it is submitted
-// as a toolset_id or an mcp_server_id, mirroring the collections picker.
+// a Remote- or pass-through-MCP-backed mcp_server. The kind determines
+// whether it is submitted as a toolset_id or an mcp_server_id, mirroring the
+// collections picker.
 type ServerOptionKind = "toolset" | "mcpServer";
 type ServerOption = {
   kind: ServerOptionKind;
   id: string;
   name: string;
+  isPassthrough?: boolean;
 };
+
+function serverOptionSuffix(option: ServerOption): string {
+  if (option.kind !== "mcpServer") return "";
+  return option.isPassthrough ? " (Pass-through MCP)" : " (Remote MCP)";
+}
 
 function serverOptionKey(kind: ServerOptionKind, id: string): string {
   return `${kind}:${id}`;
@@ -380,6 +387,7 @@ export default function PluginDetail(): JSX.Element | null {
         kind: "mcpServer",
         id: s.id,
         name: s.name ?? s.slug ?? "Untitled server",
+        isPassthrough: !!s.passthroughMcpServerId,
       });
     }
     return opts;
@@ -898,7 +906,7 @@ export default function PluginDetail(): JSX.Element | null {
                         value={serverOptionKey(o.kind, o.id)}
                       >
                         {o.name}
-                        {o.kind === "mcpServer" ? " (Remote MCP)" : ""}
+                        {serverOptionSuffix(o)}
                       </option>
                     ))}
                   </select>
@@ -1171,10 +1179,12 @@ function PluginServerCard({
             </Badge>
           )}
           {isRemote ? (
-            // Remote MCP servers have no Gram-side tool catalog, so the
-            // tool-collection badge is omitted.
+            // Remote/pass-through MCP servers have no Gram-side tool
+            // catalog, so the tool-collection badge is omitted.
             <Badge variant="neutral" className="text-xs">
-              Remote MCP
+              {mcpServer?.passthroughMcpServerId
+                ? "Pass-through MCP · Not proxied"
+                : "Remote MCP"}
             </Badge>
           ) : toolset ? (
             <ToolCollectionBadge toolNames={toolset.tools.map((t) => t.name)} />
