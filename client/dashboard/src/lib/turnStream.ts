@@ -1,0 +1,220 @@
+import { getServerURL } from "@/lib/utils";
+import type { UIMessage, UIMessageStreamWriter } from "ai";
+
+/**
+ * Consumes a chat's turn frames and renders them.
+ *
+ * This replaces polling `chat.load` for the duration of a turn. The server
+ * publishes a frame for everything the dashboard needs — text as it is
+ * generated, each persisted assistant row with its tool calls, each tool
+ * result, and a terminal frame — so nothing has to be discovered by asking
+ * again.
+ *
+ * Losslessness comes from the cursor. Every frame carries one, and a
+ * reconnect resumes with the last cursor applied, so the server replays what
+ * was missed before sending anything new. Without that, dropping the poll
+ * would mean a dropped connection loses a turn.
+ */
+
+const RECONNECT_DELAY_MS = 400;
+const MAX_RECONNECTS = 5;
+
+interface TurnFrame {
+  kind: "text" | "message" | "tool_output" | "done";
+  cursor?: string;
+  text?: string;
+  message_id?: string;
+  tool_calls?: unknown;
+  finish_reason?: string;
+  tool_call_id?: string;
+  output?: unknown;
+}
+
+interface ParsedToolCall {
+  id: string;
+  name: string;
+  input: unknown;
+}
+
+function parseFrameToolCalls(raw: unknown): ParsedToolCall[] {
+  if (!Array.isArray(raw)) return [];
+  const calls: ParsedToolCall[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const call = entry as {
+      id?: string;
+      function?: { name?: string; arguments?: string };
+    };
+    if (!call.id || !call.function?.name) continue;
+    let input: unknown = {};
+    try {
+      input = call.function.arguments
+        ? JSON.parse(call.function.arguments)
+        : {};
+    } catch {
+      // A tool call whose arguments are still malformed is worth surfacing
+      // with an empty input rather than dropping: the user sees the call.
+      input = {};
+    }
+    calls.push({ id: call.id, name: call.function.name, input });
+  }
+  return calls;
+}
+
+/**
+ * Streams one turn to the writer, returning when the turn is terminal.
+ *
+ * Reconnects transparently on a dropped connection, resuming from the last
+ * cursor. Throws only when it cannot deliver the turn at all, which the caller
+ * turns into a resync.
+ */
+export async function streamTurn(args: {
+  chatId: string;
+  writer: UIMessageStreamWriter<UIMessage>;
+  abortSignal?: AbortSignal;
+}): Promise<void> {
+  const { chatId, writer, abortSignal } = args;
+
+  let cursor = "";
+  let reconnects = 0;
+  // Each persisted assistant row opens its own step, so the turn's final,
+  // text-only row lands in a step with no tool calls — assistant-ui's resume
+  // check inspects the last step, and a step carrying resolved tool calls
+  // makes it re-send a turn the server already finished.
+  let stepOpen = false;
+  // Text arrives before the row that will contain it, so the part id is per
+  // message index rather than per row id.
+  let messageIndex = 0;
+  let sawTextThisMessage = false;
+
+  const closeStep = () => {
+    if (stepOpen) {
+      writer.write({ type: "finish-step" });
+      stepOpen = false;
+    }
+  };
+  const openStep = () => {
+    if (!stepOpen) {
+      writer.write({ type: "start-step" });
+      stepOpen = true;
+    }
+  };
+
+  try {
+    for (;;) {
+      if (abortSignal?.aborted) {
+        throw new DOMException("Aborted", "AbortError");
+      }
+
+      const url = new URL(`${getServerURL()}/chat/turnstream`);
+      url.searchParams.set("chat_id", chatId);
+      if (cursor) url.searchParams.set("after", cursor);
+
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          credentials: "include",
+          signal: abortSignal,
+          headers: { accept: "text/event-stream" },
+        });
+      } catch (err) {
+        if (abortSignal?.aborted) throw err;
+        if (++reconnects > MAX_RECONNECTS) throw err;
+        await new Promise((r) => setTimeout(r, RECONNECT_DELAY_MS));
+        continue;
+      }
+      if (!response.ok || !response.body) {
+        if (++reconnects > MAX_RECONNECTS) {
+          throw new Error(`turn stream failed: ${response.status}`);
+        }
+        await new Promise((r) => setTimeout(r, RECONNECT_DELAY_MS));
+        continue;
+      }
+      reconnects = 0;
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let done = false;
+
+      while (!done) {
+        const { done: finished, value } = await reader.read();
+        if (finished) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Frames are separated by a blank line; a trailing partial frame stays
+        // buffered until the rest of it arrives.
+        const chunks = buffer.split("\n\n");
+        buffer = chunks.pop() ?? "";
+
+        for (const chunk of chunks) {
+          const line = chunk.split("\n").find((l) => l.startsWith("data: "));
+          if (!line) continue;
+          let frame: TurnFrame;
+          try {
+            frame = JSON.parse(line.slice("data: ".length)) as TurnFrame;
+          } catch {
+            continue;
+          }
+          if (frame.cursor) cursor = frame.cursor;
+
+          switch (frame.kind) {
+            case "text": {
+              if (!frame.text) break;
+              openStep();
+              sawTextThisMessage = true;
+              writer.write({
+                type: "text-delta",
+                id: `turn-${chatId}-${messageIndex}`,
+                delta: frame.text,
+              });
+              break;
+            }
+            case "message": {
+              // The row for the text just streamed. Its tool calls are the new
+              // information; the text is already rendered, so it is not
+              // re-emitted.
+              openStep();
+              for (const call of parseFrameToolCalls(frame.tool_calls)) {
+                writer.write({
+                  type: "tool-input-available",
+                  toolCallId: call.id,
+                  toolName: call.name,
+                  input: call.input,
+                });
+              }
+              closeStep();
+              if (sawTextThisMessage) messageIndex++;
+              sawTextThisMessage = false;
+              break;
+            }
+            case "tool_output": {
+              if (!frame.tool_call_id) break;
+              writer.write({
+                type: "tool-output-available",
+                toolCallId: frame.tool_call_id,
+                output: frame.output ?? "",
+              });
+              break;
+            }
+            case "done": {
+              done = true;
+              break;
+            }
+          }
+          if (done) break;
+        }
+      }
+
+      if (done) return;
+      // The server closed without a terminal frame — the turn is still
+      // running, so resume from the cursor rather than treating it as over.
+      if (++reconnects > MAX_RECONNECTS) {
+        throw new Error("turn stream ended before the turn finished");
+      }
+      await new Promise((r) => setTimeout(r, RECONNECT_DELAY_MS));
+    }
+  } finally {
+    closeStep();
+  }
+}
