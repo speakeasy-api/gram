@@ -50,6 +50,10 @@ export function useServerAssistantTransport(
   const client = useGramContext();
   const organization = useOrganization();
   const { session } = useSession();
+  // The transport outlives any single session value, so it reads through a ref
+  // instead of closing over one.
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
   const { hasScope, isLoading: rbacLoading } = useRBAC();
 
   // The hook can be called with a projectSlug that differs from the URL-active
@@ -145,9 +149,9 @@ export function useServerAssistantTransport(
       assistantId,
       projectSlug,
       // The turn stream authenticates from headers, not cookies.
-      sessionToken: session,
+      getSessionToken: () => sessionRef.current,
     });
-  }, [ready, client, assistantId, projectSlug, session]);
+  }, [ready, client, assistantId, projectSlug]);
 
   return { transport, assistantId, ready, error, needsAdmin };
 }

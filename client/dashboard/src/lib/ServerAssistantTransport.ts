@@ -47,11 +47,15 @@ export interface ServerAssistantTransportDeps {
   /** Project slug for the Gram-Project header on sendMessage. */
   projectSlug: string;
   /**
-   * `Gram-Session` token for the turn stream. The /chat/* routes authenticate
-   * from request headers rather than cookies, so without this the stream 401s
-   * and every turn silently falls back to polling.
+   * Reads the caller's current `Gram-Session` token. The /chat/* routes
+   * authenticate from request headers rather than cookies, so without it the
+   * stream 401s and every turn silently falls back to polling.
+   *
+   * A getter rather than a value: the transport is built once, while the
+   * session resolves asynchronously, so capturing the token would pin
+   * whatever it was at construction — usually empty.
    */
-  sessionToken?: string;
+  getSessionToken?: () => string | undefined;
   /** Optional poll tuning. */
   pollIntervalMs?: number;
   pollTimeoutMs?: number;
