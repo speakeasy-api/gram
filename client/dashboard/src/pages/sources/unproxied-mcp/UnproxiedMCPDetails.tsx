@@ -5,9 +5,13 @@ import {
   SourceInfoRow,
   SourceInfoTable,
 } from "@/components/sources/SourceInfoTable";
-import { CopyButton } from "@/components/ui/copy-button";
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Dialog } from "@/components/ui/Dialog";
+import { Heading } from "@/components/ui/Heading";
+import { Stack } from "@/components/ui/Stack";
+import { Text } from "@/components/ui/Text";
 import { dateTimeFormatters } from "@/lib/dates";
 import {
   formatRemoteMcpDisplay,
@@ -18,7 +22,6 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { UnproxiedMcpServer } from "@gram/client/models/components/unproxiedmcpserver.js";
 import { useGetUnproxiedMcpServer } from "@gram/client/react-query/getUnproxiedMcpServer.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
-import { Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { Server, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Navigate, useParams } from "react-router";
@@ -79,28 +82,28 @@ export default function UnproxiedMCPDetails(): JSX.Element {
             {server && (
               <SourceInfoTable>
                 <SourceInfoRow label="URL">
-                  <Type small className="break-all">
+                  <Text small className="break-all">
                     {server.url}
-                  </Type>
+                  </Text>
                 </SourceInfoRow>
                 {server.description && (
                   <SourceInfoRow label="Description">
-                    <Type small>{server.description}</Type>
+                    <Text small>{server.description}</Text>
                   </SourceInfoRow>
                 )}
                 <SourceInfoRow label="Created">
-                  <Type small muted>
+                  <Text small muted>
                     {dateTimeFormatters.full.format(new Date(server.createdAt))}
-                  </Type>
+                  </Text>
                 </SourceInfoRow>
               </SourceInfoTable>
             )}
 
-            <Type muted small>
+            <Text muted small>
               This server is listed but never proxied — Gram doesn&apos;t fetch
               its URL or manage OAuth for it. Customers connect to the vendor
               directly.
-            </Type>
+            </Text>
 
             <RequireScope scope="mcp:write" level="component">
               {({ disabled }) => (
@@ -174,7 +177,7 @@ function UnproxiedMcpHero({
             <Badge.Text>Unproxied MCP · Not proxied</Badge.Text>
           </Badge>
           {server && (
-            <CopyButton text={server.url} tooltip="Copy URL" size="icon-sm" />
+            <CopyButton text={server.url} tooltip="Copy URL" size="xs" />
           )}
         </Stack>
       </Stack>

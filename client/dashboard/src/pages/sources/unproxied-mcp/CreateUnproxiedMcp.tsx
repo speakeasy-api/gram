@@ -1,12 +1,15 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
-import { Type } from "@/components/ui/type";
+import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Heading } from "@/components/ui/Heading";
+import { Input } from "@/components/ui/Input";
+import { Stack } from "@/components/ui/Stack";
+import { Text } from "@/components/ui/Text";
 import { useIsSpeakeasyStaff } from "@/contexts/Auth";
 import { mcpServerRouteParam, validateMcpServerUrl } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import { Alert, Badge, Button, Stack } from "@speakeasy-api/moonshine";
 import { AlertCircle, Loader2, Server } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -29,10 +32,10 @@ export default function CreateUnproxiedMcp(): JSX.Element {
         <Page.Body>
           <Stack gap={3} className="max-w-2xl">
             <Heading variant="h3">Speakeasy staff only</Heading>
-            <Type muted>
+            <Text muted>
               Unproxied MCP servers are restricted to Speakeasy staff while we
               validate this workflow.
-            </Type>
+            </Text>
             <div>
               <Button variant="secondary" onClick={() => routes.sources.goTo()}>
                 <Button.Text>Back to Sources</Button.Text>
@@ -110,12 +113,12 @@ function CreateUnproxiedMcpForm() {
             <Badge variant="neutral">Speakeasy staff only</Badge>
           </Stack>
         </Stack>
-        <Type muted>
+        <Text muted>
           List a vendor&apos;s MCP server without proxying it. Gram never
           fetches this URL or manages OAuth for it — the customer connects to
           the vendor directly. Use this to sidestep per-vendor OAuth callback
           allowlisting for servers we don&apos;t need to proxy.
-        </Type>
+        </Text>
       </Stack>
 
       <form
