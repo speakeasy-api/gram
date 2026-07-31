@@ -147,7 +147,7 @@ const BrandSlot = React.forwardRef<
 BrandSlot.displayName = "BrandSlot";
 
 const buttonVariants = cva(
-  "relative inline-flex items-center justify-center whitespace-nowrap text-sm font-mono tracking-[0.01em] transition-all select-none cursor-pointer focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-[var(--bg-surface-primary-default)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "relative inline-flex items-center justify-center whitespace-nowrap text-sm font-mono tracking-[-0.01em] transition-all select-none cursor-pointer focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-[var(--bg-surface-primary-default)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       context: {
@@ -160,7 +160,7 @@ const buttonVariants = cva(
         primary:
           "bg-btn-primary text-btn-primary shadow-[0px_2px_1px_0px_rgba(255,255,255,0.1)_inset,0px_-2px_1px_0px_rgba(0,0,0,0.2)_inset] hover:bg-btn-primary-hover hover:text-btn-primary-hover hover:shadow-[0px_2px_1px_0px_rgba(255,255,255,0.08)_inset,0px_-2px_1px_0px_rgba(0,0,0,0.25)_inset] active:bg-btn-primary-active active:text-btn-primary-active active:shadow-none disabled:bg-btn-primary-disabled disabled:text-btn-primary-disabled",
         secondary:
-          "bg-btn-secondary text-btn-secondary shadow-[0px_2px_1px_0px_rgba(255,255,255,0.25)_inset,0px_-2px_1px_0px_rgba(0,0,0,0.1)_inset] hover:bg-btn-secondary-hover hover:text-btn-secondary-hover hover:shadow-[0px_2px_1px_0px_rgba(255,255,255,0.2)_inset,0px_-2px_1px_0px_rgba(0,0,0,0.15)_inset] active:bg-btn-secondary-active active:text-btn-secondary-active active:shadow-none disabled:bg-btn-secondary-disabled disabled:text-btn-secondary-disabled",
+          "border border-neutral-default bg-transparent text-btn-secondary hover:border-neutral-hover hover:bg-btn-secondary hover:text-btn-secondary-hover active:border-neutral-active active:bg-btn-secondary-hover active:text-btn-secondary-active disabled:border-neutral-disabled disabled:bg-transparent disabled:text-btn-secondary-disabled",
         tertiary:
           "bg-transparent text-btn-tertiary hover:bg-btn-secondary-hover hover:text-btn-tertiary-hover active:bg-btn-secondary-active active:text-btn-tertiary-active disabled:text-btn-tertiary-disabled",
         "destructive-primary":
