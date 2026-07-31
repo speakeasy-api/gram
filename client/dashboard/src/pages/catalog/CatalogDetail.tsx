@@ -29,7 +29,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useMemo, useState } from "react";
+import { ReactNode, useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router";
 
 // Map of server specifiers to their website URLs
@@ -228,7 +228,7 @@ export default function CatalogDetail(): JSX.Element {
         />
       </Page.Header>
       <Page.Body>
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+        <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-3">
           {/* Left Column - Server Details */}
           <div className="space-y-6 lg:col-span-2">
             {/* Header */}
@@ -336,138 +336,92 @@ export default function CatalogDetail(): JSX.Element {
           </div>
 
           {/* Right Column - Info */}
-          <div className="space-y-4">
-            {/* Usage Stats */}
-            {(weeklyUsage || visitorsTotal || totalUsage) && (
-              <Card>
-                <Card.Header>
-                  <Card.Title>Usage</Card.Title>
-                </Card.Header>
-                <Card.Content>
-                  <div className="space-y-3">
-                    {weeklyUsage !== undefined && weeklyUsage > 0 && (
-                      <div className="flex justify-between gap-4">
-                        <Text small muted>
-                          This Week
-                        </Text>
-                        <Text className="font-medium">
-                          {weeklyUsage.toLocaleString()}
-                        </Text>
-                      </div>
-                    )}
-                    {visitorsTotal !== undefined && visitorsTotal > 0 && (
-                      <div className="flex justify-between gap-4">
-                        <Text small muted>
-                          Monthly
-                        </Text>
-                        <Text className="font-medium">
-                          {visitorsTotal.toLocaleString()}
-                        </Text>
-                      </div>
-                    )}
-                    {totalUsage !== undefined && totalUsage > 0 && (
-                      <div className="flex justify-between gap-4">
-                        <Text small muted>
-                          All Time
-                        </Text>
-                        <Text className="font-medium">
-                          {totalUsage.toLocaleString()}
-                        </Text>
-                      </div>
-                    )}
-                  </div>
-                </Card.Content>
-              </Card>
-            )}
-
-            {/* Version & Release Info */}
+          <div>
             <Card>
-              <Card.Header>
-                <Card.Title>Version & Release</Card.Title>
-              </Card.Header>
               <Card.Content>
-                <div className="space-y-3">
-                  <div className="flex justify-between gap-4">
-                    <Text small muted>
-                      Version
-                    </Text>
-                    <Text className="font-mono">{server.version}</Text>
-                  </div>
-                  {versionMeta?.status && (
-                    <div className="flex justify-between gap-4">
-                      <Text small muted>
-                        Status
-                      </Text>
-                      <Text className="capitalize">{versionMeta.status}</Text>
-                    </div>
+                <div className="divide-y">
+                  {(weeklyUsage || visitorsTotal || totalUsage) && (
+                    <DetailGroup label="Usage">
+                      {weeklyUsage !== undefined && weeklyUsage > 0 && (
+                        <DetailRow label="This Week">
+                          <Text className="font-medium">
+                            {weeklyUsage.toLocaleString()}
+                          </Text>
+                        </DetailRow>
+                      )}
+                      {visitorsTotal !== undefined && visitorsTotal > 0 && (
+                        <DetailRow label="Monthly">
+                          <Text className="font-medium">
+                            {visitorsTotal.toLocaleString()}
+                          </Text>
+                        </DetailRow>
+                      )}
+                      {totalUsage !== undefined && totalUsage > 0 && (
+                        <DetailRow label="All Time">
+                          <Text className="font-medium">
+                            {totalUsage.toLocaleString()}
+                          </Text>
+                        </DetailRow>
+                      )}
+                    </DetailGroup>
                   )}
-                  {versionMeta?.publishedAt && (
-                    <div className="flex justify-between gap-4">
-                      <Text small muted>
-                        Published
-                      </Text>
-                      <Text>
-                        {new Date(versionMeta.publishedAt).toLocaleDateString()}
-                      </Text>
-                    </div>
-                  )}
-                  {versionMeta?.updatedAt && (
-                    <div className="flex justify-between gap-4">
-                      <Text small muted>
-                        Last Updated
-                      </Text>
-                      <Text>
-                        {new Date(versionMeta.updatedAt).toLocaleDateString()}
-                      </Text>
-                    </div>
-                  )}
-                  {versionMeta?.source && (
-                    <div className="flex justify-between gap-4">
-                      <Text small muted>
-                        Source
-                      </Text>
-                      <a
-                        href={
-                          versionMeta.source.startsWith("http")
-                            ? versionMeta.source
-                            : `https://${versionMeta.source}`
-                        }
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary flex items-center gap-1 hover:underline"
-                      >
-                        <Text className="max-w-[150px] truncate text-right">
-                          {versionMeta.source}
-                        </Text>
-                        <ExternalLink className="h-3 w-3 shrink-0" />
-                      </a>
-                    </div>
-                  )}
-                </div>
-              </Card.Content>
-            </Card>
 
-            {/* Registry Info */}
-            <Card>
-              <Card.Header>
-                <Card.Title>Registry</Card.Title>
-              </Card.Header>
-              <Card.Content>
-                <div className="space-y-3">
-                  <div className="flex justify-between gap-4">
-                    <Text small muted>
-                      Registry
-                    </Text>
-                    <Text className="text-right">{server.registryId}</Text>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <Text small muted>
-                      Specifier
-                    </Text>
-                    <Text className="text-right font-mono text-xs break-all">
-                      {server.registrySpecifier}
-                    </Text>
-                  </div>
+                  <DetailGroup label="Version & Release">
+                    <DetailRow label="Version">
+                      <Text className="font-mono">{server.version}</Text>
+                    </DetailRow>
+                    {versionMeta?.status && (
+                      <DetailRow label="Status">
+                        <Text className="capitalize">{versionMeta.status}</Text>
+                      </DetailRow>
+                    )}
+                    {versionMeta?.publishedAt && (
+                      <DetailRow label="Published">
+                        <Text>
+                          {new Date(
+                            versionMeta.publishedAt,
+                          ).toLocaleDateString()}
+                        </Text>
+                      </DetailRow>
+                    )}
+                    {versionMeta?.updatedAt && (
+                      <DetailRow label="Last Updated">
+                        <Text>
+                          {new Date(versionMeta.updatedAt).toLocaleDateString()}
+                        </Text>
+                      </DetailRow>
+                    )}
+                    {versionMeta?.source && (
+                      <DetailRow label="Source">
+                        <a
+                          href={
+                            versionMeta.source.startsWith("http")
+                              ? versionMeta.source
+                              : `https://${versionMeta.source}`
+                          }
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary flex items-center gap-1 hover:underline"
+                        >
+                          <Text className="max-w-[150px] truncate text-right">
+                            {versionMeta.source}
+                          </Text>
+                          <ExternalLink className="h-3 w-3 shrink-0" />
+                        </a>
+                      </DetailRow>
+                    )}
+                  </DetailGroup>
+
+                  <DetailGroup label="Registry">
+                    <DetailRow label="Registry">
+                      <Text className="text-right">{server.registryId}</Text>
+                    </DetailRow>
+                    <DetailRow label="Specifier">
+                      <Text className="text-right font-mono text-xs break-all">
+                        {server.registrySpecifier}
+                      </Text>
+                    </DetailRow>
+                  </DetailGroup>
                 </div>
               </Card.Content>
             </Card>
@@ -483,6 +437,38 @@ export default function CatalogDetail(): JSX.Element {
         />
       </Page.Body>
     </Page>
+  );
+}
+
+function DetailGroup({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-3 py-4 first:pt-0 last:pb-0">
+      <Card.Title>{label}</Card.Title>
+      {children}
+    </div>
+  );
+}
+
+function DetailRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <Text small muted>
+        {label}
+      </Text>
+      {children}
+    </div>
   );
 }
 

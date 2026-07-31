@@ -97,7 +97,7 @@ export function ApproveAllSkillSuggestions({
         reason="You need write access to approve suggested edits."
       >
         <Button
-          size="lg"
+          className="h-10"
           disabled={!fullyLoaded}
           tooltip={
             fullyLoaded
