@@ -142,10 +142,15 @@ type LoadChatResponseBody struct {
 	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 	// When the last message in the chat was created.
 	LastMessageTimestamp string `form:"last_message_timestamp" json:"last_message_timestamp" xml:"last_message_timestamp"`
-	// Number of risk findings recorded against messages in this chat
-	// (project-scoped, found=true). Only populated by endpoints that join risk
-	// data; absent elsewhere.
+	// Number of distinct risk findings recorded against messages in this chat
+	// (deduped by source/rule/match; project-scoped, found=true, excluding
+	// excluded and false-positive results). Only populated by endpoints that join
+	// risk data; absent elsewhere.
 	RiskFindingsCount *int `form:"risk_findings_count,omitempty" json:"risk_findings_count,omitempty" xml:"risk_findings_count,omitempty"`
+	// Highest CVSS-style severity score (0.1-10) among this chat's active risk
+	// findings' policies. Absent when the chat has no active findings. Only
+	// populated by endpoints that join risk data.
+	MaxRiskScore *float64 `form:"max_risk_score,omitempty" json:"max_risk_score,omitempty" xml:"max_risk_score,omitempty"`
 	// Work units of value delivered in this chat as judged by the work-units
 	// analysis. Absent unless the organization has work-units analysis enabled and
 	// this chat has been scored.
@@ -2048,10 +2053,15 @@ type ChatOverviewResponseBody struct {
 	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 	// When the last message in the chat was created.
 	LastMessageTimestamp string `form:"last_message_timestamp" json:"last_message_timestamp" xml:"last_message_timestamp"`
-	// Number of risk findings recorded against messages in this chat
-	// (project-scoped, found=true). Only populated by endpoints that join risk
-	// data; absent elsewhere.
+	// Number of distinct risk findings recorded against messages in this chat
+	// (deduped by source/rule/match; project-scoped, found=true, excluding
+	// excluded and false-positive results). Only populated by endpoints that join
+	// risk data; absent elsewhere.
 	RiskFindingsCount *int `form:"risk_findings_count,omitempty" json:"risk_findings_count,omitempty" xml:"risk_findings_count,omitempty"`
+	// Highest CVSS-style severity score (0.1-10) among this chat's active risk
+	// findings' policies. Absent when the chat has no active findings. Only
+	// populated by endpoints that join risk data.
+	MaxRiskScore *float64 `form:"max_risk_score,omitempty" json:"max_risk_score,omitempty" xml:"max_risk_score,omitempty"`
 	// Work units of value delivered in this chat as judged by the work-units
 	// analysis. Absent unless the organization has work-units analysis enabled and
 	// this chat has been scored.
@@ -2306,6 +2316,7 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 		TotalCost:            res.TotalCost,
 		LastMessageTimestamp: res.LastMessageTimestamp,
 		RiskFindingsCount:    res.RiskFindingsCount,
+		MaxRiskScore:         res.MaxRiskScore,
 		WorkUnits:            res.WorkUnits,
 		AccountType:          res.AccountType,
 		AccountEmail:         res.AccountEmail,

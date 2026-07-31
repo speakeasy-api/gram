@@ -2460,6 +2460,7 @@ func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponse
 		TotalCost:            v.TotalCost,
 		LastMessageTimestamp: *v.LastMessageTimestamp,
 		RiskFindingsCount:    v.RiskFindingsCount,
+		MaxRiskScore:         v.MaxRiskScore,
 		WorkUnits:            v.WorkUnits,
 		AccountType:          v.AccountType,
 		AccountEmail:         v.AccountEmail,

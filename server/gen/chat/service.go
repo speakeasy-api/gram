@@ -156,10 +156,15 @@ type Chat struct {
 	TotalCost *float64
 	// When the last message in the chat was created.
 	LastMessageTimestamp string
-	// Number of risk findings recorded against messages in this chat
-	// (project-scoped, found=true). Only populated by endpoints that join risk
-	// data; absent elsewhere.
+	// Number of distinct risk findings recorded against messages in this chat
+	// (deduped by source/rule/match; project-scoped, found=true, excluding
+	// excluded and false-positive results). Only populated by endpoints that join
+	// risk data; absent elsewhere.
 	RiskFindingsCount *int
+	// Highest CVSS-style severity score (0.1-10) among this chat's active risk
+	// findings' policies. Absent when the chat has no active findings. Only
+	// populated by endpoints that join risk data.
+	MaxRiskScore *float64
 	// Work units of value delivered in this chat as judged by the work-units
 	// analysis. Absent unless the organization has work-units analysis enabled and
 	// this chat has been scored.
@@ -264,10 +269,15 @@ type ChatOverview struct {
 	TotalCost *float64
 	// When the last message in the chat was created.
 	LastMessageTimestamp string
-	// Number of risk findings recorded against messages in this chat
-	// (project-scoped, found=true). Only populated by endpoints that join risk
-	// data; absent elsewhere.
+	// Number of distinct risk findings recorded against messages in this chat
+	// (deduped by source/rule/match; project-scoped, found=true, excluding
+	// excluded and false-positive results). Only populated by endpoints that join
+	// risk data; absent elsewhere.
 	RiskFindingsCount *int
+	// Highest CVSS-style severity score (0.1-10) among this chat's active risk
+	// findings' policies. Absent when the chat has no active findings. Only
+	// populated by endpoints that join risk data.
+	MaxRiskScore *float64
 	// Work units of value delivered in this chat as judged by the work-units
 	// analysis. Absent unless the organization has work-units analysis enabled and
 	// this chat has been scored.

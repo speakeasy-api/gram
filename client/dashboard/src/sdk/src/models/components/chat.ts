@@ -75,6 +75,10 @@ export type Chat = {
    */
   maxGeneration: number;
   /**
+   * Highest CVSS-style severity score (0.1-10) among this chat's active risk findings' policies. Absent when the chat has no active findings. Only populated by endpoints that join risk data.
+   */
+  maxRiskScore?: number | undefined;
+  /**
    * The list of messages in the chat for the returned generation, ordered oldest to newest by `seq`.
    */
   messages: Array<ChatMessage>;
@@ -87,7 +91,7 @@ export type Chat = {
    */
   pinned?: boolean | undefined;
   /**
-   * Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
+   * Number of distinct risk findings recorded against messages in this chat (deduped by source/rule/match; project-scoped, found=true, excluding excluded and false-positive results). Only populated by endpoints that join risk data; absent elsewhere.
    */
   riskFindingsCount?: number | undefined;
   /**
@@ -172,6 +176,7 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
     ),
     match_segments: z.optional(z.array(RiskSegment$inboundSchema)),
     max_generation: z.int(),
+    max_risk_score: z.optional(z.number()),
     messages: z.array(ChatMessage$inboundSchema),
     num_messages: z.int(),
     pinned: z.optional(z.boolean()),
@@ -211,6 +216,7 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       "last_message_timestamp": "lastMessageTimestamp",
       "match_segments": "matchSegments",
       "max_generation": "maxGeneration",
+      "max_risk_score": "maxRiskScore",
       "num_messages": "numMessages",
       "risk_findings_count": "riskFindingsCount",
       "risk_segments": "riskSegments",

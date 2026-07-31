@@ -355,6 +355,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 			lastMessageTimestamp = row.LastMessageTimestamp.Time.Format(time.RFC3339)
 		}
 		riskCount := int(row.RiskFindingsCount)
+		maxRiskScore := maxRiskScoreFromRow(row.MaxRiskScore)
 		pinned := row.PinnedAt.Valid
 		result = append(result, &gen.ChatOverview{
 			ID:                   row.ID.String(),
@@ -369,6 +370,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 			UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
 			LastMessageTimestamp: lastMessageTimestamp,
 			RiskFindingsCount:    &riskCount,
+			MaxRiskScore:         maxRiskScore,
 			AccountType:          conv.PtrEmpty(row.AccountType),
 			AccountEmail:         conv.PtrEmpty(row.AccountEmail),
 			Pinned:               &pinned,
@@ -392,6 +394,18 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	}
 
 	return &gen.ListChatsResult{Chats: result, Total: int(total)}, nil
+}
+
+// maxRiskScoreFromRow converts the MAX(rp.score) scalar subquery's result to
+// a *float64. Sqlc can't infer a concrete nullable type for a scalar
+// subquery result, so the generated field is `interface{}` — nil when the
+// chat has no active findings (MAX over zero rows), float64 otherwise.
+func maxRiskScoreFromRow(v any) *float64 {
+	f, ok := v.(float64)
+	if !ok {
+		return nil
+	}
+	return &f
 }
 
 const (
@@ -1060,6 +1074,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
 		LastMessageTimestamp: lastMessageTimestamp,
 		RiskFindingsCount:    nil,
+		MaxRiskScore:         nil,
 		AccountType:          conv.PtrEmpty(chat.AccountType),
 		AccountEmail:         conv.PtrEmpty(chat.AccountEmail),
 		Pinned:               &pinned,

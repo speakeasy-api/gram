@@ -649,8 +649,11 @@ SELECT
   lc.last_message_timestamp,
   -- Active findings for the returned page rows only; must stay in sync with
   -- the risk_counts predicate above (and the risk.results.list detail view).
+  -- Deduped by (source, rule_id, match): the same value (e.g. one IP address
+  -- pasted many times in a log dump) is flagged once per occurrence in
+  -- risk_results, but reads as a single repeated finding to a reviewer.
   (
-    SELECT COUNT(*)::integer
+    SELECT COUNT(DISTINCT (rr.source, rr.rule_id, rr.match))::integer
     FROM risk_results rr
     JOIN chat_messages cm ON cm.id = rr.chat_message_id
     JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
@@ -660,6 +663,19 @@ SELECT
       AND rr.excluded_at IS NULL
       AND rr.false_positive_at IS NULL
   ) AS risk_findings_count,
+  -- Highest severity among this chat's active findings' policies, for a
+  -- severity-graded (rather than flat-alarming) risk indicator.
+  (
+    SELECT MAX(rp.score)
+    FROM risk_results rr
+    JOIN chat_messages cm ON cm.id = rr.chat_message_id
+    JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+    WHERE rr.project_id = @project_id
+      AND cm.chat_id = lc.id
+      AND rr.found IS TRUE
+      AND rr.excluded_at IS NULL
+      AND rr.false_positive_at IS NULL
+  ) AS max_risk_score,
   lc.account_type,
   lc.account_email,
   lc.assistant_id,
@@ -1439,6 +1455,14 @@ INSERT INTO risk_policies (project_id, organization_id, name, sources, enabled, 
 VALUES (@project_id, @organization_id, 'test-policy', '{}', TRUE, 'flag', TRUE, 1)
 RETURNING id;
 
+-- name: SeedRiskPolicyWithScore :one
+-- Test fixture: insert a risk policy with an explicit severity score, for
+-- tests asserting max_risk_score picks the highest score among a chat's
+-- active findings' policies.
+INSERT INTO risk_policies (project_id, organization_id, name, sources, enabled, action, auto_name, version, score)
+VALUES (@project_id, @organization_id, 'test-policy-scored', '{}', TRUE, 'flag', TRUE, 1, @score)
+RETURNING id;
+
 -- name: SeedDisabledRiskPolicy :one
 -- Test fixture: insert a disabled risk policy and return its id. Findings under
 -- a disabled (or deleted) policy must drop out of every risk surface — the
@@ -1449,13 +1473,31 @@ RETURNING id;
 
 -- name: SeedRiskResult :exec
 -- Test fixture: insert a risk result linking a chat message to a risk policy.
+-- rule_id is a fresh UUID per row (rather than a shared constant) so that
+-- seeding N results always produces N results distinct by (source, rule_id,
+-- match), matching risk_findings_count's dedup key — callers that want
+-- fixture rows to collapse under dedup should seed the same rule_id/match
+-- explicitly instead of relying on this default.
 INSERT INTO risk_results (
     project_id, organization_id, risk_policy_id, risk_policy_version,
-    chat_message_id, source, found
+    chat_message_id, source, rule_id, found
 )
 VALUES (
     @project_id, @organization_id, @risk_policy_id, 1,
-    @chat_message_id, 'test', @found
+    @chat_message_id, 'test', gen_random_uuid()::text, @found
+);
+
+-- name: SeedRiskResultWithRuleMatch :exec
+-- Test fixture: like SeedRiskResult, but with an explicit rule_id/match
+-- instead of an always-unique generated rule_id — for tests that need
+-- multiple rows sharing the same dedup key (source, rule_id, match).
+INSERT INTO risk_results (
+    project_id, organization_id, risk_policy_id, risk_policy_version,
+    chat_message_id, source, rule_id, match, found
+)
+VALUES (
+    @project_id, @organization_id, @risk_policy_id, 1,
+    @chat_message_id, 'test', @rule_id, @match, @found
 );
 
 -- name: SeedAssistant :one

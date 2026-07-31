@@ -2093,8 +2093,11 @@ SELECT
   lc.last_message_timestamp,
   -- Active findings for the returned page rows only; must stay in sync with
   -- the risk_counts predicate above (and the risk.results.list detail view).
+  -- Deduped by (source, rule_id, match): the same value (e.g. one IP address
+  -- pasted many times in a log dump) is flagged once per occurrence in
+  -- risk_results, but reads as a single repeated finding to a reviewer.
   (
-    SELECT COUNT(*)::integer
+    SELECT COUNT(DISTINCT (rr.source, rr.rule_id, rr.match))::integer
     FROM risk_results rr
     JOIN chat_messages cm ON cm.id = rr.chat_message_id
     JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
@@ -2104,6 +2107,19 @@ SELECT
       AND rr.excluded_at IS NULL
       AND rr.false_positive_at IS NULL
   ) AS risk_findings_count,
+  -- Highest severity among this chat's active findings' policies, for a
+  -- severity-graded (rather than flat-alarming) risk indicator.
+  (
+    SELECT MAX(rp.score)
+    FROM risk_results rr
+    JOIN chat_messages cm ON cm.id = rr.chat_message_id
+    JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+    WHERE rr.project_id = $1
+      AND cm.chat_id = lc.id
+      AND rr.found IS TRUE
+      AND rr.excluded_at IS NULL
+      AND rr.false_positive_at IS NULL
+  ) AS max_risk_score,
   lc.account_type,
   lc.account_email,
   lc.assistant_id,
@@ -2145,6 +2161,7 @@ type ListChatsRow struct {
 	NumMessages          int32
 	LastMessageTimestamp pgtype.Timestamptz
 	RiskFindingsCount    int32
+	MaxRiskScore         interface{}
 	AccountType          string
 	AccountEmail         string
 	AssistantID          uuid.NullUUID
@@ -2201,6 +2218,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 			&i.NumMessages,
 			&i.LastMessageTimestamp,
 			&i.RiskFindingsCount,
+			&i.MaxRiskScore,
 			&i.AccountType,
 			&i.AccountEmail,
 			&i.AssistantID,
@@ -2907,14 +2925,36 @@ func (q *Queries) SeedRiskPolicy(ctx context.Context, arg SeedRiskPolicyParams) 
 	return id, err
 }
 
+const seedRiskPolicyWithScore = `-- name: SeedRiskPolicyWithScore :one
+INSERT INTO risk_policies (project_id, organization_id, name, sources, enabled, action, auto_name, version, score)
+VALUES ($1, $2, 'test-policy-scored', '{}', TRUE, 'flag', TRUE, 1, $3)
+RETURNING id
+`
+
+type SeedRiskPolicyWithScoreParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Score          float64
+}
+
+// Test fixture: insert a risk policy with an explicit severity score, for
+// tests asserting max_risk_score picks the highest score among a chat's
+// active findings' policies.
+func (q *Queries) SeedRiskPolicyWithScore(ctx context.Context, arg SeedRiskPolicyWithScoreParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedRiskPolicyWithScore, arg.ProjectID, arg.OrganizationID, arg.Score)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const seedRiskResult = `-- name: SeedRiskResult :exec
 INSERT INTO risk_results (
     project_id, organization_id, risk_policy_id, risk_policy_version,
-    chat_message_id, source, found
+    chat_message_id, source, rule_id, found
 )
 VALUES (
     $1, $2, $3, 1,
-    $4, 'test', $5
+    $4, 'test', gen_random_uuid()::text, $5
 )
 `
 
@@ -2927,12 +2967,54 @@ type SeedRiskResultParams struct {
 }
 
 // Test fixture: insert a risk result linking a chat message to a risk policy.
+// rule_id is a fresh UUID per row (rather than a shared constant) so that
+// seeding N results always produces N results distinct by (source, rule_id,
+// match), matching risk_findings_count's dedup key — callers that want
+// fixture rows to collapse under dedup should seed the same rule_id/match
+// explicitly instead of relying on this default.
 func (q *Queries) SeedRiskResult(ctx context.Context, arg SeedRiskResultParams) error {
 	_, err := q.db.Exec(ctx, seedRiskResult,
 		arg.ProjectID,
 		arg.OrganizationID,
 		arg.RiskPolicyID,
 		arg.ChatMessageID,
+		arg.Found,
+	)
+	return err
+}
+
+const seedRiskResultWithRuleMatch = `-- name: SeedRiskResultWithRuleMatch :exec
+INSERT INTO risk_results (
+    project_id, organization_id, risk_policy_id, risk_policy_version,
+    chat_message_id, source, rule_id, match, found
+)
+VALUES (
+    $1, $2, $3, 1,
+    $4, 'test', $5, $6, $7
+)
+`
+
+type SeedRiskResultWithRuleMatchParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	RiskPolicyID   uuid.UUID
+	ChatMessageID  uuid.NullUUID
+	RuleID         pgtype.Text
+	Match          pgtype.Text
+	Found          bool
+}
+
+// Test fixture: like SeedRiskResult, but with an explicit rule_id/match
+// instead of an always-unique generated rule_id — for tests that need
+// multiple rows sharing the same dedup key (source, rule_id, match).
+func (q *Queries) SeedRiskResultWithRuleMatch(ctx context.Context, arg SeedRiskResultWithRuleMatchParams) error {
+	_, err := q.db.Exec(ctx, seedRiskResultWithRuleMatch,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.RiskPolicyID,
+		arg.ChatMessageID,
+		arg.RuleID,
+		arg.Match,
 		arg.Found,
 	)
 	return err

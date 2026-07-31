@@ -7,6 +7,11 @@ import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import {
+  SEVERITY_RATING_LABEL,
+  scoreToRating,
+  type SeverityRating,
+} from "@/pages/security/risk-utils";
 import { WorkUnitsRowMetrics } from "@/pages/chatLogs/WorkUnitsMetrics";
 import { useSession } from "@/contexts/Auth";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
@@ -38,13 +43,39 @@ function getTraceId(chatId: string): string {
   return chatId.slice(0, 8);
 }
 
-function RiskIndicator({ count, size = 44 }: { count: number; size?: number }) {
+// Border/text/bg for each severity rating, plus the no-findings case. Mirrors
+// SeverityBadge/SeverityScore's color bands (risk-ui.tsx) so this indicator
+// reads consistently with severity elsewhere — and, deliberately, only the
+// high/critical band uses the alarming destructive-red. A session whose
+// findings are all low/medium severity (e.g. an IP address) shouldn't look
+// as threatening as one with an actual secret leak.
+const RISK_INDICATOR_STYLE: Record<SeverityRating | "none", string> = {
+  none: "border-muted-foreground/30 text-muted-foreground/70",
+  low: "border-success/40 text-success bg-success/5",
+  medium: "border-warning/40 text-warning bg-warning/5",
+  high: "border-destructive/40 text-destructive bg-destructive/5",
+  critical: "border-destructive/40 text-destructive bg-destructive/5",
+};
+
+function RiskIndicator({
+  count,
+  maxScore,
+  size = 44,
+}: {
+  count: number;
+  /** Highest CVSS-style severity (0.1-10) among this session's findings —
+   * grades the indicator's color instead of always rendering alarming red.
+   * Absent (or count 0) renders the neutral no-findings state. */
+  maxScore?: number;
+  size?: number;
+}) {
   const hasRisk = count > 0;
+  const rating = hasRisk && maxScore != null ? scoreToRating(maxScore) : null;
   return (
     <SimpleTooltip
       tooltip={
         hasRisk
-          ? `${count} risk finding${count === 1 ? "" : "s"} on this session`
+          ? `${count} distinct risk finding${count === 1 ? "" : "s"} on this session${rating ? ` · ${SEVERITY_RATING_LABEL[rating]} severity` : ""}`
           : "No risk findings on this session"
       }
     >
@@ -52,9 +83,7 @@ function RiskIndicator({ count, size = 44 }: { count: number; size?: number }) {
         <div
           className={cn(
             "flex items-center justify-center rounded-full border-[3px]",
-            hasRisk
-              ? "border-destructive/40 text-destructive bg-destructive/5"
-              : "border-muted-foreground/30 text-muted-foreground/70",
+            RISK_INDICATOR_STYLE[rating ?? "none"],
           )}
           style={{ width: size, height: size }}
         >
@@ -280,7 +309,11 @@ export function ChatLogsTable({
                 <div className="pointer-events-none relative z-20 flex items-center gap-5">
                   {/* Left: Risk findings indicator */}
                   <div className="shrink-0">
-                    <RiskIndicator count={riskCount} size={44} />
+                    <RiskIndicator
+                      count={riskCount}
+                      maxScore={chat.maxRiskScore}
+                      size={44}
+                    />
                   </div>
 
                   {/* Center: Main content */}

@@ -696,6 +696,107 @@ func TestListChats_RiskFindingsCountInResult(t *testing.T) {
 	require.Equal(t, 3, *result.Chats[0].RiskFindingsCount)
 }
 
+// TestListChats_RiskFindingsCount_DedupesByRuleAndMatch verifies that
+// multiple risk_results sharing the same (source, rule_id, match) — e.g. the
+// same secret flagged once per occurrence in a long pasted message — collapse
+// to a single reported finding, while genuinely distinct findings still each
+// count.
+func TestListChats_RiskFindingsCount_DedupesByRuleAndMatch(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := externalUserCtx(t, ti, "ext-dedup")
+	r := repo.New(ti.conn)
+
+	chatID := seedChat(t, ctx, ti, "", "ext-dedup", "chat with repeated finding")
+	policyID, err := r.SeedRiskPolicy(ctx, repo.SeedRiskPolicyParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+
+	seedDupResult := func(ruleID, match string) {
+		msgID, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+			ChatID:    chatID,
+			ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		})
+		require.NoError(t, err)
+		require.NoError(t, r.SeedRiskResultWithRuleMatch(ctx, repo.SeedRiskResultWithRuleMatchParams{
+			ProjectID:      ti.projectID,
+			OrganizationID: ti.orgID,
+			RiskPolicyID:   policyID,
+			ChatMessageID:  uuid.NullUUID{UUID: msgID, Valid: true},
+			RuleID:         pgtype.Text{String: ruleID, Valid: true},
+			Match:          pgtype.Text{String: match, Valid: true},
+			Found:          true,
+		}))
+	}
+
+	// Same (rule_id, match) three times, as if the same IP address appeared
+	// three times in one pasted log — must collapse to one finding.
+	seedDupResult("pii.ip_address", "10.0.0.1")
+	seedDupResult("pii.ip_address", "10.0.0.1")
+	seedDupResult("pii.ip_address", "10.0.0.1")
+	// A genuinely distinct finding must still count separately.
+	seedDupResult("pii.mac_address", "00:11:22:33:44:55")
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Len(t, result.Chats, 1)
+	require.NotNil(t, result.Chats[0].RiskFindingsCount)
+	require.Equal(t, 2, *result.Chats[0].RiskFindingsCount)
+}
+
+// TestListChats_MaxRiskScore verifies that max_risk_score reports the highest
+// severity score among a chat's active findings' policies, and is absent for
+// a chat with no active findings.
+func TestListChats_MaxRiskScore(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := externalUserCtx(t, ti, "ext-severity")
+	r := repo.New(ti.conn)
+
+	scored := seedChat(t, ctx, ti, "", "ext-severity", "chat with mixed severity")
+	lowPolicyID, err := r.SeedRiskPolicyWithScore(ctx, repo.SeedRiskPolicyWithScoreParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		Score:          3.0,
+	})
+	require.NoError(t, err)
+	highPolicyID, err := r.SeedRiskPolicyWithScore(ctx, repo.SeedRiskPolicyWithScoreParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		Score:          8.5,
+	})
+	require.NoError(t, err)
+	for _, policyID := range []uuid.UUID{lowPolicyID, highPolicyID} {
+		msgID, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+			ChatID:    scored,
+			ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		})
+		require.NoError(t, err)
+		require.NoError(t, r.SeedRiskResult(ctx, repo.SeedRiskResultParams{
+			ProjectID:      ti.projectID,
+			OrganizationID: ti.orgID,
+			RiskPolicyID:   policyID,
+			ChatMessageID:  uuid.NullUUID{UUID: msgID, Valid: true},
+			Found:          true,
+		}))
+	}
+
+	safe := seedChat(t, ctx, ti, "", "ext-severity", "chat with no findings")
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	byID := make(map[string]*gen.ChatOverview, len(result.Chats))
+	for _, c := range result.Chats {
+		byID[c.ID] = c
+	}
+
+	require.NotNil(t, byID[scored.String()].MaxRiskScore)
+	require.InDelta(t, 8.5, *byID[scored.String()].MaxRiskScore, 0.001)
+	require.Nil(t, byID[safe.String()].MaxRiskScore, "chat with no active findings must have no max_risk_score")
+}
+
 // TestListChats_DisabledPolicyFinding_NotCounted verifies that a found risk
 // result under a disabled policy is excluded from the per-chat count and from
 // the has_risk filter — matching the risk.results.list detail view, so the

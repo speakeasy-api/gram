@@ -42,6 +42,10 @@ export type ChatOverview = {
    */
   lastMessageTimestamp: Date;
   /**
+   * Highest CVSS-style severity score (0.1-10) among this chat's active risk findings' policies. Absent when the chat has no active findings. Only populated by endpoints that join risk data.
+   */
+  maxRiskScore?: number | undefined;
+  /**
    * The number of messages in the chat
    */
   numMessages: number;
@@ -50,7 +54,7 @@ export type ChatOverview = {
    */
   pinned?: boolean | undefined;
   /**
-   * Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
+   * Number of distinct risk findings recorded against messages in this chat (deduped by source/rule/match; project-scoped, found=true, excluding excluded and false-positive results). Only populated by endpoints that join risk data; absent elsewhere.
    */
   riskFindingsCount?: number | undefined;
   /**
@@ -117,6 +121,7 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
+      max_risk_score: z.optional(z.number()),
       num_messages: z.int(),
       pinned: z.optional(z.boolean()),
       risk_findings_count: z.optional(z.int()),
@@ -146,6 +151,7 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
         "created_at": "createdAt",
         "external_user_id": "externalUserId",
         "last_message_timestamp": "lastMessageTimestamp",
+        "max_risk_score": "maxRiskScore",
         "num_messages": "numMessages",
         "risk_findings_count": "riskFindingsCount",
         "summary_generated_at": "summaryGeneratedAt",

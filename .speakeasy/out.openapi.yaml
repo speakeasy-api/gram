@@ -51314,6 +51314,10 @@ components:
           type: integer
           description: The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.
           format: int64
+        max_risk_score:
+          type: number
+          description: Highest CVSS-style severity score (0.1-10) among this chat's active risk findings' policies. Absent when the chat has no active findings. Only populated by endpoints that join risk data.
+          format: double
         messages:
           type: array
           items:
@@ -51328,7 +51332,7 @@ components:
           description: True when the chat is pinned
         risk_findings_count:
           type: integer
-          description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
+          description: Number of distinct risk findings recorded against messages in this chat (deduped by source/rule/match; project-scoped, found=true, excluding excluded and false-positive results). Only populated by endpoints that join risk data; absent elsewhere.
           format: int64
         risk_segments:
           type: array
@@ -51530,6 +51534,10 @@ components:
           type: string
           description: When the last message in the chat was created.
           format: date-time
+        max_risk_score:
+          type: number
+          description: Highest CVSS-style severity score (0.1-10) among this chat's active risk findings' policies. Absent when the chat has no active findings. Only populated by endpoints that join risk data.
+          format: double
         num_messages:
           type: integer
           description: The number of messages in the chat
@@ -51539,7 +51547,7 @@ components:
           description: True when the chat is pinned
         risk_findings_count:
           type: integer
-          description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
+          description: Number of distinct risk findings recorded against messages in this chat (deduped by source/rule/match; project-scoped, found=true, excluding excluded and false-positive results). Only populated by endpoints that join risk data; absent elsewhere.
           format: int64
         source:
           type: string
