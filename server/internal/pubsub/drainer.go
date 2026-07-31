@@ -56,6 +56,11 @@ const (
 	// into a log flood. The counter carries the true rate; the log carries one
 	// example error plus how many lines it stood in for.
 	logInterval = 10 * time.Second
+
+	// logMessage is fixed across drainers so the line stays greppable; the
+	// component attribute on the drainer's logger says which publisher it came
+	// from.
+	logMessage = "failed to publish to pubsub"
 )
 
 // batch is one unit of work for the drain pool. It carries the publishing
@@ -75,7 +80,6 @@ type batch struct {
 // value is not usable; construct one with NewDrainer.
 type Drainer struct {
 	logger *slog.Logger
-	logMsg string
 
 	queue chan batch
 
@@ -110,9 +114,8 @@ type Drainer struct {
 }
 
 // NewDrainer constructs a Drainer. The name identifies the draining publisher
-// on the shared ack metrics, and logMsg is the message emitted when publishes
-// fail.
-func NewDrainer(logger *slog.Logger, meterProvider metric.MeterProvider, name string, logMsg string) *Drainer {
+// on the shared ack metrics and on the drainer's logger.
+func NewDrainer(logger *slog.Logger, meterProvider metric.MeterProvider, name string) *Drainer {
 	// #nosec G118: cancel is retained on the struct and called by Close.
 	ctx, cancel := context.WithCancel(context.Background())
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/pubsub")
@@ -137,7 +140,6 @@ func NewDrainer(logger *slog.Logger, meterProvider metric.MeterProvider, name st
 
 	return &Drainer{
 		logger:     logger.With(attr.SlogComponent(name)),
-		logMsg:     logMsg,
 		queue:      make(chan batch, queueDepth),
 		mu:         sync.RWMutex{},
 		closed:     false,
@@ -235,7 +237,7 @@ func (d *Drainer) logFailure(ctx context.Context, err error, failed int, total i
 		return
 	}
 
-	d.logger.ErrorContext(ctx, d.logMsg,
+	d.logger.ErrorContext(ctx, logMessage,
 		attr.SlogError(err),
 		attr.SlogPubSubDrainFailedCount(failed),
 		attr.SlogPubSubDrainBatchSize(total),

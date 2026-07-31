@@ -64,12 +64,7 @@ func NewLogPublisher(
 		pub:    pub,
 		// The drainer stamps the component attribute on its own logger, so it
 		// takes the raw one.
-		drainer: pubsub.NewDrainer(
-			logger,
-			meterProvider,
-			"telemetry_log_publisher",
-			"failed to publish telemetry logs to pubsub",
-		),
+		drainer: pubsub.NewDrainer(logger, meterProvider, "telemetry_log_publisher"),
 	}
 }
 

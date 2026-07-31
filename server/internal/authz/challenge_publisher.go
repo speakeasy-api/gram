@@ -57,12 +57,7 @@ func NewChallengePublisher(
 		pub:    pub,
 		// The drainer stamps the component attribute on its own logger, so it
 		// takes the raw one.
-		drainer: pubsub.NewDrainer(
-			logger,
-			meterProvider,
-			"authz_challenge_publisher",
-			"failed to publish authz challenge to pubsub",
-		),
+		drainer: pubsub.NewDrainer(logger, meterProvider, "authz_challenge_publisher"),
 	}
 }
 

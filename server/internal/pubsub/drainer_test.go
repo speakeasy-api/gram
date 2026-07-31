@@ -26,7 +26,6 @@ const (
 	testQueueDepth   = 4096
 
 	testComponent = "test_publisher"
-	testLogMsg    = "failed to publish to pubsub"
 )
 
 // resolvedResult is a PublishResult that is ready the moment it is created.
@@ -72,7 +71,6 @@ func newTestDrainer(t *testing.T, logger *slog.Logger) (*pubsub.Drainer, *sdkmet
 		logger,
 		sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)),
 		testComponent,
-		testLogMsg,
 	)
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -250,7 +248,7 @@ func TestDrainer_ThrottlesFailureLogs(t *testing.T) {
 	}
 	require.NoError(t, drainer.Close(t.Context()))
 
-	require.Equal(t, 1, strings.Count(buf.String(), testLogMsg),
+	require.Equal(t, 1, strings.Count(buf.String(), "failed to publish to pubsub"),
 		"a correlated failure burst must not emit one log line per publish")
 	require.Contains(t, buf.String(), string(attr.PubSubDrainSuppressedLogsKey))
 }
