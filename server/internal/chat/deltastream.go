@@ -18,7 +18,6 @@ import (
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -122,10 +121,14 @@ func (b *DeltaBroker) Subscribe(ctx context.Context, chatID uuid.UUID) (<-chan D
 //
 // Frames are `data: {"text":"..."}` with a final `data: {"done":true}`.
 func (s *Service) HandleDeltaStream(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+	// Authorization is per-handler on these raw routes, exactly as
+	// HandleCompletion does it — nothing in the mux populates an auth context
+	// for them, so reading one without this returns unauthorized every time.
+	ctx, authCtx, _, err := s.directAuthorize(r.Context(), r)
+	if err != nil {
+		return err
+	}
+	if authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
 	if err := s.authz.Require(ctx, authz.Check{
@@ -140,9 +143,9 @@ func (s *Service) HandleDeltaStream(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeInvalid, nil, "assistant delta streaming is not enabled")
 	}
 
-	chatID, err := uuid.Parse(r.URL.Query().Get("chat_id"))
-	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid chat_id")
+	chatID, parseErr := uuid.Parse(r.URL.Query().Get("chat_id"))
+	if parseErr != nil {
+		return oops.E(oops.CodeBadRequest, parseErr, "invalid chat_id")
 	}
 	// Subscribing to a chat is subscribing to its content, so the caller must
 	// own it. GetChat is not project-scoped, so the check is made here.
