@@ -545,10 +545,10 @@ function HighlightedCode({
               <button
                 type="button"
                 onClick={activeMatch.onExclude}
-                title="Setup an exclusion rule for this finding"
+                title="Set up an exclusion rule for this finding"
                 className="shrink-0 rounded px-1.5 py-0.5 text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
               >
-                Setup exclusion rule
+                Set up exclusion rule
               </button>
             )}
           </div>

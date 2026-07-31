@@ -1,4 +1,4 @@
-import { useCallback, useState, type JSX } from "react";
+import { useCallback, useRef, useState, type JSX } from "react";
 import { toast } from "sonner";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useRiskSuggestExclusionMutation } from "@gram/client/react-query/riskSuggestExclusion.js";
@@ -36,16 +36,30 @@ export function useSetupExclusionRule(): {
   const [sheetState, setSheetState] = useState<ExclusionSheetState | null>(
     null,
   );
+  const [isSuggesting, setIsSuggesting] = useState(false);
   const suggestMutation = useRiskSuggestExclusionMutation();
+  // Bumped on every open() call. Promise.race doesn't cancel the losing
+  // request — after a timeout falls back to the manual sheet, the actual
+  // mutation keeps running in the background and eventually still resolves.
+  // Without this token, that late resolution (or a second open() call for a
+  // different selection made in the meantime) would clobber whatever sheet
+  // state the operator is looking at by then and leave the spinner on past
+  // the fallback.
+  const requestIdRef = useRef(0);
 
   const open = useCallback(
     (results: RiskResult[]) => {
       if (results.length === 0) return;
 
+      const requestId = ++requestIdRef.current;
+
       if (results.length === 1) {
+        setIsSuggesting(false);
         setSheetState(findingToExclusionState(results[0]!));
         return;
       }
+
+      setIsSuggesting(true);
 
       const timedOut = new Promise<"timeout">((resolve) => {
         setTimeout(() => resolve("timeout"), SUGGEST_TIMEOUT_MS);
@@ -62,6 +76,8 @@ export function useSetupExclusionRule(): {
         timedOut,
       ])
         .then((result) => {
+          if (requestId !== requestIdRef.current) return;
+          setIsSuggesting(false);
           if (result === "timeout") {
             toast.error("AI suggestion took too long. Setting up manually.");
             setSheetState({ mode: "create", initialScope: GLOBAL_SCOPE });
@@ -84,6 +100,8 @@ export function useSetupExclusionRule(): {
           });
         })
         .catch(() => {
+          if (requestId !== requestIdRef.current) return;
+          setIsSuggesting(false);
           toast.error("AI suggestion failed. Setting up manually.");
           setSheetState({ mode: "create", initialScope: GLOBAL_SCOPE });
         });
@@ -93,7 +111,7 @@ export function useSetupExclusionRule(): {
 
   return {
     open,
-    isSuggesting: suggestMutation.isPending,
+    isSuggesting,
     sheet: (
       <ExclusionSheet
         state={sheetState}

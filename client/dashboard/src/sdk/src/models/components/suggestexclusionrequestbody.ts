@@ -7,7 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type SuggestExclusionRequestBody = {
   /**
-   * IDs of example findings (e.g. a multiselect batch) to derive a suggestion from. Looked up server-side so the suggestion sees authoritative, unmasked content. Optional when prompt is provided.
+   * IDs of example findings (e.g. a multiselect batch) to derive a suggestion from. Looked up server-side rather than trusted from the client, but only rule_id/source cross into the suggestion — a finding's matched value (a detected secret/PII value the caller hasn't reviewed) is never read for this, so batch-derived suggestions are rule_id/source scoped rather than exact-value. Optional when prompt is provided.
    */
   findingIds?: Array<string> | undefined;
   /**

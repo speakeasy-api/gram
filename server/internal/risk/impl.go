@@ -2349,18 +2349,49 @@ func exclusionSuggestionResult(matchType, matchValue, ruleIDFilter, sourceFilter
 }
 
 // heuristicExclusionSuggestion is the deterministic fallback when the LLM is
-// unavailable. With a prompt, treats it as the literal value to suppress;
-// with only a findings batch, falls back to the first finding's matched
-// value. Usually wrong as-is, but it prefills an editable expression rather
-// than dead-ending the operator (mirrors heuristicCustomRuleSuggestion).
+// unavailable. With a prompt, treats it as the literal value to suppress —
+// safe, since the operator typed and is knowingly disclosing that value
+// themselves. With only a findings batch, never surfaces a finding's raw
+// matched value (a detected secret/PII value the operator hasn't reviewed):
+// unlike the prompt case, nothing here gates the operator seeing it first,
+// and putting it straight into match_value would bypass the audited
+// risk.unmaskResult path every other raw-match disclosure goes through.
+// Falls back to a rule_id- or source-scoped exclusion — coarser, but built
+// only from data that's never sensitive on its own.
 func heuristicExclusionSuggestion(prompt string, findings []repo.RiskResult) *gen.SuggestExclusionResult {
 	if prompt != "" {
 		return exclusionSuggestionResult("exact", strings.TrimSpace(prompt), "", "")
 	}
 	if len(findings) > 0 {
-		return exclusionSuggestionResult("exact", findings[0].Match.String, "", "")
+		return exclusionSuggestionResultFromFindingMetadata(findings)
 	}
 	return exclusionSuggestionResult("exact", "", "", "")
+}
+
+// exclusionSuggestionResultFromFindingMetadata derives a coarse exclusion
+// from a findings batch using only non-sensitive metadata (rule_id, source)
+// — never the matched value itself. Prefers rule_id when every finding
+// shares one (the more precise signal); falls back to source.
+func exclusionSuggestionResultFromFindingMetadata(findings []repo.RiskResult) *gen.SuggestExclusionResult {
+	firstRuleID := findings[0].RuleID.String
+	sameRuleID := firstRuleID != ""
+	firstSource := findings[0].Source
+	sameSource := true
+	for _, f := range findings[1:] {
+		if f.RuleID.String != firstRuleID {
+			sameRuleID = false
+		}
+		if f.Source != firstSource {
+			sameSource = false
+		}
+	}
+	if sameRuleID {
+		return exclusionSuggestionResult("rule_id", firstRuleID, "", "")
+	}
+	if sameSource {
+		return exclusionSuggestionResult("source", firstSource, "", "")
+	}
+	return exclusionSuggestionResult("rule_id", firstRuleID, "", "")
 }
 
 // heuristicCustomRuleSuggestion is the deterministic fallback when the LLM
@@ -2719,7 +2750,7 @@ func (s *Service) suggestExclusionViaLLM(ctx context.Context, orgID, projectID, 
 
 Given a natural-language description of findings an operator wants to stop flagging, a batch of example findings they selected, or both, return a JSON object the dashboard uses to prefill a "create exclusion" form. An exclusion suppresses matching findings retroactively and going forward.
 
-Each finding carries: the matched text ("match", e.g. the detected email address or token), the id of the rule that flagged it ("rule_id", e.g. "pii.email_address", "secret.aws_access_token", "custom.acme_token"), and the detector source ("source", e.g. "gitleaks", "presidio", "prompt_injection", "custom"). When given a batch of example findings instead of (or alongside) a description, look for what they share — the same rule_id, the same source, a common pattern in match — and suggest an exclusion that covers all of them without being so broad it would suppress unrelated findings.
+A finding carries the id of the rule that flagged it ("rule_id", e.g. "pii.email_address", "secret.aws_access_token", "custom.acme_token") and the detector source ("source", e.g. "gitleaks", "presidio", "prompt_injection", "custom"). When given a batch of example findings, their actual matched text is deliberately withheld from you — it's sensitive (a detected secret or PII value) and the operator hasn't reviewed or disclosed it to this request. Reason only from what the findings share by rule_id and source and suggest a "rule_id" or "source" match_type that covers them, never "exact"/"regex"/"entity_type" from batch findings alone. If the operator's own natural-language request separately names a specific value, that value came from them directly and may be used for "exact"/"regex"/"entity_type".
 
 Fields:
 - "match_type": how match_value is compared, one of:
@@ -2746,10 +2777,13 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		messageParts = append(messageParts, fmt.Sprintf("Operator request: %s", userPrompt))
 	}
 	if len(findings) > 0 {
+		// Deliberately omits each finding's matched value (a detected
+		// secret/PII value) — see the system prompt's note on why. Only
+		// rule_id/source, neither sensitive on its own, cross this boundary.
 		var b strings.Builder
 		b.WriteString("Example findings the operator selected:\n")
 		for _, f := range findings {
-			fmt.Fprintf(&b, "- rule_id=%q source=%q match=%q\n", f.RuleID.String, f.Source, f.Match.String)
+			fmt.Fprintf(&b, "- rule_id=%q source=%q\n", f.RuleID.String, f.Source)
 		}
 		messageParts = append(messageParts, strings.TrimRight(b.String(), "\n"))
 	}

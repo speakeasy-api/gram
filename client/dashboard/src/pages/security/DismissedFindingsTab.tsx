@@ -8,6 +8,7 @@ import type { JSX } from "react";
 import { useMemo } from "react";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { invalidateAllRiskListDismissedResults } from "@gram/client/react-query/riskListDismissedResults.js";
+import { invalidateAllRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { useRiskUnmarkResultsFalsePositiveMutation } from "@gram/client/react-query/riskUnmarkResultsFalsePositive.js";
 import { invalidateAllRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { invalidateAllRiskRuleBreakdown } from "@gram/client/react-query/riskRuleBreakdown.js";
@@ -48,6 +49,7 @@ export function DismissedFindingsTab(): JSX.Element {
       queryKey: ["risk", "results"],
     });
     void invalidateAllRiskListDismissedResults(queryClient);
+    void invalidateAllRiskListResults(queryClient);
     void invalidateAllRiskOverview(queryClient);
     void invalidateAllRiskRuleBreakdown(queryClient);
     void invalidateAllRiskUserBreakdown(queryClient);

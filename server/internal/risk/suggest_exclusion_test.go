@@ -4,46 +4,13 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
-
-// seedRiskResultReturningID mirrors seedRiskResultWith but returns the new
-// row's id, needed for the finding_ids-based suggestExclusion tests below.
-func seedRiskResultReturningID(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID string, policyID uuid.UUID, msgID uuid.UUID, source, ruleID, match string) uuid.UUID {
-	t.Helper()
-	ctx := t.Context()
-
-	resultID, err := uuid.NewV7()
-	require.NoError(t, err)
-
-	repo := riskrepo.New(ti.conn)
-	_, err = repo.InsertRiskResults(ctx, []riskrepo.InsertRiskResultsParams{{
-		ID:                resultID,
-		ProjectID:         projectID,
-		OrganizationID:    orgID,
-		RiskPolicyID:      policyID,
-		RiskPolicyVersion: 1,
-		ChatMessageID:     uuid.NullUUID{UUID: msgID, Valid: true},
-		Source:            source,
-		Found:             true,
-		RuleID:            pgtype.Text{String: ruleID, Valid: ruleID != ""},
-		Description:       pgtype.Text{String: "", Valid: false},
-		Match:             pgtype.Text{String: match, Valid: match != ""},
-		StartPos:          pgtype.Int4{Int32: 0, Valid: true},
-		EndPos:            pgtype.Int4{Int32: int32(len(match)), Valid: true},
-		Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},
-		Tags:              nil,
-	}})
-	require.NoError(t, err)
-	return resultID
-}
 
 func TestSuggestExclusion_Unauthorized(t *testing.T) {
 	t.Parallel()
@@ -112,8 +79,11 @@ func TestSuggestExclusion_PromptOnly_HeuristicFallback(t *testing.T) {
 
 // TestSuggestExclusion_FindingIDsOnly_HeuristicFallback guards the batch
 // path end to end: finding_ids must be looked up server-side (not trusted
-// from the client) and fed into the same heuristic fallback used for a
-// prompt, keyed off the looked-up row's match value.
+// from the client), and the fallback must never surface a finding's raw
+// matched value — a detected secret here ("AKIAIOSFODNN7EXAMPLE") the
+// operator hasn't reviewed or disclosed — since that would bypass the
+// audited risk.unmaskResult path every other raw-match disclosure goes
+// through. It falls back to a rule_id-scoped exclusion instead.
 func TestSuggestExclusion_FindingIDsOnly_HeuristicFallback(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
@@ -129,12 +99,43 @@ func TestSuggestExclusion_FindingIDsOnly_HeuristicFallback(t *testing.T) {
 	require.NoError(t, err)
 
 	_, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
-	resultID := seedRiskResultReturningID(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, msgID, "gitleaks", "secret.aws_access_token", "AKIAIOSFODNN7EXAMPLE")
+	resultID := seedRiskResultWith(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, msgID, "gitleaks", "secret.aws_access_token", "AKIAIOSFODNN7EXAMPLE")
 
 	result, err := ti.service.SuggestExclusion(ctx, &gen.SuggestExclusionPayload{
 		FindingIds: []string{resultID.String()},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "exact", result.MatchType)
-	require.Equal(t, "AKIAIOSFODNN7EXAMPLE", result.MatchValue)
+	require.Equal(t, "rule_id", result.MatchType)
+	require.Equal(t, "secret.aws_access_token", result.MatchValue)
+	require.NotContains(t, result.MatchValue, "AKIAIOSFODNN7EXAMPLE")
+}
+
+// TestSuggestExclusion_FindingIDsOnly_DifferentRuleSameSource_FallsBackToSource
+// covers the batch heuristic's second tier: findings that don't share a
+// rule_id but do share a source fall back to a source-scoped exclusion,
+// still without ever touching the raw matched values.
+func TestSuggestExclusion_FindingIDsOnly_DifferentRuleSameSource_FallsBackToSource(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Suggest Exclusion Batch Source Test")})
+	require.NoError(t, err)
+	policyID, err := uuid.Parse(policy.ID)
+	require.NoError(t, err)
+
+	_, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	id1 := seedRiskResultWith(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, msgID, "presidio", "pii.email_address", "jane.doe@acme.com")
+	id2 := seedRiskResultWith(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, msgID, "presidio", "pii.phone_number", "555-0100")
+
+	result, err := ti.service.SuggestExclusion(ctx, &gen.SuggestExclusionPayload{
+		FindingIds: []string{id1.String(), id2.String()},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "source", result.MatchType)
+	require.Equal(t, "presidio", result.MatchValue)
 }

@@ -272,8 +272,13 @@ export default function RiskEvents(): JSX.Element {
   const handleSetupExclusionSelected = useCallback(() => {
     const selected = selection.selectedItems;
     if (selected.length === 0) return;
+    // Deliberately doesn't clear the selection (unlike handleDismissSelected):
+    // a batch AI suggestion takes a few seconds, and clearing here would
+    // collapse the bulk bar mid-request, hiding the spinner on "Setup
+    // exclusion rule" with no visible feedback until the sheet opens. Leaving
+    // the selection also means Clear/retry still works if the sheet is
+    // cancelled.
     exclusionRule.open(selected);
-    selection.clear();
   }, [selection, exclusionRule]);
 
   const handleScroll = useCallback(
@@ -328,7 +333,7 @@ export default function RiskEvents(): JSX.Element {
                   onClick: handleDismissSelected,
                 },
                 {
-                  label: "Setup exclusion rule",
+                  label: "Set up exclusion rule",
                   onClick: handleSetupExclusionSelected,
                   variant: "secondary",
                   disabled: exclusionRule.isSuggesting,
@@ -605,7 +610,7 @@ function RiskEventsRow({
       ? [{ label: "Copy link", onClick: () => void handleShare() }]
       : []),
     { label: "Mark as false positive", onClick: () => onDismiss(result) },
-    { label: "Setup exclusion rule", onClick: () => onSetupExclusion(result) },
+    { label: "Set up exclusion rule", onClick: () => onSetupExclusion(result) },
   ];
 
   return (

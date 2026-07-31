@@ -263,7 +263,7 @@ function TranscriptFindingsCard({
                           ...(finding.onSetupExclusionRule
                             ? [
                                 {
-                                  label: "Setup exclusion rule",
+                                  label: "Set up exclusion rule",
                                   onClick: finding.onSetupExclusionRule,
                                 },
                               ]

@@ -1394,7 +1394,7 @@ var _ = Service("risk", func() {
 				MaxLength(500)
 			})
 			Attribute("known_rule_ids", ArrayOf(String), "Built-in and custom rule ids the suggestion may reference in rule_id filters.")
-			Attribute("finding_ids", ArrayOf(String), "IDs of example findings (e.g. a multiselect batch) to derive a suggestion from. Looked up server-side so the suggestion sees authoritative, unmasked content. Optional when prompt is provided.", func() {
+			Attribute("finding_ids", ArrayOf(String), "IDs of example findings (e.g. a multiselect batch) to derive a suggestion from. Looked up server-side rather than trusted from the client, but only rule_id/source cross into the suggestion — a finding's matched value (a detected secret/PII value the caller hasn't reviewed) is never read for this, so batch-derived suggestions are rule_id/source scoped rather than exact-value. Optional when prompt is provided.", func() {
 				MaxLength(50)
 			})
 		})

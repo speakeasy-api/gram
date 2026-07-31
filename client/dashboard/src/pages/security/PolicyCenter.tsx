@@ -877,7 +877,7 @@ function PolicyCenterContent() {
     activeTab === "policies"
       ? { label: "New Policy", onClick: () => routes.policyCenter.new.goTo() }
       : {
-          label: "Setup Exclusion Rule",
+          label: "Set up Exclusion Rule",
           onClick: () => setExclusionSheet({ mode: "create" }),
         };
   const policyDeleteRuleListItems = policyToDelete

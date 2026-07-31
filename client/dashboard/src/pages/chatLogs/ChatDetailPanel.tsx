@@ -1584,7 +1584,7 @@ function ChatDetailPanel({
               title={
                 exclusionState.mode === "edit"
                   ? "Edit exclusion rule"
-                  : "Setup exclusion rule"
+                  : "Set up exclusion rule"
               }
               onBack={closeExclusion}
             />

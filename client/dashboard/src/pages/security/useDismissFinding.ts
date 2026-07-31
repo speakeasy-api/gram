@@ -5,6 +5,7 @@ import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useRiskMarkResultsFalsePositiveMutation } from "@gram/client/react-query/riskMarkResultsFalsePositive.js";
 import { useRiskUnmarkResultsFalsePositiveMutation } from "@gram/client/react-query/riskUnmarkResultsFalsePositive.js";
 import { invalidateAllRiskListDismissedResults } from "@gram/client/react-query/riskListDismissedResults.js";
+import { invalidateAllRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { invalidateAllRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { invalidateAllRiskRuleBreakdown } from "@gram/client/react-query/riskRuleBreakdown.js";
 import { invalidateAllRiskUserBreakdown } from "@gram/client/react-query/riskUserBreakdown.js";
@@ -75,6 +76,12 @@ export function useDismissFinding(): {
       queryKey: ["risk", "results"],
     });
     void invalidateAllRiskListDismissedResults(queryClient);
+    // The chat transcript's ChatDetailPanel reads findings through the
+    // *generated* useRiskListResults hook (a separate ["@gram/client",
+    // "results", "list", ...] key namespace the prefix above never touches),
+    // so a tool-call-section dismiss left the transcript showing a finding
+    // as still flagged until a manual reload.
+    void invalidateAllRiskListResults(queryClient);
     void invalidateAllRiskOverview(queryClient);
     void invalidateAllRiskRuleBreakdown(queryClient);
     void invalidateAllRiskUserBreakdown(queryClient);

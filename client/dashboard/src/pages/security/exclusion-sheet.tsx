@@ -172,7 +172,7 @@ export function ExclusionSheet({
       <SheetContent className="flex flex-col overflow-y-auto sm:max-w-lg">
         <SheetHeader className="px-6 pt-6">
           <SheetTitle>
-            {editing ? "Edit exclusion rule" : "Setup exclusion rule"}
+            {editing ? "Edit exclusion rule" : "Set up exclusion rule"}
           </SheetTitle>
           <SheetDescription>
             {editing
