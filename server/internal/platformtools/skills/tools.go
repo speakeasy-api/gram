@@ -24,7 +24,7 @@ func (t *Create) Descriptor() core.ToolDescriptor {
 		SourceSlug:  "skills",
 		HandlerName: "create_skill",
 		Name:        "platform_create_skill",
-		Description: "Create a project skill from complete SKILL.md content. If an active skill with the same normalized name exists, this records a new immutable version instead. Returns the saved skill, version, validation status, and whether either was newly created.",
+		Description: "Create a project skill from complete SKILL.md content. If an active skill with the same normalized name exists, this records a new immutable version unless the canonical content already exists, in which case the existing version is returned as a no-op. Returns the saved skill, version, validation status, and whether either was newly created.",
 		InputSchema: core.BuildInputSchema[createInput](),
 		Variables:   nil,
 		Annotations: skillMutationAnnotations(),
