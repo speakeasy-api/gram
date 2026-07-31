@@ -289,6 +289,10 @@ trackedFiles:
   src/funcs/packagesListVersions.ts: {}
   src/funcs/packagesPublish.ts: {}
   src/funcs/packagesUpdate.ts: {}
+  src/funcs/passthroughMcpCreateServer.ts: {}
+  src/funcs/passthroughMcpDeleteServer.ts: {}
+  src/funcs/passthroughMcpGetServer.ts: {}
+  src/funcs/passthroughMcpListServers.ts: {}
   src/funcs/pluginsAddPluginServer.ts: {}
   src/funcs/pluginsCreatePlugin.ts: {}
   src/funcs/pluginsDeletePlugin.ts: {}
@@ -618,6 +622,7 @@ trackedFiles:
   src/models/components/createorganizationremotesessionclientform.ts: {}
   src/models/components/createpackageform.ts: {}
   src/models/components/createpackageresult.ts: {}
+  src/models/components/createpassthroughmcpserverform.ts: {}
   src/models/components/createpluginform.ts: {}
   src/models/components/createportalsessionresult.ts: {}
   src/models/components/createprojectrequestbody.ts: {}
@@ -811,6 +816,7 @@ trackedFiles:
   src/models/components/listorganizationremotesessionissuersresult.ts: {}
   src/models/components/listorganizationremotesessionsresult.ts: {}
   src/models/components/listpackagesresult.ts: {}
+  src/models/components/listpassthroughmcpserversresult.ts: {}
   src/models/components/listpluginsresult.ts: {}
   src/models/components/listprojectsresult.ts: {}
   src/models/components/listprompttemplatesresult.ts: {}
@@ -935,6 +941,7 @@ trackedFiles:
   src/models/components/otelsum.ts: {}
   src/models/components/package.ts: {}
   src/models/components/packageversion.ts: {}
+  src/models/components/passthroughmcpserver.ts: {}
   src/models/components/periodusage.ts: {}
   src/models/components/platformtooldefinition.ts: {}
   src/models/components/plugin.ts: {}
@@ -1309,6 +1316,7 @@ trackedFiles:
   src/models/operations/createorganizationremotesessionclient.ts: {}
   src/models/operations/createorganizationremotesessionissuer.ts: {}
   src/models/operations/createpackage.ts: {}
+  src/models/operations/createpassthroughmcpserver.ts: {}
   src/models/operations/createplugin.ts: {}
   src/models/operations/createportalsession.ts: {}
   src/models/operations/createproject.ts: {}
@@ -1355,6 +1363,7 @@ trackedFiles:
   src/models/operations/deleteorganizationremotesessionclient.ts: {}
   src/models/operations/deleteorganizationremotesessionissuer.ts: {}
   src/models/operations/deleteotelforwardingconfig.ts: {}
+  src/models/operations/deletepassthroughmcpserver.ts: {}
   src/models/operations/deleteplugin.ts: {}
   src/models/operations/deleteproject.ts: {}
   src/models/operations/deleteremotemcpserver.ts: {}
@@ -1436,6 +1445,7 @@ trackedFiles:
   src/models/operations/getorganizationremotesessionissuerdeletepreflight.ts: {}
   src/models/operations/getorganizationremotesessionissuermigratepreflight.ts: {}
   src/models/operations/getotelforwardingconfig.ts: {}
+  src/models/operations/getpassthroughmcpserver.ts: {}
   src/models/operations/getperiodusage.ts: {}
   src/models/operations/getplugin.ts: {}
   src/models/operations/getproductfeatures.ts: {}
@@ -1543,6 +1553,7 @@ trackedFiles:
   src/models/operations/listorganizationremotesessionissuers.ts: {}
   src/models/operations/listorganizationusers.ts: {}
   src/models/operations/listpackages.ts: {}
+  src/models/operations/listpassthroughmcpservers.ts: {}
   src/models/operations/listplatformexternalcredentials.ts: {}
   src/models/operations/listplugins.ts: {}
   src/models/operations/listprojects.ts: {}
@@ -1829,6 +1840,7 @@ trackedFiles:
   src/react-query/createOrganizationRemoteSessionClient.ts: {}
   src/react-query/createOrganizationRemoteSessionIssuer.ts: {}
   src/react-query/createPackage.ts: {}
+  src/react-query/createPassthroughMcpServer.ts: {}
   src/react-query/createPlugin.ts: {}
   src/react-query/createPortalSession.ts: {}
   src/react-query/createProject.ts: {}
@@ -1866,6 +1878,7 @@ trackedFiles:
   src/react-query/deleteOrganizationRemoteSessionClient.ts: {}
   src/react-query/deleteOrganizationRemoteSessionIssuer.ts: {}
   src/react-query/deleteOtelForwardingConfig.ts: {}
+  src/react-query/deletePassthroughMcpServer.ts: {}
   src/react-query/deletePlugin.ts: {}
   src/react-query/deleteProject.ts: {}
   src/react-query/deleteRemoteMcpServer.ts: {}
@@ -1940,6 +1953,8 @@ trackedFiles:
   src/react-query/getMcpServerActivity.ts: {}
   src/react-query/getObservabilityOverview.core.ts: {}
   src/react-query/getObservabilityOverview.ts: {}
+  src/react-query/getPassthroughMcpServer.core.ts: {}
+  src/react-query/getPassthroughMcpServer.ts: {}
   src/react-query/getPeriodUsage.core.ts: {}
   src/react-query/getPeriodUsage.ts: {}
   src/react-query/getProjectMetricsSummary.core.ts: {}
@@ -2140,6 +2155,8 @@ trackedFiles:
   src/react-query/organizationRemoteSessionIssuers.ts: {}
   src/react-query/otelForwardingConfig.core.ts: {}
   src/react-query/otelForwardingConfig.ts: {}
+  src/react-query/passthroughMcpServers.core.ts: {}
+  src/react-query/passthroughMcpServers.ts: {}
   src/react-query/pauseTrigger.ts: {}
   src/react-query/plugin.core.ts: {}
   src/react-query/plugin.ts: {}
@@ -2499,6 +2516,7 @@ trackedFiles:
   src/sdk/otelforwarding.ts: {}
   src/sdk/overview.ts: {}
   src/sdk/packages.ts: {}
+  src/sdk/passthroughmcp.ts: {}
   src/sdk/plugins.ts: {}
   src/sdk/policies.ts: {}
   src/sdk/policybypassrequests.ts: {}
@@ -3120,6 +3138,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  createPassthroughMcpServer:
+    speakeasy-default-create-passthrough-mcp-server:
+      requestBody:
+        application/json: {"url": "https://gaseous-bathrobe.info"}
+      responses:
+        "200":
+          application/json: {"created_at": "2026-01-20T21:23:32.085Z", "id": "b8d8c38c-9682-4978-a757-4a166aa09a92", "project_id": "bd908483-e2a0-4aab-a425-4a3c58415def", "updated_at": "2024-08-30T11:59:01.664Z", "url": "https://untrue-cutlet.net"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   createPlugin:
     speakeasy-default-create-plugin:
       requestBody:
@@ -3623,6 +3652,16 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  deletePassthroughMcpServer:
+    speakeasy-default-delete-passthrough-mcp-server:
+      parameters:
+        query:
+          id: "<id>"
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   deletePlugin:
     speakeasy-default-delete-plugin:
       parameters:
@@ -4523,6 +4562,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getPassthroughMcpServer:
+    speakeasy-default-get-passthrough-mcp-server:
+      responses:
+        "200":
+          application/json: {"created_at": "2024-05-11T22:53:24.905Z", "id": "215ceb17-4c2f-4290-b3b2-85b6bc9cad26", "project_id": "6bf3461e-0c2f-4107-94c6-81f3d5714c99", "updated_at": "2026-06-07T05:18:27.989Z", "url": "https://dull-wafer.org"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getPeriodUsage:
     speakeasy-default-get-period-usage:
       responses:
@@ -5677,6 +5725,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listPassthroughMcpServers:
+    speakeasy-default-list-passthrough-mcp-servers:
+      responses:
+        "200":
+          application/json: {"passthrough_mcp_servers": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listPlatformExternalCredentials:
     speakeasy-default-list-platform-external-credentials:
       responses:

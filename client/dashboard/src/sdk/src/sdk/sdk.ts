@@ -42,6 +42,7 @@ import { OrganizationRemoteSessions } from "./organizationremotesessions.js";
 import { Organizations } from "./organizations.js";
 import { OtelForwarding } from "./otelforwarding.js";
 import { Packages } from "./packages.js";
+import { PassthroughMcp } from "./passthroughmcp.js";
 import { Plugins } from "./plugins.js";
 import { Projects } from "./projects.js";
 import { RemoteMcp } from "./remotemcp.js";
@@ -266,6 +267,11 @@ export class Gram extends ClientSDK {
   private _packages?: Packages;
   get packages(): Packages {
     return (this._packages ??= new Packages(this._options));
+  }
+
+  private _passthroughMcp?: PassthroughMcp;
+  get passthroughMcp(): PassthroughMcp {
+    return (this._passthroughMcp ??= new PassthroughMcp(this._options));
   }
 
   private _plugins?: Plugins;

@@ -9,6 +9,7 @@ INSERT INTO mcp_servers (
     remote_mcp_server_id,
     tunneled_mcp_server_id,
     toolset_id,
+    passthrough_mcp_server_id,
     tool_variations_group_id,
     visibility
 )
@@ -22,6 +23,7 @@ VALUES (
     @remote_mcp_server_id,
     @tunneled_mcp_server_id,
     @toolset_id,
+    @passthrough_mcp_server_id,
     @tool_variations_group_id,
     @visibility
 )
@@ -108,6 +110,7 @@ SET
     remote_mcp_server_id = @remote_mcp_server_id,
     tunneled_mcp_server_id = @tunneled_mcp_server_id,
     toolset_id = @toolset_id,
+    passthrough_mcp_server_id = @passthrough_mcp_server_id,
     tool_variations_group_id = @tool_variations_group_id,
     visibility = @visibility,
     updated_at = clock_timestamp()

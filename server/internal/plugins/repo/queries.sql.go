@@ -358,7 +358,8 @@ SELECT
   EXISTS (
     SELECT 1 FROM mcp_endpoints e
     WHERE e.mcp_server_id = s.id AND e.deleted IS FALSE
-  ) AS has_endpoint
+  ) AS has_endpoint,
+  (s.passthrough_mcp_server_id IS NOT NULL)::boolean AS is_passthrough
 FROM mcp_servers s
 WHERE
   s.id = $1
@@ -372,16 +373,20 @@ type GetMcpServerForPluginServerParams struct {
 }
 
 type GetMcpServerForPluginServerRow struct {
-	ID          uuid.UUID
-	Name        pgtype.Text
-	Slug        pgtype.Text
-	Visibility  string
-	HasEndpoint bool
+	ID            uuid.UUID
+	Name          pgtype.Text
+	Slug          pgtype.Text
+	Visibility    string
+	HasEndpoint   bool
+	IsPassthrough bool
 }
 
 // Resolve an mcp_server for plugin-server validation, scoped to the project so
 // IDs alone are never trusted. has_endpoint reports whether the server has at
 // least one usable endpoint so the caller can reject unpublishable servers.
+// is_passthrough reports whether the server is backed by a pass-through MCP
+// server, which is never proxied and so never has an mcp_endpoints row; the
+// caller exempts those servers from the has_endpoint requirement.
 func (q *Queries) GetMcpServerForPluginServer(ctx context.Context, arg GetMcpServerForPluginServerParams) (GetMcpServerForPluginServerRow, error) {
 	row := q.db.QueryRow(ctx, getMcpServerForPluginServer, arg.McpServerID, arg.ProjectID)
 	var i GetMcpServerForPluginServerRow
@@ -391,6 +396,7 @@ func (q *Queries) GetMcpServerForPluginServer(ctx context.Context, arg GetMcpSer
 		&i.Slug,
 		&i.Visibility,
 		&i.HasEndpoint,
+		&i.IsPassthrough,
 	)
 	return i, err
 }

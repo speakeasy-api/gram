@@ -28,6 +28,7 @@ import (
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	passthroughmcprepo "github.com/speakeasy-api/gram/server/internal/passthroughmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -355,6 +356,43 @@ func createTestMcpServerWithEndpoint(t *testing.T, ctx context.Context, conn *pg
 	}
 
 	return fixture
+}
+
+// createTestPassthroughMcpServer creates a pass-through-backed mcp_server
+// with no mcp_endpoints row, mirroring how the real create flow leaves it
+// (there is no Gram-hosted endpoint to serve for a server Gram never
+// proxies). visibility controls publishability.
+func createTestPassthroughMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name, visibility string) mcpServerFixture {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	backingID := uuid.New()
+	_, err := passthroughmcprepo.New(conn).CreateServer(ctx, passthroughmcprepo.CreateServerParams{
+		ID:          backingID,
+		ProjectID:   *authCtx.ProjectID,
+		Name:        pgtype.Text{String: name, Valid: true},
+		Slug:        pgtype.Text{String: fmt.Sprintf("passthrough-%s-%s", name, uuid.New().String()[:8]), Valid: true},
+		Url:         "https://vendor.example.com/mcp",
+		Description: pgtype.Text{},
+	})
+	require.NoError(t, err)
+
+	slug := fmt.Sprintf("mcp-%s-%s", name, uuid.New().String()[:8])
+	serverID := uuid.New()
+	_, err = mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                     serverID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   pgtype.Text{String: name, Valid: true},
+		Slug:                   pgtype.Text{String: slug, Valid: true},
+		PassthroughMcpServerID: uuid.NullUUID{UUID: backingID, Valid: true},
+		Visibility:             visibility,
+	})
+	require.NoError(t, err)
+
+	return mcpServerFixture{id: serverID, idStr: serverID.String(), name: name, slug: slug}
 }
 
 func withauthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...authz.Grant) context.Context {

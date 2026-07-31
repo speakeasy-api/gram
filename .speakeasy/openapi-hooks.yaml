@@ -816,6 +816,8 @@ tags:
     description: Manage per-organization forwarding of inbound OTEL hook payloads to a customer-owned endpoint.
   - name: packages
     description: Manages packages in Gram.
+  - name: passthroughMcp
+    description: Managing pass-through (unproxied) MCP servers. These are vendor MCP servers that Gram lists and can attach to a plugin but never proxies, so there is no OAuth callback or upstream allowlisting involved. Restricted to Speakeasy staff.
   - name: adminChatAnalysis
     description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
   - name: adminExternalCredentials

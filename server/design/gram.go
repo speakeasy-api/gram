@@ -38,6 +38,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/organizations"
 	_ "github.com/speakeasy-api/gram/server/design/otelforwarding"
 	_ "github.com/speakeasy-api/gram/server/design/packages"
+	_ "github.com/speakeasy-api/gram/server/design/passthroughmcp"
 	_ "github.com/speakeasy-api/gram/server/design/platformadmin/chatanalysis"
 	_ "github.com/speakeasy-api/gram/server/design/platformadmin/externalcredentials"
 	_ "github.com/speakeasy-api/gram/server/design/platformadmin/remotesessions"

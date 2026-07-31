@@ -43,6 +43,10 @@ export type McpServer = {
    */
   name?: string | undefined;
   /**
+   * The ID of the pass-through MCP server used as the backend, if any. A server backed by a pass-through MCP server is never proxied by Gram.
+   */
+  passthroughMcpServerId?: string | undefined;
+  /**
    * The project ID this MCP server belongs to
    */
   projectId: string;
@@ -96,6 +100,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
       environment_id: z.optional(z.string()),
       id: z.string(),
       name: z.optional(z.string()),
+      passthrough_mcp_server_id: z.optional(z.string()),
       project_id: z.string(),
       remote_mcp_server_id: z.optional(z.string()),
       slug: z.optional(z.string()),
@@ -113,6 +118,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
       return remap$(v, {
         "created_at": "createdAt",
         "environment_id": "environmentId",
+        "passthrough_mcp_server_id": "passthroughMcpServerId",
         "project_id": "projectId",
         "remote_mcp_server_id": "remoteMcpServerId",
         "tool_variations_group_id": "toolVariationsGroupId",

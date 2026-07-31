@@ -26,6 +26,8 @@ type CreateMcpServerRequestBody struct {
 	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
 	// The ID of the toolset to use as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The ID of the pass-through MCP server to use as the backend
+	PassthroughMcpServerID *string `form:"passthrough_mcp_server_id,omitempty" json:"passthrough_mcp_server_id,omitempty" xml:"passthrough_mcp_server_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server. Omit to leave filtering disabled.
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
@@ -49,6 +51,8 @@ type UpdateMcpServerRequestBody struct {
 	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
 	// The ID of the toolset to use as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The ID of the pass-through MCP server to use as the backend
+	PassthroughMcpServerID *string `form:"passthrough_mcp_server_id,omitempty" json:"passthrough_mcp_server_id,omitempty" xml:"passthrough_mcp_server_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server. Omit to disable filtering (cleared to null, consistent with the
 	// full-record replace semantics of the other UUID references).
@@ -119,6 +123,9 @@ type CreateMcpServerResponseBody struct {
 	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The ID of the pass-through MCP server used as the backend, if any. A server
+	// backed by a pass-through MCP server is never proxied by Gram.
+	PassthroughMcpServerID *string `form:"passthrough_mcp_server_id,omitempty" json:"passthrough_mcp_server_id,omitempty" xml:"passthrough_mcp_server_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
@@ -152,6 +159,9 @@ type GetMcpServerResponseBody struct {
 	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The ID of the pass-through MCP server used as the backend, if any. A server
+	// backed by a pass-through MCP server is never proxied by Gram.
+	PassthroughMcpServerID *string `form:"passthrough_mcp_server_id,omitempty" json:"passthrough_mcp_server_id,omitempty" xml:"passthrough_mcp_server_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
@@ -197,6 +207,9 @@ type UpdateMcpServerResponseBody struct {
 	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The ID of the pass-through MCP server used as the backend, if any. A server
+	// backed by a pass-through MCP server is never proxied by Gram.
+	PassthroughMcpServerID *string `form:"passthrough_mcp_server_id,omitempty" json:"passthrough_mcp_server_id,omitempty" xml:"passthrough_mcp_server_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
@@ -2543,6 +2556,9 @@ type McpServerResponseBody struct {
 	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The ID of the pass-through MCP server used as the backend, if any. A server
+	// backed by a pass-through MCP server is never proxied by Gram.
+	PassthroughMcpServerID *string `form:"passthrough_mcp_server_id,omitempty" json:"passthrough_mcp_server_id,omitempty" xml:"passthrough_mcp_server_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
@@ -2620,13 +2636,14 @@ type ToolMetadataResponseBody struct {
 // of the "createMcpServer" endpoint of the "mcpServers" service.
 func NewCreateMcpServerRequestBody(p *mcpservers.CreateMcpServerPayload) *CreateMcpServerRequestBody {
 	body := &CreateMcpServerRequestBody{
-		Name:                  p.Name,
-		EnvironmentID:         p.EnvironmentID,
-		RemoteMcpServerID:     p.RemoteMcpServerID,
-		TunneledMcpServerID:   p.TunneledMcpServerID,
-		ToolsetID:             p.ToolsetID,
-		ToolVariationsGroupID: p.ToolVariationsGroupID,
-		Visibility:            string(p.Visibility),
+		Name:                   p.Name,
+		EnvironmentID:          p.EnvironmentID,
+		RemoteMcpServerID:      p.RemoteMcpServerID,
+		TunneledMcpServerID:    p.TunneledMcpServerID,
+		ToolsetID:              p.ToolsetID,
+		PassthroughMcpServerID: p.PassthroughMcpServerID,
+		ToolVariationsGroupID:  p.ToolVariationsGroupID,
+		Visibility:             string(p.Visibility),
 	}
 	return body
 }
@@ -2635,14 +2652,15 @@ func NewCreateMcpServerRequestBody(p *mcpservers.CreateMcpServerPayload) *Create
 // of the "updateMcpServer" endpoint of the "mcpServers" service.
 func NewUpdateMcpServerRequestBody(p *mcpservers.UpdateMcpServerPayload) *UpdateMcpServerRequestBody {
 	body := &UpdateMcpServerRequestBody{
-		ID:                    p.ID,
-		Name:                  p.Name,
-		EnvironmentID:         p.EnvironmentID,
-		RemoteMcpServerID:     p.RemoteMcpServerID,
-		TunneledMcpServerID:   p.TunneledMcpServerID,
-		ToolsetID:             p.ToolsetID,
-		ToolVariationsGroupID: p.ToolVariationsGroupID,
-		Visibility:            string(p.Visibility),
+		ID:                     p.ID,
+		Name:                   p.Name,
+		EnvironmentID:          p.EnvironmentID,
+		RemoteMcpServerID:      p.RemoteMcpServerID,
+		TunneledMcpServerID:    p.TunneledMcpServerID,
+		ToolsetID:              p.ToolsetID,
+		PassthroughMcpServerID: p.PassthroughMcpServerID,
+		ToolVariationsGroupID:  p.ToolVariationsGroupID,
+		Visibility:             string(p.Visibility),
 	}
 	return body
 }
@@ -2708,19 +2726,20 @@ func NewSetToolMetadataRequestBody(p *mcpservers.SetToolMetadataPayload) *SetToo
 // "createMcpServer" endpoint result from a HTTP "OK" response.
 func NewCreateMcpServerMcpServerOK(body *CreateMcpServerResponseBody) *types.McpServer {
 	v := &types.McpServer{
-		ID:                    *body.ID,
-		ProjectID:             *body.ProjectID,
-		Name:                  body.Name,
-		Slug:                  body.Slug,
-		EnvironmentID:         body.EnvironmentID,
-		UserSessionIssuerID:   body.UserSessionIssuerID,
-		RemoteMcpServerID:     body.RemoteMcpServerID,
-		TunneledMcpServerID:   body.TunneledMcpServerID,
-		ToolsetID:             body.ToolsetID,
-		ToolVariationsGroupID: body.ToolVariationsGroupID,
-		Visibility:            types.McpServerVisibility(*body.Visibility),
-		CreatedAt:             *body.CreatedAt,
-		UpdatedAt:             *body.UpdatedAt,
+		ID:                     *body.ID,
+		ProjectID:              *body.ProjectID,
+		Name:                   body.Name,
+		Slug:                   body.Slug,
+		EnvironmentID:          body.EnvironmentID,
+		UserSessionIssuerID:    body.UserSessionIssuerID,
+		RemoteMcpServerID:      body.RemoteMcpServerID,
+		TunneledMcpServerID:    body.TunneledMcpServerID,
+		ToolsetID:              body.ToolsetID,
+		PassthroughMcpServerID: body.PassthroughMcpServerID,
+		ToolVariationsGroupID:  body.ToolVariationsGroupID,
+		Visibility:             types.McpServerVisibility(*body.Visibility),
+		CreatedAt:              *body.CreatedAt,
+		UpdatedAt:              *body.UpdatedAt,
 	}
 
 	return v
@@ -2880,19 +2899,20 @@ func NewCreateMcpServerGatewayError(body *CreateMcpServerGatewayErrorResponseBod
 // endpoint result from a HTTP "OK" response.
 func NewGetMcpServerMcpServerOK(body *GetMcpServerResponseBody) *types.McpServer {
 	v := &types.McpServer{
-		ID:                    *body.ID,
-		ProjectID:             *body.ProjectID,
-		Name:                  body.Name,
-		Slug:                  body.Slug,
-		EnvironmentID:         body.EnvironmentID,
-		UserSessionIssuerID:   body.UserSessionIssuerID,
-		RemoteMcpServerID:     body.RemoteMcpServerID,
-		TunneledMcpServerID:   body.TunneledMcpServerID,
-		ToolsetID:             body.ToolsetID,
-		ToolVariationsGroupID: body.ToolVariationsGroupID,
-		Visibility:            types.McpServerVisibility(*body.Visibility),
-		CreatedAt:             *body.CreatedAt,
-		UpdatedAt:             *body.UpdatedAt,
+		ID:                     *body.ID,
+		ProjectID:              *body.ProjectID,
+		Name:                   body.Name,
+		Slug:                   body.Slug,
+		EnvironmentID:          body.EnvironmentID,
+		UserSessionIssuerID:    body.UserSessionIssuerID,
+		RemoteMcpServerID:      body.RemoteMcpServerID,
+		TunneledMcpServerID:    body.TunneledMcpServerID,
+		ToolsetID:              body.ToolsetID,
+		PassthroughMcpServerID: body.PassthroughMcpServerID,
+		ToolVariationsGroupID:  body.ToolVariationsGroupID,
+		Visibility:             types.McpServerVisibility(*body.Visibility),
+		CreatedAt:              *body.CreatedAt,
+		UpdatedAt:              *body.UpdatedAt,
 	}
 
 	return v
@@ -3384,19 +3404,20 @@ func NewListMcpServersForOrgGatewayError(body *ListMcpServersForOrgGatewayErrorR
 // "updateMcpServer" endpoint result from a HTTP "OK" response.
 func NewUpdateMcpServerMcpServerOK(body *UpdateMcpServerResponseBody) *types.McpServer {
 	v := &types.McpServer{
-		ID:                    *body.ID,
-		ProjectID:             *body.ProjectID,
-		Name:                  body.Name,
-		Slug:                  body.Slug,
-		EnvironmentID:         body.EnvironmentID,
-		UserSessionIssuerID:   body.UserSessionIssuerID,
-		RemoteMcpServerID:     body.RemoteMcpServerID,
-		TunneledMcpServerID:   body.TunneledMcpServerID,
-		ToolsetID:             body.ToolsetID,
-		ToolVariationsGroupID: body.ToolVariationsGroupID,
-		Visibility:            types.McpServerVisibility(*body.Visibility),
-		CreatedAt:             *body.CreatedAt,
-		UpdatedAt:             *body.UpdatedAt,
+		ID:                     *body.ID,
+		ProjectID:              *body.ProjectID,
+		Name:                   body.Name,
+		Slug:                   body.Slug,
+		EnvironmentID:          body.EnvironmentID,
+		UserSessionIssuerID:    body.UserSessionIssuerID,
+		RemoteMcpServerID:      body.RemoteMcpServerID,
+		TunneledMcpServerID:    body.TunneledMcpServerID,
+		ToolsetID:              body.ToolsetID,
+		PassthroughMcpServerID: body.PassthroughMcpServerID,
+		ToolVariationsGroupID:  body.ToolVariationsGroupID,
+		Visibility:             types.McpServerVisibility(*body.Visibility),
+		CreatedAt:              *body.CreatedAt,
+		UpdatedAt:              *body.UpdatedAt,
 	}
 
 	return v
@@ -4738,6 +4759,9 @@ func ValidateCreateMcpServerResponseBody(body *CreateMcpServerResponseBody) (err
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
 	}
+	if body.PassthroughMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.passthrough_mcp_server_id", *body.PassthroughMcpServerID, goa.FormatUUID))
+	}
 	if body.ToolVariationsGroupID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
 	}
@@ -4793,6 +4817,9 @@ func ValidateGetMcpServerResponseBody(body *GetMcpServerResponseBody) (err error
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.PassthroughMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.passthrough_mcp_server_id", *body.PassthroughMcpServerID, goa.FormatUUID))
 	}
 	if body.ToolVariationsGroupID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
@@ -4881,6 +4908,9 @@ func ValidateUpdateMcpServerResponseBody(body *UpdateMcpServerResponseBody) (err
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.PassthroughMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.passthrough_mcp_server_id", *body.PassthroughMcpServerID, goa.FormatUUID))
 	}
 	if body.ToolVariationsGroupID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
@@ -7930,6 +7960,9 @@ func ValidateMcpServerResponseBody(body *McpServerResponseBody) (err error) {
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.PassthroughMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.passthrough_mcp_server_id", *body.PassthroughMcpServerID, goa.FormatUUID))
 	}
 	if body.ToolVariationsGroupID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))

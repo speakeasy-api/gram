@@ -55,6 +55,7 @@ import (
 	organizationsc "github.com/speakeasy-api/gram/server/gen/http/organizations/client"
 	otelforwardingc "github.com/speakeasy-api/gram/server/gen/http/otel_forwarding/client"
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
+	passthroughmcpc "github.com/speakeasy-api/gram/server/gen/http/passthrough_mcp/client"
 	pluginsc "github.com/speakeasy-api/gram/server/gen/http/plugins/client"
 	projectsc "github.com/speakeasy-api/gram/server/gen/http/projects/client"
 	remotemcpc "github.com/speakeasy-api/gram/server/gen/http/remote_mcp/client"
@@ -123,6 +124,7 @@ func UsageCommands() []string {
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link)",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
+		"passthrough-mcp (create-server|list-servers|get-server|delete-server)",
 		"admin-chat-analysis (get-settings|upsert-work-units-settings|trigger-analysis)",
 		"admin-external-credentials (create-gcp-iam-platform-credential|list-platform-external-credentials|update-gcp-iam-platform-credential|get-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
@@ -1387,6 +1389,32 @@ func ParseEndpoint(
 		packagesPublishApikeyTokenFlag      = packagesPublishFlags.String("apikey-token", "", "")
 		packagesPublishSessionTokenFlag     = packagesPublishFlags.String("session-token", "", "")
 		packagesPublishProjectSlugInputFlag = packagesPublishFlags.String("project-slug-input", "", "")
+
+		passthroughMcpFlags = flag.NewFlagSet("passthrough-mcp", flag.ContinueOnError)
+
+		passthroughMcpCreateServerFlags                = flag.NewFlagSet("create-server", flag.ExitOnError)
+		passthroughMcpCreateServerBodyFlag             = passthroughMcpCreateServerFlags.String("body", "REQUIRED", "")
+		passthroughMcpCreateServerSessionTokenFlag     = passthroughMcpCreateServerFlags.String("session-token", "", "")
+		passthroughMcpCreateServerApikeyTokenFlag      = passthroughMcpCreateServerFlags.String("apikey-token", "", "")
+		passthroughMcpCreateServerProjectSlugInputFlag = passthroughMcpCreateServerFlags.String("project-slug-input", "", "")
+
+		passthroughMcpListServersFlags                = flag.NewFlagSet("list-servers", flag.ExitOnError)
+		passthroughMcpListServersSessionTokenFlag     = passthroughMcpListServersFlags.String("session-token", "", "")
+		passthroughMcpListServersApikeyTokenFlag      = passthroughMcpListServersFlags.String("apikey-token", "", "")
+		passthroughMcpListServersProjectSlugInputFlag = passthroughMcpListServersFlags.String("project-slug-input", "", "")
+
+		passthroughMcpGetServerFlags                = flag.NewFlagSet("get-server", flag.ExitOnError)
+		passthroughMcpGetServerIDFlag               = passthroughMcpGetServerFlags.String("id", "", "")
+		passthroughMcpGetServerSlugFlag             = passthroughMcpGetServerFlags.String("slug", "", "")
+		passthroughMcpGetServerSessionTokenFlag     = passthroughMcpGetServerFlags.String("session-token", "", "")
+		passthroughMcpGetServerApikeyTokenFlag      = passthroughMcpGetServerFlags.String("apikey-token", "", "")
+		passthroughMcpGetServerProjectSlugInputFlag = passthroughMcpGetServerFlags.String("project-slug-input", "", "")
+
+		passthroughMcpDeleteServerFlags                = flag.NewFlagSet("delete-server", flag.ExitOnError)
+		passthroughMcpDeleteServerIDFlag               = passthroughMcpDeleteServerFlags.String("id", "REQUIRED", "")
+		passthroughMcpDeleteServerSessionTokenFlag     = passthroughMcpDeleteServerFlags.String("session-token", "", "")
+		passthroughMcpDeleteServerApikeyTokenFlag      = passthroughMcpDeleteServerFlags.String("apikey-token", "", "")
+		passthroughMcpDeleteServerProjectSlugInputFlag = passthroughMcpDeleteServerFlags.String("project-slug-input", "", "")
 
 		adminChatAnalysisFlags = flag.NewFlagSet("admin-chat-analysis", flag.ContinueOnError)
 
@@ -3326,6 +3354,12 @@ func ParseEndpoint(
 	packagesListVersionsFlags.Usage = packagesListVersionsUsage
 	packagesPublishFlags.Usage = packagesPublishUsage
 
+	passthroughMcpFlags.Usage = passthroughMcpUsage
+	passthroughMcpCreateServerFlags.Usage = passthroughMcpCreateServerUsage
+	passthroughMcpListServersFlags.Usage = passthroughMcpListServersUsage
+	passthroughMcpGetServerFlags.Usage = passthroughMcpGetServerUsage
+	passthroughMcpDeleteServerFlags.Usage = passthroughMcpDeleteServerUsage
+
 	adminChatAnalysisFlags.Usage = adminChatAnalysisUsage
 	adminChatAnalysisGetSettingsFlags.Usage = adminChatAnalysisGetSettingsUsage
 	adminChatAnalysisUpsertWorkUnitsSettingsFlags.Usage = adminChatAnalysisUpsertWorkUnitsSettingsUsage
@@ -3749,6 +3783,8 @@ func ParseEndpoint(
 			svcf = otelForwardingFlags
 		case "packages":
 			svcf = packagesFlags
+		case "passthrough-mcp":
+			svcf = passthroughMcpFlags
 		case "admin-chat-analysis":
 			svcf = adminChatAnalysisFlags
 		case "admin-external-credentials":
@@ -4629,6 +4665,22 @@ func ParseEndpoint(
 
 			case "publish":
 				epf = packagesPublishFlags
+
+			}
+
+		case "passthrough-mcp":
+			switch epn {
+			case "create-server":
+				epf = passthroughMcpCreateServerFlags
+
+			case "list-servers":
+				epf = passthroughMcpListServersFlags
+
+			case "get-server":
+				epf = passthroughMcpGetServerFlags
+
+			case "delete-server":
+				epf = passthroughMcpDeleteServerFlags
 
 			}
 
@@ -6423,6 +6475,22 @@ func ParseEndpoint(
 			case "publish":
 				endpoint = c.Publish()
 				data, err = packagesc.BuildPublishPayload(*packagesPublishBodyFlag, *packagesPublishApikeyTokenFlag, *packagesPublishSessionTokenFlag, *packagesPublishProjectSlugInputFlag)
+			}
+		case "passthrough-mcp":
+			c := passthroughmcpc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create-server":
+				endpoint = c.CreateServer()
+				data, err = passthroughmcpc.BuildCreateServerPayload(*passthroughMcpCreateServerBodyFlag, *passthroughMcpCreateServerSessionTokenFlag, *passthroughMcpCreateServerApikeyTokenFlag, *passthroughMcpCreateServerProjectSlugInputFlag)
+			case "list-servers":
+				endpoint = c.ListServers()
+				data, err = passthroughmcpc.BuildListServersPayload(*passthroughMcpListServersSessionTokenFlag, *passthroughMcpListServersApikeyTokenFlag, *passthroughMcpListServersProjectSlugInputFlag)
+			case "get-server":
+				endpoint = c.GetServer()
+				data, err = passthroughmcpc.BuildGetServerPayload(*passthroughMcpGetServerIDFlag, *passthroughMcpGetServerSlugFlag, *passthroughMcpGetServerSessionTokenFlag, *passthroughMcpGetServerApikeyTokenFlag, *passthroughMcpGetServerProjectSlugInputFlag)
+			case "delete-server":
+				endpoint = c.DeleteServer()
+				data, err = passthroughmcpc.BuildDeleteServerPayload(*passthroughMcpDeleteServerIDFlag, *passthroughMcpDeleteServerSessionTokenFlag, *passthroughMcpDeleteServerApikeyTokenFlag, *passthroughMcpDeleteServerProjectSlugInputFlag)
 			}
 		case "admin-chat-analysis":
 			c := adminchatanalysisc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -12011,7 +12079,7 @@ func mcpServersCreateMcpServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers create-mcp-server --body '{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers create-mcp-server --body '{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"passthrough_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpServersGetMcpServerUsage() {
@@ -12107,7 +12175,7 @@ func mcpServersUpdateMcpServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers update-mcp-server --body '{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers update-mcp-server --body '{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"passthrough_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpServersListToolFiltersUsage() {
@@ -12887,6 +12955,116 @@ func packagesPublishUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages publish --body '{\n      \"deployment_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"version\": \"abc123\",\n      \"visibility\": \"private\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// passthroughMcpUsage displays the usage of the passthrough-mcp command and
+// its subcommands.
+func passthroughMcpUsage() {
+	fmt.Fprintln(os.Stderr, `Managing pass-through (unproxied) MCP servers. These are vendor MCP servers that Gram lists and can attach to a plugin but never proxies, so there is no OAuth callback or upstream allowlisting involved. Restricted to Speakeasy staff.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] passthrough-mcp COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create-server: Create a new pass-through MCP server. Restricted to callers whose email is on the speakeasy.com or speakeasyapi.dev domain.`)
+	fmt.Fprintln(os.Stderr, `    list-servers: List all pass-through MCP servers for a project`)
+	fmt.Fprintln(os.Stderr, `    get-server: Get a pass-through MCP server by ID or slug. Exactly one of id or slug must be provided.`)
+	fmt.Fprintln(os.Stderr, `    delete-server: Delete a pass-through MCP server`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s passthrough-mcp COMMAND --help\n", os.Args[0])
+}
+func passthroughMcpCreateServerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] passthrough-mcp create-server", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a new pass-through MCP server. Restricted to callers whose email is on the speakeasy.com or speakeasyapi.dev domain.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "passthrough-mcp create-server --body '{\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func passthroughMcpListServersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] passthrough-mcp list-servers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List all pass-through MCP servers for a project`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "passthrough-mcp list-servers --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func passthroughMcpGetServerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] passthrough-mcp get-server", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -slug STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a pass-through MCP server by ID or slug. Exactly one of id or slug must be provided.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "passthrough-mcp get-server --id \"550e8400-e29b-41d4-a716-446655440000\" --slug \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func passthroughMcpDeleteServerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] passthrough-mcp delete-server", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a pass-through MCP server`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "passthrough-mcp delete-server --id \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // adminChatAnalysisUsage displays the usage of the admin-chat-analysis command

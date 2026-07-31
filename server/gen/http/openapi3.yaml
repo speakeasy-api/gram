@@ -25537,6 +25537,423 @@ paths:
             x-speakeasy-name-override: update
             x-speakeasy-react-hook:
                 name: UpdatePackage
+    /rpc/passthroughMcp.createServer:
+        post:
+            description: Create a new pass-through MCP server. Restricted to callers whose email is on the speakeasy.com or speakeasyapi.dev domain.
+            operationId: createPassthroughMcpServer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreatePassthroughMcpServerForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PassthroughMcpServer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: createServer passthroughMcp
+            tags:
+                - passthroughMcp
+            x-speakeasy-name-override: createServer
+            x-speakeasy-react-hook:
+                name: CreatePassthroughMcpServer
+    /rpc/passthroughMcp.deleteServer:
+        delete:
+            description: Delete a pass-through MCP server
+            operationId: deletePassthroughMcpServer
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the pass-through MCP server to delete
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the pass-through MCP server to delete
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: deleteServer passthroughMcp
+            tags:
+                - passthroughMcp
+            x-speakeasy-name-override: deleteServer
+            x-speakeasy-react-hook:
+                name: DeletePassthroughMcpServer
+    /rpc/passthroughMcp.getServer:
+        get:
+            description: Get a pass-through MCP server by ID or slug. Exactly one of id or slug must be provided.
+            operationId: getPassthroughMcpServer
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the pass-through MCP server. Mutually exclusive with slug.
+                  in: query
+                  name: id
+                  schema:
+                    description: The ID of the pass-through MCP server. Mutually exclusive with slug.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: The slug of the pass-through MCP server. Mutually exclusive with id.
+                  in: query
+                  name: slug
+                  schema:
+                    description: The slug of the pass-through MCP server. Mutually exclusive with id.
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PassthroughMcpServer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getServer passthroughMcp
+            tags:
+                - passthroughMcp
+            x-speakeasy-name-override: getServer
+            x-speakeasy-react-hook:
+                name: GetPassthroughMcpServer
+    /rpc/passthroughMcp.listServers:
+        get:
+            description: List all pass-through MCP servers for a project
+            operationId: listPassthroughMcpServers
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListPassthroughMcpServersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listServers passthroughMcp
+            tags:
+                - passthroughMcp
+            x-speakeasy-name-override: listServers
+            x-speakeasy-react-hook:
+                name: PassthroughMcpServers
     /rpc/plugins.addPluginServer:
         post:
             description: Add an MCP server to a plugin.
@@ -52839,6 +53256,10 @@ components:
                 name:
                     type: string
                     description: A human-readable display name for the server
+                passthrough_mcp_server_id:
+                    type: string
+                    description: The ID of the pass-through MCP server to use as the backend
+                    format: uuid
                 remote_mcp_server_id:
                     type: string
                     description: The ID of the remote MCP server to use as the backend
@@ -52862,7 +53283,7 @@ components:
                         - disabled
                         - private
                         - public
-            description: Form for creating a new MCP server. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.
+            description: Form for creating a new MCP server. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or passthrough_mcp_server_id must be provided.
             required:
                 - name
                 - visibility
@@ -52951,6 +53372,22 @@ components:
                     $ref: '#/components/schemas/Package'
             required:
                 - package
+        CreatePassthroughMcpServerForm:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Optional description shown alongside the server.
+                name:
+                    type: string
+                    description: Optional human-readable name for the pass-through MCP server. Empty values are stored as null.
+                url:
+                    type: string
+                    description: The URL of the vendor's MCP server. Displayed to admins and customers only; Gram never fetches it.
+                    format: uri
+            description: Form for creating a new pass-through MCP server
+            required:
+                - url
         CreatePluginForm:
             type: object
             properties:
@@ -58141,6 +58578,16 @@ components:
                     description: The list of packages
             required:
                 - packages
+        ListPassthroughMcpServersResult:
+            type: object
+            properties:
+                passthrough_mcp_servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PassthroughMcpServer'
+            description: Result type for listing pass-through MCP servers
+            required:
+                - passthrough_mcp_servers
         ListPluginsResult:
             type: object
             properties:
@@ -59460,6 +59907,10 @@ components:
                 name:
                     type: string
                     description: A human-readable display name for the server
+                passthrough_mcp_server_id:
+                    type: string
+                    description: The ID of the pass-through MCP server used as the backend, if any. A server backed by a pass-through MCP server is never proxied by Gram.
+                    format: uuid
                 project_id:
                     type: string
                     description: The project ID this MCP server belongs to
@@ -60686,6 +61137,45 @@ components:
                 - visibility
                 - semver
                 - created_at
+        PassthroughMcpServer:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the pass-through MCP server was created
+                    format: date-time
+                description:
+                    type: string
+                    description: Optional description shown alongside the server.
+                id:
+                    type: string
+                    description: The ID of the pass-through MCP server
+                    format: uuid
+                name:
+                    type: string
+                    description: Optional human-readable name for the pass-through MCP server
+                project_id:
+                    type: string
+                    description: The project ID this pass-through MCP server belongs to
+                    format: uuid
+                slug:
+                    type: string
+                    description: URL-friendly slug derived from the URL and ID.
+                updated_at:
+                    type: string
+                    description: When the pass-through MCP server was last updated
+                    format: date-time
+                url:
+                    type: string
+                    description: The URL of the vendor's MCP server
+                    format: uri
+            description: A pass-through (unproxied) MCP server configuration
+            required:
+                - id
+                - project_id
+                - url
+                - created_at
+                - updated_at
         PeriodUsage:
             type: object
             properties:
@@ -69111,6 +69601,10 @@ components:
                 name:
                     type: string
                     description: A human-readable display name for the server. Omit to leave the existing name unchanged; if provided, must be non-empty.
+                passthrough_mcp_server_id:
+                    type: string
+                    description: The ID of the pass-through MCP server to use as the backend
+                    format: uuid
                 remote_mcp_server_id:
                     type: string
                     description: The ID of the remote MCP server to use as the backend
@@ -69134,7 +69628,7 @@ components:
                         - disabled
                         - private
                         - public
-            description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The user session issuer cannot be changed after create. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.'
+            description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The user session issuer cannot be changed after create. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or passthrough_mcp_server_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.'
             required:
                 - id
                 - visibility
@@ -70939,6 +71433,8 @@ tags:
       description: Manage per-organization forwarding of inbound OTEL hook payloads to a customer-owned endpoint.
     - name: packages
       description: Manages packages in Gram.
+    - name: passthroughMcp
+      description: Managing pass-through (unproxied) MCP servers. These are vendor MCP servers that Gram lists and can attach to a plugin but never proxies, so there is no OAuth callback or upstream allowlisting involved. Restricted to Speakeasy staff.
     - name: adminChatAnalysis
       description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
     - name: adminExternalCredentials

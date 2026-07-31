@@ -557,6 +557,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/passthroughmcp/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/passthroughmcp/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/remotemcp/queries.sql
     engine: postgresql
     gen:

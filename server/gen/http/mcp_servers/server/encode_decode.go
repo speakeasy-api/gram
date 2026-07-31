@@ -2812,19 +2812,20 @@ func EncodeDeleteMcpServerError(encoder func(context.Context, http.ResponseWrite
 // *McpServerResponseBody from a value of type *types.McpServer.
 func marshalTypesMcpServerToMcpServerResponseBody(v *types.McpServer) *McpServerResponseBody {
 	res := &McpServerResponseBody{
-		ID:                    v.ID,
-		ProjectID:             v.ProjectID,
-		Name:                  v.Name,
-		Slug:                  v.Slug,
-		EnvironmentID:         v.EnvironmentID,
-		UserSessionIssuerID:   v.UserSessionIssuerID,
-		RemoteMcpServerID:     v.RemoteMcpServerID,
-		TunneledMcpServerID:   v.TunneledMcpServerID,
-		ToolsetID:             v.ToolsetID,
-		ToolVariationsGroupID: v.ToolVariationsGroupID,
-		Visibility:            string(v.Visibility),
-		CreatedAt:             v.CreatedAt,
-		UpdatedAt:             v.UpdatedAt,
+		ID:                     v.ID,
+		ProjectID:              v.ProjectID,
+		Name:                   v.Name,
+		Slug:                   v.Slug,
+		EnvironmentID:          v.EnvironmentID,
+		UserSessionIssuerID:    v.UserSessionIssuerID,
+		RemoteMcpServerID:      v.RemoteMcpServerID,
+		TunneledMcpServerID:    v.TunneledMcpServerID,
+		ToolsetID:              v.ToolsetID,
+		PassthroughMcpServerID: v.PassthroughMcpServerID,
+		ToolVariationsGroupID:  v.ToolVariationsGroupID,
+		Visibility:             string(v.Visibility),
+		CreatedAt:              v.CreatedAt,
+		UpdatedAt:              v.UpdatedAt,
 	}
 
 	return res

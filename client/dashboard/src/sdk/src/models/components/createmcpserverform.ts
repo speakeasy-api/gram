@@ -22,7 +22,7 @@ export type CreateMcpServerFormVisibility = ClosedEnum<
 >;
 
 /**
- * Form for creating a new MCP server. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.
+ * Form for creating a new MCP server. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or passthrough_mcp_server_id must be provided.
  */
 export type CreateMcpServerForm = {
   /**
@@ -33,6 +33,10 @@ export type CreateMcpServerForm = {
    * A human-readable display name for the server
    */
   name: string;
+  /**
+   * The ID of the pass-through MCP server to use as the backend
+   */
+  passthroughMcpServerId?: string | undefined;
   /**
    * The ID of the remote MCP server to use as the backend
    */
@@ -64,6 +68,7 @@ export const CreateMcpServerFormVisibility$outboundSchema: z.ZodMiniEnum<
 export type CreateMcpServerForm$Outbound = {
   environment_id?: string | undefined;
   name: string;
+  passthrough_mcp_server_id?: string | undefined;
   remote_mcp_server_id?: string | undefined;
   tool_variations_group_id?: string | undefined;
   toolset_id?: string | undefined;
@@ -79,6 +84,7 @@ export const CreateMcpServerForm$outboundSchema: z.ZodMiniType<
   z.object({
     environmentId: z.optional(z.string()),
     name: z.string(),
+    passthroughMcpServerId: z.optional(z.string()),
     remoteMcpServerId: z.optional(z.string()),
     toolVariationsGroupId: z.optional(z.string()),
     toolsetId: z.optional(z.string()),
@@ -88,6 +94,7 @@ export const CreateMcpServerForm$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       environmentId: "environment_id",
+      passthroughMcpServerId: "passthrough_mcp_server_id",
       remoteMcpServerId: "remote_mcp_server_id",
       toolVariationsGroupId: "tool_variations_group_id",
       toolsetId: "toolset_id",

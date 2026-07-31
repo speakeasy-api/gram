@@ -370,7 +370,7 @@ var McpServerVisibility = Type("McpServerVisibility", String, func() {
 })
 
 var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
-	Description("Form for creating a new MCP server. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.")
+	Description("Form for creating a new MCP server. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or passthrough_mcp_server_id must be provided.")
 
 	Attribute("name", String, "A human-readable display name for the server")
 	Attribute("environment_id", String, "The ID of the environment to associate with the server", func() {
@@ -385,6 +385,9 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 	Attribute("toolset_id", String, "The ID of the toolset to use as the backend", func() {
 		Format(FormatUUID)
 	})
+	Attribute("passthrough_mcp_server_id", String, "The ID of the pass-through MCP server to use as the backend", func() {
+		Format(FormatUUID)
+	})
 	Attribute("tool_variations_group_id", String, "The ID of the tool variations group enabling MCP tool filtering for this server. Omit to leave filtering disabled.", func() {
 		Format(FormatUUID)
 	})
@@ -394,7 +397,7 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 })
 
 var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
-	Description("Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The user session issuer cannot be changed after create. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.")
+	Description("Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The user session issuer cannot be changed after create. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or passthrough_mcp_server_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.")
 
 	Attribute("id", String, "The ID of the MCP server to update", func() {
 		Format(FormatUUID)
@@ -410,6 +413,9 @@ var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, "The ID of the toolset to use as the backend", func() {
+		Format(FormatUUID)
+	})
+	Attribute("passthrough_mcp_server_id", String, "The ID of the pass-through MCP server to use as the backend", func() {
 		Format(FormatUUID)
 	})
 	Attribute("tool_variations_group_id", String, "The ID of the tool variations group enabling MCP tool filtering for this server. Omit to disable filtering (cleared to null, consistent with the full-record replace semantics of the other UUID references).", func() {
@@ -446,6 +452,9 @@ var McpServer = Type("McpServer", func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, "The ID of the toolset used as the backend", func() {
+		Format(FormatUUID)
+	})
+	Attribute("passthrough_mcp_server_id", String, "The ID of the pass-through MCP server used as the backend, if any. A server backed by a pass-through MCP server is never proxied by Gram.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("tool_variations_group_id", String, "The ID of the tool variations group enabling MCP tool filtering for this server, if any.", func() {

@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	passthroughmcprepo "github.com/speakeasy-api/gram/server/internal/passthroughmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -125,12 +126,13 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		payload.RemoteMcpServerID,
 		payload.TunneledMcpServerID,
 		payload.ToolsetID,
+		payload.PassthroughMcpServerID,
 		payload.ToolVariationsGroupID,
 	)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server").LogError(ctx, logger)
 	}
-	if err := validateServerBackendExclusivity(ids.RemoteMcpServerID, ids.TunneledMcpServerID, ids.ToolsetID); err != nil {
+	if err := validateServerBackendExclusivity(ids.RemoteMcpServerID, ids.TunneledMcpServerID, ids.ToolsetID, ids.PassthroughMcpServerID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
 
@@ -174,17 +176,18 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	}
 
 	server, err := txRepo.CreateMCPServer(ctx, repo.CreateMCPServerParams{
-		ID:                    serverID,
-		ProjectID:             *authCtx.ProjectID,
-		Name:                  conv.ToPGText(name),
-		Slug:                  conv.ToPGText(slug),
-		EnvironmentID:         ids.EnvironmentID,
-		UserSessionIssuerID:   ids.UserSessionIssuerID,
-		RemoteMcpServerID:     ids.RemoteMcpServerID,
-		TunneledMcpServerID:   ids.TunneledMcpServerID,
-		ToolsetID:             ids.ToolsetID,
-		ToolVariationsGroupID: ids.ToolVariationsGroupID,
-		Visibility:            string(payload.Visibility),
+		ID:                     serverID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   conv.ToPGText(name),
+		Slug:                   conv.ToPGText(slug),
+		EnvironmentID:          ids.EnvironmentID,
+		UserSessionIssuerID:    ids.UserSessionIssuerID,
+		RemoteMcpServerID:      ids.RemoteMcpServerID,
+		TunneledMcpServerID:    ids.TunneledMcpServerID,
+		ToolsetID:              ids.ToolsetID,
+		PassthroughMcpServerID: ids.PassthroughMcpServerID,
+		ToolVariationsGroupID:  ids.ToolVariationsGroupID,
+		Visibility:             string(payload.Visibility),
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -438,12 +441,13 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		payload.RemoteMcpServerID,
 		payload.TunneledMcpServerID,
 		payload.ToolsetID,
+		payload.PassthroughMcpServerID,
 		payload.ToolVariationsGroupID,
 	)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server").LogError(ctx, logger)
 	}
-	if err := validateServerBackendExclusivity(ids.RemoteMcpServerID, ids.TunneledMcpServerID, ids.ToolsetID); err != nil {
+	if err := validateServerBackendExclusivity(ids.RemoteMcpServerID, ids.TunneledMcpServerID, ids.ToolsetID, ids.PassthroughMcpServerID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
 
@@ -519,14 +523,15 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		EnvironmentID: ids.EnvironmentID,
 		// Always NULL: the query COALESCEs to the stored issuer, which is
 		// attached at create time for the server's lifetime.
-		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteMcpServerID:     ids.RemoteMcpServerID,
-		TunneledMcpServerID:   ids.TunneledMcpServerID,
-		ToolsetID:             ids.ToolsetID,
-		ToolVariationsGroupID: ids.ToolVariationsGroupID,
-		Visibility:            string(payload.Visibility),
-		ID:                    serverID,
-		ProjectID:             *authCtx.ProjectID,
+		UserSessionIssuerID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:      ids.RemoteMcpServerID,
+		TunneledMcpServerID:    ids.TunneledMcpServerID,
+		ToolsetID:              ids.ToolsetID,
+		PassthroughMcpServerID: ids.PassthroughMcpServerID,
+		ToolVariationsGroupID:  ids.ToolVariationsGroupID,
+		Visibility:             string(payload.Visibility),
+		ID:                     serverID,
+		ProjectID:              *authCtx.ProjectID,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -983,11 +988,12 @@ func (s *Service) reconcileMcpServerCustomDomains(ctx context.Context, customDom
 type serverIDs struct {
 	EnvironmentID uuid.NullUUID
 	// Set by mintServerUserSessionIssuer during create, never parsed from a payload.
-	UserSessionIssuerID   uuid.NullUUID
-	RemoteMcpServerID     uuid.NullUUID
-	TunneledMcpServerID   uuid.NullUUID
-	ToolsetID             uuid.NullUUID
-	ToolVariationsGroupID uuid.NullUUID
+	UserSessionIssuerID    uuid.NullUUID
+	RemoteMcpServerID      uuid.NullUUID
+	TunneledMcpServerID    uuid.NullUUID
+	ToolsetID              uuid.NullUUID
+	PassthroughMcpServerID uuid.NullUUID
+	ToolVariationsGroupID  uuid.NullUUID
 }
 
 // parseServerIDs parses the optional UUID payload fields into a
@@ -997,6 +1003,7 @@ func parseServerIDs(
 	remoteMcpServerIDStr *string,
 	tunneledMcpServerIDStr *string,
 	toolsetIDStr *string,
+	passthroughMcpServerIDStr *string,
 	toolVariationsGroupIDStr *string,
 ) (serverIDs, error) {
 	var (
@@ -1016,6 +1023,9 @@ func parseServerIDs(
 	if ids.ToolsetID, err = conv.PtrToNullUUID(toolsetIDStr); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid toolset_id: %w", err)
 	}
+	if ids.PassthroughMcpServerID, err = conv.PtrToNullUUID(passthroughMcpServerIDStr); err != nil {
+		return serverIDs{}, fmt.Errorf("invalid passthrough_mcp_server_id: %w", err)
+	}
 	if ids.ToolVariationsGroupID, err = conv.PtrToNullUUID(toolVariationsGroupIDStr); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid tool_variations_group_id: %w", err)
 	}
@@ -1023,9 +1033,9 @@ func parseServerIDs(
 	return ids, nil
 }
 
-func validateServerBackendExclusivity(remoteMcpServerID, tunneledMcpServerID, toolsetID uuid.NullUUID) error {
-	if backendFilterCount(remoteMcpServerID, tunneledMcpServerID, toolsetID) != 1 {
-		return fmt.Errorf("exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided")
+func validateServerBackendExclusivity(remoteMcpServerID, tunneledMcpServerID, toolsetID, passthroughMcpServerID uuid.NullUUID) error {
+	if backendFilterCount(remoteMcpServerID, tunneledMcpServerID, toolsetID, passthroughMcpServerID) != 1 {
+		return fmt.Errorf("exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or passthrough_mcp_server_id must be provided")
 	}
 	return nil
 }
@@ -1123,6 +1133,18 @@ func verifyServerReferenceOwnership(
 				return fmt.Errorf("toolset_id does not reference a resource in this project")
 			}
 			return fmt.Errorf("check toolset ownership: %w", err)
+		}
+	}
+
+	if ids.PassthroughMcpServerID.Valid {
+		if _, err := passthroughmcprepo.New(dbtx).GetServerByID(ctx, passthroughmcprepo.GetServerByIDParams{
+			ID:        ids.PassthroughMcpServerID.UUID,
+			ProjectID: projectID,
+		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("passthrough_mcp_server_id does not reference a resource in this project")
+			}
+			return fmt.Errorf("check passthrough mcp server ownership: %w", err)
 		}
 	}
 

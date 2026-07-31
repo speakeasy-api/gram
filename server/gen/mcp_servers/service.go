@@ -123,6 +123,8 @@ type CreateMcpServerPayload struct {
 	TunneledMcpServerID *string
 	// The ID of the toolset to use as the backend
 	ToolsetID *string
+	// The ID of the pass-through MCP server to use as the backend
+	PassthroughMcpServerID *string
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server. Omit to leave filtering disabled.
 	ToolVariationsGroupID *string
@@ -304,6 +306,8 @@ type UpdateMcpServerPayload struct {
 	TunneledMcpServerID *string
 	// The ID of the toolset to use as the backend
 	ToolsetID *string
+	// The ID of the pass-through MCP server to use as the backend
+	PassthroughMcpServerID *string
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server. Omit to disable filtering (cleared to null, consistent with the
 	// full-record replace semantics of the other UUID references).

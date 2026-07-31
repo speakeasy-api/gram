@@ -576,6 +576,31 @@ func TestPluginsService_AddPluginServer_RejectsMcpServerWithoutEndpoint(t *testi
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
+func TestPluginsService_AddPluginServer_PassthroughBackedWithoutEndpointSucceeds(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Passthrough Test"})
+	require.NoError(t, err)
+
+	// Pass-through servers are never proxied, so they never gain an
+	// mcp_endpoints row. AddPluginServer must not reject them for lacking one
+	// the way it would a remote- or toolset-backed server.
+	mcpServer := createTestPassthroughMcpServer(t, ctx, ti.conn, "Passthrough Widget", mcpservers.VisibilityPublic)
+
+	server, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		McpServerID: conv.PtrEmpty(mcpServer.idStr),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Passthrough Widget", server.DisplayName)
+	require.NotNil(t, server.McpServerID)
+	require.Equal(t, mcpServer.idStr, *server.McpServerID)
+}
+
 func TestPluginsService_RemovePluginServer_McpServerBacked(t *testing.T) {
 	t.Parallel()
 

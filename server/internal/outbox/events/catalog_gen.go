@@ -36,6 +36,7 @@ var All = []outbox.EventRegistration{
 	OrganizationInviteV1,
 	OrganizationWebhooksV1,
 	OtelForwardingV1,
+	PassthroughMcpServerV1,
 	PluginV1,
 	ProjectV1,
 	RemoteMcpServerHeaderV1,
