@@ -15,6 +15,10 @@ import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { ChatLaunchOverlay } from "./chat-launch-overlay.tsx";
 import { InsightsProvider } from "./insights-dock.tsx";
 import { OrgSidebar } from "./org-sidebar.tsx";
+import {
+  SidePanelProvider,
+  SidePanelSurface,
+} from "./side-panel/SidePanel.tsx";
 import { SidebarInset, SidebarProvider } from "./ui/sidebar.tsx";
 
 // Layout to handle unauthenticated landing pages and the authenticated webapp experience
@@ -51,7 +55,9 @@ export const AppLayout = (): JSX.Element => {
       }
     >
       <ModalProvider>
-        <AppLayoutContent isImpersonating={isImpersonating} />
+        <SidePanelProvider>
+          <AppLayoutContent isImpersonating={isImpersonating} />
+        </SidePanelProvider>
       </ModalProvider>
     </SidebarProvider>
   );
@@ -115,6 +121,9 @@ const AppLayoutContent = ({
             />
           </GlobalInsightsWrapper>
         </SidebarInset>
+        {/* Sibling of the content, not an overlay: the page reflows into the
+            remaining width so nothing sits behind the panel. */}
+        <SidePanelSurface />
       </div>
       {/* Above the outlet so the suggestion → chat bubble morph survives the
           navigation into the chat route. */}

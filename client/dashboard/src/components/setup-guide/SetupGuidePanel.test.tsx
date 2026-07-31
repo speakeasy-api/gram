@@ -1,0 +1,198 @@
+import type { MCPSetupGuide } from "@gram/client/models/components/mcpsetupguide.js";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  useGetMCPSetupDocs: vi.fn(),
+}));
+
+vi.mock("@gram/client/react-query/getMCPSetupDocs.js", () => ({
+  useGetMCPSetupDocs: mocks.useGetMCPSetupDocs,
+}));
+
+import { SetupGuidePanel } from "./SetupGuidePanel";
+
+function guide(overrides: Partial<MCPSetupGuide> = {}): MCPSetupGuide {
+  return {
+    slug: "box",
+    title: "Box",
+    summary: "Access, search, and manage Box content.",
+    aliases: ["com.pulsemcp.mirror/box"],
+    remotes: [],
+    matchKind: "alias",
+    externalMarkdown:
+      "---\nsetup_version: 1\n---\n\n# Box\n\nSign in to the Box Admin Console.\n",
+    speakeasyMarkdown: "# Speakeasy setup\n\nClick Add on the catalog entry.\n",
+    ...overrides,
+  };
+}
+
+afterEach(cleanup);
+
+beforeEach(() => {
+  mocks.useGetMCPSetupDocs.mockReset();
+});
+
+describe("SetupGuidePanel", () => {
+  it("refetches from the lookup keys it was opened with", () => {
+    mocks.useGetMCPSetupDocs.mockReturnValue({ data: { guides: [guide()] } });
+
+    render(
+      <SetupGuidePanel
+        registrySpecifier="com.pulsemcp.mirror/box"
+        serverUrl="https://mcp.box.com"
+      />,
+    );
+
+    // The panel outlives the page that opened it, so it cannot be handed the
+    // guides and must look them up again itself.
+    expect(mocks.useGetMCPSetupDocs.mock.calls[0]?.[0]).toEqual({
+      registrySpecifier: "com.pulsemcp.mirror/box",
+      serverUrl: "https://mcp.box.com",
+    });
+  });
+
+  it("renders nothing when no guide resolves", () => {
+    mocks.useGetMCPSetupDocs.mockReturnValue({ data: { guides: [] } });
+
+    const { container } = render(
+      <SetupGuidePanel registrySpecifier="com.example/nothing-here" />,
+    );
+
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("renders both halves, with the frontmatter and duplicate title stripped", () => {
+    mocks.useGetMCPSetupDocs.mockReturnValue({ data: { guides: [guide()] } });
+
+    const { container } = render(
+      <SetupGuidePanel registrySpecifier="com.pulsemcp.mirror/box" />,
+    );
+
+    expect(screen.getByText("Set up in Box")).toBeTruthy();
+    expect(screen.getByText("Set up in Gram")).toBeTruthy();
+    expect(container.textContent).toContain(
+      "Sign in to the Box Admin Console.",
+    );
+    expect(container.textContent).toContain("Click Add on the catalog entry.");
+    expect(container.textContent).not.toContain("setup_version");
+    // The guide's own H1s duplicate the headings the panel already provides.
+    expect(container.querySelector("h1")).toBeNull();
+  });
+
+  it("opens links out to the provider in a new tab, but keeps in-guide anchors in place", () => {
+    mocks.useGetMCPSetupDocs.mockReturnValue({
+      data: {
+        guides: [
+          guide({
+            externalMarkdown:
+              "Open the [Box console](https://app.box.com/) and see [below](#create-app).\n\n## Create the app {#create-app}\n",
+          }),
+        ],
+      },
+    });
+
+    render(<SetupGuidePanel registrySpecifier="com.pulsemcp.mirror/box" />);
+
+    const external = screen.getByRole("link", { name: "Box console" });
+    expect(external.getAttribute("target")).toBe("_blank");
+    expect(external.getAttribute("rel")).toBe("noopener noreferrer");
+
+    const anchor = screen.getByRole("link", { name: "below" });
+    expect(anchor.getAttribute("href")).toBe("#create-app");
+    expect(anchor.hasAttribute("target")).toBe(false);
+  });
+
+  it("points a cross-reference between the two halves at the heading in this panel", () => {
+    mocks.useGetMCPSetupDocs.mockReturnValue({
+      data: {
+        guides: [
+          guide({
+            externalMarkdown:
+              "Next, [add the server](speakeasy.md#add-server) in Gram.\n",
+            speakeasyMarkdown:
+              "## Add the server {#add-server}\n\nClick Add, then see [the console steps](./external.md).\n",
+          }),
+        ],
+      },
+    });
+
+    render(<SetupGuidePanel registrySpecifier="com.pulsemcp.mirror/box" />);
+
+    const crossReference = screen.getByRole("link", { name: "add the server" });
+    expect(crossReference.getAttribute("href")).toBe("#add-server");
+    expect(screen.getByRole("heading", { name: "Add the server" }).id).toBe(
+      "add-server",
+    );
+
+    // Names no heading, so there is nothing in the panel to point at.
+    expect(
+      screen.queryByRole("link", { name: "the console steps" }),
+    ).toBeNull();
+    expect(screen.getByText(/the console steps/)).toBeTruthy();
+  });
+
+  it("leaves a non-web scheme to the renderer's sanitizer", () => {
+    mocks.useGetMCPSetupDocs.mockReturnValue({
+      data: {
+        guides: [
+          guide({
+            externalMarkdown:
+              "Click [here](javascript:alert(1)) to continue.\n",
+          }),
+        ],
+      },
+    });
+
+    const { container } = render(
+      <SetupGuidePanel registrySpecifier="com.pulsemcp.mirror/box" />,
+    );
+
+    expect(container.textContent).toContain("Click here to continue.");
+    expect(screen.queryByRole("link", { name: "here" })).toBeNull();
+  });
+
+  it("links out to each guide's page on the docs site", () => {
+    mocks.useGetMCPSetupDocs.mockReturnValue({
+      data: {
+        guides: [guide({ slug: "google-big-query", title: "BigQuery" })],
+      },
+    });
+
+    render(<SetupGuidePanel registrySpecifier="com.pulsemcp.mirror/box" />);
+
+    const docs = screen.getByRole("link", { name: /Open documentation/ });
+    // The docs slug is the guide's, not the server's registry specifier.
+    expect(docs.getAttribute("href")).toBe(
+      "https://www.speakeasy.com/docs/ai-control-plane/guides/google-big-query",
+    );
+    expect(docs.getAttribute("target")).toBe("_blank");
+    expect(docs.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+
+  it("stacks every guide when the two lookup keys disagree", () => {
+    mocks.useGetMCPSetupDocs.mockReturnValue({
+      data: {
+        guides: [
+          guide({ slug: "asana", title: "Asana", matchKind: "endpoint" }),
+          guide(),
+        ],
+      },
+    });
+
+    render(
+      <SetupGuidePanel
+        registrySpecifier="com.pulsemcp.mirror/box"
+        serverUrl="https://mcp.asana.com/sse"
+      />,
+    );
+
+    expect(screen.getByText("Set up in Asana")).toBeTruthy();
+    expect(screen.getByText("Set up in Box")).toBeTruthy();
+    // Each guide carries its own docs link, so the ambiguity never has to be
+    // resolved down to one.
+    expect(
+      screen.getAllByRole("link", { name: /Open documentation/ }),
+    ).toHaveLength(2);
+  });
+});
